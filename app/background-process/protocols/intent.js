@@ -1,4 +1,6 @@
 import {protocol} from 'electron'
+import path from 'path'
+import fs from 'fs'
 
 export function setup () {
   // setup the protocol handler
@@ -11,5 +13,11 @@ export function setup () {
 // =
 
 async function intentProtocol (request, respond) {
-  debugger;
+  respond({
+    statusCode: 302,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8'
+    },
+    data: fs.createReadStream(path.join(__dirname, 'builtin-pages/intent.html'))
+  })
 }

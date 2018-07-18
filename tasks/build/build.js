@@ -57,6 +57,7 @@ var bundleApplication = function () {
     bundle(bpViewsDir.path('library-view.js'),         bpBuildDir.path('library-view.build.js'), { browserify: true, basedir: bpViewsDir.cwd() }),
     bundle(bpViewsDir.path('bookmarks.js'),            bpBuildDir.path('bookmarks.build.js'), { browserify: true, basedir: bpViewsDir.cwd() }),
     bundle(bpViewsDir.path('history.js'),              bpBuildDir.path('history.build.js'), { browserify: true, basedir: bpViewsDir.cwd() }),
+    bundle(bpViewsDir.path('intent.js'),               bpBuildDir.path('intent.build.js'), { browserify: true, basedir: bpViewsDir.cwd() }),
     bundle(bpViewsDir.path('settings.js'),             bpBuildDir.path('settings.build.js'), { browserify: true, basedir: bpViewsDir.cwd() }),
     bundle(bpViewsDir.path('start.js'),                bpBuildDir.path('start.build.js'), { browserify: true, basedir: bpViewsDir.cwd() }),
     bundle(bpViewsDir.path('profile.js'),              bpBuildDir.path('profile.build.js'), { browserify: true, basedir: bpViewsDir.cwd() }),

@@ -296,6 +296,8 @@ async function beakerProtocol (request, respond) {
   }
   if (requestUrl === 'beaker://watchlist/') {
     return cb(200, 'OK', 'text/html; charset=utf-8', path.join(__dirname, 'builtin-pages/watchlist.html'))
+  if (requestUrl === 'beaker://intent/main.js') {
+    return cb(200, 'OK', 'application/javascript; charset=utf-8', path.join(__dirname, 'builtin-pages/build/intent.build.js'))
   }
 
   // modals
