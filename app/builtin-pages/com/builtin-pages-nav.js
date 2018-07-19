@@ -5,6 +5,8 @@ function getIcon (page) {
   switch (page) {
     case 'Library':
       return yo`<i class="fa fa-book"></i>`
+    case 'Intents':
+      return yo`<i class="fa fa-lightbulb-o"></i>`
     case 'Bookmarks':
       return yo`<i class="fa fa-star-o"></i>`
     case 'History':
@@ -77,6 +79,15 @@ export default function render (currentPage = '') {
             <a href="beaker://watchlist" class="dropdown-item">
               <i class="fa fa-eye"></i>
               <span>Watchlist</span>
+            </a>`
+          : ''
+        }
+
+        ${currentPage !== 'Intents'
+          ? yo`
+            <a href="intent:" class="dropdown-item">
+            <i class="fa fa-lightbulb-o"></i>
+              <span>Intents</span>
             </a>`
           : ''
         }

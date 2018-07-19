@@ -1,6 +1,7 @@
 /* globals */
 
 import * as yo from 'yo-yo'
+import renderBuiltinPagesNav from '../com/builtin-pages-nav'
 
 // globals
 // =
@@ -24,12 +25,23 @@ function update () {
   // var theme = settings.start_page_background_image
 
   yo.update(document.querySelector('.window-content.intent'), yo`
-    <div class="window-content builtin intent ${''/* TODO(bgimg) theme */}">
+    <div class="window-content builtin intent">
       <div class="builtin-wrapper intent-wrapper">
-        ${renderServices()}
+        ${renderHeader()}
+
+        <div class="builtin-main">
+          ${renderServices()}
+        </div>
       </div>
     </div>
   `)
+}
+
+function renderHeader () {
+  return yo`
+    <div class="builtin-header fixed">
+      ${renderBuiltinPagesNav('Intents')}
+    </div>`
 }
 
 function renderServices () {
@@ -37,8 +49,8 @@ function renderServices () {
     <div class="services-container">
       ${services.length ? yo`
         <h2 class="subtitle-heading">
-          <span>Services</span>
-          <button class="btn transparent add-pinned-btn" data-tooltip="Add pinned bookmark">
+          <span>Share Services</span>
+          <button class="btn transparent add-pinned-btn" data-tooltip="Add share service">
             <i class="fa fa-plus"></i>
           </button>
         </h2>`
