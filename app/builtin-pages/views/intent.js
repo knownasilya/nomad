@@ -7,7 +7,7 @@ import renderBuiltinPagesNav from '../com/builtin-pages-nav'
 // =
 
 var services = []
-var qps = window.location.search;
+var qps = window.location.search
 
 update()
 setup()
@@ -21,9 +21,6 @@ async function setup () {
 // =
 
 function update () {
-  // TODO(bgimg) restore when background images are restored -prf
-  // var theme = settings.start_page_background_image
-
   yo.update(document.querySelector('.window-content.intent'), yo`
     <div class="window-content builtin intent">
       <div class="builtin-wrapper intent-wrapper">
@@ -80,6 +77,7 @@ function renderService (serviceItem) {
 async function loadServices () {
   services = [
     { title: 'Fritter', href: 'dat://fritter.hashbase.io/' },
-    { title: 'PasteDat', href: 'dat://pastedat-taravancil.hashbase.io/' }
+    { title: 'PasteDat', href: 'dat://pastedat-taravancil.hashbase.io/' },
+    { title: 'Twitter', href: 'https://twitter.com/share' }
   ]
 }
