@@ -67,6 +67,7 @@ function renderService (serviceItem) {
 
 async function loadServices () {
   services = [
-    { title: 'Fritter', href: 'dat://fritter.hashbase.io/' }
+    { title: 'Fritter', href: 'dat://fritter.hashbase.io/' },
+    { title: 'PasteDat', href: 'dat://pastedat-taravancil.hashbase.io/' }
   ]
 }
