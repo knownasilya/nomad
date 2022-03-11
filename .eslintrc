@@ -13,12 +13,7 @@
     "node": true
   },
 
-  "plugins": [
-    "import",
-    "node",
-    "promise",
-    "standard"
-  ],
+  "plugins": ["import", "node", "promise", "standard"],
 
   "globals": {
     "document": true,
@@ -47,13 +42,16 @@
     "block-spacing": ["error", "always"],
     "brace-style": ["off", "1tbs", { "allowSingleLine": true }],
     "camelcase": "off",
-    "comma-dangle": ["error", {
-      "arrays": "never",
-      "objects": "never",
-      "imports": "never",
-      "exports": "never",
-      "functions": "never"
-    }],
+    "comma-dangle": [
+      "error",
+      {
+        "arrays": "never",
+        "objects": "never",
+        "imports": "never",
+        "exports": "never",
+        "functions": "never"
+      }
+    ],
     "comma-spacing": ["error", { "before": false, "after": true }],
     "comma-style": ["error", "last"],
     "constructor-super": "error",
@@ -142,9 +140,22 @@
     "no-unreachable": "error",
     "no-unsafe-finally": "error",
     "no-unsafe-negation": "error",
-    "no-unused-expressions": ["error", { "allowShortCircuit": true, "allowTernary": true, "allowTaggedTemplates": true }],
-    "no-unused-vars": ["off", { "vars": "all", "args": "none", "ignoreRestSiblings": true }],
-    "no-use-before-define": ["error", { "functions": false, "classes": false, "variables": false }],
+    "no-unused-expressions": [
+      "error",
+      {
+        "allowShortCircuit": true,
+        "allowTernary": true,
+        "allowTaggedTemplates": true
+      }
+    ],
+    "no-unused-vars": [
+      "off",
+      { "vars": "all", "args": "none", "ignoreRestSiblings": true }
+    ],
+    "no-use-before-define": [
+      "error",
+      { "functions": false, "classes": false, "variables": false }
+    ],
     "no-useless-call": "error",
     "no-useless-computed-key": "error",
     "no-useless-constructor": "error",
@@ -153,12 +164,26 @@
     "no-useless-return": "off",
     "no-whitespace-before-property": "error",
     "no-with": "error",
-    "object-property-newline": ["error", { "allowMultiplePropertiesPerLine": true }],
+    "object-property-newline": [
+      "error",
+      { "allowMultiplePropertiesPerLine": true }
+    ],
     "one-var": ["error", { "initialized": "never" }],
-    "operator-linebreak": ["off", "after", { "overrides": { "?": "before", ":": "before" } }],
-    "padded-blocks": ["error", { "blocks": "never", "switches": "never", "classes": "never" }],
+    "operator-linebreak": [
+      "off",
+      "after",
+      { "overrides": { "?": "before", ":": "before" } }
+    ],
+    "padded-blocks": [
+      "error",
+      { "blocks": "never", "switches": "never", "classes": "never" }
+    ],
     "prefer-promise-reject-errors": "off",
-    "quotes": ["error", "single", { "avoidEscape": true, "allowTemplateLiterals": true }],
+    "quotes": [
+      "error",
+      "single",
+      { "avoidEscape": true, "allowTemplateLiterals": true }
+    ],
     "rest-spread-spacing": ["error", "never"],
     "semi": ["error", "never"],
     "semi-spacing": ["error", { "before": false, "after": true }],
@@ -167,10 +192,18 @@
     "space-in-parens": ["error", "never"],
     "space-infix-ops": "off",
     "space-unary-ops": ["error", { "words": true, "nonwords": false }],
-    "spaced-comment": ["off", "always", {
-      "line": { "markers": ["*package", "!", "/", ","] },
-      "block": { "balanced": true, "markers": ["*package", "!", ",", ":", "::", "flow-include"], "exceptions": ["*"] }
-    }],
+    "spaced-comment": [
+      "off",
+      "always",
+      {
+        "line": { "markers": ["*package", "!", "/", ","] },
+        "block": {
+          "balanced": true,
+          "markers": ["*package", "!", ",", ":", "::", "flow-include"],
+          "exceptions": ["*"]
+        }
+      }
+    ],
     "symbol-description": "error",
     "template-curly-spacing": ["error", "never"],
     "template-tag-spacing": ["error", "never"],
