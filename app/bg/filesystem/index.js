@@ -1,9 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { join as joinPath } from 'path';
 import * as logLib from '../logger';
-const logger = logLib
-  .get()
-  .child({ category: 'hyper', subcategory: 'filesystem' });
 import hyper from '../hyper/index';
 import * as db from '../dbs/profile-data-db';
 import * as archivesDb from '../dbs/archives';
@@ -11,6 +8,10 @@ import * as trash from './trash';
 import * as modals from '../ui/subwindows/modals';
 import lock from '../../lib/lock';
 import { isSameOrigin } from '../../lib/urls';
+
+const logger = logLib
+  .get()
+  .child({ category: 'hyper', subcategory: 'filesystem' });
 
 // typedefs
 // =
