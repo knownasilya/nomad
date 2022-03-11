@@ -108,20 +108,22 @@ class LocationBar extends LitElement {
               `beaker://desktop/?q=${encodeURIComponent(this.query)}`
             )}
             ${searchLink(
-              'Twitter',
-              `https://twitter.com/search?q=${encodeURIComponent(this.query)}`
-            )}
-            ${searchLink(
-              'Reddit',
-              `https://reddit.com/search?q=${encodeURIComponent(this.query)}`
-            )}
-            ${searchLink(
-              'GitHub',
-              `https://github.com/search?q=${encodeURIComponent(this.query)}`
+              'Startpage',
+              `https://startpage.com/do/dsearch?query=${encodeURIComponent(
+                this.query
+              )}`
             )}
             ${searchLink(
               'DuckDuckGo',
               `https://duckduckgo.com?q=${encodeURIComponent(this.query)}`
+            )}
+            ${searchLink(
+              'Twitter',
+              `https://twitter.com/search?q=${encodeURIComponent(this.query)}`
+            )}
+            ${searchLink(
+              'GitHub',
+              `https://github.com/search?q=${encodeURIComponent(this.query)}`
             )}
             ${searchLink(
               'Google',
@@ -139,8 +141,12 @@ class LocationBar extends LitElement {
                 this.query
               )}`
             )}
+            ${searchLink(
+              'Reddit',
+              `https://reddit.com/search?q=${encodeURIComponent(this.query)}`
+            )}
             ${
-              '' /* TODO restore at some point esearchLink('Beaker', `beaker://search/?q=${encodeURIComponent(this.query)}`) */
+              '' /* TODO restore at some point searchLink('Beaker', `beaker://search/?q=${encodeURIComponent(this.query)}`) */
             }
           </div>
         </div>

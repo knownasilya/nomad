@@ -46,12 +46,16 @@ export const setup = async function (opts) {
     extended_network_index_url: '',
     search_engines: [
       {
-        name: 'DuckDuckGo',
-        url: 'https://www.duckduckgo.com/',
+        name: 'Startpage',
+        url: 'https://startpage.com/do/dsearch?query=',
         selected: true,
       },
-      { name: 'Beaker', url: 'beaker://desktop/' },
-      { name: 'Google', url: 'https://www.google.com/search' },
+      {
+        name: 'DuckDuckGo',
+        url: 'https://www.duckduckgo.com/?q=',
+      },
+      { name: 'Beaker', url: 'beaker://desktop/?q=' },
+      { name: 'Google', url: 'https://www.google.com/search?q=' },
     ],
     adblock_lists: [
       {

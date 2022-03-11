@@ -7,10 +7,10 @@ const isIPAddressRegex = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/;
 const isPath = /^\//;
 const URL_RE = /^[\S]+:\/\/[\S]+$/i;
 
-// helper to determine what the user may be inputting into the locaiton bar
+// helper to determine what the user may be inputting into the location bar
 export function examineLocationInput(v) {
   // does the value look like a url?
-  var isProbablyUrl =
+  let isProbablyUrl =
     !v.includes(' ') &&
     (isPath.test(v) ||
       /\.[A-z]/.test(v) ||
@@ -22,8 +22,8 @@ export function examineLocationInput(v) {
       v.startsWith('data:') ||
       v.startsWith('intent:') ||
       v.startsWith('about:'));
-  var vWithProtocol = v;
-  var isGuessingTheScheme = false;
+  let vWithProtocol = v;
+  let isGuessingTheScheme = false;
   if (
     isProbablyUrl &&
     !isPath.test(v) &&
@@ -44,7 +44,7 @@ export function examineLocationInput(v) {
       isGuessingTheScheme = true; // note that we're guessing so that, if this fails, we can try http://
     }
   }
-  var vSearch = '?q=' + v.split(' ').map(encodeURIComponent).join('+');
+  let vSearch = v.split(' ').map(encodeURIComponent).join('+');
   return { vWithProtocol, vSearch, isProbablyUrl, isGuessingTheScheme };
 }
 

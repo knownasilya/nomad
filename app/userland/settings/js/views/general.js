@@ -343,6 +343,8 @@ class GeneralSettingsView extends LitElement {
       <div class="section">
         <div class="search-settings-list">
           ${this.settings.search_engines.map((engine, i) => {
+            const url = new URL(engine.url);
+
             return html` <div class="radio-item">
               <input
                 type="radio"
@@ -353,7 +355,7 @@ class GeneralSettingsView extends LitElement {
                 @change="${this.onSearchEngineChange}"
               />
               <label for="engine${i}">
-                ${engine.name} (${engine.url})
+                ${engine.name} (${url.origin})
                 ${this.settings.search_engines.length === 1
                   ? ''
                   : html`

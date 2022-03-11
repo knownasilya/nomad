@@ -302,7 +302,6 @@ export default function registerContextMenu() {
           searchEngines.find((se) => se.selected) || searchEngines[0];
         var query =
           searchEngine.url +
-          '?q=' +
           encodeURIComponent(props.selectionText.substr(0, 500)); // Limit query to prevent too long query error from DDG
         menuItems.push({
           label: 'Search ' + searchEngine.name + ' for "' + searchPreviewStr,
