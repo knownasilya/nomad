@@ -62,7 +62,6 @@ async function beakerProtocol(request, respond) {
       'Access-Control-Allow-Origin': '*',
     };
     if (typeof path === 'string') {
-      console.log('reading file', fs.readFileSync(path, { encoding: 'utf-8' }));
       respond({ statusCode, headers, data: fs.createReadStream(path) });
     } else if (typeof path === 'function') {
       respond({ statusCode, headers, data: intoStream(path()) });
