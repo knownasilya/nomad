@@ -1,7 +1,7 @@
-'use strict'
+'use strict';
 
-const gulp = require('gulp')
-const start = require('./start-cli')
+const gulp = require('gulp');
+const start = require('./start-cli');
 
-gulp.task('start', gulp.series(start))
-gulp.task('start-watch', gulp.series('watch', start))
+gulp.task('start', gulp.series(start));
+gulp.task('start-watch', gulp.series('watch', start));

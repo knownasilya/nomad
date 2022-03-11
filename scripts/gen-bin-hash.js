@@ -2,7 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
-console.log('Generating hash for', process.argv[2])
+console.log('Generating hash for', process.argv[2]);
 
 function hashFile(file, algorithm = 'sha512', encoding = 'base64', options) {
   return new Promise((resolve, reject) => {
@@ -22,20 +22,12 @@ function hashFile(file, algorithm = 'sha512', encoding = 'base64', options) {
         console.log(hash.read());
         resolve(hash.read());
       })
-      .pipe(
-        hash,
-        {
-          end: false,
-        }
-      );
+      .pipe(hash, {
+        end: false,
+      });
   });
 }
 
-const installerPath = path.resolve(
-  __dirname,
-  '..',
-  'dist',
-  process.argv[2]
-);
+const installerPath = path.resolve(__dirname, '..', 'dist', process.argv[2]);
 
 hashFile(installerPath);

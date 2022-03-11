@@ -23,31 +23,46 @@ module.exports.replace = function (str, patterns) {
   return str;
 };
 
-module.exports.getReleasePackageName = function(manifest) {
+module.exports.getReleasePackageName = function (manifest) {
   return module.exports.replace(manifest.packageNameTemplate, {
     name: manifest.name,
     version: manifest.version,
     build: manifest.build,
     productName: manifest.productName,
     platform: process.platform,
-    arch: process.arch
+    arch: process.arch,
   });
-}
+};
 
 module.exports.getEnvName = function () {
   return argv.env || 'development';
 };
 
 module.exports.getSigningId = function (manifest) {
-  return argv.sign || (manifest.osx.codeSignIdentitiy ? manifest.osx.codeSignIdentitiy.dmg : undefined);
+  return (
+    argv.sign ||
+    (manifest.osx.codeSignIdentitiy
+      ? manifest.osx.codeSignIdentitiy.dmg
+      : undefined)
+  );
 };
 
 module.exports.getMASSigningId = function (manifest) {
-  return argv['mas-sign'] || (manifest.osx.codeSignIdentitiy ? manifest.osx.codeSignIdentitiy.MAS : undefined);
+  return (
+    argv['mas-sign'] ||
+    (manifest.osx.codeSignIdentitiy
+      ? manifest.osx.codeSignIdentitiy.MAS
+      : undefined)
+  );
 };
 
 module.exports.getMASInstallerSigningId = function (manifest) {
-  return argv['mas-installer-sign'] || (manifest.osx.codeSignIdentitiy ? manifest.osx.codeSignIdentitiy.MASInstaller : undefined);
+  return (
+    argv['mas-installer-sign'] ||
+    (manifest.osx.codeSignIdentitiy
+      ? manifest.osx.codeSignIdentitiy.MASInstaller
+      : undefined)
+  );
 };
 
 module.exports.releaseForMAS = function () {
