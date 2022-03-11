@@ -1,33 +1,11 @@
-Beaker Browser
+Nomad Browser
 ======
-[![Backers on Open Collective](https://opencollective.com/beaker/backers/badge.svg)](#backers) [![Sponsors on Open Collective](https://opencollective.com/beaker/sponsors/badge.svg)](#sponsors)
 
-![logo.png](build/icons/256x256.png)
+Nomad is a peer-to-peer Web browser. It adds new APIs for building hostless applications while remaining compatible with the rest of the Web. [Visit the website.](https://beakerbrowser.com/)
 
-Beaker is an experimental peer-to-peer Web browser. It adds new APIs for building hostless applications while remaining compatible with the rest of the Web. [Visit the website.](https://beakerbrowser.com/)
+Nomad is a fork of the [Beaker Browser](https://beakerbrowser.com/).
 
-Please feel free to open usability issues. Join us at #beakerbrowser on Freenode.
-
-### Sponsors
-
-Sponsors support this project by contributing $100 a month or more. [Become a sponsor](https://opencollective.com/beaker#sponsor)
-
-<a href="https://opencollective.com/beaker/sponsor/0/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/0/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/1/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/1/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/2/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/2/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/3/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/3/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/4/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/4/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/5/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/5/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/6/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/6/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/7/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/7/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/8/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/8/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/9/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/9/avatar.svg"></a>
-
-### Backers
-
-Backers support this project by contributing $2 to $99 a month. [Become a backer](https://opencollective.com/beaker#backer)
-
-<a href="https://opencollective.com/beaker#backers" target="_blank"><img src="https://opencollective.com/beaker/backers.svg?width=890"></a>
+> 🏗️ Under construction
 
 ## Table of Contents
 
@@ -54,11 +32,11 @@ Backers support this project by contributing $2 to $99 a month. [Become a backer
 
 ### Binaries
 
-**Visit the [Releases Page](https://github.com/beakerbrowser/beaker/releases) to find the installer you need.**
+**Visit the [Releases Page](https://github.com/knownasilya/nomad/releases) to find the installer you need.**
 
 ### Building from source
 
-Requires node 12 or higher.
+Requires node 14 or higher.
 
 In Linux (and in some cases macOS) you need libtool, m4, autoconf, and automake:
 
@@ -80,10 +58,9 @@ npm install -g gulp
 To build:
 
 ```bash
-git clone https://github.com/beakerbrowser/beaker.git
-cd beaker/scripts
-npm install # don't worry about v8 api errors building native modules - rebuild will fix
-npm run rebuild # needed after each install. see https://github.com/electron/electron/issues/5851
+git clone https://github.com/knownasilya/nomad.git
+cd nomad/scripts
+npm install
 npm start
 ```
 
