@@ -12,7 +12,7 @@ button {
   --bg-color--primary-button--hover: rgb(73, 126, 234);
   --bg-color--transparent-button: transparent;
   --bg-color--transparent-button--hover: #f5f5fa;
-  --bg-color--transparent-button--pressed: rgba(0,0,0,.1);
+  --bg-color--transparent-button--pressed: rgba(0, 0, 0, 0.1);
   --bg-color--button-gray: #fafafa;
   --bg-color--button-gray--hover: #f5f5f5;
   --text-color--button: #333;
@@ -21,9 +21,9 @@ button {
   --text-color--primary-button: #fff;
   --border-color--button: #d4d7dc;
   --border-color--primary-button: #2864dc;
-  --box-shadow-color--button: rgba(0,0,0,.05);
-  --box-shadow-color--button--hover: rgba(0,0,0,.5);
-  --box-shadow-color--transparent-button: rgba(0,0,0,.25);
+  --box-shadow-color--button: rgba(0, 0, 0, 0.05);
+  --box-shadow-color--button--hover: rgba(0, 0, 0, 0.5);
+  --box-shadow-color--transparent-button: rgba(0, 0, 0, 0.25);
 
   background: var(--bg-color--button);
   border: 1px solid var(--border-color--semi-light);
@@ -46,7 +46,7 @@ button {
     --bg-color--primary-button--hover: rgb(73, 126, 234);
     --bg-color--transparent-button: transparent;
     --bg-color--transparent-button--hover: #444;
-    --bg-color--transparent-button--pressed: rgba(0,0,0,.1);
+    --bg-color--transparent-button--pressed: rgba(0, 0, 0, 0.1);
     --bg-color--button-gray: #fafafa;
     --bg-color--button-gray--hover: #f5f5f5;
     --text-color--button: #ccc;
@@ -55,9 +55,9 @@ button {
     --text-color--primary-button: #fff;
     --border-color--button: #777;
     --border-color--primary-button: #2864dc;
-    --box-shadow-color--button: rgba(0,0,0,.05);
-    --box-shadow-color--button--hover: rgba(0,0,0,.5);
-    --box-shadow-color--transparent-button: rgba(0,0,0,.25);
+    --box-shadow-color--button: rgba(0, 0, 0, 0.05);
+    --box-shadow-color--button--hover: rgba(0, 0, 0, 0.5);
+    --box-shadow-color--transparent-button: rgba(0, 0, 0, 0.25);
   }
 }
 
@@ -90,7 +90,7 @@ button.primary {
   background: var(--bg-color--primary-button);
   border-color: var(--border-color--primary-button);
   color: var(--text-color--primary-button);
-  box-shadow: 0 1px 1px rgba(0,0,0,.1);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
 }
 
 button.primary:hover {
@@ -117,7 +117,7 @@ button.rounded {
 }
 
 button.flat {
-  box-shadow: none; 
+  box-shadow: none;
 }
 
 button.noborder {
@@ -127,7 +127,7 @@ button.noborder {
 button.transparent {
   background: var(--bg-color--transparent-button);
   border-color: transparent;
-  box-shadow: none; 
+  box-shadow: none;
 }
 
 button.transparent[disabled] {

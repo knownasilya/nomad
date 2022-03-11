@@ -6,4 +6,4 @@ ALTER TABLE users ADD COLUMN label TEXT;
 ALTER TABLE users ADD COLUMN isTemporary INTEGER DEFAULT 0;
 
 PRAGMA user_version = 33;
-`
+`;

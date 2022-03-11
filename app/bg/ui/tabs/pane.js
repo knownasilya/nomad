@@ -1,29 +1,29 @@
-import { app, BrowserView, nativeTheme } from 'electron'
-import errorPage from '../../lib/error-page'
-import path from 'path'
-import { promises as fs } from 'fs'
-import { EventEmitter } from 'events'
-import _throttle from 'lodash.throttle'
-import { parseDriveUrl, stripUrlHash } from '../../../lib/urls'
-import { toNiceUrl } from '../../../lib/strings'
-import _get from 'lodash.get'
-import _pick from 'lodash.pick'
-import * as zoom from './zoom'
-import * as modals from '../subwindows/modals'
-import * as overlay from '../subwindows/overlay'
-import * as windowMenu from '../window-menu'
-import { getResourceContentType } from '../../browser'
-import { DRIVE_KEY_REGEX } from '../../../lib/strings'
-import * as sitedataDb from '../../dbs/sitedata'
-import * as historyDb from '../../dbs/history'
-import * as folderSyncDb from '../../dbs/folder-sync'
-import * as filesystem from '../../filesystem/index'
-import * as bookmarks from '../../filesystem/bookmarks'
-import hyper from '../../hyper/index'
+import { app, BrowserView, nativeTheme } from 'electron';
+import errorPage from '../../lib/error-page';
+import path from 'path';
+import { promises as fs } from 'fs';
+import { EventEmitter } from 'events';
+import _throttle from 'lodash.throttle';
+import { parseDriveUrl, stripUrlHash } from '../../../lib/urls';
+import { toNiceUrl } from '../../../lib/strings';
+import _get from 'lodash.get';
+import _pick from 'lodash.pick';
+import * as zoom from './zoom';
+import * as modals from '../subwindows/modals';
+import * as overlay from '../subwindows/overlay';
+import * as windowMenu from '../window-menu';
+import { getResourceContentType } from '../../browser';
+import { DRIVE_KEY_REGEX } from '../../../lib/strings';
+import * as sitedataDb from '../../dbs/sitedata';
+import * as historyDb from '../../dbs/history';
+import * as folderSyncDb from '../../dbs/folder-sync';
+import * as filesystem from '../../filesystem/index';
+import * as bookmarks from '../../filesystem/bookmarks';
+import hyper from '../../hyper/index';
 
-const ERR_ABORTED = -3
-const ERR_CONNECTION_REFUSED = -102
-const ERR_INSECURE_RESPONSE = -501
+const ERR_ABORTED = -3;
+const ERR_CONNECTION_REFUSED = -102;
+const ERR_INSECURE_RESPONSE = -501;
 const TLS_ERROR_CODES = Object.values({
   ERR_NO_SSL_VERSIONS_ENABLED: -112,
   ERR_SSL_VERSION_OR_CIPHER_MISMATCH: -113,
@@ -49,12 +49,16 @@ const TLS_ERROR_CODES = Object.values({
   ERR_SSL_VERSION_INTERFERENCE: -175,
   ERR_EARLY_DATA_REJECTED: -178,
   ERR_WRONG_VERSION_ON_EARLY_DATA: -179,
-  ERR_TLS13_DOWNGRADE_DETECTED: -180
-})
-const IS_CODE_INSECURE_RESPONSE = x => x === ERR_CONNECTION_REFUSED || x === ERR_INSECURE_RESPONSE || (x <= -200 && x > -300) || TLS_ERROR_CODES.includes(x)
+  ERR_TLS13_DOWNGRADE_DETECTED: -180,
+});
+const IS_CODE_INSECURE_RESPONSE = (x) =>
+  x === ERR_CONNECTION_REFUSED ||
+  x === ERR_INSECURE_RESPONSE ||
+  (x <= -200 && x > -300) ||
+  TLS_ERROR_CODES.includes(x);
 
-const TRIGGER_LIVE_RELOAD_DEBOUNCE = 500 // throttle live-reload triggers by this amount
-const STATUS_BAR_HEIGHT = 22
+const TRIGGER_LIVE_RELOAD_DEBOUNCE = 500; // throttle live-reload triggers by this amount
+const STATUS_BAR_HEIGHT = 22;
 
 // the variables which are automatically sent to the shell-window for rendering
 const STATE_VARS = [
@@ -86,24 +90,29 @@ const STATE_VARS = [
   'currentInpageFindString',
   'currentInpageFindResults',
   'donateLinkHref',
-  'isLiveReloading'
-]
+  'isLiveReloading',
+];
 
 // globals
 // =
 
-var _hasSeenCommentsTip = undefined
+var _hasSeenCommentsTip = undefined;
 
 // classes
 // =
 
 export class Pane extends EventEmitter {
-  constructor (tab) {
-    super()
-    this.tab = tab
+  constructor(tab) {
+    super();
+    this.tab = tab;
     this.browserView = new BrowserView({
       webPreferences: {
-        preload: path.join(__dirname, 'fg', 'webview-preload', 'index.build.js'),
+        preload: path.join(
+          __dirname,
+          'fg',
+          'webview-preload',
+          'index.build.js'
+        ),
         nodeIntegrationInSubFrames: true,
         contextIsolation: true,
         worldSafeExecuteJavaScript: false, // TODO- this causes promises to fail in executeJavaScript, need to file an issue with electron
@@ -115,431 +124,482 @@ export class Pane extends EventEmitter {
         scrollBounce: true,
         navigateOnDragDrop: true,
         enableRemoteModule: false,
-        safeDialogs: true
-      }
-    })
-    this.browserView.setBackgroundColor('#fff')
+        safeDialogs: true,
+      },
+    });
+    this.browserView.setBackgroundColor('#fff');
 
     // webview state
-    this.loadingURL = null // URL being loaded, if any
-    this.isLoading = false // is the pane loading?
-    this.isReceivingAssets = false // has the webview started receiving assets in the current load-cycle?
-    this.favicons = null // array of favicon URLs
-    this.zoom = 0 // what's the current zoom level?
-    this.loadError = null // page error state, if any
-    this.mainFrameId = undefined // the frameRoutingId of the main frame
-    this.frameUrls = {} // map of frameRoutingId -> string (url)
+    this.loadingURL = null; // URL being loaded, if any
+    this.isLoading = false; // is the pane loading?
+    this.isReceivingAssets = false; // has the webview started receiving assets in the current load-cycle?
+    this.favicons = null; // array of favicon URLs
+    this.zoom = 0; // what's the current zoom level?
+    this.loadError = null; // page error state, if any
+    this.mainFrameId = undefined; // the frameRoutingId of the main frame
+    this.frameUrls = {}; // map of frameRoutingId -> string (url)
 
     // browser state
-    this.isActive = false // is this the active pane in the tab?
-    this.currentStatus = false // the status-bar value
-    this.liveReloadEvents = null // live-reload event stream
-    this.isInpageFindActive = false // is the inpage-finder UI active?
-    this.currentInpageFindString = undefined // what's the current inpage-finder query string?
-    this.currentInpageFindResults = undefined // what's the current inpage-finder query results?
-    this.fadeoutCssId = undefined // injected CSS id to fade out the page content
-    this.attachedPane = undefined // pane which this pane is currently attached to
-    this.wantsAttachedPane = false // has the app asked for attached panes?
-    this.attachedPaneEvents = new EventEmitter() // emitter for events specifically realted to the attached pane
-    this.onAttachedPaneNavigated = (e, url) => this.attachedPaneEvents.emit('pane-navigated', {detail: {url}})
+    this.isActive = false; // is this the active pane in the tab?
+    this.currentStatus = false; // the status-bar value
+    this.liveReloadEvents = null; // live-reload event stream
+    this.isInpageFindActive = false; // is the inpage-finder UI active?
+    this.currentInpageFindString = undefined; // what's the current inpage-finder query string?
+    this.currentInpageFindResults = undefined; // what's the current inpage-finder query results?
+    this.fadeoutCssId = undefined; // injected CSS id to fade out the page content
+    this.attachedPane = undefined; // pane which this pane is currently attached to
+    this.wantsAttachedPane = false; // has the app asked for attached panes?
+    this.attachedPaneEvents = new EventEmitter(); // emitter for events specifically realted to the attached pane
+    this.onAttachedPaneNavigated = (e, url) =>
+      this.attachedPaneEvents.emit('pane-navigated', { detail: { url } });
 
     // helper state
-    this.folderSyncPath = undefined // current folder sync path
-    this.peers = 0 // how many peers does the site have?
-    this.isBookmarked = false // is the active page bookmarked?
-    this.driveInfo = null // metadata about the site if viewing a hyperdrive
-    this.donateLinkHref = null // the URL of the donate site, if set by the index.json
-    this.wasDriveTimeout = false // did the last navigation result in a timed-out hyperdrive?
-    this.layoutHeight = undefined // used by pane-layout to track height
+    this.folderSyncPath = undefined; // current folder sync path
+    this.peers = 0; // how many peers does the site have?
+    this.isBookmarked = false; // is the active page bookmarked?
+    this.driveInfo = null; // metadata about the site if viewing a hyperdrive
+    this.donateLinkHref = null; // the URL of the donate site, if set by the index.json
+    this.wasDriveTimeout = false; // did the last navigation result in a timed-out hyperdrive?
+    this.layoutHeight = undefined; // used by pane-layout to track height
 
     // wire up events
-    this.webContents.on('did-start-loading', this.onDidStartLoading.bind(this))
-    this.webContents.on('did-start-navigation', this.onDidStartNavigation.bind(this))
-    this.webContents.on('did-navigate', this.onDidNavigate.bind(this))
-    this.webContents.on('did-navigate-in-page', this.onDidNavigateInPage.bind(this))
-    this.webContents.on('did-stop-loading', this.onDidStopLoading.bind(this))
-    this.webContents.on('dom-ready', this.onDomReady.bind(this))
-    this.webContents.on('did-fail-load', this.onDidFailLoad.bind(this))
-    this.webContents.on('update-target-url', this.onUpdateTargetUrl.bind(this))
-    this.webContents.on('page-title-updated', this.onPageTitleUpdated.bind(this)) // NOTE page-title-updated isn't documented on webContents but it is supported
-    this.webContents.on('page-favicon-updated', this.onPageFaviconUpdated.bind(this))
-    this.webContents.on('new-window', this.onNewWindow.bind(this))
-    this.webContents.on('-will-add-new-contents', this.onWillAddNewContents.bind(this))
-    this.webContents.on('media-started-playing', this.onMediaChange.bind(this))
-    this.webContents.on('media-paused', this.onMediaChange.bind(this))
-    this.webContents.on('found-in-page', this.onFoundInPage.bind(this))
-    this.webContents.on('zoom-changed', this.onZoomChanged.bind(this))
+    this.webContents.on('did-start-loading', this.onDidStartLoading.bind(this));
+    this.webContents.on(
+      'did-start-navigation',
+      this.onDidStartNavigation.bind(this)
+    );
+    this.webContents.on('did-navigate', this.onDidNavigate.bind(this));
+    this.webContents.on(
+      'did-navigate-in-page',
+      this.onDidNavigateInPage.bind(this)
+    );
+    this.webContents.on('did-stop-loading', this.onDidStopLoading.bind(this));
+    this.webContents.on('dom-ready', this.onDomReady.bind(this));
+    this.webContents.on('did-fail-load', this.onDidFailLoad.bind(this));
+    this.webContents.on('update-target-url', this.onUpdateTargetUrl.bind(this));
+    this.webContents.on(
+      'page-title-updated',
+      this.onPageTitleUpdated.bind(this)
+    ); // NOTE page-title-updated isn't documented on webContents but it is supported
+    this.webContents.on(
+      'page-favicon-updated',
+      this.onPageFaviconUpdated.bind(this)
+    );
+    this.webContents.on('new-window', this.onNewWindow.bind(this));
+    this.webContents.on(
+      '-will-add-new-contents',
+      this.onWillAddNewContents.bind(this)
+    );
+    this.webContents.on('media-started-playing', this.onMediaChange.bind(this));
+    this.webContents.on('media-paused', this.onMediaChange.bind(this));
+    this.webContents.on('found-in-page', this.onFoundInPage.bind(this));
+    this.webContents.on('zoom-changed', this.onZoomChanged.bind(this));
 
     // security - deny these events
-    const deny = e => e.preventDefault()
-    this.webContents.on('remote-require', deny)
-    this.webContents.on('remote-get-global', deny)
-    this.webContents.on('remote-get-builtin', deny)
-    this.webContents.on('remote-get-current-window', deny)
-    this.webContents.on('remote-get-current-web-contents', deny)
-    this.webContents.on('remote-get-guest-web-contents', deny)
+    const deny = (e) => e.preventDefault();
+    this.webContents.on('remote-require', deny);
+    this.webContents.on('remote-get-global', deny);
+    this.webContents.on('remote-get-builtin', deny);
+    this.webContents.on('remote-get-current-window', deny);
+    this.webContents.on('remote-get-current-web-contents', deny);
+    this.webContents.on('remote-get-guest-web-contents', deny);
   }
 
-  get id () {
-    return this.webContents.id
+  get id() {
+    return this.webContents.id;
   }
 
-  get webContents () {
-    return this.browserView.webContents
+  get webContents() {
+    return this.browserView.webContents;
   }
 
-  get browserWindow () {
-    return this.tab && this.tab.browserWindow
+  get browserWindow() {
+    return this.tab && this.tab.browserWindow;
   }
 
-  get url () {
-    return this.webContents.getURL()
+  get url() {
+    return this.webContents.getURL();
   }
 
-  get origin () {
-    return toOrigin(this.url)
+  get origin() {
+    return toOrigin(this.url);
   }
 
-  get title () {
-    var title = this.webContents.getTitle()
+  get title() {
+    var title = this.webContents.getTitle();
     if ((!title || toOrigin(title) === this.origin) && this.driveInfo?.title) {
       // fallback to the index.json title field if the page doesnt provide a title
-      title = this.driveInfo.title
+      title = this.driveInfo.title;
     }
-    return title
+    return title;
   }
 
-  get siteTitle () {
+  get siteTitle() {
     try {
-      var urlp = new URL(this.loadingURL || this.url)
-      var hostname = urlp.hostname
+      var urlp = new URL(this.loadingURL || this.url);
+      var hostname = urlp.hostname;
       if (DRIVE_KEY_REGEX.test(hostname)) {
-        hostname = hostname.replace(DRIVE_KEY_REGEX, v => `${v.slice(0, 6)}..${v.slice(-2)}`)
+        hostname = hostname.replace(
+          DRIVE_KEY_REGEX,
+          (v) => `${v.slice(0, 6)}..${v.slice(-2)}`
+        );
       }
       if (hostname.includes('+')) {
-        hostname = hostname.replace(/\+[\d]+/, '')
+        hostname = hostname.replace(/\+[\d]+/, '');
       }
       if (this.driveInfo) {
         if (this.driveInfo.ident?.system) {
-          return 'My Private Drive'
+          return 'My Private Drive';
         }
       }
       if (urlp.protocol === 'beaker:') {
-        if (urlp.hostname === 'diff') return 'Beaker Diff/Merge Tool'
-        if (urlp.hostname === 'explorer') return 'Beaker Files Explorer'
-        if (urlp.hostname === 'history') return 'Beaker History'
-        if (urlp.hostname === 'library') return 'Beaker Library'
-        if (urlp.hostname === 'settings') return 'Beaker Settings'
-        if (urlp.hostname === 'webterm') return 'Beaker Webterm'
-        return 'Beaker'
+        if (urlp.hostname === 'diff') return 'Beaker Diff/Merge Tool';
+        if (urlp.hostname === 'explorer') return 'Beaker Files Explorer';
+        if (urlp.hostname === 'history') return 'Beaker History';
+        if (urlp.hostname === 'library') return 'Beaker Library';
+        if (urlp.hostname === 'settings') return 'Beaker Settings';
+        if (urlp.hostname === 'webterm') return 'Beaker Webterm';
+        return 'Beaker';
       }
-      return hostname + (urlp.port ? `:${urlp.port}` : '')
+      return hostname + (urlp.port ? `:${urlp.port}` : '');
     } catch (e) {
-      return ''
+      return '';
     }
   }
 
-  get siteSubtitle () {
+  get siteSubtitle() {
     if (this.driveInfo) {
-      var origin = this.origin
-      var version = /\+([\d]+)/.exec(origin) ? `v${/\+([\d]+)/.exec(origin)[1]}` : ''
-      var forkLabel = _get(filesystem.listDrives().find(d => d.key === this.driveInfo.key), 'forkOf.label', '')
-      return [forkLabel, version].filter(Boolean).join(' ')
+      var origin = this.origin;
+      var version = /\+([\d]+)/.exec(origin)
+        ? `v${/\+([\d]+)/.exec(origin)[1]}`
+        : '';
+      var forkLabel = _get(
+        filesystem.listDrives().find((d) => d.key === this.driveInfo.key),
+        'forkOf.label',
+        ''
+      );
+      return [forkLabel, version].filter(Boolean).join(' ');
     }
-    return ''
+    return '';
   }
 
-  get siteIcon () {
+  get siteIcon() {
     if (this.driveInfo) {
       if (this.driveInfo.ident?.profile) {
-        return 'fas fa-user-circle'
+        return 'fas fa-user-circle';
       }
       if (this.driveInfo.ident?.system) {
-        return 'fas fa-lock'
+        return 'fas fa-lock';
       }
     }
-    var url = this.loadingURL || this.url
-    if (url.startsWith('https:') && !(this.loadError && this.loadError.isInsecureResponse)) {
-      return 'fas fa-check-circle'
+    var url = this.loadingURL || this.url;
+    if (
+      url.startsWith('https:') &&
+      !(this.loadError && this.loadError.isInsecureResponse)
+    ) {
+      return 'fas fa-check-circle';
     }
     if (url.startsWith('beaker:')) {
-      return 'beaker-logo'
+      return 'beaker-logo';
     }
     // return 'fas fa-info-circle'
   }
 
-  get siteTrust () {
+  get siteTrust() {
     try {
-      var urlp = new URL(this.loadingURL || this.url)
+      var urlp = new URL(this.loadingURL || this.url);
       if (this.loadError && this.loadError.isInsecureResponse) {
-        return 'untrusted'
+        return 'untrusted';
       }
       if (['https:', 'beaker:'].includes(urlp.protocol)) {
-        return 'trusted'
+        return 'trusted';
       }
       if (urlp.protocol === 'http:') {
-        return 'untrusted'
+        return 'untrusted';
       }
       if (urlp.protocol === 'hyper:' && this.driveInfo) {
         if (this.driveInfo.ident?.internal) {
-          return 'trusted'
+          return 'trusted';
         }
       }
-    } catch (e) {
-    }
-    return 'notrust'
+    } catch (e) {}
+    return 'notrust';
   }
 
-  get driveDomain () {
-    return _get(this.driveInfo, 'domain', '')
+  get driveDomain() {
+    return _get(this.driveInfo, 'domain', '');
   }
 
-  get driveIdent () {
-    if (this.driveInfo?.ident?.system) return 'system'
-    if (this.driveInfo?.ident?.profile) return 'profile'
-    return ''
+  get driveIdent() {
+    if (this.driveInfo?.ident?.system) return 'system';
+    if (this.driveInfo?.ident?.profile) return 'profile';
+    return '';
   }
 
-  get writable () {
-    return _get(this.driveInfo, 'writable', false)
+  get writable() {
+    return _get(this.driveInfo, 'writable', false);
   }
 
-  get canGoBack () {
-    return this.webContents.canGoBack()
+  get canGoBack() {
+    return this.webContents.canGoBack();
   }
 
-  get canGoForward () {
-    return this.webContents.canGoForward()
+  get canGoForward() {
+    return this.webContents.canGoForward();
   }
 
-  get isAudioMuted () {
-    return this.webContents.isAudioMuted()
+  get isAudioMuted() {
+    return this.webContents.isAudioMuted();
   }
 
-  get isCurrentlyAudible () {
-    return this.webContents.isCurrentlyAudible()
+  get isCurrentlyAudible() {
+    return this.webContents.isCurrentlyAudible();
   }
 
-  get isLiveReloading () {
-    return !!this.liveReloadEvents
+  get isLiveReloading() {
+    return !!this.liveReloadEvents;
   }
 
-  get state () {
-    var state = _pick(this, STATE_VARS)
-    if (this.loadingURL) state.url = this.loadingURL
-    return state
+  get state() {
+    var state = _pick(this, STATE_VARS);
+    if (this.loadingURL) state.url = this.loadingURL;
+    return state;
   }
 
-  getIPCSenderInfo (event) {
+  getIPCSenderInfo(event) {
     if (event.sender === this.webContents) {
       return {
         url: this.frameUrls[event.frameId],
-        isMainFrame: event.frameId === this.mainFrameId
-      }
+        isMainFrame: event.frameId === this.mainFrameId,
+      };
     }
   }
 
-  setTab (tab) {
-    this.tab = tab
+  setTab(tab) {
+    this.tab = tab;
     if (this.tab !== tab) {
-      this.setAttachedPane(undefined)
+      this.setAttachedPane(undefined);
     }
   }
 
   // management
   // =
 
-  loadURL (url, opts = undefined) {
-    this.webContents.loadURL(url, opts)
+  loadURL(url, opts = undefined) {
+    this.webContents.loadURL(url, opts);
   }
 
-  reload () {
-    this.webContents.reload()
+  reload() {
+    this.webContents.reload();
   }
 
-  setBounds (bounds) {
+  setBounds(bounds) {
     this.browserView.setBounds({
       x: bounds.x,
       y: bounds.y,
       width: bounds.width,
-      height: bounds.height - STATUS_BAR_HEIGHT
-    })
+      height: bounds.height - STATUS_BAR_HEIGHT,
+    });
   }
 
-  show ({noFocus} = {noFocus: false}) {
-    if (this.tab.isHidden) return
-    this.browserWindow.addBrowserView(this.browserView)
-    if (!noFocus) this.webContents.focus()
-    this.emit('showed')
+  show({ noFocus } = { noFocus: false }) {
+    if (this.tab.isHidden) return;
+    this.browserWindow.addBrowserView(this.browserView);
+    if (!noFocus) this.webContents.focus();
+    this.emit('showed');
   }
 
-  focus () {
-    if (this.tab.isHidden) return
-    this.webContents.focus()
+  focus() {
+    if (this.tab.isHidden) return;
+    this.webContents.focus();
   }
 
-  hide () {
-    if (!this.browserWindow) return
-    this.browserWindow.removeBrowserView(this.browserView)
+  hide() {
+    if (!this.browserWindow) return;
+    this.browserWindow.removeBrowserView(this.browserView);
   }
 
-  destroy () {
+  destroy() {
     if (this.url && !this.url.startsWith('beaker://')) {
-      historyDb.addTabClose(0, {url: this.url, title: this.title})
+      historyDb.addTabClose(0, { url: this.url, title: this.title });
     }
-    this.hide()
-    this.stopLiveReloading()
-    this.browserView.webContents.destroy()
-    this.emit('destroyed')
+    this.hide();
+    this.stopLiveReloading();
+    this.browserView.webContents.destroy();
+    this.emit('destroyed');
   }
 
-  awaitActive () {
+  awaitActive() {
     return new Promise((resolve, reject) => {
       const showed = () => {
-        this.removeListener('showed', showed)
-        this.removeListener('destroyed', destroyed)
-        resolve()
-      }
+        this.removeListener('showed', showed);
+        this.removeListener('destroyed', destroyed);
+        resolve();
+      };
       const destroyed = () => {
-        this.removeListener('showed', showed)
-        this.removeListener('destroyed', destroyed)
-        reject()
-      }
-      this.on('showed', showed)
-      this.on('destroyed', destroyed)
-    })
+        this.removeListener('showed', showed);
+        this.removeListener('destroyed', destroyed);
+        reject();
+      };
+      this.on('showed', showed);
+      this.on('destroyed', destroyed);
+    });
   }
 
-  async fadeout () {
-    if (this.fadeoutCssId) return
-    this.fadeoutCssId = await this.webContents.insertCSS(`body { opacity: 0.5 }`)
+  async fadeout() {
+    if (this.fadeoutCssId) return;
+    this.fadeoutCssId = await this.webContents.insertCSS(
+      `body { opacity: 0.5 }`
+    );
   }
 
-  async fadein () {
-    if (!this.fadeoutCssId) return
-    await this.webContents.removeInsertedCSS(this.fadeoutCssId)
-    this.fadeoutCssId = undefined
+  async fadein() {
+    if (!this.fadeoutCssId) return;
+    await this.webContents.removeInsertedCSS(this.fadeoutCssId);
+    this.fadeoutCssId = undefined;
   }
 
-  transferWindow (targetWindow) {
-    this.hide()
-    this.browserWindow = targetWindow
+  transferWindow(targetWindow) {
+    this.hide();
+    this.browserWindow = targetWindow;
   }
 
-  async updateHistory () {
-    var url = this.url
-    var title = this.title
+  async updateHistory() {
+    var url = this.url;
+    var title = this.title;
     if (url && !url.startsWith('beaker://')) {
-      historyDb.addVisit(0, {url, title})
+      historyDb.addVisit(0, { url, title });
     }
   }
 
-  toggleMuted () {
-    this.webContents.setAudioMuted(!this.isAudioMuted)
+  toggleMuted() {
+    this.webContents.setAudioMuted(!this.isAudioMuted);
   }
 
-  async captureScreenshot () {
+  async captureScreenshot() {
     try {
       // wait a sec to allow loading to finish
-      var url = this.url
-      await new Promise(r => setTimeout(r, 2e3))
+      var url = this.url;
+      await new Promise((r) => setTimeout(r, 2e3));
 
       // capture the page
-      this.browserView.webContents.incrementCapturerCount({width: 1000, height: 800}, !this.isActive)
-      var image = await this.browserView.webContents.capturePage()
-      this.browserView.webContents.decrementCapturerCount(!this.isActive)
-      var bounds = image.getSize()
-      if (bounds.width === 0 || bounds.height === 0) return
-      if (bounds.width <= bounds.height) return // only save if it's a useful image
-      await sitedataDb.set(url, 'screenshot', image.toDataURL(), {dontExtractOrigin: true, normalizeUrl: true})
+      this.browserView.webContents.incrementCapturerCount(
+        { width: 1000, height: 800 },
+        !this.isActive
+      );
+      var image = await this.browserView.webContents.capturePage();
+      this.browserView.webContents.decrementCapturerCount(!this.isActive);
+      var bounds = image.getSize();
+      if (bounds.width === 0 || bounds.height === 0) return;
+      if (bounds.width <= bounds.height) return; // only save if it's a useful image
+      await sitedataDb.set(url, 'screenshot', image.toDataURL(), {
+        dontExtractOrigin: true,
+        normalizeUrl: true,
+      });
     } catch (e) {
       // ignore, can happen if the pane was closed during wait
-      console.log('Failed to capture page screenshot', e)
+      console.log('Failed to capture page screenshot', e);
     }
   }
 
   // inpage finder
   // =
 
-  showInpageFind () {
-    if (this.tab.isHidden) return
+  showInpageFind() {
+    if (this.tab.isHidden) return;
     if (this.isInpageFindActive) {
       // go to next result on repeat "show" commands
-      this.moveInpageFind(1)
+      this.moveInpageFind(1);
     } else {
-      this.isInpageFindActive = true
-      this.currentInpageFindResults = {activeMatchOrdinal: 0, matches: 0}
-      this.emitUpdateState()
+      this.isInpageFindActive = true;
+      this.currentInpageFindResults = { activeMatchOrdinal: 0, matches: 0 };
+      this.emitUpdateState();
     }
-    this.browserWindow.webContents.focus()
+    this.browserWindow.webContents.focus();
   }
 
-  hideInpageFind () {
-    this.webContents.stopFindInPage('clearSelection')
-    this.isInpageFindActive = false
-    this.currentInpageFindString = undefined
-    this.currentInpageFindResults = undefined
-    this.emitUpdateState()
+  hideInpageFind() {
+    this.webContents.stopFindInPage('clearSelection');
+    this.isInpageFindActive = false;
+    this.currentInpageFindString = undefined;
+    this.currentInpageFindResults = undefined;
+    this.emitUpdateState();
   }
 
-  setInpageFindString (str, dir) {
-    this.currentInpageFindString = str
-    this.webContents.findInPage(this.currentInpageFindString, {findNext: true, forward: dir !== -1})
+  setInpageFindString(str, dir) {
+    this.currentInpageFindString = str;
+    this.webContents.findInPage(this.currentInpageFindString, {
+      findNext: true,
+      forward: dir !== -1,
+    });
   }
 
-  moveInpageFind (dir) {
-    if (!this.currentInpageFindString) return
-    this.webContents.findInPage(this.currentInpageFindString, {findNext: false, forward: dir !== -1})
+  moveInpageFind(dir) {
+    if (!this.currentInpageFindString) return;
+    this.webContents.findInPage(this.currentInpageFindString, {
+      findNext: false,
+      forward: dir !== -1,
+    });
   }
 
   // live reloading
   // =
 
-  async toggleLiveReloading (enable) {
+  async toggleLiveReloading(enable) {
     if (typeof enable === 'undefined') {
-      enable = !this.liveReloadEvents
+      enable = !this.liveReloadEvents;
     }
     if (this.liveReloadEvents) {
-      this.liveReloadEvents.destroy()
-      this.liveReloadEvents = false
+      this.liveReloadEvents.destroy();
+      this.liveReloadEvents = false;
     } else if (this.driveInfo) {
-      let drive = hyper.drives.getDrive(this.driveInfo.key)
-      if (!drive) return
+      let drive = hyper.drives.getDrive(this.driveInfo.key);
+      if (!drive) return;
 
-      let {version} = parseDriveUrl(this.url)
-      let {checkoutFS} = await hyper.drives.getDriveCheckout(drive, version)
-      this.liveReloadEvents = await checkoutFS.pda.watch()
+      let { version } = parseDriveUrl(this.url);
+      let { checkoutFS } = await hyper.drives.getDriveCheckout(drive, version);
+      this.liveReloadEvents = await checkoutFS.pda.watch();
 
-      const reload = _throttle(() => {
-        this.browserView.webContents.reload()
-      }, TRIGGER_LIVE_RELOAD_DEBOUNCE, {leading: false})
+      const reload = _throttle(
+        () => {
+          this.browserView.webContents.reload();
+        },
+        TRIGGER_LIVE_RELOAD_DEBOUNCE,
+        { leading: false }
+      );
       this.liveReloadEvents.on('data', ([evt]) => {
-        if (evt === 'changed') reload()
-      })
+        if (evt === 'changed') reload();
+      });
       // ^ note this throttle is run on the front edge.
       // That means snappier reloads (no delay) but possible double reloads if multiple files change
     }
-    this.emitUpdateState()
+    this.emitUpdateState();
   }
 
-  stopLiveReloading () {
+  stopLiveReloading() {
     if (this.liveReloadEvents) {
-      this.liveReloadEvents.destroy()
-      this.liveReloadEvents = false
-      this.emitUpdateState()
+      this.liveReloadEvents.destroy();
+      this.liveReloadEvents = false;
+      this.emitUpdateState();
     }
   }
 
   // custom renderers
   // =
 
-  async injectCustomRenderers () {
+  async injectCustomRenderers() {
     // determine content type
-    let contentType = getResourceContentType(this.url) || ''
-    let isPlainText = contentType.startsWith('text/plain')
-    let isJSON = contentType.startsWith('application/json') || (isPlainText && this.url.endsWith('.json'))
-    let isJS = contentType.includes('/javascript') || (isPlainText && this.url.endsWith('.js'))
-    let isCSS = contentType.startsWith('text/css') || (isPlainText && this.url.endsWith('.css'))
+    let contentType = getResourceContentType(this.url) || '';
+    let isPlainText = contentType.startsWith('text/plain');
+    let isJSON =
+      contentType.startsWith('application/json') ||
+      (isPlainText && this.url.endsWith('.json'));
+    let isJS =
+      contentType.includes('/javascript') ||
+      (isPlainText && this.url.endsWith('.js'));
+    let isCSS =
+      contentType.startsWith('text/css') ||
+      (isPlainText && this.url.endsWith('.css'));
 
     // json rendering
     // inject the json render script
@@ -569,11 +629,18 @@ export class Pane extends EventEmitter {
           box-shadow: inset 2px 2px 2px rgba(0,0,0,.05);
           background: #ddd;
         }
-      `)
-      let jsonpath = path.join(app.getAppPath(), 'fg', 'json-renderer', 'index.build.js')
-      jsonpath = jsonpath.replace('app.asar', 'app.asar.unpacked') // fetch from unpacked dir
+      `);
+      let jsonpath = path.join(
+        app.getAppPath(),
+        'fg',
+        'json-renderer',
+        'index.build.js'
+      );
+      jsonpath = jsonpath.replace('app.asar', 'app.asar.unpacked'); // fetch from unpacked dir
       try {
-        await this.webContents.executeJavaScript(await fs.readFile(jsonpath, 'utf8'))
+        await this.webContents.executeJavaScript(
+          await fs.readFile(jsonpath, 'utf8')
+        );
       } catch (e) {
         // ignore
       }
@@ -597,11 +664,18 @@ export class Pane extends EventEmitter {
       .hljs-symbol, .hljs-bullet, .hljs-link { color: #00b0e8; }
       .hljs-emphasis { font-style: italic; }
       .hljs-strong { font-weight: bold; }
-      `)
-      let scriptpath = path.join(app.getAppPath(), 'fg', 'syntax-highlighter', 'index.js')
-      scriptpath = scriptpath.replace('app.asar', 'app.asar.unpacked') // fetch from unpacked dir
+      `);
+      let scriptpath = path.join(
+        app.getAppPath(),
+        'fg',
+        'syntax-highlighter',
+        'index.js'
+      );
+      scriptpath = scriptpath.replace('app.asar', 'app.asar.unpacked'); // fetch from unpacked dir
       try {
-        await this.webContents.executeJavaScript(await fs.readFile(scriptpath, 'utf8'))
+        await this.webContents.executeJavaScript(
+          await fs.readFile(scriptpath, 'utf8')
+        );
       } catch (e) {
         // ignore
       }
@@ -613,214 +687,247 @@ export class Pane extends EventEmitter {
 
   // helper called by UIs to pull latest state if a change event has occurred
   // eg called by the bookmark systems after the bookmark state has changed
-  async refreshState () {
+  async refreshState() {
     await Promise.all([
       this.fetchIsBookmarked(true),
-      this.fetchDriveInfo(true)
-    ])
-    this.emitUpdateState()
+      this.fetchDriveInfo(true),
+    ]);
+    this.emitUpdateState();
   }
 
-  async fetchIsBookmarked (noEmit = false) {
-    var wasBookmarked = this.isBookmarked
-    this.isBookmarked = !!(await bookmarks.get(this.url))
+  async fetchIsBookmarked(noEmit = false) {
+    var wasBookmarked = this.isBookmarked;
+    this.isBookmarked = !!(await bookmarks.get(this.url));
     if (this.isBookmarked && !wasBookmarked) {
-      this.captureScreenshot()
+      this.captureScreenshot();
     }
     if (!noEmit) {
-      this.emitUpdateState()
+      this.emitUpdateState();
     }
   }
 
-  async fetchDriveInfo (noEmit = false) {
+  async fetchDriveInfo(noEmit = false) {
     // clear existing state
-    this.folderSyncPath = undefined
-    this.peers = 0
-    this.donateLinkHref = null
+    this.folderSyncPath = undefined;
+    this.peers = 0;
+    this.donateLinkHref = null;
 
     if (!this.url.startsWith('hyper://')) {
-      this.driveInfo = null
-      return
+      this.driveInfo = null;
+      return;
     }
-    
+
     // fetch new state
-    var key
+    var key;
     try {
-      key = await hyper.dns.resolveName(this.url)
-      this.driveInfo = await hyper.drives.getDriveInfo(key)
-      this.driveInfo.ident = await filesystem.getDriveIdent(this.driveInfo.url, true)
-      this.folderSyncPath = await folderSyncDb.getPath(this.driveInfo.key)
-      this.peers = this.driveInfo.peers
-      this.donateLinkHref = _get(this, 'driveInfo.links.payment.0.href')
+      key = await hyper.dns.resolveName(this.url);
+      this.driveInfo = await hyper.drives.getDriveInfo(key);
+      this.driveInfo.ident = await filesystem.getDriveIdent(
+        this.driveInfo.url,
+        true
+      );
+      this.folderSyncPath = await folderSyncDb.getPath(this.driveInfo.key);
+      this.peers = this.driveInfo.peers;
+      this.donateLinkHref = _get(this, 'driveInfo.links.payment.0.href');
     } catch (e) {
-      this.driveInfo = null
+      this.driveInfo = null;
     }
-    if (!noEmit) this.emitUpdateState()
+    if (!noEmit) this.emitUpdateState();
   }
 
   // attached pane
   // =
 
-  setAttachedPane (pane) {
+  setAttachedPane(pane) {
     if (this.attachedPane) {
       if (!this.attachedPane.webContents.isDestroyed()) {
-        this.attachedPane.webContents.removeListener('did-navigate', this.onAttachedPaneNavigated)
+        this.attachedPane.webContents.removeListener(
+          'did-navigate',
+          this.onAttachedPaneNavigated
+        );
       }
-      this.attachedPaneEvents.emit('pane-detached')
+      this.attachedPaneEvents.emit('pane-detached');
     }
-    this.attachedPane = pane
+    this.attachedPane = pane;
     if (pane) {
-      this.attachedPaneEvents.emit('pane-attached', {detail: {id: pane.id}})
-      this.attachedPane.webContents.on('did-navigate', this.onAttachedPaneNavigated)
+      this.attachedPaneEvents.emit('pane-attached', {
+        detail: { id: pane.id },
+      });
+      this.attachedPane.webContents.on(
+        'did-navigate',
+        this.onAttachedPaneNavigated
+      );
     }
-    this.tab.emitPaneUpdateState()
+    this.tab.emitPaneUpdateState();
   }
 
   // events
   // =
 
-  emitUpdateState () {
-    this.tab.emitTabUpdateState(this)
+  emitUpdateState() {
+    this.tab.emitTabUpdateState(this);
   }
 
-  onDidStartLoading (e) {
+  onDidStartLoading(e) {
     // update state
-    this.loadingURL = null
-    this.isReceivingAssets = false
-    this.wasDriveTimeout = false
+    this.loadingURL = null;
+    this.isReceivingAssets = false;
+    this.wasDriveTimeout = false;
 
     // emit
-    this.emitUpdateState()
+    this.emitUpdateState();
   }
 
-  onDidStartNavigation (e, url, isInPlace, isMainFrame, frameProcessId, frameRoutingId) {
-    this.frameUrls[frameRoutingId] = url
-    if (!isMainFrame) return
-    this.mainFrameId = frameRoutingId
-    var origin = toOrigin(url)
+  onDidStartNavigation(
+    e,
+    url,
+    isInPlace,
+    isMainFrame,
+    frameProcessId,
+    frameRoutingId
+  ) {
+    this.frameUrls[frameRoutingId] = url;
+    if (!isMainFrame) return;
+    this.mainFrameId = frameRoutingId;
+    var origin = toOrigin(url);
 
     // handle origin changes
     if (origin !== toOrigin(this.url)) {
-      this.stopLiveReloading()
-      this.setAttachedPane(undefined)
-      this.wantsAttachedPane = false
+      this.stopLiveReloading();
+      this.setAttachedPane(undefined);
+      this.wantsAttachedPane = false;
     }
 
     // update state
-    this.loadingURL = url
-    this.isLoading = true
-    this.emitUpdateState()
+    this.loadingURL = url;
+    this.isLoading = true;
+    this.emitUpdateState();
     // if (this.tab.isHidden) app.emit('custom-background-tabs-update', backgroundTabs) TODO
   }
 
-  async onDidNavigate (e, url, httpResponseCode) {
+  async onDidNavigate(e, url, httpResponseCode) {
     // remove any active subwindows
-    modals.close(this.tab)
+    modals.close(this.tab);
 
     // read zoom
-    zoom.setZoomFromSitedata(this)
+    zoom.setZoomFromSitedata(this);
 
     // update state
-    this.loadError = null
-    this.loadingURL = null
-    this.isReceivingAssets = true
-    this.favicons = null
-    this.frameUrls = {[this.mainFrameId]: url} // drop all non-main-frame URLs
-    await Promise.all([
-      this.fetchIsBookmarked(),
-      this.fetchDriveInfo()
-    ])
+    this.loadError = null;
+    this.loadingURL = null;
+    this.isReceivingAssets = true;
+    this.favicons = null;
+    this.frameUrls = { [this.mainFrameId]: url }; // drop all non-main-frame URLs
+    await Promise.all([this.fetchIsBookmarked(), this.fetchDriveInfo()]);
     if (httpResponseCode === 504 && url.startsWith('hyper://')) {
-      this.wasDriveTimeout = true
+      this.wasDriveTimeout = true;
     }
 
     // emit
-    this.emitUpdateState()
+    this.emitUpdateState();
   }
 
-  onDidNavigateInPage (e) {
-    this.fetchIsBookmarked()
-    this.updateHistory()
+  onDidNavigateInPage(e) {
+    this.fetchIsBookmarked();
+    this.updateHistory();
   }
 
-  onDidStopLoading () {
-    this.updateHistory()
+  onDidStopLoading() {
+    this.updateHistory();
 
     // update state
-    this.isLoading = false
-    this.loadingURL = null
-    this.isReceivingAssets = false
+    this.isLoading = false;
+    this.loadingURL = null;
+    this.isReceivingAssets = false;
 
     if (!this.url) {
       // aborted load on a new tab
-      this.loadURL('about:blank')
+      this.loadURL('about:blank');
     }
 
     // run custom renderer apps
-    this.injectCustomRenderers()
+    this.injectCustomRenderers();
 
     // emit
     if (!this.tab.isHidden) {
-      windowMenu.onSetCurrentLocation(this.browserWindow, this.url)
+      windowMenu.onSetCurrentLocation(this.browserWindow, this.url);
     }
-    this.emitUpdateState()
+    this.emitUpdateState();
   }
 
-  onDomReady (e) {
+  onDomReady(e) {
     // HACK
     // sometimes 'did-stop-loading' doesnt get fired
     // not sure why, but 'dom-ready' indicates that loading is done
     // if still isLoading or isReceivingAssets, run the did-stop-loading handler
     // -prf
     if (this.isLoading || this.isReceivingAssets) {
-      this.onDidStopLoading()
+      this.onDidStopLoading();
     }
   }
 
-  async onDidFailLoad (e, errorCode, errorDescription, validatedURL, isMainFrame) {
+  async onDidFailLoad(
+    e,
+    errorCode,
+    errorDescription,
+    validatedURL,
+    isMainFrame
+  ) {
     // ignore if this is a subresource
-    if (!isMainFrame) return
+    if (!isMainFrame) return;
 
     // ignore aborts. why:
     // - sometimes, aborts are caused by redirects. no biggy
     // - if the user cancels, then we dont want to give an error screen
-    if (errorDescription == 'ERR_ABORTED' || errorCode == ERR_ABORTED) return
+    if (errorDescription == 'ERR_ABORTED' || errorCode == ERR_ABORTED) return;
 
     // also ignore non-errors
-    if (errorCode == 0) return
+    if (errorCode == 0) return;
 
     // update state
-    var isInsecureResponse = IS_CODE_INSECURE_RESPONSE(errorCode)
-    this.loadError = {isInsecureResponse, errorCode, errorDescription, validatedURL}
-    this.emitUpdateState()
+    var isInsecureResponse = IS_CODE_INSECURE_RESPONSE(errorCode);
+    this.loadError = {
+      isInsecureResponse,
+      errorCode,
+      errorDescription,
+      validatedURL,
+    };
+    this.emitUpdateState();
 
     // render failure page
-    var errorPageHTML = errorPage(this.loadError)
+    var errorPageHTML = errorPage(this.loadError);
     try {
-      await this.webContents.executeJavaScript('document.documentElement.innerHTML = \'' + errorPageHTML + '\'; undefined')
+      await this.webContents.executeJavaScript(
+        "document.documentElement.innerHTML = '" +
+          errorPageHTML +
+          "'; undefined"
+      );
     } catch (e) {
       // ignore
     }
   }
 
-  onUpdateTargetUrl (e, url) {
-    if (this.tab.isHidden) return
-    if (this.browserWindow.isDestroyed()) return
-    this.currentStatus = url ? toNiceUrl(url) : url
-    this.tab.emitPaneUpdateState()
+  onUpdateTargetUrl(e, url) {
+    if (this.tab.isHidden) return;
+    if (this.browserWindow.isDestroyed()) return;
+    this.currentStatus = url ? toNiceUrl(url) : url;
+    this.tab.emitPaneUpdateState();
   }
 
-  onPageTitleUpdated (e, title) {
-    if (this.browserWindow && this.browserWindow.isDestroyed()) return
-    this.emitUpdateState()
+  onPageTitleUpdated(e, title) {
+    if (this.browserWindow && this.browserWindow.isDestroyed()) return;
+    this.emitUpdateState();
   }
 
-  onPageFaviconUpdated (e, favicons) {
-    this.favicons = favicons && favicons[0] ? favicons : null
+  onPageFaviconUpdated(e, favicons) {
+    this.favicons = favicons && favicons[0] ? favicons : null;
 
     if (this.favicons) {
-      let url = this.url
-      this.webContents.executeJavaScriptInIsolatedWorld(999, [{code: `
+      let url = this.url;
+      this.webContents
+        .executeJavaScriptInIsolatedWorld(999, [
+          {
+            code: `
         new Promise(async (resolve) => {
           var img = await new Promise(resolve => {
             var img = new Image()
@@ -842,72 +949,82 @@ export class Pane extends EventEmitter {
           ctx.drawImage(img, 0, 0, width, height)
           resolve(canvas.toDataURL('image/png'))
         })
-      `}]).then((dataUrl, err) => {
-        if (err) console.log(err)
-        else if (dataUrl) {
-          sitedataDb.set(url, 'favicon', dataUrl)
-        }
-      })
+      `,
+          },
+        ])
+        .then((dataUrl, err) => {
+          if (err) console.log(err);
+          else if (dataUrl) {
+            sitedataDb.set(url, 'favicon', dataUrl);
+          }
+        });
     }
-    
-    this.emitUpdateState()
+
+    this.emitUpdateState();
   }
 
-  onNewWindow (e, url, frameName, disposition, options) {
-    e.preventDefault()
-    if (!this.isActive || !this.tab) return // only open if coming from the active pane
-    var setActive = disposition === 'foreground-tab' || disposition === 'new-window'
-    var setActiveBySettings = !setActive
-    this.tab.createTab(url, {setActive, setActiveBySettings, adjacentActive: true})
+  onNewWindow(e, url, frameName, disposition, options) {
+    e.preventDefault();
+    if (!this.isActive || !this.tab) return; // only open if coming from the active pane
+    var setActive =
+      disposition === 'foreground-tab' || disposition === 'new-window';
+    var setActiveBySettings = !setActive;
+    this.tab.createTab(url, {
+      setActive,
+      setActiveBySettings,
+      adjacentActive: true,
+    });
   }
 
-  onWillAddNewContents (e, url) {
+  onWillAddNewContents(e, url) {
     // HACK
     // this should be handled by new-window, but new-window currently crashes
     // if you prevent default, so we handle it here
     // see https://github.com/electron/electron/issues/23859
     // -prf
-    e.preventDefault()
-    if (!this.tab) return
-    this.tab.createTab(url, {setActive: true, adjacentActive: true})
+    e.preventDefault();
+    if (!this.tab) return;
+    this.tab.createTab(url, { setActive: true, adjacentActive: true });
   }
 
-  onMediaChange (e) {
+  onMediaChange(e) {
     // our goal with this event handler is to detect that audio is playing
     // this lets us then render an "audio playing" icon on the tab
     // for whatever reason, the event consistently precedes the "is audible" being set by at most 1s
     // so, we delay for 1s, then emit a state update
-    setTimeout(() => this.emitUpdateState(), 1e3)
+    setTimeout(() => this.emitUpdateState(), 1e3);
   }
 
-  onFoundInPage (e, res) {
+  onFoundInPage(e, res) {
     this.currentInpageFindResults = {
       activeMatchOrdinal: res.activeMatchOrdinal,
-      matches: res.matches
-    }
-    this.emitUpdateState()
+      matches: res.matches,
+    };
+    this.emitUpdateState();
   }
 
-  onZoomChanged (e, zoomDirection) {
-    if (zoomDirection === 'in') zoom.zoomIn(this)
-    if (zoomDirection === 'out') zoom.zoomOut(this)
+  onZoomChanged(e, zoomDirection) {
+    if (zoomDirection === 'in') zoom.zoomIn(this);
+    if (zoomDirection === 'out') zoom.zoomOut(this);
   }
 }
 
 // internal methods
 // =
 
-function toOrigin (str) {
+function toOrigin(str) {
   try {
-    var u = new URL(str)
-    return u.protocol + '//' + u.hostname + (u.port ? `:${u.port}` : '') + '/'
-  } catch (e) { return '' }
+    var u = new URL(str);
+    return u.protocol + '//' + u.hostname + (u.port ? `:${u.port}` : '') + '/';
+  } catch (e) {
+    return '';
+  }
 }
 
-async function fireBeforeUnloadEvent (wc) {
+async function fireBeforeUnloadEvent(wc) {
   try {
     if (wc.isLoading() || wc.isWaitingForResponse()) {
-      return // dont bother
+      return; // dont bother
     }
     return await Promise.race([
       wc.executeJavaScript(`
@@ -917,11 +1034,11 @@ async function fireBeforeUnloadEvent (wc) {
           return window.dispatchEvent(unloadEvent)
         })()
       `),
-      new Promise(r => {
-        setTimeout(r, 500) // thread may be locked, so abort after 500ms
-      })
-    ])
-    } catch (e) {
-      // ignore
-    }
+      new Promise((r) => {
+        setTimeout(r, 500); // thread may be locked, so abort after 500ms
+      }),
+    ]);
+  } catch (e) {
+    // ignore
+  }
 }

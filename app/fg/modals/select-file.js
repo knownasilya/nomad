@@ -1,522 +1,586 @@
 /* globals customElements */
-import { LitElement, html, css } from '../vendor/lit-element/lit-element'
-import { classMap } from '../vendor/lit-element/lit-html/directives/class-map'
-import { joinPath } from '../../lib/strings'
-import { createStat } from '../../bg/web-apis/fg/stat'
-import * as bg from './bg-process-rpc'
-import commonCSS from './common.css'
-import inputsCSS from './inputs.css'
-import buttonsCSS from './buttons2.css'
+import { LitElement, html, css } from '../vendor/lit-element/lit-element';
+import { classMap } from '../vendor/lit-element/lit-html/directives/class-map';
+import { joinPath } from '../../lib/strings';
+import { createStat } from '../../bg/web-apis/fg/stat';
+import * as bg from './bg-process-rpc';
+import commonCSS from './common.css';
+import inputsCSS from './inputs.css';
+import buttonsCSS from './buttons2.css';
 
 const SHORTCUTS = [
-  {url: 'virtual:my-device', title: 'My Device', icon: 'fas fa-laptop'},
-  {url: 'virtual:my-drives', title: 'My Drives', icon: 'far fa-hdd'},
-  {url: 'virtual:hosting', title: 'Hosting', icon: 'fas fa-share-alt'}
-]
+  { url: 'virtual:my-device', title: 'My Device', icon: 'fas fa-laptop' },
+  { url: 'virtual:my-drives', title: 'My Drives', icon: 'far fa-hdd' },
+  { url: 'virtual:hosting', title: 'Hosting', icon: 'fas fa-share-alt' },
+];
 
 class SelectFileModal extends LitElement {
-  static get properties () {
+  static get properties() {
     return {
-      path: {type: String},
-      files: {type: Array},
-      selectedPaths: {type: Array}
-    }
+      path: { type: String },
+      files: { type: Array },
+      selectedPaths: { type: Array },
+    };
   }
 
-  static get styles () {
-    return [commonCSS, inputsCSS, buttonsCSS, css`
-      .title {
-        background: #fff;
-        border: 0;
-        padding: 6px;
-        text-align: center;
-        font-size: 14px;
-        font-weight: 500;
-      }
+  static get styles() {
+    return [
+      commonCSS,
+      inputsCSS,
+      buttonsCSS,
+      css`
+        .title {
+          background: #fff;
+          border: 0;
+          padding: 6px;
+          text-align: center;
+          font-size: 14px;
+          font-weight: 500;
+        }
 
-      .wrapper {
-        padding: 0 15px 10px;
-      }
+        .wrapper {
+          padding: 0 15px 10px;
+        }
 
-      form {
-        padding: 0;
-        margin: 0;
-      }
+        form {
+          padding: 0;
+          margin: 0;
+        }
 
-      .layout {
-        display: grid;
-        grid-gap: 10px;
-        grid-template-columns: 180px 1fr;
-      }
+        .layout {
+          display: grid;
+          grid-gap: 10px;
+          grid-template-columns: 180px 1fr;
+        }
 
-      .form-actions {
-        display: flex;
-        text-align: left;
-      }
+        .form-actions {
+          display: flex;
+          text-align: left;
+        }
 
-      .form-actions .left {
-        flex: 1;
-      }
+        .form-actions .left {
+          flex: 1;
+        }
 
-      .form-actions .btn.cancel {
-        margin-right: 5px;
-      }
+        .form-actions .btn.cancel {
+          margin-right: 5px;
+        }
 
-      .shortcuts-list {
-        background: #f5f5fa;
-        box-sizing: border-box;
-        padding: 5px 0;
-        height: 379px;
-        overflow-y: auto;
-      }
+        .shortcuts-list {
+          background: #f5f5fa;
+          box-sizing: border-box;
+          padding: 5px 0;
+          height: 379px;
+          overflow-y: auto;
+        }
 
-      .shortcuts-list .shortcut {
-        padding: 8px 10px;
-      }
+        .shortcuts-list .shortcut {
+          padding: 8px 10px;
+        }
 
-      .shortcuts-list .shortcut.selected {
-        background: #0031;
-        font-weight: 500;
-      }
+        .shortcuts-list .shortcut.selected {
+          background: #0031;
+          font-weight: 500;
+        }
 
-      .shortcuts-list .shortcut .fa-fw {
-        margin-right: 5px;
-      }
+        .shortcuts-list .shortcut .fa-fw {
+          margin-right: 5px;
+        }
 
-      .path {
-        display: flex;
-        align-items: center;
-        padding: 0 0 4px;
-      }
+        .path {
+          display: flex;
+          align-items: center;
+          padding: 0 0 4px;
+        }
 
-      .path .fa-fw {
-        margin-right: 4px;
-      }
+        .path .fa-fw {
+          margin-right: 4px;
+        }
 
-      .path > div {
-        cursor: pointer;
-        margin-right: 4px;
-        max-width: 100px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
+        .path > div {
+          cursor: pointer;
+          margin-right: 4px;
+          max-width: 100px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
 
-      .path > div:hover {
-        text-decoration: underline;
-      }
+        .path > div:hover {
+          text-decoration: underline;
+        }
 
-      .filename {
-        display: flex;
-        align-items: center;
-        margin: 6px 0 10px;
-        background: #f3f3fa;
-        border-radius: 4px;
-        padding-left: 10px;
-      }
+        .filename {
+          display: flex;
+          align-items: center;
+          margin: 6px 0 10px;
+          background: #f3f3fa;
+          border-radius: 4px;
+          padding-left: 10px;
+        }
 
-      .filename label {
-        margin-right: 10px;
-        font-weight: normal;
-      }
+        .filename label {
+          margin-right: 10px;
+          font-weight: normal;
+        }
 
-      .filename input {
-        flex: 1;
-        margin: 0;
-        font-size: 13px;
-      }
+        .filename input {
+          flex: 1;
+          margin: 0;
+          font-size: 13px;
+        }
 
-      .files-list {
-        border-radius: 4px;
-        height: 378px;
-        box-sizing: border-box;
-        overflow-y: scroll;
-        border: 1px solid #ccc;
-        user-select: none;
-        cursor: default;
-        padding: 4px 0;
-        margin-bottom: 10px;
-      }
+        .files-list {
+          border-radius: 4px;
+          height: 378px;
+          box-sizing: border-box;
+          overflow-y: scroll;
+          border: 1px solid #ccc;
+          user-select: none;
+          cursor: default;
+          padding: 4px 0;
+          margin-bottom: 10px;
+        }
 
-      .path + .files-list {
-        height: 358px;
-      }
+        .path + .files-list {
+          height: 358px;
+        }
 
-      .files-list.grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, 120px);
-        grid-template-rows: repeat(auto-fill, 74px);
-        gap: 15px;
-        padding: 12px;
-      }
+        .files-list.grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, 120px);
+          grid-template-rows: repeat(auto-fill, 74px);
+          gap: 15px;
+          padding: 12px;
+        }
 
-      .files-list .item {
-        display: flex;
-        width: 100%;
-        align-items: center;
-        padding: 6px 10px;
-      }
+        .files-list .item {
+          display: flex;
+          width: 100%;
+          align-items: center;
+          padding: 6px 10px;
+        }
 
-      .files-list.grid .item {
-        flex-direction: column;
-        box-sizing: border-box;
-      }
+        .files-list.grid .item {
+          flex-direction: column;
+          box-sizing: border-box;
+        }
 
-      .files-list .item.disabled {
-        font-style: italic;
-        color: #aaa;
-      }
+        .files-list .item.disabled {
+          font-style: italic;
+          color: #aaa;
+        }
 
-      .files-list .item .fa-fw,
-      .files-list .item .favicon {
-        margin-right: 5px;
-      }
+        .files-list .item .fa-fw,
+        .files-list .item .favicon {
+          margin-right: 5px;
+        }
 
-      .files-list.grid .item .fa-fw {
-        font-size: 28px;
-        margin: 5px 0 10px;
-      }
+        .files-list.grid .item .fa-fw {
+          font-size: 28px;
+          margin: 5px 0 10px;
+        }
 
-      .files-list.grid .item .favicon {
-        width: 32px;
-        height: 32px;
-        object-fit: cover;
-        margin: 5px 0 10px;
-      }
+        .files-list.grid .item .favicon {
+          width: 32px;
+          height: 32px;
+          object-fit: cover;
+          margin: 5px 0 10px;
+        }
 
-      .files-list .item .fa-folder {
-        color: #9ec2e0;
-      }
+        .files-list .item .fa-folder {
+          color: #9ec2e0;
+        }
 
-      .files-list .item .fa-file {
-        -webkit-text-stroke: 1px #9a9aab;
-        color: #fff;
-      }
+        .files-list .item .fa-file {
+          -webkit-text-stroke: 1px #9a9aab;
+          color: #fff;
+        }
 
-      .files-list .item .name {
-        flex: 1;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
+        .files-list .item .name {
+          flex: 1;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
 
-      .files-list .item.selected {
-        background: #2864dc;
-        color: #fff;
-      }
+        .files-list .item.selected {
+          background: #2864dc;
+          color: #fff;
+        }
 
-      .files-list .item.selected .fa-fw {
-        text-shadow: 0 1px 2px #0006;
-      }
+        .files-list .item.selected .fa-fw {
+          text-shadow: 0 1px 2px #0006;
+        }
 
-      .drive-changer {
-        display: flex;
-      }
+        .drive-changer {
+          display: flex;
+        }
 
-      .drive-changer > * {
-        border-radius: 0 !important;
-      }
-      
-      .drive-changer > *:first-child {
-        border-top-left-radius: 4px !important;
-        border-bottom-left-radius: 4px !important;
-      }
-      
-      .drive-changer > *:last-child {
-        border-top-right-radius: 4px !important;
-        border-bottom-right-radius: 4px !important;
-      }
+        .drive-changer > * {
+          border-radius: 0 !important;
+        }
 
-      .drive-changer input {
-        flex: 0 0 300px;
-        height: auto;
-        margin: 0;
-        border-left: 0;
-        border-right: 0;
-      }
-      `]
+        .drive-changer > *:first-child {
+          border-top-left-radius: 4px !important;
+          border-bottom-left-radius: 4px !important;
+        }
+
+        .drive-changer > *:last-child {
+          border-top-right-radius: 4px !important;
+          border-bottom-right-radius: 4px !important;
+        }
+
+        .drive-changer input {
+          flex: 0 0 300px;
+          height: auto;
+          margin: 0;
+          border-left: 0;
+          border-right: 0;
+        }
+      `,
+    ];
   }
 
-  get isVirtualListing () {
-    return this.drive && this.drive.startsWith('virtual:')
+  get isVirtualListing() {
+    return this.drive && this.drive.startsWith('virtual:');
   }
 
-  get virtualTitle () {
-    var s = SHORTCUTS.find(s => s.url === this.drive)
-    return s ? s.title : ''
+  get virtualTitle() {
+    var s = SHORTCUTS.find((s) => s.url === this.drive);
+    return s ? s.title : '';
   }
 
-  constructor () {
-    super()
+  constructor() {
+    super();
 
     // state
-    this.drives = []
-    this.path = '/'
-    this.files = []
-    this.selectedPaths = []
-    this.driveInfo = null
-    this.reloadInterval = undefined
+    this.drives = [];
+    this.path = '/';
+    this.files = [];
+    this.selectedPaths = [];
+    this.driveInfo = null;
+    this.reloadInterval = undefined;
 
     // params
-    this.saveMode = false
-    this.drive = null
-    this.defaultPath = '/'
-    this.defaultFilename = ''
-    this.title = ''
-    this.buttonLabel = ''
-    this.select = ['file', 'folder', 'mount']
+    this.saveMode = false;
+    this.drive = null;
+    this.defaultPath = '/';
+    this.defaultFilename = '';
+    this.title = '';
+    this.buttonLabel = '';
+    this.select = ['file', 'folder', 'mount'];
     this.filters = {
       extensions: undefined,
       writable: undefined,
-      networked: undefined
-    }
-    this.allowMultiple = false
-    this.cbs = null
+      networked: undefined,
+    };
+    this.allowMultiple = false;
+    this.cbs = null;
   }
 
-  async init (params, cbs) {
-    this.cbs = cbs
-    this.saveMode = params.saveMode
-    this.drive = params.drive || 'virtual:my-device'
-    this.path = params.defaultPath || '/'
-    this.defaultFilename = params.defaultFilename || ''
-    this.title = params.title || ''
-    this.buttonLabel = params.buttonLabel || (this.saveMode ? 'Save' : 'Select')
-    if (params.select) this.select = params.select
+  async init(params, cbs) {
+    this.cbs = cbs;
+    this.saveMode = params.saveMode;
+    this.drive = params.drive || 'virtual:my-device';
+    this.path = params.defaultPath || '/';
+    this.defaultFilename = params.defaultFilename || '';
+    this.title = params.title || '';
+    this.buttonLabel =
+      params.buttonLabel || (this.saveMode ? 'Save' : 'Select');
+    if (params.select) this.select = params.select;
     if (params.filters) {
       if ('extensions' in params.filters) {
-        this.filters.extensions = params.filters.extensions
+        this.filters.extensions = params.filters.extensions;
       }
       if ('writable' in params.filters) {
-        this.filters.writable = params.filters.writable
+        this.filters.writable = params.filters.writable;
       }
       if ('networked' in params.filters) {
-        this.filters.networked = params.filters.networked
+        this.filters.networked = params.filters.networked;
       }
     }
-    this.allowMultiple = !this.saveMode && params.allowMultiple
+    this.allowMultiple = !this.saveMode && params.allowMultiple;
     if (!this.title) {
       if (this.saveMode) {
-        this.title = 'Save file...'
+        this.title = 'Save file...';
       } else {
-        let canSelect = v => this.select.includes(v)
-        let [file, folder, mount] = [canSelect('file'), canSelect('folder'), canSelect('mount')]
+        let canSelect = (v) => this.select.includes(v);
+        let [file, folder, mount] = [
+          canSelect('file'),
+          canSelect('folder'),
+          canSelect('mount'),
+        ];
         if (file && (folder || mount)) {
-          this.title = 'Select files or folders'
+          this.title = 'Select files or folders';
         } else if (file && !(folder || mount)) {
-          this.title = 'Select files'
+          this.title = 'Select files';
         } else if (folder) {
-          this.title = 'Select folders'
+          this.title = 'Select folders';
         } else if (mount) {
-          this.title = 'Select drives'
+          this.title = 'Select drives';
         }
       }
     }
 
-    this.driveInfo = !this.isVirtualListing ? await bg.hyperdrive.getInfo(this.drive) : undefined
-    await this.readdir()
-    this.updateComplete.then(_ => {
-      this.adjustHeight()
+    this.driveInfo = !this.isVirtualListing
+      ? await bg.hyperdrive.getInfo(this.drive)
+      : undefined;
+    await this.readdir();
+    this.updateComplete.then((_) => {
+      this.adjustHeight();
       if (this.saveMode) {
-        this.filenameInput.value = this.defaultFilename
-        this.focusInput()
-        this.requestUpdate()
+        this.filenameInput.value = this.defaultFilename;
+        this.focusInput();
+        this.requestUpdate();
       }
-    })
+    });
 
-    this.drives = await bg.drives.list()
-    this.drives.push({url: 'hyper://private/', info: {title: 'My Private Drive', writable: true}})
-    this.drives.sort((a, b) => (a.info.title || '').toLowerCase().localeCompare(b.info.title || ''))
+    this.drives = await bg.drives.list();
+    this.drives.push({
+      url: 'hyper://private/',
+      info: { title: 'My Private Drive', writable: true },
+    });
+    this.drives.sort((a, b) =>
+      (a.info.title || '').toLowerCase().localeCompare(b.info.title || '')
+    );
     if (this.isVirtualListing) {
-      this.readvirtual()
+      this.readvirtual();
     }
 
     if (!this.reloadInterval) {
       // periodically reload to keep listing updated
-      this.reloadInterval = setInterval(this.reload.bind(this), 3e3)
+      this.reloadInterval = setInterval(this.reload.bind(this), 3e3);
     }
   }
 
-  async reload () {
-    this.drives = await bg.drives.list()
-    this.drives.push({url: 'hyper://private/', info: {title: 'My Private Drive', writable: true}})
-    this.drives.sort((a, b) => (a.info.title || '').toLowerCase().localeCompare(b.info.title || ''))
-    this.requestUpdate()
+  async reload() {
+    this.drives = await bg.drives.list();
+    this.drives.push({
+      url: 'hyper://private/',
+      info: { title: 'My Private Drive', writable: true },
+    });
+    this.drives.sort((a, b) =>
+      (a.info.title || '').toLowerCase().localeCompare(b.info.title || '')
+    );
+    this.requestUpdate();
   }
 
-  cleanup () {
+  cleanup() {
     if (this.reloadInterval) {
-      clearInterval(this.reloadInterval)
-      this.reloadInterval = undefined
+      clearInterval(this.reloadInterval);
+      this.reloadInterval = undefined;
     }
   }
 
-  adjustHeight () {
+  adjustHeight() {
     // adjust height based on rendering
-    var height = this.shadowRoot.querySelector('div').clientHeight|0
-    bg.modals.resizeSelf({height})
+    var height = this.shadowRoot.querySelector('div').clientHeight | 0;
+    bg.modals.resizeSelf({ height });
   }
 
-  focusInput () {
-    var el = this.filenameInput
-    el.focus()
-    el.selectionStart = el.selectionEnd = 0
+  focusInput() {
+    var el = this.filenameInput;
+    el.focus();
+    el.selectionStart = el.selectionEnd = 0;
   }
 
-  async goto (path) {
-    this.path = path
-    await this.readdir()
-    this.selectedPaths = []
+  async goto(path) {
+    this.path = path;
+    await this.readdir();
+    this.selectedPaths = [];
     if (this.saveMode) {
-      this.filenameInput.value = this.defaultFilename
-      this.focusInput()
+      this.filenameInput.value = this.defaultFilename;
+      this.focusInput();
     }
   }
 
-  async readvirtual () {
+  async readvirtual() {
     const vfile = (url, icon, name) => ({
       isVirtual: true,
       path: url,
       icon: url.startsWith('hyper:')
         ? url === 'hyper://private/'
-          ? html`<img class="favicon" srcset="beaker://assets/img/drive-types/files.png 1x, beaker://assets/img/drive-types/files-64.png 2x">`
-          : html`<img class="favicon" src="asset:favicon:${url}">`
+          ? html`<img
+              class="favicon"
+              srcset="
+                beaker://assets/img/drive-types/files.png    1x,
+                beaker://assets/img/drive-types/files-64.png 2x
+              "
+            />`
+          : html`<img class="favicon" src="asset:favicon:${url}" />`
         : html`<span class="fa-fw ${icon}"></span>`,
       name,
-      stat: {isFile: () => true, isDirectory: () => false},
-    })
+      stat: { isFile: () => true, isDirectory: () => false },
+    });
     switch (this.drive) {
       case 'virtual:my-device':
         this.files = [
           vfile('virtual:my-drives', 'far fa-hdd', 'My Drives'),
-          vfile('virtual:hosting', 'fas fa-share-alt', 'Hosting')
-        ]
-        break
+          vfile('virtual:hosting', 'fas fa-share-alt', 'Hosting'),
+        ];
+        break;
       case 'virtual:my-drives':
-        this.files = this.drives.filter(d => d.info.writable).map(drive => vfile(drive.url, undefined, drive.info.title))
-        break
+        this.files = this.drives
+          .filter((d) => d.info.writable)
+          .map((drive) => vfile(drive.url, undefined, drive.info.title));
+        break;
       case 'virtual:hosting':
-        this.files = this.drives.filter(d => !d.info.writable).map(drive => vfile(drive.url, undefined, drive.info.title))
-        break
+        this.files = this.drives
+          .filter((d) => !d.info.writable)
+          .map((drive) => vfile(drive.url, undefined, drive.info.title));
+        break;
     }
   }
 
-  async readdir () {
+  async readdir() {
     if (this.isVirtualListing) {
-      return this.readvirtual()
+      return this.readvirtual();
     }
 
-    var files = await bg.hyperdrive.readdir(joinPath(this.drive, this.path), {includeStats: true})
-    files.forEach(file => {
-      file.stat = createStat(file.stat)
-      file.path = joinPath(this.path, file.name)
-    })
-    files.sort(sortFiles)
-    this.files = files
+    var files = await bg.hyperdrive.readdir(joinPath(this.drive, this.path), {
+      includeStats: true,
+    });
+    files.forEach((file) => {
+      file.stat = createStat(file.stat);
+      file.path = joinPath(this.path, file.name);
+    });
+    files.sort(sortFiles);
+    this.files = files;
   }
 
-  getFile (path) {
-    return this.files.find(f => f.path === path)
+  getFile(path) {
+    return this.files.find((f) => f.path === path);
   }
 
-  canSelectFile (file) {
+  canSelectFile(file) {
     if (this.isVirtualListing) {
-      return true // can always select items in virtual lists
+      return true; // can always select items in virtual lists
     }
     if (!this.driveInfo) {
-      return false // probably still loading
+      return false; // probably still loading
     }
-    if (defined(this.filters.networked) && this.filters.networked !== this.driveInfo.networked) {
-      return false
+    if (
+      defined(this.filters.networked) &&
+      this.filters.networked !== this.driveInfo.networked
+    ) {
+      return false;
     }
-    if (defined(this.filters.writable) && this.filters.writable !== this.driveInfo.writable) {
-      return false
+    if (
+      defined(this.filters.writable) &&
+      this.filters.writable !== this.driveInfo.writable
+    ) {
+      return false;
     }
     if (this.saveMode && !this.driveInfo.writable) {
-      return false
+      return false;
     }
     if (file.stat.isFile()) {
       if (!this.select.includes('file')) {
-        return false
+        return false;
       }
       if (this.filters.extensions) {
-        let hasExt = this.filters.extensions.some(ext => file.name.endsWith(ext))
+        let hasExt = this.filters.extensions.some((ext) =>
+          file.name.endsWith(ext)
+        );
         if (!hasExt) {
-          return false
+          return false;
         }
       }
-      return true
+      return true;
     } else {
-      return this.select.includes('folder') || this.select.includes('mount')
+      return this.select.includes('folder') || this.select.includes('mount');
     }
   }
 
-  get filenameInput () {
-    return this.shadowRoot.querySelector('input')
+  get filenameInput() {
+    return this.shadowRoot.querySelector('input');
   }
 
-  get hasValidSelection () {
+  get hasValidSelection() {
     if (this.saveMode) {
-      if (!this.driveInfo || !this.driveInfo.writable) return false
-      let inputValue = this.filenameInput && this.filenameInput.value
-      if (!inputValue) return false
-      let file = this.getFile(joinPath(this.path, inputValue))
-      if (file && file.stat.isDirectory()) return false
-      return true
+      if (!this.driveInfo || !this.driveInfo.writable) return false;
+      let inputValue = this.filenameInput && this.filenameInput.value;
+      if (!inputValue) return false;
+      let file = this.getFile(joinPath(this.path, inputValue));
+      if (file && file.stat.isDirectory()) return false;
+      return true;
     } else {
       if (this.selectedPaths.length === 0) {
-        if (this.select.includes('folder')) return true // can select current location
-        return false
+        if (this.select.includes('folder')) return true; // can select current location
+        return false;
       }
       if (this.filters.extensions) {
         // if there's an extensions requirement,
         // folders can still be selected but they're not valid targets
-        return this.selectedPaths.every(path => this.filters.extensions.some(ext => path.endsWith(ext)))
+        return this.selectedPaths.every((path) =>
+          this.filters.extensions.some((ext) => path.endsWith(ext))
+        );
       }
-      return true
+      return true;
     }
   }
 
   // rendering
   // =
 
-  render () {
+  render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css">
+      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
       <div>
         <div class="title">${this.title}</div>
         <div class="wrapper">
           <form @submit=${this.onSubmit}>
             ${this.saveMode
               ? html`
-                <div class="filename">
-                  <label>Save as:</label>
-                  <input type="text" name="filename" @keyup=${e => this.requestUpdate()}>
-                </div>
-              `
+                  <div class="filename">
+                    <label>Save as:</label>
+                    <input
+                      type="text"
+                      name="filename"
+                      @keyup=${(e) => this.requestUpdate()}
+                    />
+                  </div>
+                `
               : ''}
 
             <div class="layout">
               <div class="column-shortcuts">
                 <div class="shortcuts-list">
-                  ${SHORTCUTS.map(shortcut => this.renderShortcut(shortcut))}
+                  ${SHORTCUTS.map((shortcut) => this.renderShortcut(shortcut))}
                 </div>
               </div>
               <div class="column-files">
-                <div class="path">
-                  ${this.renderPath()}
-                </div>
+                <div class="path">${this.renderPath()}</div>
                 ${this.renderFilesList()}
               </div>
             </div>
 
             <div class="form-actions">
               <div class="left">
-              <button type="button" @click=${this.onClickNewDrive} class="btn">Create new drive</button>
+                <button
+                  type="button"
+                  @click=${this.onClickNewDrive}
+                  class="btn"
+                >
+                  Create new drive
+                </button>
               </div>
               <div class="right">
-                <button type="button" @click=${this.onClickCancel} class="btn cancel" tabindex="4">Cancel</button>
-                <button ?disabled=${!this.hasValidSelection} type="submit" class="btn primary" tabindex="5">
+                <button
+                  type="button"
+                  @click=${this.onClickCancel}
+                  class="btn cancel"
+                  tabindex="4"
+                >
+                  Cancel
+                </button>
+                <button
+                  ?disabled=${!this.hasValidSelection}
+                  type="submit"
+                  class="btn primary"
+                  tabindex="5"
+                >
                   ${this.buttonLabel}
                 </button>
               </div>
@@ -524,14 +588,14 @@ class SelectFileModal extends LitElement {
           </form>
         </div>
       </div>
-    `
+    `;
   }
 
-  renderShortcut (shortcut) {
+  renderShortcut(shortcut) {
     const cls = classMap({
       shortcut: true,
-      selected: this.drive === shortcut.url
-    })
+      selected: this.drive === shortcut.url,
+    });
     return html`
       <div
         class="${cls}"
@@ -543,151 +607,173 @@ class SelectFileModal extends LitElement {
           <span class="name" title="${shortcut.title}">${shortcut.title}</span>
         </div>
       </div>
-    `
+    `;
   }
 
-  renderPath () {
-    var pathParts = this.path.split('/').filter(Boolean)
-    var pathAcc = []
-    var topTitle = this.driveInfo ? (this.driveInfo.title || 'Untitled') : this.virtualTitle
-    return [html`
-      <div @click=${e => this.onClickPath(e, '/')}>${topTitle}</div>
-      <span class="fa-fw fas fa-angle-right"></span>
-    `].concat(pathParts.map(part => {
-      pathAcc.push(part)
-      var path = '/' + pathAcc.join('/')
-      return html`
-        <div  @click=${e => this.onClickPath(e, path)}>${part}</div>
+  renderPath() {
+    var pathParts = this.path.split('/').filter(Boolean);
+    var pathAcc = [];
+    var topTitle = this.driveInfo
+      ? this.driveInfo.title || 'Untitled'
+      : this.virtualTitle;
+    return [
+      html`
+        <div @click=${(e) => this.onClickPath(e, '/')}>${topTitle}</div>
         <span class="fa-fw fas fa-angle-right"></span>
-      `
-    }))
+      `,
+    ].concat(
+      pathParts.map((part) => {
+        pathAcc.push(part);
+        var path = '/' + pathAcc.join('/');
+        return html`
+          <div @click=${(e) => this.onClickPath(e, path)}>${part}</div>
+          <span class="fa-fw fas fa-angle-right"></span>
+        `;
+      })
+    );
   }
 
-  renderFilesList () {
+  renderFilesList() {
     return html`
       <div class="files-list ${this.isVirtualListing ? 'grid' : ''}">
-        ${this.files.map(file => this.renderFile(file))}
+        ${this.files.map((file) => this.renderFile(file))}
       </div>
-    `
+    `;
   }
 
-  renderFile (file) {
+  renderFile(file) {
     // TODO mounts
-    var isSelected = this.selectedPaths.includes(file.path)
-    var disabled = !this.canSelectFile(file)
+    var isSelected = this.selectedPaths.includes(file.path);
+    var disabled = !this.canSelectFile(file);
     const cls = classMap({
       item: true,
       file: file.stat.isFile(),
       folder: file.stat.isDirectory(),
       selected: isSelected,
-      disabled
-    })
+      disabled,
+    });
     return html`
       <div
         class="${cls}"
         @click=${disabled ? undefined : this.onSelectFile}
-        @dblclick=${disabled && !file.stat.isDirectory() ? undefined : this.onDblClickFile}
+        @dblclick=${disabled && !file.stat.isDirectory()
+          ? undefined
+          : this.onDblClickFile}
         data-path=${file.path}
       >
-        ${file.icon ? file.icon : html`
-          <span class="fa-fw ${file.stat.isFile() ? 'fas fa-file' : 'fas fa-folder'}"></span>
-        `}
+        ${file.icon
+          ? file.icon
+          : html`
+              <span
+                class="fa-fw ${file.stat.isFile()
+                  ? 'fas fa-file'
+                  : 'fas fa-folder'}"
+              ></span>
+            `}
         <span class="name" title="${file.name}">${file.name}</span>
       </div>
-    `
+    `;
   }
 
   // event handlers
   // =
 
-  async onSelectShortcut (e) {
-    e.preventDefault()
-    e.stopPropagation()
-    this.drive = e.currentTarget.dataset.url
-    this.driveInfo = undefined
-    this.goto('/')
+  async onSelectShortcut(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    this.drive = e.currentTarget.dataset.url;
+    this.driveInfo = undefined;
+    this.goto('/');
   }
 
-  onClickPath (e, path) {
-    e.preventDefault()
-    this.goto(path)
+  onClickPath(e, path) {
+    e.preventDefault();
+    this.goto(path);
   }
 
-  onSelectFile (e) {
-    var path = e.currentTarget.dataset.path
-    if (this.allowMultiple && (e.ctrlKey || e.metaKey) && !this.isVirtualListing) {
-      this.selectedPaths = this.selectedPaths.concat([path])
+  onSelectFile(e) {
+    var path = e.currentTarget.dataset.path;
+    if (
+      this.allowMultiple &&
+      (e.ctrlKey || e.metaKey) &&
+      !this.isVirtualListing
+    ) {
+      this.selectedPaths = this.selectedPaths.concat([path]);
     } else {
-      this.selectedPaths = [path]
+      this.selectedPaths = [path];
     }
     if (this.saveMode) {
-      this.filenameInput.value = path.split('/').pop()
+      this.filenameInput.value = path.split('/').pop();
     }
   }
 
-  onDblClickFile (e) {
-    e.preventDefault()
-    var file = this.getFile(e.currentTarget.dataset.path)
+  onDblClickFile(e) {
+    e.preventDefault();
+    var file = this.getFile(e.currentTarget.dataset.path);
     if (file.stat.isDirectory()) {
-      this.goto(file.path)
+      this.goto(file.path);
     } else {
-      this.selectedPaths = [file.path]
-      this.onSubmit()
+      this.selectedPaths = [file.path];
+      this.onSubmit();
     }
   }
 
-  onClickNewDrive (e) {
-    e.preventDefault()
-    this.cleanup()
-    this.cbs.resolve({gotoCreateDrive: true})
+  onClickNewDrive(e) {
+    e.preventDefault();
+    this.cleanup();
+    this.cbs.resolve({ gotoCreateDrive: true });
   }
 
-  onClickCancel (e) {
-    e.preventDefault()
-    this.cleanup()
-    this.cbs.reject(new Error('Canceled'))
+  onClickCancel(e) {
+    e.preventDefault();
+    this.cleanup();
+    this.cbs.reject(new Error('Canceled'));
   }
 
-  async onSubmit (e) {
-    if (e) e.preventDefault()
+  async onSubmit(e) {
+    if (e) e.preventDefault();
 
     if (this.isVirtualListing) {
-      this.drive = this.selectedPaths[0]
+      this.drive = this.selectedPaths[0];
       if (this.drive.startsWith('hyper://')) {
-        this.driveInfo = await bg.hyperdrive.getInfo(this.drive)
+        this.driveInfo = await bg.hyperdrive.getInfo(this.drive);
       }
-      return this.goto('/')
+      return this.goto('/');
     }
 
-    const makeSelectionObj = path => ({path, origin: this.drive, url: joinPath(this.drive, path)})
+    const makeSelectionObj = (path) => ({
+      path,
+      origin: this.drive,
+      url: joinPath(this.drive, path),
+    });
     if (this.saveMode) {
-      let path = joinPath(this.path, this.filenameInput.value)
+      let path = joinPath(this.path, this.filenameInput.value);
       if (this.getFile(path)) {
         if (!confirm('Overwrite this file?')) {
-          return
+          return;
         }
       }
-      this.cleanup()
-      this.cbs.resolve(makeSelectionObj(path))
+      this.cleanup();
+      this.cbs.resolve(makeSelectionObj(path));
     } else {
       if (this.select.includes('folder') && this.selectedPaths.length === 0) {
         // use current location
-        this.selectedPaths = [this.path]
+        this.selectedPaths = [this.path];
       }
-      this.cleanup()
-      this.cbs.resolve(this.selectedPaths.map(makeSelectionObj))
+      this.cleanup();
+      this.cbs.resolve(this.selectedPaths.map(makeSelectionObj));
     }
   }
 }
 
-customElements.define('select-file-modal', SelectFileModal)
+customElements.define('select-file-modal', SelectFileModal);
 
-function sortFiles (a, b) {
-  if (a.stat.isDirectory() && !b.stat.isDirectory()) return -1
-  if (!a.stat.isDirectory() && b.stat.isDirectory()) return 1
-  return a.name.localeCompare(b.name)
+function sortFiles(a, b) {
+  if (a.stat.isDirectory() && !b.stat.isDirectory()) return -1;
+  if (!a.stat.isDirectory() && b.stat.isDirectory()) return 1;
+  return a.name.localeCompare(b.name);
 }
 
-function defined (v) {
-  return typeof v !== 'undefined'
+function defined(v) {
+  return typeof v !== 'undefined';
 }

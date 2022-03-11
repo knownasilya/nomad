@@ -1,4 +1,4 @@
-import {LitElement, html} from '../../vendor/lit-element/lit-element.js'
+import { LitElement, html } from '../../vendor/lit-element/lit-element.js';
 
 /*
 Usage:
@@ -11,29 +11,32 @@ Usage:
 */
 
 export class ImgFallbacks extends LitElement {
-  static get properties () {
+  static get properties() {
     return {
-      currentImage: {type: Number}
-    }
+      currentImage: { type: Number },
+    };
   }
 
-  constructor () {
-    super()
-    this.currentImage = 1
+  constructor() {
+    super();
+    this.currentImage = 1;
   }
 
-  render () {
-    return html`<slot name="img${this.currentImage}" @slotchange=${this.onSlotChange}></slot>`
+  render() {
+    return html`<slot
+      name="img${this.currentImage}"
+      @slotchange=${this.onSlotChange}
+    ></slot>`;
   }
 
-  onSlotChange (e) {
-    var img = this.shadowRoot.querySelector('slot').assignedElements()[0]
-    if (img) img.addEventListener('error', this.onError.bind(this))
+  onSlotChange(e) {
+    var img = this.shadowRoot.querySelector('slot').assignedElements()[0];
+    if (img) img.addEventListener('error', this.onError.bind(this));
   }
 
-  onError (e) {
-    this.currentImage = this.currentImage + 1
+  onError(e) {
+    this.currentImage = this.currentImage + 1;
   }
 }
 
-customElements.define('beaker-img-fallbacks', ImgFallbacks)
+customElements.define('beaker-img-fallbacks', ImgFallbacks);

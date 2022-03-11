@@ -57,4 +57,4 @@ CREATE TABLE crawl_bookmarks_tags (
 );
 
 PRAGMA user_version = 28;
-`
+`;

@@ -1,5 +1,5 @@
-@import "beaker://app-stdlib/css/common.css";
-@import "beaker://app-stdlib/css/fontawesome.css";
+@import 'beaker://app-stdlib/css/common.css';
+@import 'beaker://app-stdlib/css/fontawesome.css';
 
 body {
   font-size: 13px;

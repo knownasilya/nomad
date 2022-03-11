@@ -10,4 +10,4 @@ export default {
   sync: 'readable',
   enableAutoSync: 'promise',
   disableAutoSync: 'promise',
-}
+};

@@ -1,4 +1,4 @@
 export default {
   join: 'duplex',
-  watch: 'readable'
-}
+  watch: 'readable',
+};

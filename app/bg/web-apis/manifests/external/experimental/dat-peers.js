@@ -6,5 +6,5 @@ export default {
   getSessionData: 'promise',
   setSessionData: 'promise',
   getOwnPeerId: 'promise',
-  createEventStream: 'readable'
-}
+  createEventStream: 'readable',
+};

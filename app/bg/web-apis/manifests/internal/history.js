@@ -5,5 +5,5 @@ export default {
   search: 'promise',
   removeVisit: 'promise',
   removeAllVisits: 'promise',
-  removeVisitsAfter: 'promise'
-}
+  removeVisitsAfter: 'promise',
+};

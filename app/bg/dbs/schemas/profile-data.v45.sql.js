@@ -11,5 +11,4 @@ CREATE TABLE user_site_sessions (
 );
 
 PRAGMA user_version = 45;
-`
-
+`;

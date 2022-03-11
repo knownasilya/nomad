@@ -8,5 +8,5 @@ export default {
   focus: 'promise',
   executeJavaScript: 'promise',
   injectCss: 'promise',
-  uninjectCss: 'promise'
-}
+  uninjectCss: 'promise',
+};

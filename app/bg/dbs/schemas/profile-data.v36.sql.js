@@ -9,4 +9,4 @@ CREATE TABLE user_site_sessions (
   FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
 );
 PRAGMA user_version = 36;
-`
+`;

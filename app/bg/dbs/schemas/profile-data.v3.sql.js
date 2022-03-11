@@ -4,4 +4,4 @@ export default `
 ALTER TABLE archives_meta ADD COLUMN lastAccessTime INTEGER DEFAULT 0;
 
 PRAGMA user_version = 3;
-`
+`;

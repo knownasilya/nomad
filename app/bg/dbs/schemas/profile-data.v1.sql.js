@@ -59,4 +59,4 @@ CREATE UNIQUE INDEX visits_stats_url ON visit_stats (url);
 INSERT INTO profiles (id) VALUES (0);
 
 PRAGMA user_version = 1;
-`
+`;

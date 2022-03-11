@@ -1,108 +1,116 @@
 /* globals customElements */
-import { LitElement, html } from '../vendor/lit-element/lit-element'
-import * as bg from './bg-process-rpc'
-import _debounce from 'lodash.debounce'
-import { ipcRenderer } from 'electron'
-import './setup'
-import './add-drive'
-import './create-drive'
-import './fork-drive'
-import './folder-sync'
-import './drive-properties'
-import './select-drive'
-import './select-file'
-import './prompt'
-import './basic-auth'
-import './user-editor'
-import './user-select'
-import './create-session'
+import { LitElement, html } from '../vendor/lit-element/lit-element';
+import * as bg from './bg-process-rpc';
+import _debounce from 'lodash.debounce';
+import { ipcRenderer } from 'electron';
+import './setup';
+import './add-drive';
+import './create-drive';
+import './fork-drive';
+import './folder-sync';
+import './drive-properties';
+import './select-drive';
+import './select-file';
+import './prompt';
+import './basic-auth';
+import './user-editor';
+import './user-select';
+import './create-session';
 
 class ModalsWrapper extends LitElement {
-  static get properties () {
+  static get properties() {
     return {
-      currentModal: {type: String}
-    }
+      currentModal: { type: String },
+    };
   }
 
-  constructor () {
-    super()
-    this.currentModal = null
-    this.cbs = null
-    this.fetchBrowserInfo()
+  constructor() {
+    super();
+    this.currentModal = null;
+    this.cbs = null;
+    this.fetchBrowserInfo();
 
     // export interface
-    window.runModal = this.runModal.bind(this)
+    window.runModal = this.runModal.bind(this);
 
     // global event listeners
-    window.addEventListener('keydown', e => {
+    window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        this.cbs.reject(new Error('Canceled'))
+        this.cbs.reject(new Error('Canceled'));
       }
-    })
+    });
   }
 
-  async fetchBrowserInfo () {
-    var {platform} = await bg.beakerBrowser.getInfo()
-    window.platform = platform
+  async fetchBrowserInfo() {
+    var { platform } = await bg.beakerBrowser.getInfo();
+    window.platform = platform;
     if (platform === 'darwin') {
-      document.body.classList.add('darwin')
+      document.body.classList.add('darwin');
     }
     if (platform === 'win32') {
-      document.body.classList.add('win32')
+      document.body.classList.add('win32');
     }
   }
 
-  async runModal (name, params) {
-    window.isModalActive = true
-    this.currentModal = name
-    await this.updateComplete
+  async runModal(name, params) {
+    window.isModalActive = true;
+    this.currentModal = name;
+    await this.updateComplete;
     return new Promise((resolve, reject) => {
-      this.cbs = {resolve, reject}
-      this.shadowRoot.querySelector(`${name}-modal`).init(params, {resolve, reject})
+      this.cbs = { resolve, reject };
+      this.shadowRoot
+        .querySelector(`${name}-modal`)
+        .init(params, { resolve, reject });
     }).then(
-      v => { window.isModalActive = false; return v },
-      v => { window.isModalActive = false; throw v }
-    )
+      (v) => {
+        window.isModalActive = false;
+        return v;
+      },
+      (v) => {
+        window.isModalActive = false;
+        throw v;
+      }
+    );
   }
 
-  render () {
-    return html`<div>${this.renderMenu()}</div>`
+  render() {
+    return html`<div>${this.renderMenu()}</div>`;
   }
 
-  renderMenu () {
+  renderMenu() {
     switch (this.currentModal) {
       case 'setup':
-        return html`<setup-modal></setup-modal>`
+        return html`<setup-modal></setup-modal>`;
       case 'add-drive':
-        return html`<add-drive-modal></add-drive-modal>`
+        return html`<add-drive-modal></add-drive-modal>`;
       case 'create-drive':
-        return html`<create-drive-modal></create-drive-modal>`
+        return html`<create-drive-modal></create-drive-modal>`;
       case 'fork-drive':
-        return html`<fork-drive-modal></fork-drive-modal>`
+        return html`<fork-drive-modal></fork-drive-modal>`;
       case 'folder-sync':
-        return html`<folder-sync-modal></folder-sync-modal>`
+        return html`<folder-sync-modal></folder-sync-modal>`;
       case 'drive-properties':
-        return html`<drive-properties-modal></drive-properties-modal>`
+        return html`<drive-properties-modal></drive-properties-modal>`;
       case 'select-drive':
-        return html`<select-drive-modal></select-drive-modal>`
+        return html`<select-drive-modal></select-drive-modal>`;
       case 'select-file':
-        return html`<select-file-modal></select-file-modal>`
+        return html`<select-file-modal></select-file-modal>`;
       case 'prompt':
-        return html`<prompt-modal></prompt-modal>`
+        return html`<prompt-modal></prompt-modal>`;
       case 'basic-auth':
-        return html`<basic-auth-modal></basic-auth-modal>`
+        return html`<basic-auth-modal></basic-auth-modal>`;
       case 'user-editor':
-        return html`<user-editor-modal></user-editor-modal>`
+        return html`<user-editor-modal></user-editor-modal>`;
       case 'user-select':
-        return html`<user-select-modal></user-select-modal>`
+        return html`<user-select-modal></user-select-modal>`;
       case 'create-session':
-        return html`<create-session-modal></create-session-modal>`
+        return html`<create-session-modal></create-session-modal>`;
     }
-    return html`<div></div>`
+    return html`<div></div>`;
   }
 }
 
-customElements.define('modals-wrapper', ModalsWrapper)
+customElements.define('modals-wrapper', ModalsWrapper);
 
 // HACK
 // Electron has an issue where browserviews fail to calculate click regions after a resize
@@ -110,6 +118,10 @@ customElements.define('modals-wrapper', ModalsWrapper)
 // we can solve this by forcing a recalculation after every resize
 // -prf
 
-const forceUpdateDragRegions = _debounce(() => ipcRenderer.send('resize-hackfix'), 100, {leading: true})
-window.addEventListener('resize', forceUpdateDragRegions)
-document.addEventListener('DOMContentLoaded', forceUpdateDragRegions)
+const forceUpdateDragRegions = _debounce(
+  () => ipcRenderer.send('resize-hackfix'),
+  100,
+  { leading: true }
+);
+window.addEventListener('resize', forceUpdateDragRegions);
+document.addEventListener('DOMContentLoaded', forceUpdateDragRegions);

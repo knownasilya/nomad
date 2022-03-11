@@ -5,4 +5,4 @@ export default {
   listAuditLog: 'promise',
   streamAuditLog: 'readable',
   getAuditLogStats: 'promise',
-}
+};

@@ -4,10 +4,7 @@
   "type": "object",
   "title": "Dats",
   "description": "A list of dats.",
-  "required": [
-    "type",
-    "dats"
-  ],
+  "required": ["type", "dats"],
   "properties": {
     "type": {
       "type": "string",

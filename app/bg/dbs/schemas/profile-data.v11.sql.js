@@ -11,4 +11,4 @@ CREATE TABLE apps_log (
 );
 
 PRAGMA user_version = 11;
-`
+`;

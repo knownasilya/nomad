@@ -1,14 +1,14 @@
-import * as archivesDb from '../../dbs/archives'
+import * as archivesDb from '../../dbs/archives';
 
 // exported api
 // =
 
 export default {
-  async list () {
-    return archivesDb.listLegacyArchives()
+  async list() {
+    return archivesDb.listLegacyArchives();
   },
 
-  async remove (key) {
-    return archivesDb.removeLegacyArchive(key)
-  }
-}
+  async remove(key) {
+    return archivesDb.removeLegacyArchive(key);
+  },
+};

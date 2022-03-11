@@ -1,8 +1,8 @@
-import * as logLib from '../logger'
-const logger = logLib.child({category: 'sqlite'})
-import FnQueue from 'function-queue'
-import { cbPromise } from '../../lib/functions'
-import _get from 'lodash.get'
+import * as logLib from '../logger';
+const logger = logLib.child({ category: 'sqlite' });
+import FnQueue from 'function-queue';
+import { cbPromise } from '../../lib/functions';
+import _get from 'lodash.get';
 
 /**
  * Create a transaction lock
@@ -11,10 +11,10 @@ import _get from 'lodash.get'
  * - MUST call given cb to release the lock
  * @returns {function(Function): void}
  */
-const makeTxLock = exports.makeTxLock = function () {
-  var fnQueue = FnQueue()
-  return cb => fnQueue.push(cb)
-}
+const makeTxLock = (exports.makeTxLock = function () {
+  var fnQueue = FnQueue();
+  return (cb) => fnQueue.push(cb);
+});
 
 /**
  * SQLite transactor, handles common needs for sqlite queries:
@@ -34,26 +34,26 @@ const makeTxLock = exports.makeTxLock = function () {
  * @returns {function(Function): Promise<any>}
  */
 export const makeSqliteTransactor = function (setupPromise) {
-  var txLock = makeTxLock()
+  var txLock = makeTxLock();
   return function (fn) {
     // 1. wait for the setup promise
-    return setupPromise.then(v => {
+    return setupPromise.then((v) => {
       // 2. provide a cb handler
-      return cbPromise(cb => {
+      return cbPromise((cb) => {
         // 3. create a tx lock
-        txLock(endTx => {
+        txLock((endTx) => {
           // 3b. wrap the cb with the lock release
           var cbWrapped = (err, res) => {
-            endTx()
-            cb(err, res)
-          }
+            endTx();
+            cb(err, res);
+          };
           // yeesh
-          fn(cbWrapped)
-        })
-      })
-    })
-  }
-}
+          fn(cbWrapped);
+        });
+      });
+    });
+  };
+};
 
 /**
  * Configures SQLite db and runs needed migrations.
@@ -62,83 +62,99 @@ export const makeSqliteTransactor = function (setupPromise) {
  * @param {Function} [opts.setup]
  * @param {Function[]} [opts.migrations]
  */
-export const setupSqliteDB = function (db, {setup, migrations}, logTag) {
+export const setupSqliteDB = function (db, { setup, migrations }, logTag) {
   return new Promise((resolve, reject) => {
     // configure connection
     db.run('PRAGMA foreign_keys = ON;', (err) => {
       if (err) {
-        console.error('Failed to enable FK support in SQLite', err)
+        console.error('Failed to enable FK support in SQLite', err);
       }
-    })
+    });
 
     // run migrations
     db.get('PRAGMA user_version;', (err, res) => {
-      if (err) return reject(err)
+      if (err) return reject(err);
 
-      var version = (res && res.user_version) ? +res.user_version : 0
-      var neededMigrations = (version === 0 && setup) ? [setup] : migrations.slice(version)
-      if (neededMigrations.length == 0) { return resolve() }
+      var version = res && res.user_version ? +res.user_version : 0;
+      var neededMigrations =
+        version === 0 && setup ? [setup] : migrations.slice(version);
+      if (neededMigrations.length == 0) {
+        return resolve();
+      }
 
-      logger.info(`${logTag} Database at version ${version}; Running ${neededMigrations.length} migrations`)
-      db.run('PRAGMA SYNCHRONOUS = OFF;') // turn off fsync to speed up migrations
-      runNeededMigrations()
-      function runNeededMigrations (err) {
+      logger.info(
+        `${logTag} Database at version ${version}; Running ${neededMigrations.length} migrations`
+      );
+      db.run('PRAGMA SYNCHRONOUS = OFF;'); // turn off fsync to speed up migrations
+      runNeededMigrations();
+      function runNeededMigrations(err) {
         if (err) {
-          logger.error(`${logTag} Failed migration`)
-          console.log(err)
-          db.run('PRAGMA SYNCHRONOUS = FULL;') // turn fsync back on
-          return reject(err)
+          logger.error(`${logTag} Failed migration`);
+          console.log(err);
+          db.run('PRAGMA SYNCHRONOUS = FULL;'); // turn fsync back on
+          return reject(err);
         }
 
-        var migration = neededMigrations.shift()
+        var migration = neededMigrations.shift();
         if (!migration) {
           // done
-          db.run('PRAGMA SYNCHRONOUS = FULL;') // turn fsync back on
-          resolve()
-          return logger.info(`${logTag} Database migrations completed without error`)
+          db.run('PRAGMA SYNCHRONOUS = FULL;'); // turn fsync back on
+          resolve();
+          return logger.info(
+            `${logTag} Database migrations completed without error`
+          );
         }
 
-        migration(runNeededMigrations)
+        migration(runNeededMigrations);
       }
-    })
-  })
-}
+    });
+  });
+};
 
 export const handleQueryBuilder = function (args) {
   // detect query builders and replace the args
   if (args[0] && _get(args[0], 'constructor.name') === 'Builder') {
-    var query = args[0].toSQL()
-    return [query.sql, query.bindings]
+    var query = args[0].toSQL();
+    return [query.sql, query.bindings];
   }
-  return args
-}
+  return args;
+};
 
-export function attachOnConflictDoUpdate (knex) {
-  knex.QueryBuilder.extend('onConflictDoUpdate', function onConflictDoUpdate(uniqueColumn, columns) {
-    if (this._method !== 'insert') {
-      throw new Error('onConflictDoUpdate error: should be used only with insert query.');
+export function attachOnConflictDoUpdate(knex) {
+  knex.QueryBuilder.extend(
+    'onConflictDoUpdate',
+    function onConflictDoUpdate(uniqueColumn, columns) {
+      if (this._method !== 'insert') {
+        throw new Error(
+          'onConflictDoUpdate error: should be used only with insert query.'
+        );
+      }
+
+      if (columns.length === 0) {
+        throw new Error(
+          'onConflictDoUpdate error: please specify at least one column name.'
+        );
+      }
+
+      const { placeholders, bindings } = Object.entries(columns).reduce(
+        (result, [key, value]) => {
+          result.placeholders.push(`??=?`);
+          result.bindings.push(key, value);
+          return result;
+        },
+        { placeholders: [], bindings: [] }
+      );
+
+      const { sql: originalSQL, bindings: originalBindings } = this.toSQL();
+
+      const newBindings = [...originalBindings, ...bindings];
+
+      return this.client.raw(
+        `${originalSQL} on conflict(${uniqueColumn}) do update set ${placeholders.join(
+          ', '
+        )}`,
+        newBindings
+      );
     }
-
-    if (columns.length === 0) {
-      throw new Error('onConflictDoUpdate error: please specify at least one column name.');
-    }
-
-    const { placeholders, bindings } = Object.entries(columns).reduce((result, [key, value]) => {
-      result.placeholders.push(`??=?`);
-      result.bindings.push(key, value);
-      return result;
-    }, { placeholders: [], bindings: [] });
-
-    const {
-      sql: originalSQL,
-      bindings: originalBindings,
-    } = this.toSQL();
-
-    const newBindings = [...originalBindings, ...bindings];
-
-    return this.client.raw(
-      `${originalSQL} on conflict(${uniqueColumn}) do update set ${placeholders.join(', ')}`,
-      newBindings,
-    );
-  });
+  );
 }

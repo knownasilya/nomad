@@ -6,13 +6,13 @@
 // will have access to it
 // -prf
 
-import {ipcRenderer} from 'electron'
+import { ipcRenderer } from 'electron';
 
-const documentCtx = document
-const webkitExitFullscreen = document.webkitExitFullscreen
+const documentCtx = document;
+const webkitExitFullscreen = document.webkitExitFullscreen;
 
 export default function () {
   ipcRenderer.on('exit-full-screen-hackfix', () => {
-    webkitExitFullscreen.call(documentCtx)
-  })
+    webkitExitFullscreen.call(documentCtx);
+  });
 }

@@ -4,12 +4,7 @@
   "type": "object",
   "title": "Vote",
   "description": "A vote up or down on some resource.",
-  "required": [
-    "type",
-    "topic",
-    "vote",
-    "createdAt"
-  ],
+  "required": ["type", "topic", "vote", "createdAt"],
   "properties": {
     "type": {
       "type": "string",

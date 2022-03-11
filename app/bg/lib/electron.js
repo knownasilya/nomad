@@ -1,25 +1,25 @@
-import path from 'path'
-import { BrowserWindow } from 'electron'
+import path from 'path';
+import { BrowserWindow } from 'electron';
 
-export function findWebContentsParentWindow (wc) {
+export function findWebContentsParentWindow(wc) {
   for (let win of BrowserWindow.getAllWindows()) {
     for (let view of win.getBrowserViews()) {
       if (view.webContents === wc) {
-        return win
+        return win;
       }
     }
   }
-  let win = BrowserWindow.fromWebContents(wc)
+  let win = BrowserWindow.fromWebContents(wc);
   while (win && win.getParentWindow()) {
-    win = win.getParentWindow()
+    win = win.getParentWindow();
   }
   // it might not be attached because it was a shell menu that has closed
   // in that case, just go with the focused window
-  if (!win) win = BrowserWindow.getFocusedWindow()
-  return win
+  if (!win) win = BrowserWindow.getFocusedWindow();
+  return win;
 }
 
-export async function spawnAndExecuteJs (url, js) {
+export async function spawnAndExecuteJs(url, js) {
   var win = new BrowserWindow({
     show: false,
     webPreferences: {
@@ -35,25 +35,25 @@ export async function spawnAndExecuteJs (url, js) {
       scrollBounce: true,
       navigateOnDragDrop: true,
       enableRemoteModule: false,
-      safeDialogs: true
-    }
-  })
-  win.loadURL(url)
-  var wc = win.webContents
+      safeDialogs: true,
+    },
+  });
+  win.loadURL(url);
+  var wc = win.webContents;
 
-  wc.on('new-window', e => e.preventDefault())
-  wc.on('will-navigate', e => e.preventDefault())
-  wc.on('will-redirect', e => e.preventDefault())
+  wc.on('new-window', (e) => e.preventDefault());
+  wc.on('will-navigate', (e) => e.preventDefault());
+  wc.on('will-redirect', (e) => e.preventDefault());
 
   try {
     await new Promise((resolve, reject) => {
-      wc.once('dom-ready', resolve)
-      wc.once('did-fail-load', reject)
-    })
+      wc.once('dom-ready', resolve);
+      wc.once('did-fail-load', reject);
+    });
 
-    var res = await wc.executeJavaScript(js)
-    return res
+    var res = await wc.executeJavaScript(js);
+    return res;
   } finally {
-    win.close()
+    win.close();
   }
 }

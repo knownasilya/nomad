@@ -1,34 +1,34 @@
 export class LSArray {
-  #key = undefined
-  
-  constructor (key) {
-    this.#key = key
+  #key = undefined;
+
+  constructor(key) {
+    this.#key = key;
   }
 
-  _read () {
+  _read() {
     try {
-      return JSON.parse(localStorage.getItem(this.#key)) || []
+      return JSON.parse(localStorage.getItem(this.#key)) || [];
     } catch {
-      return []
+      return [];
     }
   }
 
-  _save (v) {
-    localStorage.setItem(this.#key, JSON.stringify(v))
+  _save(v) {
+    localStorage.setItem(this.#key, JSON.stringify(v));
   }
 
-  get length () {
-    return this._read().length
+  get length() {
+    return this._read().length;
   }
 
-  get (index) {
-    let arr = this._read()
-    return arr[index]
+  get(index) {
+    let arr = this._read();
+    return arr[index];
   }
 
-  push (v) {
-    let arr = this._read()
-    arr.push(v)
-    this._save(arr)
+  push(v) {
+    let arr = this._read();
+    arr.push(v);
+    this._save(arr);
   }
 }

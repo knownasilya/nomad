@@ -3,5 +3,5 @@ export default {
   createTab: 'promise',
   loadURL: 'promise',
   reload: 'promise',
-  resizeSelf: 'promise'
-}
+  resizeSelf: 'promise',
+};

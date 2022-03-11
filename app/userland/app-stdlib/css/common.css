@@ -1,8 +1,8 @@
-@import "./reset.css";
-@import "./colors.css";
-@import "./typography.css";
-@import "./buttons.css";
-@import "./inputs.css";
+@import './reset.css';
+@import './colors.css';
+@import './typography.css';
+@import './buttons.css';
+@import './inputs.css';
 
 body {
   background: var(--bg-color--default);

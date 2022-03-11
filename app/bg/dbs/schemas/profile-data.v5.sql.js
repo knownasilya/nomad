@@ -4,4 +4,4 @@ export default `
 -- REMOVED
 
 PRAGMA user_version = 5;
-`
+`;

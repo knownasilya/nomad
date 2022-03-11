@@ -4,4 +4,4 @@ export default `
 ALTER TABLE archives ADD COLUMN networked INTEGER DEFAULT 1;
 
 PRAGMA user_version = 6;
-`
+`;

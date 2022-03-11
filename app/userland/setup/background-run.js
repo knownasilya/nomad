@@ -1,18 +1,20 @@
-import { BaseSlideView } from './base-slide-view.js'
+import { BaseSlideView } from './base-slide-view.js';
 
-customElements.define('background-run-view', class extends BaseSlideView {
-  constructor () {
-    super()
-    beaker.browser.updateSetupState({profileSetup: 1})
-    var checkbox = this.shadowRoot.querySelector('input')
-    checkbox.checked = true
-    checkbox.addEventListener('change', e => {
-      beaker.browser.setSetting('run_background', checkbox.checked ? 1 : 0)
-    })
-  }
+customElements.define(
+  'background-run-view',
+  class extends BaseSlideView {
+    constructor() {
+      super();
+      beaker.browser.updateSetupState({ profileSetup: 1 });
+      var checkbox = this.shadowRoot.querySelector('input');
+      checkbox.checked = true;
+      checkbox.addEventListener('change', (e) => {
+        beaker.browser.setSetting('run_background', checkbox.checked ? 1 : 0);
+      });
+    }
 
-  render () {
-    return `
+    render() {
+      return `
 <style>
 :host {
   opacity: 0;
@@ -52,6 +54,7 @@ label {
 </p>
 <hr>
 <a>Next</a>
-    `
+    `;
+    }
   }
-})
+);

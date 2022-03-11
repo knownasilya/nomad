@@ -1,23 +1,23 @@
-import { html } from '../../vendor/lit-element/lit-element.js'
-import * as contextMenu from './context-menu.js'
-import * as toast from './toast.js'
-import { writeToClipboard } from '../lib/clipboard.js'
+import { html } from '../../vendor/lit-element/lit-element.js';
+import * as contextMenu from './context-menu.js';
+import * as toast from './toast.js';
+import { writeToClipboard } from '../lib/clipboard.js';
 
-export function create ({x, y, targetLabel, url}) {
-  function onClickCopy (e) {
-    writeToClipboard(url)
-    toast.create('Copied to your clipboard')
+export function create({ x, y, targetLabel, url }) {
+  function onClickCopy(e) {
+    writeToClipboard(url);
+    toast.create('Copied to your clipboard');
   }
   contextMenu.create({
     x,
     y,
-    render () {
+    render() {
       return html`
-        <link rel="stylesheet" href="beaker://explorer/css/font-awesome.css">
+        <link rel="stylesheet" href="beaker://explorer/css/font-awesome.css" />
         <div class="share-menu">
           <p>Anybody with this link can view the ${targetLabel}</p>
           <p>
-            <input type="text" value=${url}>
+            <input type="text" value=${url} />
             <a @click=${onClickCopy}><span class="fas fa-paste"></span></a>
           </p>
         </div>
@@ -61,7 +61,7 @@ export function create ({x, y, targetLabel, url}) {
             background: #dde;
           }
         </style>
-      `
-    }
-  })
+      `;
+    },
+  });
 }

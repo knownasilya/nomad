@@ -1,6 +1,6 @@
-@import "../../app-stdlib/css/buttons2.css";
-@import "./toolbar.css";
-@import "../../app-stdlib/css/tooltip.css";
+@import '../../app-stdlib/css/buttons2.css';
+@import './toolbar.css';
+@import '../../app-stdlib/css/tooltip.css';
 
 editor-app {
   display: block;
@@ -37,7 +37,7 @@ editor-app .empty .binary-render > * {
 }
 
 editor-app .divider {
-  border-left: 1px solid rgba(255, 255, 255, .4);
+  border-left: 1px solid rgba(255, 255, 255, 0.4);
   height: 21px;
 }
 

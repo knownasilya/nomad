@@ -12,4 +12,4 @@ CREATE TABLE installed_applications (
 );
 
 PRAGMA user_version = 34;
-`
+`;

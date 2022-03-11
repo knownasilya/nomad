@@ -1,3 +1,3 @@
 export default {
-  fetch: 'promise'
-}
+  fetch: 'promise',
+};

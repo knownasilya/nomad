@@ -26,30 +26,36 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
  */
 
-import emojiRegex from 'emoji-regex'
+import emojiRegex from 'emoji-regex';
 
-function basicGithubId (text) {
-  return text.replace(/ /g, '-')
-    // escape codes
-    .replace(/%([abcdef]|\d){2,2}/ig, '')
-    // single chars that are removed
-    .replace(/[\/?!:\[\]`.,()*"';{}+=<>~\$|#@&–—]/g, '')
-    // CJK punctuations that are removed
-    .replace(/[。？！，、；：“”【】（）〔〕［］﹃﹄“ ”‘’﹁﹂—…－～《》〈〉「」]/g, '')
+function basicGithubId(text) {
+  return (
+    text
+      .replace(/ /g, '-')
+      // escape codes
+      .replace(/%([abcdef]|\d){2,2}/gi, '')
+      // single chars that are removed
+      .replace(/[\/?!:\[\]`.,()*"';{}+=<>~\$|#@&–—]/g, '')
+      // CJK punctuations that are removed
+      .replace(
+        /[。？！，、；：“”【】（）〔〕［］﹃﹄“ ”‘’﹁﹂—…－～《》〈〉「」]/g,
+        ''
+      )
+  );
 }
 
-function getGithubId (text, repetition) {
-  text = basicGithubId(text)
+function getGithubId(text, repetition) {
+  text = basicGithubId(text);
 
   // If no repetition, or if the repetition is 0 then ignore. Otherwise append '-' and the number.
   if (repetition) {
-    text += '-' + repetition
+    text += '-' + repetition;
   }
 
   // Strip emojis
-  text = text.replace(emojiRegex(), '')
+  text = text.replace(emojiRegex(), '');
 
-  return text
+  return text;
 }
 
 /**
@@ -61,33 +67,33 @@ function getGithubId (text, repetition) {
  * @param repetition  {Number} The nth occurrence of this header text, starting with 0. Not required for the 0th instance.
  * @return            {String} The header anchor id
  */
-export default function anchorMarkdownHeader (header, repetition) {
-  var replace
-  var customEncodeURI = encodeURI
+export default function anchorMarkdownHeader(header, repetition) {
+  var replace;
+  var customEncodeURI = encodeURI;
 
-  replace = getGithubId
+  replace = getGithubId;
   customEncodeURI = function (uri) {
-    var newURI = encodeURI(uri)
+    var newURI = encodeURI(uri);
 
     // encodeURI replaces the zero width joiner character
     // (used to generate emoji sequences, e.g.Female Construction Worker 👷🏼‍♀️)
     // github doesn't URL encode them, so we replace them after url encoding to preserve the zwj character.
-    return newURI.replace(/%E2%80%8D/g, '\u200D')
-  }
+    return newURI.replace(/%E2%80%8D/g, '\u200D');
+  };
 
-  function asciiOnlyToLowerCase (input) {
-    var result = ''
+  function asciiOnlyToLowerCase(input) {
+    var result = '';
     for (var i = 0; i < input.length; ++i) {
       if (input[i] >= 'A' && input[i] <= 'Z') {
-        result += input[i].toLowerCase()
+        result += input[i].toLowerCase();
       } else {
-        result += input[i]
+        result += input[i];
       }
     }
-    return result
+    return result;
   }
 
-  var href = replace(asciiOnlyToLowerCase(header.trim()), repetition)
+  var href = replace(asciiOnlyToLowerCase(header.trim()), repetition);
 
-  return customEncodeURI(href)
-};
+  return customEncodeURI(href);
+}

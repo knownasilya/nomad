@@ -4,11 +4,7 @@
   "type": "object",
   "title": "Reaction",
   "description": "An string annotation on some resource.",
-  "required": [
-    "type",
-    "topic",
-    "phrases"
-  ],
+  "required": ["type", "topic", "phrases"],
   "properties": {
     "type": {
       "type": "string",

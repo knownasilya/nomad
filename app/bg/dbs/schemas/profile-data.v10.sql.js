@@ -13,4 +13,4 @@ CREATE TABLE apps (
 );
 
 PRAGMA user_version = 10;
-`
+`;

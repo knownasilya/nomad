@@ -43,4 +43,4 @@ CREATE TABLE crawl_media_tags (
 );
 
 PRAGMA user_version = 31;
-`
+`;

@@ -4,4 +4,4 @@ export default `
 ALTER TABLE archives ADD COLUMN expiresAt INTEGER;
 
 PRAGMA user_version = 7;
-`
+`;

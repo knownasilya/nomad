@@ -1,7 +1,7 @@
-import AwaitLock from 'await-lock'
+import AwaitLock from 'await-lock';
 
 // wraps await-lock in a simpler interface, with many possible locks
-var locks = {}
+var locks = {};
 
 /**
  * Create a new lock
@@ -16,9 +16,9 @@ var locks = {}
  * @returns {Promise<function(): void>}
  */
 export default async function (key) {
-  if (!(key in locks)) locks[key] = new AwaitLock()
+  if (!(key in locks)) locks[key] = new AwaitLock();
 
-  var lock = locks[key]
-  await lock.acquireAsync()
-  return lock.release.bind(lock)
-};
+  var lock = locks[key];
+  await lock.acquireAsync();
+  return lock.release.bind(lock);
+}

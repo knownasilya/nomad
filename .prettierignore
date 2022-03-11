@@ -1,0 +1,4 @@
+app/assets
+app/**/*.build.js
+app/userland/app-stdlib/js/vs/**
+**/vendor/**

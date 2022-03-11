@@ -15,4 +15,4 @@ CREATE TABLE workspaces (
 );
 
 PRAGMA user_version = 12;
-`
+`;

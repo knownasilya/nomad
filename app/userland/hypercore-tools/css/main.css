@@ -1,8 +1,7 @@
-@import "beaker://app-stdlib/css/common.css";
-@import "beaker://assets/font-awesome.css";
+@import 'beaker://app-stdlib/css/common.css';
+@import 'beaker://assets/font-awesome.css';
 
 body {
-
   font-size: 14px;
   background: var(--bg-color--default);
   color: var(--text-color--default);
@@ -10,6 +9,5 @@ body {
 
 @media (prefers-color-scheme: dark) {
   body {
-
   }
 }

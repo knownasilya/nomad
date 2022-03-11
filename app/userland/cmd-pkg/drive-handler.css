@@ -1,9 +1,10 @@
-@import "beaker://assets/font-awesome.css";
-@import "beaker://app-stdlib/css/common.css";
+@import 'beaker://assets/font-awesome.css';
+@import 'beaker://app-stdlib/css/common.css';
 
 body {
   background: #fff;
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Ubuntu, Cantarell, "Oxygen Sans", "Helvetica Neue", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Ubuntu,
+    Cantarell, 'Oxygen Sans', 'Helvetica Neue', sans-serif;
   font-size: 14px;
   --border-color: #d4d7dc;
 }

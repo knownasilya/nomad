@@ -1,3 +1,3 @@
 export default {
-  get: 'sync'
-}
+  get: 'sync',
+};

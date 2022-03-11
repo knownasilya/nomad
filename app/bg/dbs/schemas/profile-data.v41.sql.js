@@ -17,4 +17,4 @@ CREATE TABLE crawl_dats (
 );
 
 PRAGMA user_version = 41;
-`
+`;

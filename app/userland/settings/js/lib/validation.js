@@ -1,4 +1,4 @@
-export function oneof (v, fallback, opts) {
-  if (opts.includes(v)) return v
-  return fallback
+export function oneof(v, fallback, opts) {
+  if (opts.includes(v)) return v;
+  return fallback;
 }

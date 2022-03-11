@@ -4,4 +4,4 @@ export default `
 CREATE INDEX visits_url ON visits (url);
 
 PRAGMA user_version = 14;
-`
+`;

@@ -1,3 +1,3 @@
 export default {
-  toHTML: 'sync'
-}
+  toHTML: 'sync',
+};

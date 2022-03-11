@@ -1,148 +1,154 @@
 /* globals customElements */
-import { ipcRenderer } from 'electron'
-import { LitElement, html, css } from '../../vendor/lit-element/lit-element'
-import { classMap } from '../../vendor/lit-element/lit-html/directives/class-map'
-import { queryAutocomplete } from '../../lib/location'
-import prettyHash from 'pretty-hash'
-import * as bg from '../bg-process-rpc'
-import buttonResetCSS from './button-reset.css'
-import tooltipCSS from './tooltip.css'
-import './site-info'
+import { ipcRenderer } from 'electron';
+import { LitElement, html, css } from '../../vendor/lit-element/lit-element';
+import { classMap } from '../../vendor/lit-element/lit-html/directives/class-map';
+import { queryAutocomplete } from '../../lib/location';
+import prettyHash from 'pretty-hash';
+import * as bg from '../bg-process-rpc';
+import buttonResetCSS from './button-reset.css';
+import tooltipCSS from './tooltip.css';
+import './site-info';
 
-const isHyperHashRegex = /^[a-z0-9]{64}/i
-const NETWORK_STATS_POLL_INTERVAL = 5000 // ms
+const isHyperHashRegex = /^[a-z0-9]{64}/i;
+const NETWORK_STATS_POLL_INTERVAL = 5000; // ms
 
 class NavbarLocation extends LitElement {
-  static get properties () {
+  static get properties() {
     return {
-      activeTabIndex: {type: Number},
-      url: {type: String},
-      title: {type: String},
-      siteTitle: {type: String},
-      siteSubtitle: {type: String},
-      siteIcon: {type: String},
-      siteTrust: {type: String},
-      driveDomain: {type: String},
-      driveIdent: {type: String},
-      writable: {type: Boolean},
-      folderSyncPath: {type: String, attribute: 'folder-sync-path'},
-      peers: {type: Number},
-      zoom: {type: Number},
-      loadError: {type: Object},
-      donateLinkHref: {type: String, attribute: 'donate-link-href'},
-      isLiveReloading: {type: Boolean, attribute: 'is-live-reloading'},
-      isShareMenuOpen: {type: Boolean},
-      isPeersMenuOpen: {type: Boolean},
-      isSiteMenuOpen: {type: Boolean},
-      isDonateMenuOpen: {type: Boolean},
-      isBookmarked: {type: Boolean, attribute: 'is-bookmarked'},
-      isLocationFocused: {type: Boolean},
-      hasExpanded: {type: Boolean}
-    }
+      activeTabIndex: { type: Number },
+      url: { type: String },
+      title: { type: String },
+      siteTitle: { type: String },
+      siteSubtitle: { type: String },
+      siteIcon: { type: String },
+      siteTrust: { type: String },
+      driveDomain: { type: String },
+      driveIdent: { type: String },
+      writable: { type: Boolean },
+      folderSyncPath: { type: String, attribute: 'folder-sync-path' },
+      peers: { type: Number },
+      zoom: { type: Number },
+      loadError: { type: Object },
+      donateLinkHref: { type: String, attribute: 'donate-link-href' },
+      isLiveReloading: { type: Boolean, attribute: 'is-live-reloading' },
+      isShareMenuOpen: { type: Boolean },
+      isPeersMenuOpen: { type: Boolean },
+      isSiteMenuOpen: { type: Boolean },
+      isDonateMenuOpen: { type: Boolean },
+      isBookmarked: { type: Boolean, attribute: 'is-bookmarked' },
+      isLocationFocused: { type: Boolean },
+      hasExpanded: { type: Boolean },
+    };
   }
 
-  constructor () {
-    super()
-    this.activeTabIndex = -1
-    this.url = ''
-    this.title = ''
-    this.siteTitle = ''
-    this.siteSubtitle = ''
-    this.siteIcon = ''
-    this.siteTrust = ''
-    this.driveDomain = ''
-    this.driveIdent = ''
-    this.writable = false
-    this.folderSyncPath = undefined
-    this.peers = 0
-    this.zoom = 0
-    this.loadError = null
-    this.donateLinkHref = false
-    this.isShareMenuOpen = false
-    this.isPeersMenuOpen = false
-    this.isSiteMenuOpen = false
-    this.isDonateMenuOpen = false
-    this.isBookmarked = false
-    this.isLocationFocused = false
-    this.hasExpanded = false
-    this.shouldSelectAllOnFocus = false
+  constructor() {
+    super();
+    this.activeTabIndex = -1;
+    this.url = '';
+    this.title = '';
+    this.siteTitle = '';
+    this.siteSubtitle = '';
+    this.siteIcon = '';
+    this.siteTrust = '';
+    this.driveDomain = '';
+    this.driveIdent = '';
+    this.writable = false;
+    this.folderSyncPath = undefined;
+    this.peers = 0;
+    this.zoom = 0;
+    this.loadError = null;
+    this.donateLinkHref = false;
+    this.isShareMenuOpen = false;
+    this.isPeersMenuOpen = false;
+    this.isSiteMenuOpen = false;
+    this.isDonateMenuOpen = false;
+    this.isBookmarked = false;
+    this.isLocationFocused = false;
+    this.hasExpanded = false;
+    this.shouldSelectAllOnFocus = false;
     this.autocompleteState = {
       queryIdCounter: 0,
       inputValue: '',
       lastInputValue: '',
       results: [],
       urlGuess: undefined,
-      bookmarksFetch: bg.bookmarks.list().then(bs => bs.map(b => {b.isBookmark = true; b.url = b.href; return b})),
-      searchEnginesPromise: bg.beakerBrowser.getSetting('search_engines')
-    }
-    this._isAutocompleteOpen = false
-    this.dontShowAutocompleteOnNextFocus = false // helper to avoid showing autocomplete on new tab
+      bookmarksFetch: bg.bookmarks.list().then((bs) =>
+        bs.map((b) => {
+          b.isBookmark = true;
+          b.url = b.href;
+          return b;
+        })
+      ),
+      searchEnginesPromise: bg.beakerBrowser.getSetting('search_engines'),
+    };
+    this._isAutocompleteOpen = false;
+    this.dontShowAutocompleteOnNextFocus = false; // helper to avoid showing autocomplete on new tab
 
     setInterval(async () => {
-      if (!this.url.startsWith('hyper://')) return
-      var state = await bg.views.getNetworkState('active')
-      this.peers = state?.peers?.length || 0
-      this.requestUpdate()
-    }, NETWORK_STATS_POLL_INTERVAL)
+      if (!this.url.startsWith('hyper://')) return;
+      var state = await bg.views.getNetworkState('active');
+      this.peers = state?.peers?.length || 0;
+      this.requestUpdate();
+    }, NETWORK_STATS_POLL_INTERVAL);
 
     // listen for commands from the main process
-    ipcRenderer.on('command', this.onCommand.bind(this))
+    ipcRenderer.on('command', this.onCommand.bind(this));
   }
 
-  get isAutocompleteOpen () {
-    return this._isAutocompleteOpen || false
+  get isAutocompleteOpen() {
+    return this._isAutocompleteOpen || false;
   }
 
-  set isAutocompleteOpen (v) {
-    this._isAutocompleteOpen = v
+  set isAutocompleteOpen(v) {
+    this._isAutocompleteOpen = v;
     if (v) {
-      this.setAttribute('autocomplete-open', 'autocomplete-open')
+      this.setAttribute('autocomplete-open', 'autocomplete-open');
     } else {
-      this.removeAttribute('autocomplete-open')
+      this.removeAttribute('autocomplete-open');
     }
   }
 
-  get isBeaker () {
-    return this.url.startsWith('beaker://')
+  get isBeaker() {
+    return this.url.startsWith('beaker://');
   }
 
-  get isHyperdrive () {
-    return this.url.startsWith('hyper://')
+  get isHyperdrive() {
+    return this.url.startsWith('hyper://');
   }
 
-  get modifiedUrl () {
-    var url = this.url
+  get modifiedUrl() {
+    var url = this.url;
     if (url.startsWith('beaker://desktop')) {
-      url = ''
+      url = '';
     } else if (url.includes('://')) {
       try {
-        let urlp = (new URL(url))
-        url = urlp.pathname + urlp.search + urlp.hash
+        let urlp = new URL(url);
+        url = urlp.pathname + urlp.search + urlp.hash;
       } catch (e) {
         // ignore, malformed URL
       }
     }
-    return url
+    return url;
   }
 
-  focusLocation () {
-    this.shouldSelectAllOnFocus = true
-    var input = this.shadowRoot.querySelector('.input-container input')
-    input.focus()
-    bg.views.focusShellWindow()
+  focusLocation() {
+    this.shouldSelectAllOnFocus = true;
+    var input = this.shadowRoot.querySelector('.input-container input');
+    input.focus();
+    bg.views.focusShellWindow();
   }
 
-  unfocusLocation () {
-    var input = this.shadowRoot.querySelector('.input-container input')
-    input.blur()
+  unfocusLocation() {
+    var input = this.shadowRoot.querySelector('.input-container input');
+    input.blur();
   }
 
   // rendering
   // =
 
-  render () {
+  render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css">
+      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
       <shell-window-navbar-site-info
         url=${this.url}
         siteTitle=${this.siteTitle}
@@ -154,24 +160,19 @@ class NavbarLocation extends LitElement {
         ?writable=${this.writable}
         .loadError=${this.loadError}
         ?hide-origin=${this.hasExpanded}
-        ?rounded=${false/*this.url.startsWith('beaker://desktop')*/}
+        ?rounded=${false /*this.url.startsWith('beaker://desktop')*/}
         ?autocomplete-open=${this.isAutocompleteOpen}
       >
       </shell-window-navbar-site-info>
-      ${this.renderLocation()}
-      ${this.renderZoom()}
-      ${this.renderDatConverterBtn()}
-      ${this.renderLiveReloadingBtn()}
-      ${this.renderFolderSyncBtn()}
-      ${this.renderPeers()}
-      ${this.renderDonateBtn()}
-      ${''/* DISABLED this.renderShareBtn()*/}
-      ${this.renderBookmarkBtn()}
-      ${this.renderSiteBtn()}
-    `
+      ${this.renderLocation()} ${this.renderZoom()}
+      ${this.renderDatConverterBtn()} ${this.renderLiveReloadingBtn()}
+      ${this.renderFolderSyncBtn()} ${this.renderPeers()}
+      ${this.renderDonateBtn()} ${'' /* DISABLED this.renderShareBtn()*/}
+      ${this.renderBookmarkBtn()} ${this.renderSiteBtn()}
+    `;
   }
 
-  renderLocation () {
+  renderLocation() {
     return html`
       <div class="input-container" @contextmenu=${this.onContextMenuLocation}>
         <input
@@ -183,243 +184,268 @@ class NavbarLocation extends LitElement {
           @input=${this.onInputLocation}
           @keydown=${this.onKeydownLocation}
           @contextmenu=${this.onContextmenuLocation}
-        >
+        />
         ${this.isLocationFocused ? '' : this.renderInputPretty()}
       </div>
-    `
+    `;
   }
 
-  renderInputPretty () {
+  renderInputPretty() {
     if (this.url.startsWith('beaker://desktop')) {
       return html`
         <div class="input-pretty" @mouseup=${this.onClickLocation}>
           <span class="syntax">Search or enter your address here</span>
         </div>
-      `
+      `;
     }
     if (/^(hyper|http|https|beaker|dat):\/\//.test(this.url)) {
       try {
-        var { protocol, host, pathname, search, hash } = new URL(this.url)
+        var { protocol, host, pathname, search, hash } = new URL(this.url);
         // TODO just show path?
         // return html`
         //   <div class="input-pretty">
         //     <span class="path">${pathname}${search}${hash}</span>
         //   </div>
         // `
-        var hostVersion
+        var hostVersion;
         if (protocol === 'hyper:') {
-          let match = /(.*)\+(.*)/.exec(host)
+          let match = /(.*)\+(.*)/.exec(host);
           if (match) {
-            host = match[1]
-            hostVersion = '+' + match[2]
+            host = match[1];
+            hostVersion = '+' + match[2];
           }
           if (isHyperHashRegex.test(host)) {
-            host = prettyHash(host)
+            host = prettyHash(host);
           }
         }
-        var cls = 'protocol'
+        var cls = 'protocol';
         // if (['beaker:'].includes(protocol)) cls += ' protocol-trusted'
         // if (['https:'].includes(protocol) && !this.loadError) cls += ' protocol-trusted'
-        if (['https:'].includes(protocol) && this.loadError && this.loadError.isInsecureResponse) cls += ' protocol-untrusted'
+        if (
+          ['https:'].includes(protocol) &&
+          this.loadError &&
+          this.loadError.isInsecureResponse
+        )
+          cls += ' protocol-untrusted';
         // if (['dat:'].includes(protocol)) cls += ' protocol-trusted'
         // if (['beaker:'].includes(protocol)) cls += ' protocol-trusted'
         return html`
           <div class="input-pretty" @mouseup=${this.onClickLocation}>
-            ${''/*<span class=${cls}>${protocol.slice(0, -1)}</span><span class="syntax">://</span><span class="host">${host}</span>*/}
+            ${
+              '' /*<span class=${cls}>${protocol.slice(0, -1)}</span><span class="syntax">://</span><span class="host">${host}</span>*/
+            }
             <span class="path">${pathname}${search}${hash}</span>
           </div>
-        `
+        `;
       } catch (e) {
         // invalid URL, fallback to default
       }
     }
     return html`
-      <div class="input-pretty" @mouseup=${this.onClickLocation}>${this.url}</div>
-    `
+      <div class="input-pretty" @mouseup=${this.onClickLocation}>
+        ${this.url}
+      </div>
+    `;
   }
 
-  renderZoom () {
-    if (this.zoom === 0) return ''
-    var zoomPct = ({
+  renderZoom() {
+    if (this.zoom === 0) return '';
+    var zoomPct = {
       '-0.5': 90,
       '-1': 75,
       '-1.5': 67,
       '-2': 50,
       '-2.5': 33,
       '-3': 25,
-      '0': 100,
-      '0.5': 110,
-      '1': 125,
-      '1.5': 150,
-      '2': 175,
-      '2.5': 200,
-      '3': 250,
-      '3.5': 300,
-      '4': 400,
-      '4.5': 500
-    })[this.zoom]
+      0: 100,
+      0.5: 110,
+      1: 125,
+      1.5: 150,
+      2: 175,
+      2.5: 200,
+      3: 250,
+      3.5: 300,
+      4: 400,
+      4.5: 500,
+    }[this.zoom];
     return html`
       <button @click=${this.onClickZoom} title="Zoom: ${zoomPct}%" class="zoom">
         ${zoomPct}%
       </button>
-    `
+    `;
   }
 
-  renderDatConverterBtn () {
+  renderDatConverterBtn() {
     if (this.url.startsWith('dat:')) {
       return html`
-        <button class="dat-converter" title="Convert to Hyperdrive" @click=${this.onClickConvertDat}>
+        <button
+          class="dat-converter"
+          title="Convert to Hyperdrive"
+          @click=${this.onClickConvertDat}
+        >
           Convert this site to Hyperdrive
         </button>
-      `
+      `;
     }
-    return ''
+    return '';
   }
 
-  renderLiveReloadingBtn () {
+  renderLiveReloadingBtn() {
     if (!this.isLiveReloading) {
-      return ''
+      return '';
     }
     return html`
-      <button class="live-reload" @click=${this.onClickLiveReloadingBtn} title="Live reloading enabled">
+      <button
+        class="live-reload"
+        @click=${this.onClickLiveReloadingBtn}
+        title="Live reloading enabled"
+      >
         <i class="fa fa-bolt"></i>
       </button>
-    `
+    `;
   }
 
-  renderFolderSyncBtn () {
+  renderFolderSyncBtn() {
     if (!this.folderSyncPath) {
-      return ''
+      return '';
     }
-    var cls = classMap({'folder-sync': true})
+    var cls = classMap({ 'folder-sync': true });
     return html`
-      <button class=${cls} @click=${this.onClickFolderSyncBtn} title="Folder Sync">
+      <button
+        class=${cls}
+        @click=${this.onClickFolderSyncBtn}
+        title="Folder Sync"
+      >
         <i class="fas fa-sync"></i>
         <i class="far fa-folder-open"></i>
       </button>
-    `
+    `;
   }
 
-  renderDonateBtn () {
+  renderDonateBtn() {
     if (!this.donateLinkHref) {
-      return ''
+      return '';
     }
-    var cls = classMap({donate: true, pressed: this.isDonateMenuOpen})
+    var cls = classMap({ donate: true, pressed: this.isDonateMenuOpen });
     return html`
       <button class="${cls}" @click=${this.onClickDonateMenu}>
         <i class="fa fa-donate"></i>
       </button>
-    `
+    `;
   }
 
-  renderPeers () {
+  renderPeers() {
     if (!this.isHyperdrive) {
-      return ''
+      return '';
     }
-    var cls = classMap({peers: true, pressed: this.isPeersMenuOpen})
+    var cls = classMap({ peers: true, pressed: this.isPeersMenuOpen });
     return html`
       <button class="${cls}" @click=${this.onClickPeersMenu}>
         <span class="fas fa-share-alt"></span> ${this.peers}
       </button>
-    `
+    `;
   }
 
-  renderBookmarkBtn () {
+  renderBookmarkBtn() {
     return html`
-      <button class="bookmark" @click=${this.onClickBookmark} title="Bookmark this page">
+      <button
+        class="bookmark"
+        @click=${this.onClickBookmark}
+        title="Bookmark this page"
+      >
         <span class="${this.isBookmarked ? 'fas' : 'far'} fa-star"></span>
       </button>
-    `
+    `;
   }
 
-  renderShareBtn () {
-    var cls = classMap({share: true, pressed: this.isShareMenuOpen})
+  renderShareBtn() {
+    var cls = classMap({ share: true, pressed: this.isShareMenuOpen });
     return html`
       <button class="${cls}" @click=${this.onClickShareMenu}>
         <i class="fas fa-share-square"></i>
       </button>
-    `
+    `;
   }
 
-  renderSiteBtn () {
-    var cls = classMap({site: true, pressed: this.isSiteMenuOpen})
+  renderSiteBtn() {
+    var cls = classMap({ site: true, pressed: this.isSiteMenuOpen });
     return html`
       <button class="${cls}" @click=${this.onClickSiteMenu}>
         <i class="fas fa-angle-down"></i>
       </button>
-    `
+    `;
   }
 
   // events
   // =
 
-  onCommand (e, cmd, ...args) {
+  onCommand(e, cmd, ...args) {
     if (cmd === 'create-bookmark') {
-      this.onClickBookmark()
+      this.onClickBookmark();
     }
     if (cmd === 'focus-location') {
-      this.dontShowAutocompleteOnNextFocus = true
-      this.focusLocation()
+      this.dontShowAutocompleteOnNextFocus = true;
+      this.focusLocation();
     }
     if (cmd === 'unfocus-location') {
-      this.unfocusLocation()
+      this.unfocusLocation();
     }
     if (cmd === 'set-search-engines') {
-      this.autocompleteState.searchEnginesPromise = JSON.parse(args[0])
+      this.autocompleteState.searchEnginesPromise = JSON.parse(args[0]);
     }
   }
 
-  onContextMenuLocation (e) {
-    e.preventDefault()
-    e.stopPropagation()
+  onContextMenuLocation(e) {
+    e.preventDefault();
+    e.stopPropagation();
     if (!this.isLocationFocused) {
-      this.focusLocation()
+      this.focusLocation();
     }
-    bg.views.showLocationBarContextMenu('active')
+    bg.views.showLocationBarContextMenu('active');
   }
 
-  onClickLocation (e) {
-    e.preventDefault()
-    this.focusLocation()
+  onClickLocation(e) {
+    e.preventDefault();
+    this.focusLocation();
   }
 
-  async onFocusLocation (e) {
-    var input = e.currentTarget
+  async onFocusLocation(e) {
+    var input = e.currentTarget;
     if (!this.url.startsWith('beaker://desktop')) {
-      input.value = this.url
+      input.value = this.url;
     } else {
-      input.value = ''
+      input.value = '';
     }
-    this.hasExpanded = true
-    this.isLocationFocused = true
+    this.hasExpanded = true;
+    this.isLocationFocused = true;
 
     if (!this.dontShowAutocompleteOnNextFocus) {
-      var rect = this.getClientRects()[0]
+      var rect = this.getClientRects()[0];
       bg.views.runLocationBarCmd('show', {
-        bounds: {x: (rect.left|0), y: (rect.bottom|0), width: (rect.width|0)},
-        results: (await this.autocompleteState.bookmarksFetch).slice(0, 10)
-      })
-      this.isAutocompleteOpen = true
+        bounds: { x: rect.left | 0, y: rect.bottom | 0, width: rect.width | 0 },
+        results: (await this.autocompleteState.bookmarksFetch).slice(0, 10),
+      });
+      this.isAutocompleteOpen = true;
     }
-    this.dontShowAutocompleteOnNextFocus = false
+    this.dontShowAutocompleteOnNextFocus = false;
 
-    await this.requestUpdate()
+    await this.requestUpdate();
 
     if (this.shouldSelectAllOnFocus) {
-      input.setSelectionRange(0, input.value.length)
-      this.shouldSelectAllOnFocus = false
+      input.setSelectionRange(0, input.value.length);
+      this.shouldSelectAllOnFocus = false;
     }
   }
 
-  onBlurLocation (e) {
-    this.isAutocompleteOpen = false
-    bg.views.runLocationBarCmd('hide')
+  onBlurLocation(e) {
+    this.isAutocompleteOpen = false;
+    bg.views.runLocationBarCmd('hide');
 
     // clear the selection range so that the next focusing doesnt carry it over
-    window.getSelection().empty()
-    this.shadowRoot.querySelector('.input-container input').value = this.url // reset value
-    this.isLocationFocused = false
-    this.hasExpanded = false
+    window.getSelection().empty();
+    this.shadowRoot.querySelector('.input-container input').value = this.url; // reset value
+    this.isLocationFocused = false;
+    this.hasExpanded = false;
 
     // HACK
     // Sometimes the input is blurred by the user clicking on a separate webContents (eg the current page).
@@ -428,366 +454,396 @@ class NavbarLocation extends LitElement {
     // when an input is focused, it maintains some amount of "focused" state for when you focus the browser
     // window again. We explicitly blur it here to fully enter blurred state.
     // -prf
-    this.shadowRoot.querySelector('.input-container input').blur()
+    this.shadowRoot.querySelector('.input-container input').blur();
   }
 
-  onInputLocation (e) {
-    this.autocompleteState.inputValue = e.currentTarget.value.trim()
-    queryAutocomplete(bg, this.autocompleteState, this.onAutocompleteResults.bind(this))
+  onInputLocation(e) {
+    this.autocompleteState.inputValue = e.currentTarget.value.trim();
+    queryAutocomplete(
+      bg,
+      this.autocompleteState,
+      this.onAutocompleteResults.bind(this)
+    );
   }
 
-  async onKeydownLocation (e) {
+  async onKeydownLocation(e) {
     if (e.key === 'Enter') {
-      e.preventDefault()
-      this.autocompleteState.queryIdCounter = -1 // cancel any active queries
-      bg.views.runLocationBarCmd('choose-selection')
-      e.currentTarget.blur()
-      return
+      e.preventDefault();
+      this.autocompleteState.queryIdCounter = -1; // cancel any active queries
+      bg.views.runLocationBarCmd('choose-selection');
+      e.currentTarget.blur();
+      return;
     }
 
     if (e.key === 'Escape') {
-      e.preventDefault()
-      e.currentTarget.blur()
-      return
+      e.preventDefault();
+      e.currentTarget.blur();
+      return;
     }
 
-    var up = ((e.key === 'Tab' && e.shiftKey) || e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'p'))
-    var down = ((e.key === 'Tab' && !e.shiftKey) || e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'n'))
+    var up =
+      (e.key === 'Tab' && e.shiftKey) ||
+      e.key === 'ArrowUp' ||
+      (e.ctrlKey && e.key === 'p');
+    var down =
+      (e.key === 'Tab' && !e.shiftKey) ||
+      e.key === 'ArrowDown' ||
+      (e.ctrlKey && e.key === 'n');
     if (up || down) {
-      e.preventDefault()
-      this.shadowRoot.querySelector('input').value = await bg.views.runLocationBarCmd('move-selection', {up, down})
+      e.preventDefault();
+      this.shadowRoot.querySelector('input').value =
+        await bg.views.runLocationBarCmd('move-selection', { up, down });
     }
   }
 
-  onContextmenuLocation (e) {
-    e.preventDefault()
-    e.stopPropagation()
-    bg.views.showLocationBarContextMenu('active')
+  onContextmenuLocation(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    bg.views.showLocationBarContextMenu('active');
   }
 
-  onAutocompleteResults (isPartialResults = false) {
+  onAutocompleteResults(isPartialResults = false) {
     if (!this.isAutocompleteOpen) {
-      let rect = this.getClientRects()[0]
+      let rect = this.getClientRects()[0];
       bg.views.runLocationBarCmd('show', {
-        bounds: {x: (rect.left|0), y: (rect.bottom|0), width: (rect.width|0) + 1},
+        bounds: {
+          x: rect.left | 0,
+          y: rect.bottom | 0,
+          width: (rect.width | 0) + 1,
+        },
         query: this.autocompleteState.inputValue,
-        results: this.autocompleteState.results
-      })
-      this.isAutocompleteOpen = true
-      this.requestUpdate() // to handle the isAutocompleteOpen change
+        results: this.autocompleteState.results,
+      });
+      this.isAutocompleteOpen = true;
+      this.requestUpdate(); // to handle the isAutocompleteOpen change
     } else {
       bg.views.runLocationBarCmd('set-results', {
         query: this.autocompleteState.inputValue,
-        results: this.autocompleteState.results
-      })
+        results: this.autocompleteState.results,
+      });
     }
     if (!isPartialResults && this.autocompleteState.urlGuess) {
       // we have a "URL guess"
-      let rangeStart = this.autocompleteState.inputValue.length
-      let input = this.shadowRoot.querySelector('input')
-      input.value = this.autocompleteState.urlGuess.input
-      input.setSelectionRange(rangeStart, this.autocompleteState.urlGuess.input.length)
+      let rangeStart = this.autocompleteState.inputValue.length;
+      let input = this.shadowRoot.querySelector('input');
+      input.value = this.autocompleteState.urlGuess.input;
+      input.setSelectionRange(
+        rangeStart,
+        this.autocompleteState.urlGuess.input.length
+      );
     }
   }
 
-  onClickZoom (e) {
-    bg.views.resetZoom(this.activeTabIndex)
+  onClickZoom(e) {
+    bg.views.resetZoom(this.activeTabIndex);
   }
 
-  onClickConvertDat (e) {
-    var { host } = new URL(this.url)
-    bg.beakerBrowser.convertDat(host)
+  onClickConvertDat(e) {
+    var { host } = new URL(this.url);
+    bg.beakerBrowser.convertDat(host);
   }
 
-  onClickLiveReloadingBtn (e) {
-    bg.views.toggleLiveReloading('active')
-    this.isLiveReloading = false
+  onClickLiveReloadingBtn(e) {
+    bg.views.toggleLiveReloading('active');
+    this.isLiveReloading = false;
   }
 
-  async onClickFolderSyncBtn () {
-    bg.folderSync.syncDialog(this.url)
+  async onClickFolderSyncBtn() {
+    bg.folderSync.syncDialog(this.url);
   }
 
-  async onClickShareMenu (e) {
-    this.isShareMenuOpen = true
-    var rect = this.shadowRoot.querySelector('.share').getClientRects()[0]
+  async onClickShareMenu(e) {
+    this.isShareMenuOpen = true;
+    var rect = this.shadowRoot.querySelector('.share').getClientRects()[0];
     await bg.views.toggleMenu('share', {
-      bounds: {rightOffset: (window.innerWidth - rect.right)|0},
-      params: {url: this.url}
-    })
-    this.isShareMenuOpen = false
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0 },
+      params: { url: this.url },
+    });
+    this.isShareMenuOpen = false;
   }
 
-  async onClickDonateMenu (e) {
-    this.isDonateMenuOpen = true
-    var rect = e.currentTarget.getClientRects()[0]
+  async onClickDonateMenu(e) {
+    this.isDonateMenuOpen = true;
+    var rect = e.currentTarget.getClientRects()[0];
     await bg.views.toggleMenu('donate', {
-      bounds: {rightOffset: (window.innerWidth - rect.right)|0},
-      params: {url: this.url}
-    })
-    this.isDonateMenuOpen = false
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0 },
+      params: { url: this.url },
+    });
+    this.isDonateMenuOpen = false;
   }
 
-  async onClickBookmark () {
-    var rect = this.shadowRoot.querySelector('.bookmark').getClientRects()[0]
+  async onClickBookmark() {
+    var rect = this.shadowRoot.querySelector('.bookmark').getClientRects()[0];
     // show menu
     bg.views.toggleMenu('bookmark', {
-      bounds: {rightOffset: (window.innerWidth - rect.right)|0},
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0 },
       params: {
         url: this.url,
-        metadata: {title: this.title}
-      }
-    })
+        metadata: { title: this.title },
+      },
+    });
   }
 
-  async onClickPeersMenu () {
-    if (Date.now() - (this.lastPeersMenuClick||0) < 100) {
-      return
+  async onClickPeersMenu() {
+    if (Date.now() - (this.lastPeersMenuClick || 0) < 100) {
+      return;
     }
-    this.isPeersMenuOpen = true
-    var rect = this.shadowRoot.querySelector('.peers').getClientRects()[0]
+    this.isPeersMenuOpen = true;
+    var rect = this.shadowRoot.querySelector('.peers').getClientRects()[0];
     // show menu
     await bg.views.toggleMenu('peers', {
-      bounds: {rightOffset: (window.innerWidth - rect.right)|0},
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0 },
       params: {
-        url: this.url
-      }
-    })
-    this.isPeersMenuOpen = false
-    this.lastPeersMenuClick = Date.now()
+        url: this.url,
+      },
+    });
+    this.isPeersMenuOpen = false;
+    this.lastPeersMenuClick = Date.now();
   }
 
-  async onClickSiteMenu () {
-    if (Date.now() - (this.lastSiteMenuClick||0) < 100) {
-      return
+  async onClickSiteMenu() {
+    if (Date.now() - (this.lastSiteMenuClick || 0) < 100) {
+      return;
     }
-    this.isSiteMenuOpen = true
-    var rect = this.shadowRoot.querySelector('.site').getClientRects()[0]
+    this.isSiteMenuOpen = true;
+    var rect = this.shadowRoot.querySelector('.site').getClientRects()[0];
     // show menu
     await bg.views.toggleMenu('site', {
-      bounds: {rightOffset: (window.innerWidth - rect.right)|0},
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0 },
       params: {
-        url: this.url
-      }
-    })
-    this.isSiteMenuOpen = false
-    this.lastSiteMenuClick = Date.now()
+        url: this.url,
+      },
+    });
+    this.isSiteMenuOpen = false;
+    this.lastSiteMenuClick = Date.now();
   }
 }
-NavbarLocation.styles = [buttonResetCSS, tooltipCSS, css`
-:host {
-  display: flex;
-  flex: 1;
-  background: var(--bg-color--location-input);
-  border: 1px solid var(--border-color--location-input);
-  border-radius: 16px;
-  padding-right: 8px;
-  user-select: none;
-}
+NavbarLocation.styles = [
+  buttonResetCSS,
+  tooltipCSS,
+  css`
+    :host {
+      display: flex;
+      flex: 1;
+      background: var(--bg-color--location-input);
+      border: 1px solid var(--border-color--location-input);
+      border-radius: 16px;
+      padding-right: 8px;
+      user-select: none;
+    }
 
-:host(.trusted) {
-  border: 1px solid var(--border-color--location-input--trusted);
-}
+    :host(.trusted) {
+      border: 1px solid var(--border-color--location-input--trusted);
+    }
 
-:host(.untrusted) {
-  border: 1px solid var(--border-color--location-input--untrusted);
-}
+    :host(.untrusted) {
+      border: 1px solid var(--border-color--location-input--untrusted);
+    }
 
-:host([autocomplete-open]) {
-  border-top-left-radius: 12px;
-  border-top-right-radius: 12px;
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-  border: 1px solid var(--border-color--input--focused);
-  border-bottom: 0;
-}
+    :host([autocomplete-open]) {
+      border-top-left-radius: 12px;
+      border-top-right-radius: 12px;
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      border: 1px solid var(--border-color--input--focused);
+      border-bottom: 0;
+    }
 
-button {
-  width: 27px;
-  border-radius: 0;
-  color: var(--text-color--location-btn);
-}
+    button {
+      width: 27px;
+      border-radius: 0;
+      color: var(--text-color--location-btn);
+    }
 
-button.text {
-  width: auto;
-  padding: 0 4px;
-  font-size: 11px;
-}
+    button.text {
+      width: auto;
+      padding: 0 4px;
+      font-size: 11px;
+    }
 
-button .fa,
-button .far,
-button .fas {
-  font-size: 15px;
-}
+    button .fa,
+    button .far,
+    button .fas {
+      font-size: 15px;
+    }
 
-button.text .fas,
-button.text .far {
-  font-size: 13px;
-}
+    button.text .fas,
+    button.text .far {
+      font-size: 13px;
+    }
 
-button.text .fa-info-circle {
-  font-size: 14px;
-}
+    button.text .fa-info-circle {
+      font-size: 14px;
+    }
 
-button.bookmark .fa-star {
-  font-size: 14px;
-}
+    button.bookmark .fa-star {
+      font-size: 14px;
+    }
 
-button.bookmark .fas.fa-star {
-  color: var(--text-color--location-bookmark--pressed);
-}
+    button.bookmark .fas.fa-star {
+      color: var(--text-color--location-bookmark--pressed);
+    }
 
-button .fa-link {
-  font-size: 14px;
-}
+    button .fa-link {
+      font-size: 14px;
+    }
 
-button.zoom {
-  width: auto;
-  font-size: 11px;
-  line-height: 10px;
-  background: var(--bg-color--location-zoom);
-  border-radius: 10px;
-  margin: 4px;
-  padding: 0 9px;
-  border: 1px solid var(--border-color--location-zoom);
-  font-weight: 500;
-}
+    button.zoom {
+      width: auto;
+      font-size: 11px;
+      line-height: 10px;
+      background: var(--bg-color--location-zoom);
+      border-radius: 10px;
+      margin: 4px;
+      padding: 0 9px;
+      border: 1px solid var(--border-color--location-zoom);
+      font-weight: 500;
+    }
 
-button.zoom:hover {
-  background: var(--bg-color--location-zoom--hover);
-}
+    button.zoom:hover {
+      background: var(--bg-color--location-zoom--hover);
+    }
 
-button.dat-converter {
-  width: auto;
-  font-size: 13px;
-  line-height: 23px;
-  background: var(--bg-color--location-dat-convert-btn);
-  border-radius: 5px;
-  margin: 2px;
-  padding: 0 9px;
-  font-weight: 500;
-  color: var(--text-color--location-dat-convert-btn);
-}
+    button.dat-converter {
+      width: auto;
+      font-size: 13px;
+      line-height: 23px;
+      background: var(--bg-color--location-dat-convert-btn);
+      border-radius: 5px;
+      margin: 2px;
+      padding: 0 9px;
+      font-weight: 500;
+      color: var(--text-color--location-dat-convert-btn);
+    }
 
-button.dat-converter:hover {
-  cursor: pointer;
-  background: var(--bg-color--location-dat-convert-btn--hover);
-}
+    button.dat-converter:hover {
+      cursor: pointer;
+      background: var(--bg-color--location-dat-convert-btn--hover);
+    }
 
-button.live-reload {
-  width: 24px;
-}
+    button.live-reload {
+      width: 24px;
+    }
 
-button.live-reload .fa {
-  font-size: 14px;
-  color: var(--text-color--location-live-reload-btn);
-  -webkit-text-stroke: 1px var(--text-stroke-color--location-live-reload-btn);
-  text-shadow: 0 0 8px var(--text-shadow-color--location-live-reload-btn);
-  animation: bolt-glow 2s infinite linear;
-}
+    button.live-reload .fa {
+      font-size: 14px;
+      color: var(--text-color--location-live-reload-btn);
+      -webkit-text-stroke: 1px
+        var(--text-stroke-color--location-live-reload-btn);
+      text-shadow: 0 0 8px var(--text-shadow-color--location-live-reload-btn);
+      animation: bolt-glow 2s infinite linear;
+    }
 
-@keyframes bolt-glow {
-  0% { text-shadow: 0 0 8px var(--text-shadow-color--location-live-reload-btn); }
-  50% { text-shadow: 0 0 0px var(--text-shadow-color--location-live-reload-btn); }
-  100% { text-shadow: 0 0 8px var(--text-shadow-color--location-live-reload-btn); }
-}
+    @keyframes bolt-glow {
+      0% {
+        text-shadow: 0 0 8px var(--text-shadow-color--location-live-reload-btn);
+      }
+      50% {
+        text-shadow: 0 0 0px var(--text-shadow-color--location-live-reload-btn);
+      }
+      100% {
+        text-shadow: 0 0 8px var(--text-shadow-color--location-live-reload-btn);
+      }
+    }
 
-button.folder-sync {
-  width: 40px;
-}
+    button.folder-sync {
+      width: 40px;
+    }
 
-button.folder-sync .fa-sync {
-  font-size: 8px;
-  position: relative;
-  top: -3px;
-}
+    button.folder-sync .fa-sync {
+      font-size: 8px;
+      position: relative;
+      top: -3px;
+    }
 
-button.folder-sync .fa-folder-open {
-  transform: translateY(.5px);
-}
+    button.folder-sync .fa-folder-open {
+      transform: translateY(0.5px);
+    }
 
-button.site .fa-angle-down {
-  position: relative;
-  top: 1px;
-}
+    button.site .fa-angle-down {
+      position: relative;
+      top: 1px;
+    }
 
-.input-container {
-  position: relative;
-  flex: 1;
-  margin: 0 6px;
-}
+    .input-container {
+      position: relative;
+      flex: 1;
+      margin: 0 6px;
+    }
 
-.input-pretty,
-input {
-  position: absolute;
-  left: 0;
-  top: 0;
+    .input-pretty,
+    input {
+      position: absolute;
+      left: 0;
+      top: 0;
 
-  box-sizing: border-box;
-  border: 0;
-  padding: 0;
+      box-sizing: border-box;
+      border: 0;
+      padding: 0;
 
-  width: 100%;
-  height: 26px;
-  overflow: hidden;
+      width: 100%;
+      height: 26px;
+      overflow: hidden;
 
-  color: var(--text-color--location-input);
-  background: var(--bg-color--location-input);
-  font-size: 12.5px;
-  line-height: 27px;
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Ubuntu, Cantarell, "Oxygen Sans", "Helvetica Neue", sans-serif;
-  font-weight: 400;
-  letter-spacing: 0.5px;
-}
+      color: var(--text-color--location-input);
+      background: var(--bg-color--location-input);
+      font-size: 12.5px;
+      line-height: 27px;
+      font-family: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI',
+        Ubuntu, Cantarell, 'Oxygen Sans', 'Helvetica Neue', sans-serif;
+      font-weight: 400;
+      letter-spacing: 0.5px;
+    }
 
-input:focus {
-  outline: 0;
-}
+    input:focus {
+      outline: 0;
+    }
 
-input::-webkit-input-placeholder {
-  font-weight: 400;
-}
+    input::-webkit-input-placeholder {
+      font-weight: 400;
+    }
 
-.input-pretty {
-  z-index: 1;
-  text-overflow: ellipsis;
-  cursor: text;
-}
+    .input-pretty {
+      z-index: 1;
+      text-overflow: ellipsis;
+      cursor: text;
+    }
 
-.input-pretty .protocol {
-  color: var(--text-color--location-input--light);
-}
+    .input-pretty .protocol {
+      color: var(--text-color--location-input--light);
+    }
 
-.input-pretty .protocol-trusted {
-  color: var(--text-color--cert--trusted);
-}
+    .input-pretty .protocol-trusted {
+      color: var(--text-color--cert--trusted);
+    }
 
-.input-pretty .protocol-untrusted {
-  color: var(--text-color--cert--untrusted);
-}
+    .input-pretty .protocol-untrusted {
+      color: var(--text-color--cert--untrusted);
+    }
 
-.input-pretty .host-version,
-.input-pretty .syntax,
-.input-pretty .path {
-  color: var(--text-color--location-input--light);
-  white-space: nowrap;
-  font-weight: 400;
-}
+    .input-pretty .host-version,
+    .input-pretty .syntax,
+    .input-pretty .path {
+      color: var(--text-color--location-input--light);
+      white-space: nowrap;
+      font-weight: 400;
+    }
 
-.peers {
-  letter-spacing: 0.5px;
-  height: 27px;
-  line-height: 27px;
-  width: auto;
-  min-width: 32px;
-  padding: 0 5px;
-  font-size: 13px;
-}
+    .peers {
+      letter-spacing: 0.5px;
+      height: 27px;
+      line-height: 27px;
+      width: auto;
+      min-width: 32px;
+      padding: 0 5px;
+      font-size: 13px;
+    }
 
-.peers .fas {
-  font-size: 11px;
-  position: relative;
-  top: -1px;
-}
-`]
-customElements.define('shell-window-navbar-location', NavbarLocation)
+    .peers .fas {
+      font-size: 11px;
+      position: relative;
+      top: -1px;
+    }
+  `,
+];
+customElements.define('shell-window-navbar-location', NavbarLocation);

@@ -1,67 +1,84 @@
-import { html } from '../../vendor/lit-element/lit-element.js'
-import * as contextMenu from './context-menu.js'
-import * as loc from '../lib/location.js'
+import { html } from '../../vendor/lit-element/lit-element.js';
+import * as contextMenu from './context-menu.js';
+import * as loc from '../lib/location.js';
 
-export function create (app, {x, y}) {
-  function onChangeRenderMode (e, id) {
-    app.onChangeRenderMode(e, id)
-    this.requestUpdate()
+export function create(app, { x, y }) {
+  function onChangeRenderMode(e, id) {
+    app.onChangeRenderMode(e, id);
+    this.requestUpdate();
   }
 
-  function onToggleInlineMode (e) {
-    app.onToggleInlineMode()
-    this.requestUpdate()
+  function onToggleInlineMode(e) {
+    app.onToggleInlineMode();
+    this.requestUpdate();
   }
 
-  function onChangeSortMode (e) {
-    app.onChangeSortMode(e)
-    this.requestUpdate()
+  function onChangeSortMode(e) {
+    app.onChangeSortMode(e);
+    this.requestUpdate();
   }
-  
-  const renderModes = app.renderModes
-  const isViewfile = app.pathInfo.isFile() && loc.getPath().endsWith('.view')
-  const isFolderLike = app.pathInfo.isDirectory() || isViewfile
+
+  const renderModes = app.renderModes;
+  const isViewfile = app.pathInfo.isFile() && loc.getPath().endsWith('.view');
+  const isFolderLike = app.pathInfo.isDirectory() || isViewfile;
 
   return contextMenu.create({
     x,
     y,
-    render () {
+    render() {
       const sortModeOpt = (id, label) => html`
-        <option ?selected=${id === app.sortMode} value=${id}>⇅ Sort by ${label}</option>
-      `
+        <option ?selected=${id === app.sortMode} value=${id}>
+          ⇅ Sort by ${label}
+        </option>
+      `;
       return html`
-        <link rel="stylesheet" href="beaker://explorer/css/font-awesome.css">
+        <link rel="stylesheet" href="beaker://explorer/css/font-awesome.css" />
         <div class="settings-menu">
-          ${renderModes.length ? html`
-            <h5>View mode</h5>
-            <div class="render-modes">
-              ${renderModes.map(([id, icon, label]) => html`
-                <div
-                  class="btn transparent ${id == app.renderMode ? 'pressed' : ''}"
-                  @click=${e => onChangeRenderMode.call(this, e, id)}
-                  title="Change the view to: ${label}"
-                >
-                  <div><span class="fas fa-${icon}"></span></div>
-                  <div>${label}</div>
+          ${renderModes.length
+            ? html`
+                <h5>View mode</h5>
+                <div class="render-modes">
+                  ${renderModes.map(
+                    ([id, icon, label]) => html`
+                      <div
+                        class="btn transparent ${id == app.renderMode
+                          ? 'pressed'
+                          : ''}"
+                        @click=${(e) => onChangeRenderMode.call(this, e, id)}
+                        title="Change the view to: ${label}"
+                      >
+                        <div><span class="fas fa-${icon}"></span></div>
+                        <div>${label}</div>
+                      </div>
+                    `
+                  )}
                 </div>
-              `)}
-            </div>
-          ` : ''}
-          ${isFolderLike ? html`
-            <div class="btn ${app.inlineMode ? 'pressed' : ''}" @click=${onToggleInlineMode.bind(this)}>
-              <span class="far fa-fw fa-${app.inlineMode ? 'check-square' : 'square'}"></span>
-              Show the content of files
-            </div>
-            <div class="sort-modes">
-              <select @change=${onChangeSortMode.bind(this)}>
-                ${sortModeOpt('name', 'name')}
-                ${sortModeOpt('name-reversed', 'name, reversed')}
-                ${sortModeOpt('newest', 'newest')}
-                ${sortModeOpt('oldest', 'oldest')}
-                ${sortModeOpt('recently-changed', 'recently changed')}
-              </select>
-            </div>
-          ` : ''}
+              `
+            : ''}
+          ${isFolderLike
+            ? html`
+                <div
+                  class="btn ${app.inlineMode ? 'pressed' : ''}"
+                  @click=${onToggleInlineMode.bind(this)}
+                >
+                  <span
+                    class="far fa-fw fa-${app.inlineMode
+                      ? 'check-square'
+                      : 'square'}"
+                  ></span>
+                  Show the content of files
+                </div>
+                <div class="sort-modes">
+                  <select @change=${onChangeSortMode.bind(this)}>
+                    ${sortModeOpt('name', 'name')}
+                    ${sortModeOpt('name-reversed', 'name, reversed')}
+                    ${sortModeOpt('newest', 'newest')}
+                    ${sortModeOpt('oldest', 'oldest')}
+                    ${sortModeOpt('recently-changed', 'recently changed')}
+                  </select>
+                </div>
+              `
+            : ''}
         </div>
         <style>
           .settings-menu {
@@ -147,7 +164,7 @@ export function create (app, {x, y}) {
             background: #eeeef5;
           }
         </style>
-      `
-    }
-  })
+      `;
+    },
+  });
 }

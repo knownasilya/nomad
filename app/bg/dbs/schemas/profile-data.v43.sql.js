@@ -47,4 +47,4 @@ DROP TABLE IF EXISTS crawl_sources_meta;
 DROP TABLE IF EXISTS crawl_sources;
 
 PRAGMA user_version = 43;
-`
+`;

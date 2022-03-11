@@ -1,48 +1,50 @@
 <html>
   <head>
-    <meta charset="utf-8">
-    <link rel="stylesheet" href="beaker://assets/font-awesome.css">
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
     <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Ubuntu, Cantarell, "Oxygen Sans", "Helvetica Neue", sans-serif;
-      margin: 0;
-      background: transparent;
-      border-bottom-left-radius: 12px;
-      border-bottom-right-radius: 12px;
-      border: 1px solid #1d59c7;
-      border-top: 0;
-      font-size: 12px;
-      color: rgba(0, 0, 0, 0.8);
-      overflow: hidden;
-      margin: 0 10px 10px;
-      
-      --bg-color--default: #fff;
-      --bg-color--result--hover: #f0f0f0;
-      --bg-color--result--selected: #105de8;
-      --bg-color--search-engine--hover: #f0f0f8;
-      --text-color--default: #333;
-      --text-color--result-icon: #707070;
-      --text-color--result-title: #222;
-      --text-color--result-provenance: #1f55c1;
-      --text-color--result-origin: #888;
-    }
-
-    @media (prefers-color-scheme: dark) {
       body {
-      --bg-color--default: #222;
-      --bg-color--result--hover: #333;
-      --bg-color--result--selected: #105de8;
-      --bg-color--search-engine--hover: #333;
-      --text-color--default: #ddd;
-      --text-color--result-icon: #707070;
-      --text-color--result-title: #eee;
-      --text-color--result-provenance: #3f85f1;
-      --text-color--result-origin: #888;
+        font-family: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI',
+          Ubuntu, Cantarell, 'Oxygen Sans', 'Helvetica Neue', sans-serif;
+        margin: 0;
+        background: transparent;
+        border-bottom-left-radius: 12px;
+        border-bottom-right-radius: 12px;
+        border: 1px solid #1d59c7;
+        border-top: 0;
+        font-size: 12px;
+        color: rgba(0, 0, 0, 0.8);
+        overflow: hidden;
+        margin: 0 10px 10px;
+
+        --bg-color--default: #fff;
+        --bg-color--result--hover: #f0f0f0;
+        --bg-color--result--selected: #105de8;
+        --bg-color--search-engine--hover: #f0f0f8;
+        --text-color--default: #333;
+        --text-color--result-icon: #707070;
+        --text-color--result-title: #222;
+        --text-color--result-provenance: #1f55c1;
+        --text-color--result-origin: #888;
       }
-    }
+
+      @media (prefers-color-scheme: dark) {
+        body {
+          --bg-color--default: #222;
+          --bg-color--result--hover: #333;
+          --bg-color--result--selected: #105de8;
+          --bg-color--search-engine--hover: #333;
+          --text-color--default: #ddd;
+          --text-color--result-icon: #707070;
+          --text-color--result-title: #eee;
+          --text-color--result-provenance: #3f85f1;
+          --text-color--result-origin: #888;
+        }
+      }
     </style>
   </head>
   <body>
-    <location-bar></location-bar> <!-- this tag will be defined in the preload script -->
+    <location-bar></location-bar>
+    <!-- this tag will be defined in the preload script -->
   </body>
 </html>

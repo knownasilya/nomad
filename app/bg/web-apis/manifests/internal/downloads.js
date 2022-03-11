@@ -6,5 +6,5 @@ export default {
   remove: 'promise',
   open: 'promise',
   showInFolder: 'promise',
-  createEventsStream: 'readable'
-}
+  createEventsStream: 'readable',
+};

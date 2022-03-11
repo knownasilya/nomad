@@ -4,10 +4,7 @@
   "type": "object",
   "title": "Follows",
   "description": "A list of data subscriptions.",
-  "required": [
-    "type",
-    "urls"
-  ],
+  "required": ["type", "urls"],
   "properties": {
     "type": {
       "type": "string",

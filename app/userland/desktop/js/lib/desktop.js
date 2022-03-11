@@ -1,4 +1,4 @@
-import { getAvailableName } from 'beaker://app-stdlib/js/fs.js'
+import { getAvailableName } from 'beaker://app-stdlib/js/fs.js';
 
 // exported
 // =
@@ -9,39 +9,39 @@ import { getAvailableName } from 'beaker://app-stdlib/js/fs.js'
 //   makeFixedLink('.library.goto', 'beaker://library/', 'My Library'),
 // ]
 
-export async function load () {
-  var bookmarks = []
+export async function load() {
+  var bookmarks = [];
   try {
-    bookmarks = await beaker.bookmarks.list()
-    bookmarks = bookmarks.filter(b => b.pinned)
+    bookmarks = await beaker.bookmarks.list();
+    bookmarks = bookmarks.filter((b) => b.pinned);
   } catch (e) {
-    console.log('Failed to load bookmarks files', e)
+    console.log('Failed to load bookmarks files', e);
   }
-  return bookmarks
+  return bookmarks;
 }
 
-export async function createLink ({href, title}, pinned) {
-  let bookmark = await beaker.bookmarks.get(href)
-  if (bookmark) title = bookmark.title
-  await beaker.bookmarks.add({href, title, pinned})
+export async function createLink({ href, title }, pinned) {
+  let bookmark = await beaker.bookmarks.get(href);
+  if (bookmark) title = bookmark.title;
+  await beaker.bookmarks.add({ href, title, pinned });
 }
 
-export async function remove (bookmark) {
-  await beaker.bookmarks.remove(bookmark.href)
+export async function remove(bookmark) {
+  await beaker.bookmarks.remove(bookmark.href);
 }
 
 // internal
 // =
 
-function makeFixedLink (name, href, title) {
+function makeFixedLink(name, href, title) {
   return {
     name,
     stat: {
       isDirectory: () => false,
       isFile: () => true,
       mount: undefined,
-      metadata: {href, title}
+      metadata: { href, title },
     },
-    isFixed: true
-  }
+    isFixed: true,
+  };
 }

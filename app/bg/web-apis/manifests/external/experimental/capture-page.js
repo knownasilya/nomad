@@ -1,3 +1,3 @@
 export default {
-  capturePage: 'promise'
-}
+  capturePage: 'promise',
+};

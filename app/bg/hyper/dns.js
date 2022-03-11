@@ -1,40 +1,40 @@
-import { InvalidDomainName } from 'beaker-error-constants'
-import datDnsFactory from 'dat-dns'
-import * as datDnsDb from '../dbs/dat-dns'
-import * as drives from './drives'
-import { HYPERDRIVE_HASH_REGEX } from '../../lib/const'
-import * as capabilities from './capabilities'
-import * as logLib from '../logger'
-const logger = logLib.child({category: 'hyper', subcategory: 'dns'})
+import { InvalidDomainName } from 'beaker-error-constants';
+import datDnsFactory from 'dat-dns';
+import * as datDnsDb from '../dbs/dat-dns';
+import * as drives from './drives';
+import { HYPERDRIVE_HASH_REGEX } from '../../lib/const';
+import * as capabilities from './capabilities';
+import * as logLib from '../logger';
+const logger = logLib.child({ category: 'hyper', subcategory: 'dns' });
 
-var localMapByName = {}
-var localMapByKey = {}
+var localMapByName = {};
+var localMapByKey = {};
 
-export function setLocal (name, url) {
-  var key = toHostname(url)
-  localMapByName[name] = key
-  localMapByKey[key] = name
+export function setLocal(name, url) {
+  var key = toHostname(url);
+  localMapByName[name] = key;
+  localMapByKey[key] = name;
 }
 
-export async function resolveName (name) {
-  name = toHostname(name)
-  if (HYPERDRIVE_HASH_REGEX.test(name)) return name
-  return localMapByName[name]
+export async function resolveName(name) {
+  name = toHostname(name);
+  if (HYPERDRIVE_HASH_REGEX.test(name)) return name;
+  return localMapByName[name];
 }
 
-export async function reverseResolve (key) {
-  return localMapByKey[toHostname(key)]
+export async function reverseResolve(key) {
+  return localMapByKey[toHostname(key)];
 }
 
-function toHostname (v) {
+function toHostname(v) {
   if (Buffer.isBuffer(v)) {
-    return v.toString('hex')
+    return v.toString('hex');
   }
   try {
-    var urlp = new URL(v)
-    return urlp.hostname
+    var urlp = new URL(v);
+    return urlp.hostname;
   } catch (e) {
-    return v
+    return v;
   }
 }
 

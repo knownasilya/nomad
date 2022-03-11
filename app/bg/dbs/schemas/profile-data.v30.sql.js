@@ -27,4 +27,4 @@ CREATE TABLE crawl_discussions_tags (
 );
 
 PRAGMA user_version = 30;
-`
+`;

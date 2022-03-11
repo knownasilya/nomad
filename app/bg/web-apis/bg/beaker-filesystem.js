@@ -1,5 +1,5 @@
-import { PermissionsError } from 'beaker-error-constants'
-import * as filesystem from '../../filesystem/index'
+import { PermissionsError } from 'beaker-error-constants';
+import * as filesystem from '../../filesystem/index';
 
 // typedefs
 // =
@@ -16,12 +16,12 @@ export default {
   /**
    * @returns {BeakerFilesystemPublicAPIRootRecord}
    */
-  get () {
+  get() {
     if (!this.sender.getURL().startsWith('beaker:')) {
-      throw new PermissionsError()
+      throw new PermissionsError();
     }
     return {
-      url: filesystem.get().url
-    }
-  }
-}
+      url: filesystem.get().url,
+    };
+  },
+};

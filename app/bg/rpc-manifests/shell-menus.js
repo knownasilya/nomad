@@ -7,5 +7,5 @@ export default {
   resizeSelf: 'promise',
   showInpageFind: 'promise',
   getWindowMenu: 'promise',
-  triggerWindowMenuItemById: 'promise'
-}
+  triggerWindowMenuItemById: 'promise',
+};

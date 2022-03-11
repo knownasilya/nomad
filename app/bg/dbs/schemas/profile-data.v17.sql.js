@@ -4,4 +4,4 @@ export default `
 ALTER TABLE archives ADD COLUMN localSyncPath TEXT;
 
 PRAGMA user_version = 17;
-`
+`;

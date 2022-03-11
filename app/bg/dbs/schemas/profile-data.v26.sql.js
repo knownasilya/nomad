@@ -11,4 +11,4 @@ END;
 ALTER TABLE crawl_graph RENAME TO crawl_follows;
 
 PRAGMA user_version = 26;
-`
+`;

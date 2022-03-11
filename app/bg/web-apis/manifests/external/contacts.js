@@ -4,5 +4,5 @@ export default {
   requestContacts: 'promise',
   requestAddContact: 'promise',
   list: 'promise',
-  remove: 'promise'
-}
+  remove: 'promise',
+};

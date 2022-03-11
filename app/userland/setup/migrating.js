@@ -1,19 +1,23 @@
-import { BaseSlideView } from './base-slide-view.js'
+import { BaseSlideView } from './base-slide-view.js';
 
-customElements.define('migrating-view', class extends BaseSlideView {
-  constructor () {
-    super()
-    this.doMigration()
-  }
+customElements.define(
+  'migrating-view',
+  class extends BaseSlideView {
+    constructor() {
+      super();
+      this.doMigration();
+    }
 
-  async doMigration () {
-    await beaker.browser.migrate08to09()
-    await beaker.browser.updateSetupState({migrated08to09: 1})
-    this.dispatchEvent(new CustomEvent('next', {bubbles: true, composed: true}))
-  }
+    async doMigration() {
+      await beaker.browser.migrate08to09();
+      await beaker.browser.updateSetupState({ migrated08to09: 1 });
+      this.dispatchEvent(
+        new CustomEvent('next', { bubbles: true, composed: true })
+      );
+    }
 
-  render () {
-    return `
+    render() {
+      return `
 <style>
 :host {
   opacity: 0;
@@ -59,6 +63,7 @@ h1 {
 }
 </style>
 <h1><span class="spinner"></span> Migrating your profile...</h1>
-    `
+    `;
+    }
   }
-})
+);

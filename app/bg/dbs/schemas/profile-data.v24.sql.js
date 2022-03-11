@@ -122,4 +122,4 @@ CREATE TABLE crawl_graph (
 );
 
 PRAGMA user_version = 24;
-`
+`;

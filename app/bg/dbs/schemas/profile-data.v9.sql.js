@@ -7,4 +7,4 @@ CREATE TABLE archives_meta_type (
 );
 
 PRAGMA user_version = 9;
-`
+`;

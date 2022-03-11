@@ -36,5 +36,5 @@ export default {
   beakerMerge: 'promise',
   importFromFilesystem: 'promise',
   exportToFilesystem: 'promise',
-  exportToDrive: 'promise'
-}
+  exportToDrive: 'promise',
+};

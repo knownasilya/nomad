@@ -16,4 +16,4 @@ END;
 
 PRAGMA user_version = 32;
 
-`
+`;

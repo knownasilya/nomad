@@ -4,4 +4,4 @@ export default `
 ALTER TABLE archives_meta ADD COLUMN memberOf TEXT;
 
 PRAGMA user_version = 46;
-`
+`;

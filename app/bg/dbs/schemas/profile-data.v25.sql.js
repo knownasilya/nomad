@@ -15,4 +15,4 @@ CREATE TABLE crawl_reactions (
 CREATE INDEX crawl_reactions_topic ON crawl_reactions (topic);
 
 PRAGMA user_version = 25;
-`
+`;

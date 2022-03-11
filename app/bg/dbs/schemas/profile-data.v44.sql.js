@@ -5,4 +5,4 @@ CREATE TABLE setup_state (
 );
 
 PRAGMA user_version = 44;
-`
+`;

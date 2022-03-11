@@ -5,5 +5,5 @@ export default {
   remove: 'promise',
 
   // events
-  createEventsStream: 'readable'
-}
+  createEventsStream: 'readable',
+};

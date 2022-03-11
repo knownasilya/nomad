@@ -14,7 +14,8 @@
         background: #fff;
         grid-auto-flow: column;
         grid-gap: 10px;
-        font-family: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Ubuntu, Cantarell, "Oxygen Sans", "Helvetica Neue", sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI',
+          Ubuntu, Cantarell, 'Oxygen Sans', 'Helvetica Neue', sans-serif;
         font-size: 12px;
         padding: 10px;
         box-sizing: border-box;
@@ -47,42 +48,41 @@
     </style>
   </head>
   <body>
-    <main>
-    </main>
+    <main></main>
   </body>
   <script>
-    var currentTabs
-    var currentSelection = 0
+    var currentTabs;
+    var currentSelection = 0;
 
     document.body.addEventListener('contextmenu', function (e) {
-      e.preventDefault()
-    })
+      e.preventDefault();
+    });
 
-    var mainEl = document.querySelector('main')
+    var mainEl = document.querySelector('main');
     window.setTabs = function (tabs, defaultCurrentSelection = 0) {
-      mainEl.innerHTML = ''
-      
-      currentTabs = tabs
-      
-      var i = 0
+      mainEl.innerHTML = '';
+
+      currentTabs = tabs;
+
+      var i = 0;
       for (let tab of tabs) {
-        let imgEl = document.createElement('img')
-        imgEl.setAttribute('src', `asset:favicon:${tab.url}`)
-        
-        let titleEl = document.createElement('div')
-        titleEl.classList.add('title')
-        titleEl.textContent = tab.title
-        
-        let tabEl = document.createElement('div')
-        tabEl.classList.add('tab')
-        tabEl.dataset.index = i++
-        tabEl.append(imgEl)
-        tabEl.append(titleEl)
-        mainEl.append(tabEl)
+        let imgEl = document.createElement('img');
+        imgEl.setAttribute('src', `asset:favicon:${tab.url}`);
+
+        let titleEl = document.createElement('div');
+        titleEl.classList.add('title');
+        titleEl.textContent = tab.title;
+
+        let tabEl = document.createElement('div');
+        tabEl.classList.add('tab');
+        tabEl.dataset.index = i++;
+        tabEl.append(imgEl);
+        tabEl.append(titleEl);
+        mainEl.append(tabEl);
       }
 
-      currentSelection = defaultCurrentSelection
-      highlightCurrentSelection()
+      currentSelection = defaultCurrentSelection;
+      highlightCurrentSelection();
 
       // HACK
       // wait 100ms before attaching the hover listeners
@@ -90,37 +90,40 @@
       // -prf
       setTimeout(function () {
         for (let tabEl of Array.from(mainEl.querySelectorAll('.tab'))) {
-          tabEl.addEventListener('mouseover', onMouseOverTab)
+          tabEl.addEventListener('mouseover', onMouseOverTab);
         }
-      }, 100)
-    }
+      }, 100);
+    };
 
     window.moveSelection = function (dir) {
-      currentSelection += dir
+      currentSelection += dir;
       if (currentSelection < 0) {
-        currentSelection = currentTabs.length - 1
+        currentSelection = currentTabs.length - 1;
       } else if (currentSelection >= currentTabs.length) {
-        currentSelection = 0
+        currentSelection = 0;
       }
-      highlightCurrentSelection()
-    }
+      highlightCurrentSelection();
+    };
 
     window.getSelection = function () {
-      return {winId: currentTabs[currentSelection].winId, tabIndex: currentSelection}
+      return {
+        winId: currentTabs[currentSelection].winId,
+        tabIndex: currentSelection,
+      };
+    };
+
+    function onMouseOverTab(e) {
+      currentSelection = Number(e.currentTarget.dataset.index);
+      highlightCurrentSelection();
     }
 
-    function onMouseOverTab (e) {
-      currentSelection = Number(e.currentTarget.dataset.index)
-      highlightCurrentSelection()
-    }
-
-    function highlightCurrentSelection () {
+    function highlightCurrentSelection() {
       try {
-        mainEl.querySelector('.selected').classList.remove('selected')
+        mainEl.querySelector('.selected').classList.remove('selected');
       } catch (e) {}
-      var el = mainEl.querySelectorAll('.tab')[currentSelection]
-      el.classList.add('selected')
-      el.scrollIntoView({behavior: 'smooth'})
+      var el = mainEl.querySelectorAll('.tab')[currentSelection];
+      el.classList.add('selected');
+      el.scrollIntoView({ behavior: 'smooth' });
     }
   </script>
 </html>

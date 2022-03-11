@@ -1,18 +1,22 @@
-customElements.define('intro-view', class extends HTMLElement {
-  constructor () {
-    super()
-    let shadow = this.attachShadow({mode: 'open'})
-    this.render(shadow)
-    shadow.querySelector('a').addEventListener('click', e => {
-      this.setAttribute('fadeout', true)
-      setTimeout(() => {
-        this.dispatchEvent(new CustomEvent('next', {bubbles: true, composed: true}))
-      }, 500)
-    })
-  }
+customElements.define(
+  'intro-view',
+  class extends HTMLElement {
+    constructor() {
+      super();
+      let shadow = this.attachShadow({ mode: 'open' });
+      this.render(shadow);
+      shadow.querySelector('a').addEventListener('click', (e) => {
+        this.setAttribute('fadeout', true);
+        setTimeout(() => {
+          this.dispatchEvent(
+            new CustomEvent('next', { bubbles: true, composed: true })
+          );
+        }, 500);
+      });
+    }
 
-  render (shadow) {
-    shadow.innerHTML = `
+    render(shadow) {
+      shadow.innerHTML = `
 <div id="logo">
   <div class="ring" id="ring1"></div>
   <div class="ring" id="ring2"></div>
@@ -188,6 +192,7 @@ customElements.define('intro-view', class extends HTMLElement {
     }
   }
 </style>
-    `
+    `;
+    }
   }
-})
+);

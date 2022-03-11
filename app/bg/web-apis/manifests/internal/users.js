@@ -7,5 +7,5 @@ export default {
   add: 'promise',
   edit: 'promise',
   remove: 'promise',
-  setupDefault: 'promise'
-}
+  setupDefault: 'promise',
+};

@@ -1,4 +1,3 @@
-
 export const SUGGESTED = [
   '❤',
   '👀',
@@ -29,13 +28,13 @@ export const SUGGESTED = [
   '💅',
   '✊',
   '👌',
-  '🤘'
-]
+  '🤘',
+];
 
 export const GROUPS = [
   {
-    'name': 'Smileys & Emotion',
-    'emojis': [
+    name: 'Smileys & Emotion',
+    emojis: [
       '😀',
       '😃',
       '😄',
@@ -180,12 +179,12 @@ export const GROUPS = [
       '🗨️',
       '🗯️',
       '💭',
-      '💤'
-    ]
+      '💤',
+    ],
   },
   {
-    'name': 'People & Body',
-    'emojis': [
+    name: 'People & Body',
+    emojis: [
       '👋',
       '🤚',
       '🖐️',
@@ -377,12 +376,12 @@ export const GROUPS = [
       '🗣️',
       '👤',
       '👥',
-      '👣'
-    ]
+      '👣',
+    ],
   },
   {
-    'name': 'Animals & Nature',
-    'emojis': [
+    name: 'Animals & Nature',
+    emojis: [
       '🐵',
       '🐒',
       '🦍',
@@ -502,12 +501,12 @@ export const GROUPS = [
       '🍀',
       '🍁',
       '🍂',
-      '🍃'
-    ]
+      '🍃',
+    ],
   },
   {
-    'name': 'Food & Drink',
-    'emojis': [
+    name: 'Food & Drink',
+    emojis: [
       '🍇',
       '🍈',
       '🍉',
@@ -618,12 +617,12 @@ export const GROUPS = [
       '🍽️',
       '🍴',
       '🥄',
-      '🏺'
-    ]
+      '🏺',
+    ],
   },
   {
-    'name': 'Travel & Places',
-    'emojis': [
+    name: 'Travel & Places',
+    emojis: [
       '🌍',
       '🌎',
       '🌏',
@@ -827,12 +826,12 @@ export const GROUPS = [
       '☄️',
       '🔥',
       '💧',
-      '🌊'
-    ]
+      '🌊',
+    ],
   },
   {
-    'name': 'Activities',
-    'emojis': [
+    name: 'Activities',
+    emojis: [
       '🎃',
       '🎄',
       '🎆',
@@ -908,12 +907,12 @@ export const GROUPS = [
       '🖼️',
       '🎨',
       '🧵',
-      '🧶'
-    ]
+      '🧶',
+    ],
   },
   {
-    'name': 'Objects',
-    'emojis': [
+    name: 'Objects',
+    emojis: [
       '👓',
       '🕶️',
       '🥽',
@@ -1129,12 +1128,12 @@ export const GROUPS = [
       '🚬',
       '⚰️',
       '⚱️',
-      '🗿'
-    ]
+      '🗿',
+    ],
   },
   {
-    'name': 'Symbols',
-    'emojis': [
+    name: 'Symbols',
+    emojis: [
       '🏧',
       '🚮',
       '🚰',
@@ -1339,12 +1338,12 @@ export const GROUPS = [
       '💠',
       '🔘',
       '🔳',
-      '🔲'
-    ]
+      '🔲',
+    ],
   },
   {
-    'name': 'Flags',
-    'emojis': [
+    name: 'Flags',
+    emojis: [
       '🏁',
       '🚩',
       '🎌',
@@ -1611,9 +1610,12 @@ export const GROUPS = [
       '🇿🇼',
       '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
       '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
-      '🏴󠁧󠁢󠁷󠁬󠁳󠁿'
-    ]
-  }
-]
+      '🏴󠁧󠁢󠁷󠁬󠁳󠁿',
+    ],
+  },
+];
 
-export const FULL_LIST = GROUPS.map(({emojis}) => emojis).reduce((acc, v) => acc.concat(v), [])
+export const FULL_LIST = GROUPS.map(({ emojis }) => emojis).reduce(
+  (acc, v) => acc.concat(v),
+  []
+);

@@ -1,5 +1,5 @@
-@import "./reset.css";
-@import "./colors.css";
+@import './reset.css';
+@import './colors.css';
 
 .link {
   color: var(--blue);
@@ -10,7 +10,7 @@
 }
 
 .btn.nofocus,
-.btn[disabled="disabled"],
+.btn[disabled='disabled'],
 .btn.disabled,
 .btn:disabled {
   outline: 0;
@@ -117,7 +117,7 @@
   background: #eee;
 }
 
-.btn[disabled="disabled"],
+.btn[disabled='disabled'],
 .btn.disabled,
 .btn:disabled {
   cursor: default !important;
@@ -128,19 +128,19 @@
   -webkit-font-smoothing: initial !important;
 }
 
-.btn[disabled="disabled"] .spinner,
+.btn[disabled='disabled'] .spinner,
 .btn.disabled .spinner,
 .btn:disabled .spinner {
   color: #aaa !important;
 }
 
-.btn[disabled="disabled"]:hover,
+.btn[disabled='disabled']:hover,
 .btn.disabled:hover,
 .btn:disabled:hover {
   background: #fafafa;
 }
 
-.btn[disabled="disabled"] *,
+.btn[disabled='disabled'] *,
 .btn.disabled *,
 .btn:disabled * {
   cursor: default !important;

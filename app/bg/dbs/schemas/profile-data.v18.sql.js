@@ -13,4 +13,4 @@ CREATE TABLE templates (
 );
 
 PRAGMA user_version = 18;
-`
+`;

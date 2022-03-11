@@ -1,5 +1,5 @@
-@import "beaker://app-stdlib/css/common.css";
-@import "beaker://assets/font-awesome.css";
+@import 'beaker://app-stdlib/css/common.css';
+@import 'beaker://assets/font-awesome.css';
 
 body {
   --bg-color--main: #fff;
@@ -11,7 +11,7 @@ body {
   --border-color--default: #ccc;
   --border-color--main: #bbb;
   --border-color--forks: #dde;
-  --box-shadow-color--main: rgba(0,0,0,.1);
+  --box-shadow-color--main: rgba(0, 0, 0, 0.1);
 
   margin: 0;
   background: transparent;
@@ -31,7 +31,7 @@ body {
     --border-color--default: #666;
     --border-color--main: #555;
     --border-color--forks: #555;
-    --box-shadow-color--main: rgba(0,0,0,.3);
+    --box-shadow-color--main: rgba(0, 0, 0, 0.3);
   }
 }
 

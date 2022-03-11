@@ -30,4 +30,4 @@ CREATE TRIGGER crawl_comments_au AFTER UPDATE ON crawl_comments BEGIN
 END;
 
 PRAGMA user_version = 27;
-`
+`;

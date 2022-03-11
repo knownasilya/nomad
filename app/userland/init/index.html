@@ -1,9 +1,10 @@
-<!doctype html>
+<!DOCTYPE html>
 <head>
   <style>
     body {
-     -webkit-app-region: drag;
-      font-family: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Ubuntu, Cantarell, "Oxygen Sans", "Helvetica Neue", sans-serif;
+      -webkit-app-region: drag;
+      font-family: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI',
+        Ubuntu, Cantarell, 'Oxygen Sans', 'Helvetica Neue', sans-serif;
       background: #fff;
       margin: 0;
       overflow: hidden;
@@ -38,19 +39,15 @@
       overflow: auto;
       font-size: 12px;
       word-break: break-word;
-     -webkit-app-region: no-drag;
+      -webkit-app-region: no-drag;
     }
   </style>
-  <link rel="stylesheet" href="beaker://app-stdlib/css/com/spinner.css">
+  <link rel="stylesheet" href="beaker://app-stdlib/css/com/spinner.css" />
 </head>
 <body>
   <div id="info">
-    <div class="top">
-      <span class="spinner"></span> Initializing Beaker...
-    </div>
-    <div class="bottom">
-      This may take a moment
-    </div>
+    <div class="top"><span class="spinner"></span> Initializing Beaker...</div>
+    <div class="bottom">This may take a moment</div>
   </div>
   <div id="log"></div>
   <script src="/index.js"></script>

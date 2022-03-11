@@ -6,9 +6,9 @@ Each folder is a self-contained UI component. Many folders have a 1:1 connection
 
 Notable folders:
 
- - `lib` is reusable code that's specific to frontend.
- - `shell-window` is the primary shell UI of Beaker.
+- `lib` is reusable code that's specific to frontend.
+- `shell-window` is the primary shell UI of Beaker.
 
- ## RPC
+## RPC
 
- Beaker's Web APIs are not available in these components. Therefore all RPC with the Electron process needs to be setup manually (thus the `bg-process-rpc.js` pattern).
+Beaker's Web APIs are not available in these components. Therefore all RPC with the Electron process needs to be setup manually (thus the `bg-process-rpc.js` pattern).

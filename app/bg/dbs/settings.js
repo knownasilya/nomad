@@ -1,23 +1,22 @@
-import EventEmitter from 'events'
-import sqlite3 from 'sqlite3'
-import path from 'path'
-import { cbPromise } from '../../lib/functions'
-import { setupSqliteDB } from '../lib/db'
-import { getEnvVar } from '../lib/env'
+import EventEmitter from 'events';
+import sqlite3 from 'sqlite3';
+import path from 'path';
+import { cbPromise } from '../../lib/functions';
+import { setupSqliteDB } from '../lib/db';
+import { getEnvVar } from '../lib/env';
 
-const CACHED_VALUES = ['new_tabs_in_foreground']
-const JSON_ENCODED_SETTINGS = ['search_engines', 'adblock_lists']
+const CACHED_VALUES = ['new_tabs_in_foreground'];
+const JSON_ENCODED_SETTINGS = ['search_engines', 'adblock_lists'];
 
 // globals
 // =
 
-var db
-var migrations
-var setupPromise
-var defaultSettings
-var events = new EventEmitter()
-var cachedValues = {}
-
+var db;
+var migrations;
+var setupPromise;
+var defaultSettings;
+var events = new EventEmitter();
+var cachedValues = {};
 
 // exported methods
 // =
@@ -29,9 +28,9 @@ var cachedValues = {}
  */
 export const setup = async function (opts) {
   // open database
-  var dbPath = path.join(opts.userDataPath, 'Settings')
-  db = new sqlite3.Database(dbPath)
-  setupPromise = setupSqliteDB(db, {migrations}, '[SETTINGS]')
+  var dbPath = path.join(opts.userDataPath, 'Settings');
+  db = new sqlite3.Database(dbPath);
+  setupPromise = setupSqliteDB(db, { migrations }, '[SETTINGS]');
 
   defaultSettings = {
     auto_update_enabled: 1,
@@ -46,55 +45,84 @@ export const setup = async function (opts) {
     extended_network_index: 'default',
     extended_network_index_url: '',
     search_engines: [
-      {name: 'DuckDuckGo', url: 'https://www.duckduckgo.com/', selected: true},
-      {name: 'Beaker', url: 'beaker://desktop/'},
-      {name: 'Google', url: 'https://www.google.com/search'}
+      {
+        name: 'DuckDuckGo',
+        url: 'https://www.duckduckgo.com/',
+        selected: true,
+      },
+      { name: 'Beaker', url: 'beaker://desktop/' },
+      { name: 'Google', url: 'https://www.google.com/search' },
     ],
     adblock_lists: [
-      {name: 'EasyList', url: 'https://easylist.to/easylist/easylist.txt', selected: true},
-      {name: 'EasyPrivacy', url: 'https://easylist.to/easylist/easyprivacy.txt'},
-      {name: 'EasyList Cookie List', url: 'https://easylist-downloads.adblockplus.org/easylist-cookie.txt'},
-      {name: 'Fanboy\'s Social Blocking List', url: 'https://easylist.to/easylist/fanboy-social.txt'},
-      {name: 'Fanboy\'s Annoyance List', url: 'https://easylist.to/easylist/fanboy-annoyance.txt'},
-      {name: 'Adblock Warning Removal List', url: 'https://easylist-downloads.adblockplus.org/antiadblockfilters.txt'},
-    ]
-  }
+      {
+        name: 'EasyList',
+        url: 'https://easylist.to/easylist/easylist.txt',
+        selected: true,
+      },
+      {
+        name: 'EasyPrivacy',
+        url: 'https://easylist.to/easylist/easyprivacy.txt',
+      },
+      {
+        name: 'EasyList Cookie List',
+        url: 'https://easylist-downloads.adblockplus.org/easylist-cookie.txt',
+      },
+      {
+        name: "Fanboy's Social Blocking List",
+        url: 'https://easylist.to/easylist/fanboy-social.txt',
+      },
+      {
+        name: "Fanboy's Annoyance List",
+        url: 'https://easylist.to/easylist/fanboy-annoyance.txt',
+      },
+      {
+        name: 'Adblock Warning Removal List',
+        url: 'https://easylist-downloads.adblockplus.org/antiadblockfilters.txt',
+      },
+    ],
+  };
 
   for (let k of CACHED_VALUES) {
-    cachedValues[k] = await get(k)
+    cachedValues[k] = await get(k);
   }
-}
+};
 
-export const on = events.on.bind(events)
-export const once = events.once.bind(events)
+export const on = events.on.bind(events);
+export const once = events.once.bind(events);
 
 /**
  * @param {string} key
  * @param {string | number | object} value
  * @returns {Promise<void>}
  */
-export async function set (key, value) {
+export async function set(key, value) {
   if (JSON_ENCODED_SETTINGS.includes(key)) {
-    value = JSON.stringify(value)
+    value = JSON.stringify(value);
   }
-  await setupPromise.then(() => cbPromise(cb => {
-    db.run(`
+  await setupPromise.then(() =>
+    cbPromise((cb) => {
+      db.run(
+        `
       INSERT OR REPLACE
         INTO settings (key, value, ts)
         VALUES (?, ?, ?)
-    `, [key, value, Date.now()], cb)
-  }))
-  if (CACHED_VALUES.includes(key)) cachedValues[key] = value
-  events.emit('set', key, value)
-  events.emit('set:' + key, value)
+    `,
+        [key, value, Date.now()],
+        cb
+      );
+    })
+  );
+  if (CACHED_VALUES.includes(key)) cachedValues[key] = value;
+  events.emit('set', key, value);
+  events.emit('set:' + key, value);
 }
 
 /**
  * @param {string} key
  * @returns {string | number}
  */
-export function getCached (key) {
-  return cachedValues[key]
+export function getCached(key) {
+  return cachedValues[key];
 }
 
 /**
@@ -104,53 +132,61 @@ export function getCached (key) {
 export const get = function (key) {
   // env variables
   if (key === 'no_welcome_tab') {
-    return (Number(getEnvVar('BEAKER_NO_WELCOME_TAB')) === 1)
+    return Number(getEnvVar('BEAKER_NO_WELCOME_TAB')) === 1;
   }
   // stored values
-  return setupPromise.then(() => cbPromise(cb => {
-    db.get(`SELECT value FROM settings WHERE key = ?`, [key], (err, row) => {
-      if (row) {
-        row = row.value
-        if (JSON_ENCODED_SETTINGS.includes(key)) {
-          try {
-            row = JSON.parse(row)
-          } catch (e) {
-            row = defaultSettings[key]
+  return setupPromise.then(() =>
+    cbPromise((cb) => {
+      db.get(`SELECT value FROM settings WHERE key = ?`, [key], (err, row) => {
+        if (row) {
+          row = row.value;
+          if (JSON_ENCODED_SETTINGS.includes(key)) {
+            try {
+              row = JSON.parse(row);
+            } catch (e) {
+              row = defaultSettings[key];
+            }
           }
         }
-      }
-      if (typeof row === 'undefined') { row = defaultSettings[key] }
-      cb(err, row)
+        if (typeof row === 'undefined') {
+          row = defaultSettings[key];
+        }
+        cb(err, row);
+      });
     })
-  }))
-}
+  );
+};
 
 /**
  * @returns {Promise<Object>}
  */
 export const getAll = function () {
-  return setupPromise.then(v => cbPromise(cb => {
-    db.all(`SELECT key, value FROM settings`, (err, rows) => {
-      if (err) { return cb(err) }
-      var obj = {}
-      rows.forEach(row => {
-        // parse non-string values
-        if (JSON_ENCODED_SETTINGS.includes(row.key)) {
-          try {
-            row.value = JSON.parse(row.value)
-          } catch (e) {
-            row.value = defaultSettings[key.value]
-          }
+  return setupPromise.then((v) =>
+    cbPromise((cb) => {
+      db.all(`SELECT key, value FROM settings`, (err, rows) => {
+        if (err) {
+          return cb(err);
         }
-        obj[row.key] = row.value
-      })
+        var obj = {};
+        rows.forEach((row) => {
+          // parse non-string values
+          if (JSON_ENCODED_SETTINGS.includes(row.key)) {
+            try {
+              row.value = JSON.parse(row.value);
+            } catch (e) {
+              row.value = defaultSettings[key.value];
+            }
+          }
+          obj[row.key] = row.value;
+        });
 
-      obj = Object.assign({}, defaultSettings, obj)
-      obj.no_welcome_tab = (Number(getEnvVar('BEAKER_NO_WELCOME_TAB')) === 1)
-      cb(null, obj)
+        obj = Object.assign({}, defaultSettings, obj);
+        obj.no_welcome_tab = Number(getEnvVar('BEAKER_NO_WELCOME_TAB')) === 1;
+        cb(null, obj);
+      });
     })
-  }))
-}
+  );
+};
 
 // internal methods
 // =
@@ -158,7 +194,8 @@ export const getAll = function () {
 migrations = [
   // version 1
   function (cb) {
-    db.exec(`
+    db.exec(
+      `
       CREATE TABLE settings(
         key PRIMARY KEY,
         value,
@@ -166,13 +203,18 @@ migrations = [
       );
       INSERT INTO settings (key, value) VALUES ('auto_update_enabled', 1);
       PRAGMA user_version = 1;
-    `, cb)
+    `,
+      cb
+    );
   },
   // version 2
   function (cb) {
-    db.exec(`
+    db.exec(
+      `
       INSERT INTO settings (key, value) VALUES ('start_page_background_image', '');
       PRAGMA user_version = 2
-    `, cb)
-  }
-]
+    `,
+      cb
+    );
+  },
+];

@@ -15,4 +15,4 @@ CREATE TABLE watchlist (
 );
 
 PRAGMA user_version = 23;
-`
+`;

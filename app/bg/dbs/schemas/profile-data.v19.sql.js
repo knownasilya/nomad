@@ -16,4 +16,4 @@ CREATE TABLE archive_drafts (
 );
 
 PRAGMA user_version = 19;
-`
+`;

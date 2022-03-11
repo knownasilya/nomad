@@ -1,14 +1,16 @@
 <html>
   <head>
     <style>
-      html, body {
+      html,
+      body {
         background: transparent;
         margin: 0;
         padding: 0;
       }
       body {
         display: none;
-        font-family: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Ubuntu, Cantarell, "Oxygen Sans", "Helvetica Neue", sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI',
+          Ubuntu, Cantarell, 'Oxygen Sans', 'Helvetica Neue', sans-serif;
         font-size: 12px;
         overflow: hidden;
       }
@@ -70,24 +72,26 @@
       }
     </style>
     <script>
-      window.set = opts => {
-        if (opts?.leftArrow) text.classList.add('left-arrow')
-        else text.classList.remove('left-arrow')
-        if (opts?.topArrow) text.classList.add('top-arrow')
-        else text.classList.remove('top-arrow')
-        if (opts?.centered) text.classList.add('centered')
-        else text.classList.remove('centered')
-        if (opts?.multiLine) text.classList.add('multi-line')
-        else text.classList.remove('multi-line')
+      window.set = (opts) => {
+        if (opts?.leftArrow) text.classList.add('left-arrow');
+        else text.classList.remove('left-arrow');
+        if (opts?.topArrow) text.classList.add('top-arrow');
+        else text.classList.remove('top-arrow');
+        if (opts?.centered) text.classList.add('centered');
+        else text.classList.remove('centered');
+        if (opts?.multiLine) text.classList.add('multi-line');
+        else text.classList.remove('multi-line');
         if (opts?.value) {
-          text.innerHTML = opts.value
-          document.body.style.display = 'block'
+          text.innerHTML = opts.value;
+          document.body.style.display = 'block';
         } else {
-          text.innerHTML = ''
-          document.body.style.display = 'none'
+          text.innerHTML = '';
+          document.body.style.display = 'none';
         }
-      }
+      };
     </script>
   </head>
-  <body><div id="text"></div></body>
+  <body>
+    <div id="text"></div>
+  </body>
 </html>

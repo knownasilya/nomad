@@ -1,8 +1,10 @@
-import { BaseSlideView } from './base-slide-view.js'
+import { BaseSlideView } from './base-slide-view.js';
 
-customElements.define('license-view', class extends BaseSlideView {
-  render () {
-    return `
+customElements.define(
+  'license-view',
+  class extends BaseSlideView {
+    render() {
+      return `
 <style>
 :host {
   opacity: 0;
@@ -63,6 +65,7 @@ h1 strong {
   SOFTWARE.</p>
 </div>
 <a>Next</a>
-    `
+    `;
+    }
   }
-})
+);

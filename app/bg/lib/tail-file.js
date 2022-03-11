@@ -6,17 +6,17 @@
  * MIT LICENCE
  */
 
-'use strict'
+'use strict';
 
-import fs from 'fs'
-import { StringDecoder } from 'string_decoder'
-import { Stream } from 'readable-stream'
+import fs from 'fs';
+import { StringDecoder } from 'string_decoder';
+import { Stream } from 'readable-stream';
 
 /**
  * Simple no-op function.
  * @returns {undefined}
  */
-function noop () {}
+function noop() {}
 
 /**
  * Read and then tail the given file.
@@ -26,60 +26,60 @@ function noop () {}
  * @returns {any} - TODO: add return description.
  */
 export default (file) => {
-  const buffer = Buffer.alloc(64 * 1024)
-  const decode = new StringDecoder('utf8')
-  const stream = new Stream()
-  let pos = 0
+  const buffer = Buffer.alloc(64 * 1024);
+  const decode = new StringDecoder('utf8');
+  const stream = new Stream();
+  let pos = 0;
 
-  stream.readable = true
+  stream.readable = true;
   stream.destroy = () => {
-    stream.destroyed = true
-    stream.emit('end')
-    stream.emit('close')
-  }
+    stream.destroyed = true;
+    stream.emit('end');
+    stream.emit('close');
+  };
 
   fs.open(file, 'a+', '0644', async (err, fd) => {
     if (err) {
-      stream.emit('error', err)
-      stream.destroy()
-      return
+      stream.emit('error', err);
+      stream.destroy();
+      return;
     }
 
     while (true) {
       if (stream.destroyed) {
         // abort if stream destroyed
-        fs.close(fd, noop)
-        return
+        fs.close(fd, noop);
+        return;
       }
 
       // read next chunk
-      let bytes
+      let bytes;
       try {
         bytes = await new Promise((resolve, reject) => {
           fs.read(fd, buffer, 0, buffer.length, pos, (err, bytes) => {
-            if (err) reject(err)
-            else resolve(bytes)
-          })
-        })
+            if (err) reject(err);
+            else resolve(bytes);
+          });
+        });
       } catch (err) {
-        stream.emit('error', err)
-        stream.destroy()
-        return
+        stream.emit('error', err);
+        stream.destroy();
+        return;
       }
 
       if (!bytes) {
         // nothing read
         // wait a second, then try to read again
-        await new Promise(resolve => setTimeout(resolve, 1e3))
-        continue
+        await new Promise((resolve) => setTimeout(resolve, 1e3));
+        continue;
       }
 
       // decode and emit
-      let data = decode.write(buffer.slice(0, bytes))
-      stream.emit('data', data)
-      pos += bytes
+      let data = decode.write(buffer.slice(0, bytes));
+      stream.emit('data', data);
+      pos += bytes;
     }
-  })
+  });
 
-  return stream
-}
+  return stream;
+};

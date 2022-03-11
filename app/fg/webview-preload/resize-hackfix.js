@@ -4,21 +4,21 @@
 // we can solve this by forcing a recalculation after every resize
 // -prf
 
-import {ipcRenderer} from 'electron'
+import { ipcRenderer } from 'electron';
 
 export default function () {
-  const setTimeoutFn = setTimeout
-  const clearTimeoutFn = clearTimeout
-  var to = undefined
+  const setTimeoutFn = setTimeout;
+  const clearTimeoutFn = clearTimeout;
+  var to = undefined;
 
-  function queueHackfix () {
-    if (to) clearTimeoutFn(to)
+  function queueHackfix() {
+    if (to) clearTimeoutFn(to);
     to = setTimeoutFn(() => {
-      ipcRenderer.send('resize-hackfix')
-      to = undefined
-    }, 500)
+      ipcRenderer.send('resize-hackfix');
+      to = undefined;
+    }, 500);
   }
 
-  window.addEventListener('resize', queueHackfix)
-  document.addEventListener('DOMContentLoaded', queueHackfix)
+  window.addEventListener('resize', queueHackfix);
+  document.addEventListener('DOMContentLoaded', queueHackfix);
 }

@@ -1,3 +1,3 @@
 export default {
-  set: 'promise'
-}
+  set: 'promise',
+};

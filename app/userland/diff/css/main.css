@@ -1,9 +1,9 @@
-@import "beaker://app-stdlib/css/common.css";
-@import "beaker://app-stdlib/css/fontawesome.css";
-@import "beaker://app-stdlib/css/buttons2.css";
-@import "beaker://app-stdlib/css/inputs.css";
-@import "beaker://app-stdlib/css/tooltip.css";
-@import "beaker://app-stdlib/css/com/spinner.css";
+@import 'beaker://app-stdlib/css/common.css';
+@import 'beaker://app-stdlib/css/fontawesome.css';
+@import 'beaker://app-stdlib/css/buttons2.css';
+@import 'beaker://app-stdlib/css/inputs.css';
+@import 'beaker://app-stdlib/css/tooltip.css';
+@import 'beaker://app-stdlib/css/com/spinner.css';
 
 body {
   --color-summary: #445;
@@ -22,7 +22,6 @@ body {
   font-size: 13px;
   background: #fff;
 }
-
 
 @media (prefers-color-scheme: dark) {
   body {
@@ -49,7 +48,7 @@ a {
   color: var(--blue);
 }
 
-input[type="checkbox"] {
+input[type='checkbox'] {
   margin: 0;
   height: auto;
 }
@@ -179,7 +178,7 @@ compare-diff-item .item {
   white-space: nowrap;
 }
 
-compare-diff-item .item input[type="checkbox"] {
+compare-diff-item .item input[type='checkbox'] {
   margin: 0 5px 0 0;
 }
 
@@ -224,14 +223,20 @@ compare-diff-item .item.selected .path {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  margin-top: -.4px;
+  margin-top: -0.4px;
   margin-left: 4px;
   margin-right: 4px;
 }
 
-.revision-indicator.add { background: #44c35a; }
-.revision-indicator.mod { background: #fac800; }
-.revision-indicator.del { background: #d93229; }
+.revision-indicator.add {
+  background: #44c35a;
+}
+.revision-indicator.mod {
+  background: #fac800;
+}
+.revision-indicator.del {
+  background: #d93229;
+}
 
 .summary {
   padding: 4px 24px;

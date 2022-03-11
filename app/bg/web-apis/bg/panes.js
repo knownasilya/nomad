@@ -1,127 +1,135 @@
-import emitStream from 'emit-stream'
-import * as tabManager from '../../ui/tabs/manager'
-import * as permissions from '../../ui/permissions'
-import { PermissionsError, UserDeniedError } from 'beaker-error-constants'
+import emitStream from 'emit-stream';
+import * as tabManager from '../../ui/tabs/manager';
+import * as permissions from '../../ui/permissions';
+import { PermissionsError, UserDeniedError } from 'beaker-error-constants';
 
 export default {
-  createEventStream () {
-    var {tab, senderPane} = getPaneObjects(this.sender)
-    return emitStream(senderPane.attachedPaneEvents)
+  createEventStream() {
+    var { tab, senderPane } = getPaneObjects(this.sender);
+    return emitStream(senderPane.attachedPaneEvents);
   },
 
-  setAttachable () {
-    var {tab, senderPane} = getPaneObjects(this.sender)
-    senderPane.wantsAttachedPane = true
-  },
-  
-  getAttachedPane () {
-    var {tab, senderPane} = getPaneObjects(this.sender)
-    var attachedPane = senderPane.attachedPane
-    if (!attachedPane) return undefined
-    return toPaneResponse(attachedPane)
+  setAttachable() {
+    var { tab, senderPane } = getPaneObjects(this.sender);
+    senderPane.wantsAttachedPane = true;
   },
 
-  async attachToLastActivePane () {
+  getAttachedPane() {
+    var { tab, senderPane } = getPaneObjects(this.sender);
+    var attachedPane = senderPane.attachedPane;
+    if (!attachedPane) return undefined;
+    return toPaneResponse(attachedPane);
+  },
+
+  async attachToLastActivePane() {
     if (!(await permissions.requestPermission('panesAttach', this.sender))) {
-      throw new UserDeniedError()
+      throw new UserDeniedError();
     }
 
-    var {tab, senderPane} = getPaneObjects(this.sender)
+    var { tab, senderPane } = getPaneObjects(this.sender);
 
-    var attachedPane = senderPane.attachedPane
+    var attachedPane = senderPane.attachedPane;
     if (attachedPane) {
-      return toPaneResponse(attachedPane)
+      return toPaneResponse(attachedPane);
     }
 
     // try to find a pane that's not our builtin tools or already attached to anything, if possible
     // if not, stick with the candidate
-    var candidatePane = tab.getLastActivePane()
-    const isUndesirable = pane => /^beaker:\/\/(webterm|editor|explorer)/.test(pane.url) || pane.attachedPane || pane === senderPane
+    var candidatePane = tab.getLastActivePane();
+    const isUndesirable = (pane) =>
+      /^beaker:\/\/(webterm|editor|explorer)/.test(pane.url) ||
+      pane.attachedPane ||
+      pane === senderPane;
     if (!candidatePane || isUndesirable(candidatePane)) {
-      candidatePane = tab.panes.find(p => !isUndesirable(p))
+      candidatePane = tab.panes.find((p) => !isUndesirable(p));
     }
     if (!candidatePane || candidatePane === senderPane) {
-      return undefined
+      return undefined;
     }
 
-    senderPane.setAttachedPane(candidatePane)
-    return toPaneResponse(candidatePane)
+    senderPane.setAttachedPane(candidatePane);
+    return toPaneResponse(candidatePane);
   },
 
-  async create (url, opts) {
+  async create(url, opts) {
     if (!(await permissions.requestPermission('panesCreate', this.sender))) {
-      throw new UserDeniedError()
+      throw new UserDeniedError();
     }
 
-    opts = opts && typeof opts === 'object' ? opts : {}
-    var {tab, senderPane} = getPaneObjects(this.sender)
-    var newPane = tab.createPane({url, setActive: true, splitDir: 'vert', after: tab.activePane})
+    opts = opts && typeof opts === 'object' ? opts : {};
+    var { tab, senderPane } = getPaneObjects(this.sender);
+    var newPane = tab.createPane({
+      url,
+      setActive: true,
+      splitDir: 'vert',
+      after: tab.activePane,
+    });
     if (opts.attach) {
       if (!(await permissions.requestPermission('panesAttach', this.sender))) {
-        throw new UserDeniedError()
+        throw new UserDeniedError();
       }
-      senderPane.setAttachedPane(newPane)
-      return toPaneResponse(newPane)
+      senderPane.setAttachedPane(newPane);
+      return toPaneResponse(newPane);
     }
   },
 
-  async navigate (paneId, url) {
-    var {attachedPane} = getAttachedPaneById(this.sender, paneId)
-    if (!url || typeof url !== 'string') throw new Error('Invalid URL')
-    await attachedPane.loadURL(url)
+  async navigate(paneId, url) {
+    var { attachedPane } = getAttachedPaneById(this.sender, paneId);
+    if (!url || typeof url !== 'string') throw new Error('Invalid URL');
+    await attachedPane.loadURL(url);
   },
 
-  async focus (paneId) {
-    var {tab, attachedPane} = getAttachedPaneById(this.sender, paneId)
-    tab.setActivePane(attachedPane)
-    attachedPane.focus()
+  async focus(paneId) {
+    var { tab, attachedPane } = getAttachedPaneById(this.sender, paneId);
+    tab.setActivePane(attachedPane);
+    attachedPane.focus();
   },
 
-  async executeJavaScript (paneId, script) {
+  async executeJavaScript(paneId, script) {
     if (!(await permissions.requestPermission('panesInject', this.sender))) {
-      throw new UserDeniedError()
+      throw new UserDeniedError();
     }
-    var {attachedPane} = getAttachedPaneById(this.sender, paneId)
-    return attachedPane.webContents.executeJavaScript(script)
+    var { attachedPane } = getAttachedPaneById(this.sender, paneId);
+    return attachedPane.webContents.executeJavaScript(script);
   },
 
-  async injectCss (paneId, css) {
+  async injectCss(paneId, css) {
     if (!(await permissions.requestPermission('panesInject', this.sender))) {
-      throw new UserDeniedError()
+      throw new UserDeniedError();
     }
-    var {attachedPane} = getAttachedPaneById(this.sender, paneId)
-    return attachedPane.webContents.insertCSS(css)
+    var { attachedPane } = getAttachedPaneById(this.sender, paneId);
+    return attachedPane.webContents.insertCSS(css);
   },
 
-  async uninjectCss (paneId, cssId) {
+  async uninjectCss(paneId, cssId) {
     if (!(await permissions.requestPermission('panesInject', this.sender))) {
-      throw new UserDeniedError()
+      throw new UserDeniedError();
     }
-    var {attachedPane} = getAttachedPaneById(this.sender, paneId)
-    await attachedPane.webContents.removeInsertedCSS(cssId)
-  }
+    var { attachedPane } = getAttachedPaneById(this.sender, paneId);
+    await attachedPane.webContents.removeInsertedCSS(cssId);
+  },
+};
+
+function getPaneObjects(sender) {
+  var tab = tabManager.findTab(sender);
+  if (!tab) throw new Error('Requesting pane not active');
+  var senderPane = tab.findPane(sender);
+  if (!senderPane) throw new Error('Requesting pane not active');
+  return { tab, senderPane };
 }
 
-function getPaneObjects (sender) {
-  var tab = tabManager.findTab(sender)
-  if (!tab) throw new Error('Requesting pane not active')
-  var senderPane = tab.findPane(sender)
-  if (!senderPane) throw new Error('Requesting pane not active')
-  return {tab, senderPane}
-}
-
-function getAttachedPaneById (sender, paneId) {
-  var {tab, senderPane} = getPaneObjects(sender)
+function getAttachedPaneById(sender, paneId) {
+  var { tab, senderPane } = getPaneObjects(sender);
   if (!senderPane.attachedPane || senderPane.attachedPane.id !== paneId) {
-    throw new PermissionsError('Can only managed the attached pane')
+    throw new PermissionsError('Can only managed the attached pane');
   }
-  var attachedPane = senderPane.attachedPane
-  return {tab, senderPane, attachedPane}
+  var attachedPane = senderPane.attachedPane;
+  return { tab, senderPane, attachedPane };
 }
 
-function toPaneResponse (pane) {
+function toPaneResponse(pane) {
   return {
     id: pane.id,
-    url: pane.url || pane.loadingURL
-  }
+    url: pane.url || pane.loadingURL,
+  };
 }

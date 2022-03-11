@@ -1,13 +1,13 @@
-import {LitElement, html, css} from '../../vendor/lit-element/lit-element.js'
-import {classMap} from '../../vendor/lit-element/lit-html/directives/class-map.js'
-import {ifDefined} from '../../vendor/lit-element/lit-html/directives/if-defined.js'
-import {findParent} from '../dom.js'
-import dropdownCSS from '../../css/com/dropdown.css.js'
+import { LitElement, html, css } from '../../vendor/lit-element/lit-element.js';
+import { classMap } from '../../vendor/lit-element/lit-html/directives/class-map.js';
+import { ifDefined } from '../../vendor/lit-element/lit-html/directives/if-defined.js';
+import { findParent } from '../dom.js';
+import dropdownCSS from '../../css/com/dropdown.css.js';
 
 // globals
 // =
 
-var resolve
+var resolve;
 
 // exported api
 // =
@@ -56,50 +56,50 @@ create({
   }
 }
 */
-export function create (opts) {
+export function create(opts) {
   // destroy any existing
-  destroy()
+  destroy();
 
   // extract attrs
-  var parent = opts.parent || document.body
+  var parent = opts.parent || document.body;
 
   // render interface
-  parent.appendChild(new BeakerContextMenu(opts))
-  document.addEventListener('keyup', onKeyUp)
-  document.addEventListener('click', onClickAnywhere)
+  parent.appendChild(new BeakerContextMenu(opts));
+  document.addEventListener('keyup', onKeyUp);
+  document.addEventListener('click', onClickAnywhere);
 
   // return promise
-  return new Promise(_resolve => {
-    resolve = _resolve
-  })
+  return new Promise((_resolve) => {
+    resolve = _resolve;
+  });
 }
 
-export function destroy (value) {
-  const el = document.querySelector('beaker-context-menu')
+export function destroy(value) {
+  const el = document.querySelector('beaker-context-menu');
   if (el) {
-    el.parentNode.removeChild(el)
-    document.removeEventListener('keyup', onKeyUp)
-    document.removeEventListener('click', onClickAnywhere)
-    resolve(value)
+    el.parentNode.removeChild(el);
+    document.removeEventListener('keyup', onKeyUp);
+    document.removeEventListener('click', onClickAnywhere);
+    resolve(value);
   }
 }
 
 // global event handlers
 // =
 
-function onKeyUp (e) {
-  e.preventDefault()
-  e.stopPropagation()
+function onKeyUp(e) {
+  e.preventDefault();
+  e.stopPropagation();
 
   if (e.keyCode === 27) {
-    destroy()
+    destroy();
   }
 }
 
-function onClickAnywhere (e) {
-  if (!findParent(e.target, el => el.tagName === 'BEAKER-CONTEXT-MENU')) {
+function onClickAnywhere(e) {
+  if (!findParent(e.target, (el) => el.tagName === 'BEAKER-CONTEXT-MENU')) {
     // click is outside the context-menu, destroy
-    destroy()
+    destroy();
   }
 }
 
@@ -107,34 +107,50 @@ function onClickAnywhere (e) {
 // =
 
 export class BeakerContextMenu extends LitElement {
-  constructor ({x, y, right, center, top, withTriangle, roomy, veryRoomy, rounded, noBorders, style, items, fontAwesomeCSSUrl, render}) {
-    super()
-    this.x = x
-    this.y = y
-    this.right = right || false
-    this.center = center || false
-    this.top = top || false
-    this.withTriangle = withTriangle || false
-    this.roomy = roomy || false
-    this.veryRoomy = veryRoomy || false
-    this.rounded = rounded || false
-    this.noBorders = noBorders || false
-    this.customStyle = style || undefined
-    this.items = items
-    this.fontAwesomeCSSUrl = fontAwesomeCSSUrl || '/vendor/beaker-app-stdlib/css/fontawesome.css'
-    this.customRender = render
+  constructor({
+    x,
+    y,
+    right,
+    center,
+    top,
+    withTriangle,
+    roomy,
+    veryRoomy,
+    rounded,
+    noBorders,
+    style,
+    items,
+    fontAwesomeCSSUrl,
+    render,
+  }) {
+    super();
+    this.x = x;
+    this.y = y;
+    this.right = right || false;
+    this.center = center || false;
+    this.top = top || false;
+    this.withTriangle = withTriangle || false;
+    this.roomy = roomy || false;
+    this.veryRoomy = veryRoomy || false;
+    this.rounded = rounded || false;
+    this.noBorders = noBorders || false;
+    this.customStyle = style || undefined;
+    this.items = items;
+    this.fontAwesomeCSSUrl =
+      fontAwesomeCSSUrl || '/vendor/beaker-app-stdlib/css/fontawesome.css';
+    this.customRender = render;
   }
 
   // calls the global destroy
   // (this function exists so that custom renderers can destroy with this.destroy)
-  destroy () {
-    destroy()
+  destroy() {
+    destroy();
   }
 
   // rendering
   // =
 
-  render () {
+  render() {
     const cls = classMap({
       'dropdown-items': true,
       right: this.right,
@@ -145,28 +161,28 @@ export class BeakerContextMenu extends LitElement {
       roomy: this.roomy,
       'very-roomy': this.veryRoomy,
       rounded: this.rounded,
-      'no-border': this.noBorders
-    })
-    var style = ''
-    if (this.x) style += `left: ${this.x}px; `
-    if (this.y) style += `top: ${this.y}px; `
-    return html`
-      ${this.fontAwesomeCSSUrl ? html`<link rel="stylesheet" href="${this.fontAwesomeCSSUrl}">` : ''}
+      'no-border': this.noBorders,
+    });
+    var style = '';
+    if (this.x) style += `left: ${this.x}px; `;
+    if (this.y) style += `top: ${this.y}px; `;
+    return html` ${this.fontAwesomeCSSUrl
+        ? html`<link rel="stylesheet" href="${this.fontAwesomeCSSUrl}" />`
+        : ''}
       <div class="context-menu dropdown" style="${style}">
         ${this.customRender
           ? this.customRender.call(this)
-          : html`
-            <div class="${cls}" style="${ifDefined(this.customStyle)}">
-              ${this.items.map(item => {
+          : html` <div class="${cls}" style="${ifDefined(this.customStyle)}">
+              ${this.items.map((item) => {
                 if (item === '-') {
-                  return html`<hr />`
+                  return html`<hr />`;
                 }
                 if (item.type === 'html') {
-                  return item
+                  return item;
                 }
-                var icon = item.icon
+                var icon = item.icon;
                 if (typeof icon === 'string' && !icon.includes(' ')) {
-                  icon = 'fa fa-' + icon
+                  icon = 'fa fa-' + icon;
                 }
                 if (item.disabled) {
                   return html`
@@ -174,65 +190,75 @@ export class BeakerContextMenu extends LitElement {
                       ${icon !== false ? html`<i class="${icon}"></i>` : ''}
                       ${item.label}
                     </div>
-                  `
+                  `;
                 }
                 if (item.href) {
                   return html`
-                    <a class="dropdown-item ${item.selected ? 'selected' : ''}" href=${item.href}>
+                    <a
+                      class="dropdown-item ${item.selected ? 'selected' : ''}"
+                      href=${item.href}
+                    >
                       ${icon !== false ? html`<i class="${icon}"></i>` : ''}
                       ${item.label}
                     </a>
-                  `
+                  `;
                 }
                 return html`
-                  <div class="dropdown-item ${item.selected ? 'selected' : ''}" @click=${() => { destroy(); item.click() }}>
+                  <div
+                    class="dropdown-item ${item.selected ? 'selected' : ''}"
+                    @click=${() => {
+                      destroy();
+                      item.click();
+                    }}
+                  >
                     ${typeof icon === 'string'
                       ? html`<i class="${icon}"></i>`
-                      : icon ? icon : ''}
+                      : icon
+                      ? icon
+                      : ''}
                     ${item.label}
                   </div>
-                `
+                `;
               })}
-            </div>`
-        }
-      </div>`
+            </div>`}
+      </div>`;
   }
 }
 
 BeakerContextMenu.styles = css`
-${dropdownCSS}
+  ${dropdownCSS}
 
-.context-menu {
-  position: fixed;
-  z-index: 10000;
-}
+  .context-menu {
+    position: fixed;
+    z-index: 10000;
+  }
 
-.dropdown-items {
-  width: auto;
-  white-space: nowrap;
-}
+  .dropdown-items {
+    width: auto;
+    white-space: nowrap;
+  }
 
-a.dropdown-item {
-  color: inherit;
-  text-decoration: none;
-}
+  a.dropdown-item {
+    color: inherit;
+    text-decoration: none;
+  }
 
-.dropdown-item,
-.dropdown-items.roomy .dropdown-item {
-  padding-right: 30px; /* add a little cushion to the right */
-}
+  .dropdown-item,
+  .dropdown-items.roomy .dropdown-item {
+    padding-right: 30px; /* add a little cushion to the right */
+  }
 
-/* custom icon css */
-.fa-long-arrow-alt-right.custom-link-icon {
-  position: relative;
-  transform: rotate(-45deg);
-  left: 1px;
-}
-.fa-custom-path-icon:after {
-  content: './';
-  letter-spacing: -1px;
-  font-family: var(--code-font);
-}
-`
+  /* custom icon css */
+  .fa-long-arrow-alt-right.custom-link-icon {
+    position: relative;
+    transform: rotate(-45deg);
+    left: 1px;
+  }
+  .fa-custom-path-icon:after {
+    content: './';
+    letter-spacing: -1px;
+    font-family: var(--code-font);
+  }
+`;
 
-customElements.define('beaker-context-menu', BeakerContextMenu)
+customElements.define('beaker-context-menu', BeakerContextMenu);

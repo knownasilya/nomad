@@ -1,5 +1,5 @@
-import { isFilenameBinary } from './is-ext-binary.js'
-import { urlToKey, joinPath, slugify } from './strings.js'
+import { isFilenameBinary } from './is-ext-binary.js';
+import { urlToKey, joinPath, slugify } from './strings.js';
 
 // typedefs
 // =
@@ -45,20 +45,22 @@ import { urlToKey, joinPath, slugify } from './strings.js'
  * @param {FSQueryOpts} query
  * @returns {Promise<FSQueryResult[]>}
  */
-export async function queryRead (fs, query) {
-  var files = await fs.query(query)
+export async function queryRead(fs, query) {
+  var files = await fs.query(query);
   for (let file of files) {
-    if (isFilenameBinary(file.path)) continue
-    file.content = await fs.readFile(file.path, 'utf8').catch(err => undefined)
+    if (isFilenameBinary(file.path)) continue;
+    file.content = await fs
+      .readFile(file.path, 'utf8')
+      .catch((err) => undefined);
     if (file.path.endsWith('.json')) {
       try {
-        file.content = JSON.parse(file.content)
+        file.content = JSON.parse(file.content);
       } catch (e) {
         // ignore
       }
     }
   }
-  return files
+  return files;
 }
 
 /**
@@ -66,25 +68,28 @@ export async function queryRead (fs, query) {
  * @param {FSQueryOpts} query
  * @returns {Promise<boolean>}
  */
-export async function queryHas (fs, query) {
-  var files = await fs.query(query)
-  return files.length > 0
+export async function queryHas(fs, query) {
+  var files = await fs.query(query);
+  return files.length > 0;
 }
 
 /**
  * @param {Hyperdrive} fs
  * @param {string} path
  */
-export async function ensureDir (fs, path) {
+export async function ensureDir(fs, path) {
   try {
-    let st = await fs.stat(path).catch(e => null)
+    let st = await fs.stat(path).catch((e) => null);
     if (!st) {
-      await fs.mkdir(path)
+      await fs.mkdir(path);
     } else if (!st.isDirectory()) {
-      console.error('Warning! Filesystem expects a folder but an unexpected file exists at this location.', {path})
+      console.error(
+        'Warning! Filesystem expects a folder but an unexpected file exists at this location.',
+        { path }
+      );
     }
   } catch (e) {
-    console.error('Filesystem failed to make directory', {path, error: e})
+    console.error('Filesystem failed to make directory', { path, error: e });
   }
 }
 
@@ -92,74 +97,81 @@ export async function ensureDir (fs, path) {
  * @param {Hyperdrive} fs
  * @param {string} path
  */
-export async function ensureParentDir (fs, path) {
-  return ensureDir(fs, path.split('/').slice(0, -1).join('/'))
+export async function ensureParentDir(fs, path) {
+  return ensureDir(fs, path.split('/').slice(0, -1).join('/'));
 }
 
 /**
  * @param {Hyperdrive} fs
- * @param {string} path 
- * @param {string} url 
+ * @param {string} path
+ * @param {string} url
  * @return {Promise<void>}
  */
-export async function ensureMount (fs, path, url) {
+export async function ensureMount(fs, path, url) {
   try {
-    let st = await fs.stat(path).catch(e => null)
-    let key = urlToKey(url)
+    let st = await fs.stat(path).catch((e) => null);
+    let key = urlToKey(url);
     if (!st) {
       // add mount
-      await fs.mount(path, key)
+      await fs.mount(path, key);
     } else if (st.mount) {
       if (st.mount.key !== key) {
         // change mount
-        await fs.unmount(path)
-        await fs.mount(path, key)
+        await fs.unmount(path);
+        await fs.mount(path, key);
       }
     } else {
-      console.error('Warning! Filesystem expects a mount but an unexpected file exists at this location.', {path})
+      console.error(
+        'Warning! Filesystem expects a mount but an unexpected file exists at this location.',
+        { path }
+      );
     }
   } catch (e) {
-    console.error('Filesystem failed to mount drive', {path, url, error: e})
+    console.error('Filesystem failed to mount drive', { path, url, error: e });
   }
 }
 
 /**
  * @param {Hyperdrive} fs
- * @param {string} path 
+ * @param {string} path
  * @return {Promise<void>}
  */
-export async function ensureUnmount (fs, path) {
+export async function ensureUnmount(fs, path) {
   try {
-    let st = await fs.stat(path).catch(e => null)
+    let st = await fs.stat(path).catch((e) => null);
     if (st && st.mount) {
       // remove mount
-      await fs.unmount(path)
+      await fs.unmount(path);
     }
   } catch (e) {
-    console.error('Filesystem failed to unmount drive', {path, error: e})
+    console.error('Filesystem failed to unmount drive', { path, error: e });
   }
 }
 
 /**
- * @param {string} pathSelector 
+ * @param {string} pathSelector
  * @param {string} url
  * @param {Object} drive
  * @return {Promise<void>}
  */
-export async function ensureUnmountByUrl (pathSelector, url, drive) {
+export async function ensureUnmountByUrl(pathSelector, url, drive) {
   try {
     let mounts = await drive.query({
       path: pathSelector,
-      mount: url
-    })
+      mount: url,
+    });
     if (mounts[0]) {
       // remove mount
-      await drive.unmount(mounts[0].path)
+      await drive.unmount(mounts[0].path);
     } else {
-      throw "Mount not found"
+      throw 'Mount not found';
     }
   } catch (e) {
-    console.error('Filesystem failed to unmount drive', {pathSelector, url, error: e})
+    console.error('Filesystem failed to unmount drive', {
+      pathSelector,
+      url,
+      error: e,
+    });
   }
 }
 
@@ -170,13 +182,14 @@ export async function ensureUnmountByUrl (pathSelector, url, drive) {
  * @param {string} ext
  * @returns {Promise<string>}
  */
-export async function getAvailableName (containingPath, title, fs, ext = '') {
-  var basename = slugify((title || '').trim() || 'untitled').toLowerCase()
+export async function getAvailableName(containingPath, title, fs, ext = '') {
+  var basename = slugify((title || '').trim() || 'untitled').toLowerCase();
   for (let i = 1; i < 1e9; i++) {
-    let name = ((i === 1) ? basename : `${basename}-${i}`) + (ext ? `.${ext}` : '')
-    let st = await fs.stat(joinPath(containingPath, name)).catch(e => null)
-    if (!st) return name
+    let name =
+      (i === 1 ? basename : `${basename}-${i}`) + (ext ? `.${ext}` : '');
+    let st = await fs.stat(joinPath(containingPath, name)).catch((e) => null);
+    if (!st) return name;
   }
   // yikes if this happens
-  throw new Error('Unable to find an available name for ' + title)
+  throw new Error('Unable to find an available name for ' + title);
 }

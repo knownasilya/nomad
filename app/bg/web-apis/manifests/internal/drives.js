@@ -12,5 +12,5 @@ export default {
   clearDnsCache: 'promise',
   createEventStream: 'readable',
   getDebugLog: 'promise',
-  createDebugStream: 'readable'
-}
+  createDebugStream: 'readable',
+};

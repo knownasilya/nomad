@@ -1,22 +1,24 @@
 export class BaseSlideView extends HTMLElement {
-  constructor () {
-    super()
-    this.shadow = this.attachShadow({mode: 'open'})
-    this.outerRender()
-    setTimeout(() => this.setAttribute('fadein', true), 1)
+  constructor() {
+    super();
+    this.shadow = this.attachShadow({ mode: 'open' });
+    this.outerRender();
+    setTimeout(() => this.setAttribute('fadein', true), 1);
 
-    var nextAnchor = this.shadow.querySelector('a')
+    var nextAnchor = this.shadow.querySelector('a');
     if (nextAnchor) {
-      nextAnchor.addEventListener('click', e => {
-        this.setAttribute('fadeout', true)
+      nextAnchor.addEventListener('click', (e) => {
+        this.setAttribute('fadeout', true);
         setTimeout(() => {
-          this.dispatchEvent(new CustomEvent('next', {bubbles: true, composed: true}))
-        }, 500)
-      })
+          this.dispatchEvent(
+            new CustomEvent('next', { bubbles: true, composed: true })
+          );
+        }, 500);
+      });
     }
   }
 
-  outerRender () {
+  outerRender() {
     this.shadow.innerHTML = `
 <link rel="stylesheet" href="beaker://assets/font-awesome.css">
 <style>
@@ -64,10 +66,10 @@ export class BaseSlideView extends HTMLElement {
   }
 </style>
 ${this.render()}
-`
+`;
   }
 
-  render () {
-    return 'Replaceme'
+  render() {
+    return 'Replaceme';
   }
 }

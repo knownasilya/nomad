@@ -4,4 +4,4 @@ export default `
 ALTER TABLE archives ADD COLUMN previewMode INTEGER;
 
 PRAGMA user_version = 22;
-`
+`;

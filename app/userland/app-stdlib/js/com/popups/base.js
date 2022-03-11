@@ -1,116 +1,124 @@
-import {LitElement, html} from '../../../vendor/lit-element/lit-element.js'
-import popupsCSS from '../../../css/com/popups.css.js'
+import { LitElement, html } from '../../../vendor/lit-element/lit-element.js';
+import popupsCSS from '../../../css/com/popups.css.js';
 
 // exported api
 // =
 
 export class BasePopup extends LitElement {
-  constructor () {
-    super()
+  constructor() {
+    super();
 
-    const onGlobalKeyUp = e => {
+    const onGlobalKeyUp = (e) => {
       // listen for the escape key
       if (this.shouldCloseOnEscape && e.keyCode === 27) {
-        this.onReject()
+        this.onReject();
       }
-    }
-    document.addEventListener('keyup', onGlobalKeyUp)
+    };
+    document.addEventListener('keyup', onGlobalKeyUp);
 
     // cleanup function called on cancel
     this.cleanup = () => {
-      document.removeEventListener('keyup', onGlobalKeyUp)
-    }
+      document.removeEventListener('keyup', onGlobalKeyUp);
+    };
   }
 
-  get shouldShowHead () {
-    return true
+  get shouldShowHead() {
+    return true;
   }
 
-  get shouldCloseOnOuterClick () {
-    return true
+  get shouldCloseOnOuterClick() {
+    return true;
   }
 
-  get shouldCloseOnEscape () {
-    return true
+  get shouldCloseOnEscape() {
+    return true;
   }
 
   // management
   //
 
-  static async coreCreate (parentEl, Class, ...args) {
-    var popupEl = new Class(...args)
-    parentEl.appendChild(popupEl)
+  static async coreCreate(parentEl, Class, ...args) {
+    var popupEl = new Class(...args);
+    parentEl.appendChild(popupEl);
 
     const cleanup = () => {
-      popupEl.cleanup()
-      popupEl.remove()
-    }
+      popupEl.cleanup();
+      popupEl.remove();
+    };
 
     // return a promise that resolves with resolve/reject events
     return new Promise((resolve, reject) => {
-      popupEl.addEventListener('resolve', e => {
-        resolve(e.detail)
-        cleanup()
-      })
+      popupEl.addEventListener('resolve', (e) => {
+        resolve(e.detail);
+        cleanup();
+      });
 
-      popupEl.addEventListener('reject', e => {
-        reject()
-        cleanup()
-      })
-    })
+      popupEl.addEventListener('reject', (e) => {
+        reject();
+        cleanup();
+      });
+    });
   }
 
-  static async create (Class, ...args) {
-    return BasePopup.coreCreate(document.body, Class, ...args)
+  static async create(Class, ...args) {
+    return BasePopup.coreCreate(document.body, Class, ...args);
   }
 
-  static destroy (tagName) {
-    var popup = document.querySelector(tagName)
-    if (popup) popup.onReject()
+  static destroy(tagName) {
+    var popup = document.querySelector(tagName);
+    if (popup) popup.onReject();
   }
 
   // rendering
   // =
 
-  render () {
+  render() {
     return html`
       <div class="popup-wrapper" @click=${this.onClickWrapper}>
         <div class="popup-inner">
-          ${this.shouldShowHead ? html`
-            <div class="head">
-              <span class="title">${this.renderTitle()}</span>
-              <span title="Cancel" @click=${this.onReject} class="close-btn square">&times;</span>
-            </div>
-          ` : ''}
-          <div class="body">
-            ${this.renderBody()}
-          </div>
+          ${this.shouldShowHead
+            ? html`
+                <div class="head">
+                  <span class="title">${this.renderTitle()}</span>
+                  <span
+                    title="Cancel"
+                    @click=${this.onReject}
+                    class="close-btn square"
+                    >&times;</span
+                  >
+                </div>
+              `
+            : ''}
+          <div class="body">${this.renderBody()}</div>
         </div>
       </div>
-    `
+    `;
   }
 
-  renderTitle () {
+  renderTitle() {
     // should be overridden by subclasses
   }
 
-  renderBody () {
+  renderBody() {
     // should be overridden by subclasses
   }
 
   // events
   // =
 
-  onClickWrapper (e) {
-    if (e.target.classList.contains('popup-wrapper') && this.shouldCloseOnOuterClick) {
-      this.onReject()
+  onClickWrapper(e) {
+    if (
+      e.target.classList.contains('popup-wrapper') &&
+      this.shouldCloseOnOuterClick
+    ) {
+      this.onReject();
     }
   }
 
-  onReject (e) {
-    if (e) e.preventDefault()
-    this.dispatchEvent(new CustomEvent('reject'))
+  onReject(e) {
+    if (e) e.preventDefault();
+    this.dispatchEvent(new CustomEvent('reject'));
   }
 }
 
-BasePopup.styles = [popupsCSS]
+BasePopup.styles = [popupsCSS];

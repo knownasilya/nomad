@@ -1,4 +1,4 @@
 export default {
   createTab: 'promise',
-  resizeSelf: 'promise'
-}
+  resizeSelf: 'promise',
+};

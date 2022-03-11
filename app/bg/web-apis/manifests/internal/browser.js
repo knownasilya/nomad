@@ -13,7 +13,7 @@ export default {
   updateSetupState: 'promise',
   migrate08to09: 'promise',
   setStartPageBackgroundImage: 'promise',
-  
+
   getDefaultProtocolSettings: 'promise',
   setAsDefaultProtocolClient: 'promise',
   removeAsDefaultProtocolClient: 'promise',
@@ -64,5 +64,5 @@ export default {
   openFolder: 'promise',
   doWebcontentsCmd: 'promise',
   doTest: 'promise',
-  closeModal: 'sync'
-}
+  closeModal: 'sync',
+};

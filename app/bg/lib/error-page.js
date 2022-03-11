@@ -138,7 +138,7 @@ li:last-child {
   padding-top: 10px;
   border-top: 1px solid #ddd;
 }
-`
+`;
 
 /**
  * Generate an error page HTML
@@ -152,54 +152,56 @@ li:last-child {
  * @returns {string}
  */
 export default function (e) {
-  var title = 'This site can’t be reached'
-  var info = ''
-  var icon = 'fa-exclamation-circle'
-  var button = '<a class="btn right" href="javascript:window.location.reload()">Try again</a>'
-  var errorDescription
-  var moreHelp = ''
+  var title = 'This site can’t be reached';
+  var info = '';
+  var icon = 'fa-exclamation-circle';
+  var button =
+    '<a class="btn right" href="javascript:window.location.reload()">Try again</a>';
+  var errorDescription;
+  var moreHelp = '';
 
   if (typeof e === 'object') {
-    errorDescription = e.errorDescription || ''
-    info = e.errorInfo || ''
+    errorDescription = e.errorDescription || '';
+    info = e.errorInfo || '';
     // remove trailing slash
-    var origin = e.validatedURL.slice(0, e.validatedURL.length - 1)
+    var origin = e.validatedURL.slice(0, e.validatedURL.length - 1);
 
     // strip protocol
     if (origin.startsWith('https://')) {
-      origin = origin.slice(8)
+      origin = origin.slice(8);
     } else if (origin.startsWith('http://')) {
-      origin = origin.slice(7)
+      origin = origin.slice(7);
     }
 
     switch (e.errorCode) {
       case -106:
-        title = 'No internet connection'
-        info = `<p>Your computer is not connected to the internet.</p><p>Try:</p><ul><li>Resetting your Wi-Fi connection<li>Checking your router and modem.</li></ul>`
-        break
+        title = 'No internet connection';
+        info = `<p>Your computer is not connected to the internet.</p><p>Try:</p><ul><li>Resetting your Wi-Fi connection<li>Checking your router and modem.</li></ul>`;
+        break;
       case -105:
-        icon = 'fa-frown-o'
-        info = `<p>Couldn’t resolve the DNS address for <strong>${origin}</strong></p>`
-        break
+        icon = 'fa-frown-o';
+        info = `<p>Couldn’t resolve the DNS address for <strong>${origin}</strong></p>`;
+        break;
       case 404:
-        icon = 'fa-frown-o'
-        title = e.title || 'Page Not Found'
-        info = `<p>${e.errorInfo}</p>`
-        break
+        icon = 'fa-frown-o';
+        title = e.title || 'Page Not Found';
+        info = `<p>${e.errorInfo}</p>`;
+        break;
       case -501:
-        title = 'Your connection is not secure'
-        info = `<p>Beaker cannot establish a secure connection to the server for <strong>${origin}</strong>.</p>`
-        icon = 'fa-close warning'
-        button = '<a class="btn right" href="javascript:window.history.back()">Go back</a>'
-        break
+        title = 'Your connection is not secure';
+        info = `<p>Beaker cannot establish a secure connection to the server for <strong>${origin}</strong>.</p>`;
+        icon = 'fa-close warning';
+        button =
+          '<a class="btn right" href="javascript:window.history.back()">Go back</a>';
+        break;
       case 504:
-        icon = 'fa-share-alt'
-        title = `Beaker is unable to access this ${e.resource} right now.`
-        errorDescription = `The p2p ${e.resource} was not reachable on the network.`
-        break
+        icon = 'fa-share-alt';
+        title = `Beaker is unable to access this ${e.resource} right now.`;
+        errorDescription = `The p2p ${e.resource} was not reachable on the network.`;
+        break;
     }
   } else {
-    errorDescription = e
+    errorDescription = e;
   }
 
   return `
@@ -225,5 +227,5 @@ export default function (e) {
           </div>
         </div>
       </body>
-    </html>`.replace(/\n/g, '')
-};
+    </html>`.replace(/\n/g, '');
+}

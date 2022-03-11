@@ -31,4 +31,4 @@ CREATE TRIGGER crawl_statuses_au AFTER UPDATE ON crawl_statuses BEGIN
 END;
 
 PRAGMA user_version = 39;
-`
+`;

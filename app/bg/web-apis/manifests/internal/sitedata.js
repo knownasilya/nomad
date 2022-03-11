@@ -5,5 +5,5 @@ export default {
   getPermission: 'promise',
   setPermission: 'promise',
   clearPermission: 'promise',
-  clearPermissionAllOrigins: 'promise'
-}
+  clearPermissionAllOrigins: 'promise',
+};

@@ -4,12 +4,7 @@
   "type": "object",
   "title": "Comment",
   "description": "A text post about some resource.",
-  "required": [
-    "type",
-    "topic",
-    "body",
-    "createdAt"
-  ],
+  "required": ["type", "topic", "body", "createdAt"],
   "properties": {
     "type": {
       "type": "string",

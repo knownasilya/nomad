@@ -1,40 +1,40 @@
-import {css} from '../../../app-stdlib/vendor/lit-element/lit-element.js'
-import colorsCSS from '../../../app-stdlib/css/colors.css.js'
-import buttonsCSS from '../../../app-stdlib/css/buttons2.css.js'
-import tooltipCSS from '../../../app-stdlib/css/tooltip.css.js'
-import spinnerCSS from '../../../app-stdlib/css/com/spinner.css.js'
+import { css } from '../../../app-stdlib/vendor/lit-element/lit-element.js';
+import colorsCSS from '../../../app-stdlib/css/colors.css.js';
+import buttonsCSS from '../../../app-stdlib/css/buttons2.css.js';
+import tooltipCSS from '../../../app-stdlib/css/tooltip.css.js';
+import spinnerCSS from '../../../app-stdlib/css/com/spinner.css.js';
 
 const cssStr = css`
-${colorsCSS}
-${buttonsCSS}
+  ${colorsCSS}
+  ${buttonsCSS}
 ${tooltipCSS}
 ${spinnerCSS}
 
 :host {
-  display: block;
-  max-width: 600px;
-}
+    display: block;
+    max-width: 600px;
+  }
 
-a {
-  color: var(--blue);
-  text-decoration: none;
-}
+  a {
+    color: var(--blue);
+    text-decoration: none;
+  }
 
-a:hover {
-  text-decoration: underline;
-}
+  a:hover {
+    text-decoration: underline;
+  }
 
-.section {
-  margin-bottom: 30px;
-}
+  .section {
+    margin-bottom: 30px;
+  }
 
-.message {
-  margin: 1em 0;
-  background: #FFEB3B;
-  color: #443e0b;
-  padding: 10px;
-  border-radius: 2px;
-  font-size: 15px;
-}
-`
-export default cssStr
+  .message {
+    margin: 1em 0;
+    background: #ffeb3b;
+    color: #443e0b;
+    padding: 10px;
+    border-radius: 2px;
+    font-size: 15px;
+  }
+`;
+export default cssStr;

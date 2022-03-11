@@ -1,17 +1,17 @@
-import * as path from 'path'
-import { BrowserWindow } from 'electron'
-import { ICON_PATH } from './windows'
-import * as logger from '../logger'
+import * as path from 'path';
+import { BrowserWindow } from 'electron';
+import { ICON_PATH } from './windows';
+import * as logger from '../logger';
 
 // globals
 // =
 
-var initWindow
+var initWindow;
 
 // exported api
 // =
 
-export function open ({isShutdown} = {isShutdown: false}) {
+export function open({ isShutdown } = { isShutdown: false }) {
   initWindow = new BrowserWindow({
     autoHideMenuBar: true,
     fullscreenable: false,
@@ -30,17 +30,17 @@ export function open ({isShutdown} = {isShutdown: false}) {
       sandbox: true,
       webSecurity: true,
       enableRemoteModule: false,
-      allowRunningInsecureContent: false
+      allowRunningInsecureContent: false,
     },
     icon: ICON_PATH,
-    show: true
-  })
-  initWindow.loadURL(`beaker://init/${isShutdown ? 'shutdown.html' : ''}`)
+    show: true,
+  });
+  initWindow.loadURL(`beaker://init/${isShutdown ? 'shutdown.html' : ''}`);
 }
 
-export function close () {
+export function close() {
   if (initWindow) {
-    initWindow.close()
-    initWindow = undefined
+    initWindow.close();
+    initWindow = undefined;
   }
 }

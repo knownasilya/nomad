@@ -17,4 +17,4 @@ CREATE TABLE crawl_votes (
 CREATE INDEX crawl_votes_topic ON crawl_votes (topic);
 
 PRAGMA user_version = 29;
-`
+`;

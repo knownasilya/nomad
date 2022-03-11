@@ -7,23 +7,23 @@
  * - When unfocused, the Site Info view is hidden (it's meant to act as a popup menu)
  */
 
-import path from 'path'
-import Events from 'events'
-import { BrowserView } from 'electron'
-import * as tabManager from '../tabs/manager'
+import path from 'path';
+import Events from 'events';
+import { BrowserView } from 'electron';
+import * as tabManager from '../tabs/manager';
 
 // globals
 // =
 
-const MARGIN_SIZE = 10
-var events = new Events()
-var views = {} // map of {[parentWindow.id] => BrowserView}
+const MARGIN_SIZE = 10;
+var events = new Events();
+var views = {}; // map of {[parentWindow.id] => BrowserView}
 
 // exported api
 // =
 
-export function setup (parentWindow) {
-  var view = views[parentWindow.id] = new BrowserView({
+export function setup(parentWindow) {
+  var view = (views[parentWindow.id] = new BrowserView({
     webPreferences: {
       preload: path.join(__dirname, 'fg', 'webview-preload', 'index.build.js'),
       nodeIntegrationInSubFrames: true,
@@ -35,94 +35,96 @@ export function setup (parentWindow) {
       nativeWindowOpen: true,
       nodeIntegration: false,
       scrollBounce: true,
-      navigateOnDragDrop: false
-    }
-  })
+      navigateOnDragDrop: false,
+    },
+  }));
   view.webContents.on('console-message', (e, level, message) => {
-    console.log('Site-Info window says:', message)
-  })
-  view.webContents.loadURL('beaker://site-info/')
+    console.log('Site-Info window says:', message);
+  });
+  view.webContents.loadURL('beaker://site-info/');
 }
 
-export function destroy (parentWindow) {
+export function destroy(parentWindow) {
   if (get(parentWindow)) {
-    get(parentWindow).webContents.destroy()
-    delete views[parentWindow.id]
+    get(parentWindow).webContents.destroy();
+    delete views[parentWindow.id];
   }
 }
 
-export function get (parentWindow) {
-  return views[parentWindow.id]
+export function get(parentWindow) {
+  return views[parentWindow.id];
 }
 
-export function reposition (parentWindow) {
-  var view = get(parentWindow)
+export function reposition(parentWindow) {
+  var view = get(parentWindow);
   if (view) {
     const setBounds = (b) => {
       // HACK workaround the lack of view.getBounds() -prf
       if (view.currentBounds) {
-        b = view.currentBounds // use existing bounds
+        b = view.currentBounds; // use existing bounds
       }
-      view.currentBounds = b // store new bounds
-      view.setBounds(adjustBounds(b))
-    }
+      view.currentBounds = b; // store new bounds
+      view.setBounds(adjustBounds(b));
+    };
     setBounds({
       x: view.boundsOpt ? view.boundsOpt.left : 170,
       y: (view.boundsOpt ? view.boundsOpt.top : 67) + 5,
       width: 420,
-      height: 350
-    })
+      height: 350,
+    });
   }
 }
 
-export function resize (parentWindow, bounds = {}) {
-  var view = get(parentWindow)
+export function resize(parentWindow, bounds = {}) {
+  var view = get(parentWindow);
   if (view && view.currentBounds) {
-    view.currentBounds.width = bounds.width || view.currentBounds.width
-    view.currentBounds.height = bounds.height || view.currentBounds.height
-    view.setBounds(adjustBounds(view.currentBounds))
+    view.currentBounds.width = bounds.width || view.currentBounds.width;
+    view.currentBounds.height = bounds.height || view.currentBounds.height;
+    view.setBounds(adjustBounds(view.currentBounds));
   }
 }
 
-export function toggle (parentWindow, opts) {
-  var view = get(parentWindow)
+export function toggle(parentWindow, opts) {
+  var view = get(parentWindow);
   if (view) {
     if (view.isVisible) {
-      return hide(parentWindow)
+      return hide(parentWindow);
     } else {
-      return show(parentWindow, opts)
+      return show(parentWindow, opts);
     }
   }
 }
 
-export async function show (parentWindow, opts) {
-  var view = get(parentWindow)
+export async function show(parentWindow, opts) {
+  var view = get(parentWindow);
   if (view) {
-    view.boundsOpt = opts && opts.bounds
-    parentWindow.addBrowserView(view)
-    reposition(parentWindow)
-    view.isVisible = true
+    view.boundsOpt = opts && opts.bounds;
+    parentWindow.addBrowserView(view);
+    reposition(parentWindow);
+    view.isVisible = true;
 
-    var params = opts && opts.params ? opts.params : {}
-    params.url = tabManager.getActive(parentWindow).url
-    await view.webContents.executeJavaScript(`init(${JSON.stringify(params)}); undefined`)
-    view.webContents.focus()
+    var params = opts && opts.params ? opts.params : {};
+    params.url = tabManager.getActive(parentWindow).url;
+    await view.webContents.executeJavaScript(
+      `init(${JSON.stringify(params)}); undefined`
+    );
+    view.webContents.focus();
 
     // await till hidden
-    await new Promise(resolve => {
-      events.once('hide', resolve)
-    })
+    await new Promise((resolve) => {
+      events.once('hide', resolve);
+    });
   }
 }
 
-export function hide (parentWindow) {
-  var view = get(parentWindow)
+export function hide(parentWindow) {
+  var view = get(parentWindow);
   if (view) {
-    view.webContents.executeJavaScript(`reset(); undefined`)
-    parentWindow.removeBrowserView(view)
-    view.currentBounds = null
-    view.isVisible = false
-    events.emit('hide')
+    view.webContents.executeJavaScript(`reset(); undefined`);
+    parentWindow.removeBrowserView(view);
+    view.currentBounds = null;
+    view.isVisible = false;
+    events.emit('hide');
   }
 }
 
@@ -133,11 +135,11 @@ export function hide (parentWindow) {
  * @description
  * Ajust the bounds for margin
  */
-function adjustBounds (bounds) {
+function adjustBounds(bounds) {
   return {
     x: bounds.x - MARGIN_SIZE,
     y: bounds.y,
-    width: bounds.width + (MARGIN_SIZE * 2),
-    height: bounds.height + MARGIN_SIZE
-  }
+    width: bounds.width + MARGIN_SIZE * 2,
+    height: bounds.height + MARGIN_SIZE,
+  };
 }

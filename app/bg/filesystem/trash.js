@@ -1,9 +1,17 @@
-import ms from 'ms'
-import { join as joinPath } from 'path'
-import * as filesystem from './index'
-import { PATHS, TRASH_FIRST_COLLECT_WAIT, TRASH_REGULAR_COLLECT_WAIT, TRASH_EXPIRATION_AGE } from '../../lib/const'
-import * as logLib from '../logger'
-const logger = logLib.child({category: 'hyper', subcategory: 'trash-collector'})
+import ms from 'ms';
+import { join as joinPath } from 'path';
+import * as filesystem from './index';
+import {
+  PATHS,
+  TRASH_FIRST_COLLECT_WAIT,
+  TRASH_REGULAR_COLLECT_WAIT,
+  TRASH_EXPIRATION_AGE,
+} from '../../lib/const';
+import * as logLib from '../logger';
+const logger = logLib.child({
+  category: 'hyper',
+  subcategory: 'trash-collector',
+});
 
 // typedefs
 // =
@@ -21,13 +29,13 @@ const logger = logLib.child({category: 'hyper', subcategory: 'trash-collector'})
 // globals
 // =
 
-var nextGCTimeout
+var nextGCTimeout;
 
 // exported API
 // =
 
-export function setup () {
-  schedule(TRASH_FIRST_COLLECT_WAIT)
+export function setup() {
+  schedule(TRASH_FIRST_COLLECT_WAIT);
 }
 
 /**
@@ -36,8 +44,8 @@ export function setup () {
  * @param {number} [query.olderThan]
  * @returns {Promise<TrashItem[]>}
  */
-export async function query (query = {}) {
-  return [] // TODO
+export async function query(query = {}) {
+  return []; // TODO
   // var items = /** @type TrashItem[] */([])
   // var names = await filesystem.get().pda.readdir(PATHS.TRASH)
   // for (let name of names) {
@@ -60,8 +68,8 @@ export async function query (query = {}) {
  * @param {number} [opts.olderThan]
  * @returns {Promise<CollectResult>}
  */
-export async function collect ({olderThan} = {}) {
-  return // TODO
+export async function collect({ olderThan } = {}) {
+  return; // TODO
   // logger.silly('Running GC')
   // olderThan = typeof olderThan === 'number' ? olderThan : TRASH_EXPIRATION_AGE
 
@@ -118,7 +126,7 @@ export async function collect ({olderThan} = {}) {
 /**
  * @param {number} time
  */
-function schedule (time) {
-  nextGCTimeout = setTimeout(collect, time)
-  nextGCTimeout.unref()
+function schedule(time) {
+  nextGCTimeout = setTimeout(collect, time);
+  nextGCTimeout.unref();
 }

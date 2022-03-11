@@ -2,5 +2,5 @@ export default {
   list: 'promise',
   get: 'promise',
   add: 'promise',
-  remove: 'promise'
-}
+  remove: 'promise',
+};

@@ -29,4 +29,4 @@ CREATE TRIGGER archives_meta_au AFTER UPDATE ON archives_meta BEGIN
 END;
 
 PRAGMA user_version = 42;
-`
+`;

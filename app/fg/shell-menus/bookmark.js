@@ -1,77 +1,101 @@
 /* globals customElements */
-import { LitElement, html, css } from '../vendor/lit-element/lit-element'
-import * as bg from './bg-process-rpc'
-import commonCSS from './common.css'
-import inputsCSS from './inputs.css'
-import buttonsCSS from './buttons.css'
+import { LitElement, html, css } from '../vendor/lit-element/lit-element';
+import * as bg from './bg-process-rpc';
+import commonCSS from './common.css';
+import inputsCSS from './inputs.css';
+import buttonsCSS from './buttons.css';
 
 class BookmarkMenu extends LitElement {
-  static get properties () {
+  static get properties() {
     return {
-      href: {type: String},
-      title: {type: String},
-      pinned: {type: Boolean}
-    }
+      href: { type: String },
+      title: { type: String },
+      pinned: { type: Boolean },
+    };
   }
 
-  constructor () {
-    super()
-    this.reset()
+  constructor() {
+    super();
+    this.reset();
   }
 
-  reset () {
-    this.bookmark = null
-    this.href = ''
-    this.title = ''
-    this.pinned = false
-    this.existingBookmark = undefined
+  reset() {
+    this.bookmark = null;
+    this.href = '';
+    this.title = '';
+    this.pinned = false;
+    this.existingBookmark = undefined;
   }
 
-  async init (params) {
-    this.existingBookmark = await bg.bookmarks.get(params.url)
+  async init(params) {
+    this.existingBookmark = await bg.bookmarks.get(params.url);
     if (this.existingBookmark) {
-      this.href = this.existingBookmark.href || params.url
-      this.title = this.existingBookmark.title || params.metadata.title || ''
-      this.pinned = this.existingBookmark.pinned
+      this.href = this.existingBookmark.href || params.url;
+      this.title = this.existingBookmark.title || params.metadata.title || '';
+      this.pinned = this.existingBookmark.pinned;
     } else {
-      this.href = params.url
-      this.title = params.metadata && params.metadata.title ? params.metadata.title : ''
+      this.href = params.url;
+      this.title =
+        params.metadata && params.metadata.title ? params.metadata.title : '';
     }
-    await this.requestUpdate()
+    await this.requestUpdate();
 
     // focus and highlight input
-    var input = this.shadowRoot.querySelector('input[type=text]')
-    input.focus()
-    input.setSelectionRange(0, input.value.length)
+    var input = this.shadowRoot.querySelector('input[type=text]');
+    input.focus();
+    input.setSelectionRange(0, input.value.length);
   }
 
   // rendering
   // =
 
-  render () {
+  render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css">
+      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
       <div class="wrapper">
         <form @submit=${this.onSaveBookmark}>
           <div class="input-group">
             <label for="title">Title</label>
-            <input type="text" name="title" placeholder="Title" value="${this.title}" @keyup=${this.onChangeTitle}/>
+            <input
+              type="text"
+              name="title"
+              placeholder="Title"
+              value="${this.title}"
+              @keyup=${this.onChangeTitle}
+            />
           </div>
 
           <div class="input-group">
             <label for="href">URL</label>
-            <input type="text" name="href" placeholder="Title" value="${this.href}" @keyup=${this.onChangeHref}/>
+            <input
+              type="text"
+              name="href"
+              placeholder="Title"
+              value="${this.href}"
+              @keyup=${this.onChangeHref}
+            />
           </div>
 
           <div class="input-group" style="margin: 5px 0">
             <label for="pinned-checkbox">
-              <input id="pinned-checkbox" type="checkbox" name="pinned" value="1" ?checked=${this.pinned} @change=${this.onChangePinned}/>
+              <input
+                id="pinned-checkbox"
+                type="checkbox"
+                name="pinned"
+                value="1"
+                ?checked=${this.pinned}
+                @change=${this.onChangePinned}
+              />
               Pin to start page
             </label>
           </div>
 
           <div class="buttons">
-            <button type="button" class="btn remove" @click=${this.onClickCancel}>
+            <button
+              type="button"
+              class="btn remove"
+              @click=${this.onClickCancel}
+            >
               ${this.existingBookmark ? 'Delete' : 'Cancel'}
             </button>
             <button class="btn primary" type="submit">
@@ -80,114 +104,119 @@ class BookmarkMenu extends LitElement {
           </div>
         </form>
       </div>
-    `
+    `;
   }
 
   // events
   // =
 
-  async onSaveBookmark (e) {
-    e.preventDefault()
+  async onSaveBookmark(e) {
+    e.preventDefault();
     if (this.existingBookmark && this.href !== this.existingBookmark.href) {
-      await bg.bookmarks.remove(this.existingBookmark.href)
+      await bg.bookmarks.remove(this.existingBookmark.href);
     }
     await bg.bookmarks.add({
       href: this.href,
       title: this.title,
-      pinned: this.pinned
-    })
-    bg.views.refreshState('active')
-    bg.shellMenus.close()
+      pinned: this.pinned,
+    });
+    bg.views.refreshState('active');
+    bg.shellMenus.close();
   }
 
-  async onClickCancel (e) {
-    e.preventDefault()
+  async onClickCancel(e) {
+    e.preventDefault();
     if (this.existingBookmark) {
-      await bg.bookmarks.remove(this.href)
-      bg.views.refreshState('active')
+      await bg.bookmarks.remove(this.href);
+      bg.views.refreshState('active');
     }
-    bg.shellMenus.close()
+    bg.shellMenus.close();
   }
 
-  onChangeHref (e) {
-    this.href = e.target.value
+  onChangeHref(e) {
+    this.href = e.target.value;
   }
 
-  onChangeTitle (e) {
-    this.title = e.target.value
+  onChangeTitle(e) {
+    this.title = e.target.value;
   }
 
-  onChangePinned (e) {
-    this.pinned = !this.pinned
+  onChangePinned(e) {
+    this.pinned = !this.pinned;
   }
 }
-BookmarkMenu.styles = [commonCSS, inputsCSS, buttonsCSS, css`
-.wrapper {
-  box-sizing: border-box;
-  padding: 15px 15px 0;
-  height: 195px;
-  overflow: hidden;
-}
+BookmarkMenu.styles = [
+  commonCSS,
+  inputsCSS,
+  buttonsCSS,
+  css`
+    .wrapper {
+      box-sizing: border-box;
+      padding: 15px 15px 0;
+      height: 195px;
+      overflow: hidden;
+    }
 
-form {
-  font-size: 13px;
-  margin: 0;
-}
+    form {
+      font-size: 13px;
+      margin: 0;
+    }
 
-.input-group {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 10px;
-}
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 10px;
+    }
 
-.input-group label {
-  display: block;
-  font-size: 12px;
-  margin-bottom: 2px;
-}
+    .input-group label {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 2px;
+    }
 
-.input-group input,
-.input-group textarea {
-  display: inline-block;
-  font-size: 0.725rem;
-}
+    .input-group input,
+    .input-group textarea {
+      display: inline-block;
+      font-size: 0.725rem;
+    }
 
-.input-group textarea {
-  height: 50px;
-  padding-top: 5px;
-  resize: none;
-}
+    .input-group textarea {
+      height: 50px;
+      padding-top: 5px;
+      resize: none;
+    }
 
-.input-group input[type=text] {
-  height: 28px;
-  line-height: 28px;
-}
+    .input-group input[type='text'] {
+      height: 28px;
+      line-height: 28px;
+    }
 
-.input-group input[type=checkbox] {
-  display: inline;
-  width: auto;
-  height: auto;
-  margin: 0 5px;
-  position: relative;
-  top: 2px;
-}
+    .input-group input[type='checkbox'] {
+      display: inline;
+      width: auto;
+      height: auto;
+      margin: 0 5px;
+      position: relative;
+      top: 2px;
+    }
 
-.buttons {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0;
-  margin: 15px -20px 0;
-}
+    .buttons {
+      display: flex;
+      justify-content: flex-end;
+      padding: 0;
+      margin: 15px -20px 0;
+    }
 
-.buttons button {
-  height: 40px;
-  flex: 1;
-  text-align: center;
-  border-radius: 0;
-}
-`]
+    .buttons button {
+      height: 40px;
+      flex: 1;
+      text-align: center;
+      border-radius: 0;
+    }
+  `,
+];
 
-customElements.define('bookmark-menu', BookmarkMenu)
+customElements.define('bookmark-menu', BookmarkMenu);
 
 class BookmarkEditMenu extends BookmarkMenu {}
-customElements.define('bookmark-edit-menu', BookmarkEditMenu)
+customElements.define('bookmark-edit-menu', BookmarkEditMenu);

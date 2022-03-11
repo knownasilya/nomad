@@ -248,9 +248,9 @@ const BIN_EXTS = [
   'xz',
   'z',
   'zip',
-  'zipx'
-]
+  'zipx',
+];
 
-export function isFilenameBinary (str = '') {
-  return BIN_EXTS.includes(str.split('.').pop())
+export function isFilenameBinary(str = '') {
+  return BIN_EXTS.includes(str.split('.').pop());
 }

@@ -41,5 +41,5 @@ export default {
   focusPage: 'promise',
   setPaneResizeModeEnabled: 'promise',
   openPaneMenu: 'promise',
-  openAttachMenu: 'promise'
-}
+  openAttachMenu: 'promise',
+};

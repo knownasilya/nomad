@@ -1,5 +1,5 @@
-@import "../buttons2.css";
-@import "../inputs.css";
+@import '../buttons2.css';
+@import '../inputs.css';
 
 .popup-wrapper {
   position: fixed;

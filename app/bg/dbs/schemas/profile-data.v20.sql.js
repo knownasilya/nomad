@@ -4,4 +4,4 @@ export default `
 ALTER TABLE archives ADD COLUMN autoPublishLocal INTEGER DEFAULT 0;
 
 PRAGMA user_version = 20;
-`
+`;

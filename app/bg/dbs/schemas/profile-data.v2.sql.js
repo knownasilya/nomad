@@ -5,4 +5,4 @@ export default `
 ALTER TABLE archives_meta ADD COLUMN stagingSizeLessIgnored INTEGER;
 
 PRAGMA user_version = 2;
-`
+`;

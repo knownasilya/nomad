@@ -4,13 +4,13 @@
  * @returns {string}
  */
 export const getEnvVar = function (name) {
-  var ucv = process.env[name.toUpperCase()]
+  var ucv = process.env[name.toUpperCase()];
   if (typeof ucv !== 'undefined') {
-    return ucv
+    return ucv;
   }
-  var lcv = process.env[name.toLowerCase()]
+  var lcv = process.env[name.toLowerCase()];
   if (typeof lcv !== 'undefined') {
-    return lcv
+    return lcv;
   }
-  return undefined
-}
+  return undefined;
+};

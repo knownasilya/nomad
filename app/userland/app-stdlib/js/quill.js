@@ -3,96 +3,94 @@
  */
 
 const encodeLink = (link) =>
-  encodeURI(link)
-    .replace(/\(/i, "%28")
-    .replace(/\)/i, "%29")
+  encodeURI(link).replace(/\(/i, '%28').replace(/\)/i, '%29');
 
-var idCounter = 0
+var idCounter = 0;
 
 class Node {
-  constructor (data) {
-    this.id = ++idCounter
+  constructor(data) {
+    this.id = ++idCounter;
     if (Array.isArray(data)) {
-      this.open = data[0]
-      this.close = data[1]
+      this.open = data[0];
+      this.close = data[1];
     } else if (typeof data === 'string') {
-      this.text = data
+      this.text = data;
     }
-    this.parent = undefined
-    this.children = []
+    this.parent = undefined;
+    this.children = [];
   }
 
-  append (e) {
+  append(e) {
     if (!(e instanceof Node)) {
-      e = new Node(e)
+      e = new Node(e);
     }
     if (e.parent) {
-      e.parent.children = e.parent.children.filter(child => child !== e)
+      e.parent.children = e.parent.children.filter((child) => child !== e);
     }
-    e.parent = this
-    this.children = this.children.concat(e)
+    e.parent = this;
+    this.children = this.children.concat(e);
   }
 
-  render () {
-    var text = ''
+  render() {
+    var text = '';
     if (this.open) {
-      text += this.open
+      text += this.open;
     }
     if (this.text) {
-      text += this.text
+      text += this.text;
     }
     for (var i = 0; i < this.children.length; i++) {
-      text += this.children[i].render()
+      text += this.children[i].render();
     }
     if (this.close) {
-      text += this.close
+      text += this.close;
     }
-    return text
+    return text;
   }
 }
 
 const converters = {
   embed: {
-    image: function(src) {
+    image: function (src) {
       this.append('![image](' + encodeLink(src) + ')');
     },
-    mention: function(mention) {
+    mention: function (mention) {
       this.append(`[${mention.denotationChar}${mention.value}](${mention.id})`);
-    }
+    },
   },
 
   inline: {
-    italic: function() {
+    italic: function () {
       return ['_', '_'];
     },
-    bold: function() {
+    bold: function () {
       return ['**', '**'];
     },
-    strike: function() {
+    strike: function () {
       return ['~~', '~~'];
     },
-    link: function(url) {
+    link: function (url) {
       return ['[', '](' + url + ')'];
     },
   },
 
   block: {
-    header: function({header}) {
+    header: function ({ header }) {
       this.open = '#'.repeat(header) + ' ' + this.open;
     },
-    blockquote: function() {
+    blockquote: function () {
       this.open = '> ' + this.open;
     },
     list: {
-      group: function() {
+      group: function () {
         return new Node(['', '\n']);
       },
-      line: function(attrs, group) {
+      line: function (attrs, group) {
         if (attrs.list === 'bullet') {
           this.open = '- ' + this.open;
-        } else if (attrs.list === "checked") {
+        } else if (attrs.list === 'checked') {
           this.open = '- [x] ' + this.open;
-        } else if (attrs.list === "unchecked") {
+        } else if (attrs.list === 'unchecked') {
           this.open = '- [ ] ' + this.open;
         } else if (attrs.list === 'ordered') {
           group.count = group.count || 0;
@@ -100,26 +98,26 @@ const converters = {
           this.open = count + '. ' + this.open;
         }
       },
-    }
+    },
   },
-}
+};
 
-export function deltaToMarkdown (ops) {
-  var str = convert(ops).render().trim()
+export function deltaToMarkdown(ops) {
+  var str = convert(ops).render().trim();
 
   // HACK strip out any run of newlines
   while (str.includes('\n\n\n')) {
-    str = str.replace('\n\n\n', '\n\n')
+    str = str.replace('\n\n\n', '\n\n');
   }
 
-  return str
-};
+  return str;
+}
 
-function convert (ops) {
+function convert(ops) {
   var group, line, el, activeInline, beginningOfLine;
   var root = new Node();
 
-  function newLine (paragraph) {
+  function newLine(paragraph) {
     el = line = new Node(['', paragraph ? '\n\n' : '\n']);
     root.append(line);
     activeInline = {};
@@ -171,7 +169,7 @@ function convert (ops) {
 
               fn.call(line, op.attributes, group);
               newLine(attr !== 'list');
-              break
+              break;
             }
           }
         }
@@ -181,7 +179,10 @@ function convert (ops) {
           if ((l > 0 || beginningOfLine) && group && ++group.distance >= 2) {
             group = null;
           }
-          applyInlineAttributes(op.attributes, ops[i + 1] && ops[i + 1].attributes);
+          applyInlineAttributes(
+            op.attributes,
+            ops[i + 1] && ops[i + 1].attributes
+          );
           el.append(lines[l]);
           if (l < lines.length - 1) {
             newLine();
@@ -205,12 +206,12 @@ function convert (ops) {
       seen[tag._format] = true;
       if (!attrs[tag._format]) {
         for (var k in seen) {
-          delete activeInline[k]
+          delete activeInline[k];
         }
-        el = tag.parent
+        el = tag.parent;
       }
 
-      tag = tag.parent
+      tag = tag.parent;
     }
 
     for (var attr in attrs) {
@@ -248,10 +249,10 @@ function convert (ops) {
 function hasBlockLevelAttribute(attrs, converters) {
   for (var k in attrs) {
     if (Object.keys(converters.block).includes(k)) {
-      return true
+      return true;
     }
   }
-  return false
+  return false;
 }
 
 // HACK
@@ -259,7 +260,7 @@ function hasBlockLevelAttribute(attrs, converters) {
 // Quill 2.0 removed the formats allowlist for some reason
 // this restores that functionality
 // -prf
-export function quillFormatsHackfix (Quill, formats) {
+export function quillFormatsHackfix(Quill, formats) {
   const BuiltinScroll = Quill.import('blots/scroll');
   class Scroll extends BuiltinScroll {
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */

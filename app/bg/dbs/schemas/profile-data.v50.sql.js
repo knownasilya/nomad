@@ -7,4 +7,4 @@ CREATE TABLE folder_syncs (
 );
 
 PRAGMA user_version = 50;
-`
+`;

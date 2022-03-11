@@ -1,54 +1,59 @@
 /* globals customElements */
-import { LitElement, html, css } from '../vendor/lit-element/lit-element'
-import _get from 'lodash.get'
-import * as bg from './bg-process-rpc'
-import commonCSS from './common.css'
+import { LitElement, html, css } from '../vendor/lit-element/lit-element';
+import _get from 'lodash.get';
+import * as bg from './bg-process-rpc';
+import commonCSS from './common.css';
 
 class DonateMenu extends LitElement {
-  static get properties () {
+  static get properties() {
     return {
-      url: {type: String}
-    }
+      url: { type: String },
+    };
   }
 
-  constructor () {
-    super()
-    this.reset()
+  constructor() {
+    super();
+    this.reset();
   }
 
-  reset () {
-    this.driveInfo = null
+  reset() {
+    this.driveInfo = null;
   }
 
-  async init (params) {
-    this.url = params.url
-    this.driveInfo = (await bg.views.getTabState('active', {driveInfo: true})).driveInfo
-    await this.requestUpdate()
+  async init(params) {
+    this.url = params.url;
+    this.driveInfo = (
+      await bg.views.getTabState('active', { driveInfo: true })
+    ).driveInfo;
+    await this.requestUpdate();
   }
 
-  resolvePaymentLink (paymentLink) {
-    if (!this.url) return paymentLink
+  resolvePaymentLink(paymentLink) {
+    if (!this.url) return paymentLink;
     if (paymentLink.indexOf('://') === -1) {
-      const shouldAddSlash = !this.url.endsWith('/') && !paymentLink.startsWith('/')
-      return `${this.url}${shouldAddSlash ? '/' : ''}${paymentLink}`
+      const shouldAddSlash =
+        !this.url.endsWith('/') && !paymentLink.startsWith('/');
+      return `${this.url}${shouldAddSlash ? '/' : ''}${paymentLink}`;
     }
-    return paymentLink
+    return paymentLink;
   }
 
   // rendering
   // =
 
-  renderDonationLink (paymentLink) {
-    const url = this.resolvePaymentLink(paymentLink)
-    return html`<a href="#" class="link" @click=${e => this.onOpenPage(url)}>${url}</a>`
+  renderDonationLink(paymentLink) {
+    const url = this.resolvePaymentLink(paymentLink);
+    return html`<a href="#" class="link" @click=${(e) => this.onOpenPage(url)}
+      >${url}</a
+    >`;
   }
 
-  render () {
-    var title = _get(this, 'driveInfo.title', 'this site')
-    const paymentLink = String(_get(this, 'driveInfo.links.payment.0.href'))
+  render() {
+    var title = _get(this, 'driveInfo.title', 'this site');
+    const paymentLink = String(_get(this, 'driveInfo.links.payment.0.href'));
 
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css">
+      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
       <div class="wrapper">
         <div class="header">
           <div class="header-info">
@@ -57,58 +62,57 @@ class DonateMenu extends LitElement {
           </div>
         </div>
         <div class="body">
-          <div>
-            Visit their donation page to show your appreciation!
-          </div>
-          <div>
-            ${this.renderDonationLink(paymentLink)}
-          </div>
+          <div>Visit their donation page to show your appreciation!</div>
+          <div>${this.renderDonationLink(paymentLink)}</div>
         </div>
       </div>
-    `
+    `;
   }
 
   // events
   // =
 
-  onOpenPage (href) {
-    bg.shellMenus.createTab(href)
-    bg.shellMenus.close()
+  onOpenPage(href) {
+    bg.shellMenus.createTab(href);
+    bg.shellMenus.close();
   }
 }
-DonateMenu.styles = [commonCSS, css`
-.wrapper {
-  overflow: hidden;
-}
+DonateMenu.styles = [
+  commonCSS,
+  css`
+    .wrapper {
+      overflow: hidden;
+    }
 
-.header {
-  height: auto;
-  line-height: inherit;
-  padding: 10px;
-}
+    .header {
+      height: auto;
+      line-height: inherit;
+      padding: 10px;
+    }
 
-.header-info {
-  display: flex;
-  align-items: baseline;
-  margin: 0;
-}
+    .header-info {
+      display: flex;
+      align-items: baseline;
+      margin: 0;
+    }
 
-.header-info .fa {
-  font-size: 14px;
-  margin: 0 7px 0 4px;
-}
+    .header-info .fa {
+      font-size: 14px;
+      margin: 0 7px 0 4px;
+    }
 
-.header-info h1 {
-  margin: 0;
-  font-size: 14px;
-  overflow: hidden;
-  font-weight: 500;
-}
+    .header-info h1 {
+      margin: 0;
+      font-size: 14px;
+      overflow: hidden;
+      font-weight: 500;
+    }
 
-.body {
-  padding: 10px;
-  overflow-wrap: break-word;
-}
-`]
+    .body {
+      padding: 10px;
+      overflow-wrap: break-word;
+    }
+  `,
+];
 
-customElements.define('donate-menu', DonateMenu)
+customElements.define('donate-menu', DonateMenu);
