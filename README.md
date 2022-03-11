@@ -1,7 +1,7 @@
 Nomad Browser
 ======
 
-Nomad is a peer-to-peer Web browser. It adds new APIs for building hostless applications while remaining compatible with the rest of the Web. [Visit the website.](https://beakerbrowser.com/)
+Nomad is a peer-to-peer Web browser. It adds new APIs for building hostless applications while remaining compatible with the rest of the Web.
 
 Nomad is a fork of the [Beaker Browser](https://beakerbrowser.com/).
 
