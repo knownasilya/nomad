@@ -1,14 +1,16 @@
-import { BrowserWindow } from 'electron'
-import { join as joinPath } from 'path'
-import * as logLib from '../logger'
-const logger = logLib.get().child({category: 'hyper', subcategory: 'filesystem'})
-import hyper from '../hyper/index'
-import * as db from '../dbs/profile-data-db'
-import * as archivesDb from '../dbs/archives'
-import * as trash from './trash'
-import * as modals from '../ui/subwindows/modals'
-import lock from '../../lib/lock'
-import { isSameOrigin } from '../../lib/urls'
+import { BrowserWindow } from 'electron';
+import { join as joinPath } from 'path';
+import * as logLib from '../logger';
+const logger = logLib
+  .get()
+  .child({ category: 'hyper', subcategory: 'filesystem' });
+import hyper from '../hyper/index';
+import * as db from '../dbs/profile-data-db';
+import * as archivesDb from '../dbs/archives';
+import * as trash from './trash';
+import * as modals from '../ui/subwindows/modals';
+import lock from '../../lib/lock';
+import { isSameOrigin } from '../../lib/urls';
 
 // typedefs
 // =
@@ -16,14 +18,14 @@ import { isSameOrigin } from '../../lib/urls'
 /**
  * @typedef {import('../hyper/daemon').DaemonHyperdrive} DaemonHyperdrive
  * @typedef {import('../dbs/archives').LibraryArchiveMeta} LibraryArchiveMeta
- * 
+ *
  * @typedef {Object} DriveConfig
  * @property {string} key
  * @property {string[]} tags
  * @property {Object} [forkOf]
  * @property {string} [forkOf.key]
  * @property {string} [forkOf.label]
- * 
+ *
  * @typedef {Object} DriveIdent
  * @property {boolean} internal
  * @property {boolean} system
@@ -32,9 +34,9 @@ import { isSameOrigin } from '../../lib/urls'
 // globals
 // =
 
-var browsingProfile
-var rootDrive
-var drives = []
+var browsingProfile;
+var rootDrive;
+var drives = [];
 
 // exported api
 // =
@@ -42,80 +44,112 @@ var drives = []
 /**
  * @returns {DaemonHyperdrive}
  */
-export function get () {
-  return rootDrive
+export function get() {
+  return rootDrive;
 }
 
 /**
  * @param {string} url
  * @returns {boolean}
  */
-export function isRootUrl (url) {
-  return isSameOrigin(url, browsingProfile.url) || isSameOrigin(url, 'hyper://private/')
+export function isRootUrl(url) {
+  return (
+    isSameOrigin(url, browsingProfile.url) ||
+    isSameOrigin(url, 'hyper://private/')
+  );
 }
 
 /**
  * @returns {Promise<void>}
  */
-export async function setup () {
-  trash.setup()
+export async function setup() {
+  trash.setup();
 
   // create the root drive as needed
-  var isInitialCreation = false
-  browsingProfile = await db.get(`SELECT * FROM profiles WHERE id = 0`)
-  if (!browsingProfile.url || (typeof browsingProfile.url === 'string' && browsingProfile.url.startsWith('dat:'))) {
-    let drive = await hyper.drives.createNewRootDrive()
-    logger.info('Root drive created', {url: drive.url})
-    await db.run(`UPDATE profiles SET url = ? WHERE id = 0`, [drive.url])
-    browsingProfile.url = drive.url
-    isInitialCreation = true
+  var isInitialCreation = false;
+  browsingProfile = await db.get(`SELECT * FROM profiles WHERE id = 0`);
+  if (
+    !browsingProfile.url ||
+    (typeof browsingProfile.url === 'string' &&
+      browsingProfile.url.startsWith('dat:'))
+  ) {
+    let drive = await hyper.drives.createNewRootDrive();
+    logger.info('Root drive created', { url: drive.url });
+    await db.run(`UPDATE profiles SET url = ? WHERE id = 0`, [drive.url]);
+    browsingProfile.url = drive.url;
+    isInitialCreation = true;
   }
-  if (!browsingProfile.url.endsWith('/')) browsingProfile.url += '/'
+  if (!browsingProfile.url.endsWith('/')) browsingProfile.url += '/';
 
   // load root drive
-  logger.info('Loading root drive', {url: browsingProfile.url})
-  hyper.dns.setLocal('private', browsingProfile.url)
-  rootDrive = await hyper.drives.getOrLoadDrive(browsingProfile.url, {persistSession: true})
+  logger.info('Loading root drive', { url: browsingProfile.url });
+  hyper.dns.setLocal('private', browsingProfile.url);
+  rootDrive = await hyper.drives.getOrLoadDrive(browsingProfile.url, {
+    persistSession: true,
+  });
 
   // default pinned bookmarks
   if (isInitialCreation) {
-    await rootDrive.pda.mkdir('/bookmarks')
-    await rootDrive.pda.writeFile(`/bookmarks/patreon-com-paul_maf_and_andrew.goto`, '', {metadata: {href: 'https://patreon.com/paul_maf_and_andrew', title: 'Support Beaker'}})
-    await rootDrive.pda.writeFile(`/bookmarks/beaker-dev-docs-templates.goto`, '', {metadata: {href: 'https://beaker.dev/docs/templates/', title: 'Hyperdrive Templates'}})
-    await rootDrive.pda.writeFile(`/bookmarks/twitter.goto`, '', {metadata: {href: 'https://twitter.com/', title: 'Twitter'}})
-    await rootDrive.pda.writeFile(`/bookmarks/reddit.goto`, '', {metadata: {href: 'https://reddit.com/', title: 'Reddit'}})
-    await rootDrive.pda.writeFile(`/bookmarks/youtube.goto`, '', {metadata: {href: 'https://youtube.com/', title: 'YouTube'}})
-    await rootDrive.pda.mkdir('/beaker')
-    await rootDrive.pda.writeFile(`/beaker/pins.json`, JSON.stringify([
-      'https://patreon.com/paul_maf_and_andrew',
-      'https://beaker.dev/docs/templates/',
-      'https://twitter.com/',
-      'https://reddit.com/',
-      'https://youtube.com/'
-    ], null, 2))
+    await rootDrive.pda.mkdir('/bookmarks');
+    await rootDrive.pda.writeFile(
+      `/bookmarks/beaker-dev-docs-templates.goto`,
+      '',
+      {
+        metadata: {
+          href: 'https://beaker.dev/docs/templates/',
+          title: 'Hyperdrive Templates',
+        },
+      }
+    );
+    await rootDrive.pda.writeFile(`/bookmarks/twitter.goto`, '', {
+      metadata: { href: 'https://twitter.com/', title: 'Twitter' },
+    });
+    await rootDrive.pda.writeFile(`/bookmarks/reddit.goto`, '', {
+      metadata: { href: 'https://reddit.com/', title: 'Reddit' },
+    });
+    await rootDrive.pda.writeFile(`/bookmarks/youtube.goto`, '', {
+      metadata: { href: 'https://youtube.com/', title: 'YouTube' },
+    });
+    await rootDrive.pda.mkdir('/beaker');
+    await rootDrive.pda.writeFile(
+      `/beaker/pins.json`,
+      JSON.stringify(
+        [
+          'https://beaker.dev/docs/templates/',
+          'https://twitter.com/',
+          'https://reddit.com/',
+          'https://youtube.com/',
+        ],
+        null,
+        2
+      )
+    );
   }
-  
+
   // load drive config
-  let hostKeys = []
+  let hostKeys = [];
   try {
-    drives = JSON.parse(await rootDrive.pda.readFile('/drives.json')).drives
-    hostKeys = hostKeys.concat(drives.map(drive => drive.key))
+    drives = JSON.parse(await rootDrive.pda.readFile('/drives.json')).drives;
+    hostKeys = hostKeys.concat(drives.map((drive) => drive.key));
   } catch (e) {
     if (e.name !== 'NotFoundError') {
-      logger.info('Error while reading the drive configuration at /drives.json', {error: e.toString()})
+      logger.info(
+        'Error while reading the drive configuration at /drives.json',
+        { error: e.toString() }
+      );
     }
   }
-  hyper.drives.ensureHosting(hostKeys)
-  await migrateAddressBook()
+  hyper.drives.ensureHosting(hostKeys);
+  await migrateAddressBook();
 }
 
 /**
- * @param {string} url 
+ * @param {string} url
  * @returns {DriveIdent | Promise<DriveIdent>}
  */
-export function getDriveIdent (url) {
-  var system = isRootUrl(url)
-  return {system, internal: system}
+export function getDriveIdent(url) {
+  var system = isRootUrl(url);
+  return { system, internal: system };
 }
 
 /**
@@ -123,27 +157,27 @@ export function getDriveIdent (url) {
  * @param {boolean} [opts.includeSystem]
  * @returns {Array<DriveConfig>}
  */
-export function listDrives ({includeSystem} = {includeSystem: false}) {
-  var d = drives.slice()
+export function listDrives({ includeSystem } = { includeSystem: false }) {
+  var d = drives.slice();
   if (includeSystem) {
-    d.unshift({key: 'private'})
+    d.unshift({ key: 'private' });
   }
-  return d
+  return d;
 }
 
 /**
  * @returns {Promise<Array<LibraryArchiveMeta>>}
  */
-export async function listDriveMetas () {
-  return Promise.all(drives.map(d => archivesDb.getMeta(d.key)))
+export async function listDriveMetas() {
+  return Promise.all(drives.map((d) => archivesDb.getMeta(d.key)));
 }
 
 /**
  * @param {string} key
  * @returns {DriveConfig}
  */
-export function getDriveConfig (key) {
-  return listDrives().find(d => d.key === key)
+export function getDriveConfig(key) {
+  return listDrives().find((d) => d.key === key);
 }
 
 /**
@@ -153,29 +187,36 @@ export function getDriveConfig (key) {
  * @param {string[]} [opts.tags]
  * @returns {Promise<void>}
  */
-export async function configDrive (url, {forkOf, tags} = {forkOf: undefined, tags: undefined}) {
-  var release = await lock('filesystem:drives')
+export async function configDrive(
+  url,
+  { forkOf, tags } = { forkOf: undefined, tags: undefined }
+) {
+  var release = await lock('filesystem:drives');
   try {
-    var key = await hyper.drives.fromURLToKey(url, true)
-    var driveCfg = drives.find(d => d.key === key)
+    var key = await hyper.drives.fromURLToKey(url, true);
+    var driveCfg = drives.find((d) => d.key === key);
     if (!driveCfg) {
-      let drive = await hyper.drives.getOrLoadDrive(url)
-      let manifest = await drive.pda.readManifest().catch(_ => ({}))
+      let drive = await hyper.drives.getOrLoadDrive(url);
+      let manifest = await drive.pda.readManifest().catch((_) => ({}));
 
-      driveCfg = /** @type DriveConfig */({key})
-      if (tags && Array.isArray(tags) && tags.every(t => typeof t === 'string')) {
-        driveCfg.tags = tags.filter(Boolean)
+      driveCfg = /** @type DriveConfig */ ({ key });
+      if (
+        tags &&
+        Array.isArray(tags) &&
+        tags.every((t) => typeof t === 'string')
+      ) {
+        driveCfg.tags = tags.filter(Boolean);
       }
       if (forkOf && typeof forkOf === 'object') {
-        driveCfg.forkOf = forkOf
+        driveCfg.forkOf = forkOf;
       }
 
       if (!drive.writable) {
         // announce the drive
         drive.session.drive.configureNetwork({
           announce: true,
-          lookup: true
-        })
+          lookup: true,
+        });
       }
 
       // for forks, we need to ensure:
@@ -183,41 +224,57 @@ export async function configDrive (url, {forkOf, tags} = {forkOf: undefined, tag
       // 2. there's a local forkOf.label
       // 3. the parent is saved
       if (manifest.forkOf && typeof manifest.forkOf === 'string') {
-        if (!driveCfg.forkOf) driveCfg.forkOf = {key: undefined, label: undefined}
-        driveCfg.forkOf.key = await hyper.drives.fromURLToKey(manifest.forkOf, true)
+        if (!driveCfg.forkOf)
+          driveCfg.forkOf = { key: undefined, label: undefined };
+        driveCfg.forkOf.key = await hyper.drives.fromURLToKey(
+          manifest.forkOf,
+          true
+        );
         if (!driveCfg.forkOf.label) {
-          let message = 'Choose a label to save this fork under (e.g. "dev" or "bobs-changes")'
-          let promptRes = await modals.create(BrowserWindow.getFocusedWindow().webContents, 'prompt', {message}).catch(e => false)
-          if (!promptRes || !promptRes.value) return
-          driveCfg.forkOf.label = promptRes.value
+          let message =
+            'Choose a label to save this fork under (e.g. "dev" or "bobs-changes")';
+          let promptRes = await modals
+            .create(BrowserWindow.getFocusedWindow().webContents, 'prompt', {
+              message,
+            })
+            .catch((e) => false);
+          if (!promptRes || !promptRes.value) return;
+          driveCfg.forkOf.label = promptRes.value;
         }
 
-        let parentDriveCfg = drives.find(d => d.key === driveCfg.forkOf.key)
+        let parentDriveCfg = drives.find((d) => d.key === driveCfg.forkOf.key);
         if (!parentDriveCfg) {
-          drives.push({key: driveCfg.forkOf.key})
+          drives.push({ key: driveCfg.forkOf.key });
         }
       }
 
-      drives.push(driveCfg)
+      drives.push(driveCfg);
     } else {
       if (typeof tags !== 'undefined') {
-        if (tags && Array.isArray(tags) && tags.every(t => typeof t === 'string')) {
-          driveCfg.tags = tags.filter(Boolean)
+        if (
+          tags &&
+          Array.isArray(tags) &&
+          tags.every((t) => typeof t === 'string')
+        ) {
+          driveCfg.tags = tags.filter(Boolean);
         } else {
-          delete driveCfg.tags
+          delete driveCfg.tags;
         }
       }
       if (typeof forkOf !== 'undefined') {
         if (forkOf && typeof forkOf === 'object') {
-          driveCfg.forkOf = forkOf
+          driveCfg.forkOf = forkOf;
         } else {
-          delete driveCfg.forkOf
+          delete driveCfg.forkOf;
         }
       }
     }
-    await rootDrive.pda.writeFile('/drives.json', JSON.stringify({drives}, null, 2))
+    await rootDrive.pda.writeFile(
+      '/drives.json',
+      JSON.stringify({ drives }, null, 2)
+    );
   } finally {
-    release()
+    release();
   }
 }
 
@@ -225,24 +282,27 @@ export async function configDrive (url, {forkOf, tags} = {forkOf: undefined, tag
  * @param {string} url
  * @returns {Promise<void>}
  */
-export async function removeDrive (url) {
-  var release = await lock('filesystem:drives')
+export async function removeDrive(url) {
+  var release = await lock('filesystem:drives');
   try {
-    var key = await hyper.drives.fromURLToKey(url, true)
-    var driveIndex = drives.findIndex(drive => drive.key === key)
-    if (driveIndex === -1) return
-    let drive = await hyper.drives.getOrLoadDrive(url)
+    var key = await hyper.drives.fromURLToKey(url, true);
+    var driveIndex = drives.findIndex((drive) => drive.key === key);
+    if (driveIndex === -1) return;
+    let drive = await hyper.drives.getOrLoadDrive(url);
     if (!drive.writable) {
       // unannounce the drive
       drive.session.drive.configureNetwork({
         announce: false,
-        lookup: true
-      })
+        lookup: true,
+      });
     }
-    drives.splice(driveIndex, 1)
-    await rootDrive.pda.writeFile('/drives.json', JSON.stringify({drives}, null, 2))
+    drives.splice(driveIndex, 1);
+    await rootDrive.pda.writeFile(
+      '/drives.json',
+      JSON.stringify({ drives }, null, 2)
+    );
   } finally {
-    release()
+    release();
   }
 }
 
@@ -254,55 +314,84 @@ export async function removeDrive (url) {
  * @param {DaemonHyperdrive} [drive]
  * @returns {Promise<string>}
  */
-export async function getAvailableName (containingPath, basename, ext = undefined, joiningChar = '-', drive = rootDrive) {
+export async function getAvailableName(
+  containingPath,
+  basename,
+  ext = undefined,
+  joiningChar = '-',
+  drive = rootDrive
+) {
   for (let i = 1; i < 1e9; i++) {
-    let name = ((i === 1) ? basename : `${basename}${joiningChar}${i}`) + (ext ? `.${ext}` : '')
-    let st = await stat(joinPath(containingPath, name), drive)
-    if (!st) return name
+    let name =
+      (i === 1 ? basename : `${basename}${joiningChar}${i}`) +
+      (ext ? `.${ext}` : '');
+    let st = await stat(joinPath(containingPath, name), drive);
+    if (!st) return name;
   }
   // yikes if this happens
-  throw new Error('Unable to find an available name for ' + basename)
+  throw new Error('Unable to find an available name for ' + basename);
 }
 
-export async function ensureDir (path, drive = rootDrive) {
+export async function ensureDir(path, drive = rootDrive) {
   try {
-    let st = await stat(path, drive)
+    let st = await stat(path, drive);
     if (!st) {
-      logger.info(`Creating directory ${path}`)
-      await drive.pda.mkdir(path)
+      logger.info(`Creating directory ${path}`);
+      await drive.pda.mkdir(path);
     } else if (!st.isDirectory()) {
-      logger.error('Warning! Filesystem expects a folder but an unexpected file exists at this location.', {path})
+      logger.error(
+        'Warning! Filesystem expects a folder but an unexpected file exists at this location.',
+        { path }
+      );
     }
   } catch (e) {
-    logger.error('Filesystem failed to make directory', {path: '' + path, error: e.toString()})
+    logger.error('Filesystem failed to make directory', {
+      path: '' + path,
+      error: e.toString(),
+    });
   }
 }
 
-export async function migrateAddressBook () {
-  var addressBook
-  try { addressBook = await rootDrive.pda.readFile('/address-book.json').then(JSON.parse) }
-  catch (e) {
-    return
+export async function migrateAddressBook() {
+  var addressBook;
+  try {
+    addressBook = await rootDrive.pda
+      .readFile('/address-book.json')
+      .then(JSON.parse);
+  } catch (e) {
+    return;
   }
-  addressBook.profiles = addressBook.profiles && Array.isArray(addressBook.profiles) ? addressBook.profiles : []
-  addressBook.contacts = addressBook.contacts && Array.isArray(addressBook.contacts) ? addressBook.contacts : []
-  var profiles = addressBook.profiles.concat(addressBook.contacts)
+  addressBook.profiles =
+    addressBook.profiles && Array.isArray(addressBook.profiles)
+      ? addressBook.profiles
+      : [];
+  addressBook.contacts =
+    addressBook.contacts && Array.isArray(addressBook.contacts)
+      ? addressBook.contacts
+      : [];
+  var profiles = addressBook.profiles.concat(addressBook.contacts);
   for (let profile of profiles) {
-    let existing = drives.find(d => d.key === profile.key)
+    let existing = drives.find((d) => d.key === profile.key);
     if (!existing) {
-      drives.push({key: profile.key, tags: ['contact']})
+      drives.push({ key: profile.key, tags: ['contact'] });
     } else {
-      existing.tags = (existing.tags || []).concat(['contact'])
+      existing.tags = (existing.tags || []).concat(['contact']);
     }
   }
-  await rootDrive.pda.writeFile('/drives.json', JSON.stringify({drives}, null, 2))
-  await rootDrive.pda.unlink('/address-book.json')
+  await rootDrive.pda.writeFile(
+    '/drives.json',
+    JSON.stringify({ drives }, null, 2)
+  );
+  await rootDrive.pda.unlink('/address-book.json');
 }
 
 // internal methods
 // =
 
-async function stat (path, drive = rootDrive) {
-  try { return await drive.pda.stat(path) }
-  catch (e) { return null }
+async function stat(path, drive = rootDrive) {
+  try {
+    return await drive.pda.stat(path);
+  } catch (e) {
+    return null;
+  }
 }
