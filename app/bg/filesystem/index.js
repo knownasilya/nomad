@@ -96,7 +96,7 @@ export async function setup() {
       '',
       {
         metadata: {
-          href: 'https://beaker.dev/docs/templates/',
+          href: 'https://nomad.pages.dev/docs/templates/',
           title: 'Hyperdrive Templates',
         },
       }
@@ -115,7 +115,7 @@ export async function setup() {
       `/beaker/pins.json`,
       JSON.stringify(
         [
-          'https://beaker.dev/docs/templates/',
+          'https://nomad.pages.dev/docs/templates/',
           'https://twitter.com/',
           'https://reddit.com/',
           'https://youtube.com/',
