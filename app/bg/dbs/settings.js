@@ -40,6 +40,7 @@ export const setup = async function (opts) {
     new_tabs_in_foreground: 0,
     run_background: 1,
     default_zoom: 0,
+    launch_on_startup: 0,
     browser_theme: 'system',
     analytics_enabled: 1,
     extended_network_index: 'default',

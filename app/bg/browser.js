@@ -20,6 +20,7 @@ import toIco from 'to-ico';
 import emitStream from 'emit-stream';
 import EventEmitter from 'events';
 import LRU from 'lru';
+import AutoLaunch from 'auto-launch';
 const exec = require('util').promisify(require('child_process').exec);
 import * as logLib from './logger';
 import * as adblocker from './adblocker';
@@ -202,6 +203,10 @@ export async function setup() {
     });
     cb(request.errorCode);
   });
+
+  // Ensure run on startup is set correctly
+  const runOnStartup = getSetting('launch_on_startup');
+  await setRunOnStartup(runOnStartup);
 }
 
 export const WEBAPI = {
@@ -211,6 +216,7 @@ export const WEBAPI = {
   getDaemonNetworkStatus,
   checkForUpdates,
   restartBrowser,
+  setRunOnStartup,
 
   getSetting,
   getSettings,
@@ -941,5 +947,45 @@ function onCompleted(details) {
     set(details.responseHeaders['Content-Type']);
   } else if ('content-type' in details.responseHeaders) {
     set(details.responseHeaders['content-type']);
+  }
+}
+
+async function setRunOnStartup(desiredState) {
+  if (IS_LINUX) {
+    const autoLauncher = new AutoLaunch({
+      name: 'Beaker',
+      path: process.execPath,
+    });
+    const currentState = await autoLauncher.isEnabled();
+    if (currentState !== desiredState) {
+      if (desiredState === true) {
+        await autoLauncher.enable();
+      } else {
+        await autoLauncher.disable();
+      }
+    }
+    return;
+  }
+  //using setLoginItems
+  const opts = {};
+  if (process.platform !== 'darwin') {
+    // mac
+    opts.path = path.resolve(
+      path.dirname(process.execPath),
+      '..',
+      'Update.exe'
+    );
+    opts.args = [
+      '--processStart',
+      `"${path.basename(process.execPath)}"`,
+      '--process-start-args',
+      `"--hidden"`,
+    ];
+  }
+  const currentState = app.getLoginItemSettings(opts);
+
+  if (currentState !== desiredState) {
+    opts.openAtLogin = desiredState;
+    app.setLoginItemSettings(opts);
   }
 }

@@ -5,6 +5,7 @@ export default {
   getDaemonNetworkStatus: 'promise',
   checkForUpdates: 'promise',
   restartBrowser: 'sync',
+  setRunOnStartup: 'promise',
 
   getSettings: 'promise',
   getSetting: 'promise',

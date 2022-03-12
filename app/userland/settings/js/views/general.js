@@ -77,15 +77,15 @@ class GeneralSettingsView extends LitElement {
       </div>
       <div class="form-group">
         <h2>Browser Settings</h2>
-        ${this.renderRunBackgroundSettings()} ${this.renderProtocolSettings()}
-        ${this.renderThemeSettings()}
+        ${this.renderRunBackgroundSettings()} ${this.renderStartupSettings()}
+        ${this.renderProtocolSettings()} ${this.renderThemeSettings()}
       </div>
       <div class="form-group">
         <h2>Search Settings</h2>
         ${this.renderSearchSettings()}
       </div>
       <div class="form-group">
-        <h2>Beaker Analytics</h2>
+        <h2>Nomad Analytics</h2>
         ${this.renderAnalyticsSettings()}
       </div>
     `;
@@ -277,7 +277,7 @@ class GeneralSettingsView extends LitElement {
             ?checked=${this.settings.custom_start_page === 'blank'}
             @change=${this.onCustomStartPageChange}
           />
-          <label for="customStartPage1"> Show a new tab </label>
+          <label for="customStartPage1">Show a new tab</label>
         </div>
         <div class="radio-item">
           <input
@@ -298,7 +298,7 @@ class GeneralSettingsView extends LitElement {
 
   renderRunBackgroundSettings() {
     return html`
-      <div class="section on-startup">
+      <div class="section run-background">
         <p>
           Running in the background helps keep your data online even if you're
           not using Beaker.
@@ -311,10 +311,29 @@ class GeneralSettingsView extends LitElement {
             ?checked=${this.settings.run_background == 1}
             @change=${this.onRunBackgroundToggle}
           />
-          <label for="runBackground"> Let Beaker run in the background </label>
+          <label for="runBackground">Let Nomad run in the background</label>
         </div>
       </div>
     `;
+  }
+
+  renderStartupSettings() {
+    return html`<div class="section on-startup">
+      <p>
+        When running in the background it's helpful to also have the browser
+        open on startup of your computer.
+      </p>
+
+      <div class="radio-item">
+        <input
+          type="checkbox"
+          id="onStart"
+          ?checked=${this.settings.launch_on_startup == 1}
+          @change=${this.onLaunchOnStartupToggle}
+        />
+        <label for="onStart">Launch Nomad on computer startup</label>
+      </div>
+    </div>`;
   }
 
   renderNewTabSettings() {
@@ -425,7 +444,7 @@ class GeneralSettingsView extends LitElement {
     };
 
     return html` <div class="section">
-      <p>Set Beaker as the default browser for:</p>
+      <p>Set Nomad as the default browser for:</p>
 
       ${Object.keys(this.defaultProtocolSettings).map(
         (proto) => html`
@@ -521,7 +540,7 @@ class GeneralSettingsView extends LitElement {
 
         <ul>
           <li>An anonymous ID</li>
-          <li>Your Beaker version, e.g. ${this.browserInfo.version}</li>
+          <li>Your Nomad version, e.g. ${this.browserInfo.version}</li>
           <li>Your operating system, e.g. Windows 10</li>
         </ul>
       </div>
@@ -602,6 +621,13 @@ class GeneralSettingsView extends LitElement {
   onRunBackgroundToggle(e) {
     this.settings.run_background = this.settings.run_background == 1 ? 0 : 1;
     beaker.browser.setSetting('run_background', this.settings.run_background);
+    toast.create('Setting updated');
+  }
+
+  async onLaunchOnStartupToggle(e) {
+    const desiredState = e.target.checked;
+    beaker.browser.setSetting('launch_on_startup', desiredState ? 1 : 0);
+    await beaker.browser.setRunOnStartup(desiredState);
     toast.create('Setting updated');
   }
 
