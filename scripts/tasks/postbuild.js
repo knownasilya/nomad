@@ -1,6 +1,5 @@
-var gulp = require('gulp');
-var jetpack = require('fs-jetpack');
-var run = require('./util-run');
+const gulp = require('gulp');
+const jetpack = require('fs-jetpack');
 
 gulp.task(
   'postbuild',
@@ -9,25 +8,22 @@ gulp.task(
     // but the auto updater expects 'beaker-browser-{version}{ext}'
     // couldnt figure out how to reconfig the builder, so just rename the output assets
 
-    var cwd = jetpack.cwd('../dist');
-    var names = cwd.list();
+    const cwd = jetpack.cwd('../dist');
+    const names = cwd.list();
+
     names.forEach(function (name) {
       // windows assets:
-      if (
-        name.indexOf('Beaker Browser Setup') === 0 &&
-        name.indexOf('.exe') !== -1
-      ) {
-        var newName =
-          'beaker-browser-setup-' + name.slice('Beaker Browser Setup '.length);
+      if (name.indexOf('Nomad Setup') === 0 && name.indexOf('.exe') !== -1) {
+        let newName = 'nomad-setup-' + name.slice('Nomad Setup '.length);
         return cwd.move(name, newName);
       }
 
       // osx assets:
       if (
-        name.indexOf('Beaker Browser') === 0 &&
+        name.indexOf('Nomad') === 0 &&
         (name.indexOf('.dmg') !== -1 || name.indexOf('-mac.zip') !== -1)
       ) {
-        var newName = 'beaker-browser' + name.slice('Beaker Browser'.length);
+        let newName = 'beaker' + name.slice('Nomad'.length);
         return cwd.move(name, newName);
       }
     });
