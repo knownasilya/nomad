@@ -946,7 +946,7 @@ export function buildWindowMenu(opts = {}) {
           if (win)
             tabManager.create(
               win,
-              'https://github.com/beakerbrowser/beaker/issues',
+              'https://github.com/knownasilya/nomad/issues',
               { setActive: true }
             );
         },
@@ -958,7 +958,7 @@ export function buildWindowMenu(opts = {}) {
           if (win)
             tabManager.create(
               win,
-              'https://github.com/beakerbrowser/beaker/discussions',
+              'https://github.com/knownasilya/nomad/discussions',
               { setActive: true }
             );
         },
