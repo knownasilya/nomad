@@ -54,7 +54,7 @@ class SetupModal extends LitElement {
       <div class="wrapper">
         <div class="intro">
           <img class="intro-logo" src="beaker://assets/logo" />
-          <h1 class="intro-title">Welcome to Beaker</h1>
+          <h1 class="intro-title">Welcome to Nomad</h1>
           <p class="intro-text">The browser that <strong>does more</strong>.</p>
         </div>
 
@@ -77,7 +77,7 @@ class SetupModal extends LitElement {
       <div class="wrapper">
         <div class="intro">
           <h1 class="intro-title" style="margin: 10px 0 30px; font-size: 52px;">
-            What can Beaker do?
+            What can Nomad do?
           </h1>
           <div class="feature feat1">
             <span class="feature-icon fas fa-fw fa-magic"></span>

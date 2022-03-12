@@ -55,7 +55,7 @@ export const setup = async function (opts) {
         name: 'DuckDuckGo',
         url: 'https://www.duckduckgo.com/?q=',
       },
-      { name: 'Beaker', url: 'beaker://desktop/?q=' },
+      { name: 'Nomad', url: 'beaker://desktop/?q=' },
       { name: 'Google', url: 'https://www.google.com/search?q=' },
     ],
     adblock_lists: [

@@ -1,6 +1,6 @@
 # Captured April 17 2019
 # Stripped out all entires which are not fully-qualified
-# Commented out all items not yet supported by Beaker
+# Commented out all items not yet supported by Nomad
 # -prf
 
 

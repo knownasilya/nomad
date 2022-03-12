@@ -37,11 +37,11 @@ h1 strong {
 </style>
 <h1><strong>License</strong></h1>
 <div class="license">
-  <p>Beaker is provided by Blue Link Labs, Inc.</p>
+  <p>Nomad is provided by Blue Link Labs, Inc.</p>
   <ul>
-    <li>Beaker Browser is distributed under the MIT license.</li>
+    <li>Nomad Browser is distributed under the MIT license.</li>
     <li>You are personally responsible for the content you share.</li>
-    <li>Your IP address is publicly available while using Beaker Browser.</li>
+    <li>Your IP address is publicly available while using Nomad Browser.</li>
     <li>We collect anonymized usage statistics if you don't opt out.</li>
   </ul>
   <h2>MIT License</h2>

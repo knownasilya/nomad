@@ -296,7 +296,7 @@ export default {
     },
     {
       name: 'system',
-      help: 'Beaker system info commands',
+      help: 'Nomad system info commands',
       subcommands: [
         {
           name: 'fs_audit_stream',

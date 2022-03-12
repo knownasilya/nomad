@@ -99,7 +99,7 @@ class GeneralSettingsView extends LitElement {
             <span class="fas fa-exclamation-triangle"></span> The Hyperdrive
             Daemon is Not Active
           </h2>
-          <p>The "daemon" runs Beaker's Hyperdrive networking.</p>
+          <p>The "daemon" runs Nomad's Hyperdrive networking.</p>
           <p>
             <button @click=${this.onClickRestartDaemon}>
               Restart the Daemon
@@ -118,14 +118,14 @@ class GeneralSettingsView extends LitElement {
       return html`
         <div class="section">
           <p class="message info">
-            Sorry! Beaker auto-updates are only supported on the production
-            build for macOS and Windows.
+            Sorry! Nomad auto-updates are only supported on the production build
+            for macOS and Windows.
           </p>
 
           <p>
-            To get the most recent version of Beaker, you'll need to
-            <a href="https://github.com/beakerbrowser/beaker">
-              build Beaker from source</a
+            To get the most recent version of Nomad, you'll need to
+            <a href="https://github.com/knownasilya/nomad">
+              build Nomad from source</a
             >.
           </p>
         </div>
@@ -158,7 +158,7 @@ class GeneralSettingsView extends LitElement {
 
               <span class="up-to-date">
                 <span class="fa fa-check"></span>
-                Beaker v${this.browserInfo.version} is up-to-date
+                Nomad v${this.browserInfo.version} is up-to-date
               </span>
             </p>
 
@@ -206,7 +206,7 @@ class GeneralSettingsView extends LitElement {
               <button class="btn" disabled>Updating</button>
               <span class="version-info">
                 <span class="spinner"></span>
-                Downloading the latest version of Beaker...
+                Downloading the latest version of Nomad...
               </span>
             </p>
             <p>${this.renderAutoUpdateCheckbox()}</p>
@@ -224,7 +224,7 @@ class GeneralSettingsView extends LitElement {
               </button>
               <span class="version-info">
                 <i class="fa fa-arrow-circle-o-up"></i>
-                <strong>New version available.</strong> Restart Beaker to
+                <strong>New version available.</strong> Restart Nomad to
                 install.
               </span>
             </p>
@@ -266,7 +266,7 @@ class GeneralSettingsView extends LitElement {
   renderOnStartupSettings() {
     return html`
       <div class="section">
-        <p>When Beaker starts</p>
+        <p>When Nomad starts</p>
 
         <div class="radio-item">
           <input
@@ -301,7 +301,7 @@ class GeneralSettingsView extends LitElement {
       <div class="section run-background">
         <p>
           Running in the background helps keep your data online even if you're
-          not using Beaker.
+          not using Nomad.
         </p>
 
         <div class="radio-item">

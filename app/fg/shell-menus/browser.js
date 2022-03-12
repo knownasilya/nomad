@@ -43,7 +43,7 @@ class BrowserMenu extends LitElement {
         <div class="section auto-updater">
           <div class="menu-item auto-updater" @click=${this.onClickRestart}>
             <i class="fa fa-arrow-circle-up"></i>
-            <span class="label">Restart to update Beaker</span>
+            <span class="label">Restart to update Nomad</span>
           </div>
         </div>
       `;

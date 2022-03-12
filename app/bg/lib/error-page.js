@@ -189,14 +189,14 @@ export default function (e) {
         break;
       case -501:
         title = 'Your connection is not secure';
-        info = `<p>Beaker cannot establish a secure connection to the server for <strong>${origin}</strong>.</p>`;
+        info = `<p>Nomad cannot establish a secure connection to the server for <strong>${origin}</strong>.</p>`;
         icon = 'fa-close warning';
         button =
           '<a class="btn right" href="javascript:window.history.back()">Go back</a>';
         break;
       case 504:
         icon = 'fa-share-alt';
-        title = `Beaker is unable to access this ${e.resource} right now.`;
+        title = `Nomad is unable to access this ${e.resource} right now.`;
         errorDescription = `The p2p ${e.resource} was not reachable on the network.`;
         break;
     }

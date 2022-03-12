@@ -104,7 +104,7 @@ class LocationBar extends LitElement {
           </div>
           <div class="list">
             ${searchLink(
-              'Beaker',
+              'Nomad',
               `beaker://desktop/?q=${encodeURIComponent(this.query)}`
             )}
             ${searchLink(
@@ -146,7 +146,7 @@ class LocationBar extends LitElement {
               `https://reddit.com/search?q=${encodeURIComponent(this.query)}`
             )}
             ${
-              '' /* TODO restore at some point searchLink('Beaker', `beaker://search/?q=${encodeURIComponent(this.query)}`) */
+              '' /* TODO restore at some point searchLink('Nomad', `beaker://search/?q=${encodeURIComponent(this.query)}`) */
             }
           </div>
         </div>

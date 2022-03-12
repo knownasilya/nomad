@@ -253,13 +253,13 @@ export class Pane extends EventEmitter {
         }
       }
       if (urlp.protocol === 'beaker:') {
-        if (urlp.hostname === 'diff') return 'Beaker Diff/Merge Tool';
-        if (urlp.hostname === 'explorer') return 'Beaker Files Explorer';
-        if (urlp.hostname === 'history') return 'Beaker History';
-        if (urlp.hostname === 'library') return 'Beaker Library';
-        if (urlp.hostname === 'settings') return 'Beaker Settings';
-        if (urlp.hostname === 'webterm') return 'Beaker Webterm';
-        return 'Beaker';
+        if (urlp.hostname === 'diff') return 'Nomad Diff/Merge Tool';
+        if (urlp.hostname === 'explorer') return 'Nomad Files Explorer';
+        if (urlp.hostname === 'history') return 'Nomad History';
+        if (urlp.hostname === 'library') return 'Nomad Library';
+        if (urlp.hostname === 'settings') return 'Nomad Settings';
+        if (urlp.hostname === 'webterm') return 'Nomad Webterm';
+        return 'Nomad';
       }
       return hostname + (urlp.port ? `:${urlp.port}` : '');
     } catch (e) {

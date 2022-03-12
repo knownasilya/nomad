@@ -17,7 +17,7 @@ customElements.define(
 
     render(shadow) {
       shadow.innerHTML = `
-<img id="logo" src="beaker://assets/img/logo.png">
+<img id="logo" src="beaker://assets/logo">
 <h1><span>Welcome</span> <span>to</span> <span>Nomad</span></h1>
 <a>Get Started &gt;</a>
 <style>
@@ -31,7 +31,6 @@ customElements.define(
     width: 100vw;
     background: #334;
     color: #fff;
-    opacity: 1;
     transition: opacity 0.5s;
   }
   :host([fadeout]) {
@@ -74,7 +73,6 @@ customElements.define(
     font-weight: 200;
     color: #dfdfff;
     cursor: pointer;
-    opacity: 0;
     animation: fade-in 2s 1;
     animation-fill-mode: forwards;
     animation-timing-function: cubic;
@@ -87,11 +85,10 @@ customElements.define(
   #logo {
     position: fixed;
     left: 50%;
-    top: 35px;
+    top: 50px;
     transform: translateX(-50%);
-    width: 300px;
-    height: 300px;
-    background: #334;
+    width: 250px;
+    height: 250px;
   }
 </style>
     `;

@@ -79,7 +79,7 @@ export function buildWindowMenu(opts = {}) {
   const isWritable = driveInfo && driveInfo.writable;
 
   var darwinMenu = {
-    label: 'Beaker',
+    label: 'Nomad',
     submenu: [
       {
         label: 'Preferences',
@@ -93,7 +93,7 @@ export function buildWindowMenu(opts = {}) {
       { type: 'separator' },
       { label: 'Services', role: 'services', submenu: [] },
       { type: 'separator' },
-      { label: 'Hide Beaker', accelerator: 'Cmd+H', role: 'hide' },
+      { label: 'Hide Nomad', accelerator: 'Cmd+H', role: 'hide' },
       { label: 'Hide Others', accelerator: 'Cmd+Alt+H', role: 'hideothers' },
       { label: 'Show All', role: 'unhide' },
       { type: 'separator' },
@@ -929,7 +929,7 @@ export function buildWindowMenu(opts = {}) {
     submenu: [
       {
         id: 'beakerHelp',
-        label: 'Beaker Help',
+        label: 'Nomad Help',
         accelerator: 'F1',
         click: function (item) {
           if (win)

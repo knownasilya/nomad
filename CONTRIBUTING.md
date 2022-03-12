@@ -63,7 +63,7 @@ To debug a built-in pages (e.g. the Settings or Library pages), press `CmdOrCtrl
 
 ## Submitting code
 
-Any code change should be submitted as a pull request. The description should explain what the code does and give steps to execute it. The pull request should also contain tests, if applicable. For example, a PR that changes a part of the Beaker UI will likely not need tests, but a PR that updates Beaker's networking stack would.
+Any code change should be submitted as a pull request. The description should explain what the code does and give steps to execute it. The pull request should also contain tests, if applicable. For example, a PR that changes a part of the Nomad UI will likely not need tests, but a PR that updates Nomad's networking stack would.
 
 ## Code review process
 

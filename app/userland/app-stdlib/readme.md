@@ -1,6 +1,6 @@
-# Beaker Applications Standard Library
+# Nomad Applications Standard Library
 
-A collection of JS and Web Components which are used across Beaker's default applications.
+A collection of JS and Web Components which are used across Nomad's default applications.
 
 ## Scripts
 

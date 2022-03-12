@@ -126,7 +126,7 @@ export class EditBookmarkPopup extends BasePopup {
             id="href-input"
             name="href"
             value="${this.bookmark?.href || ''}"
-            placeholder="E.g. beakerbrowser.com"
+            placeholder="E.g. example.com"
           />
 
           <label for="title-input">Title</label>
@@ -136,7 +136,7 @@ export class EditBookmarkPopup extends BasePopup {
             id="title-input"
             name="title"
             value="${this.bookmark?.title || ''}"
-            placeholder="E.g. Beaker Browser"
+            placeholder="E.g. Example Site"
           />
 
           ${typeof beaker.bookmarks === 'undefined'

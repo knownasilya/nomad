@@ -338,13 +338,13 @@ export const protocolHandler = async function (request, respond) {
         ) {
           return respondError(404, 'File Not Available', {
             errorDescription: 'File Not Available',
-            errorInfo: `Beaker could not find any peers to access ${urlp.path}`,
+            errorInfo: `Nomad could not find any peers to access ${urlp.path}`,
             title: 'File Not Available',
           });
         }
         return respondError(404, 'File Not Found', {
           errorDescription: 'File Not Found',
-          errorInfo: `Beaker could not find the file at ${urlp.path}`,
+          errorInfo: `Nomad could not find the file at ${urlp.path}`,
           title: 'File Not Found',
         });
       }

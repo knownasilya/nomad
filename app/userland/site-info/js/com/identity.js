@@ -34,7 +34,7 @@ class Identity extends LitElement {
             ${this.cert.type === 'beaker'
               ? html`
                   <div class="field-group">
-                    This is a builtin interface of Beaker
+                    This is a builtin interface of Nomad
                   </div>
                 `
               : ''}

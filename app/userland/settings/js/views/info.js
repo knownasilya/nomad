@@ -40,7 +40,7 @@ class InfoSettingsView extends LitElement {
     return html`
       <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
       <div class="section">
-        <h2 id="information" class="subtitle-heading">About Beaker</h2>
+        <h2 id="information" class="subtitle-heading">About Nomad</h2>
         <p>
           <strong>Version</strong>: ${this.browserInfo.version}
           <button
