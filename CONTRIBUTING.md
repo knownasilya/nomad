@@ -2,19 +2,19 @@
 
 ## Introduction
 
-Thanks for considering contributing to Beaker!
+Thanks for considering contributing to Nomad!
 
 We welcome any type of contribution, not only code. You can help with
+
 - **QA**: file bug reports, the more details you can give the better (e.g. screenshots with the console open)
 - **Community**: presenting the project at meetups, organizing a dedicated meetup for the local community, ...
-- **Code**: take a look at the [open issues](https://github.com/beakerbrowser/beaker/issues). Even if you can't write code, commenting on them, showing that you care about a given issue matters. It helps us triage them.
-- **Money**: we welcome financial contributions in full transparency on our [open collective](https://opencollective.com/beaker).
+- **Code**: take a look at the [open issues](https://github.com/knownasilya/nomad/issues). Even if you can't write code, commenting on them, showing that you care about a given issue matters. It helps us triage them.
 
-Looking to work on Beaker? [Watch this video](https://www.youtube.com/watch?v=YuE9OO-ZDYo) and take a look at [the build notes](./build-notes.md).
+Looking to work on Nomad? [Watch this video](https://www.youtube.com/watch?v=YuE9OO-ZDYo) and take a look at [the build notes](./build-notes.md).
 
 ## Building from source
 
-Requires node 12 or higher.
+Requires node 14 or higher.
 
 In Linux (and in some cases macOS) you need libtool, m4, and automake:
 
@@ -35,8 +35,8 @@ npm install -g gulp
 To build:
 
 ```bash
-git clone https://github.com/beakerbrowser/beaker.git
-cd beaker/scripts
+git clone https://github.com/knownasilya/nomad.git
+cd nomad/scripts
 npm install
 npm run rebuild # see https://github.com/electron/electron/issues/5851
 npm start
@@ -48,14 +48,14 @@ If you pull latest from the repo and get weird module errors, do:
 npm run burnthemall
 ```
 
-This invokes [the mad king](http://nerdist.com/wp-content/uploads/2016/05/the-mad-king-game-of-thrones.jpg), who will torch your `node_modules/`, and do the full install/rebuild process for you.
+This will torch your `node_modules/`, and do the full install/rebuild process for you.
 `npm start` should work afterwards.
 
 If you're doing development, `npm run watch` to have assets build automatically.
 
 ### Debugging
 
-To debug the background process start electron with the `--inspect` argument pointing to the `app` directory, e.g. `script/node_modules/.bin/electron --inspect app`.  You can then attach an external debugger (e.g. Chrome devtools).
+To debug the background process start electron with the `--inspect` argument pointing to the `app` directory, e.g. `script/node_modules/.bin/electron --inspect app`. You can then attach an external debugger (e.g. Chrome devtools).
 
 To debug the shell window itself (i.e. the beaker browser chrome), press `CmdOrCtrl+alt+shift+I` to open the devtools.
 
@@ -71,45 +71,14 @@ The bigger the pull request, the longer it will take to review and merge. Try to
 
 It is also always helpful to have some context for your pull request. What was the purpose? Why does it matter to you?
 
-## Financial contributions
-
-We also welcome financial contributions in full transparency on our [open collective](https://opencollective.com/beaker).
-Anyone can file an expense. If the expense makes sense for the development of the community, it will be "merged" in the ledger of our open collective by the core contributors and the person who filed the expense will be reimbursed.
-
 ## Questions
 
-If you have any questions, create an [issue](https://github.com/beakerbrowser/beaker/issues) (protip: do a quick search first to see if someone else didn't ask the same question before!).
-
-You can also reach us at [@BeakerBrowser](https://twitter.com/beakerbrowser) on Twitter, in #beakerbrowser on freenode, or hello@beaker.opencollective.com.
+If you have any questions, create an [issue](https://github.com/knownasilya/nomad/issues) (protip: do a quick search first to see if someone else didn't ask the same question before!).
 
 ## Credits
 
 ### Contributors
 
-Thank you to all the people who have already contributed to beaker!
-<a href="/beakerbrowser/beaker/graphs/contributors"><img src="https://opencollective.com/beaker/contributors.svg?width=890" />
-
-
-### Backers
-
-Thank you to all our backers! [[Become a backer](https://opencollective.com/beaker#backer)]
-
-<a href="https://opencollective.com/beaker#backers" target="_blank"><img src="https://opencollective.com/beaker/backers.svg?width=890"></a>
-
-
-### Sponsors
-
-Thank you to all our sponsors! (please ask your company to also support this open source project by [becoming a sponsor](https://opencollective.com/beaker#sponsor))
-
-<a href="https://opencollective.com/beaker/sponsor/0/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/0/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/1/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/1/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/2/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/2/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/3/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/3/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/4/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/4/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/5/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/5/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/6/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/6/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/7/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/7/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/8/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/8/avatar.svg"></a>
-<a href="https://opencollective.com/beaker/sponsor/9/website" target="_blank"><img src="https://opencollective.com/beaker/sponsor/9/avatar.svg"></a>
+Thank you to all the people who have already contributed to Nomad and beaker in the past!
 
 <!-- This `CONTRIBUTING.md` is based on @nayafia's template https://github.com/nayafia/contributing-template -->
