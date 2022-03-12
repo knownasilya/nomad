@@ -52,7 +52,7 @@ const IS_FROM_SOURCE =
   process.defaultApp || /node_modules[\\/]electron[\\/]/.test(process.execPath);
 const IS_LINUX =
   !/^win/.test(process.platform) && process.platform !== 'darwin';
-const DOT_DESKTOP_FILENAME = 'appimagekit-beaker-browser.desktop';
+const DOT_DESKTOP_FILENAME = 'appimagekit-nomad.desktop';
 const isBrowserUpdatesSupported = !(IS_LINUX || IS_FROM_SOURCE); // linux is temporarily not supported
 
 // how long between scheduled auto updates?
@@ -630,7 +630,7 @@ export function restartBrowser() {
     autoUpdater.quitAndInstall();
     logger.info('[AUTO-UPDATE] Quitting and installing.');
   } else {
-    logger.info('Restarting Beaker by restartBrowser()');
+    logger.info('Restarting Nomad by restartBrowser()');
     // do a simple restart
     app.relaunch();
     setTimeout(() => app.exit(0), 1e3);
@@ -854,9 +854,9 @@ function setUpdaterState(state) {
 function getAutoUpdaterFeedSettings() {
   return {
     provider: 'github',
-    repo: 'beaker',
-    owner: 'beakerbrowser',
-    vPrefixedTagName: false,
+    repo: 'knownasilya',
+    owner: 'nomad',
+    vPrefixedTagName: true,
   };
 }
 
@@ -953,7 +953,7 @@ function onCompleted(details) {
 async function setRunOnStartup(desiredState) {
   if (IS_LINUX) {
     const autoLauncher = new AutoLaunch({
-      name: 'Beaker',
+      name: 'Nomad',
       path: process.execPath,
     });
     const currentState = await autoLauncher.isEnabled();
