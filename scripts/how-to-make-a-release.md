@@ -6,8 +6,6 @@ Run npm install. Make sure ./app/bg/dat/converter has its node_modules installed
 
 ## Make sure to update the desktop versions and release-notes links
 
-SO HELP ME GOD if you forget this I'll kill you.
-
 ## Build
 
 `npm run build`
@@ -32,7 +30,14 @@ if (file.endsWith(nodeModulesSystemDependentSuffix)) {
 
 ## Bundle
 
-`npm run release`
+```sh
+# Bump versions, tag, and create changelog
+npm run release-version
+# Create release files
+cd scripts/
+npm run release
+# Create a release on Github, and upload binaries from /dist folder
+```
 
 On MacOS you'll need to supply two env vars:
 
