@@ -23,7 +23,7 @@ gulp.task(
         name.indexOf('Nomad') === 0 &&
         (name.indexOf('.dmg') !== -1 || name.indexOf('-mac.zip') !== -1)
       ) {
-        let newName = 'beaker' + name.slice('Nomad'.length);
+        let newName = 'nomad' + name.slice('Nomad'.length);
         return cwd.move(name, newName);
       }
     });
