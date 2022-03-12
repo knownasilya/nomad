@@ -4,8 +4,8 @@ const jetpack = require('fs-jetpack');
 gulp.task(
   'postbuild',
   gulp.series(function () {
-    // for some reason, electron-builder is spitting out 'Beaker Browser-{version}{ext}'
-    // but the auto updater expects 'beaker-browser-{version}{ext}'
+    // for some reason, electron-builder is spitting out 'Nomad-{version}{ext}'
+    // but the auto updater expects 'nomad-{version}{ext}'
     // couldnt figure out how to reconfig the builder, so just rename the output assets
 
     const cwd = jetpack.cwd('../dist');
