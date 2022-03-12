@@ -16,7 +16,7 @@ var tray;
 
 export function setup() {
   tray = new Tray(path.join(__dirname, getIcon()));
-  tray.setToolTip('Beaker Browser');
+  tray.setToolTip('Nomad Browser');
   tray.on('click', (e) => tray.popupContextMenu());
   settingsDb.on('set:run_background', buildMenu);
   nativeTheme.on('updated', updateIcon);
@@ -47,11 +47,11 @@ async function buildMenu() {
     { type: 'separator' },
     {
       type: 'checkbox',
-      label: 'Let Beaker run in the background',
+      label: 'Let Nomad run in the background',
       checked: runBackground,
       click: () => onTogglePersist(!runBackground),
     },
-    { label: 'Quit Beaker', click: () => app.quit() },
+    { label: 'Quit Nomad', click: () => app.quit() },
   ]);
   tray.setContextMenu(contextMenu);
 }
