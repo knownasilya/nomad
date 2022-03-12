@@ -42,14 +42,14 @@ label {
   margin: 0 10px;
 }
 </style>
-<h1><strong>Beaker uses a peer-to-peer network</strong>.</h1>
-<p>To help keep your data online, Beaker can run in the background even if it's not active.</p>
+<h1><strong>Nomad uses a peer-to-peer network</strong>.</h1>
+<p>To help keep your data online, Nomad can run in the background even if it's not active.</p>
 <p><img src="beaker://assets/img/onboarding/setup-tray-icon.png"></p>
 <hr>
 <p>
   <label>
     <input type="checkbox">
-    Let Beaker run in the background
+    Let Nomad run in the background
   </label>
 </p>
 <hr>
