@@ -1,4 +1,4 @@
-Nomad Browser
+Nomad
 ======
 
 Nomad is a peer-to-peer Web browser. It adds new APIs for building hostless applications while remaining compatible with the rest of the Web.
