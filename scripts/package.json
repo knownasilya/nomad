@@ -20,7 +20,6 @@
     "pre-commit": "^1.2.2",
     "q": "^1.4.1",
     "rollup": "^1.23.0",
-    "standard-version": "^9.3.2",
     "yargs": "^4.2.0"
   },
   "optionalDependencies": {
@@ -100,8 +99,7 @@
     "rebuild": "gulp rebuild",
     "release": "electron-builder -p never && gulp postbuild",
     "start": "gulp start",
-    "watch": "gulp start-watch",
-    "release-version": "standard-version"
+    "watch": "gulp start-watch"
   },
   "repository": {
     "type": "git",
