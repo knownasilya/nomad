@@ -318,6 +318,14 @@ async function beakerProtocol(request, respond) {
       path.join(__dirname, 'assets/img/logo2.png')
     );
   }
+  if (requestUrl.startsWith('beaker://assets/logo-ondark')) {
+    return cb(
+      200,
+      'OK',
+      'image/png',
+      path.join(__dirname, 'assets/img/logo-ondark.png')
+    );
+  }
   if (requestUrl.startsWith('beaker://assets/logo')) {
     return cb(
       200,

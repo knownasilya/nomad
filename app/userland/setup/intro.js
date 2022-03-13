@@ -17,7 +17,7 @@ customElements.define(
 
     render(shadow) {
       shadow.innerHTML = `
-<img id="logo" src="beaker://assets/logo">
+<img id="logo" src="beaker://assets/logo-ondark">
 <h1><span>Welcome</span> <span>to</span> <span>Nomad</span></h1>
 <a>Get Started &gt;</a>
 <style>

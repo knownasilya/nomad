@@ -7,10 +7,8 @@ import css from '../css/main.css.js';
 import {
   toHex,
   isSameOrigin,
-  toNiceDomain,
   shorten,
 } from 'beaker://app-stdlib/js/strings.js';
-import { timeDifference } from 'beaker://app-stdlib/js/time.js';
 import bytes from 'beaker://app-stdlib/vendor/bytes/index.js';
 import 'beaker://app-stdlib/js/com/hover-card.js';
 
