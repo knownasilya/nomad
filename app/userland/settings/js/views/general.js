@@ -135,7 +135,6 @@ class GeneralSettingsView extends LitElement {
     switch (this.browserInfo.updater.state) {
       default:
       case 'idle':
-        console.log(this.browserInfo.updater.error);
         return html` <div class="section">
           <h2 id="auto-updater">Auto Updater</h2>
 
