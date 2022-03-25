@@ -840,9 +840,9 @@ async function doTest(test) {}
 // =
 
 function getSenderTab(sender) {
-  let tab = tabManager.findTab(sender);
+  const tab = tabManager.findTab(sender);
   if (tab) return tab;
-  var win = findWebContentsParentWindow(sender);
+  const win = findWebContentsParentWindow(sender);
   return tabManager.getActive(win);
 }
 
@@ -857,6 +857,7 @@ function getAutoUpdaterFeedSettings() {
     repo: 'knownasilya',
     owner: 'nomad',
     vPrefixedTagName: true,
+    private: false,
   };
 }
 
@@ -899,7 +900,7 @@ function onUpdateError(e) {
   logger.error(`[AUTO-UPDATE] error: ${e.toString()}`);
   setUpdaterState(UPDATER_STATUS_IDLE);
 
-  var message = (e.toString() || '').split('\n')[0];
+  let message = (e.toString() || '').split('\n')[0];
   if (message.includes('[object Object]')) {
     message =
       typeof e.message === 'string'
@@ -923,7 +924,7 @@ function onWebContentsCreated(e, webContents) {
 }
 
 function onWillPreventUnload(e) {
-  var choice = dialog.showMessageBoxSync({
+  const choice = dialog.showMessageBoxSync({
     type: 'question',
     buttons: ['Leave', 'Stay'],
     title: 'Do you want to leave this site?',
@@ -931,7 +932,8 @@ function onWillPreventUnload(e) {
     defaultId: 0,
     cancelId: 1,
   });
-  var leave = choice === 0;
+  const leave = choice === 0;
+
   if (leave) {
     e.preventDefault();
   }

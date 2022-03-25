@@ -98,7 +98,7 @@
     "lint": "eslint --ignore-pattern 'color-thief.js' --ignore-pattern 'app/node_modules' --ignore-pattern 'vendor' --ignore-pattern '*.build.js' --ignore-pattern 'assets' --fix app",
     "rebuild": "gulp rebuild",
     "prerelease": "npm run build",
-    "release": "electron-builder -p never && gulp postbuild",
+    "release": "electron-builder -p onTagOrDraft",
     "start": "gulp start",
     "watch": "gulp start-watch"
   },
