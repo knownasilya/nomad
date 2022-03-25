@@ -90,6 +90,8 @@ protocol.registerSchemesAsPrivileged([
       supportFetchAPI: true,
       corsEnabled: true,
       stream: true,
+      // TODO: remove once https://github.com/electron/electron/issues/24859 is resolved
+      bypassCSP: true,
     },
   },
   {

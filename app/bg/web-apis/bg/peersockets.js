@@ -53,19 +53,21 @@ export default {
   },
 
   async watch() {
-    var drive = await getSenderDrive(this.sender);
+    const drive = await getSenderDrive(this.sender);
     const aliases = getAliases(this.sender);
-    var stream = new Readable();
-    var stopwatch = getClient().peers.watchPeers(drive.key, {
+    const stream = new Readable();
+    const stopWatch = await getClient().peers.watchPeers(drive.key, {
       onjoin: async (peer) =>
         stream.push(['join', { peerId: createAliasForPeer(aliases, peer) }]),
       onleave: (peer) =>
         stream.push(['leave', { peerId: createAliasForPeer(aliases, peer) }]),
     });
+
     stream.on('close', () => {
       releaseAliases(this.sender, aliases);
-      stopwatch();
+      stopWatch();
     });
+
     return stream;
   },
 };

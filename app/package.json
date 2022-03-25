@@ -98,5 +98,8 @@
     "winston": "github:winstonjs/winston#b4ced895b3e1ead8a616590189b003cfd9d7acca",
     "yazl": "^2.5.1",
     "yo-yo": "^1.4.0"
+  },
+  "volta": {
+    "extends": "../package.json"
   }
 }

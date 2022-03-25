@@ -108,5 +108,8 @@
   "bugs": {
     "url": "https://github.com/knownasilya/nomad/issues"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "volta": {
+    "extends": "../package.json"
+  }
 }
