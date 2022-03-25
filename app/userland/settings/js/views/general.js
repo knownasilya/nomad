@@ -135,6 +135,7 @@ class GeneralSettingsView extends LitElement {
     switch (this.browserInfo.updater.state) {
       default:
       case 'idle':
+        console.log(this.browserInfo.updater.error);
         return html` <div class="section">
           <h2 id="auto-updater">Auto Updater</h2>
 
@@ -142,7 +143,8 @@ class GeneralSettingsView extends LitElement {
             ? html`
                 <div class="message error">
                   <i class="fa fa-exclamation-triangle"></i>
-                  ${this.browserInfo.updater.error}
+                  ${this.browserInfo.updater.error.message ||
+                  this.browserInfo.updater.error}
                 </div>
               `
             : ''}
