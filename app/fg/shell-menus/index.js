@@ -1,4 +1,3 @@
-/* globals customElements */
 import _debounce from 'lodash.debounce';
 import { ipcRenderer } from 'electron';
 import { LitElement, html } from '../vendor/lit-element/lit-element';

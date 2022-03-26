@@ -1,5 +1,3 @@
-/* globals customElements */
-
 import { ipcRenderer } from 'electron';
 import { LitElement, html } from '../vendor/lit-element/lit-element';
 import * as bg from './bg-process-rpc';

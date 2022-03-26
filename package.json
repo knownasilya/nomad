@@ -9,6 +9,7 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint --ignore-pattern 'color-thief.js' --ignore-pattern 'app/node_modules' --ignore-pattern 'app/userland' --ignore-pattern 'vendor' --ignore-pattern '*.build.js' --ignore-pattern 'assets' app",
     "release-version": "standard-version"
   },
   "repository": {
@@ -25,6 +26,10 @@
     "node": "14.19.0"
   },
   "devDependencies": {
-    "standard-version": "^9.3.2"
+    "standard-version": "^9.3.2",
+    "eslint": "^8.12.0",
+    "eslint-plugin-import": "^2.25.4",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^6.0.0"
   }
 }

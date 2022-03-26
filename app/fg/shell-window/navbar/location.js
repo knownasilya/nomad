@@ -1,4 +1,3 @@
-/* globals customElements */
 import { ipcRenderer } from 'electron';
 import { LitElement, html, css } from '../../vendor/lit-element/lit-element';
 import { classMap } from '../../vendor/lit-element/lit-html/directives/class-map';

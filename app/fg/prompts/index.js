@@ -1,4 +1,3 @@
-/* globals customElements */
 import { LitElement, html } from '../vendor/lit-element/lit-element';
 import './progress';
 

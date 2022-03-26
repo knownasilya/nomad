@@ -1,8 +1,7 @@
 {
   "parserOptions": {
-    "ecmaVersion": 8,
+    "ecmaVersion": 2020,
     "ecmaFeatures": {
-      "experimentalObjectRestSpread": true,
       "jsx": false
     },
     "sourceType": "module"

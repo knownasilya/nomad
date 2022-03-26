@@ -1,4 +1,3 @@
-/* globals customElements */
 import { LitElement, html, css } from '../vendor/lit-element/lit-element';
 import { repeat } from '../vendor/lit-element/lit-html/directives/repeat';
 import * as bg from './bg-process-rpc';

@@ -1,4 +1,3 @@
-/* globals customElements */
 import { LitElement, html, css } from '../vendor/lit-element/lit-element';
 import { pluralize } from '../../lib/strings';
 import * as bg from './bg-process-rpc';

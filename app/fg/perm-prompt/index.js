@@ -1,4 +1,3 @@
-/* globals customElements */
 import {
   PERMS,
   PERM_ICONS,

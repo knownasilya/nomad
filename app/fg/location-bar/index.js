@@ -1,4 +1,3 @@
-/* globals customElements */
 import * as rpc from 'pauls-electron-rpc';
 import { LitElement, html, css } from '../vendor/lit-element/lit-element';
 import { repeat } from '../vendor/lit-element/lit-html/directives/repeat';
