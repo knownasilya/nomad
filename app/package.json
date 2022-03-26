@@ -1,5 +1,5 @@
 {
-  "name": "beaker-browser",
+  "name": "nomad",
   "productName": "Nomad",
   "description": "A Peer-to-Peer Web Browser.",
   "version": "1.2.4",
@@ -39,7 +39,7 @@
     "graphql": "^15.3.0",
     "graphql-fields": "^2.0.3",
     "hyperdrive-daemon-client": "^2.0.0",
-    "hyperspace": "^3.6.1",
+    "hyperspace": "^3.19.0",
     "icojs": "^0.12.3",
     "identify-filetype": "^1.0.0",
     "into-stream": "^3.1.0",
