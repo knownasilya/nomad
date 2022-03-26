@@ -1,7 +1,7 @@
 {
   "name": "beaker-browser",
   "productName": "Nomad",
-  "description": "An Peer-to-Peer Web Browser.",
+  "description": "A Peer-to-Peer Web Browser.",
   "version": "1.2.4",
   "author": "Blue Link Labs <support@beakerbrowser.com>",
   "copyright": "© 2020, Blue Link Labs",
