@@ -1,8 +1,5 @@
-/* globals Request Response fetch */
-
-import { EventTargetFromStream } from './event-target';
-
 import errors from 'beaker-error-constants';
+import { EventTargetFromStream } from './event-target';
 import experimentalGlobalFetchManifest from '../manifests/external/experimental/global-fetch';
 import experimentalCapturePageManifest from '../manifests/external/experimental/capture-page';
 import experimentalDatPeersManifest from '../manifests/external/experimental/dat-peers';

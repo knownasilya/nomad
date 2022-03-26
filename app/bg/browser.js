@@ -38,12 +38,11 @@ import * as tabManager from './ui/tabs/manager';
 import { updateSetupState } from './ui/setup-flow';
 import * as modals from './ui/subwindows/modals';
 import * as siteInfo from './ui/subwindows/site-info';
-import { findWebContentsParentWindow } from './lib/electron';
+import { findWebContentsParentWindow, spawnAndExecuteJs } from './lib/electron';
 import * as hyperDaemon from './hyper/daemon';
 import * as bookmarks from './filesystem/bookmarks';
 import { getDriveIdent } from './filesystem/index';
 import * as wcTrust from './wc-trust';
-import { spawnAndExecuteJs } from './lib/electron';
 
 // constants
 // =
