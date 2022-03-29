@@ -67,9 +67,9 @@ import V52 from './schemas/profile-data.v52.sql';
 // globals
 // =
 
-var db;
-var migrations;
-var setupPromise;
+let db;
+let migrations;
+let setupPromise;
 
 // exported methods
 // =
@@ -80,7 +80,7 @@ var setupPromise;
  */
 export const setup = function (opts) {
   // open database
-  var dbPath = path.join(opts.userDataPath, 'Profiles');
+  const dbPath = path.join(opts.userDataPath, 'Profiles');
   db = new sqlite3.Database(dbPath);
   setupPromise = setupSqliteDB(db, { migrations }, '[PROFILES]');
 };
@@ -139,9 +139,6 @@ export const getSqliteInstance = () => db;
 // internal methods
 // =
 
-function setupDb(cb) {
-  db.exec(FULL_SCHEMA, cb);
-}
 migrations = [
   migration(V1),
   migration(V2),
