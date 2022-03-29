@@ -6,7 +6,6 @@ import {
   datDnsCacheJS,
 } from '../hyper/debugging';
 import path from 'path';
-import url from 'url';
 import once from 'once';
 import fs from 'fs';
 import jetpack from 'fs-jetpack';
@@ -90,20 +89,16 @@ async function beakerProtocol(request, respond) {
     cb(200, 'OK', 'image/png', () => Buffer.from(image.buffer));
   }
 
-  var requestUrl = request.url;
-  var queryParams;
-  {
-    // strip off the hash
-    let i = requestUrl.indexOf('#');
-    if (i !== -1) requestUrl = requestUrl.slice(0, i);
-  }
-  {
-    // get the query params
-    queryParams = url.parse(requestUrl, true).query;
+  let requestUrl = request.url;
 
-    // strip off the query
-    let i = requestUrl.indexOf('?');
-    if (i !== -1) requestUrl = requestUrl.slice(0, i);
+  // strip off the hash
+  if (requestUrl.includes('#')) {
+    requestUrl = requestUrl.slice(0, requestUrl.indexOf('#'));
+  }
+
+  // strip off the query
+  if (requestUrl.includes('?')) {
+    requestUrl = requestUrl.slice(0, requestUrl.indexOf('?'));
   }
 
   // redirects from old pages

@@ -1,5 +1,5 @@
 import path from 'path';
-import url from 'url';
+import { URL } from 'url';
 import mkdirp from 'mkdirp';
 import Events from 'events';
 import datEncoding from 'dat-encoding';
@@ -332,7 +332,7 @@ function flag(b) {
  * @returns {string}
  */
 export function extractOrigin(originURL) {
-  var urlp = url.parse(originURL);
+  const urlp = new URL(originURL);
   if (!urlp || !urlp.host || !urlp.protocol) return;
   return urlp.protocol + (urlp.slashes ? '//' : '') + urlp.host;
 }

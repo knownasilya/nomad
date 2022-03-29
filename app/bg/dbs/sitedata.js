@@ -112,8 +112,9 @@ export function getPermission(url, key) {
  */
 export async function getPermissions(url) {
   await setupPromise;
-  var origin = await extractOrigin(url);
+  const origin = await extractOrigin(url);
   if (!origin) return null;
+
   return cbPromise((cb) => {
     db.all(
       `SELECT key, value FROM sitedata WHERE origin = ? AND key LIKE 'perm:%'`,
@@ -123,13 +124,15 @@ export async function getPermissions(url) {
 
         // convert to a dictionary
         // TODO - pull defaults from browser settings
-        var perms = {
+        let perms = {
           /* js: true */
         };
-        if (rows)
+
+        if (rows) {
           rows.forEach((row) => {
             perms[row.key.slice('5')] = row.value;
           });
+        }
         cb(null, perms);
       }
     );
@@ -142,8 +145,9 @@ export async function getPermissions(url) {
  */
 export async function getNetworkPermissions(url) {
   await setupPromise;
-  var origin = await extractOrigin(url);
+  const origin = await extractOrigin(url);
   if (!origin) return null;
+
   return cbPromise((cb) => {
     db.all(
       `SELECT key, value FROM sitedata WHERE origin = ? AND key LIKE 'perm:network:%'`,
