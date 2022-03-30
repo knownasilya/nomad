@@ -1,20 +1,6 @@
 import * as rpc from 'pauls-electron-rpc';
 import { findTab } from '../ui/tabs/manager';
 
-const INTERNAL_ORIGIN_REGEX = /^(beaker:)/i;
-const SITE_ORIGIN_REGEX = /^(beaker:|hyper:|https?:|data:)/i;
-const IFRAME_WHITELIST = [
-  'hyperdrive.loadDrive',
-  'hyperdrive.getInfo',
-  'hyperdrive.diff',
-  'hyperdrive.stat',
-  'hyperdrive.readFile',
-  'hyperdrive.readdir',
-  'hyperdrive.query',
-  'hyperdrive.watch',
-  'hyperdrive.resolveName',
-];
-
 // internal manifests
 import loggerManifest from './manifests/internal/logger';
 import drivesManifest from './manifests/internal/drives';
@@ -71,6 +57,20 @@ import experimentalGlobalFetchManifest from './manifests/external/experimental/g
 import experimentalCapturePageAPI from './bg/experimental/capture-page';
 import experimentalDatPeersAPI from './bg/experimental/dat-peers';
 import experimentalGlobalFetchAPI from './bg/experimental/global-fetch';
+
+const INTERNAL_ORIGIN_REGEX = /^(beaker:)/i;
+const SITE_ORIGIN_REGEX = /^(beaker:|hyper:|https?:|data:)/i;
+const IFRAME_WHITELIST = [
+  'hyperdrive.loadDrive',
+  'hyperdrive.getInfo',
+  'hyperdrive.diff',
+  'hyperdrive.stat',
+  'hyperdrive.readFile',
+  'hyperdrive.readdir',
+  'hyperdrive.query',
+  'hyperdrive.watch',
+  'hyperdrive.resolveName',
+];
 
 // exported api
 // =

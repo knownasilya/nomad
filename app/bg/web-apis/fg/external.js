@@ -10,14 +10,14 @@ import shellManifest from '../manifests/external/shell';
 const RPC_OPTS = { timeout: false, errors };
 
 export const setup = function (rpc) {
-  var capabilities = rpc.importAPI(
+  const capabilities = rpc.importAPI(
     'capabilities',
     capabilitiesManifest,
     RPC_OPTS
   );
-  var contacts = rpc.importAPI('contacts', contactsManifest, RPC_OPTS);
-  var markdown = rpc.importAPI('markdown', markdownManifest, RPC_OPTS);
-  var shell = rpc.importAPI('shell', shellManifest, RPC_OPTS);
+  const contacts = rpc.importAPI('contacts', contactsManifest, RPC_OPTS);
+  const markdown = rpc.importAPI('markdown', markdownManifest, RPC_OPTS);
+  const shell = rpc.importAPI('shell', shellManifest, RPC_OPTS);
 
   if (window.location.protocol !== 'beaker:') {
     delete shell.importFilesAndFolders;
@@ -26,12 +26,12 @@ export const setup = function (rpc) {
     delete shell.exportFilesDialog;
   }
 
-  var peersocketsRPC = rpc.importAPI(
+  const peersocketsRPC = rpc.importAPI(
     'peersockets',
     peersocketsManifest,
     RPC_OPTS
   );
-  var peersockets = {
+  const peersockets = {
     join(topic) {
       var stream = peersocketsRPC.join(topic);
       var obj = fromEventStream(stream);
@@ -45,8 +45,8 @@ export const setup = function (rpc) {
     },
   };
 
-  var panesRPC = rpc.importAPI('panes', panesManifest, RPC_OPTS);
-  var panes = new EventTargetFromStream(panesRPC.createEventStream, [
+  const panesRPC = rpc.importAPI('panes', panesManifest, RPC_OPTS);
+  const panes = new EventTargetFromStream(panesRPC.createEventStream, [
     'pane-attached',
     'pane-detached',
     'pane-navigated',
@@ -61,34 +61,42 @@ export const setup = function (rpc) {
   panes.injectCss = panesRPC.injectCss;
   panes.uninjectCss = panesRPC.uninjectCss;
 
-  var _terminalCommands = [];
-  var terminal = {
+  const _terminalCommands = [];
+  const terminal = {
     getCommands() {
       return (_terminalCommands || [])
         .slice()
         .map((obj) => Object.assign({}, obj));
     },
     registerCommand(command) {
-      if (!command || typeof command !== 'object')
+      if (!command || typeof command !== 'object') {
         throw new Error('Command must be an object');
-      if (!command.handle || typeof command.handle !== 'function')
+      }
+      if (!command.handle || typeof command.handle !== 'function') {
         throw new Error('Command must have a `handle` function');
-      if (!command.name || typeof command.name !== 'string')
+      }
+      if (!command.name || typeof command.name !== 'string') {
         throw new Error('Command must have a `name` string');
-      if (command.help && typeof command.help !== 'string')
+      }
+      if (command.help && typeof command.help !== 'string') {
         throw new Error('The `help` attribute on a command must be a string');
-      if (command.usage && typeof command.usage !== 'string')
+      }
+      if (command.usage && typeof command.usage !== 'string') {
         throw new Error('The `usage` attribute on a command must be a string');
-      if (command.options && !Array.isArray(command.options))
+      }
+      if (command.options && !Array.isArray(command.options)) {
         throw new Error(
           'The `options` attribute on a command must be an array'
         );
+      }
 
       let i = _terminalCommands.findIndex((c) => c.name === command.name);
-      if (i !== -1)
+      if (i !== -1) {
         throw new Error(
           'A "' + command.name + '" command has already been registered'
         );
+      }
+
       _terminalCommands.push({
         handle: command.handle,
         name: command.name,

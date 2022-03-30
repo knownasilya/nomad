@@ -1,8 +1,7 @@
 import errors from 'beaker-error-constants';
 import { parseDriveUrl } from '../../../lib/urls';
 import hyperdriveManifest from '../manifests/external/hyperdrive';
-import filesystemManifest from '../manifests/internal/beaker-filesystem';
-import { EventTarget, Event, fromEventStream } from './event-target';
+import { fromEventStream } from './event-target';
 import { createStat } from './stat';
 
 const isDriveUrlRe = /^(hyper:\/\/)?[^\/]+/i;

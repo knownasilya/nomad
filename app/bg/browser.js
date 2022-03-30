@@ -24,7 +24,6 @@ import AutoLaunch from 'auto-launch';
 const exec = require('util').promisify(require('child_process').exec);
 import * as logLib from './logger';
 import * as adblocker from './adblocker';
-const logger = logLib.child({ category: 'browser' });
 import * as settingsDb from './dbs/settings';
 import { convertDatArchive } from './dat/index';
 import datDns from './dat/dns';
@@ -43,6 +42,8 @@ import * as hyperDaemon from './hyper/daemon';
 import * as bookmarks from './filesystem/bookmarks';
 import { getDriveIdent } from './filesystem/index';
 import * as wcTrust from './wc-trust';
+
+const logger = logLib.child({ category: 'browser' });
 
 // constants
 // =
