@@ -3,7 +3,7 @@ process.noAsar = true;
 
 // DEBUG
 // Error.stackTraceLimit = Infinity
-// require('events').defaultMaxListeners = 1e3 // pls stfu
+// require('events').defaultMaxListeners = 1e3
 
 // This is main process of Electron, started as first thing when your
 // app starts. This script is running through entire life of your application.
@@ -48,10 +48,10 @@ import * as openURL from './bg/open-url';
 const log = logger.get().child({ category: 'browser', subcategory: 'init' });
 
 // read config from env vars
-if (getEnvVar('BEAKER_USER_DATA_PATH')) {
+if (getEnvVar('NOMAD_USER_DATA_PATH')) {
   console.log('User data path set by environment variables');
-  console.log('userData:', getEnvVar('BEAKER_USER_DATA_PATH'));
-  app.setPath('userData', getEnvVar('BEAKER_USER_DATA_PATH'));
+  console.log('userData:', getEnvVar('NOMAD_USER_DATA_PATH'));
+  app.setPath('userData', getEnvVar('NOMAD_USER_DATA_PATH'));
 }
 if (getEnvVar('BEAKER_TEST_DRIVER')) {
   testDriver.setup();
