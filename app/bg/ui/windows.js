@@ -85,7 +85,7 @@ export async function setup() {
   var previousSessionState = getPreviousBrowsingSession();
   var customStartPage = await settingsDb.get('custom_start_page');
   var isTestDriverActive = !!getEnvVar('NOMAD_TEST_DRIVER');
-  var isOpenUrlEnvVar = !!getEnvVar('BEAKER_OPEN_URL');
+  var isOpenUrlEnvVar = !!getEnvVar('NOMAD_OPEN_URL');
 
   // set up app events
   app.on('activate', () => {
@@ -202,7 +202,7 @@ export async function setup() {
     }
     if (isOpenUrlEnvVar) {
       // use the env var if specified
-      opts.pages = [getEnvVar('BEAKER_OPEN_URL')];
+      opts.pages = [getEnvVar('NOMAD_OPEN_URL')];
     }
     // create new window
     createShellWindow(opts);

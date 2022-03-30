@@ -79,7 +79,7 @@ If you're doing development, `npm run watch` to have assets build automatically.
 ### Env Vars
 
 - `DEBUG`: which log systems to output? A comma-separated string. Can be `beaker`, `dat`, `bittorrent-dht`, `dns-discovery`, `hypercore-protocol`. Specify `*` for all.
-- `BEAKER_OPEN_URL`: open the given URL on load, rather than the previous session or default tab.
+- `NOMAD_OPEN_URL`: open the given URL on load, rather than the previous session or default tab.
 - `NOMAD_USER_DATA_PATH`: override the user-data path, therefore changing where data is read/written. Useful for testing. For default value see `userData` in the [electron docs](https://electron.atom.io/docs/api/app/#appgetpathname).
 - `BEAKER_DAT_QUOTA_DEFAULT_BYTES_ALLOWED`: override the default max-quota for bytes allowed to be written by a dat site. Useful for testing. Default value is `'500mb'`. This can be a Number or a String. Check [bytes.parse](https://github.com/visionmedia/bytes.js/tree/a4b9af2bf289175f12b3538eb172f2489844b1ec#bytesparsestringnumber-value-numbernull) for supported units and abbreviations.
 
