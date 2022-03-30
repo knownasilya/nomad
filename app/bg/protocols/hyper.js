@@ -4,7 +4,6 @@ import { Readable } from 'stream';
 import parseRange from 'range-parser';
 import once from 'once';
 import * as logLib from '../logger';
-const logger = logLib.child({ category: 'hyper', subcategory: 'hyper-scheme' });
 import markdown from '../../lib/markdown';
 import * as drives from '../hyper/drives';
 import * as filesystem from '../filesystem/index';
@@ -14,6 +13,7 @@ import errorPage from '../lib/error-page';
 import * as mime from '../lib/mime';
 import * as auditLog from '../dbs/audit-log';
 
+const logger = logLib.child({ category: 'hyper', subcategory: 'hyper-scheme' });
 const md = markdown({
   allowHTML: true,
   useHeadingIds: true,
@@ -224,22 +224,25 @@ export const protocolHandler = async function (request, respond) {
       }
 
       // parse path
-      var filepath = decodeURIComponent(urlp.path);
+      let filepath = decodeURIComponent(urlp.path);
       if (!filepath) filepath = '/';
-      if (filepath.indexOf('?') !== -1)
+      if (filepath.indexOf('?') !== -1) {
         filepath = filepath.slice(0, filepath.indexOf('?')); // strip off any query params
-      var hasTrailingSlash = filepath.endsWith('/');
+      }
+      let hasTrailingSlash = filepath.endsWith('/');
 
       // checkout version if needed
+      let checkoutFS;
       try {
-        var { checkoutFS } = await drives.getDriveCheckout(drive, driveVersion);
+        const checkout = await drives.getDriveCheckout(drive, driveVersion);
+        checkoutFS = checkout.checkoutFS;
       } catch (err) {
         logger.warn(`Failed to open drive checkout ${driveKey}`, { err });
         return respondError(500, 'Failed');
       }
 
       // read the manifest (it's needed in a couple places)
-      var manifest;
+      let manifest;
       try {
         manifest = await checkoutFS.pda.readManifest();
       } catch (e) {
@@ -247,7 +250,7 @@ export const protocolHandler = async function (request, respond) {
       }
 
       // check to see if we actually have data from the drive
-      var version = await checkoutFS.session.drive.version();
+      const version = await checkoutFS.session.drive.version();
       if (version === 0) {
         logger.silly(`Drive not found ${logUrl}`, { url: request.url });
         return respondError(404, 'Site not found', {
@@ -264,21 +267,25 @@ export const protocolHandler = async function (request, respond) {
       }
 
       // check for the presence of a frontend
-      if (await checkoutFS.pda.stat('/.ui/ui.html').catch((e) => false)) {
+      const uiExists = await checkoutFS.pda
+        .stat('/.ui/ui.html')
+        .catch((e) => false);
+
+      if (uiExists) {
         customFrontend = true;
       }
 
       // lookup entry
-      var statusCode = 200;
-      var headers = {};
-      var entry = await datServeResolvePath(
+      let statusCode = 200;
+      let headers = {};
+      let canExecuteHTML = true;
+      let entry = await datServeResolvePath(
         checkoutFS.pda,
         manifest,
         urlp,
         request.headers.Accept
       );
 
-      var canExecuteHTML = true;
       if (entry && !customFrontend) {
         // dont execute HTML if in a mount and no frontend is running
         let pathParts = entry.path.split('/').filter(Boolean);
@@ -307,12 +314,14 @@ export const protocolHandler = async function (request, respond) {
             }/${urlp.search || ''}`
           );
         }
+
         if (customFrontend) {
           logger.silly(`Serving custom frontend ${logUrl}`, {
             url: request.url,
           });
           return respondCustomFrontend(checkoutFS);
         }
+
         logger.silly(`Serving builtin frontend ${logUrl}`, {
           url: request.url,
         });
@@ -364,7 +373,7 @@ export const protocolHandler = async function (request, respond) {
       }
 
       // detect mimetype
-      var mimeType = entry.metadata.mimetype || entry.metadata.mimeType;
+      let mimeType = entry.metadata.mimetype || entry.metadata.mimeType;
       if (!mimeType) {
         mimeType = mime.identify(entry.path);
       }
@@ -374,8 +383,8 @@ export const protocolHandler = async function (request, respond) {
 
       // handle range
       headers['Accept-Ranges'] = 'bytes';
-      var length;
-      var range = request.headers.Range || request.headers.range;
+      let length;
+      let range = request.headers.Range || request.headers.range;
       if (range) range = parseRange(entry.size, range);
       if (range && range.type === 'bytes') {
         range = range[0]; // only handle first range given
@@ -437,7 +446,6 @@ export const protocolHandler = async function (request, respond) {
         });
       }
 
-      var mimeType = entry.metadata.mimeType;
       if (!mimeType) {
         let chunk;
         for await (const part of checkoutFS.session.drive.createReadStream(
@@ -459,6 +467,7 @@ export const protocolHandler = async function (request, respond) {
         respond({
           statusCode,
           headers,
+          // TODO: remove wrapping whackamolestream due to https://github.com/electron/electron/pull/24022 being merged
           data: new WhackAMoleStream(
             checkoutFS.session.drive.createReadStream(entry.path, range)
           ),

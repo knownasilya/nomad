@@ -9,40 +9,39 @@ import hyper from '../hyper/index';
 import * as filesystem from '../filesystem/index';
 import * as prompts from '../ui/subwindows/prompts';
 
-var tmpdirs = {};
+const tmpdirs = new Map();
 export function getStoragePathFor(key) {
-  if (tmpdirs[key]) return tmpdirs[key];
-  tmpdirs[key] = join(tmpdir(), 'dat', key);
-  return tmpdirs[key];
+  if (tmpdirs.has(key)) return tmpdirs.get(key);
+  tmpdirs.set(key, join(tmpdir(), 'dat', key));
+  return tmpdirs.get(key);
 }
 
-var downloadPromises = {};
+const downloadPromises = new Map();
 export async function downloadDat(key) {
-  if (downloadPromises[key]) {
-    return downloadPromises[key];
+  if (downloadPromises.has(key)) {
+    return downloadPromises.get(key);
   }
 
-  var storagePath = getStoragePathFor(key);
+  const storagePath = getStoragePathFor(key);
   rimraf.sync(storagePath);
   mkdirp.sync(storagePath);
 
-  downloadPromises[key] = runConvertProcess(
-    app.getPath('userData'),
+  downloadPromises.set(
     key,
-    storagePath
+    runConvertProcess(app.getPath('userData'), key, storagePath)
   );
 
-  return downloadPromises[key];
+  return downloadPromises.get(key);
 }
 
 export async function convertDatArchive(win, key) {
   await downloadDat(key);
 
-  var storagePath = getStoragePathFor(key);
-  var drive = await hyper.drives.createNewDrive();
+  const storagePath = getStoragePathFor(key);
+  const drive = await hyper.drives.createNewDrive();
 
   // calculate size of import for progress
-  var numFilesToImport = 0;
+  let numFilesToImport = 0;
   let stats = await pda.exportFilesystemToArchive({
     srcPath: storagePath,
     dstArchive: drive.session.drive,
@@ -52,7 +51,7 @@ export async function convertDatArchive(win, key) {
   });
   numFilesToImport += stats.fileCount;
 
-  var prompt = await prompts.create(win.webContents, 'progress', {
+  const prompt = await prompts.create(win.webContents, 'progress', {
     label: 'Converting dat...',
   });
   try {
@@ -75,6 +74,7 @@ export async function convertDatArchive(win, key) {
     .rename('/dat.json', drive.session.drive, '/index.json')
     .catch((e) => undefined);
   await filesystem.configDrive(drive.url);
+
   return drive.url;
 }
 
