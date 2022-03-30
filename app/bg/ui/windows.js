@@ -84,7 +84,7 @@ export async function setup() {
   sessionWatcher = new SessionWatcher(userDataDir);
   var previousSessionState = getPreviousBrowsingSession();
   var customStartPage = await settingsDb.get('custom_start_page');
-  var isTestDriverActive = !!getEnvVar('BEAKER_TEST_DRIVER');
+  var isTestDriverActive = !!getEnvVar('NOMAD_TEST_DRIVER');
   var isOpenUrlEnvVar = !!getEnvVar('BEAKER_OPEN_URL');
 
   // set up app events
@@ -322,7 +322,7 @@ export function createShellWindow(
       // not sure whether we'll need this
       // -prf
       // run setup modal
-      // let isTestDriverActive = !!getEnvVar('BEAKER_TEST_DRIVER')
+      // let isTestDriverActive = !!getEnvVar('NOMAD_TEST_DRIVER')
       // let hasDoneSetup = Number(await sitedataDb.get('beaker://shell-window', 'has_done_setup')) === 1
       // if (!!getEnvVar('BEAKER_RUN_SETUP_FLOW')) {
       //   hasDoneSetup = false

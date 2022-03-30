@@ -8,7 +8,7 @@ import { getEnvVar } from './lib/env';
 
 const LOG_MESSAGES = false;
 
-var testPort = +getEnvVar('BEAKER_TEST_DRIVER');
+var testPort = +getEnvVar('NOMAD_TEST_DRIVER');
 var sock;
 
 // exported api

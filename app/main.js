@@ -53,7 +53,7 @@ if (getEnvVar('NOMAD_USER_DATA_PATH')) {
   console.log('userData:', getEnvVar('NOMAD_USER_DATA_PATH'));
   app.setPath('userData', getEnvVar('NOMAD_USER_DATA_PATH'));
 }
-if (getEnvVar('BEAKER_TEST_DRIVER')) {
+if (getEnvVar('NOMAD_TEST_DRIVER')) {
   testDriver.setup();
 }
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = '1'; // we know, we know
