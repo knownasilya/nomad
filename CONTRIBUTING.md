@@ -14,7 +14,7 @@ Looking to work on Nomad? [Watch this video](https://www.youtube.com/watch?v=YuE
 
 ## Building from source
 
-Requires node 14 or higher.
+Requires node 14 or higher. We recommend installing volta (https://volta.sh) to manage node versions.
 
 In Linux (and in some cases macOS) you need libtool, m4, and automake:
 
