@@ -18,10 +18,7 @@ Nomad is a fork of the [Beaker Browser](https://beakerbrowser.com/).
   - [Env Vars](#env-vars)
 - [Vulnerability disclosure](#vulnerability-disclosure)
 - [Known issues](#known-issues)
-  - [tmux](#tmux)
 - [Contributors](#contributors)
-  - [Backers](#backers)
-  - [Sponsors](#sponsors)
 - [License](#license)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
