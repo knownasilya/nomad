@@ -95,8 +95,10 @@ Launching from tmux is known to cause issues with GUI apps in macOS. On Beaker, 
 
 ## Contributors
 
-This project exists thanks to all the people who contribute. [[Contribute]](CONTRIBUTING.md).
-[![](https://opencollective.com/beaker/contributors.svg?width=890)](https://github.com/beakerbrowser/beaker/graphs/contributors)
+This project exists thanks to all the people who contribute.
+[See contributors](https://github.com/knownasilya/nomad/graphs/contributors)
+
+[[Contributing guide]](CONTRIBUTING.md)
 
 ## License
 
