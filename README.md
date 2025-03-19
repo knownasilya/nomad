@@ -34,10 +34,16 @@ Nomad is a fork of the [Beaker Browser](https://beakerbrowser.com/).
 Requires node 14 or higher.
 
 In Linux (and in some cases macOS) you need libtool, m4, autoconf, and automake:
-
+Debian/Ubuntu
 ```bash
 sudo apt-get install libtool m4 make g++ autoconf # debian/ubuntu
+```
+Fedora
+```bash
 sudo dnf install libtool m4 make gcc-c++ libXScrnSaver  # fedora
+```
+macOS
+```bash
 brew install libtool autoconf automake # macos
 ```
 
