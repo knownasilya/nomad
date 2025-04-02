@@ -42,6 +42,10 @@ Fedora
 ```bash
 sudo dnf install libtool m4 make gcc-c++ libXScrnSaver  # fedora
 ```
+Arch
+```bash
+sudo pacman -S libtool m4 make g++ autoconf
+```
 macOS
 ```bash
 brew install libtool autoconf automake # macos
