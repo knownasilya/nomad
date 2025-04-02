@@ -81,7 +81,7 @@ This invokes [the mad king](http://nerdist.com/wp-content/uploads/2016/05/the-ma
 
 If you're doing development, `npm run watch` to have assets build automatically.
 
-## [Documentation](https://docs.beakerbrowser.com)
+## Documentation
 
 ### Env Vars
 
