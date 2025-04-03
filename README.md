@@ -2,7 +2,7 @@
 
 Nomad is a peer-to-peer Web browser. It adds new APIs for building hostless applications while remaining compatible with the rest of the Web.
 
-Nomad is a fork of the [Beaker Browser](https://beakerbrowser.com/).
+Nomad is a fork of the [Beaker Browser](https://github.com/beakerbrowser/beaker).
 
 > 🏗️ Under construction
 
@@ -42,6 +42,10 @@ Fedora
 ```bash
 sudo dnf install libtool m4 make gcc-c++ libXScrnSaver  # fedora
 ```
+Arch
+```bash
+sudo pacman -S libtool m4 make g++ autoconf
+```
 macOS
 ```bash
 brew install libtool autoconf automake # macos
@@ -77,7 +81,7 @@ This invokes [the mad king](http://nerdist.com/wp-content/uploads/2016/05/the-ma
 
 If you're doing development, `npm run watch` to have assets build automatically.
 
-## [Documentation](https://docs.beakerbrowser.com)
+## Documentation
 
 ### Env Vars
 
