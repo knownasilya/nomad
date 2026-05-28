@@ -585,12 +585,12 @@ function onClose(win) {
 
 function onGoBack() {
   var win = BrowserWindow.getFocusedWindow();
-  tabManager.getActive(win).webContents.goBack();
+  tabManager.getActive(win).webContents.navigationHistory.goBack();
 }
 
 function onGoForward() {
   var win = BrowserWindow.getFocusedWindow();
-  tabManager.getActive(win).webContents.goForward();
+  tabManager.getActive(win).webContents.navigationHistory.goForward();
 }
 
 function onReload() {
@@ -608,10 +608,10 @@ function onAppCommand(win, e, cmd) {
   // see https://electronjs.org/docs/all#event-app-command-windows
   switch (cmd) {
     case 'browser-backward':
-      tabManager.getActive(win).webContents.goBack();
+      tabManager.getActive(win).webContents.navigationHistory.goBack();
       break;
     case 'browser-forward':
-      tabManager.getActive(win).webContents.goForward();
+      tabManager.getActive(win).webContents.navigationHistory.goForward();
       break;
     default:
       break;

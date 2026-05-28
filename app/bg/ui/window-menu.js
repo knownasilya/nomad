@@ -683,7 +683,7 @@ export function buildWindowMenu(opts = {}) {
         enabled: !noWindows,
         accelerator: 'CmdOrCtrl+Left',
         click: function (item) {
-          if (tab) tab.webContents.goBack();
+          if (tab) tab.webContents.navigationHistory.goBack();
         },
       },
       {
@@ -692,7 +692,7 @@ export function buildWindowMenu(opts = {}) {
         enabled: !noWindows,
         accelerator: 'CmdOrCtrl+Right',
         click: function (item) {
-          if (tab) tab.webContents.goForward();
+          if (tab) tab.webContents.navigationHistory.goForward();
         },
       },
       {

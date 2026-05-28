@@ -1395,14 +1395,14 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     getByIndex(
       getWindow(this.sender),
       index
-    )?.primaryPane?.webContents.goBack();
+    )?.primaryPane?.webContents.navigationHistory.goBack();
   },
 
   async goForward(index) {
     getByIndex(
       getWindow(this.sender),
       index
-    )?.primaryPane?.webContents.goForward();
+    )?.primaryPane?.webContents.navigationHistory.goForward();
   },
 
   async stop(index) {
