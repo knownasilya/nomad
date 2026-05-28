@@ -3,6 +3,7 @@ import { classMap } from '../../vendor/lit-element/lit-html/directives/class-map
 import _get from 'lodash.get';
 import * as bg from '../bg-process-rpc';
 import buttonResetCSS from './button-reset.css';
+import { isHyperOrPearUrl } from '../../../../lib/urls';
 
 class NavbarSiteInfo extends LitElement {
   static get properties() {
@@ -53,7 +54,7 @@ class NavbarSiteInfo extends LitElement {
   }
 
   get isHyperdrive() {
-    return this.url.startsWith('hyper://');
+    return isHyperOrPearUrl(this.url);
   }
 
   // rendering

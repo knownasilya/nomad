@@ -13,6 +13,7 @@ import {
   importFilesystemToDrive,
 } from './util';
 import { getEnvVar } from '../lib/env';
+import { isHyperOrPearUrl } from '../../lib/urls';
 import * as tabManager from './tabs/manager';
 import * as viewZoom from './tabs/zoom';
 import * as shellMenus from './subwindows/shell-menus';
@@ -74,7 +75,7 @@ export function buildWindowMenu(opts = {}) {
   const noWindows = !win;
   const tab = !noWindows && win ? tabManager.getActive(win) : undefined;
   const url = tab?.url || tab?.loadingURL || '';
-  const isDriveSite = url.startsWith('hyper://');
+  const isDriveSite = isHyperOrPearUrl(url);
   const driveInfo = isDriveSite ? tab.driveInfo : undefined;
   const isWritable = driveInfo && driveInfo.writable;
 

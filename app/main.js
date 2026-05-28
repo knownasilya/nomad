@@ -38,6 +38,7 @@ import * as beakerProtocol from './bg/protocols/beaker';
 import * as assetProtocol from './bg/protocols/asset';
 import * as hyperProtocol from './bg/protocols/hyper';
 import * as datProtocol from './bg/protocols/dat';
+import * as pearProtocol from './bg/protocols/pear';
 
 import * as testDriver from './bg/test-driver';
 import * as openURL from './bg/open-url';
@@ -79,6 +80,18 @@ protocol.registerSchemesAsPrivileged([
       allowServiceWorkers: true,
       supportFetchAPI: true,
       corsEnabled: true,
+    },
+  },
+  {
+    scheme: 'pear',
+    privileges: {
+      standard: true,
+      secure: true,
+      allowServiceWorkers: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+      bypassCSP: true,
     },
   },
   {
@@ -161,6 +174,7 @@ app.on('ready', async function () {
   assetProtocol.register(protocol);
   hyperProtocol.register(protocol);
   datProtocol.register(protocol);
+  pearProtocol.register(protocol);
 
   initWindow.close();
 
