@@ -23,7 +23,7 @@
   },
   "homepage": "https://github.com/knownasilya/nomad#readme",
   "volta": {
-    "node": "14.19.0"
+    "node": "22.15.0"
   },
   "devDependencies": {
     "standard-version": "^9.3.2",

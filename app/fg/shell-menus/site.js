@@ -2,6 +2,7 @@ import { LitElement, html, css } from '../vendor/lit-element/lit-element';
 import * as bg from './bg-process-rpc';
 import commonCSS from './common.css';
 import { writeToClipboard } from '../lib/event-handlers';
+import { isHyperOrPearUrl } from '../../lib/urls';
 
 class SiteMenu extends LitElement {
   static get properties() {
@@ -22,7 +23,7 @@ class SiteMenu extends LitElement {
     this.url = params.url;
     this.requestUpdate();
 
-    if (this.url.startsWith('hyper://')) {
+    if (isHyperOrPearUrl(this.url)) {
       try {
         this.driveInfo = await bg.hyperdrive.getInfo(this.url);
       } catch (e) {

@@ -26,6 +26,10 @@ export async function reverseResolve(key) {
   return localMapByKey[toHostname(key)];
 }
 
+export function listCache() {
+  return {};
+}
+
 function toHostname(v) {
   if (Buffer.isBuffer(v)) {
     return v.toString('hex');

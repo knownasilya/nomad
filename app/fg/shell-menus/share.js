@@ -4,6 +4,7 @@ import commonCSS from './common.css';
 import inputsCSS from './inputs.css';
 import buttonsCSS from './buttons2.css';
 import { joinPath } from '../../lib/strings';
+import { isHyperOrPearUrl } from '../../lib/urls';
 
 class ShareMenu extends LitElement {
   static get properties() {
@@ -82,7 +83,7 @@ class ShareMenu extends LitElement {
 
   async init(params) {
     var shareableUrl = undefined;
-    if (params.url.startsWith('hyper://')) {
+    if (isHyperOrPearUrl(params.url)) {
       // establish the shareable url
       try {
         let driveInfo;

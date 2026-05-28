@@ -7,6 +7,7 @@ import * as bg from '../bg-process-rpc';
 import buttonResetCSS from './button-reset.css';
 import tooltipCSS from './tooltip.css';
 import './site-info';
+import { isHyperOrPearUrl } from '../../../lib/urls';
 
 const isHyperHashRegex = /^[a-z0-9]{64}/i;
 const NETWORK_STATS_POLL_INTERVAL = 5000; // ms
@@ -84,7 +85,7 @@ class NavbarLocation extends LitElement {
     this.dontShowAutocompleteOnNextFocus = false; // helper to avoid showing autocomplete on new tab
 
     setInterval(async () => {
-      if (!this.url.startsWith('hyper://')) return;
+      if (!isHyperOrPearUrl(this.url)) return;
       var state = await bg.views.getNetworkState('active');
       this.peers = state?.peers?.length || 0;
       this.requestUpdate();
@@ -112,7 +113,7 @@ class NavbarLocation extends LitElement {
   }
 
   get isHyperdrive() {
-    return this.url.startsWith('hyper://');
+    return isHyperOrPearUrl(this.url);
   }
 
   get modifiedUrl() {

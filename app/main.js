@@ -17,7 +17,6 @@ import { getEnvVar } from './bg/lib/env';
 import * as logger from './bg/logger';
 import * as beakerBrowser from './bg/browser';
 import * as adblocker from './bg/adblocker';
-import * as analytics from './bg/analytics';
 import * as portForwarder from './bg/nat-port-forwarder';
 import dbs from './bg/dbs/index';
 import hyper from './bg/hyper/index';
@@ -38,6 +37,7 @@ import * as beakerProtocol from './bg/protocols/beaker';
 import * as assetProtocol from './bg/protocols/asset';
 import * as hyperProtocol from './bg/protocols/hyper';
 import * as datProtocol from './bg/protocols/dat';
+import * as pearProtocol from './bg/protocols/pear';
 
 import * as testDriver from './bg/test-driver';
 import * as openURL from './bg/open-url';
@@ -79,6 +79,18 @@ protocol.registerSchemesAsPrivileged([
       allowServiceWorkers: true,
       supportFetchAPI: true,
       corsEnabled: true,
+    },
+  },
+  {
+    scheme: 'pear',
+    privileges: {
+      standard: true,
+      secure: true,
+      allowServiceWorkers: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+      bypassCSP: true,
     },
   },
   {
@@ -152,7 +164,6 @@ app.on('ready', async function () {
   log.info('Initializing browser');
   await beakerBrowser.setup();
   adblocker.setup();
-  analytics.setup();
   await bookmarkPins.setup();
 
   // protocols
@@ -161,6 +172,7 @@ app.on('ready', async function () {
   assetProtocol.register(protocol);
   hyperProtocol.register(protocol);
   datProtocol.register(protocol);
+  pearProtocol.register(protocol);
 
   initWindow.close();
 

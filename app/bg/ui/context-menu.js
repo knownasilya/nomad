@@ -6,6 +6,7 @@ import { toggleShellInterface, getAddedWindowSettings } from './windows';
 import { download } from './downloads';
 import * as settingsDb from '../dbs/settings';
 import { runDrivePropertiesFlow } from './util';
+import { isHyperOrPearUrl } from '../../lib/urls';
 
 // NOTE
 // subtle but important!!
@@ -22,7 +23,7 @@ export default function registerContextMenu() {
     webContents.on('context-menu', async (e, props) => {
       var menuItems = [];
       const { mediaFlags, editFlags } = props;
-      const isHyperdrive = props.pageURL.startsWith('hyper://');
+      const isHyperdrive = isHyperOrPearUrl(props.pageURL);
       const hasText = props.selectionText.trim().length > 0;
       const can = (type) => editFlags[`can${type}`] && hasText;
       const isMisspelled = props.misspelledWord;
@@ -410,13 +411,13 @@ export function createMenuItem(id, { tab, webContents, x, y }) {
     case 'back':
       return {
         label: 'Back',
-        enabled: webContents.canGoBack(),
+        enabled: webContents.navigationHistory.canGoBack(),
         click: () => webContents.goBack(),
       };
     case 'forward':
       return {
         label: 'Forward',
-        enabled: webContents.canGoForward(),
+        enabled: webContents.navigationHistory.canGoForward(),
         click: () => webContents.goForward(),
       };
     case 'reload':

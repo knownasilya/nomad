@@ -15,6 +15,7 @@
     "anymatch": "^2.0.0",
     "auto-launch": "^5.0.5",
     "await-lock": "^1.2.1",
+    "b4a": "^1.8.1",
     "base32.js": "^0.1.0",
     "beaker-error-constants": "^1.5.0",
     "beaker-index": "~0.0.12",
@@ -98,6 +99,11 @@
     "winston": "github:winstonjs/winston#b4ced895b3e1ead8a616590189b003cfd9d7acca",
     "yazl": "^2.5.1",
     "yo-yo": "^1.4.0"
+  },
+  "overrides": {
+    "node-gyp": "^10.0.0",
+    "noise-protocol": "3.0.1",
+    "sodium-native": "npm:sodium-javascript@~0.8.0"
   },
   "volta": {
     "extends": "../package.json"

@@ -16,7 +16,7 @@ module.exports = function () {
   childProcess
     .spawn(electron, [/*'--inspect',*/ NODE_FLAGS, app], {
       stdio: 'inherit',
-      env: Object.assign({}, process.env, { BEAKER_DEV_MODE: '1' }), // inherit
+      env: Object.assign({}, process.env, { BEAKER_DEV_MODE: '1' }),
     })
     .on('close', function () {
       // User closed the app. Kill the host process.

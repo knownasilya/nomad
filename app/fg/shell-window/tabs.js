@@ -4,6 +4,7 @@ import { classMap } from '../vendor/lit-element/lit-html/directives/class-map';
 import { repeat } from '../vendor/lit-element/lit-html/directives/repeat';
 import spinnerCSS from './spinner.css';
 import * as bg from './bg-process-rpc';
+import { isHyperOrPearUrl } from '../../lib/urls';
 
 const ANIMATIONS_ENABLED = false;
 
@@ -363,7 +364,7 @@ class ShellWindowTabs extends LitElement {
       url &&
       (url.startsWith('https://') ||
         url.startsWith('dat://') ||
-        url.startsWith('hyper://'))
+        isHyperOrPearUrl(url))
     ) {
       e.preventDefault();
       bg.views.createTab(url, { focusLocationBar: true, setActive: true });

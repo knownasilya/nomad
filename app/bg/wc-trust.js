@@ -28,6 +28,7 @@
  */
 
 import { app } from 'electron';
+import { isHyperOrPearUrl } from '../lib/urls';
 
 export const TRUST = {
   UNKNOWN: -1,
@@ -76,7 +77,7 @@ export function onWebRequestCompleted(details) {
     if (details.url.startsWith('beaker://')) {
       wcInfo.trust = TRUST.TRUSTED;
     } else if (
-      details.url.startsWith('hyper://') &&
+      isHyperOrPearUrl(details.url) &&
       details.responseHeaders['Beaker-Trusted-Interface']
     ) {
       wcInfo.trust = TRUST.TRUSTED;

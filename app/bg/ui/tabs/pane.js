@@ -4,7 +4,7 @@ import path from 'path';
 import { promises as fs } from 'fs';
 import { EventEmitter } from 'events';
 import _throttle from 'lodash.throttle';
-import { parseDriveUrl, stripUrlHash } from '../../../lib/urls';
+import { parseDriveUrl, stripUrlHash, isHyperOrPearUrl } from '../../../lib/urls';
 import { toNiceUrl } from '../../../lib/strings';
 import _get from 'lodash.get';
 import _pick from 'lodash.pick';
@@ -341,11 +341,11 @@ export class Pane extends EventEmitter {
   }
 
   get canGoBack() {
-    return this.webContents.canGoBack();
+    return this.webContents.navigationHistory.canGoBack();
   }
 
   get canGoForward() {
-    return this.webContents.canGoForward();
+    return this.webContents.navigationHistory.canGoForward();
   }
 
   get isAudioMuted() {
@@ -712,7 +712,7 @@ export class Pane extends EventEmitter {
     this.peers = 0;
     this.donateLinkHref = null;
 
-    if (!this.url.startsWith('hyper://')) {
+    if (!isHyperOrPearUrl(this.url)) {
       this.driveInfo = null;
       return;
     }
@@ -819,7 +819,7 @@ export class Pane extends EventEmitter {
     this.favicons = null;
     this.frameUrls = { [this.mainFrameId]: url }; // drop all non-main-frame URLs
     await Promise.all([this.fetchIsBookmarked(), this.fetchDriveInfo()]);
-    if (httpResponseCode === 504 && url.startsWith('hyper://')) {
+    if (httpResponseCode === 504 && isHyperOrPearUrl(url)) {
       this.wasDriveTimeout = true;
     }
 
