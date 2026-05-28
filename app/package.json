@@ -100,6 +100,11 @@
     "yazl": "^2.5.1",
     "yo-yo": "^1.4.0"
   },
+  "overrides": {
+    "node-gyp": "^10.0.0",
+    "noise-protocol": "3.0.1",
+    "sodium-native": "npm:sodium-javascript@~0.8.0"
+  },
   "volta": {
     "extends": "../package.json"
   }

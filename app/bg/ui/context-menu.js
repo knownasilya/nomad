@@ -411,13 +411,13 @@ export function createMenuItem(id, { tab, webContents, x, y }) {
     case 'back':
       return {
         label: 'Back',
-        enabled: webContents.canGoBack(),
+        enabled: webContents.navigationHistory.canGoBack(),
         click: () => webContents.goBack(),
       };
     case 'forward':
       return {
         label: 'Forward',
-        enabled: webContents.canGoForward(),
+        enabled: webContents.navigationHistory.canGoForward(),
         click: () => webContents.goForward(),
       };
     case 'reload':

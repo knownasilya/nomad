@@ -1,7 +1,8 @@
 {
   "name": "beakerbrowser",
   "devDependencies": {
-    "electron": "^12.0.0",
+    "@electron/rebuild": "^3.7.1",
+    "electron": "^42.3.0",
     "electron-builder": "^23.0.2",
     "electron-notarize": "^0.3.0",
     "eslint": "^4.5.0",

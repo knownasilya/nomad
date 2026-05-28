@@ -341,11 +341,11 @@ export class Pane extends EventEmitter {
   }
 
   get canGoBack() {
-    return this.webContents.canGoBack();
+    return this.webContents.navigationHistory.canGoBack();
   }
 
   get canGoForward() {
-    return this.webContents.canGoForward();
+    return this.webContents.navigationHistory.canGoForward();
   }
 
   get isAudioMuted() {

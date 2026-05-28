@@ -3,7 +3,7 @@
 
 var path = require('path');
 var run = require('./util-run');
-var homedir = require('os').homedir();
+var { rebuild } = require('@electron/rebuild');
 
 function runAsync(...args) {
   return new Promise((resolve) => {
@@ -11,27 +11,17 @@ function runAsync(...args) {
   });
 }
 
-const MODULES_NEEDING_REBUILD = ['sqlite3'];
-
 async function main() {
-  // TODO read electron version
-  var cwd = path.join(__dirname, '../../app');
-  console.log(cwd);
-  var env = {};
-  if (process.platform === 'darwin') {
-    env = {
-      // required to make spellchecker compile
-      CXXFLAGS: '-mmacosx-version-min=10.10',
-      LDFLAGS: '-mmacosx-version-min=10.10',
-    };
-  }
-  env.HOME = path.join(homedir, '.electron-gyp');
-  for (let mod of MODULES_NEEDING_REBUILD) {
-    await runAsync(
-      `npm rebuild ${mod} --runtime=electron --target=11.0.0-beta.18 --disturl=https://electronjs.org/headers --build-from-source`,
-      { cwd, env, shell: true }
-    );
-  }
+  var electronVersion = require('../node_modules/electron/package.json').version;
+  var appDir = path.join(__dirname, '../../app');
+  console.log('Rebuilding native modules in', appDir);
+
+  await rebuild({
+    buildPath: appDir,
+    electronVersion,
+    force: true,
+  });
+
   await runAsync(`npm run build`, { shell: true });
 }
 
