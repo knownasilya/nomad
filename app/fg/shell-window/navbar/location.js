@@ -7,7 +7,7 @@ import * as bg from '../bg-process-rpc';
 import buttonResetCSS from './button-reset.css';
 import tooltipCSS from './tooltip.css';
 import './site-info';
-import { isHyperOrPearUrl } from '../../../../lib/urls';
+import { isHyperOrPearUrl } from '../../../lib/urls';
 
 const isHyperHashRegex = /^[a-z0-9]{64}/i;
 const NETWORK_STATS_POLL_INTERVAL = 5000; // ms

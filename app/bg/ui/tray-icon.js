@@ -17,7 +17,7 @@ var tray;
 export function setup() {
   tray = new Tray(path.join(__dirname, getIcon()));
   tray.setToolTip('Nomad Browser');
-  tray.on('click', (e) => tray.popupContextMenu());
+  tray.on('click', (e) => tray.popUpContextMenu());
   settingsDb.on('set:run_background', buildMenu);
   nativeTheme.on('updated', updateIcon);
   buildMenu();

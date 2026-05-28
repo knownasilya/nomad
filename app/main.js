@@ -17,7 +17,6 @@ import { getEnvVar } from './bg/lib/env';
 import * as logger from './bg/logger';
 import * as beakerBrowser from './bg/browser';
 import * as adblocker from './bg/adblocker';
-import * as analytics from './bg/analytics';
 import * as portForwarder from './bg/nat-port-forwarder';
 import dbs from './bg/dbs/index';
 import hyper from './bg/hyper/index';
@@ -165,7 +164,6 @@ app.on('ready', async function () {
   log.info('Initializing browser');
   await beakerBrowser.setup();
   adblocker.setup();
-  analytics.setup();
   await bookmarkPins.setup();
 
   // protocols
