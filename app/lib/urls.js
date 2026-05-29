@@ -36,7 +36,7 @@ export function examineLocationInput(v) {
     )
   ) {
     if (isHyperHashRegex.test(v)) {
-      vWithProtocol = 'pear://' + v;
+      vWithProtocol = 'hyper://' + v;
     } else if (v.startsWith('localhost') || isIPAddressRegex.test(v)) {
       vWithProtocol = 'http://' + v;
     } else {
@@ -49,8 +49,8 @@ export function examineLocationInput(v) {
 }
 
 const SCHEME_REGEX = /[a-z]+:\/\//i;
-//                         1          2      3        4
-const VERSION_REGEX = /^((?:hyper|pear):\/\/)?([^/]+)(\+[^/]+)(.*)$/i;
+//                         1         2      3        4
+const VERSION_REGEX = /^(hyper:\/\/)?([^/]+)(\+[^/]+)(.*)$/i;
 export function parseDriveUrl(str, parseQS) {
   // prepend the scheme if it's missing
   if (!SCHEME_REGEX.test(str)) {
@@ -163,7 +163,6 @@ export function isUrlLike(url) {
 export function isHyperUrl(url) {
   if (url.length === 64 && isHyperHashRegex.test(url)) return true;
   if (url.startsWith('hyper://')) return true;
-  if (url.startsWith('pear://')) return true;
   return false;
 }
 
@@ -172,8 +171,7 @@ export function isHyperUrl(url) {
  * @returns {Boolean}
  */
 export function isHyperOrPearUrl(url) {
-  return typeof url === 'string' &&
-    (url.startsWith('hyper://') || url.startsWith('pear://'));
+  return typeof url === 'string' && url.startsWith('hyper://');
 }
 
 /**

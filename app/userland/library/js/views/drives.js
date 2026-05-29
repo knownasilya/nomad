@@ -40,6 +40,10 @@ export class DrivesView extends LitElement {
   async load() {
     var drives = await beaker.drives.list({ includeSystem: false });
 
+    drives.forEach((drive) => {
+      drive.isPear = drive.info?.type === 'pear-app';
+    });
+
     drives = drives.filter((drive) => {
       // move forks onto their parents
       if (drive.forkOf) {
@@ -189,10 +193,11 @@ export class DrivesView extends LitElement {
 
   renderDrive(drive) {
     var numForks = drive.forks?.length || 0;
+    var driveHref = drive.url;
     if (this.hasAttribute('simple')) {
       return html`
         <a
-          href=${drive.url}
+          href=${driveHref}
           title=${drive.info.title || 'Untitled'}
           class="${classMap({ drive: true })}"
           @contextmenu=${(e) => this.onContextmenuDrive(e, drive)}
@@ -206,7 +211,7 @@ export class DrivesView extends LitElement {
     }
     return html`
       <a
-        href=${drive.url}
+        href=${driveHref}
         title=${drive.info.title || 'Untitled'}
         class="${classMap({ drive: true })}"
         @contextmenu=${(e) => this.onContextmenuDrive(e, drive)}

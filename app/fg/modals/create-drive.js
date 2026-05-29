@@ -16,6 +16,7 @@ class CreateDriveModal extends LitElement {
       errors: { type: Object },
       fromGit: { type: Boolean },
       gitUrl: { type: String },
+      isPear: { type: Boolean },
     };
   }
 
@@ -41,7 +42,7 @@ class CreateDriveModal extends LitElement {
           margin: 0;
         }
 
-        form input {
+        form input:not([type='checkbox']) {
           font-size: 14px;
           height: 34px;
           padding: 0 10px;
@@ -113,6 +114,7 @@ class CreateDriveModal extends LitElement {
     this.fromFolderPath = undefined;
     this.fromGit = false;
     this.gitUrl = undefined;
+    this.isPear = false;
     this.errors = {};
   }
 
@@ -174,6 +176,11 @@ class CreateDriveModal extends LitElement {
               value=${this.tags || ''}
               placeholder="Tags (optional, separated by spaces)"
             />
+            <label class="toggle non-fullwidth">
+              <input type="checkbox" ?checked=${this.isPear} @click=${this.onTogglePear} />
+              <div class="switch"></div>
+              <span class="text">Create as Pear app</span>
+            </label>
             ${this.fromFolderPath
               ? html`
                   <div class="from-folder-path">
@@ -307,6 +314,13 @@ class CreateDriveModal extends LitElement {
         fromGitUrl: this.fromGit ? this.gitUrl : undefined,
         prompt: false,
       });
+      if (this.isPear) {
+        if (this.fromFolderPath) {
+          await bg.folderSync.set(url, { localPath: this.fromFolderPath });
+        }
+        this.cbs.resolve({ url, gotoSync: !!this.fromFolderPath, isPear: true, pearName: this.title });
+        return;
+      }
       if (this.fromFolderPath) {
         await bg.folderSync.set(url, { localPath: this.fromFolderPath });
       }
@@ -331,6 +345,10 @@ class CreateDriveModal extends LitElement {
     });
     if (!folder || !folder.length) return;
     this.fromFolderPath = folder[0];
+  }
+
+  onTogglePear() {
+    this.isPear = !this.isPear;
   }
 
   onClickFromGit(e) {

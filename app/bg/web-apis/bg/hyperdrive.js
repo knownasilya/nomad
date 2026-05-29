@@ -86,6 +86,18 @@ export default {
       }
       if (!res || !res.url) throw new UserDeniedError();
       newDriveUrl = res.url;
+
+      if (res.isPear) {
+        try {
+          const driveKey = await lookupUrlDriveKey(newDriveUrl);
+          if (driveKey) {
+            const drive = await drives.getOrLoadDrive(driveKey);
+            const { checkoutFS } = await drives.getDriveCheckout(drive, undefined);
+            const existing = await checkoutFS.pda.readManifest().catch(() => ({}));
+            await checkoutFS.pda.writeManifest({ ...existing, type: 'pear-app' });
+          }
+        } catch {}
+      }
     } else {
       if (tags && typeof tags === 'string') {
         tags = tags.split(' ');

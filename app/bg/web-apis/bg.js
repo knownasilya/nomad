@@ -36,7 +36,6 @@ import contactsManifest from './manifests/external/contacts';
 import hyperdriveManifest from './manifests/external/hyperdrive';
 import markdownManifest from './manifests/external/markdown';
 import panesManifest from './manifests/external/panes';
-import pearManifest from './manifests/external/pear';
 import peersocketsManifest from './manifests/external/peersockets';
 import shellManifest from './manifests/external/shell';
 
@@ -46,7 +45,6 @@ import contactsAPI from './bg/contacts';
 import hyperdriveAPI from './bg/hyperdrive';
 import markdownAPI from './bg/markdown';
 import panesAPI from './bg/panes';
-import pearAPI from './bg/pear';
 import peersocketsAPI from './bg/peersockets';
 import * as shellAPI from './bg/shell';
 
@@ -61,8 +59,7 @@ import experimentalDatPeersAPI from './bg/experimental/dat-peers';
 import experimentalGlobalFetchAPI from './bg/experimental/global-fetch';
 
 const INTERNAL_ORIGIN_REGEX = /^(beaker:)/i;
-const SITE_ORIGIN_REGEX = /^(beaker:|hyper:|pear:|https?:|data:)/i;
-const PEAR_ORIGIN_REGEX = /^(pear:)/i;
+const SITE_ORIGIN_REGEX = /^(beaker:|hyper:|https?:|data:)/i;
 const IFRAME_WHITELIST = [
   'hyperdrive.loadDrive',
   'hyperdrive.getInfo',
@@ -136,7 +133,6 @@ export const setup = function () {
     secureOnly('peersockets')
   );
   rpc.exportAPI('shell', shellManifest, shellAPI, secureOnly('shell'));
-  rpc.exportAPI('pear', pearManifest, pearAPI, pearOnly);
 
   // experimental apis
   rpc.exportAPI(
@@ -158,12 +154,6 @@ export const setup = function () {
     secureOnly
   );
 };
-
-function pearOnly(event, methodName, args) {
-  if (!(event && event.sender)) return false;
-  var senderInfo = getSenderInfo(event);
-  return senderInfo.isMainFrame && PEAR_ORIGIN_REGEX.test(senderInfo.url);
-}
 
 function internalOnly(event, methodName, args) {
   if (!(event && event.sender)) {
