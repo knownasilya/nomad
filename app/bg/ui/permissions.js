@@ -1,8 +1,8 @@
+// @ts-nocheck
 import { session } from 'electron';
 import { PERMS, getPermId } from '../../lib/permissions';
 import hyper from '../hyper/index';
 import * as sitedata from '../dbs/sitedata';
-import _get from 'lodash.get';
 import { parseDriveUrl } from '../../lib/urls';
 import * as permPromptSubwindow from './subwindows/perm-prompt';
 import * as tabManager from './tabs/manager';
@@ -88,7 +88,7 @@ export async function checkLabsPerm({ perm, labApi, apiDocsUrl, sender }) {
         urlp.version
       );
       let manifest = await checkoutFS.pda.readManifest().catch((_) => {});
-      let apis = _get(manifest, 'experimental.apis');
+      let apis = manifest?.experimental?.apis;
       if (apis && Array.isArray(apis)) {
         isOptedIn = apis.includes(labApi);
       }

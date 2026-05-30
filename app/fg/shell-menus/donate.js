@@ -1,5 +1,4 @@
-import { LitElement, html, css } from '../vendor/lit-element/lit-element';
-import _get from 'lodash.get';
+import { LitElement, html, css } from 'lit';
 import * as bg from './bg-process-rpc';
 import commonCSS from './common.css';
 
@@ -48,8 +47,8 @@ class DonateMenu extends LitElement {
   }
 
   render() {
-    var title = _get(this, 'driveInfo.title', 'this site');
-    const paymentLink = String(_get(this, 'driveInfo.links.payment.0.href'));
+    var title = this.driveInfo?.title ?? 'this site';
+    const paymentLink = String(this.driveInfo?.links?.payment?.[0]?.href);
 
     return html`
       <link rel="stylesheet" href="beaker://assets/font-awesome.css" />

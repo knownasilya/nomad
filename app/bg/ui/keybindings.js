@@ -4,7 +4,6 @@ The webview handlers take precedence over the browser keybindings (which are don
 To avoid that, we listen to the window webContents' 'before-input-event' and handle the commands manually.
 */
 
-import _flattenDeep from 'lodash.flattendeep';
 import isAccelerator from 'electron-is-accelerator';
 import equals from 'keyboardevents-areequal';
 import { toKeyEvent } from 'keyboardevent-from-electron-accelerator';
@@ -100,7 +99,7 @@ function extractKeybindings(menuNode, menuLabel) {
       .map((item) => extractKeybindings(item, menuNode.label))
       .filter(Boolean);
   } else if (Array.isArray(menuNode)) {
-    return _flattenDeep(menuNode.map(extractKeybindings).filter(Boolean));
+    return menuNode.map(extractKeybindings).filter(Boolean).flat(Infinity);
   }
   return null;
 }

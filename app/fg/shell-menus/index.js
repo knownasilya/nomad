@@ -1,6 +1,6 @@
-import _debounce from 'lodash.debounce';
+import { debounce as _debounce } from '../../lib/async';
 import { ipcRenderer } from 'electron';
-import { LitElement, html } from '../vendor/lit-element/lit-element';
+import { LitElement, html } from 'lit';
 import * as bg from './bg-process-rpc';
 import './background-tray';
 import './browser';

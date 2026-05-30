@@ -185,6 +185,14 @@ async function beakerProtocol(request, respond) {
       path.join(__dirname, 'assets/css/syntax-highlight.css')
     );
   }
+  if (requestUrl === 'beaker://assets/design-tokens.css') {
+    return cb(
+      200,
+      'OK',
+      'text/css; charset=utf-8',
+      path.join(__dirname, 'assets/css/design-tokens.css')
+    );
+  }
   if (requestUrl === 'beaker://assets/font-awesome.css') {
     return cb(
       200,

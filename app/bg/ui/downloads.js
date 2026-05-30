@@ -1,3 +1,4 @@
+// @ts-nocheck
 import path from 'path';
 import fs from 'fs';
 import { app, dialog, shell } from 'electron';

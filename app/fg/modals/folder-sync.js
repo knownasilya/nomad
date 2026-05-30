@@ -1,5 +1,5 @@
-import { LitElement, html, css } from '../vendor/lit-element/lit-element';
-import { repeat } from '../vendor/lit-element/lit-html/directives/repeat';
+import { LitElement, html, css } from 'lit';
+import { repeat } from 'lit/directives/repeat.js';
 import * as bg from './bg-process-rpc';
 import commonCSS from './common.css';
 import inputsCSS from './inputs.css';
@@ -7,7 +7,7 @@ import buttonsCSS from './buttons2.css';
 import spinnerCSS from './spinner.css';
 import tooltipCSS from './tooltip.css';
 import { globToRegex } from '../../lib/strings';
-import _debounce from 'lodash.debounce';
+import { debounce as _debounce } from '../../lib/async';
 
 class FolderSyncModal extends LitElement {
   static get styles() {

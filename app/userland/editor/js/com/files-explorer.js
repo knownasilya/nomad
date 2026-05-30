@@ -1,9 +1,9 @@
 import {
   LitElement,
   html,
-} from '../../../app-stdlib/vendor/lit-element/lit-element.js';
-import { classMap } from '../../../app-stdlib/vendor/lit-element/lit-html/directives/class-map.js';
-import { repeat } from '../../../app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
+} from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
+import { repeat } from 'lit/directives/repeat.js';
 import { joinPath } from '../../../app-stdlib/js/strings.js';
 import { emit } from '../../../app-stdlib/js/dom.js';
 import sidebarFilesViewCSS from '../../css/com/files-explorer.css.js';

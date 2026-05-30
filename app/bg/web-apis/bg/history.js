@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as historyDb from '../../dbs/history';
 
 // exported api

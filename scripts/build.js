@@ -2,7 +2,6 @@
 'use strict';
 
 var pathUtil = require('path');
-var Q = require('q');
 var bundle = require('./tasks/build/bundle');
 
 var appDir = pathUtil.resolve(__dirname, '../app');
@@ -11,7 +10,7 @@ var userlandDir = pathUtil.join(appDir, 'userland');
 var p = (base, rel) => pathUtil.join(base, rel);
 
 function bundleApplication() {
-  return Q.all([
+  return Promise.all([
     bundle(p(appDir, 'main.js'), p(appDir, 'main.build.js')),
     bundle(
       p(fgDir, 'webview-preload/index.js'),

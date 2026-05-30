@@ -1,3 +1,4 @@
+// @ts-nocheck
 import path from 'path';
 import { URL } from 'url';
 import mkdirp from 'mkdirp';

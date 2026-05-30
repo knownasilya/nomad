@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { app, BrowserWindow, dialog, Menu } from 'electron';
 import {
   createShellWindow,

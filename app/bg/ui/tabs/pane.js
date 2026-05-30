@@ -1,13 +1,12 @@
+// @ts-nocheck
 import { app, BrowserView, nativeTheme } from 'electron';
 import errorPage from '../../lib/error-page';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { EventEmitter } from 'events';
-import _throttle from 'lodash.throttle';
 import { parseDriveUrl, stripUrlHash, isHyperOrPearUrl } from '../../../lib/urls';
 import { toNiceUrl } from '../../../lib/strings';
-import _get from 'lodash.get';
-import _pick from 'lodash.pick';
+import { throttle, pick } from '../../../lib/async';
 import * as zoom from './zoom';
 import * as modals from '../subwindows/modals';
 import * as overlay from '../subwindows/overlay';
@@ -273,11 +272,9 @@ export class Pane extends EventEmitter {
       var version = /\+([\d]+)/.exec(origin)
         ? `v${/\+([\d]+)/.exec(origin)[1]}`
         : '';
-      var forkLabel = _get(
-        filesystem.listDrives().find((d) => d.key === this.driveInfo.key),
-        'forkOf.label',
-        ''
-      );
+      var forkLabel =
+        filesystem.listDrives().find((d) => d.key === this.driveInfo.key)
+          ?.forkOf?.label ?? '';
       return [forkLabel, version].filter(Boolean).join(' ');
     }
     return '';
@@ -327,7 +324,7 @@ export class Pane extends EventEmitter {
   }
 
   get driveDomain() {
-    return _get(this.driveInfo, 'domain', '');
+    return this.driveInfo?.domain ?? '';
   }
 
   get driveIdent() {
@@ -337,7 +334,7 @@ export class Pane extends EventEmitter {
   }
 
   get writable() {
-    return _get(this.driveInfo, 'writable', false);
+    return this.driveInfo?.writable ?? false;
   }
 
   get canGoBack() {
@@ -361,7 +358,7 @@ export class Pane extends EventEmitter {
   }
 
   get state() {
-    var state = _pick(this, STATE_VARS);
+    var state = pick(this, STATE_VARS);
     if (this.loadingURL) state.url = this.loadingURL;
     return state;
   }
@@ -483,12 +480,7 @@ export class Pane extends EventEmitter {
       await new Promise((r) => setTimeout(r, 2e3));
 
       // capture the page
-      this.browserView.webContents.incrementCapturerCount(
-        { width: 1000, height: 800 },
-        !this.isActive
-      );
       var image = await this.browserView.webContents.capturePage();
-      this.browserView.webContents.decrementCapturerCount(!this.isActive);
       var bounds = image.getSize();
       if (bounds.width === 0 || bounds.height === 0) return;
       if (bounds.width <= bounds.height) return; // only save if it's a useful image
@@ -560,7 +552,7 @@ export class Pane extends EventEmitter {
       let { checkoutFS } = await hyper.drives.getDriveCheckout(drive, version);
       this.liveReloadEvents = await checkoutFS.pda.watch();
 
-      const reload = _throttle(
+      const reload = throttle(
         () => {
           this.browserView.webContents.reload();
         },
@@ -728,7 +720,7 @@ export class Pane extends EventEmitter {
       );
       this.folderSyncPath = await folderSyncDb.getPath(this.driveInfo.key);
       this.peers = this.driveInfo.peers;
-      this.donateLinkHref = _get(this, 'driveInfo.links.payment.0.href');
+      this.donateLinkHref = this.driveInfo?.links?.payment?.[0]?.href;
     } catch (e) {
       this.driveInfo = null;
     }

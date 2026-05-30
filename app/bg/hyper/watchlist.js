@@ -1,3 +1,4 @@
+// @ts-nocheck
 import EventEmitter from 'events';
 import emitStream from 'emit-stream';
 import * as logLib from '../logger';

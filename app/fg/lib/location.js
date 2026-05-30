@@ -1,6 +1,5 @@
 import { examineLocationInput } from '../../lib/urls';
 import { joinPath } from '../../lib/strings';
-import _uniqWith from 'lodash.uniqwith';
 
 /**
  * Used by ../shell-window/navbar/location.js
@@ -60,9 +59,8 @@ export async function queryAutocomplete(bg, ctx, onResults) {
   historyResults.forEach((r) => highlightHistoryResult(searchTerms, r));
 
   if (ctx.inputValue) {
-    finalResults = _uniqWith(
-      historyResults,
-      (a, b) => normalizeURL(a.url) === normalizeURL(b.url)
+    finalResults = historyResults.filter(
+      (r, i) => historyResults.findIndex(x => normalizeURL(x.url) === normalizeURL(r.url)) === i
     ); // remove duplicates
     finalResults = finalResults.slice(0, 10); // apply limit
   } else {

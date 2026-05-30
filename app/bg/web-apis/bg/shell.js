@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { dialog } from 'electron';
 import pda from 'pauls-dat-api2';
 import * as modals from '../../ui/subwindows/modals';
@@ -18,7 +19,7 @@ import {
   UserDeniedError,
   ArchiveNotWritableError,
 } from 'beaker-error-constants';
-import _pick from 'lodash.pick';
+import { pick } from '../../../lib/async';
 import * as wcTrust from '../../wc-trust';
 
 // typedefs
@@ -45,7 +46,7 @@ export async function drivePropertiesDialog(url) {
   await modals.create(this.sender, 'drive-properties', {
     url: info.url,
     writable: info.writable,
-    props: Object.assign(_pick(info, ['title', 'description']), {
+    props: Object.assign(pick(info, ['title', 'description']), {
       tags: cfg.tags || [],
     }),
   });

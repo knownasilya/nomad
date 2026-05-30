@@ -1,4 +1,4 @@
-import { css } from '../../app-stdlib/vendor/lit-element/lit-element.js';
+import { css } from 'lit';
 
 const cssStr = css`
   .empty {

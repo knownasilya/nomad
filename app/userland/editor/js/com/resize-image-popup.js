@@ -1,7 +1,7 @@
 import {
   html,
   css,
-} from '../../../app-stdlib/vendor/lit-element/lit-element.js';
+} from 'lit';
 import { BasePopup } from '../../../app-stdlib/js/com/popups/base.js';
 import popupsCSS from '../../../app-stdlib/css/com/popups.css.js';
 

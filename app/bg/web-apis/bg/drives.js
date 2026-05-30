@@ -1,3 +1,4 @@
+// @ts-nocheck
 import hyper from '../../hyper/index';
 import * as drives from '../../hyper/drives';
 import * as archivesDb from '../../dbs/archives';

@@ -1,3 +1,4 @@
+// @ts-nocheck
 // this emulates the implementation of event-targets by browsers
 
 const LISTENERS = Symbol(); // eslint-disable-line

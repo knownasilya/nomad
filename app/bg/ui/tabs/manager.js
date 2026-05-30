@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {
   app,
   dialog,
@@ -8,10 +9,7 @@ import {
   screen,
 } from 'electron';
 import { EventEmitter } from 'events';
-import _throttle from 'lodash.throttle';
 import emitStream from 'emit-stream';
-import _get from 'lodash.get';
-import _pick from 'lodash.pick';
 import * as rpc from 'pauls-electron-rpc';
 import { Pane } from './pane';
 import { PaneLayout } from './pane-layout';

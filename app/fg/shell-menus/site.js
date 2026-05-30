@@ -1,4 +1,4 @@
-import { LitElement, html, css } from '../vendor/lit-element/lit-element';
+import { LitElement, html, css } from 'lit';
 import * as bg from './bg-process-rpc';
 import commonCSS from './common.css';
 import { writeToClipboard } from '../lib/event-handlers';

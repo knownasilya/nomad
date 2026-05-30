@@ -1,4 +1,4 @@
-import { css } from '../vendor/lit-element/lit-element';
+import { css } from 'lit';
 
 export default css`
   input,

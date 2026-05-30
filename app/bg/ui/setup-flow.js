@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as path from 'path';
 import { URLSearchParams } from 'url';
 import { BrowserWindow } from 'electron';

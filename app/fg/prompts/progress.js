@@ -1,5 +1,4 @@
-import { LitElement, html, css } from '../vendor/lit-element/lit-element';
-import _get from 'lodash.get';
+import { LitElement, html, css } from 'lit';
 import * as bg from './bg-process-rpc';
 
 class ProgressPrompt extends LitElement {

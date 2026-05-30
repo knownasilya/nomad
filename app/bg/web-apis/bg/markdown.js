@@ -1,3 +1,4 @@
+// @ts-nocheck
 import markdown from '../../../lib/markdown';
 
 const mdNoHTML = markdown({

@@ -1,4 +1,4 @@
-import { css } from '../../app-stdlib/vendor/lit-element/lit-element.js';
+import { css } from 'lit';
 import commonCSS from '../../app-stdlib/css/common.css.js';
 import buttonsCSS from '../../app-stdlib/css/buttons2.css.js';
 import emptyCSS from './empty.css.js';

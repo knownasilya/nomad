@@ -1,5 +1,5 @@
-import { LitElement, html, css } from '../vendor/lit-element/lit-element';
-import { classMap } from '../vendor/lit-element/lit-html/directives/class-map';
+import { LitElement, html, css } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import { joinPath } from '../../lib/strings';
 import { createStat } from '../../bg/web-apis/fg/stat';
 import * as bg from './bg-process-rpc';

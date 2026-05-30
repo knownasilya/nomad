@@ -1,6 +1,5 @@
-import { LitElement, html, css } from '../vendor/lit-element/lit-element';
-import { classMap } from '../vendor/lit-element/lit-html/directives/class-map';
-import _get from 'lodash.get';
+import { LitElement, html, css } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import * as bg from './bg-process-rpc';
 import buttonResetCSS from './navbar/button-reset.css';
 import './navbar/location';
@@ -36,15 +35,15 @@ class ShellWindowNavbar extends LitElement {
   }
 
   get canGoBack() {
-    return _get(this, 'activeTab.canGoBack');
+    return this.activeTab?.canGoBack;
   }
 
   get canGoForward() {
-    return _get(this, 'activeTab.canGoForward');
+    return this.activeTab?.canGoForward;
   }
 
   get canGoUp() {
-    var url = _get(this, 'activeTab.url', '');
+    var url = this.activeTab?.url ?? '';
     try {
       var urlp = new URL(url);
       if (urlp.pathname !== '/') return true;
@@ -57,7 +56,7 @@ class ShellWindowNavbar extends LitElement {
   }
 
   get isLoading() {
-    return _get(this, 'activeTab.isLoading');
+    return this.activeTab?.isLoading;
   }
 
   focusLocation() {
@@ -78,40 +77,32 @@ class ShellWindowNavbar extends LitElement {
       </div>
       <shell-window-navbar-location
         class=${classMap({
-          [_get(this.activeTab, 'siteTrust', 'notrust')]: true,
+          [this.activeTab?.siteTrust ?? 'notrust']: true,
         })}
         .activeTabIndex="${this.activeTabIndex}"
-        url="${_get(this, 'activeTab.url', '')}"
-        title="${_get(this, 'activeTab.title', '')}"
-        siteTitle="${_get(this, 'activeTab.siteTitle', '')}"
-        siteSubtitle="${_get(this, 'activeTab.siteSubtitle', '')}"
-        siteIcon="${_get(this, 'activeTab.siteIcon', '')}"
-        siteTrust="${_get(this, 'activeTab.siteTrust', '')}"
-        driveDomain="${_get(this, 'activeTab.driveDomain', '')}"
-        driveIdent=${_get(this, 'activeTab.driveIdent', '')}
-        ?writable=${_get(this, 'activeTab.writable', false)}
-        folder-sync-path="${_get(this, 'activeTab.folderSyncPath') || ''}"
-        peers="${_get(this, 'activeTab.peers', 0)}"
-        zoom="${_get(this, 'activeTab.zoom', '')}"
-        .loadError=${_get(this, 'activeTab.loadError', null)}
-        donate-link-href="${_get(this, 'activeTab.donateLinkHref') || ''}"
-        ?is-live-reloading=${_get(this, 'activeTab.isLiveReloading')}
-        ?is-bookmarked=${_get(this, 'activeTab.isBookmarked', false)}
+        url="${this.activeTab?.url ?? ''}"
+        title="${this.activeTab?.title ?? ''}"
+        siteTitle="${this.activeTab?.siteTitle ?? ''}"
+        siteSubtitle="${this.activeTab?.siteSubtitle ?? ''}"
+        siteIcon="${this.activeTab?.siteIcon ?? ''}"
+        siteTrust="${this.activeTab?.siteTrust ?? ''}"
+        driveDomain="${this.activeTab?.driveDomain ?? ''}"
+        driveIdent=${this.activeTab?.driveIdent ?? ''}
+        ?writable=${this.activeTab?.writable ?? false}
+        folder-sync-path="${this.activeTab?.folderSyncPath || ''}"
+        peers="${this.activeTab?.peers ?? 0}"
+        zoom="${this.activeTab?.zoom ?? ''}"
+        .loadError=${this.activeTab?.loadError ?? null}
+        donate-link-href="${this.activeTab?.donateLinkHref || ''}"
+        ?is-live-reloading=${this.activeTab?.isLiveReloading}
+        ?is-bookmarked=${this.activeTab?.isBookmarked ?? false}
       ></shell-window-navbar-location>
       <shell-window-navbar-inpage-find
         .activeTabIndex="${this.activeTabIndex}"
-        ?is-active=${_get(this, 'activeTab.isInpageFindActive', false)}
-        query="${_get(this, 'activeTab.currentInpageFindString', '')}"
-        active-match="${_get(
-          this,
-          'activeTab.currentInpageFindResults.activeMatchOrdinal',
-          '0'
-        )}"
-        num-matches="${_get(
-          this,
-          'activeTab.currentInpageFindResults.matches',
-          '0'
-        )}"
+        ?is-active=${this.activeTab?.isInpageFindActive ?? false}
+        query="${this.activeTab?.currentInpageFindString ?? ''}"
+        active-match="${this.activeTab?.currentInpageFindResults?.activeMatchOrdinal ?? '0'}"
+        num-matches="${this.activeTab?.currentInpageFindResults?.matches ?? '0'}"
       ></shell-window-navbar-inpage-find>
       <div class="buttons">
         ${this.watchlistBtn} ${this.daemonInactiveBtn} ${this.browserMenuBtn}
@@ -326,7 +317,7 @@ class ShellWindowNavbar extends LitElement {
   }
 
   onClickUpdog(e) {
-    var url = _get(this, 'activeTab.url', '');
+    var url = this.activeTab?.url ?? '';
     if (!url) return;
     try {
       let urlp = new URL(url);

@@ -2,7 +2,7 @@ import {
   LitElement,
   html,
   css,
-} from '../../../app-stdlib/vendor/lit-element/lit-element.js';
+} from 'lit';
 import viewCSS from '../../css/views/blocking.css.js';
 import * as toast from '../../../app-stdlib/js/com/toast.js';
 import { fancyUrl } from '../../../app-stdlib/js/strings.js';

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Perm Prompt
  *

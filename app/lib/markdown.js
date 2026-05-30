@@ -1,6 +1,9 @@
 import MarkdownIt from 'markdown-it';
 import anchorMarkdownHeader from './anchor-markdown-header';
 
+/**
+ * @param {{ allowHTML?: boolean, useHeadingIds?: boolean, useHeadingAnchors?: boolean, hrefMassager?: Function, highlight?: Function }} [opts]
+ */
 export default function create({
   allowHTML,
   useHeadingIds,

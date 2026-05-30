@@ -1,7 +1,7 @@
 import {
   LitElement,
   html,
-} from '../../../app-stdlib/vendor/lit-element/lit-element.js';
+} from 'lit';
 import * as beakerPermissions from '../../../../lib/permissions';
 import sitePermsCSS from '../../css/com/site-perms.css.js';
 

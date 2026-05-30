@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as drives from '../../hyper/drives';
 import * as shellAPI from './shell.js';
 

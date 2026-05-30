@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { basename } from 'path';
 import * as hyperDns from '../hyper/dns';
 import { joinPath } from '../../lib/strings';

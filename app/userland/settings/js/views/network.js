@@ -2,8 +2,8 @@ import {
   LitElement,
   html,
   css,
-} from '../../../app-stdlib/vendor/lit-element/lit-element.js';
-import { repeat } from '../../../app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
+} from 'lit';
+import { repeat } from 'lit/directives/repeat.js';
 import { pluralize, toNiceDomain } from '../../../app-stdlib/js/strings.js';
 import viewCSS from '../../css/views/general.css.js';
 

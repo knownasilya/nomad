@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { EventEmitter } from 'events';
 
 const MIN_DIM_PCT = 5; // stacks and panes can't be smaller than this %

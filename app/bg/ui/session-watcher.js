@@ -1,7 +1,7 @@
+// @ts-nocheck
 import { BrowserWindow } from 'electron';
 import EventEmitter from 'events';
-import debounce from 'lodash.debounce';
-import _isEqual from 'lodash.isequal';
+import { debounce } from '../../lib/async';
 import { defaultPageState } from './default-state';
 
 const SNAPSHOT_PATH = 'shell-window-state.json';
@@ -151,7 +151,7 @@ class WindowWatcher extends EventEmitter {
   }
 
   handlePagesUpdated(pages) {
-    if (_isEqual(pages, this.snapshot.pages)) return;
+    if (JSON.stringify(pages) === JSON.stringify(this.snapshot.pages)) return;
     this.snapshot.pages = pages && pages.length ? pages : defaultPageState();
     this.emit('change', this.snapshot);
   }

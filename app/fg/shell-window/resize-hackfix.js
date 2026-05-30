@@ -4,7 +4,7 @@
 // we can solve this by forcing a recalculation after every resize
 // -prf
 
-import _debounce from 'lodash.debounce';
+import { debounce as _debounce } from '../../lib/async';
 
 window.addEventListener('resize', () => {
   forceUpdateDragRegions();

@@ -1,13 +1,12 @@
 import {
   LitElement,
   html,
-} from '../../app-stdlib/vendor/lit-element/lit-element.js';
-import { classMap } from '../../app-stdlib/vendor/lit-element/lit-html/directives/class-map.js';
+} from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import { toNiceDomain } from '../../app-stdlib/js/strings.js';
 import { writeToClipboard } from '../../app-stdlib/js/clipboard.js';
 import * as contextMenu from '../../app-stdlib/js/com/context-menu.js';
 import * as toast from '../../app-stdlib/js/com/toast.js';
-import _get from 'lodash.get';
 import * as beakerPermissions from '../../../lib/permissions';
 import mainCSS from '../css/main.css.js';
 import './com/site-perms.js';

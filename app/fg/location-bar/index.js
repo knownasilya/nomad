@@ -1,8 +1,8 @@
 import * as rpc from 'pauls-electron-rpc';
-import { LitElement, html, css } from '../vendor/lit-element/lit-element';
-import { repeat } from '../vendor/lit-element/lit-html/directives/repeat';
-import { classMap } from '../vendor/lit-element/lit-html/directives/class-map';
-import { unsafeHTML } from '../vendor/lit-element/lit-html/directives/unsafe-html';
+import { LitElement, html, css } from 'lit';
+import { repeat } from 'lit/directives/repeat.js';
+import { classMap } from 'lit/directives/class-map.js';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { makeSafe } from '../../lib/strings';
 import browserManifest from '../../bg/web-apis/manifests/internal/browser';
 import historyManifest from '../../bg/web-apis/manifests/internal/history';

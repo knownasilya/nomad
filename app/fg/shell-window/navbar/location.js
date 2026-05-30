@@ -1,6 +1,6 @@
 import { ipcRenderer } from 'electron';
-import { LitElement, html, css } from '../../vendor/lit-element/lit-element';
-import { classMap } from '../../vendor/lit-element/lit-html/directives/class-map';
+import { LitElement, html, css } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import { queryAutocomplete } from '../../lib/location';
 import prettyHash from 'pretty-hash';
 import * as bg from '../bg-process-rpc';

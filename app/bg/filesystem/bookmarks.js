@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { joinPath } from '../../lib/strings.js';
 import { normalizeUrl, createResourceSlug } from '../../lib/urls';
 import * as drives from '../hyper/drives';

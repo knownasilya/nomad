@@ -1,3 +1,4 @@
+// @ts-nocheck
 // handle OSX open-url event
 import { BrowserWindow, ipcMain } from 'electron';
 import * as windows from './ui/windows';

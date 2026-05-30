@@ -1,7 +1,7 @@
 import { dialog } from 'electron';
 import dft from 'diff-file-tree';
 import watch from 'recursive-watch';
-import _debounce from 'lodash.debounce';
+import { debounce as _debounce } from '../../../lib/async';
 import hyper from '../../hyper/index';
 import * as folderSyncDb from '../../dbs/folder-sync';
 import * as modals from '../../ui/subwindows/modals';

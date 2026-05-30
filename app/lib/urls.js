@@ -51,25 +51,34 @@ export function examineLocationInput(v) {
 const SCHEME_REGEX = /[a-z]+:\/\//i;
 //                         1         2      3        4
 const VERSION_REGEX = /^(hyper:\/\/)?([^/]+)(\+[^/]+)(.*)$/i;
+/**
+ * @typedef {URL & { path: string, query: Record<string,string>|null, version: string|null }} ParsedDriveUrl
+ */
+
+/**
+ * @param {string} str
+ * @param {boolean} [parseQS]
+ * @returns {ParsedDriveUrl}
+ */
 export function parseDriveUrl(str, parseQS) {
   // prepend the scheme if it's missing
   if (!SCHEME_REGEX.test(str)) {
     str = 'hyper://' + str;
   }
 
-  let parsed;
   let version = null;
   let match = VERSION_REGEX.exec(str);
+  /** @type {ParsedDriveUrl} */
+  let parsed;
 
   if (match) {
     // run typical parse with version segment removed
-    parsed = parse(
-      (match[1] || '') + (match[2] || '') + (match[4] || ''),
-      parseQS
+    parsed = /** @type {ParsedDriveUrl} */ (
+      parse((match[1] || '') + (match[2] || '') + (match[4] || ''))
     );
     version = match[3].slice(1);
   } else {
-    parsed = parse(str, parseQS);
+    parsed = /** @type {ParsedDriveUrl} */ (parse(str));
   }
 
   parsed.path = parsed.pathname; // to match node
@@ -78,7 +87,6 @@ export function parseDriveUrl(str, parseQS) {
     parsed.query = Object.fromEntries(parsed.searchParams); // to match node
   }
   parsed.version = version; // add version segment
-  if (!parsed.origin) parsed.origin = `hyper://${parsed.hostname}/`;
   return parsed;
 }
 

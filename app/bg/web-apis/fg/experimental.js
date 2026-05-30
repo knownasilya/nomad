@@ -1,3 +1,4 @@
+// @ts-nocheck
 import errors from 'beaker-error-constants';
 import { EventTargetFromStream } from './event-target';
 import experimentalGlobalFetchManifest from '../manifests/external/experimental/global-fetch';

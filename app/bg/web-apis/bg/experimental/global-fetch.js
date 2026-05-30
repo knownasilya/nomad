@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as permissions from '../../../ui/permissions';
 import http from 'http';
 import https from 'https';

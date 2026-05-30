@@ -1,7 +1,7 @@
 import {
   LitElement,
   html,
-} from '../../../app-stdlib/vendor/lit-element/lit-element.js';
+} from 'lit';
 import viewCSS from '../../css/views/general.css.js';
 
 class InfoSettingsView extends LitElement {

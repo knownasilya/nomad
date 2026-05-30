@@ -1,5 +1,5 @@
-import { LitElement, html, css } from '../vendor/lit-element/lit-element';
-import { repeat } from '../vendor/lit-element/lit-html/directives/repeat';
+import { LitElement, html, css } from 'lit';
+import { repeat } from 'lit/directives/repeat.js';
 import { shorten } from '../../lib/strings';
 import * as bg from './bg-process-rpc';
 import commonCSS from './common.css';

@@ -1,8 +1,8 @@
 import {
   LitElement,
   html,
-} from '../../../app-stdlib/vendor/lit-element/lit-element.js';
-import _debounce from 'lodash.debounce';
+} from 'lit';
+import { debounce as _debounce } from '../../../../lib/async';
 import viewCSS from '../../css/views/log.css.js';
 
 const AVAILABLE_LEVELS = ['error', 'warn', 'info', 'verbose', 'debug', 'silly'];

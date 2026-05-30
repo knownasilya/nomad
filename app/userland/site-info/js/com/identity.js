@@ -1,8 +1,8 @@
 import {
   LitElement,
   html,
-} from '../../../app-stdlib/vendor/lit-element/lit-element.js';
-import { repeat } from '../../../app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
+} from 'lit';
+import { repeat } from 'lit/directives/repeat.js';
 import { emit } from '../../../app-stdlib/js/dom.js';
 import identityCSS from '../../css/com/identity.css.js';
 

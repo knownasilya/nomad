@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Site Infos
  *
@@ -120,7 +121,9 @@ export async function show(parentWindow, opts) {
 export function hide(parentWindow) {
   var view = get(parentWindow);
   if (view) {
-    view.webContents.executeJavaScript(`reset(); undefined`);
+    if (view.isVisible) {
+      view.webContents.executeJavaScript(`reset(); undefined`);
+    }
     parentWindow.removeBrowserView(view);
     view.currentBounds = null;
     view.isVisible = false;

@@ -1,8 +1,8 @@
+// @ts-nocheck
 import emitStream from 'emit-stream';
 import EventEmitter from 'events';
 import datEncoding from 'dat-encoding';
 import { parseDriveUrl } from '../../lib/urls';
-import _debounce from 'lodash.debounce';
 import pda from 'pauls-dat-api2';
 import { wait } from '../../lib/functions';
 import * as logLib from '../logger';

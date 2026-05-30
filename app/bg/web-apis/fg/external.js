@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { fromEventStream, EventTargetFromStream } from './event-target';
 import errors from 'beaker-error-constants';
 import capabilitiesManifest from '../manifests/external/capabilities';

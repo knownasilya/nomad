@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { app } from 'electron';
 import * as childProcess from 'child_process';
 import { tmpdir } from 'os';

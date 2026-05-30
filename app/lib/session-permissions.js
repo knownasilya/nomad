@@ -63,10 +63,7 @@ export function enumeratePerms(permissions) {
           continue; // publicFiles have an implied read-all, don't render
         }
         let location = k === 'publicFiles' ? 'public' : 'private';
-        let recordType = getRecordType(v);
-        if (recordType === 'unknown') {
-          recordType = `${v.extension} files in ${v.prefix}`;
-        }
+        let recordType = `${v.extension} files in ${v.prefix}`;
         perms.push({
           access: v.access,
           location,

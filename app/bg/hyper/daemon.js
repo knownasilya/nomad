@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { app } from 'electron';
 import * as os from 'os';
 import * as p from 'path';

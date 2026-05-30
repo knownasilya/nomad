@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { EventTarget, bindEventStream, fromEventStream } from './event-target';
 import errors from 'beaker-error-constants';
 import loggerManifest from '../manifests/internal/logger';

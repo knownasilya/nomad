@@ -3,8 +3,8 @@
 import {
   LitElement,
   html,
-} from '../../app-stdlib/vendor/lit-element/lit-element.js';
-import { repeat } from '../../app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
+} from 'lit';
+import { repeat } from 'lit/directives/repeat.js';
 import { isFilenameBinary } from '../../app-stdlib/js/is-ext-binary.js';
 import lock from '../../../lib/lock.js';
 import datServeResolvePath from '@beaker/dat-serve-resolve-path';

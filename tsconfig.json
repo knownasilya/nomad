@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    // Type-check JS files without emitting output
+    "checkJs": true,
+    "allowJs": true,
+    "noEmit": true,
+
+    // Language and module settings that match the Vite/Rollup build pipeline
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+
+    // Permissive starting point — tighten these gradually
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+
+    // Allow require() calls (used in some bg/ files alongside import)
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+
+    // Don't type-check third-party .d.ts files
+    "skipLibCheck": true,
+
+    // Node.js + browser globals
+    "lib": ["ES2020", "DOM"],
+    "types": ["node"]
+  },
+  "include": [
+    "app/lib/**/*",
+    "app/bg/dbs/**/*",
+    "app/bg/web-apis/**/*",
+    "app/types/**/*"
+  ],
+  "exclude": [
+    "app/node_modules",
+    "node_modules",
+    "dist",
+    "**/*.build.js"
+  ]
+}

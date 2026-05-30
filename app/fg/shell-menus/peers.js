@@ -1,4 +1,4 @@
-import { LitElement, html, css } from '../vendor/lit-element/lit-element';
+import { LitElement, html, css } from 'lit';
 import { pluralize } from '../../lib/strings';
 import * as bg from './bg-process-rpc';
 import inputsCSS from './inputs.css';

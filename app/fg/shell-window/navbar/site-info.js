@@ -1,6 +1,5 @@
-import { LitElement, html, css } from '../../vendor/lit-element/lit-element';
-import { classMap } from '../../vendor/lit-element/lit-html/directives/class-map';
-import _get from 'lodash.get';
+import { LitElement, html, css } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import * as bg from '../bg-process-rpc';
 import buttonResetCSS from './button-reset.css';
 import { isHyperOrPearUrl } from '../../../lib/urls';

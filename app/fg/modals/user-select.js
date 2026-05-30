@@ -1,6 +1,6 @@
-import { LitElement, html, css } from '../vendor/lit-element/lit-element';
-import { classMap } from '../vendor/lit-element/lit-html/directives/class-map';
-import { repeat } from '../vendor/lit-element/lit-html/directives/repeat';
+import { LitElement, html, css } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
+import { repeat } from 'lit/directives/repeat.js';
 import * as bg from './bg-process-rpc';
 import commonCSS from './common.css';
 import inputsCSS from './inputs.css';

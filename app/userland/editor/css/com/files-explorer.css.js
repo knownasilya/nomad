@@ -1,4 +1,4 @@
-import { css } from '../../../app-stdlib/vendor/lit-element/lit-element.js';
+import { css } from 'lit';
 import buttons2css from '../../../app-stdlib/css/buttons2.css.js';
 import spinnercss from '../../../app-stdlib/css/com/spinner.css.js';
 

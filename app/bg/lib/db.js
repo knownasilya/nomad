@@ -2,7 +2,6 @@ import * as logLib from '../logger';
 const logger = logLib.child({ category: 'sqlite' });
 import FnQueue from 'function-queue';
 import { cbPromise } from '../../lib/functions';
-import _get from 'lodash.get';
 
 /**
  * Create a transaction lock
@@ -113,7 +112,7 @@ export const setupSqliteDB = function (db, { setup, migrations }, logTag) {
 
 export const handleQueryBuilder = function (args) {
   // detect query builders and replace the args
-  if (args[0] && _get(args[0], 'constructor.name') === 'Builder') {
+  if (args[0] && args[0]?.constructor?.name === 'Builder') {
     var query = args[0].toSQL();
     return [query.sql, query.bindings];
   }

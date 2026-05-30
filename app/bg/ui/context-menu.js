@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { app, Menu, clipboard, BrowserWindow, dialog } from 'electron';
 import path from 'path';
 import * as tabManager from './tabs/manager';

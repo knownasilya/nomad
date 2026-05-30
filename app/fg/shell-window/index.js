@@ -1,5 +1,5 @@
 import { ipcRenderer } from 'electron';
-import { LitElement, html } from '../vendor/lit-element/lit-element';
+import { LitElement, html } from 'lit';
 import * as bg from './bg-process-rpc';
 import { fromEventStream } from '../../bg/web-apis/fg/event-target';
 import './tabs';

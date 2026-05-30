@@ -49,24 +49,17 @@
     "keyboardevents-areequal": "^0.2.2",
     "knex": "^0.21.0",
     "knex-on-conflict-do-nothing": "^1.0.0",
+    "lit": "^3.3.3",
     "lodash.clonedeep": "^4.5.0",
-    "lodash.debounce": "^4.0.8",
     "lodash.difference": "^4.5.0",
     "lodash.differenceby": "^4.8.0",
-    "lodash.flattendeep": "^4.4.0",
-    "lodash.get": "^4.4.2",
     "lodash.groupby": "^4.6.0",
-    "lodash.isequal": "^4.5.0",
-    "lodash.pick": "^4.4.0",
-    "lodash.throttle": "^4.1.1",
     "lodash.uniqby": "^4.7.0",
-    "lodash.uniqwith": "^4.5.0",
     "lru": "^3.1.0",
     "markdown-it": "^10.0.0",
     "markdown-link-extractor": "^1.2.3",
     "mime": "^1.4.0",
     "mkdirp": "^1.0.4",
-    "moment": "^2.24.0",
     "ms": "^2.1.2",
     "nat-upnp": "^1.1.1",
     "node-fetch": "^2.6.7",
@@ -107,5 +100,8 @@
   },
   "volta": {
     "extends": "../package.json"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.7"
   }
 }

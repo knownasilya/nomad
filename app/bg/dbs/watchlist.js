@@ -84,7 +84,7 @@ export async function updateWatchlist(profileId, site) {
 /**
  * @param {number} profileId
  * @param {string} url
- * @return {Promise<void>}
+ * @return {Promise<any>}
  */
 export async function removeSite(profileId, url) {
   return db.run(`DELETE FROM watchlist WHERE profileId = ? AND url = ?`, [

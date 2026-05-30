@@ -1,8 +1,8 @@
 import {
   LitElement,
   html,
-} from '../../app-stdlib/vendor/lit-element/lit-element.js';
-import { classMap } from '../../app-stdlib/vendor/lit-element/lit-html/directives/class-map.js';
+} from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import * as QP from './lib/query-params.js';
 import css from '../css/main.css.js';
 import './views/general.js';

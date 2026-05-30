@@ -5,7 +5,7 @@ import {
   getPermId,
   getPermParam,
 } from '../../lib/permissions';
-import { LitElement, html, css } from '../vendor/lit-element/lit-element';
+import { LitElement, html, css } from 'lit';
 import prettyHash from 'pretty-hash';
 import * as bg from './bg-process-rpc';
 import buttonsCSS from './buttons.css';

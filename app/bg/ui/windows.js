@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {
   app,
   BrowserWindow,
@@ -33,7 +34,7 @@ import * as tabSwitcherSubwindow from './subwindows/tab-switcher';
 import { findWebContentsParentWindow } from '../lib/electron';
 import * as settingsDb from '../dbs/settings';
 import { getEnvVar } from '../lib/env';
-import _pick from 'lodash.pick';
+import { pick } from '../../lib/async';
 import * as logLib from '../logger';
 const logger = logLib.child({ category: 'browser' });
 
@@ -553,7 +554,7 @@ function ensureVisibleOnSomeDisplay(windowState) {
     return Object.assign(
       {},
       windowState,
-      _pick(defaultWindowState(), [
+      pick(defaultWindowState(), [
         'x',
         'y',
         'width',

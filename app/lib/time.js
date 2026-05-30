@@ -1,35 +1,46 @@
-import moment from 'moment';
 import { TimeoutError } from 'beaker-error-constants';
 
-moment.updateLocale('en', {
-  relativeTime: { s: 'seconds' },
+const relativeFormatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+const shortDateFormatter = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' });
+const downloadFormatter = new Intl.DateTimeFormat('en', {
+  weekday: 'short', month: 'short', day: 'numeric',
+  hour: 'numeric', minute: '2-digit', hour12: true,
 });
 
+function startOfDay(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function diffDays(a, b) {
+  return Math.round((startOfDay(a).getTime() - startOfDay(b).getTime()) / 864e5);
+}
+
 export function niceDate(ts, opts) {
-  const endOfToday = moment().endOf('day');
-  if (typeof ts === 'number' || typeof ts === 'string' || ts instanceof Date) {
-    ts = moment(ts);
-  }
-  if (ts.isSame(endOfToday, 'day')) {
-    if (opts && opts.noTime) {
-      return 'today';
-    }
-    return ts.fromNow();
-  } else if (ts.isSame(endOfToday.subtract(1, 'day'), 'day')) {
+  const date = new Date(typeof ts === 'number' || typeof ts === 'string' ? ts : ts);
+  const todayStart = startOfDay(new Date());
+  const days = diffDays(date, todayStart);
+
+  if (days === 0) {
+    if (opts && opts.noTime) return 'today';
+    const diffSec = Math.round((date.getTime() - Date.now()) / 1000);
+    const diffMin = Math.round(diffSec / 60);
+    const diffHr = Math.round(diffMin / 60);
+    if (Math.abs(diffSec) < 60) return relativeFormatter.format(diffSec, 'second');
+    if (Math.abs(diffMin) < 60) return relativeFormatter.format(diffMin, 'minute');
+    return relativeFormatter.format(diffHr, 'hour');
+  } else if (days === -1) {
     return 'yesterday';
-  } else if (ts.isSame(endOfToday, 'month')) {
-    return ts.fromNow();
+  } else if (days > -30) {
+    return relativeFormatter.format(days, 'day');
   }
-  return ts.format('ll');
+  return shortDateFormatter.format(date);
 }
 
 export function downloadTimestamp(ts) {
-  if (typeof ts === 'string') {
-    ts = moment(Number(ts));
-  } else if (typeof ts === 'number') {
-    ts = moment(ts);
-  }
-  return moment(ts).local().format('ddd MMM D, h:mma');
+  const date = new Date(typeof ts === 'string' ? Number(ts) : ts);
+  return downloadFormatter.format(date);
 }
 
 // this is a wrapper for any behavior that needs to maintain a timeout
@@ -63,7 +74,7 @@ export function timer(ms, fn) {
   if (!ms) return fn(noop, noop, noop);
 
   return new Promise((resolve, reject) => {
-    var timer;
+    var timerHandle;
     var remaining = ms;
     var start;
 
@@ -72,14 +83,14 @@ export function timer(ms, fn) {
       if (action) currentAction = action;
     };
     const pause = () => {
-      clearTimeout(timer);
+      clearTimeout(timerHandle);
       remaining -= Date.now() - start;
     };
     const resume = () => {
       if (isTimedOut) return;
-      clearTimeout(timer);
+      clearTimeout(timerHandle);
       start = Date.now();
-      timer = setTimeout(onTimeout, remaining);
+      timerHandle = setTimeout(onTimeout, remaining);
     };
     const onTimeout = () => {
       isTimedOut = true;
@@ -99,11 +110,11 @@ export function timer(ms, fn) {
     // wrap the promise
     promise.then(
       (val) => {
-        clearTimeout(timer);
+        clearTimeout(timerHandle);
         resolve(val);
       },
       (err) => {
-        clearTimeout(timer);
+        clearTimeout(timerHandle);
         reject(err);
       }
     );

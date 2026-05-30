@@ -179,7 +179,7 @@ export const getAll = function () {
             try {
               row.value = JSON.parse(row.value);
             } catch (e) {
-              row.value = defaultSettings[key.value];
+              row.value = defaultSettings[row.key];
             }
           }
           obj[row.key] = row.value;

@@ -1,4 +1,4 @@
-import { LitElement, html } from '../vendor/lit-element/lit-element';
+import { LitElement, html } from 'lit';
 import './progress';
 
 class PromptsWrapper extends LitElement {

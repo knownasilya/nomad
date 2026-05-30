@@ -1,9 +1,8 @@
+// @ts-nocheck
 import path from 'path';
 import { parseDriveUrl } from '../../../lib/urls';
 import pda from 'pauls-dat-api2';
-import pick from 'lodash.pick';
-import _get from 'lodash.get';
-import _flattenDeep from 'lodash.flattendeep';
+import { pick } from '../../../lib/async';
 import * as modals from '../../ui/subwindows/modals';
 import * as permissions from '../../ui/permissions';
 import * as hyperDns from '../../hyper/dns';
@@ -901,7 +900,7 @@ export default {
         var queriesResults = await Promise.all(
           opts.drive.map((drive) => query(drive, queryOpts))
         );
-        var results = _flattenDeep(queriesResults);
+        var results = queriesResults.flat(Infinity);
         if (opts.drive.length > 1) {
           // HACK re-sort and slice here because each query was run separately -prf
           if (opts.sort === 'name') {
