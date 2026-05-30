@@ -16,7 +16,6 @@ Run npm install.
 # Bump versions, tag, and create changelog
 npm run release-version
 # Create release files
-cd scripts/
 npm run release
 # Create a release on Github, and upload binaries from /dist folder
 ```

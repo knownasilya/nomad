@@ -2,13 +2,13 @@ beaker browser was cloned from [electron-boilerplate](https://github.com/szwacz/
 
 # Structure
 
-There are **two** `package.json` files:  
+There are **two** `package.json` files:
 
-#### 1. For development
-Sits on path: `beaker-browser/scripts/package.json`. Here you declare dependencies for the development environment and build scripts. **This folder is not distributed with real application!**
+#### 1. For development / build tooling
+Sits on path: `nomad/package.json`. Here you declare dependencies for the development environment and build scripts. **This folder is not distributed with the real application!**
 
 #### 2. For the application
-Sits on path: `beaker-browser/app/package.json`. This is **real** manifest of the application. Declare the app dependencies here.
+Sits on path: `nomad/app/package.json`. This is the **real** manifest of the application. Declare the app dependencies here.
 
 #### OMG, but seriously why there are two `package.json`?
 1. Native npm modules (those written in C, not JavaScript) need to be compiled, and here we have two different compilation targets for them. Those used in application need to be compiled against electron runtime, and all `devDependencies` need to be compiled against your locally installed node.js. Thanks to having two files this is trivial.
@@ -32,15 +32,13 @@ Sits on path: `beaker-browser/app/package.json`. This is **real** manifest of th
 #### Installation
 
 ```
-cd scripts
 npm install
 ```
-It will also download Electron runtime, and install dependencies for second `package.json` file inside `app` folder.
+It will also download Electron runtime, and install dependencies for the `app/package.json` file.
 
 #### Starting the app
 
 ```
-cd scripts
 npm start
 ```
 
@@ -57,7 +55,6 @@ npm install name_of_npm_module --save
 
 To make ready for distribution installer use command:
 ```
-cd scripts
 npm run release
 ```
 It will start the packaging process for operating system you are running this command on. Ready for distribution file will be outputted to `dist` directory.
