@@ -144,7 +144,7 @@ class BrowserMenu extends LitElement {
                           @click=${(e) =>
                             this.onOpenPage(
                               e,
-                              'https://docs.beakerbrowser.com/help/hole-punchability'
+                              'https://nomad.pages.dev/docs/api/help/hole-punchability/'
                             )}
                         >
                           <span class="far fa-fw fa-question-circle"></span>
