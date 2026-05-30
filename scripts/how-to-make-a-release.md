@@ -12,6 +12,8 @@ Run npm install. Make sure ./app/bg/dat/converter has its node_modules installed
 
 ## Apply the following patches manually to the scripts/node_modules
 
+> Skip this, it's now applied by patch-package on npm install
+
 `app-builder-lib/out/util/AppFileWalker.js` this one stops electron-bunder from removing ./app/bg/dat/converter/node_modules
 
 ```
@@ -42,15 +44,15 @@ npm run release
 On MacOS you'll need to supply two env vars:
 
 ```
-appleId=pfrazee@gmail.com
-appleIdPassword={be paul to have this}
+appleId=someemail@example.com
+appleIdPassword=somepassword
 ```
 
 On Windows, these two env vars:
 
 ```
 $env:CSC_LINK = "\path\to\.pfx"
-$env:CSC_KEY_PASSWORD = "{be paul to have this}"
+$env:CSC_KEY_PASSWORD = "somepassword"
 ```
 
 ## It's just that easy
