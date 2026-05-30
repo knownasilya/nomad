@@ -184,11 +184,7 @@ export class Pane extends EventEmitter {
       'page-favicon-updated',
       this.onPageFaviconUpdated.bind(this)
     );
-    this.webContents.on('new-window', this.onNewWindow.bind(this));
-    this.webContents.on(
-      '-will-add-new-contents',
-      this.onWillAddNewContents.bind(this)
-    );
+    this.webContents.setWindowOpenHandler(this.onWindowOpen.bind(this));
     this.webContents.on('media-started-playing', this.onMediaChange.bind(this));
     this.webContents.on('media-paused', this.onMediaChange.bind(this));
     this.webContents.on('found-in-page', this.onFoundInPage.bind(this));
@@ -955,28 +951,20 @@ export class Pane extends EventEmitter {
     this.emitUpdateState();
   }
 
-  onNewWindow(e, url, frameName, disposition, options) {
-    e.preventDefault();
-    if (!this.isActive || !this.tab) return; // only open if coming from the active pane
-    var setActive =
-      disposition === 'foreground-tab' || disposition === 'new-window';
-    var setActiveBySettings = !setActive;
-    this.tab.createTab(url, {
-      setActive,
-      setActiveBySettings,
-      adjacentActive: true,
-    });
-  }
-
-  onWillAddNewContents(e, url) {
-    // HACK
-    // this should be handled by new-window, but new-window currently crashes
-    // if you prevent default, so we handle it here
-    // see https://github.com/electron/electron/issues/23859
-    // -prf
-    e.preventDefault();
-    if (!this.tab) return;
-    this.tab.createTab(url, { setActive: true, adjacentActive: true });
+  onWindowOpen({ url, disposition }) {
+    // popups (e.g. OAuth flows) need window.opener — let Electron create a real window
+    if (disposition === 'new-window' || disposition === 'new-popup') {
+      return { action: 'allow' };
+    }
+    if (this.isActive && this.tab) {
+      var setActive = disposition === 'foreground-tab';
+      this.tab.createTab(url, {
+        setActive,
+        setActiveBySettings: !setActive,
+        adjacentActive: true,
+      });
+    }
+    return { action: 'deny' };
   }
 
   onMediaChange(e) {
