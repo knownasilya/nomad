@@ -2,11 +2,11 @@
 
 const NODE_FLAGS = `--js-flags="--throw-deprecation"`;
 
+var path = require('path');
 var childProcess = require('child_process');
 var electron = require('electron');
-var jetpack = require('fs-jetpack');
 
-var app = jetpack.cwd('../app').cwd();
+var app = path.resolve(__dirname, '../../app');
 
 module.exports = function () {
   if (process.env.ELECTRON_PATH) {

@@ -16,10 +16,9 @@ function main() {
     .join(path.sep);
   if (!isWindows) projectDir = path.sep + projectDir;
   var appDir = path.join(projectDir, 'app');
-  var scriptsDir = path.join(projectDir, 'scripts');
-  rmNodeModules(scriptsDir);
+  rmNodeModules(projectDir);
   rmNodeModules(appDir);
-  rmPackageLock(scriptsDir);
+  rmPackageLock(projectDir);
   rmPackageLock(appDir);
   run('npm install', { shell: true }, function () {
     run('npm run rebuild', { shell: true }, function () {

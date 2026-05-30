@@ -12,7 +12,7 @@ function runAsync(...args) {
 }
 
 async function main() {
-  var electronVersion = require('../node_modules/electron/package.json').version;
+  var electronVersion = require('electron/package.json').version;
   var appDir = path.join(__dirname, '../../app');
   console.log('Rebuilding native modules in', appDir);
 
