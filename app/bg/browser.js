@@ -26,8 +26,6 @@ const exec = require('util').promisify(require('child_process').exec);
 import * as logLib from './logger';
 import * as adblocker from './adblocker';
 import * as settingsDb from './dbs/settings';
-import { convertDatArchive } from './dat/index';
-import datDns from './dat/dns';
 import { open as openUrl } from './open-url';
 import * as windows from './ui/windows';
 import {
@@ -234,8 +232,6 @@ export const WEBAPI = {
   fetchBody,
   downloadURL,
 
-  convertDat,
-
   getResourceContentType,
   getCertificate,
 
@@ -303,13 +299,6 @@ export function fetchBody(url) {
 
 export async function downloadURL(url) {
   this.sender.downloadURL(url);
-}
-
-export async function convertDat(url) {
-  var win = findWebContentsParentWindow(this.sender);
-  var key = await datDns.resolveName(url);
-  var driveUrl = await convertDatArchive(win, key);
-  tabManager.create(win, driveUrl, { setActive: true });
 }
 
 export function getResourceContentType(url) {
@@ -525,27 +514,24 @@ export async function getDefaultProtocolSettings() {
     // we can just use xdg-mime directly instead
     // see https://github.com/beakerbrowser/beaker/issues/915
     // -prf
-    let [httpHandler, hyperHandler, datHandler] = await Promise.all([
+    let [httpHandler, hyperHandler] = await Promise.all([
       // If there is no default specified, be sure to catch any error
       // from exec and return '' otherwise Promise.all errors out.
       exec('xdg-mime query default "x-scheme-handler/http"').catch((err) => ''),
       exec('xdg-mime query default "x-scheme-handler/hyper"').catch(
         (err) => ''
       ),
-      exec('xdg-mime query default "x-scheme-handler/dat"').catch((err) => ''),
     ]);
     if (httpHandler && httpHandler.stdout) httpHandler = httpHandler.stdout;
     if (hyperHandler && hyperHandler.stdout) hyperHandler = hyperHandler.stdout;
-    if (datHandler && datHandler.stdout) datHandler = datHandler.stdout;
     return {
       http: (httpHandler || '').toString().trim() === DOT_DESKTOP_FILENAME,
       hyper: (hyperHandler || '').toString().trim() === DOT_DESKTOP_FILENAME,
-      dat: (datHandler || '').toString().trim() === DOT_DESKTOP_FILENAME,
     };
   }
 
   return Promise.resolve(
-    ['http', 'hyper', 'dat'].reduce((res, x) => {
+    ['http', 'hyper'].reduce((res, x) => {
       res[x] = app.isDefaultProtocolClient(x);
       return res;
     }, {})

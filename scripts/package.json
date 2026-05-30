@@ -87,7 +87,7 @@
     }
   },
   "scripts": {
-    "postinstall": "patch-package && electron-builder install-app-deps && cd ../app && npm install && cd bg/dat/converter && npm install",
+    "postinstall": "electron-builder install-app-deps && cd ../app && npm install",
     "build": "node build.js",
     "burnthemall": "node ./tasks/burnthemall.js",
     "lint": "eslint --ignore-pattern 'color-thief.js' --ignore-pattern 'app/node_modules' --ignore-pattern 'vendor' --ignore-pattern '*.build.js' --ignore-pattern 'assets' --fix app",

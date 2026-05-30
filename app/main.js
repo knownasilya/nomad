@@ -36,7 +36,6 @@ import * as permissions from './bg/ui/permissions';
 import * as beakerProtocol from './bg/protocols/beaker';
 import * as assetProtocol from './bg/protocols/asset';
 import * as hyperProtocol from './bg/protocols/hyper';
-import * as datProtocol from './bg/protocols/dat';
 
 import * as testDriver from './bg/test-driver';
 import * as openURL from './bg/open-url';
@@ -70,16 +69,6 @@ app.allowRendererProcessReuse = true;
 
 // configure the protocols
 protocol.registerSchemesAsPrivileged([
-  {
-    scheme: 'dat',
-    privileges: {
-      standard: true,
-      secure: true,
-      allowServiceWorkers: true,
-      supportFetchAPI: true,
-      corsEnabled: true,
-    },
-  },
   {
     scheme: 'hyper',
     privileges: {
@@ -158,7 +147,6 @@ app.on('ready', async function () {
   assetProtocol.setup();
   assetProtocol.register(protocol);
   hyperProtocol.register(protocol);
-  datProtocol.register(protocol);
 
   initWindow.close();
 

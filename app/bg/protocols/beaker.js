@@ -1,10 +1,6 @@
 import errorPage from '../lib/error-page';
 import * as mime from '../lib/mime';
-import {
-  drivesDebugPage,
-  datDnsCachePage,
-  datDnsCacheJS,
-} from '../hyper/debugging';
+import { drivesDebugPage } from '../hyper/debugging';
 import path from 'path';
 import once from 'once';
 import fs from 'fs';
@@ -640,17 +636,6 @@ async function beakerProtocol(request, respond) {
   // debugging
   if (requestUrl === 'beaker://active-drives/') {
     return cb(200, 'OK', 'text/html; charset=utf-8', drivesDebugPage);
-  }
-  if (requestUrl === 'beaker://dat-dns-cache/') {
-    return cb(200, 'OK', 'text/html; charset=utf-8', datDnsCachePage);
-  }
-  if (requestUrl === 'beaker://dat-dns-cache/main.js') {
-    return cb(
-      200,
-      'OK',
-      'application/javascript; charset=utf-8',
-      datDnsCacheJS
-    );
   }
   // TODO replace?
   // if (requestUrl.startsWith('beaker://debug-log/')) {

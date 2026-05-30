@@ -165,7 +165,7 @@ class NavbarLocation extends LitElement {
       >
       </shell-window-navbar-site-info>
       ${this.renderLocation()} ${this.renderZoom()}
-      ${this.renderDatConverterBtn()} ${this.renderLiveReloadingBtn()}
+      ${this.renderLiveReloadingBtn()}
       ${this.renderFolderSyncBtn()} ${this.renderPeers()}
       ${this.renderDonateBtn()} ${'' /* DISABLED this.renderShareBtn()*/}
       ${this.renderBookmarkBtn()} ${this.renderSiteBtn()}
@@ -275,20 +275,6 @@ class NavbarLocation extends LitElement {
     `;
   }
 
-  renderDatConverterBtn() {
-    if (this.url.startsWith('dat:')) {
-      return html`
-        <button
-          class="dat-converter"
-          title="Convert to Hyperdrive"
-          @click=${this.onClickConvertDat}
-        >
-          Convert this site to Hyperdrive
-        </button>
-      `;
-    }
-    return '';
-  }
 
   renderLiveReloadingBtn() {
     if (!this.isLiveReloading) {
@@ -538,11 +524,6 @@ class NavbarLocation extends LitElement {
     bg.views.resetZoom(this.activeTabIndex);
   }
 
-  onClickConvertDat(e) {
-    var { host } = new URL(this.url);
-    bg.beakerBrowser.convertDat(host);
-  }
-
   onClickLiveReloadingBtn(e) {
     bg.views.toggleLiveReloading('active');
     this.isLiveReloading = false;
@@ -702,23 +683,6 @@ NavbarLocation.styles = [
 
     button.zoom:hover {
       background: var(--bg-color--location-zoom--hover);
-    }
-
-    button.dat-converter {
-      width: auto;
-      font-size: 13px;
-      line-height: 23px;
-      background: var(--bg-color--location-dat-convert-btn);
-      border-radius: 5px;
-      margin: 2px;
-      padding: 0 9px;
-      font-weight: 500;
-      color: var(--text-color--location-dat-convert-btn);
-    }
-
-    button.dat-converter:hover {
-      cursor: pointer;
-      background: var(--bg-color--location-dat-convert-btn--hover);
     }
 
     button.live-reload {

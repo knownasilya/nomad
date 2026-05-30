@@ -30,38 +30,3 @@ export const drivesDebugPage = function () {
     </body>
   </html>`;
 };
-
-/**
- * @returns {string}
- */
-export const datDnsCachePage = function () {
-  var cache = hyperDns.listCache();
-  return `<html>
-    <body>
-      <h1>Dat DNS cache</h1>
-      <p><button>Clear cache</button></p>
-      <table style="font-family: monospace">
-        ${Object.keys(cache)
-          .map((name) => {
-            var key = cache[name];
-            return `<tr><td><strong>${name}</strong></td><td>${key}</td></tr>`;
-          })
-          .join('')}
-      </table>
-      <script src="beaker://dat-dns-cache/main.js"></script>
-    </body>
-  </html>`;
-};
-
-/**
- * @returns {string}
- */
-export const datDnsCacheJS = function () {
-  return `
-    document.querySelector('button').addEventListener('click', clear)
-    async function clear () {
-      await beaker.drives.clearDnsCache()
-      location.reload()
-    }
-  `;
-};

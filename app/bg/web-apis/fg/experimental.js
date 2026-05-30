@@ -1,9 +1,7 @@
 // @ts-nocheck
 import errors from 'beaker-error-constants';
-import { EventTargetFromStream } from './event-target';
 import experimentalGlobalFetchManifest from '../manifests/external/experimental/global-fetch';
 import experimentalCapturePageManifest from '../manifests/external/experimental/capture-page';
-import experimentalDatPeersManifest from '../manifests/external/experimental/dat-peers';
 
 export const setup = function (rpc) {
   const experimental = {};
@@ -21,12 +19,6 @@ export const setup = function (rpc) {
       experimentalCapturePageManifest,
       opts
     );
-    const datPeersRPC = rpc.importAPI(
-      'experimental-dat-peers',
-      experimentalDatPeersManifest,
-      opts
-    );
-
     // experimental.globalFetch
     experimental.globalFetch = async function globalFetch(input, init) {
       var request = new Request(input, init);
@@ -57,41 +49,6 @@ export const setup = function (rpc) {
     // experimental.capturePage
     experimental.capturePage = capturePageRPC.capturePage;
 
-    // experimental.datPeers
-    class DatPeer {
-      constructor(id, sessionData) {
-        this.id = id;
-        this.sessionData = sessionData;
-      }
-      send(data) {
-        datPeersRPC.send(this.id, data);
-      }
-    }
-    function prepDatPeersEvents(event, details) {
-      var peer = new DatPeer(details.peerId, details.sessionData);
-      delete details.peerId;
-      delete details.sessionData;
-      details.peer = peer;
-      return details;
-    }
-    const datPeersEvents = ['connect', 'message', 'session-data', 'disconnect'];
-    experimental.datPeers = new EventTargetFromStream(
-      datPeersRPC.createEventStream.bind(datPeersRPC),
-      datPeersEvents,
-      prepDatPeersEvents
-    );
-    experimental.datPeers.list = async () => {
-      var peers = await datPeersRPC.list();
-      return peers.map((p) => new DatPeer(p.id, p.sessionData));
-    };
-    experimental.datPeers.get = async (peerId) => {
-      var { sessionData } = await datPeersRPC.get(peerId);
-      return new DatPeer(peerId, sessionData);
-    };
-    experimental.datPeers.broadcast = datPeersRPC.broadcast;
-    experimental.datPeers.getSessionData = datPeersRPC.getSessionData;
-    experimental.datPeers.setSessionData = datPeersRPC.setSessionData;
-    experimental.datPeers.getOwnPeerId = datPeersRPC.getOwnPeerId;
   }
 
   return experimental;

@@ -11,7 +11,5 @@ CREATE TABLE dat_dns (
 CREATE INDEX dat_dns_name ON dat_dns (name);
 CREATE INDEX dat_dns_key ON dat_dns (key);
 
-ALTER TABLE crawl_sources ADD COLUMN datDnsId INTEGER;
-
 PRAGMA user_version = 35;
 `;

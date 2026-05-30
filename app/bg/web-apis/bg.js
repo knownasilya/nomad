@@ -7,7 +7,6 @@ import drivesManifest from './manifests/internal/drives';
 import beakerBrowserManifest from './manifests/internal/browser';
 import beakerFilesystemManifest from './manifests/internal/beaker-filesystem';
 import bookmarksManifest from './manifests/internal/bookmarks';
-import datLegacyManifest from './manifests/internal/dat-legacy';
 import downloadsManifest from './manifests/internal/downloads';
 import folderSyncManifest from './manifests/internal/folder-sync';
 import historyManifest from './manifests/internal/history';
@@ -21,7 +20,6 @@ import { WEBAPI as auditLogAPI } from '../dbs/audit-log';
 import drivesAPI from './bg/drives';
 import * as bookmarksAPI from '../filesystem/bookmarks';
 import beakerFilesystemAPI from './bg/beaker-filesystem';
-import datLegacyAPI from './bg/dat-legacy';
 import folderSyncAPI from './bg/folder-sync';
 import historyAPI from './bg/history';
 import hyperdebugAPI from './bg/hyperdebug';
@@ -50,12 +48,10 @@ import * as shellAPI from './bg/shell';
 
 // experimental manifests
 import experimentalCapturePageManifest from './manifests/external/experimental/capture-page';
-import experimentalDatPeersManifest from './manifests/external/experimental/dat-peers';
 import experimentalGlobalFetchManifest from './manifests/external/experimental/global-fetch';
 
 // experimental apis
 import experimentalCapturePageAPI from './bg/experimental/capture-page';
-import experimentalDatPeersAPI from './bg/experimental/dat-peers';
 import experimentalGlobalFetchAPI from './bg/experimental/global-fetch';
 
 const INTERNAL_ORIGIN_REGEX = /^(beaker:)/i;
@@ -96,7 +92,6 @@ export const setup = function () {
     internalOnly
   );
   rpc.exportAPI('bookmarks', bookmarksManifest, bookmarksAPI, internalOnly);
-  rpc.exportAPI('dat-legacy', datLegacyManifest, datLegacyAPI, internalOnly);
   rpc.exportAPI('downloads', downloadsManifest, downloadsAPI, internalOnly);
   rpc.exportAPI('drives', drivesManifest, drivesAPI, internalOnly);
   rpc.exportAPI('folder-sync', folderSyncManifest, folderSyncAPI, internalOnly);
@@ -139,12 +134,6 @@ export const setup = function () {
     'experimental-capture-page',
     experimentalCapturePageManifest,
     experimentalCapturePageAPI,
-    secureOnly
-  );
-  rpc.exportAPI(
-    'experimental-dat-peers',
-    experimentalDatPeersManifest,
-    experimentalDatPeersAPI,
     secureOnly
   );
   rpc.exportAPI(
