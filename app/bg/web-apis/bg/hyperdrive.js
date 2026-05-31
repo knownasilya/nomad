@@ -13,6 +13,7 @@ import * as archivesDb from '../../dbs/archives';
 import * as auditLog from '../../dbs/audit-log';
 import { timer } from '../../../lib/time';
 import * as filesystem from '../../filesystem/index';
+import * as spacesDb from '../../dbs/spaces';
 import { query } from '../../filesystem/query';
 import drivesAPI from './drives';
 import {
@@ -122,7 +123,7 @@ export default {
       try {
         let manifest = { title, description /*TODO author,*/ };
         newDrive = await drives.createNewDrive(manifest);
-        await filesystem.configDrive(newDrive.url, { tags });
+        await filesystem.configDriveForSpace(newDrive.url, { tags }, spacesDb.getCachedActiveId());
       } catch (e) {
         console.log(e);
         throw e;
@@ -200,7 +201,7 @@ export default {
 
       // save the parent if needed
       if (!filesystem.getDriveConfig(key)) {
-        await filesystem.configDrive(key);
+        await filesystem.configDriveForSpace(key, {}, spacesDb.getCachedActiveId());
       }
 
       // create
@@ -209,10 +210,10 @@ export default {
         description: detached ? description : undefined,
         detached,
       });
-      await filesystem.configDrive(newDrive.url, {
+      await filesystem.configDriveForSpace(newDrive.url, {
         tags,
         forkOf: detached ? undefined : { key, label },
-      });
+      }, spacesDb.getCachedActiveId());
       newDriveUrl = newDrive.url;
     }
 
@@ -299,7 +300,7 @@ export default {
             throw new Error('Invalid argument');
 
           if ('tags' in settings && wcTrust.isWcTrusted(this.sender)) {
-            await filesystem.configDrive(drive.url, { tags: settings.tags });
+            await filesystem.configDriveForSpace(drive.url, { tags: settings.tags }, spacesDb.getCachedActiveId());
           }
 
           // only allow beaker to set these manifest updates for now

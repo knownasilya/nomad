@@ -33,6 +33,10 @@ import { examineLocationInput } from '../../../lib/urls';
 import { findWebContentsParentWindow } from '../../lib/electron';
 import * as sitedataDb from '../../dbs/sitedata';
 import * as settingsDb from '../../dbs/settings';
+import * as spacesDb from '../../dbs/spaces';
+import * as filesystem from '../../filesystem/index';
+import spacesRPCManifest from '../../rpc-manifests/spaces';
+import { registerForPartition } from '../../protocols/index';
 import hyper from '../../hyper/index';
 
 const X_POSITION = 0;
@@ -46,6 +50,7 @@ var activeTabs = {}; // map of {[win.id]: Array<Tab>}
 var backgroundTabs = []; // Array<Tab>
 var preloadedNewTabs = {}; // map of {[win.id]: Tab}
 var lastSelectedTabIndex = {}; // map of {[win.id]: Number}
+var lastActiveTabBySpace = {}; // map of {[win.id]: {[spaceId]: Tab}}
 var closedItems = {}; // map of {[win.id]: Array<Object>}
 var windowEvents = {}; // mapof {[win.id]: EventEmitter}
 var defaultUrl = 'beaker://desktop/';
@@ -61,6 +66,8 @@ class Tab extends EventEmitter {
       isHidden: false,
       initialPanes: undefined,
       fromSnapshot: undefined,
+      spaceId: undefined,
+      partition: undefined,
     }
   ) {
     super();
@@ -90,6 +97,8 @@ class Tab extends EventEmitter {
     this.isHidden = opts.isHidden; // is this tab hidden from the user? used for the preloaded tab and background tabs
     this.isActive = false; // is this the active tab in the window?
     this.isPinned = Boolean(opts.isPinned); // is this tab pinned?
+    this.spaceId = opts.spaceId || spacesDb.getCachedActiveId();
+    this.partition = opts.partition !== undefined ? opts.partition : (spacesDb.getCachedActive()?.partition || '');
 
     // helper state
     this.lastActivePane = undefined;
@@ -120,6 +129,8 @@ class Tab extends EventEmitter {
   getSessionSnapshot() {
     return {
       isPinned: this.isPinned,
+      spaceId: this.spaceId,
+      partition: this.partition,
       stacks: this.layout.stacks.map((stack) => ({
         layoutWidth: stack.layoutWidth,
         panes: stack.panes.map((pane) => ({
@@ -131,6 +142,8 @@ class Tab extends EventEmitter {
   }
 
   loadSnapshot(snapshot) {
+    if (snapshot.spaceId) this.spaceId = snapshot.spaceId;
+    if (snapshot.partition !== undefined) this.partition = snapshot.partition;
     var stacks = Array.isArray(snapshot.stacks) ? snapshot.stacks : [];
     for (let stackSnapshot of stacks) {
       let panes = Array.isArray(stackSnapshot.panes) ? stackSnapshot.panes : [];
@@ -686,6 +699,13 @@ export function getAll(win) {
   return activeTabs[win.id] || [];
 }
 
+// Returns only the tabs visible in the active space (used for frontend index mapping)
+export function getVisibleTabs(win) {
+  win = getTopWindow(win);
+  const activeSpaceId = spacesDb.getCachedActiveId();
+  return (activeTabs[win.id] || []).filter((tab) => tab.spaceId === activeSpaceId);
+}
+
 export function getAllAcrossWindows() {
   return activeTabs;
 }
@@ -693,12 +713,12 @@ export function getAllAcrossWindows() {
 export function getByIndex(win, index) {
   win = getTopWindow(win);
   if (index === 'active') return getActive(win);
-  return getAll(win)[index];
+  return getVisibleTabs(win)[index];
 }
 
 export function getIndexOfTab(win, tab) {
   win = getTopWindow(win);
-  return getAll(win).indexOf(tab);
+  return getVisibleTabs(win).indexOf(tab);
 }
 
 export function getAllPinned(win) {
@@ -754,6 +774,7 @@ export function create(
     initialPanes: undefined,
     fromSnapshot: undefined,
     addedPaneUrls: undefined,
+    spaceId: undefined,
   }
 ) {
   url = url || defaultUrl;
@@ -763,6 +784,13 @@ export function create(
   win = getTopWindow(win);
   var tabs = (activeTabs[win.id] = activeTabs[win.id] || []);
 
+  // resolve space for this tab
+  const spaceId = opts.spaceId || (opts.fromSnapshot?.spaceId) || spacesDb.getCachedActiveId();
+  const space = spacesDb.getCachedAll().find((s) => s.id === spaceId);
+  const partition = opts.fromSnapshot?.partition !== undefined
+    ? opts.fromSnapshot.partition
+    : (space?.partition ?? '');
+
   var tab;
   var preloadedNewTab = preloadedNewTabs[win.id];
   var loadWhenReady = false;
@@ -771,9 +799,10 @@ export function create(
     !opts.fromSnapshot &&
     url === defaultUrl &&
     !opts.isPinned &&
-    preloadedNewTab
+    preloadedNewTab &&
+    preloadedNewTab.spaceId === spaceId
   ) {
-    // use the preloaded tab
+    // use the preloaded tab (only if it belongs to the same space)
     tab = preloadedNewTab;
     tab.isHidden = false; // no longer hidden
     preloadedNewTab = preloadedNewTabs[win.id] = null;
@@ -783,6 +812,8 @@ export function create(
       isPinned: opts.isPinned,
       initialPanes: opts.initialPanes,
       fromSnapshot: opts.fromSnapshot,
+      spaceId,
+      partition,
     });
     loadWhenReady = true;
   }
@@ -922,6 +953,10 @@ export async function remove(win, tab) {
     return console.warn('tabs/manager remove() called for missing tab', tab);
   }
 
+  // record position in the visible (same-space) list before removal
+  var visibleBeforeRemoval = getVisibleTabs(win);
+  var visibleIndex = visibleBeforeRemoval.indexOf(tab);
+
   for (let pane of tab.panes) {
     if (!(await runBeforeUnload(pane.webContents))) {
       return;
@@ -936,13 +971,22 @@ export async function remove(win, tab) {
   tabs.splice(i, 1);
   tab.destroy();
 
-  // set new active if that was
-  if (tabs.length >= 1 && wasActive) {
-    setActive(win, tabs[i] || tabs[i - 1]);
+  // close the window if that was the last tab across all spaces
+  if (tabs.length === 0) return win.close();
+
+  // set new active if this was the active tab — always stay within the same space
+  if (wasActive) {
+    var visibleAfterRemoval = getVisibleTabs(win);
+    if (visibleAfterRemoval.length > 0) {
+      // pick the tab at the same position, or the last one
+      var next = visibleAfterRemoval[visibleIndex] || visibleAfterRemoval[visibleAfterRemoval.length - 1];
+      setActive(win, next);
+    } else {
+      // no tabs left in this space — open a new one
+      create(win, defaultUrl, { setActive: true, spaceId: tab.spaceId });
+    }
   }
 
-  // close the window if that was the last tab
-  if (tabs.length === 0) return win.close();
   emitReplaceState(win);
 }
 
@@ -994,6 +1038,12 @@ export function setActive(win, tab) {
     active.deactivate();
   }
   lastSelectedTabIndex[win.id] = getAll(win).indexOf(active);
+
+  // track last active tab per space
+  if (tab.spaceId) {
+    if (!lastActiveTabBySpace[win.id]) lastActiveTabBySpace[win.id] = {};
+    lastActiveTabBySpace[win.id][tab.spaceId] = tab;
+  }
 
   windowMenu.onSetCurrentLocation(win);
   emitReplaceState(win);
@@ -1210,9 +1260,51 @@ export function emitReplaceState(win) {
     isSidebarHidden: getAddedWindowSettings(win).isSidebarHidden,
     isDaemonActive: hyper.daemon.isActive(),
     hasBgTabs: backgroundTabs.length > 0,
+    spaces: spacesDb.getCachedAll(),
+    activeSpace: spacesDb.getCachedActive(),
   };
   emit(win, 'replace-state', state);
   triggerSessionSnapshot(win);
+}
+
+export async function setActiveSpace(win, id) {
+  win = getTopWindow(win);
+  const space = await spacesDb.setActive(id);
+
+  // refresh the new_tabs_in_foreground cache to reflect the new space's preference
+  const newTabsFg = await settingsDb.getForSpace(id, 'new_tabs_in_foreground');
+  if (newTabsFg !== undefined) settingsDb.setCachedValue('new_tabs_in_foreground', newTabsFg);
+
+  // Update hyper://private/ alias to the new space's root drive
+  if (space.root_drive_url) {
+    filesystem.setPrivateAlias(space.root_drive_url);
+  } else {
+    // Ensure the space has a root drive
+    const drive = await filesystem.getOrSetupSpaceDrive(space);
+    filesystem.setPrivateAlias(drive.url);
+  }
+
+  // Switch to the last active tab for this space, or open a new one
+  var target = lastActiveTabBySpace[win.id]?.[id];
+  // verify the tab is still alive in this window
+  if (target && !getAll(win).includes(target)) target = undefined;
+  if (!target) {
+    // find any tab for this space
+    target = getAll(win).find((t) => t.spaceId === id);
+  }
+  if (!target) {
+    // create a new tab for this space
+    target = create(win, defaultUrl, { spaceId: id, setActive: false });
+  }
+
+  // deactivate current active tab then activate the space's tab
+  var active = getActive(win);
+  if (active && active !== target) active.deactivate();
+  target.activate();
+  if (!lastActiveTabBySpace[win.id]) lastActiveTabBySpace[win.id] = {};
+  lastActiveTabBySpace[win.id][id] = target;
+
+  emitReplaceState(win);
 }
 
 // rpc api
@@ -1503,26 +1595,64 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
   },
 });
 
+rpc.exportAPI('background-process-spaces', spacesRPCManifest, {
+  createEventStream() {
+    return emitStream(getEvents(getWindow(this.sender)));
+  },
+
+  async list() {
+    return spacesDb.list();
+  },
+
+  async getActive() {
+    return spacesDb.getActive();
+  },
+
+  async create(opts) {
+    const space = await spacesDb.create(opts);
+    // register protocols on the new session partition before any tab loads
+    if (space.partition) registerForPartition(space.partition);
+    // provision the root drive for the new space in the background
+    filesystem.getOrSetupSpaceDrive(space).catch(() => {});
+    for (let win of BrowserWindow.getAllWindows()) emitReplaceState(win);
+    return space;
+  },
+
+  async update(id, opts) {
+    return spacesDb.update(id, opts);
+  },
+
+  async remove(id) {
+    // close all tabs for this space before removing
+    for (let win of BrowserWindow.getAllWindows()) {
+      const tabs = getAll(win).filter((t) => t.spaceId === Number(id));
+      for (let tab of tabs) await remove(win, tab);
+    }
+    await spacesDb.remove(id);
+    for (let win of BrowserWindow.getAllWindows()) emitReplaceState(win);
+  },
+
+  async setActive(id) {
+    const win = getWindow(this.sender);
+    await setActiveSpace(win, Number(id));
+  },
+});
+
 // internal methods
 // =
 
 function emitUpdateState(tab) {
   if (!tab.browserWindow) return;
   var win = getTopWindow(tab.browserWindow);
-  var index = typeof tab === 'number' ? tab : getAll(win).indexOf(tab);
-  if (index === -1) {
-    console.warn(
-      'WARNING: attempted to update state of a tab not on the window'
-    );
-    return;
-  }
+  var index = typeof tab === 'number' ? tab : getVisibleTabs(win).indexOf(tab);
+  if (index === -1) return; // tab is in a different space — skip
   emit(win, 'update-state', { index, state: tab.state });
   win.emit('custom-pages-updated', takeSnapshot(win));
 }
 
 function emitUpdatePanesState(tab) {
   var win = getTopWindow(tab.browserWindow);
-  var index = typeof tab === 'number' ? tab : getAll(win).indexOf(tab);
+  var index = typeof tab === 'number' ? tab : getVisibleTabs(win).indexOf(tab);
   if (index === -1) return;
   emit(win, 'update-panes-state', { index, paneLayout: tab.layout.state });
 }
@@ -1554,7 +1684,7 @@ function emit(win, ...args) {
 }
 
 function getWindowTabState(win) {
-  return getAll(win).map((tab) => tab.state);
+  return getVisibleTabs(win).map((tab) => tab.state);
 }
 
 function addTabToClosedItems(tab) {
@@ -1652,7 +1782,9 @@ function createPreloadedNewTab(win) {
   }
   _createPreloadedNewTabTOs[id] = setTimeout(() => {
     _createPreloadedNewTabTOs[id] = null;
-    preloadedNewTabs[id] = new Tab(win, { isHidden: true });
+    const spaceId = spacesDb.getCachedActiveId();
+    const partition = spacesDb.getCachedActive()?.partition ?? '';
+    preloadedNewTabs[id] = new Tab(win, { isHidden: true, spaceId, partition });
     preloadedNewTabs[id].loadURL(defaultUrl);
   }, 1e3);
 }

@@ -104,28 +104,25 @@ export class Pane extends EventEmitter {
   constructor(tab) {
     super();
     this.tab = tab;
-    this.browserView = new BrowserView({
-      webPreferences: {
-        preload: path.join(
-          __dirname,
-          'fg',
-          'webview-preload',
-          'index.build.js'
-        ),
-        nodeIntegrationInSubFrames: true,
-        contextIsolation: true,
-        worldSafeExecuteJavaScript: false, // TODO- this causes promises to fail in executeJavaScript, need to file an issue with electron
-        webviewTag: false,
-        sandbox: true,
-        defaultEncoding: 'utf-8',
-        nativeWindowOpen: true,
-        nodeIntegration: false,
-        scrollBounce: true,
-        navigateOnDragDrop: true,
-        enableRemoteModule: false,
-        safeDialogs: true,
-      },
-    });
+    const webPrefs = {
+      preload: path.join(__dirname, 'fg', 'webview-preload', 'index.build.js'),
+      nodeIntegrationInSubFrames: true,
+      contextIsolation: true,
+      worldSafeExecuteJavaScript: false, // TODO- this causes promises to fail in executeJavaScript, need to file an issue with electron
+      webviewTag: false,
+      sandbox: true,
+      defaultEncoding: 'utf-8',
+      nativeWindowOpen: true,
+      nodeIntegration: false,
+      scrollBounce: true,
+      navigateOnDragDrop: true,
+      enableRemoteModule: false,
+      safeDialogs: true,
+    };
+    // Only set partition for non-default sessions — leaving it unset keeps the
+    // default session (with its protocol handlers and adblocker) intact.
+    if (tab.partition) webPrefs.partition = tab.partition;
+    this.browserView = new BrowserView({ webPreferences: webPrefs });
     this.browserView.setBackgroundColor('#fff');
 
     // webview state
@@ -461,7 +458,7 @@ export class Pane extends EventEmitter {
     var url = this.url;
     var title = this.title;
     if (url && !url.startsWith('beaker://')) {
-      historyDb.addVisit(0, { url, title });
+      historyDb.addVisit(0, { url, title, spaceId: this.tab.spaceId || 1 });
     }
   }
 

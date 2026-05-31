@@ -9,6 +9,7 @@ import './donate';
 import './peers';
 import './share';
 import './site';
+import './spaces';
 
 class MenusWrapper extends LitElement {
   static get properties() {
@@ -125,6 +126,8 @@ class MenusWrapper extends LitElement {
         return html`<share-menu active-menu></share-menu>`;
       case 'site':
         return html`<site-menu active-menu></site-menu>`;
+      case 'spaces':
+        return html`<spaces-menu active-menu></spaces-menu>`;
     }
     return html`<div></div>`;
   }

@@ -37,9 +37,10 @@ class BadParamError extends Error {
  * @param {Object} values
  * @param {string} values.url
  * @param {string} values.title
+ * @param {number} [values.spaceId]
  * @returns {Promise<void>}
  */
-export const addVisit = async function (profileId, { url, title }) {
+export const addVisit = async function (profileId, { url, title, spaceId = 1 }) {
   // validate parameters
   if (!url || typeof url !== 'string') {
     throw new BadParamError('url must be a string');
@@ -94,8 +95,8 @@ export const addVisit = async function (profileId, { url, title }) {
     } else {
       // log visit
       await db.run(
-        'INSERT INTO visits (profileId, url, title, tabClose, ts) VALUES (?, ?, ?, ?, ?);',
-        [profileId, url, title, 0, ts]
+        'INSERT INTO visits (profileId, url, title, tabClose, ts, spaceId) VALUES (?, ?, ?, ?, ?, ?);',
+        [profileId, url, title, 0, ts, spaceId]
       );
     }
 
@@ -166,14 +167,17 @@ export const addTabClose = async function (profileId, { url, title }) {
  * @param {number} [opts.before]
  * @param {number} [opts.after]
  * @param {Boolean} [opts.tabClose]
+ * @param {number} [spaceId]
  * @returns {Promise<Array<Visit>>}
  */
 export const getVisitHistory = async function (
   profileId,
-  { search, offset, limit, before, after, tabClose }
+  { search, offset, limit, before, after, tabClose },
+  spaceId = undefined
 ) {
   var release = await lock('history-db');
   try {
+    const spaceFilter = spaceId != null ? `AND visits.spaceId = ${Number(spaceId)}` : '';
     const params = /** @type Array<string | number> */ ([
       profileId,
       limit || 50,
@@ -192,7 +196,7 @@ export const getVisitHistory = async function (
         SELECT visits.*
           FROM visit_fts
             LEFT JOIN visits ON visits.url = visit_fts.url
-          WHERE visits.profileId = ?1 AND visit_fts MATCH ?4 ${
+          WHERE visits.profileId = ?1 AND visit_fts MATCH ?4 ${spaceFilter} ${
             tabClose ? `AND tabClose = 1` : ''
           }
           ORDER BY visits.ts DESC
@@ -201,20 +205,20 @@ export const getVisitHistory = async function (
         params
       );
     }
-    let where = '';
+    let where = spaceFilter;
     if (before && after) {
-      where += 'AND ts <= ?4 AND ts >= ?5';
+      where += ' AND ts <= ?4 AND ts >= ?5';
       params.push(before);
       params.push(after);
     } else if (before) {
-      where += 'AND ts <= ?4';
+      where += ' AND ts <= ?4';
       params.push(before);
     } else if (after) {
-      where += 'AND ts >= ?4';
+      where += ' AND ts >= ?4';
       params.push(after);
     }
     if (tabClose) {
-      where += `AND tabClose = 1`;
+      where += ` AND tabClose = 1`;
     }
     return await db.all(
       `
@@ -235,19 +239,21 @@ export const getVisitHistory = async function (
  * @param {Object} opts
  * @param {number} [opts.offset]
  * @param {number} [opts.limit]
+ * @param {number} [spaceId]
  * @returns {Promise<Array<Visit>>}
  */
-export const getMostVisited = async function (profileId, { offset, limit }) {
+export const getMostVisited = async function (profileId, { offset, limit }, spaceId = undefined) {
   var release = await lock('history-db');
   try {
     offset = offset || 0;
     limit = limit || 50;
+    const spaceFilter = spaceId != null ? `AND visits.spaceId = ${Number(spaceId)}` : '';
     return await db.all(
       `
       SELECT visit_stats.*, visits.title AS title
         FROM visit_stats
           LEFT JOIN visits ON visits.url = visit_stats.url
-        WHERE profileId = ? AND visit_stats.num_visits > 5
+        WHERE profileId = ? ${spaceFilter} AND visit_stats.num_visits > 5
         GROUP BY visit_stats.url
         ORDER BY num_visits DESC, last_visit_ts DESC
         LIMIT ? OFFSET ?

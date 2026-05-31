@@ -10,6 +10,7 @@ import hyperdriveManifest from '../../bg/web-apis/manifests/external/hyperdrive'
 import shellManifest from '../../bg/web-apis/manifests/external/shell';
 import beakerFsManifest from '../../bg/web-apis/manifests/internal/beaker-filesystem';
 import shellMenusManifest from '../../bg/rpc-manifests/shell-menus';
+import spacesManifest from '../../bg/rpc-manifests/spaces';
 import viewsManifest from '../../bg/rpc-manifests/views';
 
 export const beakerBrowser = rpc.importAPI('beaker-browser', browserManifest);
@@ -26,4 +27,5 @@ export const shellMenus = rpc.importAPI(
   'background-process-shell-menus',
   shellMenusManifest
 );
+export const spaces = rpc.importAPI('background-process-spaces', spacesManifest);
 export const views = rpc.importAPI('background-process-views', viewsManifest);

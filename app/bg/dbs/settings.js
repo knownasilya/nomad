@@ -4,9 +4,20 @@ import path from 'path';
 import { cbPromise } from '../../lib/functions';
 import { setupSqliteDB } from '../lib/db';
 import { getEnvVar } from '../lib/env';
+import * as profileDb from './profile-data-db';
 
 const CACHED_VALUES = ['new_tabs_in_foreground'];
 const JSON_ENCODED_SETTINGS = ['search_engines', 'adblock_lists'];
+
+// Settings that are always global (never per-space)
+const GLOBAL_SETTINGS = new Set([
+  'auto_update_enabled',
+  'run_background',
+  'launch_on_startup',
+  'analytics_enabled',
+  'active_space_id',
+  'no_welcome_tab',
+]);
 
 // globals
 // =
@@ -130,6 +141,10 @@ export function getCached(key) {
   return cachedValues[key];
 }
 
+export function setCachedValue(key, value) {
+  if (CACHED_VALUES.includes(key)) cachedValues[key] = value;
+}
+
 /**
  * @param {string} key
  * @returns {boolean | Promise<string | number | object>}
@@ -192,6 +207,72 @@ export const getAll = function () {
     })
   );
 };
+
+/**
+ * Get a setting for a specific space, falling back to the global value.
+ * @param {number} spaceId
+ * @param {string} key
+ */
+export async function getForSpace(spaceId, key) {
+  if (!spaceId || GLOBAL_SETTINGS.has(key)) return get(key);
+  const row = await profileDb.get(
+    'SELECT value FROM space_settings WHERE spaceId = ? AND key = ?',
+    [spaceId, key]
+  );
+  if (row && row.value !== undefined) {
+    let val = row.value;
+    if (JSON_ENCODED_SETTINGS.includes(key)) {
+      try { val = JSON.parse(val); } catch (e) { val = defaultSettings[key]; }
+    }
+    return val;
+  }
+  return get(key); // fall back to global
+}
+
+/**
+ * Get all settings for a specific space (global defaults overridden by space values).
+ * @param {number} spaceId
+ */
+export async function getAllForSpace(spaceId) {
+  const globals = await getAll();
+  if (!spaceId) return globals;
+  const rows = await profileDb.all(
+    'SELECT key, value FROM space_settings WHERE spaceId = ?',
+    [spaceId]
+  );
+  const spaceOverrides = {};
+  for (const row of rows) {
+    let val = row.value;
+    if (JSON_ENCODED_SETTINGS.includes(row.key)) {
+      try { val = JSON.parse(val); } catch (e) { continue; }
+    }
+    spaceOverrides[row.key] = val;
+  }
+  return Object.assign({}, globals, spaceOverrides);
+}
+
+/**
+ * Set a setting for a specific space.
+ * @param {number} spaceId
+ * @param {string} key
+ * @param {string|number|object} value
+ */
+export async function setForSpace(spaceId, key, value) {
+  if (!spaceId || GLOBAL_SETTINGS.has(key)) return set(key, value);
+  let stored = value;
+  if (JSON_ENCODED_SETTINGS.includes(key)) stored = JSON.stringify(value);
+  await profileDb.run(
+    'INSERT OR REPLACE INTO space_settings (spaceId, key, value, ts) VALUES (?, ?, ?, ?)',
+    [spaceId, key, stored, Date.now()]
+  );
+  // mirror new_tabs_in_foreground cache if it's for the active space
+  if (key === 'new_tabs_in_foreground') {
+    // the cache is used synchronously; update it so the setting takes effect immediately
+    cachedValues[key] = value;
+  }
+  events.emit('set', key, value);
+  events.emit('set:' + key, value);
+}
 
 // internal methods
 // =

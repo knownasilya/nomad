@@ -217,9 +217,18 @@ export const WEBAPI = {
   restartBrowser,
   setRunOnStartup,
 
-  getSetting,
-  getSettings,
-  setSetting,
+  async getSetting(key) {
+    const spaceId = tabManager.findTab(this.sender)?.spaceId;
+    return settingsDb.getForSpace(spaceId, key);
+  },
+  async getSettings() {
+    const spaceId = tabManager.findTab(this.sender)?.spaceId;
+    return settingsDb.getAllForSpace(spaceId);
+  },
+  async setSetting(key, value) {
+    const spaceId = tabManager.findTab(this.sender)?.spaceId;
+    return settingsDb.setForSpace(spaceId, key, value);
+  },
   updateAdblocker,
   updateSetupState,
   migrate08to09,

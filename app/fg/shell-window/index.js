@@ -6,6 +6,7 @@ import './tabs';
 import './navbar';
 import './panes';
 import './resize-hackfix';
+import './spaces-dropdown';
 
 // setup
 document.addEventListener('DOMContentLoaded', () => {
@@ -25,6 +26,8 @@ class ShellWindowUI extends LitElement {
       isFullscreen: { type: Boolean },
       hasBgTabs: { type: Boolean },
       hasLocationExpanded: { type: Boolean },
+      spaces: { type: Array },
+      activeSpace: { type: Object },
     };
   }
 
@@ -39,6 +42,8 @@ class ShellWindowUI extends LitElement {
     this.isFullscreen = false;
     this.hasBgTabs = false;
     this.hasLocationExpanded = false;
+    this.spaces = [];
+    this.activeSpace = null;
     this.activeTabIndex = -1;
     this.setup();
   }
@@ -75,6 +80,8 @@ class ShellWindowUI extends LitElement {
       this.isSidebarHidden = state.isSidebarHidden;
       this.isDaemonActive = state.isDaemonActive;
       this.hasBgTabs = state.hasBgTabs;
+      if (state.spaces) this.spaces = state.spaces;
+      if (state.activeSpace) this.activeSpace = state.activeSpace;
       this.stateHasChanged();
     });
     viewEvents.addEventListener('update-state', ({ index, state }) => {
@@ -119,6 +126,8 @@ class ShellWindowUI extends LitElement {
     // fetch initial tab state
     this.isUpdateAvailable = browserInfo.updater.state === 'downloaded';
     this.tabs = await bg.views.getState();
+    this.spaces = await bg.spaces.list();
+    this.activeSpace = await bg.spaces.getActive();
     this.stateHasChanged();
     getDaemonStatus();
   }
@@ -152,6 +161,8 @@ class ShellWindowUI extends LitElement {
         : html`
             <shell-window-tabs
               .tabs=${this.tabs}
+              .spaces=${this.spaces}
+              .activeSpace=${this.activeSpace}
               ?is-fullscreen=${this.isFullscreen}
               ?has-bg-tabs=${this.hasBgTabs}
             ></shell-window-tabs>

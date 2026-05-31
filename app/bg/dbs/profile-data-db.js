@@ -55,6 +55,8 @@ import V49 from './schemas/profile-data.v49.sql';
 import V50 from './schemas/profile-data.v50.sql';
 import V51 from './schemas/profile-data.v51.sql';
 import V52 from './schemas/profile-data.v52.sql';
+import V53 from './schemas/profile-data.v53.sql';
+import V54 from './schemas/profile-data.v54.sql';
 
 // typedefs
 // =
@@ -192,6 +194,8 @@ migrations = [
   migration(V50),
   migration(V51),
   migration(V52),
+  migration(V53),
+  migration(V54),
 ];
 function migration(file, opts = {}) {
   return (cb) => {

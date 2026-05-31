@@ -4,6 +4,7 @@ import * as logLib from '../logger';
 import hyper from '../hyper/index';
 import * as db from '../dbs/profile-data-db';
 import * as archivesDb from '../dbs/archives';
+import * as spacesDb from '../dbs/spaces';
 import * as trash from './trash';
 import * as modals from '../ui/subwindows/modals';
 import lock from '../../lib/lock';
@@ -38,6 +39,8 @@ const logger = logLib
 var browsingProfile;
 var rootDrive;
 var drives = [];
+// per-space root drives: map of {[spaceId]: DaemonHyperdrive}
+var spaceRootDrives = {};
 
 // exported api
 // =
@@ -142,6 +145,10 @@ export async function setup() {
   }
   hyper.drives.ensureHosting(hostKeys);
   await migrateAddressBook();
+
+  // backfill space 1's root_drive_url from the existing browsing profile
+  await spacesDb.backfillDefaultSpaceDrive(browsingProfile.url);
+  spaceRootDrives[1] = rootDrive;
 }
 
 /**
@@ -154,6 +161,95 @@ export function getDriveIdent(url) {
 }
 
 /**
+ * Update the hyper://private/ DNS alias to point to a different root drive.
+ * Called on startup and on every space switch.
+ * @param {string} url
+ */
+export function setPrivateAlias(url) {
+  if (!url) return;
+  if (!url.endsWith('/')) url += '/';
+  hyper.dns.setLocal('private', url);
+}
+
+/**
+ * Get or create the root drive for a space, caching it in memory.
+ * @param {{ id: number, root_drive_url: string|null }} space
+ * @returns {Promise<DaemonHyperdrive>}
+ */
+export async function getOrSetupSpaceDrive(space) {
+  if (spaceRootDrives[space.id]) return spaceRootDrives[space.id];
+
+  if (space.root_drive_url) {
+    let url = space.root_drive_url;
+    if (!url.endsWith('/')) url += '/';
+    const drive = await hyper.drives.getOrLoadDrive(url, { persistSession: true });
+    spaceRootDrives[space.id] = drive;
+    return drive;
+  }
+
+  // No drive yet — create one
+  const drive = await hyper.drives.createNewRootDrive();
+  logger.info('Created root drive for space', { spaceId: space.id, url: drive.url });
+  await spacesDb.update(space.id, { rootDriveUrl: drive.url });
+  spaceRootDrives[space.id] = drive;
+  return drive;
+}
+
+/**
+ * @param {number} spaceId
+ * @returns {DaemonHyperdrive|undefined}
+ */
+export function getSpaceRootDrive(spaceId) {
+  return spaceRootDrives[spaceId];
+}
+
+// per-space drives lists (spaceId 1 uses the module-level `drives`)
+var spaceDrivesMap = {}; // {[spaceId]: DriveConfig[]}
+
+/**
+ * Register a drive in the given space's root drive /drives.json.
+ * Falls back to the default configDrive for space 1.
+ * @param {string} url
+ * @param {Object} [opts]
+ * @param {number} [spaceId]
+ */
+export async function configDriveForSpace(url, opts = {}, spaceId = 1) {
+  if (spaceId === 1) {
+    return configDrive(url, opts);
+  }
+  const space = await spacesDb.get(spaceId);
+  if (!space) return configDrive(url, opts);
+  const spaceDrive = await getOrSetupSpaceDrive(space);
+
+  var release = await lock(`filesystem:drives:space-${spaceId}`);
+  try {
+    var key = await hyper.drives.fromURLToKey(url, true);
+    if (!spaceDrivesMap[spaceId]) {
+      try {
+        spaceDrivesMap[spaceId] = JSON.parse(
+          await spaceDrive.pda.readFile('/drives.json')
+        ).drives || [];
+      } catch (e) {
+        spaceDrivesMap[spaceId] = [];
+      }
+    }
+    const spaceDrives = spaceDrivesMap[spaceId];
+    if (!spaceDrives.find((d) => d.key === key)) {
+      const driveCfg = { key };
+      if (opts.tags) driveCfg.tags = opts.tags;
+      if (opts.forkOf) driveCfg.forkOf = opts.forkOf;
+      spaceDrives.push(driveCfg);
+    }
+    await spaceDrive.pda.writeFile(
+      '/drives.json',
+      JSON.stringify({ drives: spaceDrives }, null, 2)
+    );
+  } finally {
+    release();
+  }
+}
+
+/**
  * @param {Object} [opts]
  * @param {boolean} [opts.includeSystem]
  * @returns {Array<DriveConfig>}
@@ -163,6 +259,38 @@ export function listDrives({ includeSystem } = { includeSystem: false }) {
   if (includeSystem) {
     d.unshift({ key: 'private' });
   }
+  return d;
+}
+
+/**
+ * List drives for a specific space, loading their /drives.json if needed.
+ * @param {number} spaceId
+ * @param {Object} [opts]
+ * @param {boolean} [opts.includeSystem]
+ * @returns {Promise<Array<DriveConfig>>}
+ */
+export async function listDrivesForSpace(spaceId, { includeSystem } = {}) {
+  if (!spaceId || spaceId === 1) return listDrives({ includeSystem });
+
+  // Ensure drives are loaded for this space
+  if (!spaceDrivesMap[spaceId]) {
+    const space = await spacesDb.get(spaceId);
+    if (space) {
+      const spaceDrive = await getOrSetupSpaceDrive(space);
+      try {
+        spaceDrivesMap[spaceId] = JSON.parse(
+          await spaceDrive.pda.readFile('/drives.json')
+        ).drives || [];
+      } catch (e) {
+        spaceDrivesMap[spaceId] = [];
+      }
+    } else {
+      return listDrives({ includeSystem });
+    }
+  }
+
+  var d = spaceDrivesMap[spaceId].slice();
+  if (includeSystem) d.unshift({ key: 'private' });
   return d;
 }
 
@@ -291,16 +419,40 @@ export async function removeDrive(url) {
     if (driveIndex === -1) return;
     let drive = await hyper.drives.getOrLoadDrive(url);
     if (!drive.writable) {
-      // unannounce the drive
-      drive.session.drive.configureNetwork({
-        announce: false,
-        lookup: true,
-      });
+      drive.session.drive.configureNetwork({ announce: false, lookup: true });
     }
     drives.splice(driveIndex, 1);
     await rootDrive.pda.writeFile(
       '/drives.json',
       JSON.stringify({ drives }, null, 2)
+    );
+  } finally {
+    release();
+  }
+}
+
+/**
+ * Remove a drive from a specific space's /drives.json.
+ * Falls back to removeDrive for space 1.
+ * @param {string} url
+ * @param {number} [spaceId]
+ */
+export async function removeDriveForSpace(url, spaceId = 1) {
+  if (!spaceId || spaceId === 1) return removeDrive(url);
+  const space = await spacesDb.get(spaceId);
+  if (!space) return removeDrive(url);
+  const spaceDrive = await getOrSetupSpaceDrive(space);
+
+  var release = await lock(`filesystem:drives:space-${spaceId}`);
+  try {
+    var key = await hyper.drives.fromURLToKey(url, true);
+    if (!spaceDrivesMap[spaceId]) spaceDrivesMap[spaceId] = [];
+    const idx = spaceDrivesMap[spaceId].findIndex((d) => d.key === key);
+    if (idx === -1) return;
+    spaceDrivesMap[spaceId].splice(idx, 1);
+    await spaceDrive.pda.writeFile(
+      '/drives.json',
+      JSON.stringify({ drives: spaceDrivesMap[spaceId] }, null, 2)
     );
   } finally {
     release();

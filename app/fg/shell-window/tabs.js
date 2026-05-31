@@ -12,6 +12,8 @@ class ShellWindowTabs extends LitElement {
   static get properties() {
     return {
       tabs: { type: Array },
+      spaces: { type: Array },
+      activeSpace: { type: Object },
       isFullscreen: { type: Boolean, attribute: 'is-fullscreen' },
       hasBgTabs: { type: Boolean, attribute: 'has-bg-tabs' },
       isBackgroundTrayOpen: { type: Boolean },
@@ -21,6 +23,8 @@ class ShellWindowTabs extends LitElement {
   constructor() {
     super();
     this.tabs = [];
+    this.spaces = [];
+    this.activeSpace = null;
     this.tabsTransitionState = undefined; // used for 'close animations'
     this.isFullscreen = false;
     this.hasBgTabs = false;
@@ -95,6 +99,10 @@ class ShellWindowTabs extends LitElement {
               <span class="plus">+</span>
             </div>
           </div>
+          <shell-window-spaces-dropdown
+            .spaces=${this.spaces}
+            .activeSpace=${this.activeSpace}
+          ></shell-window-spaces-dropdown>
         </div>
       </div>
     `;
