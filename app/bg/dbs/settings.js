@@ -209,7 +209,10 @@ export const getAll = function () {
 };
 
 /**
- * Get a setting for a specific space, falling back to the global value.
+ * Get a setting for a specific space.
+ * For global keys, reads from the global settings table.
+ * For per-space keys, reads from space_settings and falls back to hardcoded defaults
+ * (never the shared global settings table, so spaces are fully isolated).
  * @param {number} spaceId
  * @param {string} key
  */
@@ -226,29 +229,43 @@ export async function getForSpace(spaceId, key) {
     }
     return val;
   }
-  return get(key); // fall back to global
+  // Fall back to hardcoded defaults — not the global settings table —
+  // so changes in one space can never bleed into another.
+  return defaultSettings[key];
 }
 
 /**
- * Get all settings for a specific space (global defaults overridden by space values).
+ * Get all settings for a specific space.
+ * Merges: hardcoded defaults + global settings (for GLOBAL_SETTINGS keys only) + space overrides.
  * @param {number} spaceId
  */
 export async function getAllForSpace(spaceId) {
-  const globals = await getAll();
-  if (!spaceId) return globals;
+  if (!spaceId) return getAll();
+
+  // Start from hardcoded defaults
+  var obj = Object.assign({}, defaultSettings);
+
+  // Overlay global-only keys from the global settings table
+  for (const key of GLOBAL_SETTINGS) {
+    const val = await get(key);
+    if (val !== undefined) obj[key] = val;
+  }
+
+  // Overlay space-specific settings
   const rows = await profileDb.all(
     'SELECT key, value FROM space_settings WHERE spaceId = ?',
     [spaceId]
   );
-  const spaceOverrides = {};
   for (const row of rows) {
     let val = row.value;
     if (JSON_ENCODED_SETTINGS.includes(row.key)) {
       try { val = JSON.parse(val); } catch (e) { continue; }
     }
-    spaceOverrides[row.key] = val;
+    obj[row.key] = val;
   }
-  return Object.assign({}, globals, spaceOverrides);
+
+  obj.no_welcome_tab = Number(getEnvVar('BEAKER_NO_WELCOME_TAB')) === 1;
+  return obj;
 }
 
 /**
@@ -265,13 +282,10 @@ export async function setForSpace(spaceId, key, value) {
     'INSERT OR REPLACE INTO space_settings (spaceId, key, value, ts) VALUES (?, ?, ?, ?)',
     [spaceId, key, stored, Date.now()]
   );
-  // mirror new_tabs_in_foreground cache if it's for the active space
-  if (key === 'new_tabs_in_foreground') {
-    // the cache is used synchronously; update it so the setting takes effect immediately
-    cachedValues[key] = value;
-  }
-  events.emit('set', key, value);
-  events.emit('set:' + key, value);
+  // Emit space-scoped events only — NOT the global 'set:key' events,
+  // so other spaces' caches and listeners are not affected.
+  events.emit('set-space:' + spaceId, key, value);
+  events.emit('set-space:' + spaceId + ':' + key, value);
 }
 
 // internal methods

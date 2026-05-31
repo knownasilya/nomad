@@ -637,16 +637,8 @@ class Tab extends EventEmitter {
 // =
 
 export async function setup() {
-  defaultUrl = String(await settingsDb.get('new_tab'));
-  settingsDb.on('set:new_tab', (newValue) => {
-    defaultUrl = newValue;
-
-    // reset preloaded tabs since they are now on the wrong URL
-    for (let k in preloadedNewTabs) {
-      preloadedNewTabs[k].destroy();
-    }
-    preloadedNewTabs = {};
-  });
+  // defaultUrl stays as the hardcoded 'beaker://desktop/'.
+  // Per-space new tab URLs are resolved at the RPC call site (createTab).
 
   // listen for webContents messages
   ipcMain.on('BEAKER_SCRIPTCLOSE_SELF', (e) => {
@@ -1367,8 +1359,13 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
 
   async createTab(url, opts = { focusLocationBar: false, setActive: false }) {
     var win = getWindow(this.sender);
+    if (!url) {
+      const spaceId = opts.spaceId || spacesDb.getCachedActiveId();
+      const newTabSetting = await settingsDb.getForSpace(spaceId, 'new_tab');
+      url = newTabSetting || defaultUrl;
+    }
     var tab = create(win, url, opts);
-    return getAll(win).indexOf(tab);
+    return getVisibleTabs(win).indexOf(tab);
   },
 
   async createPane(index, url) {
