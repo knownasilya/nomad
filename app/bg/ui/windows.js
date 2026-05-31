@@ -232,7 +232,7 @@ export function createShellWindow(
   var { x, y, width, height, minWidth, minHeight } = state;
   var frameSettings = {
     titleBarStyle: 'hidden',
-    trafficLightPosition: { x: 12, y: 20 },
+    trafficLightPosition: { x: 12, y: 11 },
     frame: IS_LINUX || IS_WIN,
     title: undefined,
   };

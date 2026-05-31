@@ -684,7 +684,7 @@ ShellWindowTabs.styles = css`
 
   /* make room for traffic lights */
   .darwin .tabs {
-    padding-left: 75px;
+    padding-left: 80px;
   }
   .darwin.fullscreen .tabs {
     padding-left: 0px; /* not during fullscreen */
