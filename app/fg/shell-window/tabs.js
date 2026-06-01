@@ -528,6 +528,18 @@ ShellWindowTabs.styles = css`
     left: 14px;
   }
 
+  .tab.pinned .tab-favicon::after {
+    content: '';
+    position: absolute;
+    bottom: 1px;
+    right: -3px;
+    width: 6px;
+    height: 6px;
+    background: var(--highlight-color--tab--current, #5b5ef4);
+    border-radius: 50%;
+    opacity: 0.7;
+  }
+
   .tab-title {
     font-family: system-ui;
     color: var(--text-color--tab--title);

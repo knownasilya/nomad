@@ -812,7 +812,7 @@ export function create(
 
   // add to active tabs
   if (opts.isPinned) {
-    tabs.splice(indexOfLastPinnedTab(win), 0, tab);
+    tabs.splice(indexOfLastPinnedTabInSpace(win, tab.spaceId), 0, tab);
   } else {
     let tabIndex =
       typeof opts.tabIndex !== 'undefined' && opts.tabIndex !== -1
@@ -820,7 +820,7 @@ export function create(
         : undefined;
     if (opts.adjacentActive) {
       let active = getActive(win);
-      let lastPinIndex = indexOfLastPinnedTab(win);
+      let lastPinIndex = indexOfLastPinnedTabInSpace(win, spaceId);
       tabIndex = active ? tabs.indexOf(active) : undefined;
       if (tabIndex === -1) tabIndex = undefined;
       else if (tabIndex < lastPinIndex) tabIndex = lastPinIndex;
@@ -925,7 +925,7 @@ export async function restoreBgTabByIndex(win, index) {
   app.emit('custom-background-tabs-update', backgroundTabs);
 
   if (tab.isPinned) {
-    tabs.splice(indexOfLastPinnedTab(win), 0, tab);
+    tabs.splice(indexOfLastPinnedTabInSpace(win, tab.spaceId), 0, tab);
   } else {
     tabs.push(tab);
   }
@@ -1120,7 +1120,7 @@ export function transferTabToWindow(tab, targetWindow) {
   tab.transferWindow(targetWindow);
   var targetTabs = getAll(targetWindow);
   if (tab.isPinned) {
-    targetTabs.splice(indexOfLastPinnedTab(targetWindow), 0, tab);
+    targetTabs.splice(indexOfLastPinnedTabInSpace(targetWindow, tab.spaceId), 0, tab);
   } else {
     targetTabs.push(tab);
   }
@@ -1133,10 +1133,10 @@ export function transferTabToWindow(tab, targetWindow) {
 
 export function togglePinned(win, tab) {
   win = getTopWindow(win);
-  // move tab to the "end" of the pinned tabs
+  // move tab to the "end" of the pinned tabs within its space
   var tabs = getAll(win);
   var oldIndex = tabs.indexOf(tab);
-  var newIndex = indexOfLastPinnedTab(win);
+  var newIndex = indexOfLastPinnedTabInSpace(win, tab.spaceId);
   if (oldIndex < newIndex) newIndex--;
   tabs.splice(oldIndex, 1);
   tabs.splice(newIndex, 0, tab);
@@ -1696,13 +1696,15 @@ function addPaneToClosedItems(tab, url) {
   closedItems[tab.browserWindow.id].push({ isPane: true, tab, url });
 }
 
-function indexOfLastPinnedTab(win) {
+function indexOfLastPinnedTabInSpace(win, spaceId) {
   var tabs = getAll(win);
-  var index = 0;
-  for (index; index < tabs.length; index++) {
-    if (!tabs[index].isPinned) break;
+  for (var i = 0; i < tabs.length; i++) {
+    if (tabs[i].spaceId === spaceId && !tabs[i].isPinned) return i;
   }
-  return index;
+  for (var i = tabs.length - 1; i >= 0; i--) {
+    if (tabs[i].spaceId === spaceId) return i + 1;
+  }
+  return tabs.length;
 }
 
 function definePrimaryPanePassthroughGetter(obj, name) {
