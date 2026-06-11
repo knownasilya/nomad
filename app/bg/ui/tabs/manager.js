@@ -53,7 +53,10 @@ var lastSelectedTabIndex = {}; // map of {[win.id]: Number}
 var lastActiveTabBySpace = {}; // map of {[win.id]: {[spaceId]: Tab}}
 var closedItems = {}; // map of {[win.id]: Array<Object>}
 var windowEvents = {}; // mapof {[win.id]: EventEmitter}
+var tabGroups = {}; // map of {[win.id]: Array<{id, name, color}>}
 var defaultUrl = 'beaker://desktop/';
+
+const GROUP_COLORS = ['#e04850', '#f5a623', '#f8de4c', '#3ecf8e', '#5b5ef4', '#b570f5'];
 
 // classes
 // =
@@ -97,6 +100,7 @@ class Tab extends EventEmitter {
     this.isHidden = opts.isHidden; // is this tab hidden from the user? used for the preloaded tab and background tabs
     this.isActive = false; // is this the active tab in the window?
     this.isPinned = Boolean(opts.isPinned); // is this tab pinned?
+    this.groupId = opts.groupId || null;
     this.spaceId = opts.spaceId || spacesDb.getCachedActiveId();
     this.partition = opts.partition !== undefined ? opts.partition : (spacesDb.getCachedActive()?.partition || '');
 
@@ -122,6 +126,7 @@ class Tab extends EventEmitter {
     return Object.assign(state, {
       isActive: this.isActive,
       isPinned: this.isPinned,
+      groupId: this.groupId,
       paneLayout: this.layout.state,
     });
   }
@@ -129,6 +134,7 @@ class Tab extends EventEmitter {
   getSessionSnapshot() {
     return {
       isPinned: this.isPinned,
+      groupId: this.groupId,
       spaceId: this.spaceId,
       partition: this.partition,
       stacks: this.layout.stacks.map((stack) => ({
@@ -144,6 +150,7 @@ class Tab extends EventEmitter {
   loadSnapshot(snapshot) {
     if (snapshot.spaceId) this.spaceId = snapshot.spaceId;
     if (snapshot.partition !== undefined) this.partition = snapshot.partition;
+    if (snapshot.groupId) this.groupId = snapshot.groupId;
     var stacks = Array.isArray(snapshot.stacks) ? snapshot.stacks : [];
     for (let stackSnapshot of stacks) {
       let panes = Array.isArray(stackSnapshot.panes) ? stackSnapshot.panes : [];
@@ -775,6 +782,7 @@ export function create(
   }
   win = getTopWindow(win);
   var tabs = (activeTabs[win.id] = activeTabs[win.id] || []);
+  tabGroups[win.id] = tabGroups[win.id] || [];
 
   // resolve space for this tab
   const spaceId = opts.spaceId || (opts.fromSnapshot?.spaceId) || spacesDb.getCachedActiveId();
@@ -1048,7 +1056,11 @@ export function resize(win) {
 
 export function initializeWindowFromSnapshot(win, snapshot) {
   win = getTopWindow(win);
-  for (let page of snapshot) {
+  // snapshot may be the old array format or new {pages, groups} object
+  const pages = Array.isArray(snapshot) ? snapshot : (snapshot.pages || []);
+  const groups = Array.isArray(snapshot) ? [] : (snapshot.groups || []);
+  tabGroups[win.id] = groups;
+  for (let page of pages) {
     if (typeof page === 'string') {
       // legacy compat- pages were previously just url strings
       create(win, page);
@@ -1076,7 +1088,10 @@ export function initializeBackgroundFromSnapshot(snapshot) {
 
 export function takeSnapshot(win) {
   win = getTopWindow(win);
-  return getAll(win).map((tab) => tab.getSessionSnapshot());
+  return {
+    pages: getAll(win).map((tab) => tab.getSessionSnapshot()),
+    groups: tabGroups[win.id] || [],
+  };
 }
 
 export function triggerSessionSnapshot(win) {
@@ -1181,6 +1196,20 @@ export function reorder(win, oldIndex, newIndex) {
   var tab = getByIndex(win, oldIndex);
   tabs.splice(oldIndex, 1);
   tabs.splice(newIndex, 0, tab);
+
+  // auto-assign group based on neighbors after the move
+  var visible = getVisibleTabs(win);
+  var pos = visible.indexOf(tab);
+  var before = visible[pos - 1];
+  var after = visible[pos + 1];
+  if (before?.groupId && before.groupId === after?.groupId) {
+    tab.groupId = before.groupId;
+  } else if (before?.groupId && !after?.groupId) {
+    tab.groupId = before.groupId;
+  } else {
+    tab.groupId = null;
+  }
+
   emitReplaceState(win);
 }
 
@@ -1254,6 +1283,7 @@ export function emitReplaceState(win) {
     hasBgTabs: backgroundTabs.length > 0,
     spaces: spacesDb.getCachedAll(),
     activeSpace: spacesDb.getCachedActive(),
+    groups: getTabGroups(win),
   };
   emit(win, 'replace-state', state);
   triggerSessionSnapshot(win);
@@ -1420,6 +1450,39 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
   async showTabContextMenu(index) {
     var win = getWindow(this.sender);
     var tab = getByIndex(win, index);
+    var groups = getTabGroups(win);
+
+    var groupMenuItems = [];
+    groupMenuItems.push({
+      label: 'Add to New Group',
+      click: () => {
+        var group = createTabGroup(win);
+        tab.groupId = group.id;
+        emitReplaceState(win);
+      },
+    });
+    if (groups.length > 0) {
+      groupMenuItems.push({
+        label: 'Add to Group',
+        submenu: groups.map((g) => ({
+          label: g.name,
+          click: () => {
+            tab.groupId = g.id;
+            emitReplaceState(win);
+          },
+        })),
+      });
+    }
+    if (tab.groupId) {
+      groupMenuItems.push({
+        label: 'Remove from Group',
+        click: () => {
+          tab.groupId = null;
+          emitReplaceState(win);
+        },
+      });
+    }
+
     var menu = Menu.buildFromTemplate([
       {
         label: tab.isPinned ? 'Unpin Tab' : 'Pin Tab',
@@ -1436,6 +1499,8 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
       },
       { label: 'Minimize to Background', click: () => minimizeToBg(win, tab) },
       { type: 'separator' },
+      ...groupMenuItems,
+      { type: 'separator' },
       { label: 'Close Tab', click: () => remove(win, tab) },
       { label: 'Close Other Tabs', click: () => removeAllExcept(win, tab) },
       {
@@ -1447,6 +1512,53 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
       { label: 'Reopen Closed Tab', click: () => reopenLastRemoved(win) },
     ]);
     menu.popup();
+  },
+
+  async createTabGroup(index) {
+    var win = getWindow(this.sender);
+    var tab = getByIndex(win, index);
+    if (!tab) return;
+    var group = createTabGroup(win);
+    tab.groupId = group.id;
+    emitReplaceState(win);
+  },
+
+  async addTabToGroup(index, groupId) {
+    var win = getWindow(this.sender);
+    var tab = getByIndex(win, index);
+    if (!tab) return;
+    tab.groupId = groupId;
+    emitReplaceState(win);
+  },
+
+  async removeTabFromGroup(index) {
+    var win = getWindow(this.sender);
+    var tab = getByIndex(win, index);
+    if (!tab) return;
+    tab.groupId = null;
+    emitReplaceState(win);
+  },
+
+  async renameTabGroup(groupId, name) {
+    var win = getWindow(this.sender);
+    var group = getTabGroups(win).find((g) => g.id === groupId);
+    if (!group) return;
+    group.name = name;
+    emitReplaceState(win);
+  },
+
+  async setTabGroupColor(groupId, color) {
+    var win = getWindow(this.sender);
+    var group = getTabGroups(win).find((g) => g.id === groupId);
+    if (!group) return;
+    group.color = color;
+    emitReplaceState(win);
+  },
+
+  async deleteTabGroup(groupId) {
+    var win = getWindow(this.sender);
+    removeTabGroup(win, groupId);
+    emitReplaceState(win);
   },
 
   async showLocationBarContextMenu(index) {
@@ -1705,6 +1817,31 @@ function indexOfLastPinnedTabInSpace(win, spaceId) {
     if (tabs[i].spaceId === spaceId) return i + 1;
   }
   return tabs.length;
+}
+
+function getTabGroups(win) {
+  win = getTopWindow(win);
+  return tabGroups[win.id] || [];
+}
+
+function createTabGroup(win, name, color) {
+  win = getTopWindow(win);
+  tabGroups[win.id] = tabGroups[win.id] || [];
+  const usedColors = tabGroups[win.id].map((g) => g.color);
+  const autoColor = GROUP_COLORS.find((c) => !usedColors.includes(c)) || GROUP_COLORS[0];
+  const existing = tabGroups[win.id];
+  const autoName = name || `Group ${existing.length + 1}`;
+  const group = { id: `grp-${Date.now()}-${Math.random().toString(36).slice(2)}`, name: autoName, color: color || autoColor };
+  existing.push(group);
+  return group;
+}
+
+function removeTabGroup(win, groupId) {
+  win = getTopWindow(win);
+  tabGroups[win.id] = (tabGroups[win.id] || []).filter((g) => g.id !== groupId);
+  for (let tab of getAll(win)) {
+    if (tab.groupId === groupId) tab.groupId = null;
+  }
 }
 
 function definePrimaryPanePassthroughGetter(obj, name) {

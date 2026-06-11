@@ -2,6 +2,7 @@ import { ipcRenderer } from 'electron';
 import { LitElement, html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { repeat } from 'lit/directives/repeat.js';
+import { styleMap } from 'lit/directives/style-map.js';
 import spinnerCSS from './spinner.css';
 import * as bg from './bg-process-rpc';
 import { isHyperOrPearUrl } from '../../lib/urls';
@@ -14,9 +15,11 @@ class ShellWindowTabs extends LitElement {
       tabs: { type: Array },
       spaces: { type: Array },
       activeSpace: { type: Object },
+      groups: { type: Array },
       isFullscreen: { type: Boolean, attribute: 'is-fullscreen' },
       hasBgTabs: { type: Boolean, attribute: 'has-bg-tabs' },
       isBackgroundTrayOpen: { type: Boolean },
+      editingGroupId: { type: String },
     };
   }
 
@@ -25,12 +28,14 @@ class ShellWindowTabs extends LitElement {
     this.tabs = [];
     this.spaces = [];
     this.activeSpace = null;
+    this.groups = [];
     this.tabsTransitionState = undefined; // used for 'close animations'
     this.isFullscreen = false;
     this.hasBgTabs = false;
     this.draggedTabIndex = null;
     this.isDraggingWindow = false;
     this.isBackgroundTrayOpen = false;
+    this.editingGroupId = null;
     this.faviconCache = {};
 
     // use mousemove to ensure that dragging stops if the mouse button isnt pressed
@@ -69,12 +74,28 @@ class ShellWindowTabs extends LitElement {
     if (cache) return cache.url; // fallback to cache
   }
 
+  // Build a flat list of {type:'group-header',group} and {type:'tab',tab,index} items
+  buildItems(tabs) {
+    const items = [];
+    let lastGroupId = null;
+    tabs.forEach((tab, index) => {
+      if (tab.groupId && tab.groupId !== lastGroupId) {
+        const group = (this.groups || []).find((g) => g.id === tab.groupId);
+        if (group) items.push({ type: 'group-header', group });
+      }
+      items.push({ type: 'tab', tab, index });
+      lastGroupId = tab.groupId || null;
+    });
+    return items;
+  }
+
   render() {
     const shellCls = classMap({
       shell: true,
       [window.platform]: true,
       fullscreen: this.isFullscreen,
     });
+    const items = this.buildItems(this.tabsState);
     return html`
       <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
       <div
@@ -84,7 +105,17 @@ class ShellWindowTabs extends LitElement {
       >
         <div class="tabs">
           ${this.backgroundTrayBtn}
-          ${repeat(this.tabsState, (tab, index) => this.renderTab(tab, index))}
+          ${repeat(
+            items,
+            (item) =>
+              item.type === 'group-header'
+                ? `grp:${item.group.id}`
+                : `tab:${item.index}`,
+            (item) =>
+              item.type === 'group-header'
+                ? this.renderGroupHeader(item.group)
+                : this.renderTab(item.tab, item.index)
+          )}
           <div
             class="unused-space"
             @dragover=${(e) => this.onDragoverTab(e, this.tabsState.length)}
@@ -108,6 +139,38 @@ class ShellWindowTabs extends LitElement {
     `;
   }
 
+  renderGroupHeader(group) {
+    const isEditing = this.editingGroupId === group.id;
+    return html`
+      <div
+        class="tab-group-header"
+        style=${styleMap({ '--group-color': group.color })}
+        @dragover=${(e) => this.onDragoverGroup(e, group.id)}
+        @dragleave=${(e) => this.onDragleaveGroup(e)}
+        @drop=${(e) => this.onDropGroup(e, group.id)}
+      >
+        ${isEditing
+          ? html`<input
+              class="tab-group-name-input"
+              .value=${group.name}
+              @blur=${(e) => this.onGroupNameBlur(e, group.id)}
+              @keydown=${(e) => this.onGroupNameKeydown(e, group.id)}
+              @click=${(e) => e.stopPropagation()}
+            />`
+          : html`<span
+              class="tab-group-name"
+              @dblclick=${(e) => this.onDblclickGroupName(e, group.id)}
+              >${group.name}</span
+            >`}
+        <button
+          class="tab-group-close"
+          title="Delete group"
+          @click=${(e) => this.onClickGroupClose(e, group.id)}
+        >×</button>
+      </div>
+    `;
+  }
+
   renderTab(tab, index) {
     const faviconUrl = this.getFavicon(index);
     const showFavicon = Boolean(
@@ -116,17 +179,23 @@ class ShellWindowTabs extends LitElement {
         faviconUrl ||
         tab.url.startsWith('beaker:')
     );
+    const group = tab.groupId
+      ? (this.groups || []).find((g) => g.id === tab.groupId)
+      : null;
     const cls = classMap({
       tab: true,
       current: tab.isActive,
       pinned: tab.isPinned,
+      grouped: Boolean(group),
       'has-icon': tab.isAudioMuted || tab.isCurrentlyAudible,
       'no-hover': this.tabs.length >= 12,
       'no-favicon': !showFavicon,
     });
+    const tabStyle = styleMap(group ? { '--group-color': group.color } : {});
     return html`
       <div
         class="${cls}"
+        style=${tabStyle}
         title=${tab.title || tab.url}
         draggable="true"
         @click=${(e) => this.onClickTab(e, index)}
@@ -220,6 +289,14 @@ class ShellWindowTabs extends LitElement {
         );
       }
     }
+
+    if (this.editingGroupId) {
+      const input = this.shadowRoot.querySelector('.tab-group-name-input');
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }
   }
 
   async shouldUpdate(changedProperties) {
@@ -253,28 +330,6 @@ class ShellWindowTabs extends LitElement {
 
   doMinimizeToBgAnim() {
     // DISABLED
-    // var srcEl = this.shadowRoot.querySelector('.tab.current')
-    // var dstEl = this.shadowRoot.querySelector('.tabs')
-    // if (!srcEl) return console.warn('Minimize anim aborted; source element not found')
-    // if (!dstEl) return console.warn('Minimize anim aborted; target element not found')
-    // var src = srcEl.getClientRects()[0]
-    // var dst = dstEl.getClientRects()[0]
-    // var dist = Math.abs(src.left - dst.left)
-    // var animElem = document.createElement('div')
-    // animElem.classList.add('minimize-to-bg-anim-elem')
-    // this.shadowRoot.append(animElem)
-    // const px = v => `${v}px`
-    // animElem.animate([
-    //   {left: px(src.left), top: px(src.top), width: px(src.width), height: px(src.height)},
-    //   {left: px(dst.left), top: px(dst.top), width: px(dst.width), height: px(dst.height)}
-    // ], {iterations: 1, duration: Math.max(Math.min(dist / 6, 400), 100)}).onfinish = () => {
-    //   animElem.remove()
-    //   dstEl.animate([
-    //     {background: 'var(--bg-color--background)'},
-    //     {background: 'var(--bg-color--tab--hover)'},
-    //     {background: 'var(--bg-color--background)'}
-    //   ], {duration: 250, iterations: 1})
-    // }
   }
 
   // events
@@ -390,11 +445,61 @@ class ShellWindowTabs extends LitElement {
     if (this.draggedTabIndex === null) return false;
     var draggingTab = this.tabsState[this.draggedTabIndex];
     var targetTab = this.tabsState[index];
-    if (draggingTab.isPinned !== targetTab.isPinned) {
+    if (draggingTab.isPinned !== targetTab?.isPinned) {
       // only allow tabs to drag within their own pinned/unpinned groups
       return false;
     }
     return true;
+  }
+
+  // group header drag handlers
+
+  onDragoverGroup(e, groupId) {
+    if (this.draggedTabIndex === null) return;
+    e.preventDefault();
+    e.currentTarget.classList.add('drag-hover');
+    e.dataTransfer.dropEffect = 'move';
+  }
+
+  onDragleaveGroup(e) {
+    e.currentTarget.classList.remove('drag-hover');
+  }
+
+  onDropGroup(e, groupId) {
+    e.stopPropagation();
+    e.currentTarget.classList.remove('drag-hover');
+    if (this.draggedTabIndex !== null) {
+      bg.views.addTabToGroup(this.draggedTabIndex, groupId);
+    }
+    this.draggedTabIndex = null;
+  }
+
+  // group header name editing
+
+  onDblclickGroupName(e, groupId) {
+    e.stopPropagation();
+    this.editingGroupId = groupId;
+  }
+
+  onGroupNameBlur(e, groupId) {
+    const name = e.target.value.trim();
+    if (name) bg.views.renameTabGroup(groupId, name);
+    this.editingGroupId = null;
+  }
+
+  onGroupNameKeydown(e, groupId) {
+    if (e.key === 'Enter') {
+      const name = e.target.value.trim();
+      if (name) bg.views.renameTabGroup(groupId, name);
+      this.editingGroupId = null;
+    } else if (e.key === 'Escape') {
+      this.editingGroupId = null;
+    }
+  }
+
+  onClickGroupClose(e, groupId) {
+    e.stopPropagation();
+    bg.views.deleteTabGroup(groupId);
   }
 
   onMousedownShell(e) {
@@ -706,6 +811,74 @@ ShellWindowTabs.styles = css`
     position: fixed;
     z-index: 100;
     background: #fffc;
+  }
+
+  /* tab groups */
+
+  .tab-group-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+    height: 30px;
+    padding: 0 5px 0 9px;
+    margin-top: 3px;
+    background: var(--group-color, #5b5ef4);
+    border-radius: 4px 4px 0 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    cursor: default;
+  }
+
+  .tab-group-header.drag-hover {
+    filter: brightness(1.15);
+  }
+
+  .tab-group-name {
+    font-size: 11px;
+    line-height: 13px;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: default;
+  }
+
+  .tab-group-name-input {
+    font-size: 11px;
+    line-height: 13px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 2px;
+    color: white;
+    outline: none;
+    padding: 1px 4px;
+    width: 80px;
+    cursor: text;
+  }
+
+  .tab-group-close {
+    background: transparent;
+    border: 0;
+    color: white;
+    cursor: default;
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0.6;
+    padding: 0 2px;
+    margin-left: 1px;
+  }
+
+  .tab-group-close:hover {
+    opacity: 1;
+  }
+
+  .tab.grouped::before {
+    background: var(--group-color, #5b5ef4) !important;
+  }
+
+  .tab.grouped {
+    border-left-color: var(--group-color, #5b5ef4);
   }
 `;
 customElements.define('shell-window-tabs', ShellWindowTabs);

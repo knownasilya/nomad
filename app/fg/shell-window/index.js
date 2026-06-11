@@ -28,6 +28,7 @@ class ShellWindowUI extends LitElement {
       hasLocationExpanded: { type: Boolean },
       spaces: { type: Array },
       activeSpace: { type: Object },
+      groups: { type: Array },
     };
   }
 
@@ -44,6 +45,7 @@ class ShellWindowUI extends LitElement {
     this.hasLocationExpanded = false;
     this.spaces = [];
     this.activeSpace = null;
+    this.groups = [];
     this.activeTabIndex = -1;
     this.setup();
   }
@@ -82,6 +84,7 @@ class ShellWindowUI extends LitElement {
       this.hasBgTabs = state.hasBgTabs;
       if (state.spaces) this.spaces = state.spaces;
       if (state.activeSpace) this.activeSpace = state.activeSpace;
+      if (state.groups) this.groups = state.groups;
       this.stateHasChanged();
     });
     viewEvents.addEventListener('update-state', ({ index, state }) => {
@@ -163,6 +166,7 @@ class ShellWindowUI extends LitElement {
               .tabs=${this.tabs}
               .spaces=${this.spaces}
               .activeSpace=${this.activeSpace}
+              .groups=${this.groups}
               ?is-fullscreen=${this.isFullscreen}
               ?has-bg-tabs=${this.hasBgTabs}
             ></shell-window-tabs>
