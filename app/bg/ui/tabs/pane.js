@@ -543,18 +543,19 @@ export class Pane extends EventEmitter {
 
       let { version } = parseDriveUrl(this.url);
       let { checkoutFS } = await hyper.drives.getDriveCheckout(drive, version);
-      this.liveReloadEvents = await checkoutFS.pda.watch();
-
       const reload = throttle(
-        () => {
-          this.browserView.webContents.reload();
-        },
+        () => { this.browserView.webContents.reload(); },
         TRIGGER_LIVE_RELOAD_DEBOUNCE,
         { leading: false }
       );
-      this.liveReloadEvents.on('data', ([evt]) => {
-        if (evt === 'changed') reload();
-      });
+      // Drive watch in v11 returns an AsyncIterator
+      const watcher = checkoutFS.drive.watch('/');
+      this.liveReloadEvents = watcher;
+      ;(async () => {
+        for await (const diff of watcher) {
+          reload();
+        }
+      })().catch(() => {});
       // ^ note this throttle is run on the front edge.
       // That means snappier reloads (no delay) but possible double reloads if multiple files change
     }

@@ -120,39 +120,21 @@ class BrowserMenu extends LitElement {
           </div>
         </div>
 
-        ${this.daemonStatus
+        ${this.daemonStatus?.active
           ? html`
               <div class="network-status">
                 <div class="network-status-title">Network Status</div>
                 <div class="network-status-line">
                   <span class="fa-fw fas fa-network-wired"></span>
-                  ${this.daemonStatus.remoteAddress || 'Unknown'}
+                  ${this.daemonStatus.connections === 0
+                    ? 'No connections'
+                    : `${this.daemonStatus.connections} peer${this.daemonStatus.connections === 1 ? '' : 's'}`}
                 </div>
                 <div class="network-status-line">
-                  ${this.daemonStatus.holepunchable
-                    ? html`<span class="fa-fw fas fa-check"></span>
-                        Hole-punchable`
-                    : html`<span
-                          class="fa-fw fas fa-exclamation-triangle"
-                        ></span>
-                        Not hole-punchable`}
+                  ${this.daemonStatus.relayed
+                    ? html`<span class="fa-fw fas fa-exchange-alt"></span> Via relay`
+                    : html`<span class="fa-fw fas fa-check"></span> Direct`}
                 </div>
-                ${!this.daemonStatus.holepunchable
-                  ? html`
-                      <div class="help">
-                        <a
-                          @click=${(e) =>
-                            this.onOpenPage(
-                              e,
-                              'https://nomad.pages.dev/docs/api/help/hole-punchability/'
-                            )}
-                        >
-                          <span class="far fa-fw fa-question-circle"></span>
-                          What does this mean?
-                        </a>
-                      </div>
-                    `
-                  : ''}
               </div>
             `
           : ''}

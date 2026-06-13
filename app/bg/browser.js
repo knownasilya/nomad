@@ -162,6 +162,10 @@ export async function setup() {
       ) {
         // allow trusted WCs
         return cb({ cancel: false });
+      } else if (details.webContentsId) {
+        // fall back to URL check for WCs created before wcTrust.setup() (e.g. init window)
+        const wc = webContents.fromId(details.webContentsId);
+        return cb({ cancel: !(wc && /^(beaker:\/\/|asset:)/.test(wc.getURL())) });
       } else {
         // disallow all other requesters
         return cb({ cancel: true });
@@ -590,14 +594,11 @@ export async function getDaemonStatus() {
 }
 
 export async function getDaemonNetworkStatus() {
-  // bit of a hack, this
-  return Array.from(hyperDaemon.getClient().drive._drives, (drive) => {
-    var key = drive.drive.key.toString('hex');
-    return {
-      key,
-      peers: hyperDaemon.listPeerAddresses(key),
-    };
-  });
+  const status = await hyperDaemon.getDaemonStatus();
+  return [{
+    key: 'all',
+    peers: status.connections > 0 ? hyperDaemon.listPeerAddresses() || [] : [],
+  }];
 }
 
 export function checkForUpdates(opts = {}) {

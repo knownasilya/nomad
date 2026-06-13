@@ -20,7 +20,6 @@ class ShellWindowUI extends LitElement {
       isWindows: { type: Boolean },
       isUpdateAvailable: { type: Boolean },
       numWatchlistNotifications: { type: Number },
-      isHolepunchable: { type: Boolean },
       isDaemonActive: { type: Boolean },
       isShellInterfaceHidden: { type: Boolean },
       isFullscreen: { type: Boolean },
@@ -37,7 +36,6 @@ class ShellWindowUI extends LitElement {
     this.tabs = [];
     this.isUpdateAvailable = false;
     this.numWatchlistNotifications = 0;
-    this.isHolepunchable = true;
     this.isDaemonActive = true;
     this.isShellInterfaceHidden = false;
     this.isFullscreen = false;
@@ -117,13 +115,7 @@ class ShellWindowUI extends LitElement {
     });
 
     const getDaemonStatus = async () => {
-      var status = await bg.beakerBrowser.getDaemonStatus();
-      // HACK: don't indicate 'not holepunchable' if the daemon isnt active to tell us
-      var isHolepunchable = status.holepunchable || !status.active;
-      if (this.isHolepunchable !== isHolepunchable) {
-        this.isHolepunchable = isHolepunchable;
-        this.stateHasChanged();
-      }
+      await bg.beakerBrowser.getDaemonStatus();
     };
 
     // fetch initial tab state
@@ -175,7 +167,6 @@ class ShellWindowUI extends LitElement {
               .activeTab=${this.activeTab}
               ?is-sidebar-hidden=${this.isSidebarHidden}
               ?is-update-available=${this.isUpdateAvailable}
-              ?is-holepunchable=${this.isHolepunchable}
               ?is-daemon-active=${this.isDaemonActive}
               num-watchlist-notifications="${this.numWatchlistNotifications}"
             ></shell-window-navbar>

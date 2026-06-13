@@ -1,405 +1,250 @@
 // @ts-nocheck
 import { app } from 'electron';
-import * as os from 'os';
-import * as p from 'path';
-import { promises as fs } from 'fs';
-import * as childProcess from 'child_process';
-import HyperdriveClient from 'hyperdrive-daemon-client';
-import datEncoding from 'dat-encoding';
-import * as pda from 'pauls-dat-api2';
+import path from 'path';
+import { randomBytes } from 'crypto';
+import Corestore from 'corestore';
+import Hyperswarm from 'hyperswarm';
+import Hyperdrive from 'hyperdrive';
+import b4a from 'b4a';
 import EventEmitter from 'events';
 import * as logLib from '../logger';
+
 const baseLogger = logLib.get();
 const logger = baseLogger.child({ category: 'hyper', subcategory: 'daemon' });
 
-const SETUP_RETRIES = 100;
-const GARBAGE_COLLECT_SESSIONS_INTERVAL = 30e3;
-const MAX_SESSION_AGE = 300e3; // 5min
-const HYPERSPACE_BIN_PATH = require.resolve('hyperspace/bin/index.js');
-const HYPERSPACE_STORAGE_DIR = p.join(os.homedir(), '.hyperspace', 'storage');
-const HYPERDRIVE_STORAGE_DIR = p.join(
-  os.homedir(),
-  '.hyperdrive',
-  'storage',
-  'cores'
-);
-
-// typedefs
-// =
-
-/**
- * @typedef {Object} DaemonHyperdrive
- * @prop {number} sessionId
- * @prop {Buffer} key
- * @prop {Buffer} discoveryKey
- * @prop {string} url
- * @prop {string} domain
- * @prop {boolean} writable
- * @prop {Boolean} persistSession
- * @prop {Object} session
- * @prop {Object} session.drive
- * @prop {function(): Promise<void>} session.close
- * @prop {function(Object): Promise<void>} session.configureNetwork
- * @prop {function(): Promise<Object>} getInfo
- * @prop {DaemonHyperdrivePDA} pda
- *
- * @typedef {Object} DaemonHyperdrivePDA
- * @prop {Number} lastCallTime
- * @prop {Number} numActiveStreams
- * @prop {function(string): Promise<Object>} stat
- * @prop {function(string, Object=): Promise<any>} readFile
- * @prop {function(string, Object=): Promise<Array<Object>>} readdir
- * @prop {function(string): Promise<number>} readSize
- * @prop {function(number, string?): Promise<Array<Object>>} diff
- * @prop {function(string, any, Object=): Promise<void>} writeFile
- * @prop {function(string): Promise<void>} mkdir
- * @prop {function(string, string): Promise<void>} copy
- * @prop {function(string, string): Promise<void>} rename
- * @prop {function(string, Object): Promise<void>} updateMetadata
- * @prop {function(string, string|string[]): Promise<void>} deleteMetadata
- * @prop {function(string): Promise<void>} unlink
- * @prop {function(string, Object=): Promise<void>} rmdir
- * @prop {function(string, string|Buffer): Promise<void>} mount
- * @prop {function(string): Promise<void>} unmount
- * @prop {function(string=): NodeJS.ReadableStream} watch
- * @prop {function(): NodeJS.ReadableStream} createNetworkActivityStream
- * @prop {function(): Promise<Object>} readManifest
- * @prop {function(Object): Promise<void>} writeManifest
- * @prop {function(Object): Promise<void>} updateManifest
- */
+const GARBAGE_COLLECT_INTERVAL = 30e3;
+const MAX_SESSION_AGE = 300e3; // 5 min
 
 // globals
-// =
-
-var client; // client object created by hyperdrive-daemon-client
-var isControllingDaemonProcess = false; // did we start the process?
-var isSettingUp = true;
-var isShuttingDown = false;
-var isDaemonActive = false;
-var isFirstConnect = true;
-var daemonProcess = undefined;
-var sessions = {}; // map of keyStr => DaemonHyperdrive
+var store; // Corestore instance
+var swarm; // Hyperswarm instance
+var sessions = {}; // sessionKey -> DriveSession
+var discoveries = {}; // discoveryKeyHex -> Hyperswarm Discovery
 var events = new EventEmitter();
-
-// exported apis
-// =
 
 export const on = events.on.bind(events);
 
-export function getClient() {
-  return client;
-}
-
-export function getHyperspaceClient() {
-  return client._client;
-}
-
 export function isActive() {
-  if (isFirstConnect) {
-    // avoid the "inactive daemon" indicator during setup
-    return true;
-  }
-  return isDaemonActive;
-}
-
-export async function getDaemonStatus() {
-  if (isDaemonActive) {
-    return Object.assign(await client.status(), { active: true });
-  }
-  return { active: false };
-}
-
-export async function setup() {
-  if (isSettingUp) {
-    isSettingUp = false;
-    // periodically close sessions
-    let interval2 = setInterval(() => {
-      let numClosed = 0;
-      let now = Date.now();
-      for (let key in sessions) {
-        if (sessions[key].persistSession) continue;
-        if (sessions[key].pda.numActiveStreams > 0) continue;
-        if (now - sessions[key].pda.lastCallTime < MAX_SESSION_AGE) continue;
-        closeHyperdriveSession(key);
-        numClosed++;
-      }
-      if (numClosed > 0) {
-        logger.debug(`Closed ${numClosed} session(s) due to inactivity`);
-      }
-    }, GARBAGE_COLLECT_SESSIONS_INTERVAL);
-    interval2.unref();
-
-    events.on('daemon-restored', async () => {
-      logger.info('Hyperdrive daemon has been restored');
-    });
-    events.on('daemon-stopped', async () => {
-      logger.info('Hyperdrive daemon has been lost');
-      isControllingDaemonProcess = false;
-    });
-  }
-
-  try {
-    client = new HyperdriveClient();
-    await client.ready();
-    logger.info('Connected to an external daemon.');
-    isDaemonActive = true;
-    isFirstConnect = false;
-    events.emit('daemon-restored');
-    reconnectAllDriveSessions();
-    return;
-  } catch (err) {
-    logger.info(
-      'Failed to connect to an external daemon. Launching the daemon...'
-    );
-    client = false;
-  }
-
-  isControllingDaemonProcess = true;
-  logger.info('Starting daemon process, assuming process control');
-
-  // Check which storage directory to use.
-  // If .hyperspace/storage exists, use that. Otherwise use .hyperdrive/storage/cores
-  const storageDir = await getDaemonStorageDir();
-  var daemonProcessArgs = [
-    HYPERSPACE_BIN_PATH,
-    '-s',
-    storageDir,
-    '--no-migrate',
-  ];
-  logger.info(
-    `Daemon: spawn ${app.getPath('exe')} ${daemonProcessArgs.join(' ')}`
-  );
-  daemonProcess = childProcess.spawn(app.getPath('exe'), daemonProcessArgs, {
-    // stdio: [process.stdin, process.stdout, process.stderr], // DEBUG
-    env: Object.assign({}, process.env, {
-      ELECTRON_RUN_AS_NODE: 1,
-      ELECTRON_NO_ASAR: 1,
-    }),
-  });
-  daemonProcess.stdout.on('data', (data) => logger.info(`Daemon: ${data}`));
-  daemonProcess.stderr.on('data', (data) =>
-    logger.info(`Daemon (stderr): ${data}`)
-  );
-  daemonProcess.on('error', (err) =>
-    logger.error(`Hyperspace Daemon error: ${err.toString()}`)
-  );
-  daemonProcess.on('close', () => {
-    logger.info(`Daemon process has closed`);
-    isDaemonActive = false;
-    daemonProcess = undefined;
-    events.emit('daemon-stopped');
-  });
-
-  await attemptConnect();
-  isDaemonActive = true;
-  isFirstConnect = false;
-  events.emit('daemon-restored');
-  reconnectAllDriveSessions();
+  return !!store;
 }
 
 export function requiresShutdown() {
-  return isControllingDaemonProcess && !isShuttingDown;
+  return !!store;
+}
+
+export function getCorestore() {
+  return store;
+}
+
+export function getSwarm() {
+  return swarm;
+}
+
+export async function getDaemonStatus() {
+  if (!swarm) return { active: false };
+  const conns = swarm.connections ? [...swarm.connections] : [];
+  return {
+    active: true,
+    connections: conns.length,
+    relayed: conns.some((c) => c.relayedThrough),
+  };
+}
+
+export async function setup() {
+  const storagePath = path.join(app.getPath('userData'), 'corestore');
+  logger.info('Initializing Corestore', { path: storagePath });
+
+  store = new Corestore(storagePath);
+  await store.ready();
+
+  swarm = new Hyperswarm();
+  swarm.on('connection', (conn) => {
+    logger.debug('Swarm connection', { remoteAddress: conn.rawStream?.remoteHost });
+    store.replicate(conn);
+  });
+
+  const gc = setInterval(_garbageCollect, GARBAGE_COLLECT_INTERVAL);
+  gc.unref();
+
+  logger.info('Hyper stack ready');
+  events.emit('ready');
 }
 
 export async function shutdown() {
-  if (isControllingDaemonProcess && isDaemonActive) {
-    let promise = new Promise((resolve) => {
-      daemonProcess.on('close', () => resolve());
-    });
-    isShuttingDown = true;
-    daemonProcess.kill();
-
-    // HACK: the daemon has a bug that causes it to stay open sometimes, give it the double tap -prf
-    let i = setInterval(() => {
-      if (!isDaemonActive) {
-        clearInterval(i);
-      } else {
-        daemonProcess.kill();
-      }
-    }, 2e3);
-    i.unref();
-
-    await promise;
+  if (swarm) { await swarm.destroy(); swarm = null; }
+  if (store) {
+    try { await store.close(); } catch (e) {
+      if (e.code !== 'REQUEST_CANCELLED') throw e;
+    }
+    store = null;
   }
 }
 
 /**
- * Gets a hyperdrives interface to the daemon for the given key
- *
  * @param {Object|string} opts
- * @param {Buffer} [opts.key]
- * @param {number} [opts.version]
- * @param {Buffer} [opts.hash]
- * @param {boolean} [opts.writable]
- * @returns {DaemonHyperdrive}
+ * @returns {DriveSession|undefined}
  */
 export function getHyperdriveSession(opts) {
-  return sessions[createSessionKey(opts)];
+  return sessions[_sessionKey(opts)];
 }
 
 /**
- * Creates a hyperdrives interface to the daemon for the given key
+ * Open or create a Hyperdrive v11 session.
  *
  * @param {Object} opts
- * @param {Buffer} [opts.key]
- * @param {number} [opts.version]
- * @param {Buffer} [opts.hash]
- * @param {boolean} [opts.writable]
- * @param {String} [opts.domain]
- * @returns {Promise<DaemonHyperdrive>}
+ * @param {Buffer|string} [opts.key]      - hex key or Buffer; omit to create new
+ * @param {number}        [opts.version]  - if set, returns a read-only checkout
+ * @param {boolean}       [opts.writable] - unused (writable is derived from key ownership)
+ * @param {string}        [opts.domain]   - DNS alias for the URL
+ * @returns {Promise<DriveSession>}
  */
 export async function createHyperdriveSession(opts) {
-  if (opts.key) {
-    let sessionKey = createSessionKey(opts);
-    if (sessions[sessionKey]) return sessions[sessionKey];
+  const sessKey = _sessionKey(opts);
+  if (sessions[sessKey]) {
+    sessions[sessKey]._lastUsed = Date.now();
+    return sessions[sessKey];
   }
 
-  const drive = await client.drive.get(opts);
-  const key = (opts.key = datEncoding.toStr(drive.key));
-  var driveObj = {
-    key: drive.key,
-    discoveryKey: drive.discoveryKey,
-    url: `hyper://${opts.domain || key}/`,
-    writable: drive.writable,
-    domain: opts.domain,
-    persistSession: false,
+  const keyBuf = opts.key
+    ? (Buffer.isBuffer(opts.key) ? opts.key : b4a.from(opts.key, 'hex'))
+    : undefined;
 
-    session: {
-      drive,
-      opts,
-      async close() {
-        delete sessions[key];
-        return this.drive.close();
-      },
-    },
+  if (opts.version) {
+    // Versioned checkout — ensure base session exists first
+    const baseOpts = { key: keyBuf, domain: opts.domain };
+    const baseKey = _sessionKey(baseOpts);
+    if (!sessions[baseKey]) {
+      await createHyperdriveSession(baseOpts);
+    }
+    const base = sessions[baseKey];
+    const checkout = base.drive.checkout(opts.version);
+    const sess = _makeSession(sessKey, base.key, base.discoveryKey, checkout, opts.domain, false);
+    sess._isCheckout = true;
+    sessions[sessKey] = sess;
+    logger.debug(`Opened drive checkout ${sessKey}`);
+    return sess;
+  }
 
-    async getInfo() {
-      var version = await this.session.drive.version();
-      return { version };
-    },
+  // Base session
+  // Each new drive needs a unique Corestore namespace so their internal 'db' Hyperbees
+  // don't share the same exclusive write lock (which would deadlock on the second drive).
+  const driveStore = keyBuf ? store : store.namespace(randomBytes(32));
+  const drive = keyBuf ? new Hyperdrive(store, keyBuf) : new Hyperdrive(driveStore);
+  await drive.ready();
 
-    pda: createHyperdriveSessionPDA(drive),
-  };
-  var sessKey = createSessionKey(opts);
-  logger.debug(`Opening drive-session ${sessKey}`);
-  sessions[sessKey] = driveObj;
-  return /** @type DaemonHyperdrive */ (driveObj);
+  const keyStr = b4a.toString(drive.key, 'hex');
+  const discKeyStr = b4a.toString(drive.discoveryKey, 'hex');
+
+  // Join swarm for this drive (idempotent per discovery key)
+  if (!discoveries[discKeyStr]) {
+    discoveries[discKeyStr] = swarm.join(drive.discoveryKey);
+    logger.debug(`Joined swarm for drive ${keyStr}`);
+  }
+
+  const sess = _makeSession(keyStr, drive.key, drive.discoveryKey, drive, opts.domain, drive.writable);
+  sessions[keyStr] = sess;
+  logger.debug(`Opened drive session ${keyStr}`);
+  return sess;
 }
 
 /**
- * Closes a hyperdrives interface to the daemon for the given key
- *
+ * Close a drive session. Safe to call if the session doesn't exist.
  * @param {Object|string} opts
- * @param {Buffer} [opts.key]
- * @param {number} [opts.version]
- * @param {Buffer} [opts.hash]
- * @param {boolean} [opts.writable]
- * @returns {void}
  */
 export function closeHyperdriveSession(opts) {
-  var key = createSessionKey(opts);
-  if (sessions[key]) {
-    logger.debug(`Closing drive-session ${key}`);
-    sessions[key].session.close();
-    delete sessions[key];
-  }
-}
-
-export function listPeerAddresses(key) {
-  let peers = getHyperdriveSession({ key })?.session?.drive?.metadata?.peers;
-  if (peers)
-    return peers.map((p) => ({ type: p.type, remoteAddress: p.remoteAddress }));
-}
-
-// internal methods
-// =
-
-async function getDaemonStorageDir() {
-  try {
-    await fs.access(HYPERDRIVE_STORAGE_DIR);
-    return HYPERDRIVE_STORAGE_DIR;
-  } catch (err) {
-    return HYPERSPACE_STORAGE_DIR;
-  }
-}
-
-async function onInvalidAuthToken() {
-  // TODO replaceme
-  // if (!isConnectionActive) return
-  // isConnectionActive = false
-  // logger.info('A daemon reset was detected. Refreshing all drive sessions.')
-  // // daemon is online but our connection is outdated, reset the connection
-  // await attemptConnect()
-  // reconnectAllDriveSessions()
-  // logger.info('Connection re-established.')
-}
-
-function createSessionKey(opts) {
-  if (typeof opts === 'string') {
-    return opts; // assume it's already a session key
-  }
-  var key = opts.key.toString('hex');
-  if (opts.version) {
-    key += `+${opts.version}`;
-  }
-  if ('writable' in opts) {
-    key += `+${opts.writable ? 'w' : 'ro'}`;
-  }
-  return key;
-}
-
-async function attemptConnect() {
-  var connectBackoff = 100;
-  for (let i = 0; i < SETUP_RETRIES; i++) {
-    try {
-      client = new HyperdriveClient();
-      await client.ready();
-      break;
-    } catch (e) {
-      logger.info('Failed to connect to daemon, retrying');
-      await new Promise((r) => setTimeout(r, connectBackoff));
-      connectBackoff += 100;
-    }
-  }
-}
-
-async function reconnectAllDriveSessions() {
-  for (let sessionKey in sessions) {
-    await reconnectDriveSession(sessions[sessionKey]);
-  }
-}
-
-async function reconnectDriveSession(driveObj) {
-  const drive = await client.drive.get(driveObj.session.opts);
-  driveObj.session.drive = drive;
-  driveObj.pda = createHyperdriveSessionPDA(drive);
+  const key = _sessionKey(opts);
+  if (!sessions[key]) return;
+  logger.debug(`Closing drive session ${key}`);
+  sessions[key]._close();
+  delete sessions[key];
 }
 
 /**
- * Provides a pauls-dat-api2 object for the given drive
- * @param {Object} drive
- * @returns {DaemonHyperdrivePDA}
+ * Configure swarm announce/lookup for a drive.
+ * @param {Buffer|string} discoveryKey
+ * @param {{ announce: boolean, lookup: boolean }} opts
  */
-function createHyperdriveSessionPDA(drive) {
-  var obj = {
-    lastCallTime: Date.now(),
-    numActiveStreams: 0,
-  };
-  for (let k in pda) {
-    if (typeof pda[k] === 'function') {
-      obj[k] = async (...args) => {
-        obj.lastCallTime = Date.now();
-        if (k === 'watch') {
-          obj.numActiveStreams++;
-          let stream = pda.watch.call(pda, drive, ...args);
-          stream.on('close', () => {
-            obj.numActiveStreams--;
-          });
-          return stream;
-        }
-        return pda[k].call(pda, drive, ...args);
-      };
-    }
+export async function configureNetwork(discoveryKey, { announce, lookup }) {
+  const keyBuf = Buffer.isBuffer(discoveryKey) ? discoveryKey : b4a.from(discoveryKey, 'hex');
+  const discKeyStr = b4a.toString(keyBuf, 'hex');
+
+  if (discoveries[discKeyStr]) {
+    await discoveries[discKeyStr].destroy();
+    delete discoveries[discKeyStr];
   }
-  return obj;
+
+  if (announce || lookup) {
+    discoveries[discKeyStr] = swarm.join(keyBuf, { server: announce, client: lookup });
+  }
+}
+
+/**
+ * @param {Buffer|string} key
+ * @returns {Array<{remoteAddress: string, type: string}>|undefined}
+ */
+export function listPeerAddresses(key) {
+  if (!swarm) return undefined;
+  return [...swarm.connections].map((c) => ({
+    remoteAddress: c.rawStream?.remoteHost || 'unknown',
+    type: c.relayedThrough ? 'relay' : 'direct',
+  }));
+}
+
+// internal
+// =
+
+function _makeSession(sessKey, key, discoveryKey, drive, domain, writable) {
+  const keyStr = b4a.toString(key, 'hex');
+  const url = `hyper://${domain || keyStr}/`;
+  return {
+    key,
+    discoveryKey,
+    url,
+    writable,
+    domain,
+    persistSession: false,
+    drive,
+    _lastUsed: Date.now(),
+    _isCheckout: false,
+
+    async getInfo() {
+      this._lastUsed = Date.now();
+      return { version: drive.version };
+    },
+
+    _close() {
+      // Checkouts share the base drive's discovery; only the base session owns it
+      if (!this._isCheckout) {
+        const discKeyStr = b4a.toString(this.discoveryKey, 'hex');
+        if (discoveries[discKeyStr]) {
+          discoveries[discKeyStr].destroy().catch(() => {});
+          delete discoveries[discKeyStr];
+        }
+      }
+      drive.close().catch(() => {});
+    },
+  };
+}
+
+function _sessionKey(opts) {
+  if (typeof opts === 'string') return opts;
+  const key = Buffer.isBuffer(opts.key)
+    ? b4a.toString(opts.key, 'hex')
+    : (opts.key || '');
+  let k = key;
+  if (opts.version) k += `+${opts.version}`;
+  return k;
+}
+
+function _garbageCollect() {
+  const now = Date.now();
+  let closed = 0;
+  for (const key in sessions) {
+    const sess = sessions[key];
+    if (sess.persistSession) continue;
+    if (now - sess._lastUsed < MAX_SESSION_AGE) continue;
+    closeHyperdriveSession(key);
+    closed++;
+  }
+  if (closed > 0) logger.debug(`GC closed ${closed} idle session(s)`);
 }

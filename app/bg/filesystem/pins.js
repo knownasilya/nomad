@@ -1,3 +1,4 @@
+import b4a from 'b4a';
 import * as filesystem from './index';
 import { query } from './query';
 import { normalizeUrl } from '../../lib/urls';
@@ -7,26 +8,21 @@ import { normalizeUrl } from '../../lib/urls';
 
 export async function setup() {
   var privateDrive = filesystem.get();
-
-  var exists = await privateDrive.pda
-    .stat('/beaker/pins.json')
-    .catch((e) => false);
-  if (exists) return;
+  const entry = await privateDrive.drive.entry('/beaker/pins.json').catch(() => null);
+  if (entry) return;
 
   // migrate bookmarks
   var pins = [];
-  for (let bookmark of await query(privateDrive, {
-    path: '/bookmarks/*.goto',
-  })) {
-    if (
-      bookmark.stat.metadata.pinned ||
-      bookmark.stat.metadata['beaker/pinned']
-    ) {
-      pins.push(normalizeUrl(bookmark.stat.metadata.href));
-      await privateDrive.pda.deleteMetadata(bookmark.path, [
-        'pinned',
-        'beaker/pinned',
-      ]);
+  for (let bookmark of await query(privateDrive, { path: '/bookmarks/*.goto' })) {
+    const meta = bookmark.stat?.metadata || bookmark.metadata || {};
+    if (meta.pinned || meta['beaker/pinned']) {
+      pins.push(normalizeUrl(meta.href));
+      // Remove pin flags from metadata
+      const newMeta = Object.assign({}, meta);
+      delete newMeta.pinned;
+      delete newMeta['beaker/pinned'];
+      const buf = await privateDrive.drive.get(bookmark.path);
+      await privateDrive.drive.put(bookmark.path, buf || b4a.alloc(0), { metadata: newMeta });
     }
   }
   await write(pins);
@@ -62,27 +58,16 @@ export async function remove(url) {
 async function read() {
   var data;
   try {
-    data = await filesystem
-      .get()
-      .pda.readFile('/beaker/pins.json')
-      .then(JSON.parse);
+    const buf = await filesystem.get().drive.get('/beaker/pins.json');
+    data = buf ? JSON.parse(b4a.toString(buf)) : [];
   } catch (e) {
     data = [];
   }
-  data = data
-    .filter((b) => b && typeof b === 'string')
-    .map((v) => normalizeUrl(v));
-  return data;
+  return data.filter((b) => b && typeof b === 'string').map((v) => normalizeUrl(v));
 }
 
 async function write(data) {
   data = data && Array.isArray(data) ? data : [];
   data = data.filter((b) => b && typeof b === 'string');
-  await filesystem
-    .get()
-    .pda.mkdir('/beaker')
-    .catch((e) => undefined);
-  await filesystem
-    .get()
-    .pda.writeFile('/beaker/pins.json', JSON.stringify(data, null, 2));
+  await filesystem.get().drive.put('/beaker/pins.json', b4a.from(JSON.stringify(data, null, 2)));
 }

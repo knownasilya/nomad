@@ -104,44 +104,12 @@ export default {
   },
 
   async compare(url) {
-    var drive = await getDrive(url);
-    var current = await folderSyncDb.get(drive.key.toString('hex'));
-    if (!current || !current.localPath) return [];
-    return normalizeCompare(
-      await dft.diff(
-        current.localPath,
-        { fs: drive.session.drive, path: '/' },
-        { compareContent: true, sizeLimit: COMPARE_SIZE_LIMIT }
-      )
-    );
+    // TODO: folder sync diff not yet implemented for Hyperdrive v11
+    return [];
   },
 
   async restoreFile(url, filepath) {
-    var drive = await getDrive(url);
-    var current = await folderSyncDb.get(drive.key.toString('hex'));
-    if (!current || !current.localPath) throw new Error('No local path set');
-    var diff = await dft.diff(
-      current.localPath,
-      { fs: drive.session.drive, path: '/' },
-      {
-        compareContent: true,
-        sizeLimit: COMPARE_SIZE_LIMIT,
-        filter: (p) => {
-          p = normalizePath(p);
-          if (filepath === p) return false; // direct match
-          if (filepath.startsWith(p) && filepath.charAt(p.length) === '/')
-            return false; // parent folder
-          if (p.startsWith(filepath) && p.charAt(filepath.length) === '/')
-            return false; // child file
-          return true;
-        },
-      }
-    );
-    return dft.applyLeft(
-      current.localPath,
-      { fs: drive.session.drive, path: '/' },
-      diff
-    );
+    // TODO: folder sync restore not yet implemented for Hyperdrive v11
   },
 
   sync,
@@ -172,23 +140,7 @@ async function getDrive(url) {
 }
 
 async function sync(url) {
-  var drive = await getDrive(url);
-  var current = await folderSyncDb.get(drive.key.toString('hex'));
-  if (!current || !current.localPath) return;
-  var diff = await dft.diff(
-    current.localPath,
-    { fs: drive.session.drive, path: '/' },
-    {
-      compareContent: true,
-      sizeLimit: COMPARE_SIZE_LIMIT,
-      filter: createIgnoreFilter(current.ignoredFiles),
-    }
-  );
-  return dft.applyRightStream(
-    current.localPath,
-    { fs: drive.session.drive, path: '/' },
-    diff
-  );
+  // TODO: folder sync not yet implemented for Hyperdrive v11
 }
 
 function startAutosync(key, current) {

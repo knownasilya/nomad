@@ -16,7 +16,6 @@ class ShellWindowNavbar extends LitElement {
         type: Number,
         attribute: 'num-watchlist-notifications',
       },
-      isHolepunchable: { type: Boolean, attribute: 'is-holepunchable' },
       isDaemonActive: { type: Boolean, attribute: 'is-daemon-active' },
       isBrowserMenuOpen: { type: Boolean },
     };
@@ -29,7 +28,6 @@ class ShellWindowNavbar extends LitElement {
     this.isSidebarHidden = false;
     this.isUpdateAvailable = false;
     this.numWatchlistNotifications = 0;
-    this.isHolepunchable = true;
     this.isDaemonActive = false;
     this.isBrowserMenuOpen = false;
   }
@@ -286,9 +284,6 @@ class ShellWindowNavbar extends LitElement {
         ${this.isUpdateAvailable
           ? html`<span class="fas fa-arrow-alt-circle-up"></span>`
           : html`<span class="fa fa-bars"></span>`}
-        ${!this.isHolepunchable
-          ? html`<span class="fas fa-circle"></span>`
-          : ''}
       </button>
     `;
   }

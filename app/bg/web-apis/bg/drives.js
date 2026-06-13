@@ -126,7 +126,9 @@ export default {
   },
 
   createDebugStream() {
-    return drives.createDebugStream();
+    // TODO: debug streams removed in v11 stack
+    const { EventEmitter } = require('events');
+    return new EventEmitter();
   },
 };
 

@@ -1371,10 +1371,7 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
       let drive = hyper.drives.getDrive(tab.primaryPane.driveInfo.key);
       if (drive) {
         return {
-          peers: drive.session.drive.metadata.peers.map((p) => ({
-            type: p.type,
-            remoteAddress: p.remoteAddress,
-          })),
+          peers: hyper.daemon.listPeerAddresses(drive.key) || [],
         };
       }
     }

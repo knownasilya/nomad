@@ -100,6 +100,14 @@ function trackWc(wc) {
       wcInfos[id].trust = TRUST.UNKNOWN;
     }
   });
+  // session.webRequest.onCompleted does not fire for custom protocols (beaker://).
+  // Set trust directly on navigation commit for beaker:// pages.
+  // For hyper:// pages, trust is set directly by the protocol handler (see protocols/hyper.js).
+  wc.on('did-navigate', (e, url) => {
+    if (wcInfos[id] && wcInfos[id].trust === TRUST.UNKNOWN && url.startsWith('beaker://')) {
+      wcInfos[id].trust = TRUST.TRUSTED;
+    }
+  });
   wc.on('destroyed', (e) => {
     delete wcInfos[id];
   });

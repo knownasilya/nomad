@@ -58,8 +58,6 @@ class DesktopApp extends LitElement {
       addressBook.loadProfile(),
       desktop.load(),
     ]);
-    console.log(this.pins);
-    this.legacyArchives = await beaker.datLegacy.list();
   }
 
   // rendering
@@ -294,11 +292,7 @@ class DesktopApp extends LitElement {
 
   async onClickRemoveLegacyArchive(e, archive) {
     e.preventDefault();
-    if (!confirm('Are you sure?')) return;
-    await beaker.datLegacy.remove(archive.key);
-    this.legacyArchives.splice(this.legacyArchives.indexOf(archive), 1);
-    toast.create('Archive removed');
-    this.requestUpdate();
+    // datLegacy removed in Nomad — no-op
   }
 }
 
