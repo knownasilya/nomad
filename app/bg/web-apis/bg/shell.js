@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { dialog } from 'electron';
 import { promises as nodefs } from 'fs';
-import { join as joinPath2 } from 'path';
+import { join as joinPath2, basename as pathBasename } from 'path';
 import * as modals from '../../ui/subwindows/modals';
 import * as prompts from '../../ui/subwindows/prompts';
 import * as drives from '../../hyper/drives';
@@ -493,10 +493,11 @@ async function doImport(wc, url, filePaths) {
   if (isHistoric)
     throw new ArchiveNotWritableError('Cannot modify a historic version');
 
+  var numImported = 0;
   var prompt = await prompts.create(wc, 'progress', { label: 'Importing files...' });
   try {
     for (let srcPath of filePaths) {
-      await _importFsFolder(checkoutFS.drive, srcPath, urlp.pathname || '/', { ignore: ['index.json'] });
+      numImported += await _importFsItem(checkoutFS.drive, srcPath, urlp.pathname || '/', { ignore: ['index.json'] });
     }
   } finally {
     prompts.close(prompt.tab);
@@ -508,20 +509,32 @@ async function doImport(wc, url, filePaths) {
 // filesystem helpers (replaces pauls-dat-api2 export functions)
 // =
 
-async function _importFsFolder(drive, srcPath, dstPath, { ignore = [] } = {}) {
+async function _importFsItem(drive, srcPath, dstPath, { ignore = [] } = {}) {
   const ignoreSet = new Set(ignore);
-  const entries = await nodefs.readdir(srcPath, { withFileTypes: true });
-  for (const entry of entries) {
-    if (ignoreSet.has(entry.name)) continue;
-    const fullSrc = joinPath2(srcPath, entry.name);
-    const fullDst = (dstPath.endsWith('/') ? dstPath : dstPath + '/') + entry.name;
-    if (entry.isDirectory()) {
-      await _importFsFolder(drive, fullSrc, fullDst, { ignore });
-    } else if (entry.isFile()) {
-      const buf = await nodefs.readFile(fullSrc);
-      await drive.put(fullDst, buf);
-    }
+  const srcStat = await nodefs.stat(srcPath);
+  const name = pathBasename(srcPath);
+  if (ignoreSet.has(name)) return 0;
+
+  if (srcStat.isFile()) {
+    const fullDst = (dstPath.endsWith('/') ? dstPath : dstPath + '/') + name;
+    const buf = await nodefs.readFile(srcPath);
+    await drive.put(fullDst, buf);
+    return 1;
   }
+
+  if (srcStat.isDirectory()) {
+    let count = 0;
+    const entries = await nodefs.readdir(srcPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (ignoreSet.has(entry.name)) continue;
+      const fullSrc = joinPath2(srcPath, entry.name);
+      const fullDst = (dstPath.endsWith('/') ? dstPath : dstPath + '/') + name;
+      count += await _importFsItem(drive, fullSrc, fullDst, { ignore });
+    }
+    return count;
+  }
+
+  return 0;
 }
 
 async function _exportToFs(drive, srcFolder, dstPath, { overwriteExisting = true } = {}) {

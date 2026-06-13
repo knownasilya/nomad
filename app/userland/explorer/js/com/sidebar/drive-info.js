@@ -52,10 +52,11 @@ export class DriveInfo extends LitElement {
     // this solves that issue
     // -prf
     try {
+      const thumbPath = this.driveInfo.manifest?.thumb || 'thumb';
       this.querySelector('img').removeAttribute('src');
       this.querySelector('img').setAttribute(
         'src',
-        `${this.driveInfo.url}thumb`
+        `${this.driveInfo.url}${thumbPath}`
       );
     } catch (e) {}
   }

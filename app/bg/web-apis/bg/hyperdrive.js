@@ -396,8 +396,8 @@ const hyperdriveAPI = {
     return auditLog.record(this.sender.getURL(), 'copy', { url, srcpath, dstpath }, undefined, () =>
       timer(to(opts), async (checkin, pause, resume) => {
         const src = await lookupDrive(this.sender, urlp.hostname, urlp.version);
-        const dstOrigin = dstpath.includes('://') ? dstpath : urlp.origin;
-        const dst = await lookupDrive(this.sender, dstOrigin);
+        const dstHostname = dstpath.includes('://') ? parseDriveUrl(dstpath).hostname : urlp.hostname;
+        const dst = await lookupDrive(this.sender, dstHostname);
 
         const srcFinal = srcpath.includes('://') ? normalizeFilepath(new URL(srcpath).pathname) : srcpath;
         const dstFinal = dstpath.includes('://') ? normalizeFilepath(new URL(dstpath).pathname) : dstpath;
@@ -426,8 +426,8 @@ const hyperdriveAPI = {
     return auditLog.record(this.sender.getURL(), 'rename', { url, srcpath, dstpath }, undefined, () =>
       timer(to(opts), async (checkin, pause, resume) => {
         const src = await lookupDrive(this.sender, urlp.hostname, urlp.version);
-        const dstOrigin = dstpath.includes('://') ? dstpath : urlp.origin;
-        const dst = await lookupDrive(this.sender, dstOrigin);
+        const dstHostname = dstpath.includes('://') ? parseDriveUrl(dstpath).hostname : urlp.hostname;
+        const dst = await lookupDrive(this.sender, dstHostname);
 
         const srcFinal = srcpath.includes('://') ? normalizeFilepath(new URL(srcpath).pathname) : srcpath;
         const dstFinal = dstpath.includes('://') ? normalizeFilepath(new URL(dstpath).pathname) : dstpath;
@@ -502,7 +502,7 @@ const hyperdriveAPI = {
     const prefix = urlp.pathname;
     return auditLog.record(this.sender.getURL(), 'diff', { url, other, prefix }, undefined, () =>
       timer(to(opts), async (checkin, pause, resume) => {
-        const { checkoutFS } = await lookupDrive(this.sender, urlp.origin, urlp.version);
+        const { checkoutFS } = await lookupDrive(this.sender, urlp.hostname, urlp.version);
         pause();
         await assertReadPermission(checkoutFS, this.sender);
         resume();
