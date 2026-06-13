@@ -268,6 +268,9 @@ export function createShellWindow(
       frameSettings
     )
   );
+  // pauls-electron-rpc adds a did-navigate listener per concurrent RPC call;
+  // during shell-window startup many calls fire simultaneously so raise the limit.
+  win.webContents.setMaxListeners(50);
   win.once('ready-to-show', () => {
     win.show();
     if (!hasFirstWindowLoaded) {
