@@ -1,5 +1,5 @@
 import ms from 'ms';
-import { join as joinPath } from 'path';
+import b4a from 'b4a';
 import * as filesystem from './index';
 import {
   PATHS,
@@ -12,19 +12,6 @@ const logger = logLib.child({
   category: 'hyper',
   subcategory: 'trash-collector',
 });
-
-// typedefs
-// =
-
-/**
- * @typedef {Object} CollectResult
- * @prop {number} totalBytes
- * @prop {number} totalItems
- *
- * @typedef {Object} TrashItem
- * @prop {string} name
- * @prop {Object} stat
- */
 
 // globals
 // =
@@ -39,93 +26,86 @@ export function setup() {
 }
 
 /**
+ * Add a drive key to the trash list with the current timestamp.
+ * @param {string} key hex drive key
+ */
+export async function add(key) {
+  const rootDrive = filesystem.get();
+  if (!rootDrive) return;
+  const items = await _read(rootDrive);
+  if (!items.find((i) => i.key === key)) {
+    items.push({ key, deletedAt: Date.now() });
+    await _write(rootDrive, items);
+  }
+}
+
+/**
  * @param {Object} [query]
- * @param {boolean} [query.mounts]
  * @param {number} [query.olderThan]
- * @returns {Promise<TrashItem[]>}
+ * @returns {Promise<Array<{key: string, deletedAt: number}>>}
  */
 export async function query(query = {}) {
-  return []; // TODO
-  // var items = /** @type TrashItem[] */([])
-  // var names = await filesystem.get().pda.readdir(PATHS.TRASH)
-  // for (let name of names) {
-  //   let st = await filesystem.get().pda.stat(joinPath(PATHS.TRASH, name))
-  //   if (query.mounts && !st.mount) {
-  //     continue
-  //   }
-  //   if (query.olderThan) {
-  //     if (Date.now() - st.mtime < query.olderThan) {
-  //       continue
-  //     }
-  //   }
-  //   items.push({name, stat: st})
-  // }
-  // return items
+  const rootDrive = filesystem.get();
+  if (!rootDrive) return [];
+  const items = await _read(rootDrive);
+  return items.filter((item) => {
+    if (query.olderThan && Date.now() - item.deletedAt < query.olderThan) return false;
+    return true;
+  });
 }
 
 /**
  * @param {Object} [opts]
  * @param {number} [opts.olderThan]
- * @returns {Promise<CollectResult>}
+ * @returns {Promise<{totalItems: number}>}
  */
 export async function collect({ olderThan } = {}) {
-  return; // TODO
-  // logger.silly('Running GC')
-  // olderThan = typeof olderThan === 'number' ? olderThan : TRASH_EXPIRATION_AGE
+  logger.silly('Running trash GC');
+  olderThan = typeof olderThan === 'number' ? olderThan : TRASH_EXPIRATION_AGE;
 
-  // // clear any scheduled GC
-  // if (nextGCTimeout) {
-  //   clearTimeout(nextGCTimeout)
-  //   nextGCTimeout = null
-  // }
+  if (nextGCTimeout) {
+    clearTimeout(nextGCTimeout);
+    nextGCTimeout = null;
+  }
 
-  // // run the GC
-  // var totalBytes = 0
-  // var startTime = Date.now()
+  const rootDrive = filesystem.get();
+  if (!rootDrive) {
+    schedule(TRASH_REGULAR_COLLECT_WAIT);
+    return { totalItems: 0 };
+  }
 
-  // // clear items in trash
-  // var trashItems = await query({olderThan})
-  // if (trashItems.length) {
-  //   logger.info(`Deleting ${trashItems.length} items in trash`)
-  //   logger.silly('Items:', {urls: trashItems.map(a => a.name)})
-  // }
-  // for (let item of trashItems) {
-  //   let path = joinPath(PATHS.TRASH, item.name)
-  //   if (item.stat.mount) {
-  //     await filesystem.get().pda.unmount(path)
-  //   } else if (item.stat.isDirectory()) {
-  //     await filesystem.get().pda.rmdir(path, {recursive: true})
-  //   } else {
-  //     await filesystem.get().pda.unlink(path)
-  //   }
-  //   totalBytes += item.stat.size
-  // }
+  const items = await _read(rootDrive);
+  const toRemove = items.filter((item) => Date.now() - item.deletedAt >= olderThan);
+  const remaining = items.filter((item) => Date.now() - item.deletedAt < olderThan);
 
-  // // clear cached dats
-  // // TODO
-  // // fetch all drive metas with lastaccesstime older than DAT_CACHE_TIME
-  // // then delete the drive
-  // {
-  //   // await datLibrary.removeFromTrash(trashItems[i].key)
-  //   // totalBytes += await archivesDb.deleteArchive(trashItems[i].key)
-  // }
+  if (toRemove.length) {
+    logger.info(`Deleting ${toRemove.length} drives from trash`);
+    await _write(rootDrive, remaining);
+  }
 
-  // logger.silly(`GC completed in ${Date.now() - startTime} ms`)
+  schedule(TRASH_REGULAR_COLLECT_WAIT);
+  logger.silly(`Scheduling next trash GC in ${ms(TRASH_REGULAR_COLLECT_WAIT)}`);
 
-  // // schedule the next GC
-  // schedule(TRASH_REGULAR_COLLECT_WAIT)
-  // logger.silly(`Scheduling next run to happen in ${ms(TRASH_REGULAR_COLLECT_WAIT)}`)
-
-  // // return stats
-  // return {totalBytes, totalItems: trashItems.length}
+  return { totalItems: toRemove.length };
 }
 
 // helpers
 // =
 
-/**
- * @param {number} time
- */
+async function _read(rootDrive) {
+  try {
+    const buf = await rootDrive.drive.get(PATHS.TRASH);
+    if (!buf) return [];
+    return JSON.parse(b4a.toString(buf));
+  } catch {
+    return [];
+  }
+}
+
+async function _write(rootDrive, items) {
+  await rootDrive.drive.put(PATHS.TRASH, b4a.from(JSON.stringify(items)));
+}
+
 function schedule(time) {
   nextGCTimeout = setTimeout(collect, time);
   nextGCTimeout.unref();

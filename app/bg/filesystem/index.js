@@ -298,6 +298,7 @@ export async function removeDrive(url) {
     if (!drive.writable) {
       await hyper.daemon.configureNetwork(drive.discoveryKey, { announce: false, lookup: true });
     }
+    await trash.add(key);
     drives.splice(driveIndex, 1);
     await rootDrive.drive.put('/drives.json', b4a.from(JSON.stringify({ drives }, null, 2)));
   } finally {
