@@ -82,19 +82,18 @@ class DesktopApp extends LitElement {
   }
 
   renderReleaseNotice() {
-    return '';
-    // if (this.lastDismissedReleaseNotice >= CURRENT_VERSION) {
-    //   return '';
-    // }
-    // return html`
-    //   <div class="release-notice">
-    //     <a href=${RELEASE.url} class="view-release-notes" target="_blank">
-    //       <span class="fas fa-fw fa-rocket"></span>
-    //       <strong>Welcome to Nomad ${RELEASE.label}!</strong>
-    //       Click here to see what's new.
-    //     </a>
-    //   </div>
-    // `;
+    if (this.lastDismissedReleaseNotice >= CURRENT_VERSION) {
+      return '';
+    }
+    return html`
+      <div class="release-notice">
+        <a href=${RELEASE.url} class="view-release-notes" target="_blank">
+          <span class="fas fa-fw fa-rocket"></span>
+          <strong>Welcome to Nomad ${RELEASE.label}!</strong>
+          Click here to see what's new.
+        </a>
+      </div>
+    `;
   }
 
   renderPins() {
