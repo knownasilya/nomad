@@ -13,29 +13,20 @@ class DrivePropertiesModal extends LitElement {
       inputsCSS,
       buttonsCSS,
       css`
-        .wrapper {
-          padding: 0;
-        }
-
-        h1.title {
-          padding: 14px 20px;
-          margin: 0;
-          border-color: #bbb;
-        }
-
         form {
           padding: 0;
           margin: 0;
         }
 
         .props {
-          background: #fafafa;
+          border-bottom: 1px solid var(--m-border);
         }
 
         .prop {
           display: flex;
           align-items: center;
-          border-bottom: 1px dashed #ccc;
+          border-bottom: 1px solid var(--m-border);
+          min-height: 38px;
         }
 
         .prop:last-child {
@@ -43,65 +34,56 @@ class DrivePropertiesModal extends LitElement {
         }
 
         .prop .key {
-          flex: 0 0 100px;
-          padding: 8px 8px 8px 20px;
-          border-right: 1px dashed #ccc;
+          flex: 0 0 110px;
+          padding: 8px 10px 8px 20px;
+          border-right: 1px solid var(--m-border);
+          font-size: 12px;
           font-weight: 500;
+          color: var(--m-text-light);
+          align-self: stretch;
+          display: flex;
+          align-items: center;
+          background: var(--m-bg-secondary);
         }
 
-        .prop input {
-          border-radius: 0;
-          margin: 0;
-          border: 0;
-          padding: 0;
-          height: auto;
-        }
-
-        .prop .img-input,
-        .prop .other-input,
         .prop input[type='text'] {
           flex: 1;
-          font-size: 14px;
-          padding: 8px;
-          background: #fafafa;
-        }
-
-        .prop.writable .img-input:hover,
-        .prop.writable .other-input:hover,
-        .prop.writable input[type='text']:hover {
-          background: #f0f0f0;
+          font-size: 13px;
+          padding: 0 12px;
+          border-radius: 0;
+          border: 0;
+          height: 38px;
+          background: transparent;
+          color: var(--m-text-default);
         }
 
         .prop input[type='text']:focus {
-          box-shadow: none;
-        }
-
-        .prop.writable input[type='text']:focus {
-          background: #f0f0f0;
+          box-shadow: inset 0 0 0 2px rgba(64, 64, 231, 0.25);
+          background: rgba(64, 64, 231, 0.03);
         }
 
         .prop .img-input {
+          flex: 1;
           display: flex;
           align-items: center;
+          gap: 10px;
+          padding: 8px 12px;
         }
 
         .prop img {
-          width: 16px;
-          height: 16px;
+          width: 32px;
+          height: 32px;
           object-fit: cover;
-          margin-right: 5px;
+          border-radius: 6px;
+          border: 1px solid var(--m-border);
         }
 
         .form-actions {
           display: flex;
           justify-content: space-between;
-          border-top: 1px dashed #ccc;
-          padding: 8px 10px;
-        }
-
-        .form-actions button {
-          padding: 6px 12px;
-          font-size: 12px;
+          align-items: center;
+          padding: 10px 16px;
+          gap: 8px;
         }
       `,
     ];
@@ -112,6 +94,7 @@ class DrivePropertiesModal extends LitElement {
     this.cbs = undefined;
     this.url = '';
     this.writable = false;
+    this.thumbPath = null;
     this.props = {};
   }
 
@@ -119,6 +102,7 @@ class DrivePropertiesModal extends LitElement {
     this.cbs = cbs;
     this.url = params.url;
     this.writable = params.writable;
+    this.thumbPath = params.thumbPath || null;
     this.props = params.props || {};
     this.props.title = this.props.title || '';
     this.props.description = this.props.description || '';
@@ -128,7 +112,7 @@ class DrivePropertiesModal extends LitElement {
   }
 
   adjustHeight() {
-    var height = this.shadowRoot.querySelector('div').clientHeight | 0;
+    var height = this.shadowRoot.querySelector('div').scrollHeight;
     bg.modals.resizeSelf({ height });
   }
 
@@ -152,7 +136,7 @@ class DrivePropertiesModal extends LitElement {
             <div class="prop">
               <div class="key">Thumbnail</div>
               <div class="img-input">
-                <img src="${this.url}/thumb" />
+                <img src="${this.url}/${this.thumbPath || 'thumb'}" />
                 <input
                   id="thumb-input"
                   type="file"
@@ -236,13 +220,15 @@ class DrivePropertiesModal extends LitElement {
           .unlink(joinPath(this.url, '/thumb.jpeg'))
           .catch((e) => null),
       ]);
+      let newThumbPath = `thumb.${ext}`;
       await bg.hyperdrive.writeFile(
-        joinPath(this.url, `/thumb.${ext}`),
+        joinPath(this.url, `/${newThumbPath}`),
         await bufPromise
       );
+      newProps.thumb = newThumbPath;
     }
 
-    // handle props
+    // handle props (configure also awaits asset cache update)
     await bg.hyperdrive.configure(this.url, newProps).catch((e) => null);
 
     this.cbs.resolve();

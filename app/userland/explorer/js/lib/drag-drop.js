@@ -10,13 +10,14 @@ export async function handleDragDrop(targetEl, x, y, targetPath, dataTransfer) {
     if (dataTransfer.files && dataTransfer.files.length) {
       // files dragged into the window
       let targetUrl = joinPath(loc.getOrigin(), targetPath);
-      var res = await beaker.shell.importFilesAndFolders(
-        targetUrl,
-        Array.from(dataTransfer.files, (f) => f.path)
-      );
+      var paths = Array.from(dataTransfer.files, (f) =>
+        window.electronWebUtils ? window.electronWebUtils.getPathForFile(f) : f.path
+      ).filter(Boolean);
+      var res = await beaker.shell.importFilesAndFolders(targetUrl, paths);
       toast.create(
         `Imported ${res.numImported} ${pluralize(res.numImported, 'item')}`
       );
+      window.dispatchEvent(new CustomEvent('explorer-files-changed'));
       return;
     }
     // TODO:

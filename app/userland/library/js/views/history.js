@@ -60,12 +60,17 @@ export class HistoryView extends LitElement {
       <link rel="stylesheet" href="beaker://app-stdlib/css/fontawesome.css" />
       ${links
         ? html`
+            <div class="history-header">
+              <span class="col col-icon"></span>
+              <span class="col col-title">Page</span>
+              <span class="col col-url">URL</span>
+            </div>
             <div class="links">
               ${repeat(links, (link) => this.renderLink(link))}
               ${links.length === 0 && !this.filter
                 ? html`
                     <div class="empty">
-                      <span class="fas fa-rss"></span>
+                      <span class="fas fa-history"></span>
                       <div>No sites have been visited recently.</div>
                     </div>
                   `
@@ -73,7 +78,8 @@ export class HistoryView extends LitElement {
               ${links.length === 0 && this.filter
                 ? html`
                     <div class="empty">
-                      <div>No matches found for "${this.filter}".</div>
+                      <span class="fas fa-search"></span>
+                      <div>No matches for "${this.filter}"</div>
                     </div>
                   `
                 : ''}
@@ -87,7 +93,7 @@ export class HistoryView extends LitElement {
     return html`
       <a class="link" href=${link.url}>
         <img src="asset:favicon:${link.url}" />
-        <span class="title">${link.title}</span>
+        <span class="title">${link.title || link.url}</span>
         <span class="url">${link.url}</span>
       </a>
     `;

@@ -32,6 +32,7 @@ const IS_RIGHT_ALIGNED = [
   'share',
   'site',
   'donate',
+  'spaces',
 ];
 var events = new Events();
 var views = {}; // map of {[parentWindow.id] => BrowserView}
@@ -47,8 +48,8 @@ export function setup(parentWindow) {
       preload: path.join(__dirname, 'fg', 'shell-menus', 'index.build.js'),
     },
   }));
-  view.webContents.on('console-message', (e, level, message) => {
-    console.log('Shell-Menus window says:', message);
+  view.webContents.on('console-message', (e) => {
+    console.log('Shell-Menus window says:', e.message);
   });
   view.webContents.loadURL('beaker://shell-menus/');
 }
@@ -131,6 +132,13 @@ export function reposition(parentWindow) {
         y: 72,
         width: 250,
         height: 350,
+      });
+    } else if (view.menuId === 'spaces') {
+      setBounds({
+        x: view.boundsOpt?.rightOffset || 10,
+        y: 34,
+        width: 200,
+        height: 300,
       });
     }
   }

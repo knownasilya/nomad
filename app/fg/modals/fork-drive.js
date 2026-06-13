@@ -33,131 +33,102 @@ class ForkDriveModal extends LitElement {
       buttonsCSS,
       spinnerCSS,
       css`
-        .wrapper {
-          padding: 0;
-        }
-
         form {
           padding: 14px 20px;
           margin: 0;
         }
 
         .loading {
-          padding: 20px 22px 20px;
-          font-size: 15px;
-          font-style: normal;
-          border-bottom: 1px solid #ccd;
-          color: rgba(0, 0, 0, 0.6);
+          padding: 14px 20px;
+          color: var(--m-text-light);
+          border-bottom: 1px solid var(--m-border);
         }
 
         h1 {
           margin-top: 0;
+          font-size: 14px;
+          font-weight: 600;
         }
+
+        /* Tab-style mode switcher */
 
         .tabbed-nav {
           display: flex;
           align-items: center;
-          font-size: 17px;
-          letter-spacing: 0.5px;
-          margin: -4px -16px 14px;
+          gap: 2px;
+          margin: -4px 0 14px;
+          background: var(--m-bg-secondary);
+          border: 1px solid var(--m-border);
+          border-radius: var(--m-radius);
+          padding: 3px;
         }
 
-        .tabbed-nav span {
-          min-width: 5px;
-          border: 1px solid transparent;
-          border-bottom: 1px solid #bbb;
-          height: 28px;
-        }
-
+        .tabbed-nav span,
         .tabbed-nav span.spacer {
-          flex: 1;
+          display: none;
         }
 
         .tabbed-nav a {
-          color: inherit;
-          border: 1px solid transparent;
-          border-bottom: 1px solid #bbb;
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--m-text-light);
           cursor: pointer;
-          border-top-left-radius: 2px;
-          border-top-right-radius: 2px;
-          padding: 4px 18px;
+          border-radius: calc(var(--m-radius) - 2px);
+          padding: 5px 12px;
+          font-size: 12px;
+          font-weight: 500;
+          transition: background 0.1s, color 0.1s;
         }
 
         .tabbed-nav a.active {
-          border: 1px solid #bbb;
-          border-bottom: 1px solid transparent;
+          background: #fff;
+          color: var(--m-text-default);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
 
         .columns {
           display: grid;
           grid-template-columns: auto 1fr;
-          grid-gap: 12px;
-        }
-
-        input {
-          font-size: 14px;
-          height: 34px;
-          padding: 0 10px;
-          border-color: #bbb;
-        }
-
-        select {
-          -webkit-appearance: none;
-          display: inline-block;
-          font-size: 13px;
-          font-weight: 500;
-          padding: 8px 30px 8px 10px;
-          max-width: 100%;
-          border: 1px solid #bbc;
-          border-radius: 4px;
-          outline: 0;
-          background-color: #fff;
-          background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAMAAABg3Am1AAAARVBMVEUAAAAsPlAsPlAsPlAsPlAsPlAsPlAsPlAsPlAsPlAsPlAsPlAsPlAsPlAsPlAsPlAsPlAsPlAsPlAsPlAsPlAsPlAsPlAz1sU3AAAAFnRSTlMAAwQMERkbIikuVWl0dXeDtLXF5PH5X4+8lwAAAIxJREFUSInt0TcCwjAQRNFvE5dkwKD7H5WGINsKszWa+r9qoO1ftjqc1B0N2DyDYwNcPX0Ia0Yf2HFx9Y+e7u4Be6B3CAOXsPcTqrDvd5qw6G1FxL0ipn1dzPuaWPZlkepLIt3nRa7PiXyfFqU+Jcr9UtT6uaj3U6H0sdD6n1D7j9B76M7jbevo29rgBddTP/7iwZL3AAAAAElFTkSuQmCC);
-          background-repeat: no-repeat;
-          background-position: right 0.7em top 50%, 0 0;
-          background-size: 0.65em auto, 100%;
+          gap: 14px;
         }
 
         .help {
-          opacity: 0.6;
+          font-size: 12px;
+          color: var(--m-text-light);
+          margin: -6px 0 10px;
+          line-height: 1.4;
         }
 
         .help.with-icon {
-          padding-left: 16px;
+          padding-left: 18px;
           position: relative;
         }
 
         .help.with-icon .fas {
           position: absolute;
-          left: -2px;
+          left: 0;
           top: 1px;
           font-size: 11px;
-        }
-
-        input + .help {
-          margin-top: -8px;
+          color: var(--m-text-very-light);
         }
 
         .help a {
           cursor: pointer;
-          color: blue;
-          text-decoration: underline;
-        }
-
-        hr {
-          border: 0;
-          border-top: 1px solid #ddd;
-          margin: 10px 0;
+          color: var(--m-blue);
         }
 
         .form-actions {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          gap: 8px;
         }
 
         .fork-dat-progress {
-          font-size: 14px;
+          font-size: 12px;
+          color: var(--m-text-light);
         }
       `,
     ];
@@ -216,7 +187,7 @@ class ForkDriveModal extends LitElement {
   }
 
   adjustHeight() {
-    var height = this.shadowRoot.querySelector('div').clientHeight | 0;
+    var height = this.shadowRoot.querySelector('div').scrollHeight;
     bg.modals.resizeSelf({ height });
   }
 

@@ -26,6 +26,9 @@ editor-app .toolbar button {
   font-size: 11px;
   color: inherit;
   border-radius: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 editor-app .toolbar button:not([disabled]):hover {

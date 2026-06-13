@@ -1,9 +1,8 @@
 // @ts-nocheck
 import emitStream from 'emit-stream';
 import EventEmitter from 'events';
-import datEncoding from 'dat-encoding';
+import b4a from 'b4a';
 import { parseDriveUrl } from '../../lib/urls';
-import pda from 'pauls-dat-api2';
 import { wait } from '../../lib/functions';
 import * as logLib from '../logger';
 const baseLogger = logLib.get();
@@ -22,256 +21,159 @@ import * as hyperDns from './dns';
 import * as filesystem from '../filesystem/index';
 
 // constants
-// =
-
 import {
   HYPERDRIVE_HASH_REGEX,
-  DRIVE_MANIFEST_FILENAME,
 } from '../../lib/const';
 import { InvalidURLError, TimeoutError } from 'beaker-error-constants';
 
-// typedefs
-// =
-
-/**
- * @typedef {import('./daemon').DaemonHyperdrive} DaemonHyperdrive
- */
-
 // globals
-// =
-
 var driveLoadPromises = {}; // key -> promise
 var drivesEvents = new EventEmitter();
 
 // exported API
-// =
-
 export const on = drivesEvents.on.bind(drivesEvents);
 export const addListener = drivesEvents.addListener.bind(drivesEvents);
 export const removeListener = drivesEvents.removeListener.bind(drivesEvents);
 
-/**
- * @return {Promise<void>}
- */
 export async function setup() {
-  // connect to the daemon
   await daemon.setup();
-
-  // TODO
-  // hyperDnsDb.on('updated', ({key, name}) => {
-  //   var drive = getDrive(key)
-  //   if (drive) {
-  //     drive.domain = name
-  //   }
-  // })
-
-  logger.info('Initialized dat daemon');
+  logger.info('Initialized hyper stack');
 }
 
 /**
- * @param {String[]} keys
- * @returns {Promise<void>}
+ * Ensure the given drive keys are being announced on the swarm.
+ * @param {string[]} keys
  */
 export async function ensureHosting(keys) {
-  var configs = await daemon.getClient().drive.allNetworkConfigurations();
-  for (let key of keys) {
-    let cfg = configs.get(key);
-    if (!cfg || !cfg.announce || !cfg.lookup) {
+  for (const key of keys) {
+    const sess = daemon.getHyperdriveSession({ key });
+    if (!sess) {
       try {
-        let drive = await getOrLoadDrive(key);
-        logger.silly(`Reconfiguring network behavior for drive ${key}`);
-        await drive.session.drive.configureNetwork({
-          announce: true,
-          lookup: true,
-        });
+        await getOrLoadDrive(key);
+        logger.silly(`Joined swarm for drive ${key}`);
       } catch (e) {
-        logger.debug(`Failed to configure behavior for drive ${key}`, {
-          error: e,
-        });
+        logger.debug(`Failed to join swarm for drive ${key}`, { error: e });
       }
     }
   }
 }
 
-/**
- * @returns {NodeJS.ReadableStream}
- */
 export function createEventStream() {
   return emitStream.toStream(drivesEvents);
 }
 
-/**
- * @param {string} key
- * @returns {Promise<string>}
- */
 export function getDebugLog(key) {
-  return ''; // TODO needed? daemon.getDebugLog(key)
+  return '';
 }
 
 /**
- * @returns {NodeJS.ReadableStream}
+ * Read drive metadata and persist it to the archives DB.
  */
-export function createDebugStream() {
-  // TODO needed?
-  // return daemon.createDebugStream()
-}
-
-// read metadata for the drive, and store it in the meta db
-export async function pullLatestDriveMeta(drive, { updateMTime } = {}) {
+export async function pullLatestDriveMeta(drive, { updateMTime, updateAssets } = {}) {
   try {
-    var key = drive.key.toString('hex');
-
-    // trigger DNS update
-    // confirmDomain(key) DISABLED
-
-    var version = await drive.session.drive.version();
-    if (version === drive.lastMetaPullVersion) {
-      return;
-    }
-    var lastMetaPullVersion = drive.lastMetaPullVersion;
+    const key = b4a.toString(drive.key, 'hex');
+    const version = drive.drive.version;
+    if (version === drive.lastMetaPullVersion) return;
+    const lastMetaPullVersion = drive.lastMetaPullVersion;
     drive.lastMetaPullVersion = version;
 
     if (lastMetaPullVersion) {
-      driveAssets
-        .hasUpdates(drive, lastMetaPullVersion)
-        .then((hasAssetUpdates) => {
-          if (hasAssetUpdates) {
-            driveAssets.update(drive);
-          }
+      if (updateAssets) {
+        const hasAssetUpdates = await driveAssets.hasUpdates(drive, lastMetaPullVersion);
+        if (hasAssetUpdates) await driveAssets.update(drive);
+      } else {
+        driveAssets.hasUpdates(drive, lastMetaPullVersion).then((hasAssetUpdates) => {
+          if (hasAssetUpdates) driveAssets.update(drive);
         });
+      }
     } else {
-      driveAssets.update(drive);
+      await driveAssets.update(drive);
     }
 
-    // read the drive meta and size on disk
-    var [manifest, oldMeta, size] = await Promise.all([
-      drive.pda.readManifest().catch(() => {}),
+    const [meta, oldMeta] = await Promise.all([
+      _readIndexJson(drive).catch(() => ({})),
       archivesDb.getMeta(key),
-      0, //drive.pda.readSize('/')
     ]);
-    var { title, description, type, author, forkOf } = manifest || {};
-    var writable = drive.writable;
-    var mtime = updateMTime ? Date.now() : oldMeta.mtime;
-    var details = {
-      title,
-      description,
-      type,
-      forkOf,
-      mtime,
-      size,
-      author,
-      writable,
-    };
+    const { title, description, type, author, forkOf } = meta || {};
+    const writable = drive.writable;
+    const mtime = Date.now();
+    const details = { title, description, type, forkOf, mtime, size: 0, author, writable };
 
-    // check for changes
-    if (!hasMetaChanged(details, oldMeta)) {
-      return;
-    }
+    if (!hasMetaChanged(details, oldMeta)) return;
 
-    // write the record
     await archivesDb.setMeta(key, details);
-
-    // emit the updated event
     details.url = 'hyper://' + key + '/';
     drivesEvents.emit('updated', { key, details, oldMeta });
-    logger.info('Updated recorded metadata for hyperdrive', { key, details });
+    logger.info('Updated drive metadata', { key, details });
     return details;
   } catch (e) {
-    console.error('Error pulling meta', e);
+    console.error('Error pulling drive meta', e);
   }
 }
 
 // drive creation
 // =
 
-/**
- * @returns {Promise<DaemonHyperdrive>}
- */
 export async function createNewRootDrive() {
-  var drive = await loadDrive(null, { visibility: 'private' });
+  const drive = await loadDrive(null, { visibility: 'private' });
   await pullLatestDriveMeta(drive);
   return drive;
 }
 
 /**
- * @param {Object} [manifest]
- * @returns {Promise<DaemonHyperdrive>}
+ * @param {Object} [meta]
+ * @returns {Promise<DriveSession>}
  */
-export async function createNewDrive(manifest = {}) {
-  // create the drive
-  var drive = await loadDrive(null);
-
-  // announce the drive
-  drive.session.drive.configureNetwork({
-    announce: true,
-    lookup: true,
-  });
-
-  // write the manifest and default datignore
-  await Promise.all([
-    drive.pda.writeManifest(manifest),
-    // DISABLED drive.pda.writeFile('/.datignore', await settingsDb.get('default_dat_ignore'), 'utf8')
-  ]);
-
-  // save the metadata
+export async function createNewDrive(meta = {}) {
+  const drive = await loadDrive(null);
+  // Write index.json if any metadata was supplied
+  if (meta && Object.keys(meta).length > 0) {
+    await drive.drive.put('/index.json', b4a.from(JSON.stringify(meta, null, 2)));
+  }
   await pullLatestDriveMeta(drive);
-
   return drive;
 }
 
 /**
  * @param {string} srcDriveUrl
  * @param {Object} [opts]
- * @returns {Promise<DaemonHyperdrive>}
+ * @returns {Promise<DriveSession>}
  */
 export async function forkDrive(srcDriveUrl, opts = {}) {
   srcDriveUrl = fromKeyToURL(srcDriveUrl);
 
-  // get the source drive
-  var srcDrive;
-  var downloadRes = await Promise.race([
-    (async function () {
+  let srcDrive;
+  const downloadRes = await Promise.race([
+    (async () => {
       srcDrive = await getOrLoadDrive(srcDriveUrl);
-      if (!srcDrive) {
-        throw new Error('Invalid drive key');
-      }
-      // return srcDrive.session.drive.download('/') TODO needed?
+      if (!srcDrive) throw new Error('Invalid drive key');
     })(),
     new Promise((r) => setTimeout(() => r('timeout'), 60e3)),
   ]);
-  if (downloadRes === 'timeout') {
-    throw new TimeoutError('Timed out while downloading source drive');
+  if (downloadRes === 'timeout') throw new TimeoutError('Timed out while downloading source drive');
+
+  const srcMeta = await _readIndexJson(srcDrive).catch(() => ({}));
+  const dstMeta = {
+    title: opts.title || srcMeta.title,
+    description: opts.description || srcMeta.description,
+    forkOf: opts.detached ? undefined : fromKeyToURL(srcDriveUrl),
+  };
+  for (const k in srcMeta) {
+    if (k === 'author') continue;
+    if (!dstMeta[k]) dstMeta[k] = srcMeta[k];
   }
 
-  // fetch source drive meta
-  var srcManifest = await srcDrive.pda.readManifest().catch((_) => {});
-  srcManifest = srcManifest || {};
+  const dstDrive = await createNewDrive(dstMeta);
 
-  // override any opts data
-  var dstManifest = {
-    title: opts.title ? opts.title : srcManifest.title,
-    description: opts.description ? opts.description : srcManifest.description,
-    forkOf: opts.detached ? undefined : fromKeyToURL(srcDriveUrl),
-    // author: manifest.author
-  };
-  for (let k in srcManifest) {
-    if (k === 'author') continue;
-    if (!dstManifest[k]) {
-      dstManifest[k] = srcManifest[k];
+  // Copy all files from src to dst
+  const ignore = new Set(['/.dat', '/.git', '/index.json']);
+  for await (const entry of srcDrive.drive.list('/')) {
+    if (ignore.has(entry.key)) continue;
+    const buf = await srcDrive.drive.get(entry.key);
+    if (buf) {
+      await dstDrive.drive.put(entry.key, buf, { metadata: entry.value?.metadata });
     }
   }
-
-  // create the new drive
-  var dstDrive = await createNewDrive(dstManifest);
-
-  // copy files
-  var ignore = ['/.dat', '/.git', '/index.json'];
-  await pda.exportArchiveToArchive({
-    srcArchive: srcDrive.session.drive,
-    dstArchive: dstDrive.session.drive,
-    skipUndownloadedFiles: false,
-    ignore,
-  });
 
   return dstDrive;
 }
@@ -280,32 +182,21 @@ export async function forkDrive(srcDriveUrl, opts = {}) {
 // =
 
 export async function loadDrive(key, opts) {
-  // validate key
   if (key) {
     if (!Buffer.isBuffer(key)) {
-      // existing dat
       key = await fromURLToKey(key, true);
-      if (!HYPERDRIVE_HASH_REGEX.test(key)) {
-        throw new InvalidURLError();
-      }
-      key = datEncoding.toBuf(key);
+      if (!HYPERDRIVE_HASH_REGEX.test(key)) throw new InvalidURLError();
+      key = b4a.from(key, 'hex');
     }
   }
 
-  // fallback to the promise, if possible
-  var keyStr = key ? datEncoding.toStr(key) : null;
-  if (keyStr && keyStr in driveLoadPromises) {
-    return driveLoadPromises[keyStr];
-  }
+  const keyStr = key ? b4a.toString(key, 'hex') : null;
+  if (keyStr && keyStr in driveLoadPromises) return driveLoadPromises[keyStr];
 
-  // run and cache the promise
-  var p = loadDriveInner(key, opts);
+  const p = _loadDriveInner(key, opts);
   if (key) driveLoadPromises[keyStr] = p;
-  p.catch((err) => {
-    console.error('Failed to load drive', keyStr, err.toString());
-  });
+  p.catch((err) => console.error('Failed to load drive', keyStr, err.toString()));
 
-  // when done, clear the promise
   if (key) {
     const clear = () => delete driveLoadPromises[keyStr];
     p.then(clear, clear);
@@ -314,65 +205,37 @@ export async function loadDrive(key, opts) {
   return p;
 }
 
-// main logic, separated out so we can capture the promise
-async function loadDriveInner(key, opts) {
+async function _loadDriveInner(key, opts) {
   try {
-    // fetch dns name if known
-    var domain = await hyperDns.reverseResolve(key);
-    // let dnsRecord = await hyperDnsDb.getCurrentByKey(datEncoding.toStr(key)) TODO
-    // drive.domain = dnsRecord ? dnsRecord.name : undefined
-
-    // create the drive session with the daemon
-    var drive = await daemon.createHyperdriveSession({ key, domain });
-    drive.pullLatestDriveMeta = (opts) => pullLatestDriveMeta(drive, opts);
+    const domain = await hyperDns.reverseResolve(key);
+    const drive = await daemon.createHyperdriveSession({ key, domain });
+    drive.pullLatestDriveMeta = (o) => pullLatestDriveMeta(drive, o);
     key = drive.key;
 
-    if (opts && opts.persistSession) {
-      drive.persistSession = true;
-    }
+    if (opts?.persistSession) drive.persistSession = true;
 
-    // update db
-    archivesDb
-      .touch(drive.key)
-      .catch((err) =>
-        console.error(
-          'Failed to update lastAccessTime for drive',
-          drive.key,
-          err
-        )
-      );
+    archivesDb.touch(drive.key).catch((err) =>
+      console.error('Failed to update lastAccessTime', drive.key, err)
+    );
+
     if (!drive.writable) {
-      await downloadHack(drive, DRIVE_MANIFEST_FILENAME);
+      // Trigger a get of index.json to warm up sparse replication — 5s timeout so we don't hang on unreachable drives
+      await Promise.race([
+        drive.drive.get('/index.json').catch(() => {}),
+        new Promise((r) => setTimeout(r, 5000)),
+      ]);
     }
     await drive.pullLatestDriveMeta();
     driveAssets.update(drive);
-
     return drive;
   } catch (e) {
     if (
       e.toString().includes('daemon has shut down') ||
       e.toString().includes('RPC stream destroyed')
     ) {
-      // suppress, beaker is shutting down
+      // suppress, app is shutting down
     } else {
       throw e;
-    }
-  }
-}
-
-/**
- * HACK to work around the incomplete daemon-client download() method -prf
- */
-async function downloadHack(drive, path) {
-  if (!(await drive.pda.stat(path).catch((err) => undefined))) return;
-  let fileStats = (await drive.session.drive.fileStats(path)).get(path);
-  if (fileStats.downloadedBlocks >= fileStats.blocks) return;
-  await drive.session.drive.download(path);
-  for (let i = 0; i < 10; i++) {
-    await wait(500);
-    fileStats = (await drive.session.drive.fileStats(path)).get(path);
-    if (fileStats.downloadedBlocks >= fileStats.blocks) {
-      return;
     }
   }
 }
@@ -383,23 +246,18 @@ export function getDrive(key) {
 }
 
 export async function getDriveCheckout(drive, version) {
-  var isHistoric = false;
-  var checkoutFS = drive;
+  let isHistoric = false;
+  let checkoutFS = drive;
   if (typeof version !== 'undefined' && version !== null) {
-    let seq = parseInt(version);
+    const seq = parseInt(version);
     if (Number.isNaN(seq)) {
-      if (version === 'latest') {
-        // ignore, we use latest by default
-      } else {
-        throw new Error('Invalid version identifier:' + version);
-      }
+      if (version !== 'latest') throw new Error('Invalid version identifier: ' + version);
     } else {
-      let latestVersion = await drive.session.drive.version();
-      if (version <= latestVersion) {
+      const latestVersion = drive.drive.version;
+      if (seq <= latestVersion) {
         checkoutFS = await daemon.createHyperdriveSession({
           key: drive.key,
-          version,
-          writable: false,
+          version: seq,
           domain: drive.domain,
         });
         isHistoric = true;
@@ -411,7 +269,7 @@ export async function getDriveCheckout(drive, version) {
 
 export async function getOrLoadDrive(key, opts) {
   key = await fromURLToKey(key, true);
-  var drive = getDrive(key);
+  const drive = getDrive(key);
   if (drive) return drive;
   return loadDrive(key, opts);
 }
@@ -429,59 +287,43 @@ export function isDriveLoaded(key) {
 // drive fetch/query
 // =
 
-export async function getDriveInfo(
-  key,
-  { ignoreCache, onlyCache } = { ignoreCache: false, onlyCache: false }
-) {
+export async function getDriveInfo(key, { ignoreCache, onlyCache } = {}) {
   var meta;
   try {
-    // get the drive
     key = await fromURLToKey(key, true);
     var drive;
     if (!onlyCache) {
       drive = getDrive(key);
-      if (!drive && ignoreCache) {
-        drive = await loadDrive(key);
-      }
+      if (!drive && ignoreCache) drive = await loadDrive(key);
     }
 
-    var domain = drive ? drive.domain : await hyperDns.reverseResolve(key);
-    var url = `hyper://${domain || key}/`;
+    const domain = drive ? drive.domain : await hyperDns.reverseResolve(key);
+    const url = `hyper://${domain || key}/`;
 
-    // fetch drive data
-    var manifest, driveInfo;
+    var indexMeta, driveInfo;
     if (drive) {
       await drive.pullLatestDriveMeta();
-      [meta, manifest, driveInfo] = await Promise.all([
+      [meta, indexMeta, driveInfo] = await Promise.all([
         archivesDb.getMeta(key),
-        drive.pda.readManifest().catch((_) => {}),
+        _readIndexJson(drive).catch(() => ({})),
         drive.getInfo(),
       ]);
     } else {
       meta = await archivesDb.getMeta(key);
       driveInfo = { version: undefined };
+      indexMeta = {};
     }
-    manifest = manifest || {};
-    if (filesystem.isRootUrl(url) && !meta.title) {
-      meta.title = 'My Private Drive';
-    }
+
+    if (filesystem.isRootUrl(url) && !meta.title) meta.title = 'My Private Drive';
     meta.key = key;
     meta.discoveryKey = drive ? drive.discoveryKey : undefined;
     meta.url = url;
-    // meta.domain = drive.domain TODO
-    meta.links = manifest.links || {};
-    meta.manifest = manifest;
+    meta.links = indexMeta?.links || {};
+    meta.manifest = indexMeta || {};
     meta.version = driveInfo.version;
-    meta.peers = drive?.session?.drive?.metadata?.peers?.length || 0;
+    meta.peers = daemon.listPeerAddresses(key)?.length || 0;
   } catch (e) {
-    meta = {
-      key,
-      url: `hyper://${key}/`,
-      writable: false,
-      version: 0,
-      title: '',
-      description: '',
-    };
+    meta = { key, url: `hyper://${key}/`, writable: false, version: 0, title: '', description: '' };
   }
   meta.title = meta.title || '';
   meta.description = meta.description || '';
@@ -489,123 +331,74 @@ export async function getDriveInfo(
 }
 
 export async function clearFileCache(key) {
-  return {}; // TODO daemon.clearFileCache(key, userSettings)
+  return {};
 }
 
-/**
- * @desc
- * Get the primary URL for a given dat URL
- *
- * @param {string} url
- * @returns {Promise<string>}
- */
 export async function getPrimaryUrl(url) {
-  var key = await fromURLToKey(url, true);
-  var datDnsRecord = await hyperDnsDb.getCurrentByKey(key);
+  const key = await fromURLToKey(url, true);
+  const datDnsRecord = await hyperDnsDb.getCurrentByKey(key);
   if (!datDnsRecord) return `hyper://${key}/`;
   return `hyper://${datDnsRecord.name}/`;
 }
 
-/**
- * @desc
- * Check that the drive's index.json `domain` matches the current DNS
- * If yes, write the confirmed entry to the dat_dns table
- *
- * @param {string} key
- * @returns {Promise<boolean>}
- */
 export async function confirmDomain(key) {
-  // DISABLED
-  // hyper: does not currently use DNS
-  // -prf
-  // // fetch the current domain from the manifest
-  // try {
-  //   var drive = await getOrLoadDrive(key)
-  //   var datJson = await drive.pda.readManifest()
-  // } catch (e) {
-  //   return false
-  // }
-  // if (!datJson.domain) {
-  //   await hyperDnsDb.unset(key)
-  //   return false
-  // }
-  // // confirm match with current DNS
-  // var dnsKey = await hyperDns.resolveName(datJson.domain)
-  // if (key !== dnsKey) {
-  //   await hyperDnsDb.unset(key)
-  //   return false
-  // }
-  // // update mapping
-  // await hyperDnsDb.update({name: datJson.domain, key})
-  // return true
+  // DISABLED — hyper: does not currently use DNS
 }
 
 // helpers
 // =
 
 export function fromURLToKey(url, lookupDns = false) {
-  if (Buffer.isBuffer(url)) {
-    return url;
-  }
-  if (HYPERDRIVE_HASH_REGEX.test(url)) {
-    // simple case: given the key
-    return url;
-  }
+  if (Buffer.isBuffer(url)) return url;
+  if (HYPERDRIVE_HASH_REGEX.test(url)) return url;
 
-  var urlp = parseDriveUrl(url);
+  const urlp = parseDriveUrl(url);
   if (urlp.protocol !== 'hyper:' && urlp.protocol !== 'dat:') {
     throw new InvalidURLError('URL must be a hyper: or dat: scheme');
   }
   if (!HYPERDRIVE_HASH_REGEX.test(urlp.host)) {
-    if (!lookupDns) {
-      throw new InvalidURLError('Hostname is not a valid hash');
-    }
+    if (!lookupDns) throw new InvalidURLError('Hostname is not a valid hash');
     return hyperDns.resolveName(urlp.host);
   }
-
   return urlp.host;
 }
 
 export function fromKeyToURL(key) {
-  if (typeof key !== 'string') {
-    key = datEncoding.toStr(key);
-  }
-  if (!key.startsWith('hyper://')) {
-    return `hyper://${key}/`;
-  }
+  if (typeof key !== 'string') key = b4a.toString(key, 'hex');
+  if (!key.startsWith('hyper://')) return `hyper://${key}/`;
   return key;
 }
 
+// internal helpers
+// =
+
+/**
+ * Read /index.json from a drive session (replaces readManifest).
+ */
+async function _readIndexJson(drive) {
+  const buf = await drive.drive.get('/index.json');
+  if (!buf) return {};
+  return JSON.parse(b4a.toString(buf));
+}
+
 function hasMetaChanged(m1, m2) {
-  for (let k of [
-    'title',
-    'description',
-    'forkOf',
-    'size',
-    'author',
-    'writable',
-    'mtime',
-  ]) {
+  for (const k of ['title', 'description', 'forkOf', 'size', 'author', 'writable', 'mtime']) {
     if (!m1[k]) m1[k] = undefined;
     if (!m2[k]) m2[k] = undefined;
     if (k === 'forkOf') {
-      if (!isUrlsEq(m1[k], m2[k])) {
-        return true;
-      }
+      if (!_urlsEq(m1[k], m2[k])) return true;
     } else {
-      if (m1[k] !== m2[k]) {
-        return true;
-      }
+      if (m1[k] !== m2[k]) return true;
     }
   }
   return false;
 }
 
-var isUrlsEqRe = /([0-9a-f]{64})/i;
-function isUrlsEq(a, b) {
+const _urlsEqRe = /([0-9a-f]{64})/i;
+function _urlsEq(a, b) {
   if (!a && !b) return true;
   if (typeof a !== typeof b) return false;
-  var ma = isUrlsEqRe.exec(a);
-  var mb = isUrlsEqRe.exec(b);
+  const ma = _urlsEqRe.exec(a);
+  const mb = _urlsEqRe.exec(b);
   return ma && mb && ma[1] === mb[1];
 }

@@ -1,5 +1,3 @@
-import { EventEmitter } from 'events';
-import emitStream from 'emit-stream';
 import hyper from '../../hyper/index';
 
 // exported api
@@ -7,26 +5,18 @@ import hyper from '../../hyper/index';
 
 export default {
   async listCores(url) {
-    var drive = await hyper.drives.getOrLoadDrive(url);
-    return (await drive.session.drive.stats()).stats;
+    // TODO: drive stats not available in Hyperdrive v11 — return placeholder
+    return [];
   },
 
   async hasCoreBlocks(key, from, to) {
-    var client = hyper.daemon.getHyperspaceClient();
-    var core = client
-      .corestore()
-      .get({ key: typeof key === 'string' ? Buffer.from(key, 'hex') : key });
-    var bits = [];
-    for (let i = from; i < to; i++) {
-      bits.push(await core.has(i));
-    }
-    return bits;
+    // TODO: direct core access removed — use Corestore from daemon if needed
+    return [];
   },
 
   async createCoreEventStream(url, corename) {
-    corename = ['metadata', 'content'].includes('corename') || 'metadata';
-    var drive = await hyper.drives.getOrLoadDrive(url);
-    var core = drive.session.drive[corename];
-    return emitStream(core);
+    // TODO: core event streams removed in v11 stack
+    const { EventEmitter } = await import('events');
+    return new EventEmitter();
   },
 };

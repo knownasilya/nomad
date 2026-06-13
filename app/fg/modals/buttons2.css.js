@@ -1,72 +1,87 @@
 import { css } from 'lit';
 
 const cssStr = css`
-  /**
- * New button styles
- * We should replace buttons.css with this
- */
-
   button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    padding: 0 12px;
     background: #fff;
-    border: 1px solid #d4d7dc;
-    border-radius: 3px;
-    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
-    padding: 5px 10px;
-    color: #333;
+    border: 1px solid #d8d8e2;
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    color: #1a1a22;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
     outline: 0;
+    white-space: nowrap;
+    transition: background 0.08s, border-color 0.08s;
+  }
+
+  button:hover {
+    background: #f4f4f8;
+    border-color: #c8c8d4;
   }
 
   button:active {
-    background: #eee;
+    background: #eeeef4;
+    transform: scale(0.98);
   }
 
-  button.pressed {
-    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.5);
-    background: #6d6d79;
-    color: rgba(255, 255, 255, 1);
-    border-color: transparent;
-    border-radius: 4px;
+  button:focus-visible {
+    box-shadow: 0 0 0 3px rgba(64, 64, 231, 0.2);
+  }
+
+  button[disabled],
+  button:disabled {
+    opacity: 0.45;
+    cursor: default;
+    pointer-events: none;
   }
 
   button.primary {
-    background: #5289f7;
-    border-color: #2864dc;
+    background: #4040e7;
+    border-color: #3535c4;
     color: #fff;
-    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 3px rgba(64, 64, 231, 0.3);
   }
 
-  button[disabled] {
-    border-color: #d4d7dc;
-    background: #fff;
-    color: #999;
+  button.primary:hover {
+    background: #3535cc;
+    border-color: #2b2baa;
   }
 
-  button.rounded {
-    border-radius: 16px;
+  button.primary:active {
+    background: #2b2baa;
   }
 
-  button.flat {
-    box-shadow: none;
-  }
-
-  button.noborder {
-    border-color: transparent;
+  button.cancel {
+    color: #5a5a6e;
   }
 
   button.transparent {
     background: transparent;
     border-color: transparent;
     box-shadow: none;
+    color: #5a5a6e;
   }
 
   button.transparent:hover {
-    background: #f5f5f5;
+    background: #f4f4f8;
+    border-color: transparent;
   }
 
-  button.transparent.pressed {
-    background: rgba(0, 0, 0, 0.1);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
-    color: inherit;
+  button.pressed {
+    background: #e8e8f0;
+    border-color: #c8c8d4;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+
+  .btn-group {
+    display: flex;
+    gap: 6px;
   }
 
   .radio-group button {
@@ -76,41 +91,8 @@ const cssStr = css`
   }
 
   .radio-group button.pressed {
-    background: #6d6d79;
-    border-radius: 30px;
-  }
-
-  .btn-group {
-    display: flex;
-    margin: 0 6px;
-  }
-
-  .btn-group button {
-    border-radius: 0;
-    border-right-width: 0;
-  }
-
-  .btn-group button:first-child {
-    border-top-left-radius: 3px;
-    border-bottom-left-radius: 3px;
-  }
-
-  .btn-group button:last-child {
-    border-top-right-radius: 3px;
-    border-bottom-right-radius: 3px;
-    border-right-width: 1px;
-  }
-
-  .btn-group.rounded button:first-child {
-    border-top-left-radius: 14px;
-    border-bottom-left-radius: 14px;
-    padding-left: 14px;
-  }
-
-  .btn-group.rounded button:last-child {
-    border-top-right-radius: 14px;
-    border-bottom-right-radius: 14px;
-    padding-right: 14px;
+    background: #e8e8f0;
+    border-radius: 20px;
   }
 `;
 export default cssStr;

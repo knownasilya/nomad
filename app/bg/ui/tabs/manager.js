@@ -33,6 +33,10 @@ import { examineLocationInput } from '../../../lib/urls';
 import { findWebContentsParentWindow } from '../../lib/electron';
 import * as sitedataDb from '../../dbs/sitedata';
 import * as settingsDb from '../../dbs/settings';
+import * as spacesDb from '../../dbs/spaces';
+import * as filesystem from '../../filesystem/index';
+import spacesRPCManifest from '../../rpc-manifests/spaces';
+import { registerForPartition } from '../../protocols/index';
 import hyper from '../../hyper/index';
 
 const X_POSITION = 0;
@@ -46,9 +50,13 @@ var activeTabs = {}; // map of {[win.id]: Array<Tab>}
 var backgroundTabs = []; // Array<Tab>
 var preloadedNewTabs = {}; // map of {[win.id]: Tab}
 var lastSelectedTabIndex = {}; // map of {[win.id]: Number}
+var lastActiveTabBySpace = {}; // map of {[win.id]: {[spaceId]: Tab}}
 var closedItems = {}; // map of {[win.id]: Array<Object>}
 var windowEvents = {}; // mapof {[win.id]: EventEmitter}
+var tabGroups = {}; // map of {[win.id]: Array<{id, name, color}>}
 var defaultUrl = 'beaker://desktop/';
+
+const GROUP_COLORS = ['#e04850', '#f5a623', '#f8de4c', '#3ecf8e', '#5b5ef4', '#b570f5'];
 
 // classes
 // =
@@ -61,6 +69,8 @@ class Tab extends EventEmitter {
       isHidden: false,
       initialPanes: undefined,
       fromSnapshot: undefined,
+      spaceId: undefined,
+      partition: undefined,
     }
   ) {
     super();
@@ -90,6 +100,9 @@ class Tab extends EventEmitter {
     this.isHidden = opts.isHidden; // is this tab hidden from the user? used for the preloaded tab and background tabs
     this.isActive = false; // is this the active tab in the window?
     this.isPinned = Boolean(opts.isPinned); // is this tab pinned?
+    this.groupId = opts.groupId || null;
+    this.spaceId = opts.spaceId || spacesDb.getCachedActiveId();
+    this.partition = opts.partition !== undefined ? opts.partition : (spacesDb.getCachedActive()?.partition || '');
 
     // helper state
     this.lastActivePane = undefined;
@@ -113,6 +126,7 @@ class Tab extends EventEmitter {
     return Object.assign(state, {
       isActive: this.isActive,
       isPinned: this.isPinned,
+      groupId: this.groupId,
       paneLayout: this.layout.state,
     });
   }
@@ -120,6 +134,9 @@ class Tab extends EventEmitter {
   getSessionSnapshot() {
     return {
       isPinned: this.isPinned,
+      groupId: this.groupId,
+      spaceId: this.spaceId,
+      partition: this.partition,
       stacks: this.layout.stacks.map((stack) => ({
         layoutWidth: stack.layoutWidth,
         panes: stack.panes.map((pane) => ({
@@ -131,6 +148,9 @@ class Tab extends EventEmitter {
   }
 
   loadSnapshot(snapshot) {
+    if (snapshot.spaceId) this.spaceId = snapshot.spaceId;
+    if (snapshot.partition !== undefined) this.partition = snapshot.partition;
+    if (snapshot.groupId) this.groupId = snapshot.groupId;
     var stacks = Array.isArray(snapshot.stacks) ? snapshot.stacks : [];
     for (let stackSnapshot of stacks) {
       let panes = Array.isArray(stackSnapshot.panes) ? stackSnapshot.panes : [];
@@ -624,16 +644,8 @@ class Tab extends EventEmitter {
 // =
 
 export async function setup() {
-  defaultUrl = String(await settingsDb.get('new_tab'));
-  settingsDb.on('set:new_tab', (newValue) => {
-    defaultUrl = newValue;
-
-    // reset preloaded tabs since they are now on the wrong URL
-    for (let k in preloadedNewTabs) {
-      preloadedNewTabs[k].destroy();
-    }
-    preloadedNewTabs = {};
-  });
+  // defaultUrl stays as the hardcoded 'beaker://desktop/'.
+  // Per-space new tab URLs are resolved at the RPC call site (createTab).
 
   // listen for webContents messages
   ipcMain.on('BEAKER_SCRIPTCLOSE_SELF', (e) => {
@@ -686,6 +698,13 @@ export function getAll(win) {
   return activeTabs[win.id] || [];
 }
 
+// Returns only the tabs visible in the active space (used for frontend index mapping)
+export function getVisibleTabs(win) {
+  win = getTopWindow(win);
+  const activeSpaceId = spacesDb.getCachedActiveId();
+  return (activeTabs[win.id] || []).filter((tab) => tab.spaceId === activeSpaceId);
+}
+
 export function getAllAcrossWindows() {
   return activeTabs;
 }
@@ -693,12 +712,12 @@ export function getAllAcrossWindows() {
 export function getByIndex(win, index) {
   win = getTopWindow(win);
   if (index === 'active') return getActive(win);
-  return getAll(win)[index];
+  return getVisibleTabs(win)[index];
 }
 
 export function getIndexOfTab(win, tab) {
   win = getTopWindow(win);
-  return getAll(win).indexOf(tab);
+  return getVisibleTabs(win).indexOf(tab);
 }
 
 export function getAllPinned(win) {
@@ -754,6 +773,7 @@ export function create(
     initialPanes: undefined,
     fromSnapshot: undefined,
     addedPaneUrls: undefined,
+    spaceId: undefined,
   }
 ) {
   url = url || defaultUrl;
@@ -762,6 +782,14 @@ export function create(
   }
   win = getTopWindow(win);
   var tabs = (activeTabs[win.id] = activeTabs[win.id] || []);
+  tabGroups[win.id] = tabGroups[win.id] || [];
+
+  // resolve space for this tab
+  const spaceId = opts.spaceId || (opts.fromSnapshot?.spaceId) || spacesDb.getCachedActiveId();
+  const space = spacesDb.getCachedAll().find((s) => s.id === spaceId);
+  const partition = opts.fromSnapshot?.partition !== undefined
+    ? opts.fromSnapshot.partition
+    : (space?.partition ?? '');
 
   var tab;
   var preloadedNewTab = preloadedNewTabs[win.id];
@@ -771,9 +799,10 @@ export function create(
     !opts.fromSnapshot &&
     url === defaultUrl &&
     !opts.isPinned &&
-    preloadedNewTab
+    preloadedNewTab &&
+    preloadedNewTab.spaceId === spaceId
   ) {
-    // use the preloaded tab
+    // use the preloaded tab (only if it belongs to the same space)
     tab = preloadedNewTab;
     tab.isHidden = false; // no longer hidden
     preloadedNewTab = preloadedNewTabs[win.id] = null;
@@ -783,13 +812,15 @@ export function create(
       isPinned: opts.isPinned,
       initialPanes: opts.initialPanes,
       fromSnapshot: opts.fromSnapshot,
+      spaceId,
+      partition,
     });
     loadWhenReady = true;
   }
 
   // add to active tabs
   if (opts.isPinned) {
-    tabs.splice(indexOfLastPinnedTab(win), 0, tab);
+    tabs.splice(indexOfLastPinnedTabInSpace(win, tab.spaceId), 0, tab);
   } else {
     let tabIndex =
       typeof opts.tabIndex !== 'undefined' && opts.tabIndex !== -1
@@ -797,7 +828,7 @@ export function create(
         : undefined;
     if (opts.adjacentActive) {
       let active = getActive(win);
-      let lastPinIndex = indexOfLastPinnedTab(win);
+      let lastPinIndex = indexOfLastPinnedTabInSpace(win, spaceId);
       tabIndex = active ? tabs.indexOf(active) : undefined;
       if (tabIndex === -1) tabIndex = undefined;
       else if (tabIndex < lastPinIndex) tabIndex = lastPinIndex;
@@ -902,7 +933,7 @@ export async function restoreBgTabByIndex(win, index) {
   app.emit('custom-background-tabs-update', backgroundTabs);
 
   if (tab.isPinned) {
-    tabs.splice(indexOfLastPinnedTab(win), 0, tab);
+    tabs.splice(indexOfLastPinnedTabInSpace(win, tab.spaceId), 0, tab);
   } else {
     tabs.push(tab);
   }
@@ -922,6 +953,10 @@ export async function remove(win, tab) {
     return console.warn('tabs/manager remove() called for missing tab', tab);
   }
 
+  // record position in the visible (same-space) list before removal
+  var visibleBeforeRemoval = getVisibleTabs(win);
+  var visibleIndex = visibleBeforeRemoval.indexOf(tab);
+
   for (let pane of tab.panes) {
     if (!(await runBeforeUnload(pane.webContents))) {
       return;
@@ -936,13 +971,22 @@ export async function remove(win, tab) {
   tabs.splice(i, 1);
   tab.destroy();
 
-  // set new active if that was
-  if (tabs.length >= 1 && wasActive) {
-    setActive(win, tabs[i] || tabs[i - 1]);
+  // close the window if that was the last tab across all spaces
+  if (tabs.length === 0) return win.close();
+
+  // set new active if this was the active tab — always stay within the same space
+  if (wasActive) {
+    var visibleAfterRemoval = getVisibleTabs(win);
+    if (visibleAfterRemoval.length > 0) {
+      // pick the tab at the same position, or the last one
+      var next = visibleAfterRemoval[visibleIndex] || visibleAfterRemoval[visibleAfterRemoval.length - 1];
+      setActive(win, next);
+    } else {
+      // no tabs left in this space — open a new one
+      create(win, defaultUrl, { setActive: true, spaceId: tab.spaceId });
+    }
   }
 
-  // close the window if that was the last tab
-  if (tabs.length === 0) return win.close();
   emitReplaceState(win);
 }
 
@@ -995,6 +1039,12 @@ export function setActive(win, tab) {
   }
   lastSelectedTabIndex[win.id] = getAll(win).indexOf(active);
 
+  // track last active tab per space
+  if (tab.spaceId) {
+    if (!lastActiveTabBySpace[win.id]) lastActiveTabBySpace[win.id] = {};
+    lastActiveTabBySpace[win.id][tab.spaceId] = tab;
+  }
+
   windowMenu.onSetCurrentLocation(win);
   emitReplaceState(win);
 }
@@ -1006,7 +1056,11 @@ export function resize(win) {
 
 export function initializeWindowFromSnapshot(win, snapshot) {
   win = getTopWindow(win);
-  for (let page of snapshot) {
+  // snapshot may be the old array format or new {pages, groups} object
+  const pages = Array.isArray(snapshot) ? snapshot : (snapshot.pages || []);
+  const groups = Array.isArray(snapshot) ? [] : (snapshot.groups || []);
+  tabGroups[win.id] = groups;
+  for (let page of pages) {
     if (typeof page === 'string') {
       // legacy compat- pages were previously just url strings
       create(win, page);
@@ -1034,7 +1088,10 @@ export function initializeBackgroundFromSnapshot(snapshot) {
 
 export function takeSnapshot(win) {
   win = getTopWindow(win);
-  return getAll(win).map((tab) => tab.getSessionSnapshot());
+  return {
+    pages: getAll(win).map((tab) => tab.getSessionSnapshot()),
+    groups: tabGroups[win.id] || [],
+  };
 }
 
 export function triggerSessionSnapshot(win) {
@@ -1078,7 +1135,7 @@ export function transferTabToWindow(tab, targetWindow) {
   tab.transferWindow(targetWindow);
   var targetTabs = getAll(targetWindow);
   if (tab.isPinned) {
-    targetTabs.splice(indexOfLastPinnedTab(targetWindow), 0, tab);
+    targetTabs.splice(indexOfLastPinnedTabInSpace(targetWindow, tab.spaceId), 0, tab);
   } else {
     targetTabs.push(tab);
   }
@@ -1091,10 +1148,10 @@ export function transferTabToWindow(tab, targetWindow) {
 
 export function togglePinned(win, tab) {
   win = getTopWindow(win);
-  // move tab to the "end" of the pinned tabs
+  // move tab to the "end" of the pinned tabs within its space
   var tabs = getAll(win);
   var oldIndex = tabs.indexOf(tab);
-  var newIndex = indexOfLastPinnedTab(win);
+  var newIndex = indexOfLastPinnedTabInSpace(win, tab.spaceId);
   if (oldIndex < newIndex) newIndex--;
   tabs.splice(oldIndex, 1);
   tabs.splice(newIndex, 0, tab);
@@ -1139,6 +1196,20 @@ export function reorder(win, oldIndex, newIndex) {
   var tab = getByIndex(win, oldIndex);
   tabs.splice(oldIndex, 1);
   tabs.splice(newIndex, 0, tab);
+
+  // auto-assign group based on neighbors after the move
+  var visible = getVisibleTabs(win);
+  var pos = visible.indexOf(tab);
+  var before = visible[pos - 1];
+  var after = visible[pos + 1];
+  if (before?.groupId && before.groupId === after?.groupId) {
+    tab.groupId = before.groupId;
+  } else if (before?.groupId && !after?.groupId) {
+    tab.groupId = before.groupId;
+  } else {
+    tab.groupId = null;
+  }
+
   emitReplaceState(win);
 }
 
@@ -1210,9 +1281,52 @@ export function emitReplaceState(win) {
     isSidebarHidden: getAddedWindowSettings(win).isSidebarHidden,
     isDaemonActive: hyper.daemon.isActive(),
     hasBgTabs: backgroundTabs.length > 0,
+    spaces: spacesDb.getCachedAll(),
+    activeSpace: spacesDb.getCachedActive(),
+    groups: getTabGroups(win),
   };
   emit(win, 'replace-state', state);
   triggerSessionSnapshot(win);
+}
+
+export async function setActiveSpace(win, id) {
+  win = getTopWindow(win);
+  const space = await spacesDb.setActive(id);
+
+  // refresh the new_tabs_in_foreground cache to reflect the new space's preference
+  const newTabsFg = await settingsDb.getForSpace(id, 'new_tabs_in_foreground');
+  if (newTabsFg !== undefined) settingsDb.setCachedValue('new_tabs_in_foreground', newTabsFg);
+
+  // Update hyper://private/ alias to the new space's root drive
+  if (space.root_drive_url) {
+    filesystem.setPrivateAlias(space.root_drive_url);
+  } else {
+    // Ensure the space has a root drive
+    const drive = await filesystem.getOrSetupSpaceDrive(space);
+    filesystem.setPrivateAlias(drive.url);
+  }
+
+  // Switch to the last active tab for this space, or open a new one
+  var target = lastActiveTabBySpace[win.id]?.[id];
+  // verify the tab is still alive in this window
+  if (target && !getAll(win).includes(target)) target = undefined;
+  if (!target) {
+    // find any tab for this space
+    target = getAll(win).find((t) => t.spaceId === id);
+  }
+  if (!target) {
+    // create a new tab for this space
+    target = create(win, defaultUrl, { spaceId: id, setActive: false });
+  }
+
+  // deactivate current active tab then activate the space's tab
+  var active = getActive(win);
+  if (active && active !== target) active.deactivate();
+  target.activate();
+  if (!lastActiveTabBySpace[win.id]) lastActiveTabBySpace[win.id] = {};
+  lastActiveTabBySpace[win.id][id] = target;
+
+  emitReplaceState(win);
 }
 
 // rpc api
@@ -1220,7 +1334,12 @@ export function emitReplaceState(win) {
 
 rpc.exportAPI('background-process-views', viewsRPCManifest, {
   createEventStream() {
-    return emitStream(getEvents(getWindow(this.sender)));
+    var win = getWindow(this.sender);
+    var stream = emitStream(getEvents(win));
+    // Emit the full current state to any new subscriber (e.g. shell window reload)
+    // so groups and other state are available immediately without waiting for a change.
+    setImmediate(() => emitReplaceState(win));
+    return stream;
   },
 
   async refreshState(tab) {
@@ -1257,10 +1376,7 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
       let drive = hyper.drives.getDrive(tab.primaryPane.driveInfo.key);
       if (drive) {
         return {
-          peers: drive.session.drive.metadata.peers.map((p) => ({
-            type: p.type,
-            remoteAddress: p.remoteAddress,
-          })),
+          peers: hyper.daemon.listPeerAddresses(drive.key) || [],
         };
       }
     }
@@ -1275,8 +1391,13 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
 
   async createTab(url, opts = { focusLocationBar: false, setActive: false }) {
     var win = getWindow(this.sender);
+    if (!url) {
+      const spaceId = opts.spaceId || spacesDb.getCachedActiveId();
+      const newTabSetting = await settingsDb.getForSpace(spaceId, 'new_tab');
+      url = newTabSetting || defaultUrl;
+    }
     var tab = create(win, url, opts);
-    return getAll(win).indexOf(tab);
+    return getVisibleTabs(win).indexOf(tab);
   },
 
   async createPane(index, url) {
@@ -1331,6 +1452,39 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
   async showTabContextMenu(index) {
     var win = getWindow(this.sender);
     var tab = getByIndex(win, index);
+    var groups = getTabGroups(win);
+
+    var groupMenuItems = [];
+    groupMenuItems.push({
+      label: 'Add to New Group',
+      click: () => {
+        var group = createTabGroup(win);
+        tab.groupId = group.id;
+        emitReplaceState(win);
+      },
+    });
+    if (groups.length > 0) {
+      groupMenuItems.push({
+        label: 'Add to Group',
+        submenu: groups.map((g) => ({
+          label: g.name,
+          click: () => {
+            tab.groupId = g.id;
+            emitReplaceState(win);
+          },
+        })),
+      });
+    }
+    if (tab.groupId) {
+      groupMenuItems.push({
+        label: 'Remove from Group',
+        click: () => {
+          tab.groupId = null;
+          emitReplaceState(win);
+        },
+      });
+    }
+
     var menu = Menu.buildFromTemplate([
       {
         label: tab.isPinned ? 'Unpin Tab' : 'Pin Tab',
@@ -1347,6 +1501,8 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
       },
       { label: 'Minimize to Background', click: () => minimizeToBg(win, tab) },
       { type: 'separator' },
+      ...groupMenuItems,
+      { type: 'separator' },
       { label: 'Close Tab', click: () => remove(win, tab) },
       { label: 'Close Other Tabs', click: () => removeAllExcept(win, tab) },
       {
@@ -1358,6 +1514,101 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
       { label: 'Reopen Closed Tab', click: () => reopenLastRemoved(win) },
     ]);
     menu.popup();
+  },
+
+  async createTabGroup(index) {
+    var win = getWindow(this.sender);
+    var tab = getByIndex(win, index);
+    if (!tab) return;
+    var group = createTabGroup(win);
+    tab.groupId = group.id;
+    emitReplaceState(win);
+  },
+
+  async addTabToGroup(index, groupId) {
+    var win = getWindow(this.sender);
+    var tab = getByIndex(win, index);
+    if (!tab) return;
+    tab.groupId = groupId;
+    emitReplaceState(win);
+  },
+
+  async removeTabFromGroup(index) {
+    var win = getWindow(this.sender);
+    var tab = getByIndex(win, index);
+    if (!tab) return;
+    tab.groupId = null;
+    emitReplaceState(win);
+  },
+
+  async renameTabGroup(groupId, name) {
+    var win = getWindow(this.sender);
+    var group = getTabGroups(win).find((g) => g.id === groupId);
+    if (!group) return;
+    group.name = name;
+    emitReplaceState(win);
+  },
+
+  async setTabGroupColor(groupId, color) {
+    var win = getWindow(this.sender);
+    var group = getTabGroups(win).find((g) => g.id === groupId);
+    if (!group) return;
+    group.color = color;
+    emitReplaceState(win);
+  },
+
+  async showGroupContextMenu(groupId) {
+    var win = getWindow(this.sender);
+    var group = getTabGroups(win).find((g) => g.id === groupId);
+    if (!group) return;
+    var menu = Menu.buildFromTemplate([
+      {
+        label: group.hidden ? 'Show Tabs' : 'Hide Tabs',
+        click: () => {
+          group.hidden = !group.hidden;
+          emitReplaceState(win);
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Close All',
+        click: async () => {
+          var groupTabs = getAll(win).filter((t) => t.groupId === groupId).slice();
+          for (var tab of groupTabs) {
+            await remove(win, tab);
+          }
+          removeTabGroup(win, groupId);
+          emitReplaceState(win);
+        },
+      },
+    ]);
+    menu.popup({ window: getTopWindow(win) });
+  },
+
+  async reorderTabGroup(groupId, beforeGroupId) {
+    var win = getWindow(this.sender);
+    var tabs = getAll(win);
+    // Pull out all tabs belonging to groupId (iterating backwards to splice safely)
+    var groupTabs = [];
+    for (var i = tabs.length - 1; i >= 0; i--) {
+      if (tabs[i].groupId === groupId) {
+        groupTabs.unshift(tabs.splice(i, 1)[0]);
+      }
+    }
+    if (groupTabs.length === 0) return;
+    // Find insertion point: before first tab of beforeGroupId, or at end if null
+    var insertIndex = beforeGroupId !== null
+      ? tabs.findIndex((t) => t.groupId === beforeGroupId)
+      : -1;
+    if (insertIndex === -1) insertIndex = tabs.length;
+    tabs.splice(insertIndex, 0, ...groupTabs);
+    emitReplaceState(win);
+  },
+
+  async deleteTabGroup(groupId) {
+    var win = getWindow(this.sender);
+    removeTabGroup(win, groupId);
+    emitReplaceState(win);
   },
 
   async showLocationBarContextMenu(index) {
@@ -1503,26 +1754,64 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
   },
 });
 
+rpc.exportAPI('background-process-spaces', spacesRPCManifest, {
+  createEventStream() {
+    return emitStream(getEvents(getWindow(this.sender)));
+  },
+
+  async list() {
+    return spacesDb.list();
+  },
+
+  async getActive() {
+    return spacesDb.getActive();
+  },
+
+  async create(opts) {
+    const space = await spacesDb.create(opts);
+    // register protocols on the new session partition before any tab loads
+    if (space.partition) registerForPartition(space.partition);
+    // provision the root drive for the new space in the background
+    filesystem.getOrSetupSpaceDrive(space).catch(() => {});
+    for (let win of BrowserWindow.getAllWindows()) emitReplaceState(win);
+    return space;
+  },
+
+  async update(id, opts) {
+    return spacesDb.update(id, opts);
+  },
+
+  async remove(id) {
+    // close all tabs for this space before removing
+    for (let win of BrowserWindow.getAllWindows()) {
+      const tabs = getAll(win).filter((t) => t.spaceId === Number(id));
+      for (let tab of tabs) await remove(win, tab);
+    }
+    await spacesDb.remove(id);
+    for (let win of BrowserWindow.getAllWindows()) emitReplaceState(win);
+  },
+
+  async setActive(id) {
+    const win = getWindow(this.sender);
+    await setActiveSpace(win, Number(id));
+  },
+});
+
 // internal methods
 // =
 
 function emitUpdateState(tab) {
   if (!tab.browserWindow) return;
   var win = getTopWindow(tab.browserWindow);
-  var index = typeof tab === 'number' ? tab : getAll(win).indexOf(tab);
-  if (index === -1) {
-    console.warn(
-      'WARNING: attempted to update state of a tab not on the window'
-    );
-    return;
-  }
+  var index = typeof tab === 'number' ? tab : getVisibleTabs(win).indexOf(tab);
+  if (index === -1) return; // tab is in a different space — skip
   emit(win, 'update-state', { index, state: tab.state });
   win.emit('custom-pages-updated', takeSnapshot(win));
 }
 
 function emitUpdatePanesState(tab) {
   var win = getTopWindow(tab.browserWindow);
-  var index = typeof tab === 'number' ? tab : getAll(win).indexOf(tab);
+  var index = typeof tab === 'number' ? tab : getVisibleTabs(win).indexOf(tab);
   if (index === -1) return;
   emit(win, 'update-panes-state', { index, paneLayout: tab.layout.state });
 }
@@ -1554,7 +1843,7 @@ function emit(win, ...args) {
 }
 
 function getWindowTabState(win) {
-  return getAll(win).map((tab) => tab.state);
+  return getVisibleTabs(win).map((tab) => tab.state);
 }
 
 function addTabToClosedItems(tab) {
@@ -1569,13 +1858,40 @@ function addPaneToClosedItems(tab, url) {
   closedItems[tab.browserWindow.id].push({ isPane: true, tab, url });
 }
 
-function indexOfLastPinnedTab(win) {
+function indexOfLastPinnedTabInSpace(win, spaceId) {
   var tabs = getAll(win);
-  var index = 0;
-  for (index; index < tabs.length; index++) {
-    if (!tabs[index].isPinned) break;
+  for (var i = 0; i < tabs.length; i++) {
+    if (tabs[i].spaceId === spaceId && !tabs[i].isPinned) return i;
   }
-  return index;
+  for (var i = tabs.length - 1; i >= 0; i--) {
+    if (tabs[i].spaceId === spaceId) return i + 1;
+  }
+  return tabs.length;
+}
+
+function getTabGroups(win) {
+  win = getTopWindow(win);
+  return tabGroups[win.id] || [];
+}
+
+function createTabGroup(win, name, color) {
+  win = getTopWindow(win);
+  tabGroups[win.id] = tabGroups[win.id] || [];
+  const usedColors = tabGroups[win.id].map((g) => g.color);
+  const autoColor = GROUP_COLORS.find((c) => !usedColors.includes(c)) || GROUP_COLORS[0];
+  const existing = tabGroups[win.id];
+  const autoName = name || `Group ${existing.length + 1}`;
+  const group = { id: `grp-${Date.now()}-${Math.random().toString(36).slice(2)}`, name: autoName, color: color || autoColor };
+  existing.push(group);
+  return group;
+}
+
+function removeTabGroup(win, groupId) {
+  win = getTopWindow(win);
+  tabGroups[win.id] = (tabGroups[win.id] || []).filter((g) => g.id !== groupId);
+  for (let tab of getAll(win)) {
+    if (tab.groupId === groupId) tab.groupId = null;
+  }
 }
 
 function definePrimaryPanePassthroughGetter(obj, name) {
@@ -1652,7 +1968,9 @@ function createPreloadedNewTab(win) {
   }
   _createPreloadedNewTabTOs[id] = setTimeout(() => {
     _createPreloadedNewTabTOs[id] = null;
-    preloadedNewTabs[id] = new Tab(win, { isHidden: true });
+    const spaceId = spacesDb.getCachedActiveId();
+    const partition = spacesDb.getCachedActive()?.partition ?? '';
+    preloadedNewTabs[id] = new Tab(win, { isHidden: true, spaceId, partition });
     preloadedNewTabs[id].loadURL(defaultUrl);
   }, 1e3);
 }

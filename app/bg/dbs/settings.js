@@ -4,9 +4,20 @@ import path from 'path';
 import { cbPromise } from '../../lib/functions';
 import { setupSqliteDB } from '../lib/db';
 import { getEnvVar } from '../lib/env';
+import * as profileDb from './profile-data-db';
 
 const CACHED_VALUES = ['new_tabs_in_foreground'];
 const JSON_ENCODED_SETTINGS = ['search_engines', 'adblock_lists'];
+
+// Settings that are always global (never per-space)
+const GLOBAL_SETTINGS = new Set([
+  'auto_update_enabled',
+  'run_background',
+  'launch_on_startup',
+  'analytics_enabled',
+  'active_space_id',
+  'no_welcome_tab',
+]);
 
 // globals
 // =
@@ -130,6 +141,10 @@ export function getCached(key) {
   return cachedValues[key];
 }
 
+export function setCachedValue(key, value) {
+  if (CACHED_VALUES.includes(key)) cachedValues[key] = value;
+}
+
 /**
  * @param {string} key
  * @returns {boolean | Promise<string | number | object>}
@@ -192,6 +207,86 @@ export const getAll = function () {
     })
   );
 };
+
+/**
+ * Get a setting for a specific space.
+ * For global keys, reads from the global settings table.
+ * For per-space keys, reads from space_settings and falls back to hardcoded defaults
+ * (never the shared global settings table, so spaces are fully isolated).
+ * @param {number} spaceId
+ * @param {string} key
+ */
+export async function getForSpace(spaceId, key) {
+  if (!spaceId || GLOBAL_SETTINGS.has(key)) return get(key);
+  const row = await profileDb.get(
+    'SELECT value FROM space_settings WHERE spaceId = ? AND key = ?',
+    [spaceId, key]
+  );
+  if (row && row.value !== undefined) {
+    let val = row.value;
+    if (JSON_ENCODED_SETTINGS.includes(key)) {
+      try { val = JSON.parse(val); } catch (e) { val = defaultSettings[key]; }
+    }
+    return val;
+  }
+  // Fall back to hardcoded defaults — not the global settings table —
+  // so changes in one space can never bleed into another.
+  return defaultSettings[key];
+}
+
+/**
+ * Get all settings for a specific space.
+ * Merges: hardcoded defaults + global settings (for GLOBAL_SETTINGS keys only) + space overrides.
+ * @param {number} spaceId
+ */
+export async function getAllForSpace(spaceId) {
+  if (!spaceId) return getAll();
+
+  // Start from hardcoded defaults
+  var obj = Object.assign({}, defaultSettings);
+
+  // Overlay global-only keys from the global settings table
+  for (const key of GLOBAL_SETTINGS) {
+    const val = await get(key);
+    if (val !== undefined) obj[key] = val;
+  }
+
+  // Overlay space-specific settings
+  const rows = await profileDb.all(
+    'SELECT key, value FROM space_settings WHERE spaceId = ?',
+    [spaceId]
+  );
+  for (const row of rows) {
+    let val = row.value;
+    if (JSON_ENCODED_SETTINGS.includes(row.key)) {
+      try { val = JSON.parse(val); } catch (e) { continue; }
+    }
+    obj[row.key] = val;
+  }
+
+  obj.no_welcome_tab = Number(getEnvVar('BEAKER_NO_WELCOME_TAB')) === 1;
+  return obj;
+}
+
+/**
+ * Set a setting for a specific space.
+ * @param {number} spaceId
+ * @param {string} key
+ * @param {string|number|object} value
+ */
+export async function setForSpace(spaceId, key, value) {
+  if (!spaceId || GLOBAL_SETTINGS.has(key)) return set(key, value);
+  let stored = value;
+  if (JSON_ENCODED_SETTINGS.includes(key)) stored = JSON.stringify(value);
+  await profileDb.run(
+    'INSERT OR REPLACE INTO space_settings (spaceId, key, value, ts) VALUES (?, ?, ?, ?)',
+    [spaceId, key, stored, Date.now()]
+  );
+  // Emit space-scoped events only — NOT the global 'set:key' events,
+  // so other spaces' caches and listeners are not affected.
+  events.emit('set-space:' + spaceId, key, value);
+  events.emit('set-space:' + spaceId + ':' + key, value);
+}
 
 // internal methods
 // =

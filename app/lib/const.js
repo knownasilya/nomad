@@ -10,6 +10,7 @@ export const ANALYTICS_CHECKIN_INTERVAL = ms('6h');
 // hyperdrive FS file paths
 export const PATHS = {
   BOOKMARKS: '/bookmarks',
+  TRASH: '/beaker/trash.json',
 };
 
 // hyperdrive trash management

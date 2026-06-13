@@ -127,7 +127,7 @@ class DriveView extends LitElement {
       <header>
         <h1>
           <img
-            src="/thumb"
+            src=${`/${this.info.manifest?.thumb || 'thumb'}`}
             @error=${(e) => {
               e.currentTarget.style.display = 'none';
             }}

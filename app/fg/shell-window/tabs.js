@@ -2,6 +2,7 @@ import { ipcRenderer } from 'electron';
 import { LitElement, html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { repeat } from 'lit/directives/repeat.js';
+import { styleMap } from 'lit/directives/style-map.js';
 import spinnerCSS from './spinner.css';
 import * as bg from './bg-process-rpc';
 import { isHyperOrPearUrl } from '../../lib/urls';
@@ -12,21 +13,30 @@ class ShellWindowTabs extends LitElement {
   static get properties() {
     return {
       tabs: { type: Array },
+      spaces: { type: Array },
+      activeSpace: { type: Object },
+      groups: { type: Array },
       isFullscreen: { type: Boolean, attribute: 'is-fullscreen' },
       hasBgTabs: { type: Boolean, attribute: 'has-bg-tabs' },
       isBackgroundTrayOpen: { type: Boolean },
+      editingGroupId: { type: String },
     };
   }
 
   constructor() {
     super();
     this.tabs = [];
+    this.spaces = [];
+    this.activeSpace = null;
+    this.groups = [];
     this.tabsTransitionState = undefined; // used for 'close animations'
     this.isFullscreen = false;
     this.hasBgTabs = false;
     this.draggedTabIndex = null;
+    this.draggedGroupId = null;
     this.isDraggingWindow = false;
     this.isBackgroundTrayOpen = false;
+    this.editingGroupId = null;
     this.faviconCache = {};
 
     // use mousemove to ensure that dragging stops if the mouse button isnt pressed
@@ -65,12 +75,33 @@ class ShellWindowTabs extends LitElement {
     if (cache) return cache.url; // fallback to cache
   }
 
+  // Build a flat list of {type:'group-header',group} and {type:'tab',tab,index} items
+  buildItems(tabs) {
+    const items = [];
+    let lastGroupId = null;
+    tabs.forEach((tab, index) => {
+      if (tab.groupId && tab.groupId !== lastGroupId) {
+        const group = (this.groups || []).find((g) => g.id === tab.groupId);
+        if (group) items.push({ type: 'group-header', group });
+      }
+      const group = tab.groupId
+        ? (this.groups || []).find((g) => g.id === tab.groupId)
+        : null;
+      if (!group?.hidden) {
+        items.push({ type: 'tab', tab, index });
+      }
+      lastGroupId = tab.groupId || null;
+    });
+    return items;
+  }
+
   render() {
     const shellCls = classMap({
       shell: true,
       [window.platform]: true,
       fullscreen: this.isFullscreen,
     });
+    const items = this.buildItems(this.tabsState);
     return html`
       <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
       <div
@@ -80,7 +111,17 @@ class ShellWindowTabs extends LitElement {
       >
         <div class="tabs">
           ${this.backgroundTrayBtn}
-          ${repeat(this.tabsState, (tab, index) => this.renderTab(tab, index))}
+          ${repeat(
+            items,
+            (item) =>
+              item.type === 'group-header'
+                ? `grp:${item.group.id}`
+                : `tab:${item.index}`,
+            (item) =>
+              item.type === 'group-header'
+                ? this.renderGroupHeader(item.group)
+                : this.renderTab(item.tab, item.index)
+          )}
           <div
             class="unused-space"
             @dragover=${(e) => this.onDragoverTab(e, this.tabsState.length)}
@@ -95,7 +136,47 @@ class ShellWindowTabs extends LitElement {
               <span class="plus">+</span>
             </div>
           </div>
+          <shell-window-spaces-dropdown
+            .spaces=${this.spaces}
+            .activeSpace=${this.activeSpace}
+          ></shell-window-spaces-dropdown>
         </div>
+      </div>
+    `;
+  }
+
+  renderGroupHeader(group) {
+    const isEditing = this.editingGroupId === group.id;
+    return html`
+      <div
+        class="tab-group-header${group.hidden ? ' hidden-group' : ''}"
+        style=${styleMap({ '--group-color': group.color })}
+        draggable="true"
+        @contextmenu=${(e) => this.onContextmenuGroup(e, group.id)}
+        @dragstart=${(e) => this.onDragstartGroup(e, group.id)}
+        @dragend=${(e) => this.onDragendGroup(e)}
+        @dragover=${(e) => this.onDragoverGroup(e, group.id)}
+        @dragleave=${(e) => this.onDragleaveGroup(e)}
+        @drop=${(e) => this.onDropGroup(e, group.id)}
+      >
+        ${isEditing
+          ? html`<input
+              class="tab-group-name-input"
+              .value=${group.name}
+              @blur=${(e) => this.onGroupNameBlur(e, group.id)}
+              @keydown=${(e) => this.onGroupNameKeydown(e, group.id)}
+              @click=${(e) => e.stopPropagation()}
+            />`
+          : html`<span
+              class="tab-group-name"
+              @dblclick=${(e) => this.onDblclickGroupName(e, group.id)}
+              >${group.name}</span
+            >`}
+        <button
+          class="tab-group-close"
+          title="Delete group"
+          @click=${(e) => this.onClickGroupClose(e, group.id)}
+        >×</button>
       </div>
     `;
   }
@@ -108,17 +189,23 @@ class ShellWindowTabs extends LitElement {
         faviconUrl ||
         tab.url.startsWith('beaker:')
     );
+    const group = tab.groupId
+      ? (this.groups || []).find((g) => g.id === tab.groupId)
+      : null;
     const cls = classMap({
       tab: true,
       current: tab.isActive,
       pinned: tab.isPinned,
+      grouped: Boolean(group),
       'has-icon': tab.isAudioMuted || tab.isCurrentlyAudible,
       'no-hover': this.tabs.length >= 12,
       'no-favicon': !showFavicon,
     });
+    const tabStyle = styleMap(group ? { '--group-color': group.color } : {});
     return html`
       <div
         class="${cls}"
+        style=${tabStyle}
         title=${tab.title || tab.url}
         draggable="true"
         @click=${(e) => this.onClickTab(e, index)}
@@ -212,6 +299,14 @@ class ShellWindowTabs extends LitElement {
         );
       }
     }
+
+    if (this.editingGroupId) {
+      const input = this.shadowRoot.querySelector('.tab-group-name-input');
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }
   }
 
   async shouldUpdate(changedProperties) {
@@ -245,28 +340,6 @@ class ShellWindowTabs extends LitElement {
 
   doMinimizeToBgAnim() {
     // DISABLED
-    // var srcEl = this.shadowRoot.querySelector('.tab.current')
-    // var dstEl = this.shadowRoot.querySelector('.tabs')
-    // if (!srcEl) return console.warn('Minimize anim aborted; source element not found')
-    // if (!dstEl) return console.warn('Minimize anim aborted; target element not found')
-    // var src = srcEl.getClientRects()[0]
-    // var dst = dstEl.getClientRects()[0]
-    // var dist = Math.abs(src.left - dst.left)
-    // var animElem = document.createElement('div')
-    // animElem.classList.add('minimize-to-bg-anim-elem')
-    // this.shadowRoot.append(animElem)
-    // const px = v => `${v}px`
-    // animElem.animate([
-    //   {left: px(src.left), top: px(src.top), width: px(src.width), height: px(src.height)},
-    //   {left: px(dst.left), top: px(dst.top), width: px(dst.width), height: px(dst.height)}
-    // ], {iterations: 1, duration: Math.max(Math.min(dist / 6, 400), 100)}).onfinish = () => {
-    //   animElem.remove()
-    //   dstEl.animate([
-    //     {background: 'var(--bg-color--background)'},
-    //     {background: 'var(--bg-color--tab--hover)'},
-    //     {background: 'var(--bg-color--background)'}
-    //   ], {duration: 250, iterations: 1})
-    // }
   }
 
   // events
@@ -339,6 +412,15 @@ class ShellWindowTabs extends LitElement {
     }
     e.preventDefault();
 
+    // When dragging a group, only the unused-space (index === tabsState.length) accepts the drop
+    if (this.draggedGroupId !== null) {
+      if (index === this.tabsState.length) {
+        e.currentTarget.classList.add('drag-hover');
+        e.dataTransfer.dropEffect = 'move';
+      }
+      return false;
+    }
+
     if (!this.canDrop(index)) {
       return false;
     }
@@ -358,6 +440,13 @@ class ShellWindowTabs extends LitElement {
     }
     e.stopPropagation();
     e.currentTarget.classList.remove('drag-hover');
+
+    // Group dropped on unused space — move to end (beforeGroupId = null)
+    if (this.draggedGroupId !== null) {
+      bg.views.reorderTabGroup(this.draggedGroupId, null);
+      this.draggedGroupId = null;
+      return false;
+    }
 
     const url = e.dataTransfer.getData('text');
     if (
@@ -382,11 +471,83 @@ class ShellWindowTabs extends LitElement {
     if (this.draggedTabIndex === null) return false;
     var draggingTab = this.tabsState[this.draggedTabIndex];
     var targetTab = this.tabsState[index];
-    if (draggingTab.isPinned !== targetTab.isPinned) {
+    if (draggingTab.isPinned !== targetTab?.isPinned) {
       // only allow tabs to drag within their own pinned/unpinned groups
       return false;
     }
     return true;
+  }
+
+  // group header drag handlers
+
+  onContextmenuGroup(e, groupId) {
+    e.preventDefault();
+    e.stopPropagation();
+    bg.views.showGroupContextMenu(groupId);
+  }
+
+  onDragstartGroup(e, groupId) {
+    this.draggedGroupId = groupId;
+    this.draggedTabIndex = null;
+    e.dataTransfer.effectAllowed = 'move';
+    e.stopPropagation();
+  }
+
+  onDragendGroup(e) {
+    this.draggedGroupId = null;
+  }
+
+  onDragoverGroup(e, groupId) {
+    const isDraggingTab = this.draggedTabIndex !== null;
+    const isDraggingGroup = this.draggedGroupId !== null && this.draggedGroupId !== groupId;
+    if (!isDraggingTab && !isDraggingGroup) return;
+    e.preventDefault();
+    e.currentTarget.classList.add('drag-hover');
+    e.dataTransfer.dropEffect = 'move';
+  }
+
+  onDragleaveGroup(e) {
+    e.currentTarget.classList.remove('drag-hover');
+  }
+
+  onDropGroup(e, groupId) {
+    e.stopPropagation();
+    e.currentTarget.classList.remove('drag-hover');
+    if (this.draggedGroupId !== null && this.draggedGroupId !== groupId) {
+      bg.views.reorderTabGroup(this.draggedGroupId, groupId);
+      this.draggedGroupId = null;
+    } else if (this.draggedTabIndex !== null) {
+      bg.views.addTabToGroup(this.draggedTabIndex, groupId);
+      this.draggedTabIndex = null;
+    }
+  }
+
+  // group header name editing
+
+  onDblclickGroupName(e, groupId) {
+    e.stopPropagation();
+    this.editingGroupId = groupId;
+  }
+
+  onGroupNameBlur(e, groupId) {
+    const name = e.target.value.trim();
+    if (name) bg.views.renameTabGroup(groupId, name);
+    this.editingGroupId = null;
+  }
+
+  onGroupNameKeydown(e, groupId) {
+    if (e.key === 'Enter') {
+      const name = e.target.value.trim();
+      if (name) bg.views.renameTabGroup(groupId, name);
+      this.editingGroupId = null;
+    } else if (e.key === 'Escape') {
+      this.editingGroupId = null;
+    }
+  }
+
+  onClickGroupClose(e, groupId) {
+    e.stopPropagation();
+    bg.views.deleteTabGroup(groupId);
   }
 
   onMousedownShell(e) {
@@ -487,6 +648,7 @@ ShellWindowTabs.styles = css`
     background: transparent;
     transition: background 0.3s;
     border-left: 1px solid var(--border-color--tab);
+    border-radius: 6px 6px 0 0;
   }
 
   .tab.pinned {
@@ -518,6 +680,18 @@ ShellWindowTabs.styles = css`
 
   .tab.pinned .tab-favicon {
     left: 14px;
+  }
+
+  .tab.pinned .tab-favicon::after {
+    content: '';
+    position: absolute;
+    bottom: 1px;
+    right: -3px;
+    width: 6px;
+    height: 6px;
+    background: var(--highlight-color--tab--current, #5b5ef4);
+    border-radius: 50%;
+    opacity: 0.7;
   }
 
   .tab-title {
@@ -628,16 +802,11 @@ ShellWindowTabs.styles = css`
   .tab.current {
     background: var(--bg-color--tab--current);
     height: 31px;
+    box-shadow: inset 0 3px 0 var(--highlight-color--tab--current);
   }
 
-  .tab.current:before {
-    content: '';
-    position: absolute;
-    left: -1px;
-    top: -3px;
-    width: calc(100% + 2px);
-    height: 3px;
-    background: var(--highlight-color--tab--current);
+  .tab.current.grouped {
+    box-shadow: inset 0 3px 0 var(--group-color, #5b5ef4);
   }
 
   .tab.current .tab-close {
@@ -676,7 +845,7 @@ ShellWindowTabs.styles = css`
 
   /* make room for traffic lights */
   .darwin .tabs {
-    padding-left: 75px;
+    padding-left: 80px;
   }
   .darwin.fullscreen .tabs {
     padding-left: 0px; /* not during fullscreen */
@@ -686,6 +855,99 @@ ShellWindowTabs.styles = css`
     position: fixed;
     z-index: 100;
     background: #fffc;
+  }
+
+  /* tab groups */
+
+  .tab-group-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+    height: 30px;
+    padding: 0 8px 0 8px;
+    margin-top: 3px;
+    background: color-mix(in srgb, var(--group-color, #5b5ef4) 14%, transparent);
+    border-radius: 6px 6px 0 0;
+    border-left: 1px solid var(--border-color--tab);
+    color: var(--group-color, #5b5ef4);
+    cursor: default;
+    transition: background 0.12s;
+  }
+
+  .tab-group-header::before {
+    content: '';
+    display: block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--group-color, #5b5ef4);
+    flex-shrink: 0;
+  }
+
+  .tab-group-header.drag-hover {
+    background: color-mix(in srgb, var(--group-color, #5b5ef4) 24%, transparent);
+  }
+
+  .tab-group-header.hidden-group {
+    opacity: 0.55;
+  }
+
+  .tab-group-header.hidden-group::before {
+    opacity: 0.4;
+  }
+
+  .tab-group-name {
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: default;
+    letter-spacing: 0.1px;
+  }
+
+  .tab-group-name-input {
+    font-size: 11px;
+    line-height: 13px;
+    background: rgba(255, 255, 255, 0.25);
+    border: 1px solid color-mix(in srgb, var(--group-color, #5b5ef4) 45%, transparent);
+    border-radius: 3px;
+    color: var(--group-color, #5b5ef4);
+    outline: none;
+    padding: 1px 4px;
+    width: 80px;
+    cursor: text;
+  }
+
+  .tab-group-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 0;
+    color: var(--group-color, #5b5ef4);
+    cursor: default;
+    font-size: 13px;
+    line-height: 1;
+    opacity: 0.5;
+    padding: 0;
+    margin-left: 1px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    transition: opacity 0.12s, background 0.12s;
+  }
+
+  .tab-group-close:hover {
+    opacity: 1;
+    background: color-mix(in srgb, var(--group-color, #5b5ef4) 18%, transparent);
+  }
+
+  .tab.grouped {
+    border-left-color: var(--group-color, #5b5ef4);
   }
 `;
 customElements.define('shell-window-tabs', ShellWindowTabs);

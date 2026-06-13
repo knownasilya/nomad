@@ -104,28 +104,25 @@ export class Pane extends EventEmitter {
   constructor(tab) {
     super();
     this.tab = tab;
-    this.browserView = new BrowserView({
-      webPreferences: {
-        preload: path.join(
-          __dirname,
-          'fg',
-          'webview-preload',
-          'index.build.js'
-        ),
-        nodeIntegrationInSubFrames: true,
-        contextIsolation: true,
-        worldSafeExecuteJavaScript: false, // TODO- this causes promises to fail in executeJavaScript, need to file an issue with electron
-        webviewTag: false,
-        sandbox: true,
-        defaultEncoding: 'utf-8',
-        nativeWindowOpen: true,
-        nodeIntegration: false,
-        scrollBounce: true,
-        navigateOnDragDrop: true,
-        enableRemoteModule: false,
-        safeDialogs: true,
-      },
-    });
+    const webPrefs = {
+      preload: path.join(__dirname, 'fg', 'webview-preload', 'index.build.js'),
+      nodeIntegrationInSubFrames: true,
+      contextIsolation: true,
+      worldSafeExecuteJavaScript: false, // TODO- this causes promises to fail in executeJavaScript, need to file an issue with electron
+      webviewTag: false,
+      sandbox: true,
+      defaultEncoding: 'utf-8',
+      nativeWindowOpen: true,
+      nodeIntegration: false,
+      scrollBounce: true,
+      navigateOnDragDrop: true,
+      enableRemoteModule: false,
+      safeDialogs: true,
+    };
+    // Only set partition for non-default sessions — leaving it unset keeps the
+    // default session (with its protocol handlers and adblocker) intact.
+    if (tab.partition) webPrefs.partition = tab.partition;
+    this.browserView = new BrowserView({ webPreferences: webPrefs });
     this.browserView.setBackgroundColor('#fff');
 
     // webview state
@@ -461,7 +458,7 @@ export class Pane extends EventEmitter {
     var url = this.url;
     var title = this.title;
     if (url && !url.startsWith('beaker://')) {
-      historyDb.addVisit(0, { url, title });
+      historyDb.addVisit(0, { url, title, spaceId: this.tab.spaceId || 1 });
     }
   }
 
@@ -546,18 +543,19 @@ export class Pane extends EventEmitter {
 
       let { version } = parseDriveUrl(this.url);
       let { checkoutFS } = await hyper.drives.getDriveCheckout(drive, version);
-      this.liveReloadEvents = await checkoutFS.pda.watch();
-
       const reload = throttle(
-        () => {
-          this.browserView.webContents.reload();
-        },
+        () => { this.browserView.webContents.reload(); },
         TRIGGER_LIVE_RELOAD_DEBOUNCE,
         { leading: false }
       );
-      this.liveReloadEvents.on('data', ([evt]) => {
-        if (evt === 'changed') reload();
-      });
+      // Drive watch in v11 returns an AsyncIterator
+      const watcher = checkoutFS.drive.watch('/');
+      this.liveReloadEvents = watcher;
+      ;(async () => {
+        for await (const diff of watcher) {
+          reload();
+        }
+      })().catch(() => {});
       // ^ note this throttle is run on the front edge.
       // That means snappier reloads (no delay) but possible double reloads if multiple files change
     }
@@ -837,7 +835,7 @@ export class Pane extends EventEmitter {
     this.injectCustomRenderers();
 
     // emit
-    if (!this.tab.isHidden) {
+    if (this.tab && !this.tab.isHidden) {
       windowMenu.onSetCurrentLocation(this.browserWindow, this.url);
     }
     this.emitUpdateState();

@@ -7,34 +7,37 @@ export default {
   configure: 'promise',
   diff: 'promise',
 
-  stat: 'promise',
-  readFile: 'promise',
-  writeFile: 'promise',
-  unlink: 'promise',
+  // v11 API
+  entry: 'promise',
+  get: 'promise',
+  put: 'promise',
+  del: 'promise',
+  list: 'promise',
+
+  mkdir: 'promise',
+  rmdir: 'promise',
   copy: 'promise',
   rename: 'promise',
   updateMetadata: 'promise',
   deleteMetadata: 'promise',
 
-  readdir: 'promise',
-  mkdir: 'promise',
-  rmdir: 'promise',
-
-  symlink: 'promise',
-
-  mount: 'promise',
-  unmount: 'promise',
-
   query: 'promise',
-
   watch: 'readable',
-  createNetworkActivityStream: 'readable',
-
-  resolveName: 'promise',
 
   beakerDiff: 'promise',
   beakerMerge: 'promise',
   importFromFilesystem: 'promise',
   exportToFilesystem: 'promise',
   exportToDrive: 'promise',
+
+  // v10 compat shims
+  stat: 'promise',
+  readFile: 'promise',
+  writeFile: 'promise',
+  unlink: 'promise',
+  readdir: 'promise',
+  symlink: 'promise',
+  mount: 'promise',
+  unmount: 'promise',
+  createNetworkActivityStream: 'readable',
 };

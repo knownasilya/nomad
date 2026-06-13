@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { dialog } from 'electron';
-import pda from 'pauls-dat-api2';
+import { promises as nodefs } from 'fs';
+import { join as joinPath2, basename as pathBasename } from 'path';
 import * as modals from '../../ui/subwindows/modals';
 import * as prompts from '../../ui/subwindows/prompts';
 import * as drives from '../../hyper/drives';
@@ -46,6 +47,7 @@ export async function drivePropertiesDialog(url) {
   await modals.create(this.sender, 'drive-properties', {
     url: info.url,
     writable: info.writable,
+    thumbPath: info.manifest?.thumb || null,
     props: Object.assign(pick(info, ['title', 'description']), {
       tags: cfg.tags || [],
     }),
@@ -468,13 +470,7 @@ export async function exportFilesDialog(urls) {
         urlp.version
       );
       let dstPath = joinPath(baseDstPath, urlp.pathname.split('/').pop());
-      await pda.exportArchiveToFilesystem({
-        srcArchive: checkoutFS.session ? checkoutFS.session.drive : checkoutFS,
-        srcPath: urlp.pathname,
-        dstPath,
-        overwriteExisting: false,
-        skipUndownloadedFiles: false,
-      });
+      await _exportToFs(checkoutFS.drive, urlp.pathname, dstPath, { overwriteExisting: false });
     }
     return { numExported: res.filePaths.length };
   }
@@ -498,46 +494,62 @@ async function doImport(wc, url, filePaths) {
   if (isHistoric)
     throw new ArchiveNotWritableError('Cannot modify a historic version');
 
-  // calculate size of import for progress
-  var numFilesToImport = 0;
-  for (let srcPath of filePaths) {
-    let stats = await pda.exportFilesystemToArchive({
-      srcPath,
-      dstArchive: checkoutFS.session ? checkoutFS.session.drive : checkoutFS,
-      dstPath: urlp.pathname,
-      ignore: ['index.json'],
-      inplaceImport: false,
-      dryRun: true,
-    });
-    numFilesToImport += stats.fileCount;
-  }
-
-  var prompt = await prompts.create(wc, 'progress', {
-    label: 'Importing files...',
-  });
-  let numImported = 0;
+  var numImported = 0;
+  var prompt = await prompts.create(wc, 'progress', { label: 'Importing files...' });
   try {
     for (let srcPath of filePaths) {
-      let stats = await pda.exportFilesystemToArchive({
-        srcPath,
-        dstArchive: checkoutFS.session ? checkoutFS.session.drive : checkoutFS,
-        dstPath: urlp.pathname,
-        ignore: ['index.json'],
-        inplaceImport: false,
-        dryRun: false,
-        progress(stats) {
-          prompt.webContents.executeJavaScript(
-            `updateProgress(${
-              (numImported + stats.fileCount) / numFilesToImport
-            }); undefined`
-          );
-        },
-      });
-      numImported += stats.fileCount;
+      numImported += await _importFsItem(checkoutFS.drive, srcPath, urlp.pathname || '/', { ignore: ['index.json'] });
     }
   } finally {
     prompts.close(prompt.tab);
   }
 
   return { numImported };
+}
+
+// filesystem helpers (replaces pauls-dat-api2 export functions)
+// =
+
+async function _importFsItem(drive, srcPath, dstPath, { ignore = [] } = {}) {
+  const ignoreSet = new Set(ignore);
+  const srcStat = await nodefs.stat(srcPath);
+  const name = pathBasename(srcPath);
+  if (ignoreSet.has(name)) return 0;
+
+  if (srcStat.isFile()) {
+    const fullDst = (dstPath.endsWith('/') ? dstPath : dstPath + '/') + name;
+    const buf = await nodefs.readFile(srcPath);
+    await drive.put(fullDst, buf);
+    return 1;
+  }
+
+  if (srcStat.isDirectory()) {
+    let count = 0;
+    const entries = await nodefs.readdir(srcPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (ignoreSet.has(entry.name)) continue;
+      const fullSrc = joinPath2(srcPath, entry.name);
+      const fullDst = (dstPath.endsWith('/') ? dstPath : dstPath + '/') + name;
+      count += await _importFsItem(drive, fullSrc, fullDst, { ignore });
+    }
+    return count;
+  }
+
+  return 0;
+}
+
+async function _exportToFs(drive, srcFolder, dstPath, { overwriteExisting = true } = {}) {
+  await nodefs.mkdir(dstPath, { recursive: true });
+  for await (const entry of drive.list(srcFolder, { recursive: true })) {
+    const relPath = entry.key.slice(srcFolder.length).replace(/^\//, '');
+    const dstFile = joinPath2(dstPath, relPath);
+    if (!overwriteExisting) {
+      try { await nodefs.access(dstFile); continue; } catch {}
+    }
+    const buf = await drive.get(entry.key);
+    if (buf) {
+      await nodefs.mkdir(joinPath2(dstFile, '..'), { recursive: true });
+      await nodefs.writeFile(dstFile, buf);
+    }
+  }
 }

@@ -1,8 +1,10 @@
 // @ts-nocheck
 import path from 'path';
 import { parseDriveUrl } from '../../../lib/urls';
-import pda from 'pauls-dat-api2';
+import b4a from 'b4a';
 import { pick } from '../../../lib/async';
+import { promises as nodefs } from 'fs';
+import EventEmitter from 'events';
 import * as modals from '../../ui/subwindows/modals';
 import * as permissions from '../../ui/permissions';
 import * as hyperDns from '../../hyper/dns';
@@ -13,6 +15,7 @@ import * as archivesDb from '../../dbs/archives';
 import * as auditLog from '../../dbs/audit-log';
 import { timer } from '../../../lib/time';
 import * as filesystem from '../../filesystem/index';
+import * as spacesDb from '../../dbs/spaces';
 import { query } from '../../filesystem/query';
 import drivesAPI from './drives';
 import {
@@ -42,7 +45,7 @@ const to = (opts) =>
     ? opts.timeout
     : DEFAULT_DRIVE_API_TIMEOUT;
 
-export default {
+const hyperdriveAPI = {
   async createDrive({
     title,
     description,
@@ -54,15 +57,13 @@ export default {
   } = {}) {
     var newDriveUrl;
 
-    // only allow these vars to be set by beaker, for now
     if (!wcTrust.isWcTrusted(this.sender)) {
       fromGitUrl = undefined;
       visibility = undefined;
-      author = undefined; // TODO _get(windows.getUserSessionFor(this.sender), 'url')
+      author = undefined;
     }
 
     if (prompt !== false) {
-      // run the creation modal
       let res;
       try {
         res = await modals.create(this.sender, 'create-drive', {
@@ -79,36 +80,18 @@ export default {
           });
         }
       } catch (e) {
-        if (e.name !== 'Error') {
-          throw e; // only rethrow if a specific error
-        }
+        if (e.name !== 'Error') throw e;
       }
       if (!res || !res.url) throw new UserDeniedError();
       newDriveUrl = res.url;
-
-      if (res.isPear) {
-        try {
-          const driveKey = await lookupUrlDriveKey(newDriveUrl);
-          if (driveKey) {
-            const drive = await drives.getOrLoadDrive(driveKey);
-            const { checkoutFS } = await drives.getDriveCheckout(drive, undefined);
-            const existing = await checkoutFS.pda.readManifest().catch(() => ({}));
-            await checkoutFS.pda.writeManifest({ ...existing, type: 'pear-app' });
-          }
-        } catch {}
-      }
     } else {
-      if (tags && typeof tags === 'string') {
-        tags = tags.split(' ');
-      } else if (tags && !Array.isArray(tags)) {
-        tags = undefined;
-      }
-      tags = tags.filter((v) => typeof v === 'string');
+      if (tags && typeof tags === 'string') tags = tags.split(' ');
+      else if (tags && !Array.isArray(tags)) tags = undefined;
+      if (tags) tags = tags.filter((v) => typeof v === 'string');
 
-      // no modal, ask for permission
       await assertCreateDrivePermission(this.sender, { title, tags });
 
-      let importFolder = undefined;
+      let importFolder;
       if (fromGitUrl) {
         try {
           importFolder = await gitCloneToTmp(fromGitUrl);
@@ -117,57 +100,33 @@ export default {
         }
       }
 
-      // create
-      let newDrive;
-      try {
-        let manifest = { title, description /*TODO author,*/ };
-        newDrive = await drives.createNewDrive(manifest);
-        await filesystem.configDrive(newDrive.url, { tags });
-      } catch (e) {
-        console.log(e);
-        throw e;
-      }
+      const meta = { title, description };
+      const newDrive = await drives.createNewDrive(meta);
+      await filesystem.configDriveForSpace(newDrive.url, { tags }, spacesDb.getCachedActiveId());
       newDriveUrl = newDrive.url;
 
-      // git clone if needed
       if (importFolder) {
-        await pda.exportFilesystemToArchive({
-          srcPath: importFolder,
-          dstArchive: newDrive.session.drive,
-          dstPath: '/',
-          ignore: ['.git', '**/.git', 'index.json'],
-          inplaceImport: true,
-          dryRun: false,
+        await _importFsFolder(newDrive.drive, importFolder, '/', {
+          ignore: ['.git', 'index.json'],
         });
       }
     }
-    let newDriveKey = await lookupUrlDriveKey(newDriveUrl);
 
+    const newDriveKey = await lookupUrlDriveKey(newDriveUrl);
     if (!wcTrust.isWcTrusted(this.sender)) {
-      // grant write permissions to the creating app
-      permissions.grantPermission(
-        'modifyDrive:' + newDriveKey,
-        this.sender.getURL()
-      );
+      permissions.grantPermission('modifyDrive:' + newDriveKey, this.sender.getURL());
     }
     return newDriveUrl;
   },
 
-  async forkDrive(
-    url,
-    { detached, title, description, tags, label, prompt } = {}
-  ) {
+  async forkDrive(url, { detached, title, description, tags, label, prompt } = {}) {
     var newDriveUrl;
 
-    // only allow these vars to be set by beaker, for now
-    if (!wcTrust.isWcTrusted(this.sender)) {
-      label = undefined;
-    }
+    if (!wcTrust.isWcTrusted(this.sender)) label = undefined;
 
     if (prompt !== false) {
-      // run the fork modal
       let res;
-      let forks = await drivesAPI.getForks(url);
+      const forks = await drivesAPI.getForks(url);
       try {
         res = await modals.create(this.sender, 'fork-drive', {
           url,
@@ -179,40 +138,31 @@ export default {
           label,
         });
       } catch (e) {
-        if (e.name !== 'Error') {
-          throw e; // only rethrow if a specific error
-        }
+        if (e.name !== 'Error') throw e;
       }
       if (!res || !res.url) throw new UserDeniedError();
       newDriveUrl = res.url;
     } else {
-      if (tags && typeof tags === 'string') {
-        tags = tags.split(' ');
-      } else if (tags && !Array.isArray(tags)) {
-        tags = undefined;
-      }
-      tags = tags.filter((v) => typeof v === 'string');
+      if (tags && typeof tags === 'string') tags = tags.split(' ');
+      else if (tags && !Array.isArray(tags)) tags = undefined;
+      if (tags) tags = tags.filter((v) => typeof v === 'string');
 
-      // no modal, ask for permission
       await assertCreateDrivePermission(this.sender, { title, tags });
 
-      let key = await lookupUrlDriveKey(url);
-
-      // save the parent if needed
+      const key = await lookupUrlDriveKey(url);
       if (!filesystem.getDriveConfig(key)) {
-        await filesystem.configDrive(key);
+        await filesystem.configDriveForSpace(key, {}, spacesDb.getCachedActiveId());
       }
 
-      // create
-      let newDrive = await drives.forkDrive(key, {
+      const newDrive = await drives.forkDrive(key, {
         title: detached ? title : undefined,
         description: detached ? description : undefined,
         detached,
       });
-      await filesystem.configDrive(newDrive.url, {
+      await filesystem.configDriveForSpace(newDrive.url, {
         tags,
         forkOf: detached ? undefined : { key, label },
-      });
+      }, spacesDb.getCachedActiveId());
       newDriveUrl = newDrive.url;
     }
 
@@ -220,643 +170,348 @@ export default {
   },
 
   async loadDrive(url) {
-    if (!url || typeof url !== 'string') {
-      return Promise.reject(new InvalidURLError());
-    }
-    var urlp = parseDriveUrl(url);
+    if (!url || typeof url !== 'string') return Promise.reject(new InvalidURLError());
+    const urlp = parseDriveUrl(url);
     await lookupDrive(this.sender, urlp.hostname, urlp.version);
     return Promise.resolve(true);
   },
 
   async getInfo(url, opts = {}) {
-    return auditLog.record(
-      this.sender.getURL(),
-      'getInfo',
-      { url },
-      undefined,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          var urlp = parseDriveUrl(url);
-          var { driveKey, version } = await lookupDrive(
-            this.sender,
-            urlp.hostname,
-            urlp.version,
-            true
-          );
-          var info = await drives.getDriveInfo(driveKey);
-          info.tags = filesystem.getDriveConfig(driveKey)?.tags || [];
-          var isCap = urlp.hostname.endsWith('.cap');
+    return auditLog.record(this.sender.getURL(), 'getInfo', { url }, undefined, () =>
+      timer(to(opts), async (checkin, pause, resume) => {
+        const urlp = parseDriveUrl(url);
+        const { driveKey, version } = await lookupDrive(
+          this.sender, urlp.hostname, urlp.version, true
+        );
+        const info = await drives.getDriveInfo(driveKey);
+        info.tags = filesystem.getDriveConfig(driveKey)?.tags || [];
 
-          // request from beaker internal sites: give all data
-          if (wcTrust.isWcTrusted(this.sender)) {
-            return info;
-          }
+        if (wcTrust.isWcTrusted(this.sender)) return info;
 
-          pause(); // dont count against timeout, there may be user prompts
-          await assertReadPermission(driveKey, this.sender);
-          resume();
+        pause();
+        await assertReadPermission(driveKey, this.sender);
+        resume();
 
-          // request from userland: return a subset of the data
-          return {
-            key: isCap ? urlp.hostname : info.key,
-            url: isCap ? urlp.origin : info.url,
-            // domain: info.domain, TODO
-            writable: info.writable,
-
-            // state
-            version: info.version,
-            peers: info.peers,
-
-            // manifest
-            title: info.title,
-            description: info.description,
-          };
-        })
+        return {
+          key: info.key,
+          url: info.url,
+          writable: info.writable,
+          version: info.version,
+          peers: info.peers,
+          title: info.title,
+          description: info.description,
+        };
+      })
     );
   },
 
   async configure(url, settings, opts) {
-    return auditLog.record(
-      this.sender.getURL(),
-      'configure',
-      { url, ...settings },
-      undefined,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('looking up drive');
+    return auditLog.record(this.sender.getURL(), 'configure', { url, ...settings }, undefined, () =>
+      timer(to(opts), async (checkin, pause, resume) => {
+        const urlp = parseDriveUrl(url);
+        const { drive, checkoutFS, isHistoric } = await lookupDrive(
+          this.sender, urlp.hostname, urlp.version
+        );
+        if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
+        if (!settings || typeof settings !== 'object') throw new Error('Invalid argument');
 
-          var urlp = parseDriveUrl(url);
-          var { drive, checkoutFS, isHistoric } = await lookupDrive(
-            this.sender,
-            urlp.hostname,
-            urlp.version
-          );
-          if (isHistoric)
-            throw new ArchiveNotWritableError(
-              'Cannot modify a historic version'
-            );
-          if (!settings || typeof settings !== 'object')
-            throw new Error('Invalid argument');
+        if ('tags' in settings && wcTrust.isWcTrusted(this.sender)) {
+          await filesystem.configDriveForSpace(drive.url, { tags: settings.tags }, spacesDb.getCachedActiveId());
+        }
 
-          if ('tags' in settings && wcTrust.isWcTrusted(this.sender)) {
-            await filesystem.configDrive(drive.url, { tags: settings.tags });
-          }
+        if (!wcTrust.isWcTrusted(this.sender)) {
+          delete settings.tags;
+          delete settings.author;
+        }
 
-          // only allow beaker to set these manifest updates for now
-          if (!wcTrust.isWcTrusted(this.sender)) {
-            delete settings.tags;
-            delete settings.author;
-          }
+        const metaUpdates = pick(settings, DRIVE_CONFIGURABLE_FIELDS);
+        if (!drive.writable || Object.keys(metaUpdates).length === 0) return;
 
-          // manifest updates
-          let manifestUpdates = pick(settings, DRIVE_CONFIGURABLE_FIELDS);
-          if (!drive.writable || Object.keys(manifestUpdates).length === 0) {
-            // no manifest updates
-            return;
-          }
+        pause();
+        const senderOrigin = archivesDb.extractOrigin(this.sender.getURL());
+        await assertWritePermission(drive, this.sender);
+        await assertQuotaPermission(drive, senderOrigin, Buffer.byteLength(JSON.stringify(settings), 'utf8'));
+        resume();
 
-          pause(); // dont count against timeout, there may be user prompts
-          var senderOrigin = archivesDb.extractOrigin(this.sender.getURL());
-          await assertWritePermission(drive, this.sender);
-          await assertQuotaPermission(
-            drive,
-            senderOrigin,
-            Buffer.byteLength(JSON.stringify(settings), 'utf8')
-          );
-          resume();
-
-          checkin('updating drive');
-          await checkoutFS.pda.updateManifest(manifestUpdates);
-          await drives.pullLatestDriveMeta(drive);
-        })
+        // Merge into /index.json
+        const existing = await _readIndexJson(checkoutFS.drive);
+        const updated = Object.assign({}, existing, metaUpdates);
+        await checkoutFS.drive.put('/index.json', b4a.from(JSON.stringify(updated, null, 2)));
+        await drives.pullLatestDriveMeta(drive, { updateAssets: true });
+      })
     );
   },
 
-  async diff(url, other, opts = {}) {
-    var urlp = parseDriveUrl(url);
-    var url = urlp.origin;
-    var prefix = urlp.pathname;
-    return auditLog.record(
-      this.sender.getURL(),
-      'diff',
-      { url, other, prefix },
-      undefined,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('looking up drive');
-          const { checkoutFS } = await lookupDrive(
-            this.sender,
-            url,
-            urlp.version
-          );
-          pause(); // dont count against timeout, there may be user prompts
-          await assertReadPermission(checkoutFS, this.sender);
-          resume();
-          checkin('diffing');
-          return checkoutFS.pda.diff(other, prefix);
-        })
+  // v11 API: entry(url) — replaces stat()
+  // Returns {key, value: {blob, metadata}} or null
+  async entry(url, opts = {}) {
+    const urlp = parseDriveUrl(url);
+    const filepath = normalizeFilepath(urlp.pathname || '');
+    return auditLog.record(this.sender.getURL(), 'entry', { url, filepath }, undefined, () =>
+      timer(to(opts), async (checkin, pause, resume) => {
+        const { checkoutFS } = await lookupDrive(this.sender, urlp.hostname, urlp.version);
+        pause();
+        await assertReadPermission(checkoutFS, this.sender, filepath);
+        resume();
+        return checkoutFS.drive.entry(filepath);
+      })
     );
   },
 
-  async stat(url, opts = {}) {
-    var urlp = parseDriveUrl(url);
-    var url = urlp.origin;
-    var filepath = normalizeFilepath(urlp.pathname || '');
-    return auditLog.record(
-      this.sender.getURL(),
-      'stat',
-      { url, filepath },
-      undefined,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('looking up drive');
-          const { checkoutFS } = await lookupDrive(
-            this.sender,
-            urlp.hostname,
-            urlp.version
-          );
-          pause(); // dont count against timeout, there may be user prompts
-          await assertReadPermission(checkoutFS, this.sender, filepath);
-          resume();
-          checkin('stating file');
-          return checkoutFS.pda.stat(filepath, opts);
-        })
+  // v11 API: get(url, opts) — replaces readFile()
+  // Returns Buffer (opts.encoding = 'binary') or string (default utf8)
+  async get(url, opts = {}) {
+    const urlp = parseDriveUrl(url);
+    const filepath = normalizeFilepath(urlp.pathname || '');
+    return auditLog.record(this.sender.getURL(), 'get', { url, filepath, opts }, undefined, () =>
+      timer(to(opts), async (checkin, pause, resume) => {
+        const { checkoutFS } = await lookupDrive(this.sender, urlp.hostname, urlp.version);
+        pause();
+        await assertReadPermission(checkoutFS, this.sender, filepath);
+        resume();
+        const buf = await checkoutFS.drive.get(filepath);
+        if (!buf) return null;
+        if (opts.encoding === 'binary') return buf;
+        if (opts.encoding === 'base64') return b4a.toString(buf, 'base64');
+        if (opts.encoding === 'hex') return b4a.toString(buf, 'hex');
+        return b4a.toString(buf);
+      })
     );
   },
 
-  async readFile(url, opts = {}) {
-    var urlp = parseDriveUrl(url);
-    var url = urlp.origin;
-    var filepath = normalizeFilepath(urlp.pathname || '');
-    return auditLog.record(
-      this.sender.getURL(),
-      'readFile',
-      { url, filepath, opts },
-      undefined,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('looking up drive');
-          const { checkoutFS } = await lookupDrive(
-            this.sender,
-            urlp.hostname,
-            urlp.version
-          );
-          pause(); // dont count against timeout, there may be user prompts
-          await assertReadPermission(checkoutFS, this.sender, filepath);
-          resume();
-          checkin('reading file');
-          return checkoutFS.pda.readFile(filepath, opts);
-        })
+  // v11 API: put(url, data, opts) — replaces writeFile()
+  async put(url, data, opts = {}) {
+    const urlp = parseDriveUrl(url);
+    const filepath = normalizeFilepath(urlp.pathname || '');
+    if (typeof opts === 'string') opts = { encoding: opts };
+    const buf = _toBuffer(data, opts);
+    const sourceSize = buf.byteLength;
+    return auditLog.record(this.sender.getURL(), 'put', { url, filepath }, sourceSize, () =>
+      timer(to(opts), async (checkin, pause, resume) => {
+        const { drive, checkoutFS, isHistoric } = await lookupDrive(
+          this.sender, urlp.hostname, urlp.version
+        );
+        if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
+
+        pause();
+        const senderOrigin = archivesDb.extractOrigin(this.sender.getURL());
+        await assertWritePermission(drive, this.sender, filepath);
+        await assertQuotaPermission(drive, senderOrigin, sourceSize);
+        assertValidFilePath(filepath);
+        assertUnprotectedFilePath(filepath, this.sender);
+        resume();
+
+        const putOpts = opts.metadata ? { metadata: opts.metadata } : undefined;
+        return checkoutFS.drive.put(filepath, buf, putOpts);
+      })
     );
   },
 
-  async writeFile(url, data, opts = {}) {
-    var urlp = parseDriveUrl(url);
-    var url = urlp.origin;
-    var filepath = normalizeFilepath(urlp.pathname || '');
-    if (typeof opts === 'string') {
-      opts = { encoding: opts };
-    }
-    if (opts.encoding === 'json') {
-      data = JSON.stringify(data, null, 2);
-      opts.encoding = 'utf8';
-    }
-    const sourceSize = Buffer.byteLength(data, opts.encoding);
-    return auditLog.record(
-      this.sender.getURL(),
-      'writeFile',
-      { url, filepath },
-      sourceSize,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('looking up drive');
-          const { drive, checkoutFS, isHistoric } = await lookupDrive(
-            this.sender,
-            urlp.hostname,
-            urlp.version
-          );
-          if (isHistoric)
-            throw new ArchiveNotWritableError(
-              'Cannot modify a historic version'
-            );
+  // v11 API: del(url, opts) — replaces unlink()
+  async del(url, opts = {}) {
+    const urlp = parseDriveUrl(url);
+    const filepath = normalizeFilepath(urlp.pathname || '');
+    return auditLog.record(this.sender.getURL(), 'del', { url, filepath }, undefined, () =>
+      timer(to(opts), async (checkin, pause, resume) => {
+        const { drive, checkoutFS, isHistoric } = await lookupDrive(
+          this.sender, urlp.hostname, urlp.version
+        );
+        if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
 
-          pause(); // dont count against timeout, there may be user prompts
-          const senderOrigin = archivesDb.extractOrigin(this.sender.getURL());
-          await assertWritePermission(drive, this.sender, filepath);
-          await assertQuotaPermission(drive, senderOrigin, sourceSize);
-          assertValidFilePath(filepath);
-          assertUnprotectedFilePath(filepath, this.sender);
-          resume();
+        pause();
+        await assertWritePermission(drive, this.sender, filepath);
+        assertUnprotectedFilePath(filepath, this.sender);
+        resume();
 
-          checkin('writing file');
-          var res = await checkoutFS.pda.writeFile(filepath, data, opts);
-          return res;
-        })
+        return checkoutFS.drive.del(filepath);
+      })
     );
   },
 
-  async unlink(url, opts = {}) {
-    var urlp = parseDriveUrl(url);
-    var url = urlp.origin;
-    var filepath = normalizeFilepath(urlp.pathname || '');
-    return auditLog.record(
-      this.sender.getURL(),
-      'unlink',
-      { url, filepath },
-      undefined,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('looking up drive');
-          const { drive, checkoutFS, isHistoric } = await lookupDrive(
-            this.sender,
-            urlp.hostname,
-            urlp.version
-          );
-          if (isHistoric)
-            throw new ArchiveNotWritableError(
-              'Cannot modify a historic version'
-            );
+  // v11 API: list(url, opts) — replaces readdir()
+  // Returns array of {key, value} entry objects. Use opts.recursive = true for deep listing.
+  async list(url, opts = {}) {
+    const urlp = parseDriveUrl(url);
+    const filepath = normalizeFilepath(urlp.pathname || '');
+    return auditLog.record(this.sender.getURL(), 'list', { url, filepath, opts }, undefined, () =>
+      timer(to(opts), async (checkin, pause, resume) => {
+        const { checkoutFS } = await lookupDrive(this.sender, urlp.hostname, urlp.version);
+        pause();
+        await assertReadPermission(checkoutFS, this.sender, filepath);
+        resume();
+        const results = [];
+        for await (const entry of checkoutFS.drive.list(filepath, { recursive: opts.recursive || false })) {
+          results.push(entry);
+        }
+        return results;
+      })
+    );
+  },
 
-          pause(); // dont count against timeout, there may be user prompts
-          await assertWritePermission(drive, this.sender, filepath);
-          assertUnprotectedFilePath(filepath, this.sender);
-          resume();
+  // mkdir is a no-op in v11 (directories are implicit)
+  async mkdir(url, opts) {
+    const urlp = parseDriveUrl(url);
+    const filepath = normalizeFilepath(urlp.pathname || '');
+    return auditLog.record(this.sender.getURL(), 'mkdir', { url, filepath }, undefined, () =>
+      timer(to(opts), async (checkin, pause, resume) => {
+        const { drive, isHistoric } = await lookupDrive(
+          this.sender, urlp.hostname, urlp.version
+        );
+        if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
+        pause();
+        await assertWritePermission(drive, this.sender);
+        assertValidPath(filepath);
+        assertUnprotectedFilePath(filepath, this.sender);
+        resume();
+        // In v11, directories are implicit — nothing to do
+      })
+    );
+  },
 
-          checkin('deleting file');
-          var res = await checkoutFS.pda.unlink(filepath);
-          return res;
-        })
+  // rmdir deletes all files recursively under the given path
+  async rmdir(url, opts = {}) {
+    const urlp = parseDriveUrl(url);
+    const filepath = normalizeFilepath(urlp.pathname || '');
+    return auditLog.record(this.sender.getURL(), 'rmdir', { url, filepath }, undefined, () =>
+      timer(to(opts), async (checkin, pause, resume) => {
+        const { drive, checkoutFS, isHistoric } = await lookupDrive(
+          this.sender, urlp.hostname, urlp.version
+        );
+        if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
+        pause();
+        await assertWritePermission(drive, this.sender);
+        assertUnprotectedFilePath(filepath, this.sender);
+        resume();
+        for await (const entry of checkoutFS.drive.list(filepath, { recursive: true })) {
+          await checkoutFS.drive.del(entry.key);
+        }
+      })
     );
   },
 
   async copy(url, dstpath, opts = {}) {
-    var urlp = parseDriveUrl(url);
-    var url = urlp.origin;
-    var srcpath = normalizeFilepath(urlp.pathname || '');
+    const urlp = parseDriveUrl(url);
+    const srcpath = normalizeFilepath(urlp.pathname || '');
     dstpath = normalizeFilepath(dstpath || '');
-    const src = await lookupDrive(this.sender, urlp.hostname, urlp.version);
-    const sourceSize = await src.drive.pda.readSize(srcpath);
-    return auditLog.record(
-      this.sender.getURL(),
-      'copy',
-      { url, srcpath, dstpath },
-      sourceSize,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('searching for drive');
+    return auditLog.record(this.sender.getURL(), 'copy', { url, srcpath, dstpath }, undefined, () =>
+      timer(to(opts), async (checkin, pause, resume) => {
+        const src = await lookupDrive(this.sender, urlp.hostname, urlp.version);
+        const dstHostname = dstpath.includes('://') ? parseDriveUrl(dstpath).hostname : urlp.hostname;
+        const dst = await lookupDrive(this.sender, dstHostname);
 
-          const dst = await lookupDrive(
-            this.sender,
-            dstpath.includes('://') ? dstpath : url
-          );
+        const srcFinal = srcpath.includes('://') ? normalizeFilepath(new URL(srcpath).pathname) : srcpath;
+        const dstFinal = dstpath.includes('://') ? normalizeFilepath(new URL(dstpath).pathname) : dstpath;
 
-          if (srcpath.includes('://'))
-            srcpath = normalizeFilepath(new URL(srcpath).pathname);
-          if (dstpath.includes('://'))
-            dstpath = normalizeFilepath(new URL(dstpath).pathname);
+        pause();
+        const senderOrigin = archivesDb.extractOrigin(this.sender.getURL());
+        await assertReadPermission(src.drive, this.sender, srcFinal);
+        await assertWritePermission(dst.drive, this.sender, dstFinal);
+        assertUnprotectedFilePath(dstFinal, this.sender);
+        resume();
 
-          pause(); // dont count against timeout, there may be user prompts
-          const senderOrigin = archivesDb.extractOrigin(this.sender.getURL());
-          await assertReadPermission(src.drive, this.sender, srcpath);
-          await assertWritePermission(dst.drive, this.sender, dstpath);
-          assertUnprotectedFilePath(dstpath, this.sender);
-          await assertQuotaPermission(dst.drive, senderOrigin, sourceSize);
-          resume();
+        const srcEntry = await src.checkoutFS.drive.entry(srcFinal);
+        if (!srcEntry) throw new InvalidPathError('Source path does not exist');
 
-          checkin('copying');
-          var res = await src.checkoutFS.pda.copy(
-            srcpath,
-            dst.checkoutFS.session.drive,
-            dstpath
-          );
-          return res;
-        })
+        const buf = await src.checkoutFS.drive.get(srcFinal);
+        await assertQuotaPermission(dst.drive, senderOrigin, buf ? buf.byteLength : 0);
+        return dst.checkoutFS.drive.put(dstFinal, buf || b4a.alloc(0), { metadata: srcEntry.value?.metadata });
+      })
     );
   },
 
   async rename(url, dstpath, opts = {}) {
-    var urlp = parseDriveUrl(url);
-    var url = urlp.origin;
-    var srcpath = normalizeFilepath(urlp.pathname || '');
+    const urlp = parseDriveUrl(url);
+    const srcpath = normalizeFilepath(urlp.pathname || '');
     dstpath = normalizeFilepath(dstpath || '');
-    return auditLog.record(
-      this.sender.getURL(),
-      'rename',
-      { url, srcpath, dstpath },
-      undefined,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('searching for drive');
+    return auditLog.record(this.sender.getURL(), 'rename', { url, srcpath, dstpath }, undefined, () =>
+      timer(to(opts), async (checkin, pause, resume) => {
+        const src = await lookupDrive(this.sender, urlp.hostname, urlp.version);
+        const dstHostname = dstpath.includes('://') ? parseDriveUrl(dstpath).hostname : urlp.hostname;
+        const dst = await lookupDrive(this.sender, dstHostname);
 
-          const src = await lookupDrive(
-            this.sender,
-            urlp.hostname,
-            urlp.version
-          );
-          const dst = await lookupDrive(
-            this.sender,
-            dstpath.includes('://') ? dstpath : url
-          );
+        const srcFinal = srcpath.includes('://') ? normalizeFilepath(new URL(srcpath).pathname) : srcpath;
+        const dstFinal = dstpath.includes('://') ? normalizeFilepath(new URL(dstpath).pathname) : dstpath;
 
-          if (srcpath.includes('://'))
-            srcpath = normalizeFilepath(new URL(srcpath).pathname);
-          if (dstpath.includes('://'))
-            dstpath = normalizeFilepath(new URL(dstpath).pathname);
+        pause();
+        await assertWritePermission(src.drive, this.sender, srcFinal);
+        await assertWritePermission(dst.drive, this.sender, dstFinal);
+        assertValidPath(dstFinal);
+        assertUnprotectedFilePath(srcFinal, this.sender);
+        assertUnprotectedFilePath(dstFinal, this.sender);
+        resume();
 
-          pause(); // dont count against timeout, there may be user prompts
-          await assertWritePermission(src.drive, this.sender, srcpath);
-          await assertWritePermission(dst.drive, this.sender, dstpath);
-          assertValidPath(dstpath);
-          assertUnprotectedFilePath(srcpath, this.sender);
-          assertUnprotectedFilePath(dstpath, this.sender);
-          resume();
-
-          checkin('renaming file');
-          var res = await src.checkoutFS.pda.rename(
-            srcpath,
-            dst.checkoutFS.session.drive,
-            dstpath
-          );
-          return res;
-        })
+        const srcEntry = await src.checkoutFS.drive.entry(srcFinal);
+        if (!srcEntry) throw new InvalidPathError('Source path does not exist');
+        const buf = await src.checkoutFS.drive.get(srcFinal);
+        await dst.checkoutFS.drive.put(dstFinal, buf || b4a.alloc(0), { metadata: srcEntry.value?.metadata });
+        await src.checkoutFS.drive.del(srcFinal);
+      })
     );
   },
 
   async updateMetadata(url, metadata, opts = {}) {
-    var urlp = parseDriveUrl(url);
-    var url = urlp.origin;
-    var filepath = normalizeFilepath(urlp.pathname || '');
-    return auditLog.record(
-      this.sender.getURL(),
-      'updateMetadata',
-      { url, filepath, metadata },
-      undefined,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('looking up drive');
-          const { drive, checkoutFS, isHistoric } = await lookupDrive(
-            this.sender,
-            urlp.hostname,
-            urlp.version
-          );
-          if (isHistoric)
-            throw new ArchiveNotWritableError(
-              'Cannot modify a historic version'
-            );
+    const urlp = parseDriveUrl(url);
+    const filepath = normalizeFilepath(urlp.pathname || '');
+    return auditLog.record(this.sender.getURL(), 'updateMetadata', { url, filepath, metadata }, undefined, () =>
+      timer(to(opts), async (checkin, pause, resume) => {
+        const { drive, checkoutFS, isHistoric } = await lookupDrive(
+          this.sender, urlp.hostname, urlp.version
+        );
+        if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
+        pause();
+        await assertWritePermission(drive, this.sender, filepath);
+        assertValidPath(filepath);
+        resume();
 
-          pause(); // dont count against timeout, there may be user prompts
-          await assertWritePermission(drive, this.sender, filepath);
-          assertValidPath(filepath);
-          resume();
-
-          checkin('updating metadata');
-          var res = await checkoutFS.pda.updateMetadata(filepath, metadata);
-          return res;
-        })
+        const entry = await checkoutFS.drive.entry(filepath);
+        if (!entry) throw new InvalidPathError('Path does not exist');
+        const existingMeta = entry.value?.metadata || {};
+        const newMeta = Object.assign({}, existingMeta, metadata);
+        const buf = await checkoutFS.drive.get(filepath);
+        return checkoutFS.drive.put(filepath, buf || b4a.alloc(0), { metadata: newMeta });
+      })
     );
   },
 
   async deleteMetadata(url, keys, opts = {}) {
-    var urlp = parseDriveUrl(url);
-    var url = urlp.origin;
-    var filepath = normalizeFilepath(urlp.pathname || '');
-    return auditLog.record(
-      this.sender.getURL(),
-      'deleteMetadata',
-      { url, filepath, keys },
-      undefined,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('looking up drive');
-          const { drive, checkoutFS, isHistoric } = await lookupDrive(
-            this.sender,
-            urlp.hostname,
-            urlp.version
-          );
-          if (isHistoric)
-            throw new ArchiveNotWritableError(
-              'Cannot modify a historic version'
-            );
+    const urlp = parseDriveUrl(url);
+    const filepath = normalizeFilepath(urlp.pathname || '');
+    return auditLog.record(this.sender.getURL(), 'deleteMetadata', { url, filepath, keys }, undefined, () =>
+      timer(to(opts), async (checkin, pause, resume) => {
+        const { drive, checkoutFS, isHistoric } = await lookupDrive(
+          this.sender, urlp.hostname, urlp.version
+        );
+        if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
+        pause();
+        await assertWritePermission(drive, this.sender, filepath);
+        assertValidPath(filepath);
+        resume();
 
-          pause(); // dont count against timeout, there may be user prompts
-          await assertWritePermission(drive, this.sender, filepath);
-          assertValidPath(filepath);
-          resume();
-
-          checkin('updating metadata');
-          var res = await checkoutFS.pda.deleteMetadata(filepath, keys);
-          return res;
-        })
+        const entry = await checkoutFS.drive.entry(filepath);
+        if (!entry) throw new InvalidPathError('Path does not exist');
+        const newMeta = Object.assign({}, entry.value?.metadata || {});
+        for (const k of (Array.isArray(keys) ? keys : [keys])) delete newMeta[k];
+        const buf = await checkoutFS.drive.get(filepath);
+        return checkoutFS.drive.put(filepath, buf || b4a.alloc(0), { metadata: newMeta });
+      })
     );
   },
 
-  async readdir(url, opts = {}) {
-    var urlp = parseDriveUrl(url);
-    var url = urlp.origin;
-    var filepath = normalizeFilepath(urlp.pathname || '');
-    return auditLog.record(
-      this.sender.getURL(),
-      'readdir',
-      { url, filepath, opts },
-      undefined,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('searching for drive');
-          const { checkoutFS } = await lookupDrive(
-            this.sender,
-            urlp.hostname,
-            urlp.version
-          );
-
-          pause(); // dont count against timeout, there may be user prompts
-          await assertReadPermission(checkoutFS, this.sender, filepath);
-          resume();
-
-          checkin('reading directory');
-          var names = await checkoutFS.pda.readdir(filepath, opts);
-          if (opts.includeStats) {
-            names = names.map((obj) => ({ name: obj.name, stat: obj.stat }));
-          }
-          return names;
-        })
-    );
-  },
-
-  async mkdir(url, opts) {
-    var urlp = parseDriveUrl(url);
-    var url = urlp.origin;
-    var filepath = normalizeFilepath(urlp.pathname || '');
-    return auditLog.record(
-      this.sender.getURL(),
-      'mkdir',
-      { url, filepath, opts },
-      undefined,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('searching for drive');
-          const { drive, checkoutFS, isHistoric } = await lookupDrive(
-            this.sender,
-            urlp.hostname,
-            urlp.version
-          );
-          if (isHistoric)
-            throw new ArchiveNotWritableError(
-              'Cannot modify a historic version'
-            );
-
-          pause(); // dont count against timeout, there may be user prompts
-          await assertWritePermission(drive, this.sender);
-          await assertValidPath(filepath);
-          assertUnprotectedFilePath(filepath, this.sender);
-          resume();
-
-          checkin('making directory');
-          var res = await checkoutFS.pda.mkdir(filepath, opts);
-          return res;
-        })
-    );
-  },
-
-  async rmdir(url, opts = {}) {
-    var urlp = parseDriveUrl(url);
-    var url = urlp.origin;
-    var filepath = normalizeFilepath(urlp.pathname || '');
-    return auditLog.record(
-      this.sender.getURL(),
-      'rmdir',
-      { url, filepath, opts },
-      undefined,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('searching for drive');
-          const { drive, checkoutFS, isHistoric } = await lookupDrive(
-            this.sender,
-            urlp.hostname,
-            urlp.version
-          );
-          if (isHistoric)
-            throw new ArchiveNotWritableError(
-              'Cannot modify a historic version'
-            );
-
-          pause(); // dont count against timeout, there may be user prompts
-          await assertWritePermission(drive, this.sender);
-          assertUnprotectedFilePath(filepath, this.sender);
-          resume();
-
-          checkin('removing directory');
-          var res = await checkoutFS.pda.rmdir(filepath, opts);
-          return res;
-        })
-    );
-  },
-
-  async symlink(url, linkname, opts) {
-    var urlp = parseDriveUrl(url);
-    var url = urlp.origin;
-    var target = normalizeFilepath(urlp.pathname || '');
-    linkname = normalizeFilepath(linkname || '');
-    return auditLog.record(
-      this.sender.getURL(),
-      'symlink',
-      { url, target, linkname },
-      undefined,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('searching for drive');
-          const { drive, checkoutFS, isHistoric } = await lookupDrive(
-            this.sender,
-            urlp.hostname,
-            urlp.version
-          );
-          if (isHistoric)
-            throw new ArchiveNotWritableError(
-              'Cannot modify a historic version'
-            );
-
-          pause(); // dont count against timeout, there may be user prompts
-          await assertReadPermission(drive, this.sender, target);
-          await assertWritePermission(drive, this.sender, linkname);
-          await assertValidPath(linkname);
-          assertUnprotectedFilePath(linkname, this.sender);
-          resume();
-
-          checkin('symlinking');
-          var res = await checkoutFS.pda.symlink(target, linkname);
-          return res;
-        })
-    );
-  },
-
-  async mount(url, mount, opts) {
-    var urlp = parseDriveUrl(url);
-    var url = urlp.origin;
-    var filepath = normalizeFilepath(urlp.pathname || '');
-    var mountKey = typeof mount === 'object' ? mount.key : mount;
-    if (mountKey.includes('.cap'))
-      throw new Error('Unable to mount capability URLs');
-    return auditLog.record(
-      this.sender.getURL(),
-      'mount',
-      { url, filepath, opts },
-      undefined,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('searching for drive');
-          const { drive, checkoutFS, isHistoric } = await lookupDrive(
-            this.sender,
-            urlp.hostname,
-            urlp.version
-          );
-          if (isHistoric)
-            throw new ArchiveNotWritableError(
-              'Cannot modify a historic version'
-            );
-
-          pause(); // dont count against timeout, there may be user prompts
-          await assertWritePermission(drive, this.sender);
-          await assertValidPath(filepath);
-          assertUnprotectedFilePath(filepath, this.sender);
-          resume();
-
-          checkin('mounting drive');
-          var res = await checkoutFS.pda.mount(filepath, mount);
-          return res;
-        })
-    );
-  },
-
-  async unmount(url, opts = {}) {
-    var urlp = parseDriveUrl(url);
-    var url = urlp.origin;
-    var filepath = normalizeFilepath(urlp.pathname || '');
-    return auditLog.record(
-      this.sender.getURL(),
-      'unmount',
-      { url, filepath, opts },
-      undefined,
-      () =>
-        timer(to(opts), async (checkin, pause, resume) => {
-          checkin('searching for drive');
-          const { drive, checkoutFS, isHistoric } = await lookupDrive(
-            this.sender,
-            urlp.hostname,
-            urlp.version
-          );
-          if (isHistoric)
-            throw new ArchiveNotWritableError(
-              'Cannot modify a historic version'
-            );
-
-          pause(); // dont count against timeout, there may be user prompts
-          await assertWritePermission(drive, this.sender);
-          assertUnprotectedFilePath(filepath, this.sender);
-          resume();
-
-          checkin('unmounting drive');
-          var res = await checkoutFS.pda.unmount(filepath);
-          return res;
-        })
+  async diff(url, other, opts = {}) {
+    const urlp = parseDriveUrl(url);
+    const prefix = urlp.pathname;
+    return auditLog.record(this.sender.getURL(), 'diff', { url, other, prefix }, undefined, () =>
+      timer(to(opts), async (checkin, pause, resume) => {
+        const { checkoutFS } = await lookupDrive(this.sender, urlp.hostname, urlp.version);
+        pause();
+        await assertReadPermission(checkoutFS, this.sender);
+        resume();
+        const results = [];
+        for await (const entry of checkoutFS.drive.diff(other || 0, prefix || '/')) {
+          results.push(entry);
+        }
+        return results;
+      })
     );
   },
 
@@ -865,252 +520,191 @@ export default {
     if (!Array.isArray(opts.drive)) opts.drive = [opts.drive];
     return auditLog.record(this.sender.getURL(), 'query', opts, undefined, () =>
       timer(to(opts), async (checkin, pause, resume) => {
-        checkin('looking up drives');
-        var capUrls = {};
+        const resolvedDrives = [];
         for (let i = 0; i < opts.drive.length; i++) {
-          let urlp = parseDriveUrl(opts.drive[i]);
-          opts.drive[i] = (
-            await auditLog.record(
-              '-query',
-              'lookupDrive',
-              { url: opts.drive[i] },
-              undefined,
-              () => lookupDrive(this.sender, urlp.hostname, urlp.version),
-              { ignoreFast: true }
-            )
-          ).checkoutFS;
-          if (urlp.hostname.endsWith('.cap')) {
-            capUrls[opts.drive[i].key.toString('hex')] = urlp.hostname;
-          }
+          const urlp = parseDriveUrl(opts.drive[i]);
+          const looked = await lookupDrive(this.sender, urlp.hostname, urlp.version);
+          resolvedDrives.push(looked.checkoutFS);
         }
-        pause(); // dont count against timeout, there may be user prompts
-        for (let drive of opts.drive) {
-          await assertReadPermission(drive, this.sender);
-        }
+        pause();
+        for (const drive of resolvedDrives) await assertReadPermission(drive, this.sender);
         resume();
-        checkin('running query');
-        var queryOpts = opts;
-        if (opts.drive.length > 1) {
-          // HACK we need to get more results in the individual drive queries so that we can correctly
-          // merge, re-sort, and slice after -prf
-          queryOpts = Object.assign({}, opts);
-          queryOpts.limit = queryOpts.offset + queryOpts.limit;
-          queryOpts.offset = 0;
-        }
-        var queriesResults = await Promise.all(
-          opts.drive.map((drive) => query(drive, queryOpts))
-        );
-        var results = queriesResults.flat(Infinity);
-        if (opts.drive.length > 1) {
-          // HACK re-sort and slice here because each query was run separately -prf
-          if (opts.sort === 'name') {
-            results.sort((a, b) =>
-              opts.reverse
-                ? path
-                    .basename(b.path)
-                    .toLowerCase()
-                    .localeCompare(path.basename(a.path).toLowerCase())
-                : path
-                    .basename(a.path)
-                    .toLowerCase()
-                    .localeCompare(path.basename(b.path).toLowerCase())
-            );
-          } else if (opts.sort === 'mtime') {
-            results.sort((a, b) =>
-              opts.reverse
-                ? b.stat.mtime - a.stat.mtime
-                : a.stat.mtime - b.stat.mtime
-            );
-          } else if (opts.sort === 'ctime') {
-            results.sort((a, b) =>
-              opts.reverse
-                ? b.stat.ctime - a.stat.ctime
-                : a.stat.ctime - b.stat.ctime
-            );
-          }
-          if (opts.offset && opts.limit)
-            results = results.slice(opts.offset, opts.offset + opts.limit);
-          else if (opts.offset) results = results.slice(opts.offset);
-          else if (opts.limit) results = results.slice(0, opts.limit);
-        }
-        if (Object.keys(capUrls).length > 0) {
-          // mask capability URLs
-          for (let res of results) {
-            for (let key in capUrls) {
-              res.drive = res.drive.replace(key, capUrls[key]);
-              res.url = res.url.replace(key, capUrls[key]);
-            }
-          }
-        }
-        return results;
+        const queryOpts = Object.assign({}, opts, { drive: resolvedDrives });
+        const results = await Promise.all(resolvedDrives.map((d) => query(d, queryOpts)));
+        return results.flat(Infinity);
       })
     );
   },
 
   async watch(url, pathPattern) {
-    var { drive } = await lookupDrive(this.sender, url);
+    const { drive } = await lookupDrive(this.sender, url);
     await assertReadPermission(drive, this.sender);
-    return drive.pda.watch(pathPattern);
+    const emitter = new EventEmitter();
+    const folder = pathPattern || '/';
+    ;(async () => {
+      for await (const diff of drive.drive.watch(folder)) {
+        emitter.emit('changed', diff);
+      }
+    })().catch(() => {});
+    return emitter;
   },
 
-  async createNetworkActivityStream(url) {
-    var { drive } = await lookupDrive(this.sender, url);
-    await assertReadPermission(drive, this.sender);
-    return drive.pda.createNetworkActivityStream();
-  },
+  // Beaker-internal helpers (shell UI only)
 
   async beakerDiff(srcUrl, dstUrl, opts) {
     assertBeakerOnly(this.sender);
-    if (!srcUrl || typeof srcUrl !== 'string') {
-      throw new InvalidURLError(
-        'The first parameter of diff() must be a hyperdrive URL'
-      );
-    }
-    if (!dstUrl || typeof dstUrl !== 'string') {
-      throw new InvalidURLError(
-        'The second parameter of diff() must be a hyperdrive URL'
-      );
-    }
-    var [src, dst] = await Promise.all([
+    if (!srcUrl || typeof srcUrl !== 'string') throw new InvalidURLError('First param must be a hyper URL');
+    if (!dstUrl || typeof dstUrl !== 'string') throw new InvalidURLError('Second param must be a hyper URL');
+    const [src, dst] = await Promise.all([
       lookupDrive(this.sender, srcUrl),
       lookupDrive(this.sender, dstUrl),
     ]);
-    return pda.diff(
-      src.checkoutFS.pda,
-      src.filepath,
-      dst.checkoutFS.pda,
-      dst.filepath,
-      opts
-    );
+    const results = [];
+    for await (const entry of src.checkoutFS.drive.diff(0, src.filepath || '/')) {
+      results.push(entry);
+    }
+    return results;
   },
 
   async beakerMerge(srcUrl, dstUrl, opts) {
     assertBeakerOnly(this.sender);
-    if (!srcUrl || typeof srcUrl !== 'string') {
-      throw new InvalidURLError(
-        'The first parameter of merge() must be a hyperdrive URL'
-      );
-    }
-    if (!dstUrl || typeof dstUrl !== 'string') {
-      throw new InvalidURLError(
-        'The second parameter of merge() must be a hyperdrive URL'
-      );
-    }
-    var [src, dst] = await Promise.all([
+    if (!srcUrl || typeof srcUrl !== 'string') throw new InvalidURLError('First param must be a hyper URL');
+    if (!dstUrl || typeof dstUrl !== 'string') throw new InvalidURLError('Second param must be a hyper URL');
+    const [src, dst] = await Promise.all([
       lookupDrive(this.sender, srcUrl),
       lookupDrive(this.sender, dstUrl),
     ]);
-    if (!dst.drive.writable)
-      throw new ArchiveNotWritableError(
-        'The destination drive is not writable'
-      );
-    if (dst.isHistoric)
-      throw new ArchiveNotWritableError('Cannot modify a historic version');
-    var res = await pda.merge(
-      src.checkoutFS.pda,
-      src.filepath,
-      dst.checkoutFS.pda,
-      dst.filepath,
-      opts
-    );
-    return res;
+    if (!dst.drive.writable) throw new ArchiveNotWritableError('Destination drive is not writable');
+    if (dst.isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
+    const srcFolder = src.filepath || '/';
+    const dstFolder = dst.filepath || '/';
+    for await (const entry of src.checkoutFS.drive.list(srcFolder, { recursive: true })) {
+      const relPath = entry.key.slice(srcFolder.endsWith('/') ? srcFolder.length : srcFolder.length + 1);
+      const dstPath = dstFolder.endsWith('/') ? dstFolder + relPath : dstFolder + '/' + relPath;
+      const buf = await src.checkoutFS.drive.get(entry.key);
+      if (buf) await dst.checkoutFS.drive.put(dstPath, buf, { metadata: entry.value?.metadata });
+    }
   },
 
   async importFromFilesystem(opts) {
     assertBeakerOnly(this.sender);
-    var { checkoutFS, filepath, isHistoric } = await lookupDrive(
-      this.sender,
-      opts.dst
-    );
-    if (isHistoric)
-      throw new ArchiveNotWritableError('Cannot modify a historic version');
-    var res = await pda.exportFilesystemToArchive({
-      srcPath: opts.src,
-      dstArchive: checkoutFS.session ? checkoutFS.session.drive : checkoutFS,
-      dstPath: filepath,
+    const { checkoutFS, filepath, isHistoric } = await lookupDrive(this.sender, opts.dst);
+    if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
+    return _importFsFolder(checkoutFS.drive, opts.src, filepath || '/', {
       ignore: opts.ignore,
-      inplaceImport: opts.inplaceImport !== false,
-      dryRun: opts.dryRun,
     });
-    return res;
   },
 
   async exportToFilesystem(opts) {
     assertBeakerOnly(this.sender);
-
-    // TODO do we need to replace this? -prf
-    // if (await checkFolderIsEmpty(opts.dst) === false) {
-    // return
-    // }
-
-    var { checkoutFS, filepath } = await lookupDrive(this.sender, opts.src);
-    return pda.exportArchiveToFilesystem({
-      srcArchive: checkoutFS.session ? checkoutFS.session.drive : checkoutFS,
-      srcPath: filepath,
-      dstPath: opts.dst,
+    const { checkoutFS, filepath } = await lookupDrive(this.sender, opts.src);
+    return _exportToFs(checkoutFS.drive, filepath || '/', opts.dst, {
       ignore: opts.ignore,
       overwriteExisting: opts.overwriteExisting,
-      skipUndownloadedFiles: opts.skipUndownloadedFiles,
     });
   },
 
   async exportToDrive(opts) {
     assertBeakerOnly(this.sender);
-    var src = await lookupDrive(this.sender, opts.src);
-    var dst = await lookupDrive(this.sender, opts.dst);
-    if (dst.isHistoric)
-      throw new ArchiveNotWritableError('Cannot modify a historic version');
-    var res = await pda.exportArchiveToArchive({
-      srcArchive: src.checkoutFS.session
-        ? src.checkoutFS.session.drive
-        : src.checkoutFS,
-      srcPath: src.filepath,
-      dstArchive: dst.checkoutFS.session
-        ? dst.checkoutFS.session.drive
-        : dst.checkoutFS,
-      dstPath: dst.filepath,
-      ignore: opts.ignore,
-      skipUndownloadedFiles: opts.skipUndownloadedFiles,
-    });
-    return res;
+    const src = await lookupDrive(this.sender, opts.src);
+    const dst = await lookupDrive(this.sender, opts.dst);
+    if (dst.isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
+    const srcFolder = src.filepath || '/';
+    const dstFolder = dst.filepath || '/';
+    const ignore = new Set(opts.ignore || []);
+    for await (const entry of src.checkoutFS.drive.list(srcFolder, { recursive: true })) {
+      if (ignore.has(entry.key)) continue;
+      const relPath = entry.key.slice(srcFolder.length);
+      const dstPath = (dstFolder.endsWith('/') ? dstFolder : dstFolder + '/') + relPath.replace(/^\//, '');
+      const buf = await src.checkoutFS.drive.get(entry.key);
+      if (buf) await dst.checkoutFS.drive.put(dstPath, buf, { metadata: entry.value?.metadata });
+    }
+  },
+
+  // v10 compat shims — keep existing userland working without rewrite
+  async readFile(url, opts) {
+    if (typeof opts === 'string') opts = { encoding: opts };
+    return hyperdriveAPI.get.call(this, url, opts || {});
+  },
+  async writeFile(url, data, opts) {
+    if (typeof opts === 'string') opts = { encoding: opts };
+    return hyperdriveAPI.put.call(this, url, data, opts || {});
+  },
+  async stat(url, opts) {
+    const urlp = parseDriveUrl(url);
+    const filepath = normalizeFilepath(urlp.pathname || '');
+    // Root is always a directory in Hyperdrive v11 — no entry exists for '/', and
+    // hyperdrive throws "Invalid filename: /" if you try to look it up.
+    if (filepath === '/') {
+      return { mode: 16384 /* IFDIR */, size: 0, offset: 0, blocks: 0, downloaded: 0, mtime: 0, ctime: 0, metadata: {} };
+    }
+    const e = await hyperdriveAPI.entry.call(this, url, opts || {});
+    if (!e) return null;
+    const isFile = !!e.value?.blob;
+    return {
+      mode: isFile ? 32768 /* IFREG */ : 16384 /* IFDIR */,
+      size: e.value?.blob?.byteLength || 0,
+      offset: 0,
+      blocks: 0,
+      downloaded: 0,
+      mtime: 0,
+      ctime: 0,
+      metadata: e.value?.metadata || {},
+    };
+  },
+  async unlink(url, opts) {
+    return hyperdriveAPI.del.call(this, url, opts || {});
+  },
+  async readdir(url, opts = {}) {
+    const entries = await hyperdriveAPI.list.call(this, url, { recursive: opts.recursive || false });
+    if (opts.includeStats) {
+      return entries.map((e) => {
+        const isFile = !!e.value?.blob;
+        return {
+          name: path.basename(e.key),
+          stat: {
+            // mode encodes file vs directory so fg-side createStat() can reconstruct isFile/isDirectory
+            mode: isFile ? 32768 /* IFREG */ : 16384 /* IFDIR */,
+            size: e.value?.blob?.byteLength || 0,
+            offset: 0,
+            blocks: 0,
+            downloaded: 0,
+            mtime: 0,
+            ctime: 0,
+            metadata: e.value?.metadata || {},
+          },
+        };
+      });
+    }
+    return entries.map((e) => path.basename(e.key));
+  },
+  async symlink() { /* no-op: symlinks removed in v11 */ },
+  async mount() { /* no-op: mounts removed in v11 */ },
+  async unmount() { /* no-op: mounts removed in v11 */ },
+  async createNetworkActivityStream() {
+    const { EventEmitter } = require('events');
+    return new EventEmitter();
   },
 };
+
+export default hyperdriveAPI;
 
 // internal helpers
 // =
 
-// helper to check if filepath refers to a file that userland is not allowed to edit directly
 function assertUnprotectedFilePath(filepath, sender) {
-  if (wcTrust.isWcTrusted(sender)) {
-    return; // can write any file
-  }
-  if (filepath === '/' + DRIVE_MANIFEST_FILENAME) {
-    throw new ProtectedFileNotWritableError();
-  }
+  if (wcTrust.isWcTrusted(sender)) return;
+  if (filepath === '/' + DRIVE_MANIFEST_FILENAME) throw new ProtectedFileNotWritableError();
 }
 
-// temporary helper to make sure the call is made by a beaker: page
 function assertBeakerOnly(sender) {
-  if (!wcTrust.isWcTrusted(sender)) {
-    throw new PermissionsError();
-  }
+  if (!wcTrust.isWcTrusted(sender)) throw new PermissionsError();
 }
 
 async function assertCreateDrivePermission(sender, opts) {
-  // beaker: always allowed
-  if (wcTrust.isWcTrusted(sender)) {
-    return true;
-  }
-
-  // ask the user
-  let allowed = await permissions.requestPermission(
-    'createDrive',
-    sender,
-    opts
-  );
-  if (!allowed) {
-    throw new UserDeniedError();
-  }
+  if (wcTrust.isWcTrusted(sender)) return true;
+  const allowed = await permissions.requestPermission('createDrive', sender, opts);
+  if (!allowed) throw new UserDeniedError();
 }
 
 async function assertReadPermission(drive, sender, filepath = undefined) {
@@ -1121,126 +715,64 @@ async function assertReadPermission(drive, sender, filepath = undefined) {
     driveUrl = drive.url;
   }
 
-  let ident = filesystem.getDriveIdent(driveUrl);
+  const ident = filesystem.getDriveIdent(driveUrl);
   if (ident.system) {
-    let origin = archivesDb.extractOrigin(sender.getURL()) + '/';
-    if (wcTrust.isWcTrusted(sender) || filesystem.isRootUrl(origin)) {
-      return true;
-    }
+    const origin = archivesDb.extractOrigin(sender.getURL()) + '/';
+    if (wcTrust.isWcTrusted(sender) || filesystem.isRootUrl(origin)) return true;
     throw new PermissionsError('Cannot read the hyper://private/ drive');
   }
-
   return true;
 }
 
 async function assertWritePermission(drive, sender, filepath = undefined) {
-  var driveKey = drive.key.toString('hex');
-  var driveUrl = `hyper://${driveKey}`;
+  const driveKey = b4a.toString(drive.key, 'hex');
   const perm = 'modifyDrive:' + driveKey;
 
-  // beaker: always allowed
-  if (wcTrust.isWcTrusted(sender)) {
-    return true;
-  }
+  if (wcTrust.isWcTrusted(sender)) return true;
 
-  // self-modification ALWAYS allowed
-  var senderDatKey = await lookupUrlDriveKey(sender.getURL());
-  if (senderDatKey === driveKey) {
-    return true;
-  }
+  const senderDatKey = await lookupUrlDriveKey(sender.getURL());
+  if (senderDatKey === driveKey) return true;
 
-  let ident = filesystem.getDriveIdent(driveUrl);
+  const ident = filesystem.getDriveIdent(`hyper://${driveKey}`);
+  if (ident.system) throw new PermissionsError('Cannot write the hyper://private/ drive');
 
-  // cant even ask to write the private drive
-  if (ident.system) {
-    throw new PermissionsError('Cannot write the hyper://private/ drive');
-  }
-
-  // ensure the sender is allowed to write
-  var allowed = await permissions.queryPermission(perm, sender);
+  const allowed = await permissions.queryPermission(perm, sender);
   if (allowed) return true;
 
-  // ask the user
-  var details = await drives.getDriveInfo(driveKey);
-  allowed = await permissions.requestPermission(perm, sender, {
-    title: details.title,
-  });
-  if (!allowed) throw new UserDeniedError();
-  return true;
-}
-
-async function assertDeleteDrivePermission(drive, sender) {
-  var driveKey = drive.key.toString('hex');
-  const perm = 'deleteDrive:' + driveKey;
-
-  // beaker: always allowed
-  if (wcTrust.isWcTrusted(sender)) {
-    return true;
-  }
-
-  // ask the user
-  var details = await drives.getDriveInfo(driveKey);
-  var allowed = await permissions.requestPermission(perm, sender, {
-    title: details.title,
-  });
-  if (!allowed) throw new UserDeniedError();
+  const details = await drives.getDriveInfo(driveKey);
+  const userAllowed = await permissions.requestPermission(perm, sender, { title: details.title });
+  if (!userAllowed) throw new UserDeniedError();
   return true;
 }
 
 async function assertQuotaPermission(drive, senderOrigin, byteLength) {
-  // beaker: always allowed
-  if (senderOrigin.startsWith('beaker:')) {
-    return;
-  }
-
-  // fetch the drive meta
+  if (senderOrigin.startsWith('beaker:')) return;
   const meta = await archivesDb.getMeta(drive.key);
-
-  // fallback to default quota
-  var bytesAllowed =
-    /* TODO userSettings.bytesAllowed ||*/ DAT_QUOTA_DEFAULT_BYTES_ALLOWED;
-
-  // check the new size
-  var newSize = meta.size + byteLength;
-  if (newSize > bytesAllowed) {
-    throw new QuotaExceededError();
-  }
+  const bytesAllowed = DAT_QUOTA_DEFAULT_BYTES_ALLOWED;
+  const newSize = (meta.size || 0) + byteLength;
+  if (newSize > bytesAllowed) throw new QuotaExceededError();
 }
 
 function assertValidFilePath(filepath) {
-  if (filepath.slice(-1) === '/') {
-    throw new InvalidPathError('Files can not have a trailing slash');
-  }
+  if (filepath.slice(-1) === '/') throw new InvalidPathError('Files cannot have a trailing slash');
   assertValidPath(filepath);
 }
 
 function assertValidPath(fileOrFolderPath) {
-  if (!DRIVE_VALID_PATH_REGEX.test(fileOrFolderPath)) {
-    throw new InvalidPathError('Path contains invalid characters');
-  }
+  if (!DRIVE_VALID_PATH_REGEX.test(fileOrFolderPath)) throw new InvalidPathError('Path contains invalid characters');
 }
 
 function normalizeFilepath(str) {
   str = decodeURIComponent(str);
-  if (!str.includes('://') && str.charAt(0) !== '/') {
-    str = '/' + str;
-  }
+  if (!str.includes('://') && str.charAt(0) !== '/') str = '/' + str;
   return str;
 }
 
-// helper to handle the URL argument that's given to most args
-// - can get a hyperdrive hash, or hyperdrive url
-// - sets checkoutFS to what's requested by version
-export async function lookupDrive(
-  sender,
-  driveHostname,
-  version,
-  dontGetDrive = false
-) {
-  var driveKey;
+export async function lookupDrive(sender, driveHostname, version, dontGetDrive = false) {
+  let driveKey;
 
-  if (driveHostname.endsWith('.cap')) {
-    let cap = capabilities.lookupCap(driveHostname);
+  if (driveHostname && driveHostname.endsWith('.cap')) {
+    const cap = capabilities.lookupCap(driveHostname);
     if (cap) {
       driveKey = cap.target.key;
       version = cap.target.version;
@@ -1253,29 +785,72 @@ export async function lookupDrive(
     driveKey = await drives.fromURLToKey(driveHostname, true);
   }
 
-  if (dontGetDrive) {
-    return { driveKey, version };
-  }
+  if (dontGetDrive) return { driveKey, version };
 
-  var drive = drives.getDrive(driveKey);
+  let drive = drives.getDrive(driveKey);
   if (!drive) drive = await drives.loadDrive(driveKey);
-  var { checkoutFS, isHistoric } = await drives.getDriveCheckout(
-    drive,
-    version
-  );
+  const { checkoutFS, isHistoric } = await drives.getDriveCheckout(drive, version);
   return { drive, version, isHistoric, checkoutFS };
 }
 
 async function lookupUrlDriveKey(url) {
   if (HYPERDRIVE_HASH_REGEX.test(url)) return url;
-  if (!url.startsWith('hyper://')) {
-    return false; // not a drive site
-  }
-
-  var urlp = parseDriveUrl(url);
+  if (!url.startsWith('hyper://')) return false;
+  const urlp = parseDriveUrl(url);
   try {
     return await hyperDns.resolveName(urlp.hostname);
   } catch (e) {
     return false;
+  }
+}
+
+async function _readIndexJson(drive) {
+  const buf = await drive.get('/index.json');
+  if (!buf) return {};
+  try { return JSON.parse(b4a.toString(buf)); } catch { return {}; }
+}
+
+function _toBuffer(data, opts = {}) {
+  if (Buffer.isBuffer(data)) return data;
+  if (typeof data === 'string') {
+    if (opts.encoding === 'base64') return b4a.from(data, 'base64');
+    if (opts.encoding === 'hex') return b4a.from(data, 'hex');
+    return b4a.from(data);
+  }
+  return b4a.from(JSON.stringify(data));
+}
+
+async function _importFsFolder(drive, srcPath, dstPath, { ignore = [] } = {}) {
+  const ignoreSet = new Set(ignore);
+  const entries = await nodefs.readdir(srcPath, { withFileTypes: true });
+  for (const entry of entries) {
+    const relName = entry.name;
+    if (ignoreSet.has(relName)) continue;
+    const fullSrc = srcPath.endsWith('/') ? srcPath + relName : srcPath + '/' + relName;
+    const fullDst = (dstPath.endsWith('/') ? dstPath : dstPath + '/') + relName;
+    if (entry.isDirectory()) {
+      await _importFsFolder(drive, fullSrc, fullDst, { ignore });
+    } else if (entry.isFile()) {
+      const buf = await nodefs.readFile(fullSrc);
+      await drive.put(fullDst, buf);
+    }
+  }
+}
+
+async function _exportToFs(drive, srcFolder, dstPath, { ignore = [], overwriteExisting = true } = {}) {
+  const ignoreSet = new Set(ignore);
+  await nodefs.mkdir(dstPath, { recursive: true });
+  for await (const entry of drive.list(srcFolder, { recursive: true })) {
+    if (ignoreSet.has(entry.key)) continue;
+    const relPath = entry.key.slice(srcFolder.length).replace(/^\//, '');
+    const dstFile = dstPath.endsWith('/') ? dstPath + relPath : dstPath + '/' + relPath;
+    if (!overwriteExisting) {
+      try { await nodefs.access(dstFile); continue; } catch {}
+    }
+    const buf = await drive.get(entry.key);
+    if (buf) {
+      await nodefs.mkdir(path.dirname(dstFile), { recursive: true });
+      await nodefs.writeFile(dstFile, buf);
+    }
   }
 }

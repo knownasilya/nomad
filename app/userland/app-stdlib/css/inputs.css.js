@@ -7,10 +7,10 @@ const cssStr = css`
 
   input,
   textarea {
-    border-radius: 4px;
+    border-radius: 6px;
     color: var(--text-color--default);
     background: var(--bg-color--default);
-    border: 1px solid var(--border-color--light);
+    border: 1px solid var(--border-color--semi-light);
     box-sizing: border-box;
   }
   textarea {
@@ -73,8 +73,8 @@ const cssStr = css`
   textarea:focus,
   select:focus {
     outline: 0;
-    border: 1px solid rgba(41, 95, 203, 0.8);
-    box-shadow: 0 0 0 2px rgba(41, 95, 203, 0.2);
+    border: 1px solid #4040e7;
+    box-shadow: 0 0 0 2px rgba(64, 64, 231, 0.18);
   }
 
   input.error,

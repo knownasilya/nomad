@@ -27,6 +27,9 @@ class SettingsApp extends LitElement {
   constructor() {
     super();
     this.currentSubview = QP.getParam('view') || 'general';
+  }
+
+  firstUpdated() {
     this.load();
   }
 

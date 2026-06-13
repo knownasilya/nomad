@@ -27,57 +27,26 @@ class CreateDriveModal extends LitElement {
       buttonsCSS,
       spinnerCSS,
       css`
-        .wrapper {
-          padding: 0;
-        }
-
-        h1.title {
-          padding: 14px 20px;
-          margin: 0;
-          border-color: #bbb;
-        }
-
-        form {
-          padding: 14px 20px;
-          margin: 0;
-        }
-
         form input:not([type='checkbox']) {
-          font-size: 14px;
-          height: 34px;
-          padding: 0 10px;
-          border-color: #bbb;
-          margin-top: 0;
-        }
-
-        hr {
-          border: 0;
-          border-top: 1px solid #ddd;
-          margin: 20px 0;
+          margin-bottom: 10px;
+          display: block;
         }
 
         .from-folder-path {
-          background: #f3f3f8;
-          padding: 10px 12px;
+          background: var(--m-bg-secondary);
+          padding: 8px 12px;
           margin-bottom: 10px;
-          border-radius: 4px;
+          border-radius: var(--m-radius);
+          font-size: 12px;
+          color: var(--m-text-light);
+          border: 1px solid var(--m-border);
         }
 
         .form-actions {
           display: flex;
-        }
-
-        .form-actions button {
-          padding: 6px 12px;
-          font-size: 12px;
-        }
-
-        .form-actions button {
-          margin-left: 5px;
-        }
-
-        .form-actions button:first-child {
-          margin-left: 0;
+          align-items: center;
+          gap: 6px;
+          padding-top: 4px;
         }
 
         .form-actions button:nth-child(3) {
@@ -86,18 +55,21 @@ class CreateDriveModal extends LitElement {
 
         .git-repo {
           position: relative;
-          border: 1px solid #ddd;
-          border-radius: 4px;
-          margin-top: 16px;
-          padding: 16px 10px 0;
+          border: 1px solid var(--m-border);
+          border-radius: var(--m-radius);
+          margin-top: 14px;
+          padding: 16px 12px 4px;
         }
 
         .git-repo-label {
           position: absolute;
-          top: -8px;
-          left: 8px;
-          padding: 0px 4px;
+          top: -9px;
+          left: 10px;
+          padding: 0 4px;
           background: #fff;
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--m-text-light);
         }
       `,
     ];
@@ -136,7 +108,7 @@ class CreateDriveModal extends LitElement {
   }
 
   adjustHeight() {
-    var height = this.shadowRoot.querySelector('div').clientHeight | 0;
+    var height = this.shadowRoot.querySelector('div').scrollHeight;
     bg.modals.resizeSelf({ height });
   }
 

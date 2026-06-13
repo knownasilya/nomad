@@ -89,7 +89,7 @@ class SiteInfoApp extends LitElement {
     });
     const globalAnchorClickHandler = (isPopup) => (e) => {
       e.preventDefault();
-      var a = e.path.reduce(
+      var a = (e.composedPath ? e.composedPath() : e.path || []).reduce(
         (acc, v) => acc || (v.tagName === 'A' ? v : undefined),
         undefined
       );

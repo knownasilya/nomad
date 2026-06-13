@@ -150,9 +150,15 @@ class WindowWatcher extends EventEmitter {
     this.emit('remove');
   }
 
-  handlePagesUpdated(pages) {
-    if (JSON.stringify(pages) === JSON.stringify(this.snapshot.pages)) return;
+  handlePagesUpdated(payload) {
+    const pages = Array.isArray(payload) ? payload : (payload?.pages || []);
+    const groups = Array.isArray(payload) ? [] : (payload?.groups || []);
+    if (
+      JSON.stringify(pages) === JSON.stringify(this.snapshot.pages) &&
+      JSON.stringify(groups) === JSON.stringify(this.snapshot.groups)
+    ) return;
     this.snapshot.pages = pages && pages.length ? pages : defaultPageState();
+    this.snapshot.groups = groups;
     this.emit('change', this.snapshot);
   }
 

@@ -5,6 +5,7 @@ import folderSyncManifest from '../../bg/web-apis/manifests/internal/folder-sync
 import historyManifest from '../../bg/web-apis/manifests/internal/history';
 import hyperdriveManifest from '../../bg/web-apis/manifests/external/hyperdrive';
 import overlayManifest from '../../bg/rpc-manifests/overlay';
+import spacesManifest from '../../bg/rpc-manifests/spaces';
 import viewsManifest from '../../bg/rpc-manifests/views';
 import watchlistManifest from '../../bg/web-apis/manifests/internal/watchlist';
 
@@ -17,5 +18,6 @@ export const overlay = rpc.importAPI(
   'background-process-overlay',
   overlayManifest
 );
+export const spaces = rpc.importAPI('background-process-spaces', spacesManifest);
 export const views = rpc.importAPI('background-process-views', viewsManifest);
 export const watchlist = rpc.importAPI('watchlist', watchlistManifest);

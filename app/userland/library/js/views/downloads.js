@@ -29,8 +29,6 @@ export class DownloadsView extends LitElement {
 
   async load() {
     this.downloads = await beaker.downloads.getDownloads();
-    console.log(this.downloads);
-
     var dlEvents = beaker.downloads.createEventsStream();
     dlEvents.addEventListener('updated', this.onUpdateDownload.bind(this));
     dlEvents.addEventListener('done', this.onUpdateDownload.bind(this));

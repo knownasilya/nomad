@@ -31,60 +31,18 @@ export class EditBookmarkPopup extends BasePopup {
           width: 500px;
         }
 
-        .popup-inner label {
-          font-size: 13px;
-        }
-
         .popup-inner label.checkbox {
           display: flex;
           align-items: center;
-          margin: 5px 0;
-        }
-
-        .popup-inner input[type='text'] {
-          padding: 6px;
+          margin: 8px 0 4px;
+          font-weight: 400;
         }
 
         .popup-inner input[type='checkbox'] {
           display: inline;
           height: auto;
           width: auto;
-          margin: 0 10px 0 2px;
-        }
-
-        .viz-selector {
-          margin-bottom: 10px;
-        }
-
-        .viz-selector > span {
-          display: inline-flex;
-          margin-right: 5px;
-        }
-
-        .viz-selector a {
-          border: 1px solid var(--border-color--light);
-          border-radius: 4px;
-          padding: 4px 6px;
-        }
-
-        .viz-selector a:first-child {
-          border-top-right-radius: 0;
-          border-bottom-right-radius: 0;
-        }
-
-        .viz-selector a:last-child {
-          border-top-left-radius: 0;
-          border-bottom-left-radius: 0;
-        }
-
-        .viz-selector a.selected {
-          background: var(--bg-color--selected);
-          border-color: var(--bg-color--selected);
-          color: var(--bg-color--default);
-        }
-
-        .delete {
-          margin-right: auto;
+          margin: 0 8px 0 2px;
         }
       `,
     ];
@@ -196,7 +154,6 @@ export class EditBookmarkPopup extends BasePopup {
       title: e.target.title.value,
       pinned: e.target.pinned?.checked,
     };
-    console.log(b);
     if (typeof beaker.bookmarks === 'undefined') {
       // userland
       b.href = normalizeUrl(b.href);

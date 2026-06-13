@@ -36,6 +36,8 @@ import * as permissions from './bg/ui/permissions';
 import * as beakerProtocol from './bg/protocols/beaker';
 import * as assetProtocol from './bg/protocols/asset';
 import * as hyperProtocol from './bg/protocols/hyper';
+import { registerForPartition } from './bg/protocols/index';
+import * as spacesDb from './bg/dbs/spaces';
 
 import * as testDriver from './bg/test-driver';
 import * as openURL from './bg/open-url';
@@ -88,6 +90,13 @@ protocol.registerSchemesAsPrivileged([
       standard: true,
       secure: true,
       allowServiceWorkers: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+  {
+    scheme: 'asset',
+    privileges: {
       supportFetchAPI: true,
       corsEnabled: true,
     },
@@ -147,6 +156,16 @@ app.on('ready', async function () {
   assetProtocol.setup();
   assetProtocol.register(protocol);
   hyperProtocol.register(protocol);
+
+  // register protocols on all non-default space session partitions
+  try {
+    const allSpaces = await spacesDb.list();
+    for (const space of allSpaces) {
+      if (space.partition) registerForPartition(space.partition);
+    }
+  } catch (e) {
+    // non-fatal: new spaces will register on first use
+  }
 
   initWindow.close();
 

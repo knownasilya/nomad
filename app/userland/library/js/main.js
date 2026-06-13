@@ -16,6 +16,7 @@ export class LibraryApp extends LitElement {
     return {
       view: { type: String },
       filter: { type: String },
+      viewMode: { type: String },
     };
   }
 
@@ -29,6 +30,7 @@ export class LibraryApp extends LitElement {
     beaker.panes.attachToLastActivePane();
 
     this.view = '';
+    this.viewMode = localStorage.getItem('lib-view-mode') || 'list';
     const getView = () => {
       var view = location.pathname.slice(1);
       return view === '' ? 'drives' : view;
@@ -51,6 +53,11 @@ export class LibraryApp extends LitElement {
         }
       }
     });
+  }
+
+  setViewMode(mode) {
+    this.viewMode = mode;
+    localStorage.setItem('lib-view-mode', mode);
   }
 
   async setView(view) {
@@ -94,7 +101,10 @@ export class LibraryApp extends LitElement {
             }}
           />
         </div>
-        ${this.renderNewBtn()}
+        <div class="header-actions">
+          ${this.renderViewToggle()}
+          ${this.renderNewBtn()}
+        </div>
       </header>
       <div class="layout">
         <nav>
@@ -127,6 +137,7 @@ export class LibraryApp extends LitElement {
                 <drives-view
                   class="full-size"
                   .filter=${this.filter}
+                  .viewMode=${this.viewMode}
                   loadable
                 ></drives-view>
               `
@@ -136,6 +147,7 @@ export class LibraryApp extends LitElement {
                 <bookmarks-view
                   class="full-size"
                   .filter=${this.filter}
+                  .viewMode=${this.viewMode}
                   loadable
                 ></bookmarks-view>
               `
@@ -163,20 +175,30 @@ export class LibraryApp extends LitElement {
     `;
   }
 
+  renderViewToggle() {
+    if (this.view !== 'drives' && this.view !== 'bookmarks') return '';
+    return html`
+      <span class="view-toggle">
+        <button
+          class="${this.viewMode === 'list' ? 'active' : ''}"
+          title="List view"
+          @click=${() => this.setViewMode('list')}
+        ><span class="fas fa-list"></span></button>
+        <button
+          class="${this.viewMode === 'card' ? 'active' : ''}"
+          title="Card view"
+          @click=${() => this.setViewMode('card')}
+        ><span class="fas fa-th"></span></button>
+      </span>
+    `;
+  }
+
   renderNewBtn() {
     if (this.view === 'drives') {
-      return html`
-        <span class="new-btn"
-          ><button @click=${this.onCreateDrive}>New Hyperdrive</button></span
-        >
-      `;
+      return html`<button class="new-action-btn" @click=${this.onCreateDrive}>New Hyperdrive</button>`;
     }
     if (this.view === 'bookmarks') {
-      return html`
-        <span class="new-btn"
-          ><button @click=${this.onCreateBookmark}>New Bookmark</button></span
-        >
-      `;
+      return html`<button class="new-action-btn" @click=${this.onCreateBookmark}>New Bookmark</button>`;
     }
   }
 

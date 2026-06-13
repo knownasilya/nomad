@@ -87,8 +87,9 @@ export async function checkLabsPerm({ perm, labApi, apiDocsUrl, sender }) {
         drive,
         urlp.version
       );
-      let manifest = await checkoutFS.pda.readManifest().catch((_) => {});
-      let apis = manifest?.experimental?.apis;
+      let indexJson = {};
+      try { const buf = await checkoutFS.drive.get('/index.json'); if (buf) indexJson = JSON.parse(buf.toString()); } catch {}
+      let apis = indexJson?.experimental?.apis;
       if (apis && Array.isArray(apis)) {
         isOptedIn = apis.includes(labApi);
       }

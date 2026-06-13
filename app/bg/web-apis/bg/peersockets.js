@@ -1,79 +1,178 @@
+// @ts-nocheck
+// Peersockets — per-topic messaging over existing Hyperswarm connections using Protomux channels.
+import Protomux from 'protomux';
+import c from 'compact-encoding';
+import { createHash } from 'crypto';
+import b4a from 'b4a';
 import { Duplex, Readable } from 'streamx';
-import { getClient } from '../../hyper/daemon';
 import * as drives from '../../hyper/drives';
+import * as daemon from '../../hyper/daemon';
 import { PermissionsError } from 'beaker-error-constants';
 
-const sessionAliases = new Map();
+const PROTOCOL = 'nomad/peersocket';
+
+// roomId hex -> Room
+const rooms = new Map();
+let swarmListenerInstalled = false;
 
 // exported api
 // =
 
 export default {
   async join(topic) {
-    var drive = await getSenderDrive(this.sender);
-    topic = massageTopic(topic, drive.discoveryKey);
-    const aliases = getAliases(this.sender);
+    const drive = await getSenderDrive(this.sender);
+    _ensureSwarmListener();
 
-    var stream = new Duplex({
+    const id = _roomId(drive.key, topic);
+    const idHex = b4a.toString(id, 'hex');
+    if (!rooms.has(idHex)) rooms.set(idHex, new Room(id));
+    const room = rooms.get(idHex);
+
+    // Open channels on all existing connections immediately
+    const swarm = daemon.getSwarm();
+    if (swarm) {
+      for (const conn of swarm.connections) room.openOnConn(conn);
+    }
+
+    const stream = new Duplex({
       write(data, cb) {
-        if (
-          !Array.isArray(data) ||
-          typeof data[0] === 'undefined' ||
-          typeof data[1] === 'undefined'
-        ) {
-          console.debug(
-            'Incorrectly formed message from peersockets send API',
-            data
-          );
-          return cb(null);
+        // Incoming writes are [peerId, msgBuffer] from fg-side send(peerId, msg)
+        if (Array.isArray(data) && data.length === 2) {
+          const msg = Buffer.isBuffer(data[1]) ? data[1] : b4a.from(data[1]);
+          room.sendTo(data[0], msg);
         }
-        const peer = getPeerForAlias(aliases, data[0]);
-        if (!peer) return;
-        topicHandle.send(data[1], peer);
         cb(null);
       },
     });
     stream.objectMode = true;
-    var topicHandle = getClient().peersockets.join(topic, {
-      onmessage(message, peer) {
-        stream.push([
-          'message',
-          { peerId: createAliasForPeer(aliases, peer), message },
-        ]);
-      },
-    });
-    drive.pda.numActiveStreams++;
+
+    room.joinStreams.add(stream);
     stream.on('close', () => {
-      drive.pda.numActiveStreams--;
-      releaseAliases(this.sender, aliases);
-      topicHandle.close();
+      room.joinStreams.delete(stream);
+      room._maybeCleanup();
     });
 
     return stream;
   },
 
   async watch() {
-    const drive = await getSenderDrive(this.sender);
-    const aliases = getAliases(this.sender);
-    const stream = new Readable();
-    const stopWatch = await getClient().peers.watchPeers(drive.key, {
-      onjoin: async (peer) =>
-        stream.push(['join', { peerId: createAliasForPeer(aliases, peer) }]),
-      onleave: (peer) =>
-        stream.push(['leave', { peerId: createAliasForPeer(aliases, peer) }]),
-    });
+    await getSenderDrive(this.sender); // validate origin
+    _ensureSwarmListener();
 
-    stream.on('close', () => {
-      releaseAliases(this.sender, aliases);
-      stopWatch();
-    });
+    const stream = new Readable();
+    stream.objectMode = true;
+    const swarm = daemon.getSwarm();
+
+    if (swarm) {
+      const onConn = (conn) => {
+        if (stream.destroyed) {
+          swarm.removeListener('connection', onConn);
+          return;
+        }
+        const peerId = conn.remotePublicKey
+          ? b4a.toString(conn.remotePublicKey, 'hex')
+          : null;
+        if (!peerId) return;
+        stream.push(['join', { peerId }]);
+        conn.on('close', () => {
+          if (!stream.destroyed) stream.push(['leave', { peerId }]);
+        });
+      };
+      swarm.on('connection', onConn);
+      stream.on('close', () => swarm.removeListener('connection', onConn));
+    }
 
     return stream;
   },
 };
 
-// internal methods
+// internal
 // =
+
+class Room {
+  constructor(id) {
+    this.id = id;
+    this.idHex = b4a.toString(id, 'hex');
+    this.joinStreams = new Set();
+    this.watchStreams = new Set();
+    this.channels = new Map(); // peerKeyHex -> { channel, msg }
+  }
+
+  openOnConn(conn) {
+    const peerId = conn.remotePublicKey
+      ? b4a.toString(conn.remotePublicKey, 'hex')
+      : null;
+    if (!peerId || this.channels.has(peerId)) return;
+
+    let mux;
+    try {
+      mux = Protomux.from(conn);
+    } catch {
+      return;
+    }
+
+    const room = this;
+    const channel = mux.createChannel({
+      protocol: PROTOCOL,
+      id: this.id,
+      messages: [
+        {
+          encoding: c.buffer,
+          onmessage(data) {
+            for (const s of room.joinStreams) {
+              s.push(['message', { peerId, message: data }]);
+            }
+          },
+        },
+      ],
+      onopen() {
+        for (const ws of room.watchStreams) ws.push(['join', { peerId }]);
+      },
+      onclose() {
+        room.channels.delete(peerId);
+        for (const ws of room.watchStreams) ws.push(['leave', { peerId }]);
+        room._maybeCleanup();
+      },
+    });
+
+    if (!channel) return; // already exists on this mux
+
+    this.channels.set(peerId, { channel, msg: channel.messages[0] });
+    channel.open();
+  }
+
+  sendTo(peerId, msg) {
+    const peer = this.channels.get(peerId);
+    if (peer?.msg) peer.msg.send(msg);
+  }
+
+  _maybeCleanup() {
+    if (this.joinStreams.size === 0 && this.watchStreams.size === 0) {
+      for (const { channel } of this.channels.values()) {
+        try { channel.close(); } catch {}
+      }
+      rooms.delete(this.idHex);
+    }
+  }
+}
+
+function _roomId(driveKey, topic) {
+  return createHash('sha256')
+    .update(Buffer.isBuffer(driveKey) ? driveKey : b4a.from(driveKey, 'hex'))
+    .update('/')
+    .update(topic)
+    .digest();
+}
+
+function _ensureSwarmListener() {
+  if (swarmListenerInstalled) return;
+  swarmListenerInstalled = true;
+  const swarm = daemon.getSwarm();
+  if (!swarm) return;
+  swarm.on('connection', (conn) => {
+    for (const room of rooms.values()) room.openOnConn(conn);
+  });
+}
 
 async function getSenderDrive(sender) {
   var url = sender.getURL();
@@ -83,35 +182,4 @@ async function getSenderDrive(sender) {
     );
   }
   return drives.getOrLoadDrive(url);
-}
-
-function massageTopic(topic, discoveryKey) {
-  return `webapp/${discoveryKey.toString('hex')}/${topic}`;
-}
-
-function getAliases(sender) {
-  let aliases = sessionAliases.get(sender);
-  if (!aliases) {
-    aliases = { refs: 0, byPeer: new Map(), byAlias: [] };
-    sessionAliases.set(sender, aliases);
-  }
-  aliases.refs++;
-  return aliases;
-}
-
-function releaseAliases(sender, aliases) {
-  if (!--aliases.refs) sessionAliases.delete(sender);
-}
-
-function createAliasForPeer(aliases, peer) {
-  let alias = aliases.byPeer.get(peer);
-  if (alias) return alias;
-  alias = aliases.byPeer.size + 1;
-  aliases.byPeer.set(peer, alias);
-  aliases.byAlias[alias] = peer;
-  return alias;
-}
-
-function getPeerForAlias(aliases, alias) {
-  return aliases.byAlias[alias];
 }

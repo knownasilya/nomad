@@ -935,7 +935,7 @@ export function buildWindowMenu(opts = {}) {
         accelerator: 'F1',
         click: function (item) {
           if (win)
-            tabManager.create(win, 'https://docs.beakerbrowser.com/', {
+            tabManager.create(win, 'https://nomad.pages.dev/docs/api/', {
               setActive: true,
             });
         },

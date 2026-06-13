@@ -41,7 +41,7 @@ export class DriveInfo extends LitElement {
         ${this.driveInfo.description
           ? html`<p>${this.driveInfo.description}</p>`
           : undefined}
-        <p class="facts">${this.renderType()} ${this.renderSize()}</p>
+        <p class="facts">${this.renderType()} ${this.renderSize()} ${this.renderUpdated()}</p>
       </section>
     `;
   }
@@ -52,10 +52,11 @@ export class DriveInfo extends LitElement {
     // this solves that issue
     // -prf
     try {
+      const thumbPath = this.driveInfo.manifest?.thumb || 'thumb';
       this.querySelector('img').removeAttribute('src');
       this.querySelector('img').setAttribute(
         'src',
-        `${this.driveInfo.url}/thumb`
+        `${this.driveInfo.url}${thumbPath}`
       );
     } catch (e) {}
   }
@@ -79,6 +80,16 @@ export class DriveInfo extends LitElement {
         ><span class="fas fa-fw fa-save"></span> ${bytes(
           this.driveInfo.size
         )}</span
+      >`;
+    }
+  }
+
+  renderUpdated() {
+    if (this.driveInfo.mtime) {
+      return html`<span
+        ><span class="fas fa-fw fa-clock"></span> ${new Date(
+          this.driveInfo.mtime
+        ).toLocaleDateString()}</span
       >`;
     }
   }

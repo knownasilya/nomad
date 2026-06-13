@@ -40,7 +40,10 @@ export const removeListener = events.removeListener.bind(events);
 export async function update(drive, filenames = null) {
   // list target assets
   if (!filenames) {
-    filenames = await drive.pda.readdir('/');
+    filenames = [];
+    for await (const entry of drive.drive.list('/', { recursive: false })) {
+      filenames.push(entry.key.replace(/^\//, ''));
+    }
   }
   filenames = filenames.filter((v) => ASSET_PATH_REGEX.test(v));
 
@@ -66,11 +69,9 @@ export async function update(drive, filenames = null) {
  * @returns {Promise<Boolean>}
  */
 export async function hasUpdates(drive, startVersion = 0) {
-  var changes = await drive.pda.diff(startVersion, '/');
-  for (let change of changes) {
-    if (ASSET_PATH_REGEX.test(change.name)) {
-      return true;
-    }
+  for await (const change of drive.drive.diff(startVersion, '/')) {
+    const name = (change.left?.key || change.right?.key || '').replace(/^\//, '');
+    if (ASSET_PATH_REGEX.test(name)) return true;
   }
   return false;
 }
@@ -97,23 +98,18 @@ function extractAssetType(pathname) {
  * @returns string The asset as a data URL
  */
 async function readAsset(drive, pathname) {
+  const buf = await drive.drive.get(pathname);
+  if (!buf) throw new Error('Asset not found: ' + pathname);
   if (pathname.endsWith('.ico')) {
-    let data = await drive.pda.readFile(pathname, 'binary');
-    // select the best-fitting size
-    let images = await ICO.parse(data, 'image/png');
+    let images = await ICO.parse(buf, 'image/png');
     let image = images[0];
     for (let i = 1; i < images.length; i++) {
-      if (
-        Math.abs(images[i].width - IDEAL_FAVICON_SIZE) <
-        Math.abs(image.width - IDEAL_FAVICON_SIZE)
-      ) {
+      if (Math.abs(images[i].width - IDEAL_FAVICON_SIZE) < Math.abs(image.width - IDEAL_FAVICON_SIZE)) {
         image = images[i];
       }
     }
-    let buf = Buffer.from(image.buffer);
-    return `data:image/png;base64,${buf.toString('base64')}`;
+    return `data:image/png;base64,${Buffer.from(image.buffer).toString('base64')}`;
   } else {
-    let data = await drive.pda.readFile(pathname, 'base64');
-    return `data:${mime.lookup(pathname)};base64,${data}`;
+    return `data:${mime.lookup(pathname)};base64,${buf.toString('base64')}`;
   }
 }

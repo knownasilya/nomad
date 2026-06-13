@@ -1,5 +1,11 @@
 // @ts-nocheck
 import * as historyDb from '../../dbs/history';
+import { findTab } from '../../ui/tabs/manager';
+
+function getCallerSpaceId(sender) {
+  const tab = findTab(sender);
+  return tab?.spaceId ?? undefined;
+}
 
 // exported api
 // =
@@ -9,12 +15,12 @@ export default {
     return historyDb.addVisit(0, ...args);
   },
 
-  async getVisitHistory(...args) {
-    return historyDb.getVisitHistory(0, ...args);
+  async getVisitHistory(opts) {
+    return historyDb.getVisitHistory(0, opts, getCallerSpaceId(this.sender));
   },
 
-  async getMostVisited(...args) {
-    return historyDb.getMostVisited(0, ...args);
+  async getMostVisited(opts) {
+    return historyDb.getMostVisited(0, opts, getCallerSpaceId(this.sender));
   },
 
   async search(...args) {

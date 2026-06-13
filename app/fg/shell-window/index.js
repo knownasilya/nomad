@@ -6,6 +6,7 @@ import './tabs';
 import './navbar';
 import './panes';
 import './resize-hackfix';
+import './spaces-dropdown';
 
 // setup
 document.addEventListener('DOMContentLoaded', () => {
@@ -19,12 +20,14 @@ class ShellWindowUI extends LitElement {
       isWindows: { type: Boolean },
       isUpdateAvailable: { type: Boolean },
       numWatchlistNotifications: { type: Number },
-      isHolepunchable: { type: Boolean },
       isDaemonActive: { type: Boolean },
       isShellInterfaceHidden: { type: Boolean },
       isFullscreen: { type: Boolean },
       hasBgTabs: { type: Boolean },
       hasLocationExpanded: { type: Boolean },
+      spaces: { type: Array },
+      activeSpace: { type: Object },
+      groups: { type: Array },
     };
   }
 
@@ -33,12 +36,14 @@ class ShellWindowUI extends LitElement {
     this.tabs = [];
     this.isUpdateAvailable = false;
     this.numWatchlistNotifications = 0;
-    this.isHolepunchable = true;
     this.isDaemonActive = true;
     this.isShellInterfaceHidden = false;
     this.isFullscreen = false;
     this.hasBgTabs = false;
     this.hasLocationExpanded = false;
+    this.spaces = [];
+    this.activeSpace = null;
+    this.groups = [];
     this.activeTabIndex = -1;
     this.setup();
   }
@@ -75,6 +80,9 @@ class ShellWindowUI extends LitElement {
       this.isSidebarHidden = state.isSidebarHidden;
       this.isDaemonActive = state.isDaemonActive;
       this.hasBgTabs = state.hasBgTabs;
+      if (state.spaces) this.spaces = state.spaces;
+      if (state.activeSpace) this.activeSpace = state.activeSpace;
+      if (state.groups) this.groups = state.groups;
       this.stateHasChanged();
     });
     viewEvents.addEventListener('update-state', ({ index, state }) => {
@@ -107,18 +115,14 @@ class ShellWindowUI extends LitElement {
     });
 
     const getDaemonStatus = async () => {
-      var status = await bg.beakerBrowser.getDaemonStatus();
-      // HACK: don't indicate 'not holepunchable' if the daemon isnt active to tell us
-      var isHolepunchable = status.holepunchable || !status.active;
-      if (this.isHolepunchable !== isHolepunchable) {
-        this.isHolepunchable = isHolepunchable;
-        this.stateHasChanged();
-      }
+      await bg.beakerBrowser.getDaemonStatus();
     };
 
     // fetch initial tab state
     this.isUpdateAvailable = browserInfo.updater.state === 'downloaded';
     this.tabs = await bg.views.getState();
+    this.spaces = await bg.spaces.list();
+    this.activeSpace = await bg.spaces.getActive();
     this.stateHasChanged();
     getDaemonStatus();
   }
@@ -152,6 +156,9 @@ class ShellWindowUI extends LitElement {
         : html`
             <shell-window-tabs
               .tabs=${this.tabs}
+              .spaces=${this.spaces}
+              .activeSpace=${this.activeSpace}
+              .groups=${this.groups}
               ?is-fullscreen=${this.isFullscreen}
               ?has-bg-tabs=${this.hasBgTabs}
             ></shell-window-tabs>
@@ -160,7 +167,6 @@ class ShellWindowUI extends LitElement {
               .activeTab=${this.activeTab}
               ?is-sidebar-hidden=${this.isSidebarHidden}
               ?is-update-available=${this.isUpdateAvailable}
-              ?is-holepunchable=${this.isHolepunchable}
               ?is-daemon-active=${this.isDaemonActive}
               num-watchlist-notifications="${this.numWatchlistNotifications}"
             ></shell-window-navbar>

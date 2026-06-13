@@ -3,7 +3,7 @@ import * as hyperdrive from './fg/hyperdrive';
 import * as internal from './fg/internal';
 import * as external from './fg/external';
 import * as experimental from './fg/experimental';
-import { contextBridge } from 'electron';
+import { contextBridge, webUtils } from 'electron';
 
 export const setup = function () {
   // setup APIs
@@ -29,4 +29,7 @@ export const setup = function () {
   if (Object.keys(beaker).length > 0) {
     contextBridge.exposeInMainWorld('beaker', beaker);
   }
+  contextBridge.exposeInMainWorld('electronWebUtils', {
+    getPathForFile: (file) => webUtils.getPathForFile(file),
+  });
 };

@@ -4,10 +4,14 @@ import * as drives from '../../hyper/drives';
 import * as archivesDb from '../../dbs/archives';
 import {
   listDrives,
+  listDrivesForSpace,
   configDrive,
+  configDriveForSpace,
   removeDrive,
+  removeDriveForSpace,
   getDriveIdent,
 } from '../../filesystem/index';
+import { findTab } from '../../ui/tabs/manager';
 import * as trash from '../../filesystem/trash';
 
 // exported api
@@ -16,7 +20,9 @@ import * as trash from '../../filesystem/trash';
 export default {
   async get(key) {
     key = await drives.fromURLToKey(key, true);
-    var drive = listDrives().find((drive) => drive.key === key);
+    const spaceId = findTab(this.sender)?.spaceId;
+    const drivesList = await listDrivesForSpace(spaceId);
+    var drive = drivesList.find((d) => d.key === key);
     var info = await drives
       .getDriveInfo(key, { onlyCache: true })
       .catch((e) => ({}));
@@ -33,12 +39,14 @@ export default {
   },
 
   async list(opts) {
-    return assembleRecords(listDrives(opts));
+    const spaceId = findTab(this.sender)?.spaceId;
+    return assembleRecords(await listDrivesForSpace(spaceId, opts));
   },
 
   async getForks(key) {
     key = await drives.fromURLToKey(key, true);
-    var drivesList = listDrives();
+    const spaceId = findTab(this.sender)?.spaceId;
+    var drivesList = await listDrivesForSpace(spaceId);
     var rootDrive = drivesList.find((drive) => drive.key === key);
     if (!rootDrive) return assembleRecords([{ key }]);
 
@@ -74,11 +82,13 @@ export default {
   },
 
   async configure(key, opts) {
-    return configDrive(key, opts);
+    const spaceId = findTab(this.sender)?.spaceId;
+    return configDriveForSpace(key, opts, spaceId);
   },
 
   async remove(key) {
-    return removeDrive(key);
+    const spaceId = findTab(this.sender)?.spaceId;
+    return removeDriveForSpace(key, spaceId);
   },
 
   async collectTrash() {
@@ -116,7 +126,9 @@ export default {
   },
 
   createDebugStream() {
-    return drives.createDebugStream();
+    // TODO: debug streams removed in v11 stack
+    const { EventEmitter } = require('events');
+    return new EventEmitter();
   },
 };
 

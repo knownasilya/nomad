@@ -73,6 +73,8 @@ export class ExplorerApp extends LitElement {
     this.inlineMode = false;
     this.sortMode = undefined;
 
+    window.addEventListener('explorer-files-changed', () => this.load());
+
     beaker.panes.addEventListener('pane-attached', (e) => {
       this.attachedPane = beaker.panes.getAttachedPane();
       if (loc.getUrl() !== this.attachedPane.url) {
@@ -287,14 +289,6 @@ export class ExplorerApp extends LitElement {
         .map((item) => this.items.find((item2) => item2.path === item.path))
         .filter(Boolean);
     }
-
-    console.log({
-      driveInfo: this.driveInfo,
-      mountInfo: this.mountInfo,
-      pathInfo: this.pathInfo,
-      items: this.items,
-      itemGroups: this.itemGroups,
-    });
 
     this.loadingState = LOADING_STATES.LOADED;
     this.requestUpdate();
@@ -840,6 +834,7 @@ export class ExplorerApp extends LitElement {
         toast.create(`Error: ${e.toString()}`, 'error');
         return;
       }
+      this.load();
       var url = joinPath(loc.getUrl(), filename);
       window.open(`beaker://editor/?url=${url}`);
     }
@@ -853,6 +848,7 @@ export class ExplorerApp extends LitElement {
       var drive = beaker.hyperdrive.drive(this.currentDriveInfo.url);
       try {
         await drive.mkdir(pathname);
+        this.load();
       } catch (e) {
         console.error(e);
         toast.create(`Error: ${e.toString()}`, 'error');
@@ -956,6 +952,7 @@ export class ExplorerApp extends LitElement {
           loc.getPath().split('/').slice(0, -1).concat([newName]).join('/')
         );
       }
+      this.load();
     }
   }
 
@@ -994,6 +991,7 @@ export class ExplorerApp extends LitElement {
           `Deleted ${pluralize(this.selection.length, 'item')}`,
           'success'
         );
+        this.load();
       } else {
         if (
           !confirm(
@@ -1010,6 +1008,7 @@ export class ExplorerApp extends LitElement {
         toast.create(`Deleted 1 item`, 'success');
 
         loc.setPath(loc.getPath().split('/').slice(0, -1).join('/'));
+        this.load();
       }
     } catch (e) {
       console.error(e);
