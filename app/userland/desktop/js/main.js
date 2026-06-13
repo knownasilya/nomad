@@ -69,7 +69,7 @@ class DesktopApp extends LitElement {
       <div id="topright">
         <a href="#" @click=${this.onClickNewHyperdrive}>+ New Hyperdrive</a>
         <a href="beaker://library/" title="Library">My Library</a>
-        <a href="https://docs.beakerbrowser.com/" title="Help">Help</a>
+        <a href="https://nomad.pages.dev/docs/api/" title="Help">Help</a>
       </div>
 
       <main>

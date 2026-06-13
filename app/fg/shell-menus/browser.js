@@ -113,7 +113,7 @@ class BrowserMenu extends LitElement {
           <div
             class="menu-item"
             @click=${(e) =>
-              this.onOpenPage(e, 'https://docs.beakerbrowser.com')}
+              this.onOpenPage(e, 'https://nomad.pages.dev/docs/api/')}
           >
             <i class="far fa-life-ring"></i>
             <span class="label">Help</span>
