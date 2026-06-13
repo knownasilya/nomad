@@ -288,14 +288,6 @@ export class ExplorerApp extends LitElement {
         .filter(Boolean);
     }
 
-    console.log({
-      driveInfo: this.driveInfo,
-      mountInfo: this.mountInfo,
-      pathInfo: this.pathInfo,
-      items: this.items,
-      itemGroups: this.itemGroups,
-    });
-
     this.loadingState = LOADING_STATES.LOADED;
     this.requestUpdate();
   }

@@ -94,6 +94,13 @@ protocol.registerSchemesAsPrivileged([
       corsEnabled: true,
     },
   },
+  {
+    scheme: 'asset',
+    privileges: {
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
 ]);
 
 // handle OS event to open URLs

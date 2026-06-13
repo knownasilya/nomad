@@ -18,32 +18,21 @@ const IFCHR = 8192; // 0b0010...
 const IFIFO = 4096; // 0b0001...
 
 export function createStat(data) {
-  /*
-  TODO- are the following attrs needed?
-  this.dev = 0
-  this.nlink = 1
-  this.rdev = 0
-  this.blksize = 0
-  this.ino = 0
-  this.uid = data ? data.uid : 0
-  this.gid = data ? data.gid : 0 */
+  if (!data) return null;
 
-  var mode = data ? data.mode : 0;
+  var mode = data.mode || 0;
   return {
     mode,
-    size: data ? data.size : 0,
-    offset: data ? data.offset : 0,
-    blocks: data ? data.blocks : 0,
-    downloaded: data ? data.downloaded : 0,
-    atime: new Date(data ? data.mtime : 0), // we just set this to mtime ...
-    mtime: new Date(data ? data.mtime : 0),
-    ctime: new Date(data ? data.ctime : 0),
-    mount:
-      data && data.mount && data.mount.key
-        ? { key: toHex(data.mount.key) }
-        : null,
-    linkname: data ? data.linkname : null,
-    metadata: data ? data.metadata : {},
+    size: data.size || 0,
+    offset: data.offset || 0,
+    blocks: data.blocks || 0,
+    downloaded: data.downloaded || 0,
+    atime: new Date(data.mtime || 0),
+    mtime: new Date(data.mtime || 0),
+    ctime: new Date(data.ctime || 0),
+    mount: data.mount?.key ? { key: toHex(data.mount.key) } : null,
+    linkname: data.linkname || null,
+    metadata: data.metadata || {},
 
     isSocket: check(mode, IFSOCK),
     isSymbolicLink: check(mode, IFLNK),

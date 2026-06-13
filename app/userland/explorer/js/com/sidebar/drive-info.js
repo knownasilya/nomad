@@ -55,7 +55,7 @@ export class DriveInfo extends LitElement {
       this.querySelector('img').removeAttribute('src');
       this.querySelector('img').setAttribute(
         'src',
-        `${this.driveInfo.url}/thumb`
+        `${this.driveInfo.url}thumb`
       );
     } catch (e) {}
   }
