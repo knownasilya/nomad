@@ -7,7 +7,6 @@ import { EditBookmarkPopup } from 'beaker://app-stdlib/js/com/popups/edit-bookma
 import { AddLinkPopup } from './com/add-link-popup.js';
 import * as toast from 'beaker://app-stdlib/js/com/toast.js';
 import { writeToClipboard } from 'beaker://app-stdlib/js/clipboard.js';
-import { pluralize } from 'beaker://app-stdlib/js/strings.js';
 import * as desktop from './lib/desktop.js';
 import * as addressBook from './lib/address-book.js';
 import css from '../css/main.css.js';
@@ -16,17 +15,16 @@ import 'beaker://app-stdlib/js/com/img-fallbacks.js';
 const VERSION_ID = (major, minor, patch, pre) =>
   major * 1e9 + minor * 1e6 + patch * 1e3 + pre;
 const CURRENT_VERSION = VERSION_ID(1, 2, 1, 0);
-// const RELEASE = {
-//   label: '1.2.1',
-//   url: 'https://beakerbrowser.com/2020/12/08/beaker-1.1.html',
-// };
+const RELEASE = {
+  label: '1.2.1',
+  url: 'https://beakerbrowser.com/2020/12/08/beaker-1.1.html',
+};
 
 class DesktopApp extends LitElement {
   static get properties() {
     return {
       profile: { type: Object },
       pins: { type: Array },
-      legacyArchives: { type: Array },
     };
   }
 
@@ -38,7 +36,6 @@ class DesktopApp extends LitElement {
     super();
     this.profile = undefined;
     this.pins = [];
-    this.legacyArchives = [];
 
     this.load();
 
@@ -75,7 +72,6 @@ class DesktopApp extends LitElement {
       <main>
         <div class="onecol">
           ${this.renderReleaseNotice()} ${this.renderPins()}
-          ${this.renderLegacyArchivesNotice()}
         </div>
       </main>
     `;
@@ -122,104 +118,6 @@ class DesktopApp extends LitElement {
           <span class="fas fa-fw fa-plus thumb"></span>
         </a>
       </div>
-    `;
-  }
-
-  renderLegacyArchivesNotice() {
-    if (this.legacyArchives.length === 0) {
-      return '';
-    }
-    return html`
-      <section class="legacy-archives notice">
-        <h3>Legacy Dats</h3>
-        <p>
-          You have ${this.legacyArchives.length} legacy Dat
-          ${pluralize(this.legacyArchives.length, 'archive')} which can be
-          converted to Hyperdrive.
-        </p>
-        <div class="archives">
-          ${this.legacyArchives.slice(0, 3).map(
-            (archive) => html`
-              <div class="archive">
-                <a
-                  href="dat://${archive.key}"
-                  title=${archive.title}
-                  target="_blank"
-                  >${archive.title || archive.key}</a
-                >
-                <div class="btn-group">
-                  <button
-                    @click=${(e) => {
-                      window.location = `dat://${archive.key}`;
-                    }}
-                  >
-                    View
-                  </button>
-                  <button
-                    @click=${(e) => this.onClickRemoveLegacyArchive(e, archive)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            `
-          )}
-          ${this.legacyArchives.length > 3
-            ? html`
-                <a
-                  @click=${(e) => {
-                    this.currentNav = 'legacy-archives';
-                  }}
-                  >View All &raquo;</a
-                >
-              `
-            : ''}
-        </div>
-      </section>
-    `;
-  }
-
-  renderLegacyArchivesView() {
-    if (this.legacyArchives.length === 0) {
-      return '';
-    }
-    return html`
-      <section class="legacy-archives view">
-        <h3>Legacy Dats</h3>
-        <p>
-          You have ${this.legacyArchives.length} legacy Dat
-          ${pluralize(this.legacyArchives.length, 'archive')} which can be
-          converted to Hyperdrive.
-        </p>
-        <div class="archives">
-          ${this.legacyArchives.map(
-            (archive) => html`
-              <div class="archive">
-                <a
-                  href="dat://${archive.key}"
-                  title=${archive.title}
-                  target="_blank"
-                  >${archive.title || archive.key}</a
-                >
-                <div class="btn-group">
-                  <button
-                    @click=${(e) => {
-                      window.location = `dat://${archive.key}`;
-                    }}
-                  >
-                    View
-                  </button>
-                  <button
-                    @click=${(e) => this.onClickRemoveLegacyArchive(e, archive)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            `
-          )}
-        </div>
-      </section>
     `;
   }
 
@@ -289,10 +187,6 @@ class DesktopApp extends LitElement {
     this.load();
   }
 
-  async onClickRemoveLegacyArchive(e, archive) {
-    e.preventDefault();
-    // datLegacy removed in Nomad — no-op
-  }
 }
 
 customElements.define('desktop-app', DesktopApp);

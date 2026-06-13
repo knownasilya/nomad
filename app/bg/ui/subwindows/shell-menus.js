@@ -48,8 +48,8 @@ export function setup(parentWindow) {
       preload: path.join(__dirname, 'fg', 'shell-menus', 'index.build.js'),
     },
   }));
-  view.webContents.on('console-message', (e, level, message) => {
-    console.log('Shell-Menus window says:', message);
+  view.webContents.on('console-message', (e) => {
+    console.log('Shell-Menus window says:', e.message);
   });
   view.webContents.loadURL('beaker://shell-menus/');
 }

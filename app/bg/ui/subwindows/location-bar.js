@@ -35,8 +35,8 @@ export function setup(parentWindow) {
     },
   }));
   view.setAutoResize({ width: true, height: false });
-  view.webContents.on('console-message', (e, level, message) => {
-    console.log('Location-Bar window says:', message);
+  view.webContents.on('console-message', (e) => {
+    console.log('Location-Bar window says:', e.message);
   });
   view.webContents.loadURL('beaker://location-bar/');
 

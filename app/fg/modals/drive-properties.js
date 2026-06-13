@@ -112,6 +112,7 @@ class DrivePropertiesModal extends LitElement {
     this.cbs = undefined;
     this.url = '';
     this.writable = false;
+    this.thumbPath = null;
     this.props = {};
   }
 
@@ -119,6 +120,7 @@ class DrivePropertiesModal extends LitElement {
     this.cbs = cbs;
     this.url = params.url;
     this.writable = params.writable;
+    this.thumbPath = params.thumbPath || null;
     this.props = params.props || {};
     this.props.title = this.props.title || '';
     this.props.description = this.props.description || '';
@@ -152,7 +154,7 @@ class DrivePropertiesModal extends LitElement {
             <div class="prop">
               <div class="key">Thumbnail</div>
               <div class="img-input">
-                <img src="${this.url}/thumb" />
+                <img src="${this.url}/${this.thumbPath || 'thumb'}" />
                 <input
                   id="thumb-input"
                   type="file"
@@ -236,13 +238,15 @@ class DrivePropertiesModal extends LitElement {
           .unlink(joinPath(this.url, '/thumb.jpeg'))
           .catch((e) => null),
       ]);
+      let newThumbPath = `thumb.${ext}`;
       await bg.hyperdrive.writeFile(
-        joinPath(this.url, `/thumb.${ext}`),
+        joinPath(this.url, `/${newThumbPath}`),
         await bufPromise
       );
+      newProps.thumb = newThumbPath;
     }
 
-    // handle props
+    // handle props (configure also awaits asset cache update)
     await bg.hyperdrive.configure(this.url, newProps).catch((e) => null);
 
     this.cbs.resolve();

@@ -69,7 +69,7 @@ export function getDebugLog(key) {
 /**
  * Read drive metadata and persist it to the archives DB.
  */
-export async function pullLatestDriveMeta(drive, { updateMTime } = {}) {
+export async function pullLatestDriveMeta(drive, { updateMTime, updateAssets } = {}) {
   try {
     const key = b4a.toString(drive.key, 'hex');
     const version = drive.drive.version;
@@ -78,11 +78,16 @@ export async function pullLatestDriveMeta(drive, { updateMTime } = {}) {
     drive.lastMetaPullVersion = version;
 
     if (lastMetaPullVersion) {
-      driveAssets.hasUpdates(drive, lastMetaPullVersion).then((hasAssetUpdates) => {
-        if (hasAssetUpdates) driveAssets.update(drive);
-      });
+      if (updateAssets) {
+        const hasAssetUpdates = await driveAssets.hasUpdates(drive, lastMetaPullVersion);
+        if (hasAssetUpdates) await driveAssets.update(drive);
+      } else {
+        driveAssets.hasUpdates(drive, lastMetaPullVersion).then((hasAssetUpdates) => {
+          if (hasAssetUpdates) driveAssets.update(drive);
+        });
+      }
     } else {
-      driveAssets.update(drive);
+      await driveAssets.update(drive);
     }
 
     const [meta, oldMeta] = await Promise.all([
@@ -91,7 +96,7 @@ export async function pullLatestDriveMeta(drive, { updateMTime } = {}) {
     ]);
     const { title, description, type, author, forkOf } = meta || {};
     const writable = drive.writable;
-    const mtime = updateMTime ? Date.now() : oldMeta.mtime;
+    const mtime = Date.now();
     const details = { title, description, type, forkOf, mtime, size: 0, author, writable };
 
     if (!hasMetaChanged(details, oldMeta)) return;

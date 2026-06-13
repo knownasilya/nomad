@@ -2,25 +2,28 @@
 @import 'beaker://app-stdlib/css/fontawesome.css';
 
 body {
-  --text-color--nav--highlight: #445;
-  --bg-color--header-search: #fafafd;
-  --bg-color--new-btn--highlight: #fafafd;
-  --bg-color--nav--highlight: #e3e6fd;
+  --lib-search-bg: rgba(0, 0, 0, 0.055);
+  --lib-nav-active-bg: rgba(64, 64, 231, 0.09);
+  --lib-nav-active-text: #4040e7;
+  --lib-nav-hover-bg: var(--bg-color--semi-light);
+  --lib-row-hover-bg: #f5f5fb;
+  --lib-header-bg: #fff;
+  --lib-sidebar-bg: #fff;
 
   font-size: 13px;
-  background: #fff;
-  color: #333;
+  background: var(--bg-color--secondary);
+  color: var(--text-color--default);
   overflow: hidden;
 }
 
 @media (prefers-color-scheme: dark) {
   body {
-    --text-color--nav--highlight: #bbb;
-    --bg-color--header-search: #303030;
-    --bg-color--new-btn--highlight: #303030;
-    --bg-color--nav--highlight: #333;
-
-    background: #222;
-    color: #ccc;
+    --lib-search-bg: rgba(255, 255, 255, 0.07);
+    --lib-nav-active-bg: rgba(93, 128, 255, 0.13);
+    --lib-nav-active-text: #7b9fff;
+    --lib-nav-hover-bg: var(--bg-color--semi-light);
+    --lib-row-hover-bg: #2a2a34;
+    --lib-header-bg: #1e1e24;
+    --lib-sidebar-bg: #1e1e24;
   }
 }

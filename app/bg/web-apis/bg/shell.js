@@ -47,6 +47,7 @@ export async function drivePropertiesDialog(url) {
   await modals.create(this.sender, 'drive-properties', {
     url: info.url,
     writable: info.writable,
+    thumbPath: info.manifest?.thumb || null,
     props: Object.assign(pick(info, ['title', 'description']), {
       tags: cfg.tags || [],
     }),

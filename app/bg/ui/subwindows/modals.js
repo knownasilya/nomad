@@ -93,8 +93,8 @@ export async function create(webContents, modalName, params = {}) {
   view.modalName = modalName;
   parentWindow.addBrowserView(view);
   setBounds(view, parentWindow);
-  view.webContents.on('console-message', (e, level, message) => {
-    console.log('Modals window says:', message);
+  view.webContents.on('console-message', (e) => {
+    console.log('Modals window says:', e.message);
   });
   view.webContents.loadURL('beaker://modals/');
   view.webContents.focus();

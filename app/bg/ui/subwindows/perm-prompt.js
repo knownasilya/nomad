@@ -65,8 +65,8 @@ export async function create(parentWindow, tab, params) {
   }));
   parentWindow.addBrowserView(view);
   setBounds(view, parentWindow);
-  view.webContents.on('console-message', (e, level, message) => {
-    console.log('Perm-Prompt window says:', message);
+  view.webContents.on('console-message', (e) => {
+    console.log('Perm-Prompt window says:', e.message);
   });
   view.webContents.loadURL('beaker://perm-prompt/');
   view.webContents.focus();

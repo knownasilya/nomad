@@ -28,16 +28,23 @@ export class BeakerEditThumb extends BasePopup {
     var profile = await profiles.me();
     var drive = beaker.hyperdrive.drive(profile.url);
 
-    // find the existing thumb
+    // find the existing thumb: prefer index.json manifest, fall back to legacy paths
+    var info = await drive.getInfo();
     var existingThumbPath = null;
-    const test = async (path) => {
-      if (existingThumbPath) return;
-      var res = await drive.stat(path).catch((e) => undefined);
-      if (res) existingThumbPath = path;
-    };
-    await test('/thumb.jpg');
-    await test('/thumb.jpeg');
-    await test('/thumb.png');
+    if (info.manifest?.thumb) {
+      var res = await drive.stat(info.manifest.thumb).catch(() => undefined);
+      if (res) existingThumbPath = info.manifest.thumb;
+    }
+    if (!existingThumbPath) {
+      const test = async (path) => {
+        if (existingThumbPath) return;
+        var res = await drive.stat(path).catch((e) => undefined);
+        if (res) existingThumbPath = path;
+      };
+      await test('/thumb.jpg');
+      await test('/thumb.jpeg');
+      await test('/thumb.png');
+    }
 
     // run the modal
     var img = await BeakerEditThumb.create(profile.url, existingThumbPath);
@@ -47,7 +54,13 @@ export class BeakerEditThumb extends BasePopup {
     await drive.unlink('/thumb.jpg').catch((e) => undefined);
     await drive.unlink('/thumb.jpeg').catch((e) => undefined);
     await drive.unlink('/thumb.png').catch((e) => undefined);
-    await drive.writeFile(`/thumb.${img.ext}`, img.base64buf, 'base64');
+    var newThumbPath = `thumb.${img.ext}`;
+    await drive.writeFile(`/${newThumbPath}`, img.base64buf, 'base64');
+
+    // update index.json to record the thumb path
+    var manifest = Object.assign({}, info.manifest);
+    manifest.thumb = newThumbPath;
+    await drive.writeFile('/index.json', JSON.stringify(manifest, null, 2));
   }
 
   static destroy() {

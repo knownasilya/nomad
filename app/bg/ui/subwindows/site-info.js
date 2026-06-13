@@ -39,8 +39,8 @@ export function setup(parentWindow) {
       navigateOnDragDrop: false,
     },
   }));
-  view.webContents.on('console-message', (e, level, message) => {
-    console.log('Site-Info window says:', message);
+  view.webContents.on('console-message', (e) => {
+    console.log('Site-Info window says:', e.message);
   });
   view.webContents.loadURL('beaker://site-info/');
 }

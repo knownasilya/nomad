@@ -1,6 +1,6 @@
-@import '../../app-stdlib/css/buttons2.css';
+@import 'beaker://app-stdlib/css/buttons2.css';
 @import './toolbar.css';
-@import '../../app-stdlib/css/tooltip.css';
+@import 'beaker://app-stdlib/css/tooltip.css';
 
 editor-app {
   display: block;

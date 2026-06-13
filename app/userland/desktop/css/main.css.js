@@ -210,36 +210,5 @@ ${spinnerCSS}
     }
   }
 
-  .legacy-archives {
-    font-size: 14px;
-  }
-
-  .legacy-archives a {
-    color: var(--text-color--link);
-    cursor: pointer;
-  }
-
-  .legacy-archives .archives {
-    margin-top: 10px;
-  }
-
-  .legacy-archives .archive {
-    padding: 10px;
-    margin-bottom: 4px;
-    border-radius: 4px;
-    background: var(--bg-color--light);
-  }
-
-  .legacy-archives .archive:hover {
-    background: #fafafd;
-  }
-
-  .legacy-archives .archive a {
-    display: block;
-    font-size: 14px;
-    font-weight: 500;
-    letter-spacing: 0.5px;
-    margin-bottom: 5px;
-  }
 `;
 export default cssStr;

@@ -237,7 +237,7 @@ const hyperdriveAPI = {
         const existing = await _readIndexJson(checkoutFS.drive);
         const updated = Object.assign({}, existing, metaUpdates);
         await checkoutFS.drive.put('/index.json', b4a.from(JSON.stringify(updated, null, 2)));
-        await drives.pullLatestDriveMeta(drive);
+        await drives.pullLatestDriveMeta(drive, { updateAssets: true });
       })
     );
   },

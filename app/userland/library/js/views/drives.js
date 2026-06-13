@@ -224,6 +224,7 @@ export class DrivesView extends LitElement {
         </div>
         <div class="description">${drive.info.description.slice(0, 50)}</div>
         <div class="owner">${drive.info.writable ? 'Mine' : ''}</div>
+        <div class="updated">${drive.info.mtime ? new Date(drive.info.mtime).toLocaleDateString() : ''}</div>
         <div class="forks">
           ${numForks > 0
             ? html`

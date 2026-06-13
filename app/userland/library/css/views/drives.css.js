@@ -116,6 +116,12 @@ ${spinnerCSS}
     color: #99a;
   }
 
+  .drive .updated {
+    flex: 0 0 90px;
+    color: #99a;
+    font-size: 12px;
+  }
+
   .drive .forks {
     flex: 0 0 100px;
   }
@@ -175,6 +181,9 @@ ${spinnerCSS}
       font-size: 12px;
     }
     .drive .description {
+      display: none;
+    }
+    .drive .updated {
       display: none;
     }
     .drive .peers {

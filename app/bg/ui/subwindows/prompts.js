@@ -74,8 +74,8 @@ export async function create(webContents, promptName, params = {}) {
     parentWindow.addBrowserView(view);
   }
   setBounds(view, tab);
-  view.webContents.on('console-message', (e, level, message) => {
-    console.log('Prompts window says:', message);
+  view.webContents.on('console-message', (e) => {
+    console.log('Prompts window says:', e.message);
   });
   view.webContents.loadURL('beaker://prompts/');
   await view.webContents.executeJavaScript(
