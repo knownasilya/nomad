@@ -84,7 +84,12 @@ class ShellWindowTabs extends LitElement {
         const group = (this.groups || []).find((g) => g.id === tab.groupId);
         if (group) items.push({ type: 'group-header', group });
       }
-      items.push({ type: 'tab', tab, index });
+      const group = tab.groupId
+        ? (this.groups || []).find((g) => g.id === tab.groupId)
+        : null;
+      if (!group?.hidden) {
+        items.push({ type: 'tab', tab, index });
+      }
       lastGroupId = tab.groupId || null;
     });
     return items;
@@ -144,9 +149,10 @@ class ShellWindowTabs extends LitElement {
     const isEditing = this.editingGroupId === group.id;
     return html`
       <div
-        class="tab-group-header"
+        class="tab-group-header${group.hidden ? ' hidden-group' : ''}"
         style=${styleMap({ '--group-color': group.color })}
         draggable="true"
+        @contextmenu=${(e) => this.onContextmenuGroup(e, group.id)}
         @dragstart=${(e) => this.onDragstartGroup(e, group.id)}
         @dragend=${(e) => this.onDragendGroup(e)}
         @dragover=${(e) => this.onDragoverGroup(e, group.id)}
@@ -473,6 +479,12 @@ class ShellWindowTabs extends LitElement {
   }
 
   // group header drag handlers
+
+  onContextmenuGroup(e, groupId) {
+    e.preventDefault();
+    e.stopPropagation();
+    bg.views.showGroupContextMenu(groupId);
+  }
 
   onDragstartGroup(e, groupId) {
     this.draggedGroupId = groupId;
@@ -875,6 +887,14 @@ ShellWindowTabs.styles = css`
 
   .tab-group-header.drag-hover {
     background: color-mix(in srgb, var(--group-color, #5b5ef4) 24%, transparent);
+  }
+
+  .tab-group-header.hidden-group {
+    opacity: 0.55;
+  }
+
+  .tab-group-header.hidden-group::before {
+    opacity: 0.4;
   }
 
   .tab-group-name {

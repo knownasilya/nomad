@@ -16,6 +16,7 @@ export default {
   restoreBgTab: 'promise',
   closeBgTab: 'promise',
   showTabContextMenu: 'promise',
+  showGroupContextMenu: 'promise',
   createTabGroup: 'promise',
   addTabToGroup: 'promise',
   removeTabFromGroup: 'promise',

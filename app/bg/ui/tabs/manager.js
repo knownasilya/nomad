@@ -1557,6 +1557,34 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     emitReplaceState(win);
   },
 
+  async showGroupContextMenu(groupId) {
+    var win = getWindow(this.sender);
+    var group = getTabGroups(win).find((g) => g.id === groupId);
+    if (!group) return;
+    var menu = Menu.buildFromTemplate([
+      {
+        label: group.hidden ? 'Show Tabs' : 'Hide Tabs',
+        click: () => {
+          group.hidden = !group.hidden;
+          emitReplaceState(win);
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Close All',
+        click: async () => {
+          var groupTabs = getAll(win).filter((t) => t.groupId === groupId).slice();
+          for (var tab of groupTabs) {
+            await remove(win, tab);
+          }
+          removeTabGroup(win, groupId);
+          emitReplaceState(win);
+        },
+      },
+    ]);
+    menu.popup({ window: getTopWindow(win) });
+  },
+
   async reorderTabGroup(groupId, beforeGroupId) {
     var win = getWindow(this.sender);
     var tabs = getAll(win);
