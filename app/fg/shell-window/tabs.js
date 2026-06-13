@@ -33,6 +33,7 @@ class ShellWindowTabs extends LitElement {
     this.isFullscreen = false;
     this.hasBgTabs = false;
     this.draggedTabIndex = null;
+    this.draggedGroupId = null;
     this.isDraggingWindow = false;
     this.isBackgroundTrayOpen = false;
     this.editingGroupId = null;
@@ -145,6 +146,9 @@ class ShellWindowTabs extends LitElement {
       <div
         class="tab-group-header"
         style=${styleMap({ '--group-color': group.color })}
+        draggable="true"
+        @dragstart=${(e) => this.onDragstartGroup(e, group.id)}
+        @dragend=${(e) => this.onDragendGroup(e)}
         @dragover=${(e) => this.onDragoverGroup(e, group.id)}
         @dragleave=${(e) => this.onDragleaveGroup(e)}
         @drop=${(e) => this.onDropGroup(e, group.id)}
@@ -402,6 +406,15 @@ class ShellWindowTabs extends LitElement {
     }
     e.preventDefault();
 
+    // When dragging a group, only the unused-space (index === tabsState.length) accepts the drop
+    if (this.draggedGroupId !== null) {
+      if (index === this.tabsState.length) {
+        e.currentTarget.classList.add('drag-hover');
+        e.dataTransfer.dropEffect = 'move';
+      }
+      return false;
+    }
+
     if (!this.canDrop(index)) {
       return false;
     }
@@ -421,6 +434,13 @@ class ShellWindowTabs extends LitElement {
     }
     e.stopPropagation();
     e.currentTarget.classList.remove('drag-hover');
+
+    // Group dropped on unused space — move to end (beforeGroupId = null)
+    if (this.draggedGroupId !== null) {
+      bg.views.reorderTabGroup(this.draggedGroupId, null);
+      this.draggedGroupId = null;
+      return false;
+    }
 
     const url = e.dataTransfer.getData('text');
     if (
@@ -454,8 +474,21 @@ class ShellWindowTabs extends LitElement {
 
   // group header drag handlers
 
+  onDragstartGroup(e, groupId) {
+    this.draggedGroupId = groupId;
+    this.draggedTabIndex = null;
+    e.dataTransfer.effectAllowed = 'move';
+    e.stopPropagation();
+  }
+
+  onDragendGroup(e) {
+    this.draggedGroupId = null;
+  }
+
   onDragoverGroup(e, groupId) {
-    if (this.draggedTabIndex === null) return;
+    const isDraggingTab = this.draggedTabIndex !== null;
+    const isDraggingGroup = this.draggedGroupId !== null && this.draggedGroupId !== groupId;
+    if (!isDraggingTab && !isDraggingGroup) return;
     e.preventDefault();
     e.currentTarget.classList.add('drag-hover');
     e.dataTransfer.dropEffect = 'move';
@@ -468,10 +501,13 @@ class ShellWindowTabs extends LitElement {
   onDropGroup(e, groupId) {
     e.stopPropagation();
     e.currentTarget.classList.remove('drag-hover');
-    if (this.draggedTabIndex !== null) {
+    if (this.draggedGroupId !== null && this.draggedGroupId !== groupId) {
+      bg.views.reorderTabGroup(this.draggedGroupId, groupId);
+      this.draggedGroupId = null;
+    } else if (this.draggedTabIndex !== null) {
       bg.views.addTabToGroup(this.draggedTabIndex, groupId);
+      this.draggedTabIndex = null;
     }
-    this.draggedTabIndex = null;
   }
 
   // group header name editing
@@ -600,6 +636,7 @@ ShellWindowTabs.styles = css`
     background: transparent;
     transition: background 0.3s;
     border-left: 1px solid var(--border-color--tab);
+    border-radius: 6px 6px 0 0;
   }
 
   .tab.pinned {
@@ -753,16 +790,11 @@ ShellWindowTabs.styles = css`
   .tab.current {
     background: var(--bg-color--tab--current);
     height: 31px;
+    box-shadow: inset 0 3px 0 var(--highlight-color--tab--current);
   }
 
-  .tab.current:before {
-    content: '';
-    position: absolute;
-    left: -1px;
-    top: -3px;
-    width: calc(100% + 2px);
-    height: 3px;
-    background: var(--highlight-color--tab--current);
+  .tab.current.grouped {
+    box-shadow: inset 0 3px 0 var(--group-color, #5b5ef4);
   }
 
   .tab.current .tab-close {
@@ -818,39 +850,52 @@ ShellWindowTabs.styles = css`
   .tab-group-header {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: 5px;
     flex-shrink: 0;
     height: 30px;
-    padding: 0 5px 0 9px;
+    padding: 0 8px 0 8px;
     margin-top: 3px;
-    background: var(--group-color, #5b5ef4);
-    border-radius: 4px 4px 0 0;
-    border-left: 1px solid rgba(255, 255, 255, 0.2);
-    color: white;
+    background: color-mix(in srgb, var(--group-color, #5b5ef4) 14%, transparent);
+    border-radius: 6px 6px 0 0;
+    border-left: 1px solid var(--border-color--tab);
+    color: var(--group-color, #5b5ef4);
     cursor: default;
+    transition: background 0.12s;
+  }
+
+  .tab-group-header::before {
+    content: '';
+    display: block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--group-color, #5b5ef4);
+    flex-shrink: 0;
   }
 
   .tab-group-header.drag-hover {
-    filter: brightness(1.15);
+    background: color-mix(in srgb, var(--group-color, #5b5ef4) 24%, transparent);
   }
 
   .tab-group-name {
     font-size: 11px;
-    line-height: 13px;
+    font-weight: 500;
+    line-height: 1;
     max-width: 100px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     cursor: default;
+    letter-spacing: 0.1px;
   }
 
   .tab-group-name-input {
     font-size: 11px;
     line-height: 13px;
-    background: rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    border-radius: 2px;
-    color: white;
+    background: rgba(255, 255, 255, 0.25);
+    border: 1px solid color-mix(in srgb, var(--group-color, #5b5ef4) 45%, transparent);
+    border-radius: 3px;
+    color: var(--group-color, #5b5ef4);
     outline: none;
     padding: 1px 4px;
     width: 80px;
@@ -858,23 +903,27 @@ ShellWindowTabs.styles = css`
   }
 
   .tab-group-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: transparent;
     border: 0;
-    color: white;
+    color: var(--group-color, #5b5ef4);
     cursor: default;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1;
-    opacity: 0.6;
-    padding: 0 2px;
+    opacity: 0.5;
+    padding: 0;
     margin-left: 1px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    transition: opacity 0.12s, background 0.12s;
   }
 
   .tab-group-close:hover {
     opacity: 1;
-  }
-
-  .tab.grouped::before {
-    background: var(--group-color, #5b5ef4) !important;
+    background: color-mix(in srgb, var(--group-color, #5b5ef4) 18%, transparent);
   }
 
   .tab.grouped {

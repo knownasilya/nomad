@@ -1334,7 +1334,12 @@ export async function setActiveSpace(win, id) {
 
 rpc.exportAPI('background-process-views', viewsRPCManifest, {
   createEventStream() {
-    return emitStream(getEvents(getWindow(this.sender)));
+    var win = getWindow(this.sender);
+    var stream = emitStream(getEvents(win));
+    // Emit the full current state to any new subscriber (e.g. shell window reload)
+    // so groups and other state are available immediately without waiting for a change.
+    setImmediate(() => emitReplaceState(win));
+    return stream;
   },
 
   async refreshState(tab) {
@@ -1549,6 +1554,26 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     var group = getTabGroups(win).find((g) => g.id === groupId);
     if (!group) return;
     group.color = color;
+    emitReplaceState(win);
+  },
+
+  async reorderTabGroup(groupId, beforeGroupId) {
+    var win = getWindow(this.sender);
+    var tabs = getAll(win);
+    // Pull out all tabs belonging to groupId (iterating backwards to splice safely)
+    var groupTabs = [];
+    for (var i = tabs.length - 1; i >= 0; i--) {
+      if (tabs[i].groupId === groupId) {
+        groupTabs.unshift(tabs.splice(i, 1)[0]);
+      }
+    }
+    if (groupTabs.length === 0) return;
+    // Find insertion point: before first tab of beforeGroupId, or at end if null
+    var insertIndex = beforeGroupId !== null
+      ? tabs.findIndex((t) => t.groupId === beforeGroupId)
+      : -1;
+    if (insertIndex === -1) insertIndex = tabs.length;
+    tabs.splice(insertIndex, 0, ...groupTabs);
     emitReplaceState(win);
   },
 

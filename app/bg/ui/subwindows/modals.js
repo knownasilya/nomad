@@ -19,7 +19,8 @@ import { findWebContentsParentWindow } from '../../lib/electron';
 // globals
 // =
 
-const MARGIN_SIZE = 10;
+const MARGIN_SIZE = 16;
+const SHADOW_EXTRA = 16; // extra height below content for box-shadow clearance
 var views = {}; // map of {[tab.id] => BrowserView}
 
 // exported api
@@ -230,7 +231,7 @@ function getDefaultWidth(view) {
 function getDefaultHeight(view) {
   if (view.modalName === 'select-file') return 460;
   if (view.modalName === 'select-contact') return 460;
-  return 300;
+  return 400;
 }
 
 function setBounds(view, parentWindow, { width, height } = {}) {
@@ -255,6 +256,6 @@ function setBounds(view, parentWindow, { width, height } = {}) {
       MARGIN_SIZE, // centered
     y: 70,
     width: view.currentBounds.width + MARGIN_SIZE * 2,
-    height: view.currentBounds.height + MARGIN_SIZE,
+    height: view.currentBounds.height + MARGIN_SIZE * 2 + SHADOW_EXTRA,
   });
 }

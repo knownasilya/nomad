@@ -21,6 +21,7 @@ export default {
   removeTabFromGroup: 'promise',
   renameTabGroup: 'promise',
   setTabGroupColor: 'promise',
+  reorderTabGroup: 'promise',
   deleteTabGroup: 'promise',
   showLocationBarContextMenu: 'promise',
   goBack: 'promise',

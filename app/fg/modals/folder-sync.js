@@ -18,30 +18,26 @@ class FolderSyncModal extends LitElement {
       spinnerCSS,
       tooltipCSS,
       css`
-        .wrapper {
-          padding: 0;
-        }
-
-        h1.title {
-          padding: 14px 20px;
-          margin: 0;
-          border-color: #bbb;
-        }
-
         .refresh {
-          position: absolute;
-          right: 53px;
-          top: 18px;
-          font-size: 10px;
+          font-size: 11px;
           cursor: pointer;
+          color: var(--m-text-very-light);
+          transition: color 0.1s;
+        }
+
+        .refresh:hover {
+          color: var(--m-text-default);
         }
 
         .close {
-          position: absolute;
-          right: 30px;
-          top: 17px;
           font-size: 13px;
           cursor: pointer;
+          color: var(--m-text-very-light);
+          transition: color 0.1s;
+        }
+
+        .close:hover {
+          color: var(--m-text-default);
         }
 
         main {
@@ -52,71 +48,50 @@ class FolderSyncModal extends LitElement {
           margin-bottom: 0 !important;
         }
 
-        input {
-          margin: 0;
-          display: initial;
-          width: initial;
-        }
-
-        hr {
-          border: 0;
-          border-top: 1px solid #ddd;
-          margin: 20px 0;
-        }
-
-        .folder-path,
-        .changes {
-          margin: 2px 0 10px;
-        }
-
-        input[type='checkbox'] {
-          height: auto;
-          margin: 0;
-          margin-right: 5px;
-        }
-
         .folder-path {
           display: flex;
+          margin-bottom: 10px;
         }
 
         .folder-path input {
           flex: 1;
-          background: #f3f3f8;
+          background: var(--m-bg-secondary);
+          border-right: 0;
           border-top-right-radius: 0;
           border-bottom-right-radius: 0;
           box-shadow: none;
-          border-color: #f3f3f8;
-          padding-left: 10px;
         }
 
         .folder-path button:not(:last-child) {
           border-right: 0;
-          border-top-right-radius: 0;
-          border-bottom-right-radius: 0;
+          border-radius: 0;
         }
 
-        .folder-path button {
+        .folder-path button:last-child {
           border-top-left-radius: 0;
           border-bottom-left-radius: 0;
         }
 
         .changes {
+          margin-bottom: 10px;
           max-height: 300px;
-          overflow-y: scroll;
-          border: 1px solid #dde;
-          border-radius: 4px;
+          overflow-y: auto;
+          border: 1px solid var(--m-border);
+          border-radius: var(--m-radius);
         }
 
         .changes .empty {
-          padding: 6px 8px;
-          color: #555;
+          padding: 8px 12px;
+          color: var(--m-text-light);
+          font-size: 12px;
         }
 
         .change {
           display: flex;
           align-items: center;
-          height: 32px;
-          border-bottom: 1px solid #dde;
+          height: 30px;
+          border-bottom: 1px solid var(--m-border);
+          font-size: 12px;
         }
 
         .change:last-child {
@@ -124,8 +99,8 @@ class FolderSyncModal extends LitElement {
         }
 
         .change.ignored {
-          background: #fafafd;
-          color: #778;
+          background: var(--m-bg-secondary);
+          color: var(--m-text-very-light);
         }
 
         .change.clickable {
@@ -136,98 +111,88 @@ class FolderSyncModal extends LitElement {
           display: inline-block;
           width: 18px;
           text-align: center;
+          color: var(--m-text-light);
         }
 
         .change .spacer {
-          background: #f3f3f8;
+          background: var(--m-bg-secondary);
           width: 18px;
           height: 100%;
         }
 
         .change .path {
           flex: 1;
-          padding: 8px;
+          padding: 6px 8px;
           white-space: nowrap;
           overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .revision-indicator {
           display: inline-block;
-          width: 8px;
-          height: 8px;
+          width: 6px;
+          height: 6px;
           border-radius: 50%;
-          margin-top: -0.4px;
-          margin-left: 4px;
-          margin-right: 4px;
+          margin: 0 4px;
+          vertical-align: middle;
         }
 
         .revert {
           margin-right: 8px;
           cursor: pointer;
+          color: var(--m-text-very-light);
+          font-size: 11px;
         }
 
-        .revision-indicator.add {
-          background: #44c35a;
+        .revert:hover {
+          color: var(--m-text-default);
         }
-        .revision-indicator.mod {
-          background: #fac800;
-        }
-        .revision-indicator.del {
-          background: #d93229;
-        }
+
+        .revision-indicator.add { background: #44c35a; }
+        .revision-indicator.mod { background: #fac800; }
+        .revision-indicator.del { background: #d93229; }
 
         .ignores,
         .log {
-          height: 100px;
+          height: 80px;
+          font-size: 11px;
+          font-family: ui-monospace, monospace;
         }
 
-        summary {
-          font-size: 13px;
-        }
-
-        summary label {
-          float: right;
-          font-size: 12px;
-          display: flex;
-          align-items: center;
-          font-weight: normal;
-        }
-
-        textarea {
-          padding: 5px;
-        }
-
-        textarea,
         details {
           display: block;
           width: 100%;
-          margin: 5px 0 15px 0;
+          margin: 0 0 12px;
+        }
+
+        details summary {
+          font-size: 12px;
+          margin-bottom: 6px;
+        }
+
+        details summary label {
+          float: right;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          font-weight: 400;
         }
 
         .form-actions {
           display: flex;
-          padding: 14px 20px;
-          border-top: 1px solid rgb(187, 187, 187);
+          align-items: center;
+          padding: 10px 16px;
+          border-top: 1px solid var(--m-border);
+          gap: 6px;
         }
 
-        .form-actions button {
-          padding: 6px 12px;
-          font-size: 12px;
-        }
-
-        .form-actions button:first-child {
+        .form-actions > button:first-child {
           margin-right: auto;
         }
 
-        .form-actions button .spinner {
-          width: 6px;
-          height: 6px;
-        }
-
-        .form-actions label {
+        .form-actions > span {
           display: flex;
-          align-items: center;
-          margin-right: 15px;
+          gap: 6px;
         }
       `,
     ];
@@ -366,7 +331,7 @@ class FolderSyncModal extends LitElement {
   }
 
   adjustHeight() {
-    var height = this.shadowRoot.querySelector('div').clientHeight | 0;
+    var height = this.shadowRoot.querySelector('div').scrollHeight;
     bg.modals.resizeSelf({ height });
   }
 

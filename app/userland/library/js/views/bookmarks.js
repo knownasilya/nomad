@@ -14,6 +14,7 @@ export class BookmarksView extends LitElement {
     return {
       bookmarks: { type: Array },
       filter: { type: String },
+      viewMode: { type: String },
       showHeader: { type: Boolean, attribute: 'show-header' },
       hideEmpty: { type: Boolean, attribute: 'hide-empty' },
     };
@@ -27,6 +28,7 @@ export class BookmarksView extends LitElement {
     super();
     this.bookmarks = undefined;
     this.filter = undefined;
+    this.viewMode = 'list';
     this.showHeader = false;
     this.hideEmpty = false;
     this.load();
@@ -36,7 +38,6 @@ export class BookmarksView extends LitElement {
     var bookmarks = await beaker.bookmarks.list();
     bookmarks.sort((a, b) => a.title.localeCompare(b.title));
     this.bookmarks = bookmarks;
-    console.log(this.bookmarks);
   }
 
   async bookmarkMenu(bookmark) {
@@ -84,21 +85,36 @@ export class BookmarksView extends LitElement {
           bookmark.title.toLowerCase().includes(this.filter)
       );
     }
+    const isCard = this.viewMode === 'card';
     return html`
       <link rel="stylesheet" href="beaker://app-stdlib/css/fontawesome.css" />
       ${bookmarks
         ? html`
-            ${this.showHeader && !(this.hideEmpty && bookmarks.length === 0)
-              ? html` <h4>Bookmarks</h4> `
+            ${!isCard
+              ? html`
+                  <div class="bookmarks-header">
+                    <span class="col col-icon"></span>
+                    <span class="col col-title">Name</span>
+                    <span class="col col-url">URL</span>
+                  </div>
+                `
               : ''}
-            <div class="bookmarks">
-              ${repeat(bookmarks, (bookmark) => this.renderBookmark(bookmark))}
-              ${bookmarks.length === 0 && this.filter
-                ? html`
-                    <div class="empty">
-                      <div>No matches found for "${this.filter}".</div>
-                    </div>
-                  `
+            <div class="${isCard ? 'bookmarks card-view' : 'bookmarks'}">
+              ${repeat(bookmarks, (bookmark) => this.renderBookmark(bookmark, isCard))}
+              ${bookmarks.length === 0
+                ? this.filter
+                  ? html`
+                      <div class="empty">
+                        <span class="fas fa-search"></span>
+                        <div>No matches for "${this.filter}"</div>
+                      </div>
+                    `
+                  : html`
+                      <div class="empty">
+                        <span class="far fa-star"></span>
+                        <div>No bookmarks yet.</div>
+                      </div>
+                    `
                 : ''}
             </div>
           `
@@ -106,8 +122,10 @@ export class BookmarksView extends LitElement {
     `;
   }
 
-  renderBookmark(bookmark) {
+  renderBookmark(bookmark, isCard = false) {
     var { href, title } = bookmark;
+    let domain = '';
+    try { domain = new URL(href).hostname; } catch (e) {}
     return html`
       <a
         class="bookmark"
@@ -115,17 +133,15 @@ export class BookmarksView extends LitElement {
         title=${title || ''}
         @contextmenu=${(e) => this.onContextmenuBookmark(e, bookmark)}
       >
-        <img class="favicon" src="asset:favicon:${href}">
-        <div class="title">${title}</div>
-        <div class="href">${href}</div>
+        <img class="favicon" src="asset:favicon:${href}" />
+        <div class="title">${title || html`<em>Untitled</em>`}</div>
+        <div class="href">${isCard ? domain : href}</div>
         <div class="ctrls">
-          <button class="transparent" @click=${(e) =>
-            this.onClickBookmarkMenuBtn(
-              e,
-              bookmark
-            )}><span class="fas fa-fw fa-ellipsis-h"></span></button>
+          <button @click=${(e) => this.onClickBookmarkMenuBtn(e, bookmark)}>
+            <span class="fas fa-fw fa-ellipsis-h"></span>
+          </button>
         </div>
-      </div>
+      </a>
     `;
   }
 
@@ -166,7 +182,6 @@ export class BookmarksView extends LitElement {
       this.load();
     } catch (e) {
       // ignore
-      console.log(e);
     }
   }
 

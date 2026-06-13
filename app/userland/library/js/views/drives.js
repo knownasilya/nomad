@@ -18,6 +18,7 @@ export class DrivesView extends LitElement {
       drives: { type: Array },
       readonly: { type: Boolean },
       filter: { type: String },
+      viewMode: { type: String },
       showHeader: { type: Boolean, attribute: 'show-header' },
       hideEmpty: { type: Boolean, attribute: 'hide-empty' },
     };
@@ -32,6 +33,7 @@ export class DrivesView extends LitElement {
     this.drives = undefined;
     this.readonly = undefined;
     this.filter = undefined;
+    this.viewMode = 'list';
     this.showHeader = false;
     this.hideEmpty = false;
     this.load();
@@ -69,8 +71,6 @@ export class DrivesView extends LitElement {
       });
     }
     drives.sort((a, b) => a.info.title.localeCompare(b.info.title));
-    console.log(drives);
-
     this.drives = drives;
   }
 
@@ -162,20 +162,31 @@ export class DrivesView extends LitElement {
         drive.info.title.toLowerCase().includes(this.filter)
       );
     }
+    const isSimple = this.hasAttribute('simple');
+    const isCard = !isSimple && this.viewMode === 'card';
     return html`
       <link rel="stylesheet" href="beaker://app-stdlib/css/fontawesome.css" />
       ${drives
         ? html`
-            ${this.showHeader && !(this.hideEmpty && drives.length === 0)
-              ? html` <h4>Drives</h4> `
+            ${!isSimple && !isCard
+              ? html`
+                  <div class="drives-header">
+                    <span class="col col-icon"></span>
+                    <span class="col col-title">Name</span>
+                    <span class="col col-owner">Owner</span>
+                    <span class="col col-updated">Updated</span>
+                    <span class="col col-peers">Peers</span>
+                  </div>
+                `
               : ''}
-            <div class="drives">
-              ${repeat(drives, (drive) => this.renderDrive(drive))}
+            <div class="${isCard ? 'drives card-view' : 'drives'}">
+              ${repeat(drives, (drive) => this.renderDrive(drive, isSimple, isCard))}
               ${drives.length === 0
                 ? this.filter
                   ? html`
                       <div class="empty">
-                        <div>No matches found for "${this.filter}".</div>
+                        <span class="fas fa-search"></span>
+                        <div>No matches for "${this.filter}"</div>
                       </div>
                     `
                   : html`
@@ -191,20 +202,41 @@ export class DrivesView extends LitElement {
     `;
   }
 
-  renderDrive(drive) {
+  renderDrive(drive, isSimple = false, isCard = false) {
     var numForks = drive.forks?.length || 0;
     var driveHref = drive.url;
-    if (this.hasAttribute('simple')) {
+    if (isCard) {
+      return html`
+        <a href=${driveHref} class="drive" title=${drive.info.title || 'Untitled'}
+           @contextmenu=${(e) => this.onContextmenuDrive(e, drive)}>
+          <img class="favicon" src="asset:favicon:${drive.url}" />
+          <div class="title">
+            <span class="drive-name">${drive.info.title || html`<em>Untitled</em>`}</span>
+            ${drive.tags.map((tag) => html`<span class="tag">${tag}</span>`)}
+          </div>
+          <div class="card-meta">
+            ${typeof drive.info.peers !== 'undefined' ? html`<span>${drive.info.peers}p</span>` : ''}
+            ${drive.info.mtime ? html`<span>${new Date(drive.info.mtime).toLocaleDateString()}</span>` : ''}
+          </div>
+          <div class="ctrls">
+            <button @click=${(e) => this.onClickDriveMenuBtn(e, drive)}>
+              <span class="fas fa-fw fa-ellipsis-h"></span>
+            </button>
+          </div>
+        </a>
+      `;
+    }
+    if (isSimple) {
       return html`
         <a
           href=${driveHref}
           title=${drive.info.title || 'Untitled'}
-          class="${classMap({ drive: true })}"
+          class="drive"
           @contextmenu=${(e) => this.onContextmenuDrive(e, drive)}
         >
           <img class="favicon" src="asset:favicon:${drive.url}" />
           <div class="title">
-            ${drive.info.title || html`<em>Untitled</em>`}
+            <span class="drive-name">${drive.info.title || html`<em>Untitled</em>`}</span>
           </div>
         </a>
       `;
@@ -213,46 +245,26 @@ export class DrivesView extends LitElement {
       <a
         href=${driveHref}
         title=${drive.info.title || 'Untitled'}
-        class="${classMap({ drive: true })}"
+        class="drive"
         @contextmenu=${(e) => this.onContextmenuDrive(e, drive)}
       >
         <img class="favicon" src="asset:favicon:${drive.url}" />
         <div class="title">
-          ${drive.info.title || html`<em>Untitled</em>`}
-          ${drive.forkOf?.label ? html`[${drive.forkOf.label}]` : ''}
+          <span class="drive-name">${drive.info.title || html`<em>Untitled</em>`}</span>
+          ${drive.forkOf?.label ? html`<span class="fork-label">${drive.forkOf.label}</span>` : ''}
           ${drive.tags.map((tag) => html`<span class="tag">${tag}</span>`)}
         </div>
-        <div class="description">${drive.info.description.slice(0, 50)}</div>
-        <div class="owner">${drive.info.writable ? 'Mine' : ''}</div>
-        <div class="updated">${drive.info.mtime ? new Date(drive.info.mtime).toLocaleDateString() : ''}</div>
-        <div class="forks">
-          ${numForks > 0
-            ? html`
-                <a @click=${(e) => this.onClickViewForksOf(e, drive)} href="#">
-                  ${numForks} ${pluralize(numForks, 'fork')}
-                  ${drive.showForks
-                    ? html`<span class="fas fa-fw fa-caret-down"></span>`
-                    : ''}
-                </a>
-              `
-            : html`<a>-</a>`}
-        </div>
+        <div class="owner ${drive.info.writable ? 'mine' : ''}">${drive.info.writable ? 'Mine' : ''}</div>
+        <div class="updated">${drive.info.mtime ? new Date(drive.info.mtime).toLocaleDateString() : '—'}</div>
         <div class="peers">
           ${drive.ident.system
-            ? html` <a><span class="fas fa-lock"></span></a> `
+            ? html`<span class="fas fa-lock"></span>`
             : typeof drive.info.peers === 'undefined'
-            ? html` <a>-</a> `
-            : html`
-                <a
-                  >${drive.info.peers} ${pluralize(drive.info.peers, 'peer')}</a
-                >
-              `}
+            ? '—'
+            : html`${drive.info.peers} ${pluralize(drive.info.peers, 'peer')}`}
         </div>
         <div class="ctrls">
-          <button
-            class="transparent"
-            @click=${(e) => this.onClickDriveMenuBtn(e, drive)}
-          >
+          <button @click=${(e) => this.onClickDriveMenuBtn(e, drive)}>
             <span class="fas fa-fw fa-ellipsis-h"></span>
           </button>
         </div>

@@ -1,14 +1,10 @@
 import { css } from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import buttonsCSS from 'beaker://app-stdlib/css/buttons2.css.js';
-import tooltipCSS from 'beaker://app-stdlib/css/tooltip.css.js';
 import spinnerCSS from 'beaker://app-stdlib/css/com/spinner.css.js';
 
 const cssStr = css`
-  ${buttonsCSS}
-  ${tooltipCSS}
-${spinnerCSS}
+  ${spinnerCSS}
 
-:host {
+  :host {
     display: block;
   }
 
@@ -20,63 +16,118 @@ ${spinnerCSS}
     text-decoration: underline;
   }
 
+  /* Downloads list */
+
   .downloads {
     font-size: 13px;
-    box-sizing: border-box;
   }
 
   .downloads .empty {
-    font-size: 17px;
-    letter-spacing: 0.75px;
-    color: #667;
-    padding: 28px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 20px;
+    color: var(--text-color--light);
+    font-size: 14px;
+    text-align: center;
   }
+
+  /* Download row */
 
   .download {
     display: flex;
     align-items: center;
-    padding: 18px 24px;
-    color: inherit;
-    border-bottom: 1px solid var(--border-color--light);
+    padding: 10px 14px;
+    color: var(--text-color--default);
+    border-bottom: 1px solid var(--border-color--very-light);
+    gap: 12px;
+    transition: background 0.08s;
+  }
+
+  .download:hover {
+    background: var(--lib-row-hover-bg);
   }
 
   .download .title {
     flex: 1;
+    min-width: 0;
   }
 
   .download .title strong {
-    margin-right: 10px;
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-color--default);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+  }
+
+  .download .title .url {
+    font-size: 11px;
+    color: var(--text-color--very-light);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .download .metadata {
-    width: 300px;
+    flex: 0 0 260px;
+    font-size: 12px;
+    color: var(--text-color--light);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
   }
 
   .download .metadata progress {
-    margin-right: 10px;
-    width: 40px;
-  }
-
-  .download .metadata > *:not(:first-child) {
-    margin-left: 5px;
-  }
-
-  .download .metadata > * {
-    margin-right: 3px;
-  }
-
-  .download .controls {
     width: 80px;
-    text-align: right;
+    height: 4px;
+    accent-color: var(--text-color--link);
   }
 
   .download .link {
-    color: #2864dc;
+    color: var(--text-color--link);
     cursor: pointer;
+    font-size: 12px;
   }
 
   .download .link:hover {
     text-decoration: underline;
+  }
+
+  .download .controls {
+    flex: 0 0 60px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px;
+  }
+
+  .download .controls button {
+    background: none;
+    border: 0;
+    box-shadow: none;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+    color: var(--text-color--lightish);
+    line-height: 1;
+    font-size: 13px;
+  }
+
+  .download .controls button:hover {
+    background: var(--border-color--light);
+  }
+
+  /* Loading */
+
+  .loading {
+    display: flex;
+    justify-content: center;
+    padding: 40px;
   }
 `;
 export default cssStr;

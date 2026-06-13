@@ -306,7 +306,11 @@ export function createShellWindow(
         tabManager.loadPins(win);
       }
       if (!createOpts.dontInitPages) {
-        tabManager.initializeWindowFromSnapshot(win, state);
+        if (tabManager.getAll(win).length === 0) {
+          // Only initialize from snapshot on first load; on shell-window reload
+          // tabs already exist in the main process, so skip to avoid resetting groups.
+          tabManager.initializeWindowFromSnapshot(win, state);
+        }
         if (tabManager.getAll(win).length === 0) {
           tabManager.create(win); // create default new tab
         }

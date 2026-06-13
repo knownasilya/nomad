@@ -144,7 +144,7 @@ export const addTabClose = async function (profileId, { url, title }) {
     } else {
       // log visit
       await db.run(
-        'INSERT INTO visits (profileId, url, title, tabClose, ts) VALUES (?, ?, ?, ?);',
+        'INSERT INTO visits (profileId, url, title, tabClose, ts) VALUES (?, ?, ?, ?, ?);',
         [profileId, url, title, 1, ts]
       );
     }

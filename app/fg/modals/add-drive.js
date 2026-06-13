@@ -21,15 +21,6 @@ class AddDriveModal extends LitElement {
       buttonsCSS,
       spinnerCSS,
       css`
-        .wrapper {
-          padding: 0;
-        }
-        h1.title {
-          font-size: 17px;
-          padding: 14px 20px;
-          border-color: #f0f0f7;
-          margin: 0;
-        }
         form {
           padding: 0;
           margin: 0;
@@ -37,57 +28,63 @@ class AddDriveModal extends LitElement {
         .loading {
           display: flex;
           align-items: center;
-          padding: 20px;
-          font-size: 15px;
-          border-bottom: 1px solid #f0f0f7;
-        }
-        .loading .spinner {
-          margin-right: 10px;
+          gap: 10px;
+          padding: 16px 20px;
+          font-size: 13px;
+          border-bottom: 1px solid var(--m-border);
+          color: var(--m-text-light);
         }
         .error {
-          padding: 20px;
-          margin: 0;
-          font-size: 15px;
-          color: #555;
-          border-bottom: 1px solid #f0f0f7;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 14px 20px;
+          font-size: 13px;
+          color: #d93229;
+          border-bottom: 1px solid var(--m-border);
+          background: #fff8f8;
         }
         .drive {
           display: flex;
           align-items: center;
-          height: 108px;
-          padding: 10px 20px;
-          border-bottom: 1px solid #f0f0f7;
-          box-sizing: border-box;
+          padding: 14px 20px;
+          border-bottom: 1px solid var(--m-border);
+          gap: 14px;
         }
         .drive img {
-          border-radius: 4px;
+          border-radius: 8px;
           object-fit: cover;
-          width: 80px;
-          height: 80px;
-          margin-right: 16px;
-          box-sizing: border-box;
+          width: 56px;
+          height: 56px;
+          flex-shrink: 0;
+          border: 1px solid var(--m-border);
         }
         .drive .title {
-          font-size: 23px;
+          font-size: 15px;
+          font-weight: 600;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          color: var(--m-text-default);
         }
         .drive .description {
-          font-size: 17px;
+          font-size: 12px;
+          color: var(--m-text-light);
+          margin-top: 2px;
         }
         .drive .info {
           flex: 1;
+          min-width: 0;
         }
         .tags {
-          margin: 10px 18px 0;
+          padding: 10px 20px 0;
         }
         .form-actions {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 0 20px 14px;
-          text-align: left;
+          padding: 10px 16px;
+          gap: 8px;
         }
       `,
     ];
@@ -213,7 +210,7 @@ class AddDriveModal extends LitElement {
 
   updated() {
     // adjust size based on rendering
-    var height = this.shadowRoot.querySelector('div').clientHeight | 0;
+    var height = this.shadowRoot.querySelector('div').scrollHeight;
     bg.modals.resizeSelf({ height });
   }
 

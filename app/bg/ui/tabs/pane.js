@@ -835,7 +835,7 @@ export class Pane extends EventEmitter {
     this.injectCustomRenderers();
 
     // emit
-    if (!this.tab.isHidden) {
+    if (this.tab && !this.tab.isHidden) {
       windowMenu.onSetCurrentLocation(this.browserWindow, this.url);
     }
     this.emitUpdateState();
