@@ -26,6 +26,20 @@ _Avoid_: shared drive, multi-user drive, autobase drive
 A keypair that has been granted append access to a Collaborative Drive. Writers are added explicitly via `inviteWriter` / `addWriter`; they are not inferred from replication.
 _Avoid_: author, contributor, collaborator
 
+### Shell chrome
+
+**Tab Layout**:
+The navigation mode for the browser shell. Either `top-bar` (horizontal strip of tabs above the navbar) or `sidebar` (vertical panel replacing the tab strip). A global setting; the same layout applies across all Spaces.
+_Avoid_: navigation mode, tab style, view mode
+
+**Tab Sidebar**:
+The vertical navigation panel shown when Tab Layout is `sidebar`. Renders groups as collapsible folder sections and ungrouped tabs as a flat list. Can be positioned left or right, resized, and collapsed to an icon rail. Distinct from any content-area panel.
+_Avoid_: side panel, sidebar (unqualified), drawer
+
+**Sidebar Rail**:
+The collapsed state of the Tab Sidebar: a narrow strip (~48px) showing only favicons. Toggled independently from group-level collapse.
+_Avoid_: mini sidebar, icon bar
+
 ### User model
 
 **Space**:

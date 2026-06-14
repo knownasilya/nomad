@@ -182,6 +182,7 @@ export const protocolHandler = async function (request, respond) {
       errorInfo: `${request.url} is an invalid hyper:// URL`,
     });
   }
+
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return respondError(405, 'Method Not Supported');
   }

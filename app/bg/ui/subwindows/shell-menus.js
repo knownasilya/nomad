@@ -134,12 +134,13 @@ export function reposition(parentWindow) {
         height: 350,
       });
     } else if (view.menuId === 'spaces') {
-      setBounds({
-        x: view.boundsOpt?.rightOffset || 10,
-        y: 34,
-        width: 200,
-        height: 300,
-      });
+      const bo = view.boundsOpt;
+      if (bo?.left !== undefined) {
+        // Sidebar mode: caller provides explicit screen coordinates.
+        setBounds({ x: bo.left, y: bo.top ?? 34, width: 200, height: 300 });
+      } else {
+        setBounds({ x: bo?.rightOffset || 10, y: 34, width: 200, height: 300 });
+      }
     }
   }
 }
@@ -252,6 +253,10 @@ rpc.exportAPI('background-process-shell-menus', shellMenusRPCManifest, {
 // =
 
 function adjustPosition(bounds, view, parentWindow) {
+  if (view.boundsOpt?.left !== undefined) {
+    // Explicit position provided (e.g. sidebar spaces button) — use as-is.
+    return;
+  }
   if (IS_RIGHT_ALIGNED.includes(view.menuId)) {
     let parentBounds = parentWindow.getContentBounds();
     bounds.x = parentBounds.width - bounds.width - bounds.x + MARGIN_SIZE;

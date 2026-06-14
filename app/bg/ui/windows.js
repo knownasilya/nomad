@@ -88,6 +88,28 @@ export async function setup() {
   var isTestDriverActive = !!getEnvVar('NOMAD_TEST_DRIVER');
   var isOpenUrlEnvVar = !!getEnvVar('NOMAD_OPEN_URL');
 
+  // When sidebar layout settings change from any settings page, push the
+  // new values to all open windows immediately so no restart is required.
+  const onSidebarSettingChanged = async () => {
+    const [tabLayout, sidebarSide, sidebarWidth] = await Promise.all([
+      settingsDb.get('tab_layout'),
+      settingsDb.get('sidebar_side'),
+      settingsDb.get('sidebar_width'),
+    ]);
+    for (const win of BrowserWindow.getAllWindows()) {
+      updateAddedWindowSettings(win, {
+        tabLayout: tabLayout || 'top-bar',
+        sidebarSide: sidebarSide || 'left',
+        sidebarWidth: Number(sidebarWidth) || 220,
+      });
+      tabManager.emitReplaceState(win);
+      win.emit('resize');
+    }
+  };
+  settingsDb.on('set:tab_layout', onSidebarSettingChanged);
+  settingsDb.on('set:sidebar_side', onSidebarSettingChanged);
+  settingsDb.on('set:sidebar_width', onSidebarSettingChanged);
+
   // set up app events
   app.on('activate', () => {
     // wait for ready (not waiting can trigger errors)
@@ -308,6 +330,9 @@ export function createShellWindow(
         // NOTE this is legacy compat- the pins are now stored in the session state
         tabManager.loadPins(win);
       }
+      // Load sidebar settings before any tab bounds are computed so BrowserViews
+      // are placed correctly from the first paint rather than jumping on first toggle.
+      await initSidebarSettings(win, settingsDb);
       if (!createOpts.dontInitPages) {
         if (tabManager.getAll(win).length === 0) {
           // Only initialize from snapshot on first load; on shell-window reload
@@ -324,6 +349,7 @@ export function createShellWindow(
       if (state.isSidebarHidden) {
         setSidebarHidden(win, true);
       }
+      tabManager.emitReplaceState(win);
       win.emit('custom-pages-ready');
 
       // DISABLED
@@ -484,6 +510,33 @@ export function setSidebarHidden(win, isSidebarHidden) {
   sessionWatcher.updateState(win, { isSidebarHidden });
   tabManager.emitReplaceState(win);
   win.emit('resize');
+}
+
+export function setSidebarWidth(win, width) {
+  updateAddedWindowSettings(win, { sidebarWidth: width });
+  tabManager.emitReplaceState(win);
+  win.emit('resize');
+}
+
+export function toggleSidebarCollapsed(win) {
+  const current = getAddedWindowSettings(win).sidebarCollapsed || false;
+  updateAddedWindowSettings(win, { sidebarCollapsed: !current });
+  tabManager.emitReplaceState(win);
+  win.emit('resize');
+}
+
+export async function initSidebarSettings(win, settingsDb) {
+  const [tabLayout, sidebarSide, sidebarWidth] = await Promise.all([
+    settingsDb.get('tab_layout'),
+    settingsDb.get('sidebar_side'),
+    settingsDb.get('sidebar_width'),
+  ]);
+  updateAddedWindowSettings(win, {
+    tabLayout: tabLayout || 'top-bar',
+    sidebarSide: sidebarSide || 'left',
+    sidebarWidth: Number(sidebarWidth) || 220,
+    sidebarCollapsed: false,
+  });
 }
 
 // internal methods

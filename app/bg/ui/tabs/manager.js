@@ -28,6 +28,8 @@ import {
   createShellWindow,
   getAddedWindowSettings,
   toggleSidebarHidden,
+  setSidebarWidth,
+  toggleSidebarCollapsed,
 } from '../windows';
 import { examineLocationInput } from '../../../lib/urls';
 import { findWebContentsParentWindow } from '../../lib/electron';
@@ -41,6 +43,8 @@ import hyper from '../../hyper/index';
 
 const X_POSITION = 0;
 const Y_POSITION = 75;
+const Y_POSITION_SIDEBAR = 41; // navbar only, no tab strip
+const SIDEBAR_RAIL_WIDTH = 48;
 
 // globals
 // =
@@ -198,17 +202,23 @@ class Tab extends EventEmitter {
   }
 
   get tabBounds() {
-    var addedWindowSettings = getAddedWindowSettings(this.browserWindow);
-    var x = X_POSITION;
-    var y = Y_POSITION;
+    var s = getAddedWindowSettings(this.browserWindow);
     var { width, height } = this.browserWindow.getContentBounds();
-    if (addedWindowSettings.isShellInterfaceHidden) {
-      x = 0;
-      y = 0;
-    } else if (addedWindowSettings.isSidebarHidden) {
-      x = 0;
+    if (s.isShellInterfaceHidden) {
+      return { x: 0, y: 0, width, height };
     }
-    return { x, y: y, width: width - x, height: height - y };
+    const isSidebar = s.tabLayout === 'sidebar';
+    const y = isSidebar ? Y_POSITION_SIDEBAR : Y_POSITION;
+    if (!isSidebar) {
+      return { x: X_POSITION, y, width: width - X_POSITION, height: height - y };
+    }
+    const sidebarW = s.sidebarCollapsed
+      ? SIDEBAR_RAIL_WIDTH
+      : (s.sidebarWidth || 220);
+    if (s.sidebarSide === 'right') {
+      return { x: 0, y, width: width - sidebarW, height: height - y };
+    }
+    return { x: sidebarW, y, width: width - sidebarW, height: height - y };
   }
 
   getIPCSenderInfo(event) {
@@ -1274,11 +1284,16 @@ export function emitReplaceStateAllWindows() {
 
 export function emitReplaceState(win) {
   win = getTopWindow(win);
+  var s = getAddedWindowSettings(win);
   var state = {
     tabs: getWindowTabState(win),
     isFullscreen: win.isFullScreen(),
-    isShellInterfaceHidden: getAddedWindowSettings(win).isShellInterfaceHidden,
-    isSidebarHidden: getAddedWindowSettings(win).isSidebarHidden,
+    isShellInterfaceHidden: s.isShellInterfaceHidden,
+    isSidebarHidden: s.isSidebarHidden,
+    tabLayout: s.tabLayout || 'top-bar',
+    sidebarSide: s.sidebarSide || 'left',
+    sidebarWidth: s.sidebarWidth || 220,
+    sidebarCollapsed: s.sidebarCollapsed || false,
     isDaemonActive: hyper.daemon.isActive(),
     hasBgTabs: backgroundTabs.length > 0,
     spaces: spacesDb.getCachedAll(),
@@ -1711,6 +1726,21 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
 
   async toggleSidebarHidden() {
     toggleSidebarHidden(getWindow(this.sender));
+  },
+
+  async setSidebarWidth(width) {
+    var win = getWindow(this.sender);
+    setSidebarWidth(win, Number(width));
+  },
+
+  async toggleSidebarCollapsed() {
+    toggleSidebarCollapsed(getWindow(this.sender));
+  },
+
+  async setSidebarCollapsedGroups(groupIds) {
+    var win = getWindow(this.sender);
+    await settingsDb.set('sidebar_collapsed_groups', groupIds);
+    emitReplaceState(win);
   },
 
   async showMenu(id, opts) {

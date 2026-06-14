@@ -3,6 +3,7 @@ import { LitElement, html } from 'lit';
 import * as bg from './bg-process-rpc';
 import { fromEventStream } from '../../bg/web-apis/fg/event-target';
 import './tabs';
+import './sidebar';
 import './navbar';
 import './panes';
 import './resize-hackfix';
@@ -28,6 +29,10 @@ class ShellWindowUI extends LitElement {
       spaces: { type: Array },
       activeSpace: { type: Object },
       groups: { type: Array },
+      tabLayout: { type: String },
+      sidebarSide: { type: String },
+      sidebarWidth: { type: Number },
+      sidebarCollapsed: { type: Boolean },
     };
   }
 
@@ -45,6 +50,10 @@ class ShellWindowUI extends LitElement {
     this.activeSpace = null;
     this.groups = [];
     this.activeTabIndex = -1;
+    this.tabLayout = 'top-bar';
+    this.sidebarSide = 'left';
+    this.sidebarWidth = 220;
+    this.sidebarCollapsed = false;
     this.setup();
   }
 
@@ -83,6 +92,10 @@ class ShellWindowUI extends LitElement {
       if (state.spaces) this.spaces = state.spaces;
       if (state.activeSpace) this.activeSpace = state.activeSpace;
       if (state.groups) this.groups = state.groups;
+      if (state.tabLayout) this.tabLayout = state.tabLayout;
+      if (state.sidebarSide) this.sidebarSide = state.sidebarSide;
+      if (state.sidebarWidth) this.sidebarWidth = state.sidebarWidth;
+      this.sidebarCollapsed = state.sidebarCollapsed || false;
       this.stateHasChanged();
     });
     viewEvents.addEventListener('update-state', ({ index, state }) => {
@@ -137,7 +150,10 @@ class ShellWindowUI extends LitElement {
 
     await this.requestUpdate();
     if (!this.isShellInterfaceHidden) {
-      this.shadowRoot.querySelector('shell-window-tabs').requestUpdate();
+      const tabsEl = this.shadowRoot.querySelector('shell-window-tabs');
+      if (tabsEl) tabsEl.requestUpdate();
+      const sidebarEl = this.shadowRoot.querySelector('shell-window-sidebar');
+      if (sidebarEl) sidebarEl.requestUpdate();
       if (this.activeTab) {
         this.shadowRoot.querySelector('shell-window-navbar').requestUpdate();
       }
@@ -149,19 +165,50 @@ class ShellWindowUI extends LitElement {
   // =
 
   render() {
+    const isSidebar = this.tabLayout === 'sidebar';
+    const sidebarW = this.sidebarCollapsed ? 48 : this.sidebarWidth;
+    const isDarwin = document.body.classList.contains('darwin');
+    const isLeft = this.sidebarSide !== 'right';
+    // Expanded macOS left: sidebar starts at top:0, need 80px margin to clear traffic lights.
+    // Collapsed macOS left: sidebar starts at top:34px, margin just matches the 48px rail width,
+    // but we still need inner padding to push buttons past the traffic lights (80 - 48 = 32px).
+    const isCollapsedDarwinLeft = isSidebar && isDarwin && isLeft && this.sidebarCollapsed;
+    const needsTrafficLightClearance = isDarwin && isLeft && !this.sidebarCollapsed;
+    const navbarMargin = isSidebar
+      ? Math.max(sidebarW, needsTrafficLightClearance ? 80 : 0)
+      : 0;
+    const navbarInnerPadding = isCollapsedDarwinLeft ? 80 - sidebarW : 0;
+    const navbarStyle = [
+      navbarMargin ? `margin-${isLeft ? 'left' : 'right'}: ${navbarMargin}px` : '',
+      navbarInnerPadding ? `padding-${isLeft ? 'left' : 'right'}: ${navbarInnerPadding}px` : '',
+    ].filter(Boolean).join('; ');
     return html`
       ${this.isWindows ? html`<shell-window-win32></shell-window-win32>` : ''}
       ${this.isShellInterfaceHidden
         ? ''
         : html`
-            <shell-window-tabs
-              .tabs=${this.tabs}
-              .spaces=${this.spaces}
-              .activeSpace=${this.activeSpace}
-              .groups=${this.groups}
-              ?is-fullscreen=${this.isFullscreen}
-              ?has-bg-tabs=${this.hasBgTabs}
-            ></shell-window-tabs>
+            ${isSidebar
+              ? html`
+                  <shell-window-sidebar
+                    .tabs=${this.tabs}
+                    .spaces=${this.spaces}
+                    .activeSpace=${this.activeSpace}
+                    .groups=${this.groups}
+                    sidebar-side=${this.sidebarSide}
+                    sidebar-width=${this.sidebarWidth}
+                    ?sidebar-collapsed=${this.sidebarCollapsed}
+                  ></shell-window-sidebar>
+                `
+              : html`
+                  <shell-window-tabs
+                    .tabs=${this.tabs}
+                    .spaces=${this.spaces}
+                    .activeSpace=${this.activeSpace}
+                    .groups=${this.groups}
+                    ?is-fullscreen=${this.isFullscreen}
+                    ?has-bg-tabs=${this.hasBgTabs}
+                  ></shell-window-tabs>
+                `}
             <shell-window-navbar
               .activeTabIndex=${this.activeTabIndex}
               .activeTab=${this.activeTab}
@@ -169,6 +216,7 @@ class ShellWindowUI extends LitElement {
               ?is-update-available=${this.isUpdateAvailable}
               ?is-daemon-active=${this.isDaemonActive}
               num-watchlist-notifications="${this.numWatchlistNotifications}"
+              style=${navbarStyle}
             ></shell-window-navbar>
           `}
       <shell-window-panes .activeTab=${this.activeTab}></shell-window-panes>

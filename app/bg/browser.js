@@ -171,18 +171,17 @@ export async function setup() {
         return cb({ cancel: true });
       }
     } else if (details.url.startsWith('hyper://private')) {
+      if (details.resourceType === 'mainFrame') {
+        // Always allow top-level navigation to hyper://private/ — it resolves via local DNS
+        // to the user's root Hyperdrive regardless of what the tab's current URL is.
+        return cb({ cancel: false });
+      }
       if (!details.webContentsId) {
-        if (details.resourceType === 'mainFrame') {
-          // allow toplevel navigation
-          return cb({ cancel: false });
-        } else {
-          // not enough info, cancel
-          return cb({ cancel: true });
-        }
+        return cb({ cancel: true });
       }
       let wc = webContents.fromId(details.webContentsId);
       if (/^(beaker:\/\/|hyper:\/\/private\/)/.test(wc.getURL())) {
-        // allow access from self and from beaker
+        // allow sub-resource requests from beaker pages and hyper://private/ itself
         cb({ cancel: false });
       } else {
         cb({ cancel: true });
