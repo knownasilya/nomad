@@ -639,44 +639,66 @@ const hyperdriveAPI = {
       return { mode: 16384 /* IFDIR */, size: 0, offset: 0, blocks: 0, downloaded: 0, mtime: 0, ctime: 0, metadata: {} };
     }
     const e = await hyperdriveAPI.entry.call(this, url, opts || {});
-    if (!e) return null;
-    const isFile = !!e.value?.blob;
-    return {
-      mode: isFile ? 32768 /* IFREG */ : 16384 /* IFDIR */,
-      size: e.value?.blob?.byteLength || 0,
-      offset: 0,
-      blocks: 0,
-      downloaded: 0,
-      mtime: 0,
-      ctime: 0,
-      metadata: e.value?.metadata || {},
-    };
+    if (e) {
+      const isFile = !!e.value?.blob;
+      return {
+        mode: isFile ? 32768 /* IFREG */ : 16384 /* IFDIR */,
+        size: e.value?.blob?.byteLength || 0,
+        offset: 0,
+        blocks: 0,
+        downloaded: 0,
+        mtime: 0,
+        ctime: 0,
+        metadata: e.value?.metadata || {},
+      };
+    }
+    // Hyperdrive v11 directories are implicit (no Hyperbee entry of their own).
+    // Check if any children exist under this path — if so, treat it as a directory.
+    const children = await hyperdriveAPI.list.call(this, url, { recursive: false });
+    if (children.length > 0) {
+      return { mode: 16384 /* IFDIR */, size: 0, offset: 0, blocks: 0, downloaded: 0, mtime: 0, ctime: 0, metadata: {} };
+    }
+    return null;
   },
   async unlink(url, opts) {
     return hyperdriveAPI.del.call(this, url, opts || {});
   },
   async readdir(url, opts = {}) {
+    const urlp = parseDriveUrl(url);
+    const filepath = normalizeFilepath(urlp.pathname || '');
     const entries = await hyperdriveAPI.list.call(this, url, { recursive: opts.recursive || false });
+
+    // shallowReadStream pushes the raw Hyperbee node even for directory entries,
+    // where e.key is the first *file* found inside the subdirectory, not the dir itself.
+    // Mirror shallowReadStream's own name computation (std(folder, true) strips trailing slash).
+    const normalizedPath = filepath === '/' ? '' : filepath.replace(/\/$/, '');
+    const shallowName = (key) => {
+      const suffix = key.slice(normalizedPath.length + 1); // e.g. 'history/abc.json' or 'index.html'
+      const i = suffix.indexOf('/');
+      return i === -1 ? suffix : suffix.slice(0, i);
+    };
+
     if (opts.includeStats) {
       return entries.map((e) => {
-        const isFile = !!e.value?.blob;
+        const name = shallowName(e.key);
+        const isFile = !e.key.slice(normalizedPath.length + 1).includes('/') && !!e.value?.blob;
         return {
-          name: path.basename(e.key),
+          name,
           stat: {
             // mode encodes file vs directory so fg-side createStat() can reconstruct isFile/isDirectory
             mode: isFile ? 32768 /* IFREG */ : 16384 /* IFDIR */,
-            size: e.value?.blob?.byteLength || 0,
+            size: isFile ? (e.value?.blob?.byteLength || 0) : 0,
             offset: 0,
             blocks: 0,
             downloaded: 0,
             mtime: 0,
             ctime: 0,
-            metadata: e.value?.metadata || {},
+            metadata: isFile ? (e.value?.metadata || {}) : {},
           },
         };
       });
     }
-    return entries.map((e) => path.basename(e.key));
+    return entries.map((e) => shallowName(e.key));
   },
   async symlink() { /* no-op: symlinks removed in v11 */ },
   async mount() { /* no-op: mounts removed in v11 */ },

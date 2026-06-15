@@ -224,6 +224,8 @@ export class ExplorerApp extends LitElement {
         `Reading path information (${loc.getPath()})`,
         () => drive.stat(loc.getPath())
       );
+      // stat() returns null when the path has no entry and no implicit children
+      if (!this.pathInfo) throw new Error('NotFoundError: ' + loc.getPath());
       await this.readPathAncestry();
     } catch (e) {
       if (e.message.includes('NotFoundError')) {
@@ -303,13 +305,15 @@ export class ExplorerApp extends LitElement {
       let path = '/' + pathParts.join('/') + '/';
       let stat = undefined;
       let mount = undefined;
-      if (path === loc.getPath()) {
+      // path always has a trailing slash; loc.getPath() may not (e.g. for files)
+      if (path === loc.getPath() || path.replace(/\/$/, '') === loc.getPath()) {
         stat = this.pathInfo;
       } else {
         stat = await this.attempt(`Reading path information (${path})`, () =>
           drive.stat(path).catch((e) => undefined)
         );
       }
+      if (!stat) { pathParts.pop(); continue; }
       if (stat.mount) {
         mount = await this.attempt(
           `Reading site information (${stat.mount.key}) for parent mount at ${path}`,

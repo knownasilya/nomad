@@ -1,4 +1,52 @@
 import { LitElement, html, css } from 'lit';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+
+function mdToHtml(text) {
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const inline = s => s
+    .replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  const tokens = [];
+  const lines = text.split('\n');
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.startsWith('```')) {
+      const codeLines = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith('```')) { codeLines.push(lines[i]); i++; }
+      tokens.push({ type: 'code', code: codeLines.join('\n') });
+      i++;
+      continue;
+    }
+    const hm = line.match(/^(#{1,3}) (.+)/);
+    if (hm) { tokens.push({ type: 'heading', level: hm[1].length, text: hm[2] }); i++; continue; }
+    if (line.match(/^[-*] /)) {
+      const items = [];
+      while (i < lines.length && lines[i].match(/^[-*] /)) { items.push(lines[i].slice(2)); i++; }
+      tokens.push({ type: 'list', items });
+      continue;
+    }
+    if (line.trim() === '') { tokens.push({ type: 'blank' }); i++; continue; }
+    const paraLines = [];
+    while (i < lines.length && lines[i].trim() !== '' && !lines[i].startsWith('```') && !lines[i].match(/^[-*] /) && !lines[i].match(/^#{1,3} /)) {
+      paraLines.push(lines[i]); i++;
+    }
+    tokens.push({ type: 'para', lines: paraLines });
+  }
+
+  const parts = tokens.map(t => {
+    if (t.type === 'code') return `<pre><code>${esc(t.code)}</code></pre>`;
+    if (t.type === 'heading') { const tag = `h${t.level}`; return `<${tag}>${inline(esc(t.text))}</${tag}>`; }
+    if (t.type === 'list') return `<ul>${t.items.map(s => `<li>${inline(esc(s))}</li>`).join('')}</ul>`;
+    if (t.type === 'para') return `<p>${t.lines.map(l => inline(esc(l))).join('<br>')}</p>`;
+    return '';
+  });
+  return parts.join('') || `<p>${inline(esc(text))}</p>`;
+}
 
 class NomadChatBubble extends LitElement {
   static properties = {
@@ -6,6 +54,7 @@ class NomadChatBubble extends LitElement {
     messages: { type: Array },
     draft: { type: String },
     streaming: { type: Boolean },
+    sessionId: { type: String },
   };
 
   static styles = css`
@@ -81,19 +130,37 @@ class NomadChatBubble extends LitElement {
       font-size: 15px;
     }
 
-    .close-btn {
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .icon-btn {
       background: none;
       border: none;
       cursor: pointer;
       color: rgba(255,255,255,.75);
-      font-size: 20px;
+      font-size: 18px;
       line-height: 1;
-      padding: 2px 4px;
+      padding: 4px 6px;
       border-radius: 4px;
-      transition: color .1s;
+      transition: color .1s, background .1s;
+      display: flex;
+      align-items: center;
     }
 
-    .close-btn:hover { color: #fff; }
+    .icon-btn:hover { color: #fff; background: rgba(255,255,255,.15); }
+
+    .icon-btn svg {
+      width: 15px;
+      height: 15px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
 
     /* Messages */
     .messages {
@@ -113,9 +180,44 @@ class NomadChatBubble extends LitElement {
       padding: 9px 12px;
       border-radius: 12px;
       line-height: 1.45;
-      white-space: pre-wrap;
       word-break: break-word;
       font-size: 13.5px;
+    }
+
+    .msg.user { white-space: pre-wrap; }
+
+    .msg.assistant p, .msg.assistant h1, .msg.assistant h2, .msg.assistant h3,
+    .msg.assistant ul, .msg.assistant pre {
+      margin: 0 0 6px 0;
+    }
+    .msg.assistant p:last-child, .msg.assistant ul:last-child,
+    .msg.assistant pre:last-child { margin-bottom: 0; }
+
+    .msg.assistant h1 { font-size: 15px; font-weight: 700; }
+    .msg.assistant h2 { font-size: 14px; font-weight: 700; }
+    .msg.assistant h3 { font-size: 13.5px; font-weight: 600; }
+
+    .msg.assistant ul { padding-left: 18px; }
+    .msg.assistant li { margin-bottom: 2px; }
+
+    .msg.assistant code {
+      background: rgba(0,0,0,.08);
+      border-radius: 3px;
+      padding: 1px 4px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+    }
+
+    .msg.assistant pre {
+      background: rgba(0,0,0,.07);
+      border-radius: 6px;
+      padding: 8px 10px;
+      overflow-x: auto;
+    }
+    .msg.assistant pre code {
+      background: none;
+      padding: 0;
+      font-size: 12px;
     }
 
     .msg.user {
@@ -134,7 +236,7 @@ class NomadChatBubble extends LitElement {
 
     .msg.assistant.streaming::after {
       content: '▋';
-      display: inline-block;
+      display: inline;
       animation: blink .8s step-end infinite;
       opacity: .6;
       margin-left: 1px;
@@ -224,7 +326,63 @@ class NomadChatBubble extends LitElement {
     this.messages = [];
     this.draft = '';
     this.streaming = false;
+    this._pendingReload = false;
+    this.sessionId = this._loadSessionId() || this._createSessionId();
+    this.messages = this._loadMessages(this.sessionId);
+    this._watchDriveChanges();
   }
+
+  // Reload the page when the AI writes to the drive.
+  // If a change arrives mid-stream, defer the reload until streaming ends.
+  _watchDriveChanges() {
+    try {
+      const drive = window.beaker?.hyperdrive?.drive(location.href);
+      if (!drive) return;
+      const watcher = drive.watch('/');
+      watcher.addEventListener('changed', () => {
+        if (this.streaming) {
+          this._pendingReload = true;
+        } else if (!this.draft) {
+          location.reload();
+        }
+      });
+    } catch { /* non-hyper page or API unavailable */ }
+  }
+
+  // — Session persistence —
+
+  get _prefix() {
+    return `nomad-chat:${location.origin}`;
+  }
+
+  _loadSessionId() {
+    return localStorage.getItem(`${this._prefix}:session-id`) || null;
+  }
+
+  _createSessionId() {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    localStorage.setItem(`${this._prefix}:session-id`, id);
+    return id;
+  }
+
+  _loadMessages(id) {
+    try {
+      return JSON.parse(localStorage.getItem(`${this._prefix}:session:${id}`) || '[]');
+    } catch { return []; }
+  }
+
+  _saveMessages() {
+    localStorage.setItem(`${this._prefix}:session:${this.sessionId}`, JSON.stringify(this.messages));
+  }
+
+  _newSession() {
+    this.sessionId = this._createSessionId();
+    this.messages = [];
+    this._saveMessages();
+    this.requestUpdate();
+  }
+
+  // — Render —
 
   render() {
     return html`
@@ -236,11 +394,15 @@ class NomadChatBubble extends LitElement {
   }
 
   renderPanel() {
+    const isStreaming = this.streaming;
     return html`
       <div class="panel">
         <div class="header">
           <span class="header-title">Ask AI</span>
-          <button class="close-btn" @click=${this._toggleOpen}>×</button>
+          <div class="header-actions">
+            <button class="icon-btn" title="New session" @click=${this._newSession}>${newChatSvg()}</button>
+            <button class="icon-btn" title="Close" @click=${this._toggleOpen}>${closeSvg()}</button>
+          </div>
         </div>
         ${this.messages.length === 0
           ? html`
@@ -251,11 +413,7 @@ class NomadChatBubble extends LitElement {
             `
           : html`
               <div class="messages" ${scrollRef(this)}>
-                ${this.messages.map((m, i) => html`
-                  <div class="msg ${m.role}${i === this.messages.length - 1 && this.streaming ? ' streaming' : ''}">
-                    ${m.content}
-                  </div>
-                `)}
+                ${this.messages.map((m, i) => html`<div class="msg ${m.role}${i === this.messages.length - 1 && isStreaming ? ' streaming' : ''}">${m.role === 'assistant' ? unsafeHTML(mdToHtml(m.content.trimStart())) : m.content.trimStart()}</div>`)}
               </div>
             `
         }
@@ -265,15 +423,17 @@ class NomadChatBubble extends LitElement {
             @input=${e => { this.draft = e.target.value; }}
             @keydown=${this._onKeydown}
             placeholder="Ask something…"
-            ?disabled=${this.streaming}
+            ?disabled=${isStreaming}
           ></textarea>
-          <button class="send-btn" @click=${this._send} ?disabled=${this.streaming || !this.draft.trim()}>
+          <button class="send-btn" @click=${this._send} ?disabled=${isStreaming || !this.draft.trim()}>
             Send
           </button>
         </div>
       </div>
     `;
   }
+
+  // — Events —
 
   _toggleOpen() {
     this.open = !this.open;
@@ -321,6 +481,11 @@ class NomadChatBubble extends LitElement {
       this.messages = updated;
     } finally {
       this.streaming = false;
+      this._saveMessages();
+      if (this._pendingReload && !this.draft) {
+        this._pendingReload = false;
+        location.reload();
+      }
     }
   }
 
@@ -334,7 +499,6 @@ class NomadChatBubble extends LitElement {
 function scrollRef(host) {
   return (el) => {
     if (el) {
-      // scroll to bottom on initial render of messages container
       requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
     }
   };
@@ -348,7 +512,14 @@ function chatSvg() {
 
 function closeSvg() {
   return html`<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path d="M18 6 6 18M6 6l12 12" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+    <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+  </svg>`;
+}
+
+function newChatSvg() {
+  return html`<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/>
+    <path d="M18.375 2.625a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4Z"/>
   </svg>`;
 }
 

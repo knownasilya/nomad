@@ -116,7 +116,21 @@ topic.addEventListener('message', e => {
 \`\`\`
 
 ---
-The current drive's URL is \`location.href\`. A drive can freely read/write its own files; writing to other drives requires the user to grant permission.`;
+The current drive's URL is \`location.href\`. A drive can freely read/write its own files; writing to other drives requires the user to grant permission.
+
+## Resolving which file to edit from a URL
+
+When a user asks you to edit the current page, derive the target file path from the URL as follows:
+
+1. **Exact file path** — if \`location.pathname\` has an extension (e.g. \`/about.html\`, \`/posts/hello.md\`), that is the file to edit.
+2. **Directory / trailing slash** — if the pathname is \`/\` or ends with \`/\`, the browser resolves index files in this priority order:
+   - \`index.html\` (checked first — wins if it exists)
+   - \`index.md\`
+   - \`index.txt\`
+   Read the drive to find which one exists, then edit that file.
+3. **Extensionless path** — treat it as a directory (append \`/\`) and apply the same index-file lookup above.
+
+Example: on \`hyper://abc.../\` you would check for \`/index.html\` first, then \`/index.md\`, then \`/index.txt\`, and edit whichever one exists. Use \`beaker.hyperdrive.stat()\` to test existence.`;
 
 // Built-in tools exposed to the model
 const BUILTIN_TOOLS = [
