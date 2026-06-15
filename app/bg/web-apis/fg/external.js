@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { fromEventStream, EventTargetFromStream } from './event-target';
 import errors from 'beaker-error-constants';
+import * as aiModule from './ai';
 import capabilitiesManifest from '../manifests/external/capabilities';
 import contactsManifest from '../manifests/external/contacts';
 import markdownManifest from '../manifests/external/markdown';
@@ -113,6 +114,7 @@ export const setup = function (rpc) {
   };
 
   return {
+    ...aiModule.setup(rpc),
     capabilities,
     contacts,
     markdown,

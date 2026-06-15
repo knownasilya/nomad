@@ -40,6 +40,16 @@ _Avoid_: side panel, sidebar (unqualified), drawer
 The collapsed state of the Tab Sidebar: a narrow strip (~48px) showing only favicons. Toggled independently from group-level collapse.
 _Avoid_: mini sidebar, icon bar
 
+### AI
+
+**AI Runtime**:
+The external OpenAI-compatible inference server (Ollama, LM Studio, or any `/v1/chat/completions`-compatible server) that executes model calls. Configured globally in Nomad settings via `ai_base_url` and `ai_default_model`. Not bundled; user-managed separately.
+_Avoid_: local model, AI server, LLM backend
+
+**AI Config**:
+The `/ai/` folder inside a Drive, containing `system.md` (the system prompt) and optionally a `tools/` directory. A Drive has an AI Config when it includes this folder. Any Drive can opt into AI behaviour by adding an `ai` key to its `/index.json` — either an inline object `{ "model": "..." }` or a pointer string `"hyper://..."` delegating to another Drive's AI Config.
+_Avoid_: agent config, AI settings, model config
+
 ### User model
 
 **Space**:

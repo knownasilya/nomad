@@ -21,6 +21,8 @@ const GLOBAL_SETTINGS = new Set([
   'sidebar_side',
   'sidebar_width',
   'sidebar_collapsed_groups',
+  'ai_base_url',
+  'ai_default_model',
 ]);
 
 // globals
@@ -77,6 +79,9 @@ export const setup = async function (opts) {
     sidebar_side: 'left',
     sidebar_width: 220,
     sidebar_collapsed_groups: [],
+    ai_base_url: 'http://localhost:11434/v1',
+    ai_default_model: '',
+    ai_space_default: '',
     adblock_lists: [
       {
         name: 'EasyList',

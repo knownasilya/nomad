@@ -29,6 +29,7 @@ import { WEBAPI as downloadsAPI } from '../ui/downloads';
 import { WEBAPI as beakerBrowserAPI } from '../browser';
 
 // external manifests
+import aiManifest from './manifests/external/ai';
 import capabilitiesManifest from './manifests/external/capabilities';
 import contactsManifest from './manifests/external/contacts';
 import hyperdriveManifest from './manifests/external/hyperdrive';
@@ -38,6 +39,7 @@ import peersocketsManifest from './manifests/external/peersockets';
 import shellManifest from './manifests/external/shell';
 
 // external apis
+import aiAPI from './bg/ai';
 import capabilitiesAPI from './bg/capabilities';
 import contactsAPI from './bg/contacts';
 import hyperdriveAPI from './bg/hyperdrive';
@@ -101,6 +103,7 @@ export const setup = function () {
   rpc.exportAPI('watchlist', watchlistManifest, watchlistAPI, internalOnly);
 
   // external apis
+  rpc.exportAPI('ai', aiManifest, aiAPI, secureOnly('ai'));
   rpc.exportAPI(
     'capabilities',
     capabilitiesManifest,

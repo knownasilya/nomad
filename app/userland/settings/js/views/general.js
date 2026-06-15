@@ -812,5 +812,6 @@ class GeneralSettingsView extends LitElement {
     this.listingSelfState = 'done';
     this.requestUpdate();
   }
+
 }
 customElements.define('general-settings-view', GeneralSettingsView);
