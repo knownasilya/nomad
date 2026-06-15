@@ -9,6 +9,8 @@ import {
   screen,
 } from 'electron';
 import { EventEmitter } from 'events';
+import fs from 'fs';
+import path from 'path';
 import emitStream from 'emit-stream';
 import * as rpc from 'pauls-electron-rpc';
 import { Pane } from './pane';
@@ -679,6 +681,19 @@ export async function setup() {
           return;
         }
       }
+    }
+  });
+
+  ipcMain.on('NOMAD_INJECT_CHAT_BUBBLE', async (e) => {
+    try {
+      const bundlePath = path.join(__dirname, 'fg', 'chat-bubble', 'index.build.js');
+      const code = fs.readFileSync(bundlePath, 'utf8');
+      await e.sender.executeJavaScript(code);
+      await e.sender.executeJavaScript(
+        'if (!document.querySelector("nomad-chat-bubble")) document.body.appendChild(document.createElement("nomad-chat-bubble"))'
+      );
+    } catch (err) {
+      console.error('[chat-bubble] inject failed:', err.message);
     }
   });
 

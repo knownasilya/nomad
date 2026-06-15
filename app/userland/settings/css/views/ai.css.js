@@ -74,6 +74,29 @@ const cssStr = css`
     box-shadow: 0 0 0 2px rgba(41, 95, 203, 0.2);
   }
 
+  .input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .input-row input[type='text'] {
+    width: 300px;
+  }
+
+  .test-status {
+    margin: 6px 0 0;
+    font-size: 13px;
+  }
+
+  .test-status.ok {
+    color: var(--green, #3b8b3b);
+  }
+
+  .test-status.err {
+    color: var(--red, #c0392b);
+  }
+
   .badge-experimental {
     font-size: 11px;
     font-weight: 500;

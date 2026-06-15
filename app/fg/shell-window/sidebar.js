@@ -263,9 +263,13 @@ class ShellWindowSidebar extends LitElement {
     const isLeft = this.sidebarSide !== 'right';
     const menuW = 200;
     const menuH = 300;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const left = isLeft ? rect.left : Math.max(0, rect.right - menuW);
-    const top = Math.max(0, rect.top - menuH);
+    const footerPad = 4; // .sidebar-footer padding-top
+    const btnH = 34;     // .spaces-btn height
+    // Button sits at the very bottom of the sidebar; use window.innerHeight
+    // rather than getBoundingClientRect() which gives shadow-DOM-relative coords.
+    const btnTop = window.innerHeight - footerPad - btnH;
+    const top = Math.max(0, btnTop - menuH);
+    const left = isLeft ? 0 : Math.max(0, this.sidebarWidth - menuW);
     bg.views.toggleMenu('spaces', { bounds: { left, top } });
   }
 

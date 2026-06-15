@@ -13,6 +13,9 @@ export function setup(rpc) {
       chat(messages) {
         return streamToAsyncIterator(fromEventStream(aiRPC.chat(messages)));
       },
+      testConnection(baseUrl) {
+        return aiRPC.testConnection(baseUrl);
+      },
     },
   };
 }

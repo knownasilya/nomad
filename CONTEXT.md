@@ -50,6 +50,10 @@ _Avoid_: local model, AI server, LLM backend
 The `/ai/` folder inside a Drive, containing `system.md` (the system prompt) and optionally a `tools/` directory. A Drive has an AI Config when it includes this folder. Any Drive can opt into AI behaviour by adding an `ai` key to its `/index.json` — either an inline object `{ "model": "..." }` or a pointer string `"hyper://..."` delegating to another Drive's AI Config.
 _Avoid_: agent config, AI settings, model config
 
+**Chat Bubble**:
+A floating chat overlay Nomad injects into a Drive page when `"chatBubble": true` is set in the Drive's `/index.json`. The overlay is provided entirely by Nomad (a Lit custom element injected via the main process); the Drive author does not need to write any chat UI code. The bubble uses `beaker.ai.chat()` resolved against the same Drive's AI Config.
+_Avoid_: chat widget, chat overlay, embedded chat
+
 ### User model
 
 **Space**:

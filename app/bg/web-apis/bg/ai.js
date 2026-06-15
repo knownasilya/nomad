@@ -11,6 +11,113 @@ import * as permissions from '../../ui/permissions';
 import { parseDriveUrl } from '../../../lib/urls';
 import { findTab } from '../../ui/tabs/manager';
 
+// Built-in system context always appended to every conversation's system prompt.
+// KEEP IN SYNC with nomad.dev/content/docs/api/apis/ — when a new API is added
+// or an existing method signature changes, update both the docs and this string.
+const NOMAD_API_REFERENCE = `\
+You are an AI assistant embedded in Nomad, a peer-to-peer web browser that hosts and serves websites via Hyperdrive (hyper:// protocol). Pages running in Nomad have access to the following JavaScript APIs under the global \`beaker\` object:
+
+## beaker.hyperdrive — Read/write Hyperdrive files
+
+Methods work with full \`hyper://\` URLs or plain paths (relative to the current drive).
+
+\`\`\`js
+// Drive instance — scope all ops to one drive
+const drive = beaker.hyperdrive.drive('hyper://key...')
+
+// Create a new drive
+const drive = await beaker.hyperdrive.createDrive({ title, description })
+
+// Read
+const info    = await beaker.hyperdrive.getInfo(url)          // { key, url, writable, version, title, description }
+const stat    = await beaker.hyperdrive.stat(url)             // { isFile(), isDirectory(), size, mtime, metadata }
+const text    = await beaker.hyperdrive.readFile(url)         // string (utf8 default)
+const binary  = await beaker.hyperdrive.readFile(url, 'binary')
+const entries = await beaker.hyperdrive.readdir(url)          // string[]
+const entries = await beaker.hyperdrive.readdir(url, { includeStats: true }) // { name, stat }[]
+
+// Write (requires permission for other drives)
+await beaker.hyperdrive.writeFile(url, data)
+await beaker.hyperdrive.mkdir(url)
+await beaker.hyperdrive.copy(srcUrl, dstUrl)
+await beaker.hyperdrive.rename(srcUrl, dstUrl)
+await beaker.hyperdrive.unlink(url)
+await beaker.hyperdrive.rmdir(url, { recursive: true })
+await beaker.hyperdrive.configure(url, { title, description })
+
+// Watch for changes
+const watcher = drive.watch('/', onChanged) // EventTarget, emits 'changed'
+\`\`\`
+
+## beaker.shell — Browser dialogs and library management
+
+\`\`\`js
+// Dialogs
+const files = await beaker.shell.selectFileDialog({ title, select: ['file'], filters: { extensions: ['png'] }, allowMultiple: true })
+// => [{ path, origin, url }]
+
+const file  = await beaker.shell.saveFileDialog({ title, defaultFilename: 'out.txt', extension: 'txt' })
+const url   = await beaker.shell.selectDriveDialog({ title, writable: true, tag: 'website' })
+
+// Library
+await beaker.shell.saveDriveDialog(url)
+await beaker.shell.tagDrive(url, 'website blog')
+await beaker.shell.unsaveDrive(url)
+const drives = await beaker.shell.listDrives({ tag: 'website', writable: true })
+
+// Properties dialog
+await beaker.shell.drivePropertiesDialog(url)
+\`\`\`
+
+## beaker.ai — AI chat (this API)
+
+\`\`\`js
+const messages = [{ role: 'user', content: 'Hello' }]
+for await (const chunk of beaker.ai.chat(messages)) {
+  process(chunk) // string chunk streamed from the model
+}
+\`\`\`
+
+## beaker.panes — Multi-pane tab layout
+
+\`\`\`js
+beaker.panes.setAttachable()                               // mark this pane as attachable
+const pane = await beaker.panes.attachToLastActivePane()   // attach to the previously focused pane
+const pane = await beaker.panes.create(url, { attach: true }) // open url in a new pane
+await beaker.panes.navigate(pane.id, url)
+await beaker.panes.focus(pane.id)
+const res  = await beaker.panes.executeJavaScript(pane.id, script)
+const cssId = await beaker.panes.injectCss(pane.id, styles)
+await beaker.panes.uninjectCss(pane.id, cssId)
+
+// Events on beaker.panes
+beaker.panes.addEventListener('pane-attached',  e => { /* e.detail.id */ })
+beaker.panes.addEventListener('pane-detached',  e => { })
+beaker.panes.addEventListener('pane-navigated', e => { /* e.detail.url */ })
+\`\`\`
+
+## beaker.peersockets — Real-time peer messaging
+
+Messages are scoped to the current Hyperdrive and its connected peers.
+
+\`\`\`js
+// Track peers
+const peerIds = new Set()
+const peerEvents = beaker.peersockets.watch()
+peerEvents.addEventListener('join',  e => peerIds.add(e.peerId))
+peerEvents.addEventListener('leave', e => peerIds.delete(e.peerId))
+
+// Send/receive on a named topic
+const topic = beaker.peersockets.join('chat')
+topic.send(peerId, new TextEncoder().encode('hello'))
+topic.addEventListener('message', e => {
+  console.log(e.peerId, new TextDecoder().decode(e.message))
+})
+\`\`\`
+
+---
+The current drive's URL is \`location.href\`. A drive can freely read/write its own files; writing to other drives requires the user to grant permission.`;
+
 // Built-in tools exposed to the model
 const BUILTIN_TOOLS = [
   {
@@ -73,14 +180,28 @@ const BUILTIN_TOOLS = [
 ];
 
 export default {
+  async testConnection(baseUrl) {
+    const url = (baseUrl || 'http://localhost:11434/v1').replace(/\/$/, '') + '/models';
+    try {
+      const data = await fetchJson(url);
+      return { ok: true, models: data.data?.length ?? 0 };
+    } catch (err) {
+      return { ok: false, error: err.message || 'Could not connect' };
+    }
+  },
+
   chat(messages) {
     const emitter = new EventEmitter();
+    emitter.on('error', () => {}); // prevent unhandled-error throw
     const stream = emitStream(emitter);
     const sender = this.sender;
 
-    runChat(messages, sender, emitter).catch((err) => {
-      emitter.emit('data', ['error', { message: err.message }]);
-      emitter.emit('end');
+    runChat(messages, sender, emitter).then(() => {
+      stream.end();
+    }).catch((err) => {
+      console.error('[ai] chat error:', err);
+      emitter.emit('error', { message: err.message });
+      stream.end();
     });
 
     return stream;
@@ -99,9 +220,10 @@ async function runChat(messages, sender, emitter) {
     throw new Error('No AI model configured. Set ai_default_model in settings or add {"ai": {"model": "..."}} to your Drive\'s index.json.');
   }
 
-  const fullMessages = systemPrompt
-    ? [{ role: 'system', content: systemPrompt }, ...messages]
-    : [...messages];
+  const systemContent = systemPrompt
+    ? `${systemPrompt}\n\n---\n\n${NOMAD_API_REFERENCE}`
+    : NOMAD_API_REFERENCE;
+  const fullMessages = [{ role: 'system', content: systemContent }, ...messages];
 
   let msgHistory = fullMessages;
 
@@ -131,6 +253,7 @@ async function runChat(messages, sender, emitter) {
         const args = JSON.parse(tc.function.arguments || '{}');
         result = await executeTool(tc.function.name, args, sender);
       } catch (err) {
+        console.error(`[ai] tool "${tc.function.name}" failed:`, err);
         result = `Error: ${err.message}`;
       }
       msgHistory.push({
@@ -141,8 +264,7 @@ async function runChat(messages, sender, emitter) {
     }
   }
 
-  emitter.emit('data', ['done', {}]);
-  emitter.emit('end');
+  emitter.emit('done', {});
 }
 
 async function resolveAiConfig(sender) {
@@ -153,19 +275,21 @@ async function resolveAiConfig(sender) {
     try {
       const urlp = parseDriveUrl(senderUrl);
       const driveKey = await drives.fromURLToKey(urlp.hostname, true);
-      const drive = drives.getDrive(driveKey) || (await drives.loadDrive(driveKey));
-      const indexBuf = await drive.get('/index.json');
+      const session = drives.getDrive(driveKey) || (await drives.loadDrive(driveKey));
+      const hd = session.drive;
+      const indexBuf = await hd.get('/index.json');
       if (indexBuf) {
         const index = JSON.parse(b4a.toString(indexBuf));
         if (index.ai) {
-          let aiDrive = drive;
+          let aiHd = hd;
           let model = null;
           if (typeof index.ai === 'string') {
             // Pointer to another drive's AI Config
             const targetUrlp = parseDriveUrl(index.ai);
             const targetKey = await drives.fromURLToKey(targetUrlp.hostname, true);
-            aiDrive = drives.getDrive(targetKey) || (await drives.loadDrive(targetKey));
-            const targetIndexBuf = await aiDrive.get('/index.json');
+            const targetSession = drives.getDrive(targetKey) || (await drives.loadDrive(targetKey));
+            aiHd = targetSession.drive;
+            const targetIndexBuf = await aiHd.get('/index.json');
             if (targetIndexBuf) {
               const targetIndex = JSON.parse(b4a.toString(targetIndexBuf));
               model = targetIndex.ai?.model || null;
@@ -173,7 +297,7 @@ async function resolveAiConfig(sender) {
           } else if (typeof index.ai === 'object') {
             model = index.ai.model || null;
           }
-          const sysBuf = await aiDrive.get('/ai/system.md');
+          const sysBuf = await aiHd.get('/ai/system.md');
           const systemPrompt = sysBuf ? b4a.toString(sysBuf) : null;
           return { model, systemPrompt };
         }
@@ -192,10 +316,11 @@ async function resolveAiConfig(sender) {
       try {
         const targetUrlp = parseDriveUrl(spaceDefault);
         const targetKey = await drives.fromURLToKey(targetUrlp.hostname, true);
-        const aiDrive = drives.getDrive(targetKey) || (await drives.loadDrive(targetKey));
-        const sysBuf = await aiDrive.get('/ai/system.md');
+        const targetSession = drives.getDrive(targetKey) || (await drives.loadDrive(targetKey));
+        const aiHd = targetSession.drive;
+        const sysBuf = await aiHd.get('/ai/system.md');
         const systemPrompt = sysBuf ? b4a.toString(sysBuf) : null;
-        const indexBuf = await aiDrive.get('/index.json');
+        const indexBuf = await aiHd.get('/index.json');
         let model = null;
         if (indexBuf) {
           const index = JSON.parse(b4a.toString(indexBuf));
@@ -259,7 +384,8 @@ async function getCurrentDrive(sender) {
   try {
     const urlp = parseDriveUrl(senderUrl);
     const driveKey = await drives.fromURLToKey(urlp.hostname, true);
-    return drives.getDrive(driveKey) || (await drives.loadDrive(driveKey));
+    const session = drives.getDrive(driveKey) || (await drives.loadDrive(driveKey));
+    return session?.drive || null;
   } catch {
     return null;
   }
@@ -274,6 +400,28 @@ function fetchText(url) {
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
         res.on('end', () => resolve(data));
+        res.on('error', reject);
+      })
+      .on('error', reject);
+  });
+}
+
+function fetchJson(url) {
+  return new Promise((resolve, reject) => {
+    const urlp = new URL(url);
+    const proto = urlp.protocol === 'https:' ? https : http;
+    proto
+      .get(url, (res) => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          return reject(new Error(`Server returned ${res.statusCode}`));
+        }
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try { resolve(JSON.parse(data)); }
+          catch { reject(new Error('Invalid JSON response')); }
+        });
         res.on('error', reject);
       })
       .on('error', reject);
@@ -337,7 +485,7 @@ function streamCompletion(baseUrl, model, messages, tools, emitter) {
 
             if (delta.content) {
               textContent += delta.content;
-              emitter.emit('data', ['chunk', { text: delta.content }]);
+              emitter.emit('chunk', { text: delta.content });
             }
 
             if (delta.tool_calls) {

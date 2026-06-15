@@ -9,6 +9,7 @@ class AiSettingsView extends LitElement {
   static get properties() {
     return {
       settings: { type: Object },
+      testStatus: { type: Object },
     };
   }
 
@@ -19,6 +20,7 @@ class AiSettingsView extends LitElement {
   constructor() {
     super();
     this.settings = undefined;
+    this.testStatus = null; // null | 'testing' | {ok, models} | {error}
   }
 
   async load() {
@@ -62,14 +64,19 @@ class AiSettingsView extends LitElement {
             Ollama default: <code>http://localhost:11434/v1</code> —
             LM Studio default: <code>http://localhost:1234/v1</code>
           </p>
-          <input
-            id="ai-base-url"
-            type="text"
-            style="width: 360px"
-            value="${baseUrl}"
-            placeholder="http://localhost:11434/v1"
-            @change=${this.onAiBaseUrlChange}
-          />
+          <div class="input-row">
+            <input
+              id="ai-base-url"
+              type="text"
+              value="${baseUrl}"
+              placeholder="http://localhost:11434/v1"
+              @change=${this.onAiBaseUrlChange}
+            />
+            <button class="btn" ?disabled=${this.testStatus === 'testing'} @click=${this.onTestConnection}>
+              ${this.testStatus === 'testing' ? 'Testing…' : 'Test Connection'}
+            </button>
+          </div>
+          ${this.renderTestStatus()}
         </div>
         <div class="section">
           <label for="ai-default-model">Default model</label>
@@ -91,8 +98,25 @@ class AiSettingsView extends LitElement {
     `;
   }
 
+  renderTestStatus() {
+    if (!this.testStatus || this.testStatus === 'testing') return html``;
+    if (this.testStatus.ok) {
+      const label = this.testStatus.models === 1
+        ? '1 model available'
+        : `${this.testStatus.models} models available`;
+      return html`<p class="test-status ok"><span class="fas fa-check-circle"></span> Connected — ${label}</p>`;
+    }
+    return html`<p class="test-status err"><span class="fas fa-times-circle"></span> ${this.testStatus.error}</p>`;
+  }
+
   // events
   // =
+
+  async onTestConnection() {
+    this.testStatus = 'testing';
+    const baseUrl = this.settings.ai_base_url || 'http://localhost:11434/v1';
+    this.testStatus = await beaker.ai.testConnection(baseUrl);
+  }
 
   onAiBaseUrlChange(e) {
     this.settings.ai_base_url = e.currentTarget.value;
