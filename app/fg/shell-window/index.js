@@ -166,28 +166,32 @@ class ShellWindowUI extends LitElement {
 
   render() {
     const isSidebar = this.tabLayout === 'sidebar';
-    const sidebarW = this.sidebarCollapsed ? 48 : this.sidebarWidth;
     const isDarwin = document.body.classList.contains('darwin');
     const isLeft = this.sidebarSide !== 'right';
-    // Expanded macOS left: sidebar starts at top:0, need 80px margin to clear traffic lights.
-    // Collapsed macOS left: sidebar starts at top:34px, margin just matches the 48px rail width,
-    // but we still need inner padding to push buttons past the traffic lights (80 - 48 = 32px).
-    const isCollapsedDarwinLeft = isSidebar && isDarwin && isLeft && this.sidebarCollapsed;
-    const needsTrafficLightClearance = isDarwin && isLeft && !this.sidebarCollapsed;
-    const navbarMargin = isSidebar
-      ? Math.max(sidebarW, needsTrafficLightClearance ? 80 : 0)
-      : 0;
-    const navbarInnerPadding = isCollapsedDarwinLeft ? 80 - sidebarW : 0;
+    const sidebarOpen = isSidebar && !this.sidebarCollapsed;
+    // Sidebar open on macOS left: need at least 80px for traffic lights.
+    // Sidebar closed on macOS left: navbar still needs 80px clearance for traffic lights.
+    let navbarMargin = 0;
+    let navbarPadding = 0;
+    if (isSidebar) {
+      if (sidebarOpen) {
+        navbarMargin = Math.max(this.sidebarWidth, isDarwin && isLeft ? 80 : 0);
+      } else if (isDarwin && isLeft) {
+        // Sidebar closed on macOS left: use padding so the border spans full width
+        // but content starts past the traffic lights.
+        navbarPadding = 80;
+      }
+    }
     const navbarStyle = [
       navbarMargin ? `margin-${isLeft ? 'left' : 'right'}: ${navbarMargin}px` : '',
-      navbarInnerPadding ? `padding-${isLeft ? 'left' : 'right'}: ${navbarInnerPadding}px` : '',
+      navbarPadding ? `padding-${isLeft ? 'left' : 'right'}: ${navbarPadding}px` : '',
     ].filter(Boolean).join('; ');
     return html`
       ${this.isWindows ? html`<shell-window-win32></shell-window-win32>` : ''}
       ${this.isShellInterfaceHidden
         ? ''
         : html`
-            ${isSidebar
+            ${isSidebar && !this.sidebarCollapsed
               ? html`
                   <shell-window-sidebar
                     .tabs=${this.tabs}
@@ -196,10 +200,10 @@ class ShellWindowUI extends LitElement {
                     .groups=${this.groups}
                     sidebar-side=${this.sidebarSide}
                     sidebar-width=${this.sidebarWidth}
-                    ?sidebar-collapsed=${this.sidebarCollapsed}
                   ></shell-window-sidebar>
                 `
-              : html`
+              : !isSidebar
+              ? html`
                   <shell-window-tabs
                     .tabs=${this.tabs}
                     .spaces=${this.spaces}
@@ -208,7 +212,8 @@ class ShellWindowUI extends LitElement {
                     ?is-fullscreen=${this.isFullscreen}
                     ?has-bg-tabs=${this.hasBgTabs}
                   ></shell-window-tabs>
-                `}
+                `
+              : ''}
             <shell-window-navbar
               .activeTabIndex=${this.activeTabIndex}
               .activeTab=${this.activeTab}
@@ -216,6 +221,8 @@ class ShellWindowUI extends LitElement {
               ?is-update-available=${this.isUpdateAvailable}
               ?is-daemon-active=${this.isDaemonActive}
               num-watchlist-notifications="${this.numWatchlistNotifications}"
+              tab-layout=${this.tabLayout}
+              ?sidebar-collapsed=${this.sidebarCollapsed}
               style=${navbarStyle}
             ></shell-window-navbar>
           `}

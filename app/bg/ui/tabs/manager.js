@@ -44,7 +44,6 @@ import hyper from '../../hyper/index';
 const X_POSITION = 0;
 const Y_POSITION = 75;
 const Y_POSITION_SIDEBAR = 41; // navbar only, no tab strip
-const SIDEBAR_RAIL_WIDTH = 48;
 
 // globals
 // =
@@ -212,9 +211,10 @@ class Tab extends EventEmitter {
     if (!isSidebar) {
       return { x: X_POSITION, y, width: width - X_POSITION, height: height - y };
     }
-    const sidebarW = s.sidebarCollapsed
-      ? SIDEBAR_RAIL_WIDTH
-      : (s.sidebarWidth || 220);
+    if (s.sidebarCollapsed) {
+      return { x: 0, y, width, height: height - y };
+    }
+    const sidebarW = s.sidebarWidth || 220;
     if (s.sidebarSide === 'right') {
       return { x: 0, y, width: width - sidebarW, height: height - y };
     }

@@ -5,7 +5,6 @@ import { styleMap } from 'lit/directives/style-map.js';
 import spinnerCSS from './spinner.css';
 import * as bg from './bg-process-rpc';
 
-const RAIL_WIDTH = 48;
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 480;
 
@@ -18,7 +17,6 @@ class ShellWindowSidebar extends LitElement {
       groups: { type: Array },
       sidebarSide: { type: String, attribute: 'sidebar-side' },
       sidebarWidth: { type: Number, attribute: 'sidebar-width' },
-      sidebarCollapsed: { type: Boolean, attribute: 'sidebar-collapsed' },
       collapsedGroups: { type: Object },
       editingGroupId: { type: String },
     };
@@ -32,7 +30,6 @@ class ShellWindowSidebar extends LitElement {
     this.groups = [];
     this.sidebarSide = 'left';
     this.sidebarWidth = 220;
-    this.sidebarCollapsed = false;
     this.collapsedGroups = new Set();
     this.editingGroupId = null;
     this.faviconCache = {};
@@ -85,15 +82,13 @@ class ShellWindowSidebar extends LitElement {
 
   render() {
     const isLeft = this.sidebarSide !== 'right';
-    const w = this.sidebarCollapsed ? RAIL_WIDTH : this.sidebarWidth;
     const isDarwin = document.body.classList.contains('darwin');
     const sidebarStyle = styleMap({
-      width: `${w}px`,
+      width: `${this.sidebarWidth}px`,
       [isLeft ? 'left' : 'right']: '0',
     });
     const cls = classMap({
       sidebar: true,
-      collapsed: this.sidebarCollapsed,
       'side-right': !isLeft,
       darwin: isDarwin,
     });
@@ -101,15 +96,9 @@ class ShellWindowSidebar extends LitElement {
       <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
       <div class="${cls}" style=${sidebarStyle}>
         <div class="sidebar-header">
-          ${isDarwin && isLeft && !this.sidebarCollapsed
-            ? html`<div class="traffic-light-spacer"></div>`
-            : ''}
-          <button
-            class="collapse-btn"
-            title=${this.sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            @click=${this._onClickCollapse}
-          >
-            <span class="fas fa-${this.sidebarCollapsed ? 'chevron-right' : 'chevron-left'}"></span>
+          ${isDarwin && isLeft ? html`<div class="traffic-light-spacer"></div>` : ''}
+          <button class="close-btn" title="Hide sidebar" @click=${this._onClickCollapse}>
+            <span class="fas fa-chevron-${isLeft ? 'left' : 'right'}"></span>
           </button>
         </div>
         <div class="sidebar-tabs">
@@ -123,11 +112,11 @@ class ShellWindowSidebar extends LitElement {
         <div class="sidebar-footer">
           <button class="new-tab-btn" title="New tab" @click=${this._onClickNew}>
             <span class="fas fa-plus"></span>
-            ${this.sidebarCollapsed ? '' : html`<span class="label">New tab</span>`}
+            <span class="label">New tab</span>
           </button>
           ${this._renderSpacesDropdown()}
         </div>
-        ${this.sidebarCollapsed ? '' : this._renderResizeHandle(isLeft)}
+        ${this._renderResizeHandle(isLeft)}
       </div>
     `;
   }
@@ -423,21 +412,9 @@ ShellWindowSidebar.styles = css`
     -webkit-app-region: drag;
   }
 
-  /* On macOS left sidebar, reserve 80px for traffic lights (close/min/max buttons).
-     Only applies when expanded — collapsed rail is shifted below the traffic-light zone instead. */
-  .sidebar.darwin:not(.side-right):not(.collapsed) .sidebar-header {
+  /* On macOS left sidebar, reserve 80px for traffic lights */
+  .sidebar.darwin:not(.side-right) .sidebar-header {
     padding-left: 80px;
-  }
-
-  /* Collapsed macOS left: start the rail below the traffic-light zone so the border
-     doesn't run through the buttons and the collapse toggle is immediately accessible. */
-  .sidebar.collapsed.darwin:not(.side-right) {
-    top: 34px;
-    height: calc(100vh - 34px);
-  }
-
-  .sidebar.collapsed .sidebar-header {
-    justify-content: center;
   }
 
   .traffic-light-spacer {
@@ -445,7 +422,7 @@ ShellWindowSidebar.styles = css`
     -webkit-app-region: drag;
   }
 
-  .collapse-btn {
+  .close-btn {
     -webkit-app-region: no-drag;
     background: transparent;
     border: 0;
@@ -462,7 +439,7 @@ ShellWindowSidebar.styles = css`
     transition: opacity 0.15s, background 0.15s;
   }
 
-  .collapse-btn:hover {
+  .close-btn:hover {
     opacity: 1;
     background: var(--bg-color--tab--hover);
   }
@@ -717,31 +694,6 @@ ShellWindowSidebar.styles = css`
     opacity: 0.4;
   }
 
-  /* collapsed (rail) state */
-
-  .sidebar.collapsed .sidebar-tabs {
-    padding: 2px;
-  }
-
-  .sidebar.collapsed .group-header {
-    justify-content: center;
-    padding: 0;
-  }
-
-  .sidebar.collapsed .sidebar-tab {
-    justify-content: center;
-    padding: 0;
-  }
-
-  .sidebar.collapsed .sidebar-footer {
-    align-items: center;
-  }
-
-  .sidebar.collapsed .new-tab-btn {
-    justify-content: center;
-    padding: 0;
-    width: 36px;
-  }
 `;
 
 customElements.define('shell-window-sidebar', ShellWindowSidebar);
