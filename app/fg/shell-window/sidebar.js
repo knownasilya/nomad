@@ -92,6 +92,8 @@ class ShellWindowSidebar extends LitElement {
       'side-right': !isLeft,
       darwin: isDarwin,
     });
+    const pinnedTabs = this.tabs.map((tab, index) => ({ tab, index })).filter(({ tab }) => tab.isPinned);
+    const hasPinned = pinnedTabs.length > 0;
     return html`
       <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
       <div class="${cls}" style=${sidebarStyle}>
@@ -102,20 +104,20 @@ class ShellWindowSidebar extends LitElement {
           </button>
         </div>
         <div class="sidebar-tabs">
+          ${hasPinned ? html`
+            ${repeat(pinnedTabs, ({ index }) => `pin:${index}`, ({ tab, index }) => this._renderTab(tab, index))}
+            <div class="tab-separator"></div>
+          ` : ''}
           ${this._renderUngroupedTabs()}
-          ${repeat(
-            this.groups || [],
-            (g) => g.id,
-            (g) => this._renderGroup(g)
-          )}
-        </div>
-        <div class="sidebar-footer">
-          <button class="new-tab-btn" title="New tab" @click=${this._onClickNew}>
-            <span class="fas fa-plus"></span>
-            <span class="label">New tab</span>
+          ${repeat(this.groups || [], (g) => g.id, (g) => this._renderGroup(g))}
+          <button class="new-tab-inline" title="New tab" @click=${this._onClickNew}>
+            <span class="new-tab-icon fas fa-plus"></span>
+            <span class="new-tab-label">New tab</span>
           </button>
-          ${this._renderSpacesDropdown()}
         </div>
+        ${this._renderSpacesDropdown() ? html`
+          <div class="sidebar-footer">${this._renderSpacesDropdown()}</div>
+        ` : ''}
         ${this._renderResizeHandle(isLeft)}
       </div>
     `;
@@ -124,7 +126,7 @@ class ShellWindowSidebar extends LitElement {
   _renderUngroupedTabs() {
     const ungrouped = this.tabs
       .map((tab, index) => ({ tab, index }))
-      .filter(({ tab }) => !tab.groupId);
+      .filter(({ tab }) => !tab.groupId && !tab.isPinned);
     if (!ungrouped.length) return '';
     return repeat(
       ungrouped,
@@ -148,26 +150,22 @@ class ShellWindowSidebar extends LitElement {
           @contextmenu=${(e) => this._onContextmenuGroup(e, group.id)}
         >
           <span class="group-dot"></span>
-          ${this.sidebarCollapsed
-            ? ''
-            : html`
-                ${isEditing
-                  ? html`<input
-                      class="group-name-input"
-                      .value=${group.name}
-                      @blur=${(e) => this._onGroupNameBlur(e, group.id)}
-                      @keydown=${(e) => this._onGroupNameKeydown(e, group.id)}
-                      @click=${(e) => e.stopPropagation()}
-                    />`
-                  : html`<span
-                      class="group-name"
-                      @dblclick=${(e) => this._onDblclickGroupName(e, group.id)}
-                      >${group.name}</span
-                    >`}
-                <span class="group-chevron fas fa-chevron-${isCollapsed ? 'right' : 'down'}"></span>
-              `}
+          ${isEditing
+            ? html`<input
+                class="group-name-input"
+                .value=${group.name}
+                @blur=${(e) => this._onGroupNameBlur(e, group.id)}
+                @keydown=${(e) => this._onGroupNameKeydown(e, group.id)}
+                @click=${(e) => e.stopPropagation()}
+              />`
+            : html`<span
+                class="group-name"
+                @dblclick=${(e) => this._onDblclickGroupName(e, group.id)}
+                >${group.name}</span
+              >`}
+          <span class="group-chevron fas fa-chevron-${isCollapsed ? 'right' : 'down'}"></span>
         </div>
-        ${isCollapsed || this.sidebarCollapsed
+        ${isCollapsed
           ? ''
           : repeat(
               groupTabs,
@@ -210,21 +208,13 @@ class ShellWindowSidebar extends LitElement {
               />`
             : html`<img src="asset:favicon:${tab.url}?cache=${Date.now()}" />`}
         </div>
-        ${this.sidebarCollapsed
-          ? ''
-          : html`
-              <div class="tab-title">${tab.title || tab.url}</div>
-              ${tab.isAudioMuted
-                ? html`<span class="fas fa-volume-mute tab-audio"></span>`
-                : tab.isCurrentlyAudible
-                ? html`<span class="fas fa-volume-up tab-audio"></span>`
-                : ''}
-              <div
-                class="tab-close"
-                title="Close tab"
-                @click=${(e) => this._onClickClose(e, index)}
-              ></div>
-            `}
+        <div class="tab-title">${tab.title || tab.url}</div>
+        ${tab.isAudioMuted
+          ? html`<span class="fas fa-volume-mute tab-audio"></span>`
+          : tab.isCurrentlyAudible
+          ? html`<span class="fas fa-volume-up tab-audio"></span>`
+          : ''}
+        <div class="tab-close" title="Close tab" @click=${(e) => this._onClickClose(e, index)}></div>
       </div>
     `;
   }
@@ -247,10 +237,10 @@ class ShellWindowSidebar extends LitElement {
       <button
         class="spaces-btn"
         title="Switch space"
-        @click=${this._onClickSpaces}
+        @click=${(e) => this._onClickSpaces(e)}
       >
         <span class="space-dot" style="background:${space?.color || '#6c6cff'}"></span>
-        ${this.sidebarCollapsed ? '' : html`<span class="space-name">${space?.name || 'Spaces'}</span>`}
+        <span class="space-name">${space?.name || 'Spaces'}</span>
       </button>
     `;
   }
@@ -269,14 +259,13 @@ class ShellWindowSidebar extends LitElement {
     bg.views.toggleSidebarCollapsed();
   }
 
-  _onClickSpaces() {
+  _onClickSpaces(e) {
     const isLeft = this.sidebarSide !== 'right';
-    const w = this.sidebarCollapsed ? RAIL_WIDTH : this.sidebarWidth;
     const menuW = 200;
     const menuH = 300;
-    // Position the menu flush with the outer edge of the sidebar, above the footer.
-    const left = isLeft ? w : window.innerWidth - w - menuW;
-    const top = Math.max(0, window.innerHeight - menuH - 10);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const left = isLeft ? rect.left : Math.max(0, rect.right - menuW);
+    const top = Math.max(0, rect.top - menuH);
     bg.views.toggleMenu('spaces', { bounds: { left, top } });
   }
 
@@ -392,7 +381,7 @@ ShellWindowSidebar.styles = css`
     box-sizing: border-box;
     overflow: hidden;
     font-family: system-ui, -apple-system, sans-serif;
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .sidebar.side-right {
@@ -428,14 +417,14 @@ ShellWindowSidebar.styles = css`
     border: 0;
     color: var(--text-color--tab--title);
     cursor: default;
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
+    width: 26px;
+    height: 26px;
+    border-radius: 5px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 11px;
-    opacity: 0.5;
+    opacity: 0.4;
     transition: opacity 0.15s, background 0.15s;
   }
 
@@ -450,20 +439,27 @@ ShellWindowSidebar.styles = css`
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 2px 4px;
+    padding: 4px 6px;
+  }
+
+  .tab-separator {
+    height: 1px;
+    background: var(--border-color--tab);
+    margin: 4px 2px 4px;
   }
 
   .sidebar-tab {
     display: flex;
     align-items: center;
-    gap: 7px;
-    height: 28px;
-    padding: 0 6px;
-    border-radius: 5px;
+    gap: 9px;
+    height: 34px;
+    padding: 0 8px;
+    border-radius: 6px;
     cursor: default;
     position: relative;
-    transition: background 0.12s;
+    transition: background 0.1s;
     -webkit-user-select: none;
+    user-select: none;
   }
 
   .sidebar-tab:hover {
@@ -476,7 +472,7 @@ ShellWindowSidebar.styles = css`
   }
 
   .sidebar-tab.in-group {
-    padding-left: 20px;
+    padding-left: 22px;
   }
 
   .tab-favicon {
@@ -494,14 +490,14 @@ ShellWindowSidebar.styles = css`
   }
 
   .tab-favicon .spinner {
-    width: 10px;
-    height: 10px;
+    width: 11px;
+    height: 11px;
   }
 
   .tab-title {
     flex: 1;
-    color: var(--text-color--tab--title);
-    font-size: 11.5px;
+    font-size: 13px;
+    color: var(--text-color--default, var(--text-color--tab--title));
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -510,23 +506,23 @@ ShellWindowSidebar.styles = css`
   .tab-audio {
     font-size: 10px;
     color: var(--text-color--tab--title);
-    opacity: 0.6;
+    opacity: 0.5;
     flex-shrink: 0;
   }
 
   .tab-close {
     opacity: 0;
     flex-shrink: 0;
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     border-radius: 3px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1;
     color: var(--text-color--tab--close);
-    transition: opacity 0.12s, background 0.12s;
+    transition: opacity 0.1s, background 0.1s;
   }
 
   .tab-close::before {
@@ -535,10 +531,11 @@ ShellWindowSidebar.styles = css`
   }
 
   .sidebar-tab:hover .tab-close {
-    opacity: 1;
+    opacity: 0.6;
   }
 
   .tab-close:hover {
+    opacity: 1 !important;
     background: var(--bg-color--tab-close--hover);
   }
 
@@ -547,19 +544,19 @@ ShellWindowSidebar.styles = css`
   .group-header {
     display: flex;
     align-items: center;
-    gap: 6px;
-    height: 26px;
-    padding: 0 6px;
-    border-radius: 5px;
+    gap: 8px;
+    height: 32px;
+    padding: 0 8px;
+    border-radius: 6px;
     cursor: default;
-    color: var(--group-color, #5b5ef4);
     -webkit-user-select: none;
-    transition: background 0.12s;
-    margin-top: 4px;
+    user-select: none;
+    transition: background 0.1s;
+    margin-top: 6px;
   }
 
   .group-header:hover {
-    background: color-mix(in srgb, var(--group-color, #5b5ef4) 10%, transparent);
+    background: var(--bg-color--tab--hover);
   }
 
   .group-dot {
@@ -572,8 +569,9 @@ ShellWindowSidebar.styles = css`
 
   .group-name {
     flex: 1;
-    font-size: 11px;
-    font-weight: 500;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-color--default, var(--text-color--tab--title));
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -581,11 +579,12 @@ ShellWindowSidebar.styles = css`
 
   .group-name-input {
     flex: 1;
-    font-size: 11px;
-    background: rgba(255,255,255,0.2);
+    font-size: 12px;
+    font-weight: 600;
+    background: transparent;
     border: 1px solid color-mix(in srgb, var(--group-color, #5b5ef4) 45%, transparent);
     border-radius: 3px;
-    color: var(--group-color, #5b5ef4);
+    color: var(--text-color--default, var(--text-color--tab--title));
     outline: none;
     padding: 1px 4px;
     cursor: text;
@@ -593,68 +592,72 @@ ShellWindowSidebar.styles = css`
 
   .group-chevron {
     font-size: 9px;
-    opacity: 0.7;
+    opacity: 0.4;
     flex-shrink: 0;
   }
 
-  /* footer */
+  /* new tab inline */
 
-  .sidebar-footer {
-    flex-shrink: 0;
-    padding: 4px;
-    border-top: 1px solid var(--border-color--tab);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .new-tab-btn {
+  .new-tab-inline {
     display: flex;
     align-items: center;
-    gap: 8px;
-    height: 28px;
+    gap: 9px;
+    height: 34px;
     padding: 0 8px;
-    border-radius: 5px;
+    border-radius: 6px;
     background: transparent;
     border: 0;
     cursor: default;
-    color: var(--text-color--tab--add);
-    font-size: 12px;
     width: 100%;
+    font-size: 13px;
+    color: var(--text-color--tab--add, var(--text-color--tab--title));
+    opacity: 0.5;
     -webkit-user-select: none;
-    transition: background 0.12s;
+    user-select: none;
+    transition: background 0.1s, opacity 0.1s;
+    margin-top: 2px;
   }
 
-  .new-tab-btn:hover {
+  .new-tab-inline:hover {
     background: var(--bg-color--tab--hover);
-    color: var(--text-color--tab--add--hover);
+    opacity: 1;
   }
 
-  .new-tab-btn .fas {
+  .new-tab-icon {
     font-size: 11px;
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
   }
 
-  .new-tab-btn .label {
-    flex: 1;
+  .new-tab-label {
     text-align: left;
-    font-family: system-ui;
+  }
+
+  /* footer (spaces only) */
+
+  .sidebar-footer {
+    flex-shrink: 0;
+    padding: 4px 6px;
+    border-top: 1px solid var(--border-color--tab);
   }
 
   .spaces-btn {
     display: flex;
     align-items: center;
-    gap: 7px;
-    height: 28px;
+    gap: 9px;
+    height: 34px;
     padding: 0 8px;
-    border-radius: 5px;
+    border-radius: 6px;
     background: transparent;
     border: 0;
     cursor: default;
     color: var(--text-color--tab--title);
-    font-size: 11px;
+    font-size: 13px;
     width: 100%;
     -webkit-user-select: none;
-    transition: background 0.12s;
+    user-select: none;
+    transition: background 0.1s;
   }
 
   .spaces-btn:hover {
@@ -691,7 +694,7 @@ ShellWindowSidebar.styles = css`
   .resize-handle:hover,
   .resize-handle:active {
     background: var(--highlight-color--tab--current, #5b5ef4);
-    opacity: 0.4;
+    opacity: 0.3;
   }
 
 `;
