@@ -52,6 +52,7 @@ class AiSettingsView extends LitElement {
           <p>
             The model runtime and downloads are managed by your inference
             server — Nomad only connects to it.
+            <a href="https://nomad.pages.dev/docs/api/apis/beaker.ai/" target="_blank">API documentation</a>
           </p>
         </div>
         <div class="section">
