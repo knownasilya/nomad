@@ -8,6 +8,8 @@ import * as bg from './bg-process-rpc';
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 480;
 
+const SPACE_COLORS = ['#6c6cff', '#e85d4a', '#e8a025', '#3ab36e', '#2b9fd4', '#9b59b6', '#e91e8c', '#607d8b'];
+
 class ShellWindowSidebar extends LitElement {
   static get properties() {
     return {
@@ -19,6 +21,10 @@ class ShellWindowSidebar extends LitElement {
       sidebarWidth: { type: Number, attribute: 'sidebar-width' },
       collapsedGroups: { type: Object },
       editingGroupId: { type: String },
+      spacesPopupOpen: { type: Boolean },
+      isCreatingSpace: { type: Boolean },
+      newSpaceName: { type: String },
+      newSpaceColor: { type: String },
     };
   }
 
@@ -34,7 +40,12 @@ class ShellWindowSidebar extends LitElement {
     this.editingGroupId = null;
     this.faviconCache = {};
     this._resizing = false;
+    this.spacesPopupOpen = false;
+    this.isCreatingSpace = false;
+    this.newSpaceName = '';
+    this.newSpaceColor = SPACE_COLORS[0];
     this._loadCollapsedGroups();
+    this._boundClosePopup = this._closeSpacesPopup.bind(this);
   }
 
   async _loadCollapsedGroups() {
@@ -233,11 +244,60 @@ class ShellWindowSidebar extends LitElement {
   _renderSpacesDropdown() {
     if (!this.spaces || this.spaces.length <= 1) return '';
     const space = this.activeSpace;
+    const isLeft = this.sidebarSide !== 'right';
     return html`
+      ${this.spacesPopupOpen ? html`
+        <div class="spaces-popup" style="${isLeft ? 'left:0' : 'right:0'}">
+          <div class="spaces-popup-header">Spaces</div>
+          <div class="spaces-popup-list">
+            ${this.spaces.map((s) => html`
+              <div
+                class="spaces-popup-item ${s.id === this.activeSpace?.id ? 'active' : ''}"
+                @click=${() => this._onSwitchSpace(s.id)}
+              >
+                <span class="space-dot" style="background:${s.color}"></span>
+                <span class="spaces-popup-name">${s.name}</span>
+                ${s.id === this.activeSpace?.id ? html`<span class="fas fa-check spaces-popup-check"></span>` : ''}
+              </div>
+            `)}
+          </div>
+          <div class="spaces-popup-divider"></div>
+          ${this.isCreatingSpace ? html`
+            <div class="spaces-create-form">
+              <input
+                class="spaces-name-input"
+                type="text"
+                placeholder="Space name"
+                .value=${this.newSpaceName}
+                @input=${(e) => { this.newSpaceName = e.target.value; }}
+                @keydown=${this._onSpaceNameKeydown}
+                @click=${(e) => e.stopPropagation()}
+              />
+              <div class="spaces-color-row">
+                ${SPACE_COLORS.map((c) => html`
+                  <button
+                    class="spaces-swatch ${c === this.newSpaceColor ? 'selected' : ''}"
+                    style="background:${c}"
+                    @click=${(e) => { e.stopPropagation(); this.newSpaceColor = c; }}
+                  ></button>
+                `)}
+              </div>
+              <div class="spaces-form-btns">
+                <button class="spaces-cancel-btn" @click=${(e) => { e.stopPropagation(); this.isCreatingSpace = false; }}>Cancel</button>
+                <button class="spaces-create-btn" ?disabled=${!this.newSpaceName.trim()} @click=${(e) => { e.stopPropagation(); this._onCreateSpace(); }}>Create</button>
+              </div>
+            </div>
+          ` : html`
+            <div class="spaces-popup-new" @click=${(e) => { e.stopPropagation(); this.isCreatingSpace = true; this.newSpaceName = ''; this.newSpaceColor = SPACE_COLORS[0]; }}>
+              <span class="fas fa-plus"></span> New space
+            </div>
+          `}
+        </div>
+      ` : ''}
       <button
         class="spaces-btn"
         title="Switch space"
-        @click=${(e) => this._onClickSpaces(e)}
+        @click=${this._onClickSpaces}
       >
         <span class="space-dot" style="background:${space?.color || '#6c6cff'}"></span>
         <span class="space-name">${space?.name || 'Spaces'}</span>
@@ -250,6 +310,10 @@ class ShellWindowSidebar extends LitElement {
       const input = this.shadowRoot.querySelector('.group-name-input');
       if (input) { input.focus(); input.select(); }
     }
+    if (this.isCreatingSpace) {
+      const input = this.shadowRoot.querySelector('.spaces-name-input');
+      if (input) input.focus();
+    }
   }
 
   // events
@@ -260,17 +324,39 @@ class ShellWindowSidebar extends LitElement {
   }
 
   _onClickSpaces(e) {
-    const isLeft = this.sidebarSide !== 'right';
-    const menuW = 200;
-    const menuH = 300;
-    const footerPad = 4; // .sidebar-footer padding-top
-    const btnH = 34;     // .spaces-btn height
-    // Button sits at the very bottom of the sidebar; use window.innerHeight
-    // rather than getBoundingClientRect() which gives shadow-DOM-relative coords.
-    const btnTop = window.innerHeight - footerPad - btnH;
-    const top = Math.max(0, btnTop - menuH);
-    const left = isLeft ? 0 : Math.max(0, this.sidebarWidth - menuW);
-    bg.views.toggleMenu('spaces', { bounds: { left, top } });
+    e.stopPropagation();
+    if (this.spacesPopupOpen) {
+      this._closeSpacesPopup();
+    } else {
+      this.spacesPopupOpen = true;
+      this.isCreatingSpace = false;
+      // Close when clicking outside
+      setTimeout(() => window.addEventListener('click', this._boundClosePopup), 0);
+    }
+  }
+
+  _closeSpacesPopup() {
+    this.spacesPopupOpen = false;
+    this.isCreatingSpace = false;
+    window.removeEventListener('click', this._boundClosePopup);
+  }
+
+  async _onSwitchSpace(id) {
+    await bg.spaces.setActive(id);
+    this._closeSpacesPopup();
+  }
+
+  async _onCreateSpace() {
+    const name = this.newSpaceName.trim();
+    if (!name) return;
+    await bg.spaces.create({ name, color: this.newSpaceColor });
+    this._closeSpacesPopup();
+  }
+
+  _onSpaceNameKeydown(e) {
+    e.stopPropagation();
+    if (e.key === 'Enter') this._onCreateSpace();
+    if (e.key === 'Escape') { this.isCreatingSpace = false; }
   }
 
   _onClickNew() {
@@ -383,7 +469,6 @@ ShellWindowSidebar.styles = css`
     flex-direction: column;
     z-index: 10;
     box-sizing: border-box;
-    overflow: hidden;
     font-family: system-ui, -apple-system, sans-serif;
     font-size: 13px;
   }
@@ -444,6 +529,7 @@ ShellWindowSidebar.styles = css`
     overflow-y: auto;
     overflow-x: hidden;
     padding: 4px 6px;
+    min-height: 0;
   }
 
   .tab-separator {
@@ -644,6 +730,151 @@ ShellWindowSidebar.styles = css`
     flex-shrink: 0;
     padding: 4px 6px;
     border-top: 1px solid var(--border-color--tab);
+    position: relative;
+  }
+
+  /* spaces inline popup */
+
+  .spaces-popup {
+    position: absolute;
+    bottom: 100%;
+    width: 200px;
+    background: var(--bg-color--background);
+    border: 1px solid var(--border-color--tab);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    z-index: 100;
+    overflow: hidden;
+    margin-bottom: 4px;
+  }
+
+  .spaces-popup-header {
+    padding: 6px 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-color--tab--title);
+    opacity: 0.6;
+    border-bottom: 1px solid var(--border-color--tab);
+  }
+
+  .spaces-popup-list {
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .spaces-popup-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    cursor: default;
+    font-size: 12px;
+    color: var(--text-color--default, var(--text-color--tab--title));
+  }
+
+  .spaces-popup-item:hover {
+    background: var(--bg-color--tab--hover);
+  }
+
+  .spaces-popup-item.active {
+    font-weight: 600;
+  }
+
+  .spaces-popup-name {
+    flex: 1;
+  }
+
+  .spaces-popup-check {
+    font-size: 10px;
+    opacity: 0.7;
+  }
+
+  .spaces-popup-divider {
+    height: 1px;
+    background: var(--border-color--tab);
+    margin: 2px 0;
+  }
+
+  .spaces-popup-new {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 10px;
+    font-size: 12px;
+    color: var(--text-color--link, #5c5cff);
+    cursor: default;
+  }
+
+  .spaces-popup-new:hover {
+    background: var(--bg-color--tab--hover);
+  }
+
+  .spaces-create-form {
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .spaces-name-input {
+    width: 100%;
+    padding: 4px 7px;
+    border: 1px solid var(--border-color--tab);
+    border-radius: 3px;
+    font-size: 12px;
+    background: var(--bg-color--input, var(--bg-color--background));
+    color: var(--text-color--default, var(--text-color--tab--title));
+    outline: 0;
+    box-sizing: border-box;
+  }
+
+  .spaces-color-row {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+
+  .spaces-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    padding: 0;
+    cursor: default;
+    outline: 0;
+  }
+
+  .spaces-swatch.selected {
+    border-color: var(--text-color--default, #333);
+  }
+
+  .spaces-form-btns {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+
+  .spaces-cancel-btn, .spaces-create-btn {
+    padding: 3px 10px;
+    border-radius: 3px;
+    border: 1px solid var(--border-color--tab);
+    font-size: 11px;
+    cursor: default;
+    outline: 0;
+    background: transparent;
+    color: var(--text-color--default, var(--text-color--tab--title));
+  }
+
+  .spaces-create-btn {
+    background: var(--color--blue, #5c5cff);
+    color: #fff;
+    border-color: transparent;
+  }
+
+  .spaces-create-btn:disabled {
+    opacity: 0.5;
   }
 
   .spaces-btn {

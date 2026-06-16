@@ -14,6 +14,7 @@
     "ajv": "^6.10.2",
     "anymatch": "^2.0.0",
     "auto-launch": "^5.0.5",
+    "autobase": "^7.28.1",
     "await-lock": "^1.2.1",
     "b4a": "^1.8.1",
     "base32.js": "^0.1.0",
@@ -23,6 +24,7 @@
     "bytes": "^3.1.0",
     "circular-append-file": "^1.0.1",
     "concat-stream": "^1.6.2",
+    "corestore": "^7.10.1",
     "cross-fetch": "^3.0.5",
     "dat-dns": "^3.2.1",
     "dat-encoding": "^5.0.1",
@@ -39,8 +41,7 @@
     "function-queue": "0.0.12",
     "graphql": "^15.3.0",
     "graphql-fields": "^2.0.3",
-    "autobase": "^7.0.0",
-    "corestore": "^6.0.0",
+    "hyperbee": "^2.27.3",
     "hyperdrive": "^11.0.0",
     "hyperswarm": "^4.0.0",
     "icojs": "^0.16.1",
@@ -92,7 +93,8 @@
     "utp-native": "^2.1.7",
     "winston": "github:winstonjs/winston#b4ced895b3e1ead8a616590189b003cfd9d7acca",
     "yazl": "^2.5.1",
-    "yo-yo": "^1.4.0"
+    "yo-yo": "^1.4.0",
+    "zod": "^4.4.3"
   },
   "overrides": {
     "node-gyp": "^10.0.0",

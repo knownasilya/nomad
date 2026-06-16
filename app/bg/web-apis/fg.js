@@ -1,5 +1,6 @@
 import * as rpc from 'pauls-electron-rpc';
 import * as hyperdrive from './fg/hyperdrive';
+import * as autobase from './fg/autobase';
 import * as internal from './fg/internal';
 import * as external from './fg/external';
 import * as experimental from './fg/experimental';
@@ -15,6 +16,7 @@ export const setup = function () {
     window.location.hostname.endsWith('hyperdrive.network') /* TEMPRARY */
   ) {
     beaker.hyperdrive = hyperdrive.setup(rpc);
+    beaker.autobase = autobase.setup(rpc);
     Object.assign(beaker, external.setup(rpc));
   }
   if (['beaker:', 'hyper:'].includes(window.location.protocol)) {

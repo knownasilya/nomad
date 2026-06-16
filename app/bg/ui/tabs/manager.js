@@ -59,6 +59,7 @@ var lastActiveTabBySpace = {}; // map of {[win.id]: {[spaceId]: Tab}}
 var closedItems = {}; // map of {[win.id]: Array<Object>}
 var windowEvents = {}; // mapof {[win.id]: EventEmitter}
 var tabGroups = {}; // map of {[win.id]: Array<{id, name, color}>}
+var windowActiveSpaceId = {}; // map of {[win.id]: spaceId} — per-window active space
 var defaultUrl = 'beaker://desktop/';
 
 const GROUP_COLORS = ['#e04850', '#f5a623', '#f8de4c', '#3ecf8e', '#5b5ef4', '#b570f5'];
@@ -106,8 +107,9 @@ class Tab extends EventEmitter {
     this.isActive = false; // is this the active tab in the window?
     this.isPinned = Boolean(opts.isPinned); // is this tab pinned?
     this.groupId = opts.groupId || null;
-    this.spaceId = opts.spaceId || spacesDb.getCachedActiveId();
-    this.partition = opts.partition !== undefined ? opts.partition : (spacesDb.getCachedActive()?.partition || '');
+    this.spaceId = opts.spaceId || getWindowActiveSpaceId(win);
+    const activeSpace = spacesDb.getCachedAll().find((s) => s.id === this.spaceId) || spacesDb.getCachedActive();
+    this.partition = opts.partition !== undefined ? opts.partition : (activeSpace?.partition || '');
 
     // helper state
     this.lastActivePane = undefined;
@@ -166,6 +168,7 @@ class Tab extends EventEmitter {
         var pane = new Pane(this);
         this.panes.push(pane);
         pane.setTab(this);
+        filesystem.registerWebContentsSpace(pane.id, this.spaceId);
 
         if (stack) {
           let after = stack.panes[stack.panes.length - 1];
@@ -407,9 +410,12 @@ class Tab extends EventEmitter {
     } else {
       this.layout.addPane(pane);
     }
+
+    filesystem.registerWebContentsSpace(pane.id, this.spaceId);
   }
 
   detachPane(pane) {
+    filesystem.unregisterWebContentsSpace(pane.id);
     if (this.panes.length === 1) {
       // this is going to close the tab
       // save, in case the user wants to restore it
@@ -637,13 +643,13 @@ class Tab extends EventEmitter {
   // =
 
   emitTabUpdateState(pane) {
-    if (this.isHidden || !this.browserWindow) return;
+    if (this.isHidden || !this.browserWindow || this.browserWindow.isDestroyed()) return;
     // if (!pane.isActive) return
     emitUpdateState(this);
   }
 
   emitPaneUpdateState() {
-    if (this.isHidden || !this.browserWindow) return;
+    if (this.isHidden || !this.browserWindow || this.browserWindow.isDestroyed()) return;
     emitUpdatePanesState(this);
   }
 
@@ -723,10 +729,23 @@ export function getAll(win) {
   return activeTabs[win.id] || [];
 }
 
+export function getWindowActiveSpaceId(win) {
+  win = getTopWindow(win);
+  if (windowActiveSpaceId[win.id] === undefined) {
+    windowActiveSpaceId[win.id] = spacesDb.getCachedActiveId();
+  }
+  return windowActiveSpaceId[win.id];
+}
+
+export function getWindowActiveSpace(win) {
+  const id = getWindowActiveSpaceId(win);
+  return spacesDb.getCachedAll().find((s) => s.id === id) || spacesDb.getCachedActive();
+}
+
 // Returns only the tabs visible in the active space (used for frontend index mapping)
 export function getVisibleTabs(win) {
   win = getTopWindow(win);
-  const activeSpaceId = spacesDb.getCachedActiveId();
+  const activeSpaceId = getWindowActiveSpaceId(win);
   return (activeTabs[win.id] || []).filter((tab) => tab.spaceId === activeSpaceId);
 }
 
@@ -809,8 +828,13 @@ export function create(
   var tabs = (activeTabs[win.id] = activeTabs[win.id] || []);
   tabGroups[win.id] = tabGroups[win.id] || [];
 
+  // Eagerly capture the active space for this window on first tab creation
+  if (windowActiveSpaceId[win.id] === undefined) {
+    windowActiveSpaceId[win.id] = spacesDb.getCachedActiveId();
+  }
+
   // resolve space for this tab
-  const spaceId = opts.spaceId || (opts.fromSnapshot?.spaceId) || spacesDb.getCachedActiveId();
+  const spaceId = opts.spaceId || (opts.fromSnapshot?.spaceId) || getWindowActiveSpaceId(win);
   const space = spacesDb.getCachedAll().find((s) => s.id === spaceId);
   const partition = opts.fromSnapshot?.partition !== undefined
     ? opts.fromSnapshot.partition
@@ -1020,6 +1044,7 @@ export async function destroyAll(win) {
     t.destroy();
   }
   delete activeTabs[win.id];
+  delete windowActiveSpaceId[win.id];
 }
 
 export async function removeAllExcept(win, tab) {
@@ -1081,6 +1106,11 @@ export function resize(win) {
 
 export function initializeWindowFromSnapshot(win, snapshot) {
   win = getTopWindow(win);
+  // Capture the current active space for this window before any other window's
+  // setActiveSpace call can mutate spacesDb.activeSpaceId.
+  if (windowActiveSpaceId[win.id] === undefined) {
+    windowActiveSpaceId[win.id] = spacesDb.getCachedActiveId();
+  }
   // snapshot may be the old array format or new {pages, groups} object
   const pages = Array.isArray(snapshot) ? snapshot : (snapshot.pages || []);
   const groups = Array.isArray(snapshot) ? [] : (snapshot.groups || []);
@@ -1312,7 +1342,7 @@ export function emitReplaceState(win) {
     isDaemonActive: hyper.daemon.isActive(),
     hasBgTabs: backgroundTabs.length > 0,
     spaces: spacesDb.getCachedAll(),
-    activeSpace: spacesDb.getCachedActive(),
+    activeSpace: getWindowActiveSpace(win),
     groups: getTabGroups(win),
   };
   emit(win, 'replace-state', state);
@@ -1323,18 +1353,15 @@ export async function setActiveSpace(win, id) {
   win = getTopWindow(win);
   const space = await spacesDb.setActive(id);
 
+  // Track the active space per-window (not globally)
+  windowActiveSpaceId[win.id] = id;
+
   // refresh the new_tabs_in_foreground cache to reflect the new space's preference
   const newTabsFg = await settingsDb.getForSpace(id, 'new_tabs_in_foreground');
   if (newTabsFg !== undefined) settingsDb.setCachedValue('new_tabs_in_foreground', newTabsFg);
 
-  // Update hyper://private/ alias to the new space's root drive
-  if (space.root_drive_url) {
-    filesystem.setPrivateAlias(space.root_drive_url);
-  } else {
-    // Ensure the space has a root drive
-    const drive = await filesystem.getOrSetupSpaceDrive(space);
-    filesystem.setPrivateAlias(drive.url);
-  }
+  // Ensure the space's root drive is loaded so per-request hyper://private/ resolution works
+  await filesystem.getOrSetupSpaceDrive(space);
 
   // Switch to the last active tab for this space, or open a new one
   var target = lastActiveTabBySpace[win.id]?.[id];
@@ -1422,7 +1449,7 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
   async createTab(url, opts = { focusLocationBar: false, setActive: false }) {
     var win = getWindow(this.sender);
     if (!url) {
-      const spaceId = opts.spaceId || spacesDb.getCachedActiveId();
+      const spaceId = opts.spaceId || getWindowActiveSpaceId(win);
       const newTabSetting = await settingsDb.getForSpace(spaceId, 'new_tab');
       url = newTabSetting || defaultUrl;
     }
@@ -2013,8 +2040,8 @@ function createPreloadedNewTab(win) {
   }
   _createPreloadedNewTabTOs[id] = setTimeout(() => {
     _createPreloadedNewTabTOs[id] = null;
-    const spaceId = spacesDb.getCachedActiveId();
-    const partition = spacesDb.getCachedActive()?.partition ?? '';
+    const spaceId = getWindowActiveSpaceId(win);
+    const partition = getWindowActiveSpace(win)?.partition ?? '';
     preloadedNewTabs[id] = new Tab(win, { isHidden: true, spaceId, partition });
     preloadedNewTabs[id].loadURL(defaultUrl);
   }, 1e3);

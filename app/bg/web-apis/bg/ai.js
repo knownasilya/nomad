@@ -384,7 +384,10 @@ async function executeTool(name, args, sender) {
       const perm = 'modifyDrive:' + driveKey;
       const allowed = await permissions.requestPermission(perm, sender);
       if (!allowed) throw new Error('Write permission denied');
-      await drive.put(args.path, b4a.from(args.content));
+      const now = Date.now();
+      const existing = await drive.entry(args.path).catch(() => null);
+      const ctime = existing?.value?.metadata?.ctime || now;
+      await drive.put(args.path, b4a.from(args.content), { metadata: { ctime, mtime: now } });
       return 'File written successfully';
     }
     default:

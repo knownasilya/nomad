@@ -12,7 +12,12 @@ import {
   getDriveIdent,
 } from '../../filesystem/index';
 import { findTab } from '../../ui/tabs/manager';
+import * as filesystem from '../../filesystem/index';
 import * as trash from '../../filesystem/trash';
+
+function getSenderSpaceId(sender) {
+  return findTab(sender)?.spaceId ?? filesystem.getSpaceIdForWebContents(sender?.id);
+}
 
 // exported api
 // =
@@ -20,7 +25,7 @@ import * as trash from '../../filesystem/trash';
 export default {
   async get(key) {
     key = await drives.fromURLToKey(key, true);
-    const spaceId = findTab(this.sender)?.spaceId;
+    const spaceId = getSenderSpaceId(this.sender);
     const drivesList = await listDrivesForSpace(spaceId);
     var drive = drivesList.find((d) => d.key === key);
     var info = await drives
@@ -39,13 +44,13 @@ export default {
   },
 
   async list(opts) {
-    const spaceId = findTab(this.sender)?.spaceId;
+    const spaceId = getSenderSpaceId(this.sender);
     return assembleRecords(await listDrivesForSpace(spaceId, opts));
   },
 
   async getForks(key) {
     key = await drives.fromURLToKey(key, true);
-    const spaceId = findTab(this.sender)?.spaceId;
+    const spaceId = getSenderSpaceId(this.sender);
     var drivesList = await listDrivesForSpace(spaceId);
     var rootDrive = drivesList.find((drive) => drive.key === key);
     if (!rootDrive) return assembleRecords([{ key }]);
@@ -82,12 +87,12 @@ export default {
   },
 
   async configure(key, opts) {
-    const spaceId = findTab(this.sender)?.spaceId;
+    const spaceId = getSenderSpaceId(this.sender);
     return configDriveForSpace(key, opts, spaceId);
   },
 
   async remove(key) {
-    const spaceId = findTab(this.sender)?.spaceId;
+    const spaceId = getSenderSpaceId(this.sender);
     return removeDriveForSpace(key, spaceId);
   },
 

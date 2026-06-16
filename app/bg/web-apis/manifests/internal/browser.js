@@ -32,6 +32,10 @@ export default {
   getResourceContentType: 'sync',
   getCertificate: 'promise',
 
+  getCertExceptions: 'promise',
+  addCertException: 'promise',
+  removeCertException: 'promise',
+
   executeShellWindowCommand: 'promise',
   toggleSiteInfo: 'promise',
   toggleLiveReloading: 'promise',

@@ -10,6 +10,8 @@ import * as trash from './trash';
 import * as modals from '../ui/subwindows/modals';
 import lock from '../../lib/lock';
 import { isSameOrigin } from '../../lib/urls';
+import { HYPERDRIVE_HASH_REGEX } from '../../lib/const';
+import * as autobases from '../hyper/autobases';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'filesystem' });
 
@@ -36,6 +38,7 @@ var browsingProfile;
 var rootDrive;
 var drives = [];
 var spaceRootDrives = {}; // {[spaceId]: DriveSession}
+var webContentsSpaceMap = new Map(); // {[webContentsId]: spaceId}
 
 // exported api
 // =
@@ -69,7 +72,6 @@ export async function setup() {
   if (!browsingProfile.url.endsWith('/')) browsingProfile.url += '/';
 
   logger.info('Loading root drive', { url: browsingProfile.url });
-  hyper.dns.setLocal('private', browsingProfile.url);
   rootDrive = await hyper.drives.getOrLoadDrive(browsingProfile.url, { persistSession: true });
 
   // If the drive from a previous session is not writable (keypair not in this Corestore),
@@ -79,9 +81,12 @@ export async function setup() {
     const newDrive = await hyper.drives.createNewRootDrive();
     await db.run(`UPDATE profiles SET url = ? WHERE id = 0`, [newDrive.url]);
     browsingProfile.url = newDrive.url;
+    if (!browsingProfile.url.endsWith('/')) browsingProfile.url += '/';
     rootDrive = newDrive;
     isInitialCreation = true;
   }
+
+  hyper.dns.setLocal('private', browsingProfile.url);
 
   if (isInitialCreation) {
     await _driveWriteFile(rootDrive, `/bookmarks/beaker-dev-docs-templates.goto`, '', {
@@ -104,7 +109,7 @@ export async function setup() {
     const drivesBuf = await rootDrive.drive.get('/drives.json');
     if (drivesBuf) {
       drives = JSON.parse(b4a.toString(drivesBuf)).drives;
-      hostKeys = hostKeys.concat(drives.map((d) => d.key));
+      hostKeys = hostKeys.concat(drives.filter(d => d.type !== 'autobase').map((d) => d.key));
     }
   } catch (e) {
     if (!(e instanceof SyntaxError)) {
@@ -120,7 +125,28 @@ export async function setup() {
 
 export function getDriveIdent(url) {
   const system = isRootUrl(url);
-  return { system, internal: system };
+  return { system, internal: system, profile: false };
+}
+
+export async function getDriveIdentFull(url) {
+  const ident = getDriveIdent(url);
+  if (ident.system) return ident;
+  try {
+    // getOrLoadDrive hangs for autobase keys — detect and skip them first
+    const hostname = new URL(url).hostname;
+    if (HYPERDRIVE_HASH_REGEX.test(hostname)) {
+      if (getDriveConfig(hostname)?.type === 'autobase' || autobases.getCollaborativeDrive(hostname)) {
+        return ident;
+      }
+    }
+    const drive = await hyper.drives.getOrLoadDrive(url);
+    const buf = await drive.drive.get('/index.json');
+    if (buf) {
+      const manifest = JSON.parse(buf.toString());
+      ident.profile = manifest.type === 'walled.garden/person';
+    }
+  } catch {}
+  return ident;
 }
 
 export function setPrivateAlias(url) {
@@ -149,6 +175,22 @@ export async function getOrSetupSpaceDrive(space) {
 
 export function getSpaceRootDrive(spaceId) {
   return spaceRootDrives[spaceId];
+}
+
+export function getSpaceRootDriveUrl(spaceId) {
+  return spaceRootDrives[spaceId]?.url || null;
+}
+
+export function registerWebContentsSpace(wcId, spaceId) {
+  webContentsSpaceMap.set(wcId, spaceId);
+}
+
+export function unregisterWebContentsSpace(wcId) {
+  webContentsSpaceMap.delete(wcId);
+}
+
+export function getSpaceIdForWebContents(wcId) {
+  return webContentsSpaceMap.get(wcId);
 }
 
 var spaceDrivesMap = {};
@@ -288,15 +330,42 @@ export async function configDrive(url, { forkOf, tags } = {}) {
   }
 }
 
+// Register a non-Hyperdrive (e.g. autobase) URL in the drives list without loading it.
+// configDrive() tries to open a Hyperdrive to read /index.json, which hangs for autobase URLs
+// because the underlying core isn't a Hyperdrive.
+export async function configAutobaseDrive(url, { tags } = {}) {
+  var release = await lock('filesystem:drives');
+  try {
+    var key = await hyper.drives.fromURLToKey(url, true);
+    var driveCfg = drives.find((d) => d.key === key);
+    if (!driveCfg) {
+      driveCfg = { key, type: 'autobase' };
+      if (tags && Array.isArray(tags)) driveCfg.tags = tags.filter(Boolean);
+      drives.push(driveCfg);
+    } else {
+      driveCfg.type = 'autobase';
+      if (tags && Array.isArray(tags)) driveCfg.tags = tags.filter(Boolean);
+    }
+    await rootDrive.drive.put('/drives.json', b4a.from(JSON.stringify({ drives }, null, 2)));
+  } finally {
+    release();
+  }
+}
+
 export async function removeDrive(url) {
   var release = await lock('filesystem:drives');
   try {
     var key = await hyper.drives.fromURLToKey(url, true);
     const driveIndex = drives.findIndex((d) => d.key === key);
     if (driveIndex === -1) return;
-    const drive = await hyper.drives.getOrLoadDrive(url);
-    if (!drive.writable) {
-      await hyper.daemon.configureNetwork(drive.discoveryKey, { announce: false, lookup: true });
+    // Skip Hyperdrive-specific cleanup for autobase drives — getOrLoadDrive()
+    // would try to open the autobase core as a Hyperdrive and hang.
+    const driveCfg = drives[driveIndex];
+    if (driveCfg.type !== 'autobase') {
+      const drive = await hyper.drives.getOrLoadDrive(url);
+      if (!drive.writable) {
+        await hyper.daemon.configureNetwork(drive.discoveryKey, { announce: false, lookup: true });
+      }
     }
     await trash.add(key);
     drives.splice(driveIndex, 1);
@@ -367,7 +436,8 @@ export async function migrateAddressBook() {
     if (!existing) {
       drives.push({ key: profile.key, tags: ['contact'] });
     } else {
-      existing.tags = (existing.tags || []).concat(['contact']);
+      const tags = existing.tags || [];
+      if (!tags.includes('contact')) existing.tags = tags.concat(['contact']);
     }
   }
   await rootDrive.drive.put('/drives.json', b4a.from(JSON.stringify({ drives }, null, 2)));

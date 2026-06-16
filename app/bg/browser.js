@@ -39,7 +39,7 @@ import * as siteInfo from './ui/subwindows/site-info';
 import { findWebContentsParentWindow, spawnAndExecuteJs } from './lib/electron';
 import * as hyperDaemon from './hyper/daemon';
 import * as bookmarks from './filesystem/bookmarks';
-import { getDriveIdent } from './filesystem/index';
+import { getDriveIdentFull } from './filesystem/index';
 import * as wcTrust from './wc-trust';
 
 const logger = logLib.child({ category: 'browser' });
@@ -78,6 +78,10 @@ var resourceContentTypes = new LRU(100); // URL -> Content-Type
 
 // certificate tracker
 var originCerts = new LRU(100); // hostname -> {issuerName, subjectName, validExpiry}
+
+// cert bypass: persistent (from settings) and transient (current load only)
+var certPersistentExceptions = new Set(); // Set<hostname>
+var certOnceExceptions = new Set(); // Set<hostname>, cleared after each load
 
 // events emitted to rpc clients
 var browserEvents = new EventEmitter();
@@ -206,6 +210,37 @@ export async function setup() {
     cb(request.errorCode);
   });
 
+  // Global cert-error override: fires for ALL webContents/sessions regardless of partition.
+  // setCertificateVerifyProc only covers session.defaultSession; this covers everything.
+  app.on('certificate-error', (event, wc, url, error, certificate, callback) => {
+    try {
+      const hostname = new URL(url).hostname.toLowerCase().trim();
+      if (certPersistentExceptions.has(hostname) || certOnceExceptions.has(hostname)) {
+        event.preventDefault();
+        callback(true);
+        return;
+      }
+    } catch (_) {}
+    callback(false);
+  });
+
+  // Load persistent cert exceptions
+  const storedExceptions = await settingsDb.get('cert_exceptions');
+  if (Array.isArray(storedExceptions)) {
+    for (const h of storedExceptions) certPersistentExceptions.add(h);
+  }
+  settingsDb.on('set:cert_exceptions', (val) => {
+    // settings.js JSON-encodes the value before emitting, so we may receive a string
+    let list = val;
+    if (typeof list === 'string') {
+      try { list = JSON.parse(list); } catch (e) { return; }
+    }
+    certPersistentExceptions.clear();
+    if (Array.isArray(list)) {
+      for (const h of list) certPersistentExceptions.add(h);
+    }
+  });
+
   // Ensure run on startup is set correctly
   const runOnStartup = getSetting('launch_on_startup');
   await setRunOnStartup(runOnStartup);
@@ -246,6 +281,24 @@ export const WEBAPI = {
 
   getResourceContentType,
   getCertificate,
+
+  async getCertExceptions() {
+    return Array.from(certPersistentExceptions);
+  },
+  async addCertException(hostname) {
+    hostname = String(hostname).toLowerCase().trim();
+    certPersistentExceptions.add(hostname);
+    const list = Array.from(certPersistentExceptions);
+    await settingsDb.set('cert_exceptions', list);
+    return list;
+  },
+  async removeCertException(hostname) {
+    hostname = String(hostname).toLowerCase().trim();
+    certPersistentExceptions.delete(hostname);
+    const list = Array.from(certPersistentExceptions);
+    await settingsDb.set('cert_exceptions', list);
+    return list;
+  },
 
   listBuiltinFavicons,
   getBuiltinFavicon,
@@ -294,6 +347,27 @@ export const WEBAPI = {
   closeModal: () => {}, // DEPRECATED, probably safe to remove soon
 };
 
+export function addCertOnceException(hostname) {
+  hostname = String(hostname).toLowerCase().trim();
+  certOnceExceptions.add(hostname);
+}
+
+export function removeCertOnceException(hostname) {
+  hostname = String(hostname).toLowerCase().trim();
+  certOnceExceptions.delete(hostname);
+}
+
+export function isCertPersistentException(hostname) {
+  return certPersistentExceptions.has(String(hostname).toLowerCase().trim());
+}
+
+export async function addCertPersistentException(hostname) {
+  hostname = String(hostname).toLowerCase().trim();
+  certPersistentExceptions.add(hostname);
+  const list = Array.from(certPersistentExceptions);
+  await settingsDb.set('cert_exceptions', list);
+}
+
 export function fetchBody(url) {
   return new Promise((resolve) => {
     var http = url.startsWith('https') ? require('https') : require('http');
@@ -330,7 +404,7 @@ export async function getCertificate(url) {
   } else if (url.startsWith('beaker:')) {
     return { type: 'beaker' };
   } else if (url.startsWith('hyper://')) {
-    let ident = await getDriveIdent(url, true);
+    let ident = await getDriveIdentFull(url);
     return { type: 'hyperdrive', ident };
   }
 }

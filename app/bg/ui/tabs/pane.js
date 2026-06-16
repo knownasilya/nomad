@@ -11,7 +11,8 @@ import * as zoom from './zoom';
 import * as modals from '../subwindows/modals';
 import * as overlay from '../subwindows/overlay';
 import * as windowMenu from '../window-menu';
-import { getResourceContentType } from '../../browser';
+import { getResourceContentType, addCertOnceException, removeCertOnceException, isCertPersistentException, addCertPersistentException } from '../../browser';
+import * as settingsDb from '../../dbs/settings';
 import { DRIVE_KEY_REGEX } from '../../../lib/strings';
 import * as sitedataDb from '../../dbs/sitedata';
 import * as historyDb from '../../dbs/history';
@@ -159,6 +160,8 @@ export class Pane extends EventEmitter {
     this.layoutHeight = undefined; // used by pane-layout to track height
 
     // wire up events
+    this.webContents.on('will-navigate', this.onWillNavigate.bind(this));
+    this.webContents.on('console-message', this.onConsoleMessage.bind(this));
     this.webContents.on('did-start-loading', this.onDidStartLoading.bind(this));
     this.webContents.on(
       'did-start-navigation',
@@ -708,10 +711,7 @@ export class Pane extends EventEmitter {
     try {
       key = await hyper.dns.resolveName(this.url);
       this.driveInfo = await hyper.drives.getDriveInfo(key);
-      this.driveInfo.ident = await filesystem.getDriveIdent(
-        this.driveInfo.url,
-        true
-      );
+      this.driveInfo.ident = await filesystem.getDriveIdentFull(this.driveInfo.url);
       this.folderSyncPath = await folderSyncDb.getPath(this.driveInfo.key);
       this.peers = this.driveInfo.peers;
       this.donateLinkHref = this.driveInfo?.links?.payment?.[0]?.href;
@@ -764,6 +764,41 @@ export class Pane extends EventEmitter {
     this.emitUpdateState();
   }
 
+  async onWillNavigate(e, url) {
+    if (!url.startsWith('beaker://cert-bypass-')) return;
+    e.preventDefault();
+    await this._handleCertBypass(url.startsWith('beaker://cert-bypass-always') ? 'always' : 'once', url.replace(/^beaker:\/\/cert-bypass-(?:once|always)\?url=/, ''));
+  }
+
+  async onConsoleMessage(e, level, message) {
+    if (!message.startsWith('__nomad_cert__:')) return;
+    const rest = message.slice('__nomad_cert__:'.length);
+    const colon = rest.indexOf(':');
+    if (colon === -1) return;
+    const action = rest.slice(0, colon);
+    const encodedUrl = rest.slice(colon + 1);
+    await this._handleCertBypass(action, encodedUrl);
+  }
+
+  async _handleCertBypass(action, encodedUrl) {
+    try {
+      const targetUrl = decodeURIComponent(encodedUrl);
+      const hostname = new URL(targetUrl).hostname;
+      if (action === 'always') {
+        // Update in-memory set synchronously BEFORE loadURL so the cert verify proc sees it
+        await addCertPersistentException(hostname);
+      } else {
+        addCertOnceException(hostname);
+        const cleanup = () => removeCertOnceException(hostname);
+        this.webContents.once('did-finish-load', cleanup);
+        this.webContents.once('did-fail-load', cleanup);
+      }
+      this.loadURL(targetUrl);
+    } catch (err) {
+      // ignore parse errors
+    }
+  }
+
   onDidStartNavigation(
     e,
     url,
@@ -805,6 +840,7 @@ export class Pane extends EventEmitter {
     this.favicons = null;
     this.frameUrls = { [this.mainFrameId]: url }; // drop all non-main-frame URLs
     await Promise.all([this.fetchIsBookmarked(), this.fetchDriveInfo()]);
+    if (!this.webContents || this.webContents.isDestroyed()) return;
     if (httpResponseCode === 504 && isHyperOrPearUrl(url)) {
       this.wasDriveTimeout = true;
     }
@@ -884,9 +920,7 @@ export class Pane extends EventEmitter {
     var errorPageHTML = errorPage(this.loadError);
     try {
       await this.webContents.executeJavaScript(
-        "document.documentElement.innerHTML = '" +
-          errorPageHTML +
-          "'; undefined"
+        `document.documentElement.innerHTML = ${JSON.stringify(errorPageHTML)}; undefined`
       );
     } catch (e) {
       // ignore

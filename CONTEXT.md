@@ -54,6 +54,15 @@ _Avoid_: agent config, AI settings, model config
 A floating chat overlay Nomad injects into a Drive page when `"chatBubble": true` is set in the Drive's `/index.json`. The overlay is provided entirely by Nomad (a Lit custom element injected via the main process); the Drive author does not need to write any chat UI code. The bubble uses `beaker.ai.chat()` resolved against the same Drive's AI Config.
 _Avoid_: chat widget, chat overlay, embedded chat
 
+### Social data
+
+**Profile Drive**:
+A Drive with `type: "walled.garden/person"` in its `/index.json`. Represents a user's public social identity — name, avatar, bio, and a structured links array. Distinct from the Root Drive, which is always private. Referenced in the Drive Registry under a `profile` tag.
+_Avoid_: identity drive, person drive, social profile
+
+**Writer Keys**:
+The list of device-level writer keypairs belonging to a single Profile Drive owner, published at `/.data/walled.garden/writer-keys.json` inside the Profile Drive. Allows resolving multiple device writers back to one identity.
+
 ### User model
 
 **Space**:

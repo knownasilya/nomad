@@ -24,8 +24,26 @@ export class FileList extends BaseFilesView {
     });
   }
 
+  formatDate(ts) {
+    if (!ts?.getTime || ts.getTime() <= 0) return '—';
+    return html`${this.dateFormatter.format(ts)} <span>at</span> ${this.timeFormatter.format(ts)}`;
+  }
+
   // rendering
   // =
+
+  renderHeader() {
+    return html`
+      <div class="header">
+        ${this.showOrigin ? html`<span class="author">Drive</span>` : ''}
+        <span class="icon"></span>
+        <span class="name">Name</span>
+        <span class="date">Created</span>
+        <span class="date">Modified</span>
+        <span class="size">Size</span>
+      </div>
+    `;
+  }
 
   renderItem(item) {
     var cls = classMap({
@@ -62,10 +80,8 @@ export class FileList extends BaseFilesView {
             : ''}
         </span>
         <span class="name">${this.showOrigin ? item.realPath : item.name}</span>
-        <span class="date"
-          >${this.dateFormatter.format(item.stat.ctime)}
-          <span>at</span> ${this.timeFormatter.format(item.stat.ctime)}</span
-        >
+        <span class="date">${this.formatDate(item.stat.ctime)}</span>
+        <span class="date">${this.formatDate(item.stat.mtime)}</span>
         <span class="size"
           >${item.stat.size ? formatBytes(item.stat.size) : ''}</span
         >
