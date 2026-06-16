@@ -121,6 +121,21 @@ export async function setup() {
 
   await spacesDb.backfillDefaultSpaceDrive(browsingProfile.url);
   spaceRootDrives[1] = rootDrive;
+
+  // Pre-load all other spaces' root drives so hyper://private/ resolves to the
+  // correct drive for each space before any restored tabs fire their first request.
+  // Without this, restored tabs from space N see getSpaceRootDriveUrl(N) === null
+  // and fall back to DNS (space 1's drive), silently writing files to the wrong place.
+  const allSpaces = await spacesDb.list();
+  await Promise.all(
+    allSpaces
+      .filter((s) => s.id !== 1 && s.root_drive_url)
+      .map((s) =>
+        getOrSetupSpaceDrive(s).catch((e) =>
+          logger.warn('Pre-load space drive failed', { spaceId: s.id, error: e.toString() })
+        )
+      )
+  );
 }
 
 export function getDriveIdent(url) {
@@ -428,6 +443,9 @@ export async function migrateAddressBook() {
   } catch (e) {
     return;
   }
+  // Only touch the file if it's actually the old Beaker Browser address-book format.
+  // A user-created file at this path that lacks both arrays must not be deleted.
+  if (!Array.isArray(addressBook.profiles) && !Array.isArray(addressBook.contacts)) return;
   addressBook.profiles = Array.isArray(addressBook.profiles) ? addressBook.profiles : [];
   addressBook.contacts = Array.isArray(addressBook.contacts) ? addressBook.contacts : [];
   const profiles = addressBook.profiles.concat(addressBook.contacts);
