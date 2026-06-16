@@ -28,7 +28,7 @@ jobs:
           version: latest
 
       - name: Setup Node.js
-        uses: volta-cli/action@v2
+        uses: volta-cli/action@v5
 
       - name: Install Linux build dependencies
         if: matrix.os == 'ubuntu-latest'
