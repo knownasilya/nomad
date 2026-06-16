@@ -7,7 +7,7 @@ import { getEnvVar } from '../lib/env';
 import * as profileDb from './profile-data-db';
 
 const CACHED_VALUES = ['new_tabs_in_foreground'];
-const JSON_ENCODED_SETTINGS = ['search_engines', 'adblock_lists'];
+const JSON_ENCODED_SETTINGS = ['search_engines', 'adblock_lists', 'sidebar_collapsed_groups', 'cert_exceptions'];
 
 // Settings that are always global (never per-space)
 const GLOBAL_SETTINGS = new Set([
@@ -17,6 +17,13 @@ const GLOBAL_SETTINGS = new Set([
   'analytics_enabled',
   'active_space_id',
   'no_welcome_tab',
+  'tab_layout',
+  'sidebar_side',
+  'sidebar_width',
+  'sidebar_collapsed_groups',
+  'ai_base_url',
+  'ai_default_model',
+  'cert_exceptions',
 ]);
 
 // globals
@@ -69,6 +76,14 @@ export const setup = async function (opts) {
       { name: 'Nomad', url: 'beaker://desktop/?q=' },
       { name: 'Google', url: 'https://www.google.com/search?q=' },
     ],
+    tab_layout: 'top-bar',
+    sidebar_side: 'left',
+    sidebar_width: 220,
+    sidebar_collapsed_groups: [],
+    ai_base_url: 'http://localhost:11434/v1',
+    ai_default_model: '',
+    ai_space_default: '',
+    cert_exceptions: [],
     adblock_lists: [
       {
         name: 'EasyList',

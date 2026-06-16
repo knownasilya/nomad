@@ -15,6 +15,7 @@ import { ModalActiveError } from 'beaker-error-constants';
 import * as tabManager from '../tabs/manager';
 import modalsRPCManifest from '../../rpc-manifests/modals';
 import { findWebContentsParentWindow } from '../../lib/electron';
+import * as filesystem from '../../filesystem/index';
 
 // globals
 // =
@@ -100,6 +101,9 @@ export async function create(webContents, modalName, params = {}) {
   view.webContents.loadURL('beaker://modals/');
   view.webContents.focus();
 
+  // Propagate the calling tab's space to the modal so space-aware APIs work
+  if (tab.spaceId) filesystem.registerWebContentsSpace(view.webContents.id, tab.spaceId);
+
   // run the modal flow
   var result;
   var err;
@@ -113,6 +117,7 @@ export async function create(webContents, modalName, params = {}) {
 
   // destroy the window
   parentWindow.removeBrowserView(view);
+  filesystem.unregisterWebContentsSpace(view.webContents.id);
   view.webContents.destroy();
   delete views[tab.id];
 

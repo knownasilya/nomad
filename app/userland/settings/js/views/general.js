@@ -72,6 +72,7 @@ class GeneralSettingsView extends LitElement {
       </div>
       <div class="form-group">
         <h2>Tab Settings</h2>
+        ${this.renderNavLayoutSettings()}
         ${this.renderOnStartupSettings()} ${this.renderNewTabSettings()}
         ${this.renderTabSettings()} ${this.renderDefaultZoomSettings()}
       </div>
@@ -293,6 +294,78 @@ class GeneralSettingsView extends LitElement {
             Show tabs from your last session
           </label>
         </div>
+      </div>
+    `;
+  }
+
+  renderNavLayoutSettings() {
+    const isSidebar = this.settings.tab_layout === 'sidebar';
+    const width = this.settings.sidebar_width || 220;
+    return html`
+      <div class="section">
+        <p>Navigation layout:</p>
+        <div class="radio-item">
+          <input
+            type="radio"
+            id="navLayoutTopBar"
+            name="nav-layout"
+            value="top-bar"
+            ?checked=${!isSidebar}
+            @change=${this.onNavLayoutChange}
+          />
+          <label for="navLayoutTopBar">Top bar (default)</label>
+        </div>
+        <div class="radio-item">
+          <input
+            type="radio"
+            id="navLayoutSidebar"
+            name="nav-layout"
+            value="sidebar"
+            ?checked=${isSidebar}
+            @change=${this.onNavLayoutChange}
+          />
+          <label for="navLayoutSidebar">Sidebar</label>
+        </div>
+        ${isSidebar
+          ? html`
+              <div style="margin-top: 10px; padding-left: 22px;">
+                <p style="margin: 0 0 6px;">Sidebar position:</p>
+                <div class="radio-item">
+                  <input
+                    type="radio"
+                    id="sidebarLeft"
+                    name="sidebar-side"
+                    value="left"
+                    ?checked=${this.settings.sidebar_side !== 'right'}
+                    @change=${this.onSidebarSideChange}
+                  />
+                  <label for="sidebarLeft">Left</label>
+                </div>
+                <div class="radio-item">
+                  <input
+                    type="radio"
+                    id="sidebarRight"
+                    name="sidebar-side"
+                    value="right"
+                    ?checked=${this.settings.sidebar_side === 'right'}
+                    @change=${this.onSidebarSideChange}
+                  />
+                  <label for="sidebarRight">Right</label>
+                </div>
+                <p style="margin: 10px 0 4px;">Sidebar width: <strong>${width}px</strong></p>
+                <input
+                  type="range"
+                  min="160"
+                  max="480"
+                  step="10"
+                  .value=${String(width)}
+                  @input=${this.onSidebarWidthChange}
+                  @change=${this.onSidebarWidthCommit}
+                  style="width: 220px;"
+                />
+              </div>
+            `
+          : ''}
       </div>
     `;
   }
@@ -619,6 +692,32 @@ class GeneralSettingsView extends LitElement {
     toast.create('Setting updated');
   }
 
+  onNavLayoutChange(e) {
+    this.settings.tab_layout = e.target.value;
+    beaker.browser.setSetting('tab_layout', this.settings.tab_layout);
+    toast.create('Setting updated');
+    this.requestUpdate();
+  }
+
+  onSidebarSideChange(e) {
+    this.settings.sidebar_side = e.target.value;
+    beaker.browser.setSetting('sidebar_side', this.settings.sidebar_side);
+    toast.create('Setting updated');
+    this.requestUpdate();
+  }
+
+  onSidebarWidthChange(e) {
+    this.settings.sidebar_width = Number(e.target.value);
+    this.requestUpdate();
+  }
+
+  onSidebarWidthCommit(e) {
+    this.settings.sidebar_width = Number(e.target.value);
+    beaker.browser.setSetting('sidebar_width', this.settings.sidebar_width);
+    toast.create('Setting updated');
+    this.requestUpdate();
+  }
+
   onRunBackgroundToggle(e) {
     this.settings.run_background = this.settings.run_background == 1 ? 0 : 1;
     beaker.browser.setSetting('run_background', this.settings.run_background);
@@ -713,5 +812,6 @@ class GeneralSettingsView extends LitElement {
     this.listingSelfState = 'done';
     this.requestUpdate();
   }
+
 }
 customElements.define('general-settings-view', GeneralSettingsView);

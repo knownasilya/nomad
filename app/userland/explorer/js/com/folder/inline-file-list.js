@@ -46,7 +46,7 @@ export class InlineFileList extends BaseFilesView {
           <div>
             Updated:
             <span class="date"
-              >${timeDifference(item.stat.ctime, true, 'ago')}</span
+              >${item.stat.ctime?.getTime() > 0 ? timeDifference(item.stat.ctime, true, 'ago') : '—'}</span
             >
           </div>
         </div>

@@ -24,8 +24,8 @@ export class ViewfileInfo extends LitElement {
 
   get mergeMode() {
     return (
-      this.viewfileObj['unwalled.garden/explorer-view'] &&
-      this.viewfileObj['unwalled.garden/explorer-view'].merge
+      this.viewfileObj['walled.garden/explorer-view'] &&
+      this.viewfileObj['walled.garden/explorer-view'].merge
     );
   }
 

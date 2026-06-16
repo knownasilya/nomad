@@ -92,6 +92,10 @@ export class BaseFilesView extends LitElement {
   // rendering
   // =
 
+  renderHeader() {
+    return '';
+  }
+
   render() {
     var inlineMdItem = this.getInlineMdItem();
     var isEmpty = this.itemGroups.reduce(
@@ -112,6 +116,7 @@ export class BaseFilesView extends LitElement {
         @dragleave=${this.onDragleaveContainer}
         @drop=${this.onDropContainer}
       >
+        ${this.renderHeader()}
         ${this.itemGroups.map((group) => {
           if (group.items.length === 0) return '';
           return html`

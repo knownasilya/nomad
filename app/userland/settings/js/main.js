@@ -7,6 +7,8 @@ import * as QP from './lib/query-params.js';
 import css from '../css/main.css.js';
 import './views/general.js';
 import './views/blocking.js';
+import './views/ai.js';
+import './views/security.js';
 import './views/info.js';
 import './views/network.js';
 import './views/fs-audit-log.js';
@@ -79,6 +81,8 @@ class SettingsApp extends LitElement {
     return html`
       ${item('general', 'fas fa-cog', 'General')}
       ${item('blocking', 'fas fa-ban', 'Content Blocking')}
+      ${item('ai', 'fas fa-brain', 'AI')}
+      ${item('security', 'fas fa-shield-alt', 'Security')}
       <hr />
       ${item('general-logs', 'fas fa-clipboard-list', 'General Logs')}
       ${item('network', 'fas fa-share-alt', 'Network Stats')}
@@ -97,6 +101,10 @@ class SettingsApp extends LitElement {
         return html`<general-settings-view loadable></general-settings-view>`;
       case 'blocking':
         return html`<blocking-settings-view loadable></blocking-settings-view>`;
+      case 'ai':
+        return html`<ai-settings-view loadable></ai-settings-view>`;
+      case 'security':
+        return html`<security-settings-view loadable></security-settings-view>`;
       case 'info':
         return html`<info-settings-view loadable></info-settings-view>`;
       case 'network':

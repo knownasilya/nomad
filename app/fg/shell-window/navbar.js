@@ -18,6 +18,8 @@ class ShellWindowNavbar extends LitElement {
       },
       isDaemonActive: { type: Boolean, attribute: 'is-daemon-active' },
       isBrowserMenuOpen: { type: Boolean },
+      tabLayout: { type: String, attribute: 'tab-layout' },
+      sidebarCollapsed: { type: Boolean, attribute: 'sidebar-collapsed' },
     };
   }
 
@@ -30,6 +32,8 @@ class ShellWindowNavbar extends LitElement {
     this.numWatchlistNotifications = 0;
     this.isDaemonActive = false;
     this.isBrowserMenuOpen = false;
+    this.tabLayout = 'top-bar';
+    this.sidebarCollapsed = false;
   }
 
   get canGoBack() {
@@ -70,6 +74,7 @@ class ShellWindowNavbar extends LitElement {
     return html`
       <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
       <div class="buttons" style="padding: 0 6px">
+        ${this.tabLayout === 'sidebar' && this.sidebarCollapsed ? this.sidebarToggleBtn : ''}
         ${this.backBtn} ${this.forwardBtn} ${this.reloadBtn} ${this.updogBtn}
         ${this.homeBtn}
       </div>
@@ -105,6 +110,19 @@ class ShellWindowNavbar extends LitElement {
       <div class="buttons">
         ${this.watchlistBtn} ${this.daemonInactiveBtn} ${this.browserMenuBtn}
       </div>
+    `;
+  }
+
+  get sidebarToggleBtn() {
+    return html`
+      <button
+        class="sidebar-toggle-btn"
+        title=${this.sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+        @click=${this.onClickSidebarToggle}
+        style="margin: 0 4px 0 0"
+      >
+        <span class="fas fa-columns"></span>
+      </button>
     `;
   }
 
@@ -291,6 +309,10 @@ class ShellWindowNavbar extends LitElement {
   // events
   // =
 
+  onClickSidebarToggle() {
+    bg.views.toggleSidebarCollapsed();
+  }
+
   onClickGoBack(e) {
     bg.views.goBack(this.activeTabIndex);
   }
@@ -414,6 +436,14 @@ ShellWindowNavbar.styles = css`
     color: #fff;
     font-weight: bold;
     padding: 0 3px;
+  }
+
+  .sidebar-toggle-btn .fas {
+    color: var(--text-color--navbar-btn--lighter);
+  }
+
+  .sidebar-toggle-btn:not([disabled]):hover .fas {
+    color: var(--text-color--navbar-btn);
   }
 
   .browser-menu-btn {

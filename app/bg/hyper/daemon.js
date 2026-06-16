@@ -126,10 +126,13 @@ export async function createHyperdriveSession(opts) {
   }
 
   // Base session
-  // Each new drive needs a unique Corestore namespace so their internal 'db' Hyperbees
-  // don't share the same exclusive write lock (which would deadlock on the second drive).
-  const driveStore = keyBuf ? store : store.namespace(randomBytes(32));
-  const drive = keyBuf ? new Hyperdrive(store, keyBuf) : new Hyperdrive(driveStore);
+  // Each drive gets its own namespaced Corestore session. This is critical: Hyperdrive's
+  // _close() calls this.corestore.close(), which would destroy the root store (and all
+  // other drives' mutexes) if drives shared the root store directly. With a namespaced
+  // session (_attached=null by default), close() only affects this drive's cores.
+  // Replication streams are inherited from the root store, so swarm replication still works.
+  const driveStore = store.namespace(randomBytes(32));
+  const drive = keyBuf ? new Hyperdrive(driveStore, keyBuf) : new Hyperdrive(driveStore);
   await drive.ready();
 
   const keyStr = b4a.toString(drive.key, 'hex');

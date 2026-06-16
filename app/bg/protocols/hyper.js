@@ -8,6 +8,7 @@ import b4a from 'b4a';
 import * as logLib from '../logger';
 import markdown from '../../lib/markdown';
 import * as drives from '../hyper/drives';
+import * as autobases from '../hyper/autobases';
 import * as filesystem from '../filesystem/index';
 import * as capabilities from '../hyper/capabilities';
 import errorPage from '../lib/error-page';
@@ -182,6 +183,7 @@ export const protocolHandler = async function (request, respond) {
       errorInfo: `${request.url} is an invalid hyper:// URL`,
     });
   }
+
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return respondError(405, 'Method Not Supported');
   }
@@ -201,7 +203,19 @@ export const protocolHandler = async function (request, respond) {
     driveVersion = cap.target.version;
   } else {
     try {
-      driveKey = await drives.fromURLToKey(urlp.host, true);
+      if (urlp.host === 'private' && request.webContentsId) {
+        // Resolve hyper://private/ per-request using the requesting tab's space,
+        // so multiple windows with different active spaces each see their own root drive.
+        const spaceId = filesystem.getSpaceIdForWebContents(request.webContentsId);
+        const spaceUrl = spaceId ? filesystem.getSpaceRootDriveUrl(spaceId) : null;
+        if (spaceUrl) {
+          driveKey = await drives.fromURLToKey(spaceUrl, true);
+        } else {
+          driveKey = await drives.fromURLToKey(urlp.host, true);
+        }
+      } else {
+        driveKey = await drives.fromURLToKey(urlp.host, true);
+      }
       driveVersion = urlp.version;
     } catch (err) {
       return respondError(404, 'No DNS record found for ' + urlp.host, {
@@ -222,6 +236,13 @@ export const protocolHandler = async function (request, respond) {
     { url: urlp.origin, path: urlp.pathname },
     undefined,
     async () => {
+      // check if this URL belongs to an autobase collaborative drive
+      const driveCfg = filesystem.getDriveConfig(driveKey);
+      if (driveCfg && driveCfg.type === 'autobase') {
+        logger.silly(`Serving autobase drive ${logUrl}`, { url: request.url });
+        return serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect);
+      }
+
       try {
         // start searching the network
         logger.silly(`Loading drive for ${logUrl}`, { url: request.url });
@@ -458,6 +479,80 @@ function intoStream(text) {
       this.push(typeof text === 'string' ? b4a.from(text) : text);
       this.push(null);
     },
+  });
+}
+
+async function serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect) {
+  let sess;
+  try {
+    sess = await autobases.getOrLoadCollaborativeDrive(driveKey);
+    if (!sess) throw new Error('Not found');
+  } catch (err) {
+    logger.warn(`Failed to load autobase ${driveKey}`, { err });
+    return respondError(500, 'Failed to load collaborative drive');
+  }
+
+  const bee = sess.drive;
+
+  let filepath = decodeURIComponent(urlp.path);
+  if (!filepath) filepath = '/';
+  if (filepath.indexOf('?') !== -1) filepath = filepath.slice(0, filepath.indexOf('?'));
+  const hasTrailingSlash = filepath.endsWith('/');
+
+  // Check for custom frontend at /.ui/ui.html
+  const uiNode = await bee.get('/.ui/ui.html').catch(() => null);
+  if (uiNode) {
+    // Any HTML-wanting request to a "directory-like" path → serve the UI
+    const wantsHTML = mime.acceptHeaderWantsHTML(request.headers.Accept)
+    if (wantsHTML && (filepath === '/' || hasTrailingSlash || !filepath.includes('.'))) {
+      const buf = uiNode.value
+      return respond({
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'text/html',
+          'Access-Control-Allow-Origin': '*',
+          'Allow-CSP-From': '*',
+          'Cache-Control': 'no-cache',
+        },
+        data: intoStream(buf),
+      });
+    }
+  }
+
+  // Serve the requested file from Hyperbee
+  const lookupPath = filepath.replace(/\/$/, '') || '/'
+
+  // Try exact path first
+  let node = await bee.get(lookupPath).catch(() => null)
+
+  // Try directory index files
+  if (!node) {
+    const prefix = lookupPath.endsWith('/') ? lookupPath : lookupPath + '/'
+    for (const name of ['index.html', 'index.md']) {
+      node = await bee.get(prefix + name).catch(() => null)
+      if (node) { filepath = prefix + name; break }
+    }
+  }
+
+  if (!node) {
+    return respondError(404, 'File Not Found', {
+      errorDescription: 'File Not Found',
+      errorInfo: `Could not find ${urlp.path} in this collaborative drive`,
+      title: 'File Not Found',
+    });
+  }
+
+  const buf = node.value
+  const mimeType = mime.identify(node.key)
+  return respond({
+    statusCode: 200,
+    headers: {
+      'Content-Type': mimeType || 'application/octet-stream',
+      'Access-Control-Allow-Origin': '*',
+      'Allow-CSP-From': '*',
+      'Cache-Control': 'no-cache',
+    },
+    data: new WhackAMoleStream(Readable.from(buf)),
   });
 }
 

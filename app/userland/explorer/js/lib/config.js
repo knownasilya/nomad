@@ -30,7 +30,7 @@ export function oneof(v, values) {
 
 export function getVFCfg(obj, key, values) {
   if (!obj) return undefined;
-  const ns = 'unwalled.garden/explorer-view';
+  const ns = 'walled.garden/explorer-view';
   if (obj[ns] && typeof obj[ns] === 'object') {
     return oneof(obj[ns][key], values);
   }

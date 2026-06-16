@@ -31,7 +31,7 @@ export function toSemanticItemGroups(items) {
   for (let i of items) {
     if (i.stat.mount && i.stat.mount.key) {
       switch (i.mount.type) {
-        case 'unwalled.garden/person':
+        case 'walled.garden/person':
           add('users', 'Users', i);
           break;
         case 'website':

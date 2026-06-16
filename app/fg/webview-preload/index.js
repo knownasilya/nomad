@@ -2,6 +2,7 @@ import { ipcRenderer } from 'electron';
 import { setup as setupWebAPIs } from '../../bg/web-apis/fg.js';
 import { setup as setupPrompt } from './prompt';
 import { setup as setupExecuteJavascript } from './execute-javascript';
+import { setupChatBubble } from './chat-bubble';
 import setupExitFullScreenHackfix from './exit-full-screen-hackfix';
 // import readableStreamAsyncIteratorPolyfill from './readable-stream-async-iterator-polyfill'
 import windowOpenCloseHackfix from './window-open-close-hackfix';
@@ -16,6 +17,7 @@ resizeHackfix();
 setupWebAPIs();
 setupPrompt();
 setupExecuteJavascript();
+setupChatBubble();
 
 window.addEventListener('focus', (e) => {
   // track focus

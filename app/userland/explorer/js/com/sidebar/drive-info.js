@@ -62,12 +62,12 @@ export class DriveInfo extends LitElement {
   }
 
   renderType() {
-    if (this.driveInfo.type === 'unwalled.garden/person') {
+    if (this.driveInfo.type === 'walled.garden/person') {
       return html`<span
         ><span class="fas fa-fw fa-user-circle"></span> Person</span
       >`;
     }
-    if (this.driveInfo.type === 'unwalled.garden/website') {
+    if (this.driveInfo.type === 'walled.garden/website') {
       return html`<span
         ><span class="far fa-fw fa-file-alt"></span> Website</span
       >`;

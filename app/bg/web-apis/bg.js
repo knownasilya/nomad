@@ -29,21 +29,27 @@ import { WEBAPI as downloadsAPI } from '../ui/downloads';
 import { WEBAPI as beakerBrowserAPI } from '../browser';
 
 // external manifests
+import aiManifest from './manifests/external/ai';
+import autobaseManifest from './manifests/external/autobase';
 import capabilitiesManifest from './manifests/external/capabilities';
 import contactsManifest from './manifests/external/contacts';
 import hyperdriveManifest from './manifests/external/hyperdrive';
 import markdownManifest from './manifests/external/markdown';
 import panesManifest from './manifests/external/panes';
 import peersocketsManifest from './manifests/external/peersockets';
+import schemasManifest from './manifests/external/schemas';
 import shellManifest from './manifests/external/shell';
 
 // external apis
+import aiAPI from './bg/ai';
+import autobaseAPI from './bg/autobase';
 import capabilitiesAPI from './bg/capabilities';
 import contactsAPI from './bg/contacts';
 import hyperdriveAPI from './bg/hyperdrive';
 import markdownAPI from './bg/markdown';
 import panesAPI from './bg/panes';
 import peersocketsAPI from './bg/peersockets';
+import schemasAPI from './bg/schemas';
 import * as shellAPI from './bg/shell';
 
 // experimental manifests
@@ -101,6 +107,8 @@ export const setup = function () {
   rpc.exportAPI('watchlist', watchlistManifest, watchlistAPI, internalOnly);
 
   // external apis
+  rpc.exportAPI('ai', aiManifest, aiAPI, secureOnly('ai'));
+  rpc.exportAPI('autobase', autobaseManifest, autobaseAPI, secureOnly('autobase'));
   rpc.exportAPI(
     'capabilities',
     capabilitiesManifest,
@@ -121,6 +129,7 @@ export const setup = function () {
   );
   rpc.exportAPI('markdown', markdownManifest, markdownAPI);
   rpc.exportAPI('panes', panesManifest, panesAPI, secureOnly('panes'));
+  rpc.exportAPI('schemas', schemasManifest, schemasAPI);
   rpc.exportAPI(
     'peersockets',
     peersocketsManifest,

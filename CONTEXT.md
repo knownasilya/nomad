@@ -26,6 +26,43 @@ _Avoid_: shared drive, multi-user drive, autobase drive
 A keypair that has been granted append access to a Collaborative Drive. Writers are added explicitly via `inviteWriter` / `addWriter`; they are not inferred from replication.
 _Avoid_: author, contributor, collaborator
 
+### Shell chrome
+
+**Tab Layout**:
+The navigation mode for the browser shell. Either `top-bar` (horizontal strip of tabs above the navbar) or `sidebar` (vertical panel replacing the tab strip). A global setting; the same layout applies across all Spaces.
+_Avoid_: navigation mode, tab style, view mode
+
+**Tab Sidebar**:
+The vertical navigation panel shown when Tab Layout is `sidebar`. Renders groups as collapsible folder sections and ungrouped tabs as a flat list. Can be positioned left or right, resized, and collapsed to an icon rail. Distinct from any content-area panel.
+_Avoid_: side panel, sidebar (unqualified), drawer
+
+**Sidebar Rail**:
+The collapsed state of the Tab Sidebar: a narrow strip (~48px) showing only favicons. Toggled independently from group-level collapse.
+_Avoid_: mini sidebar, icon bar
+
+### AI
+
+**AI Runtime**:
+The external OpenAI-compatible inference server (Ollama, LM Studio, or any `/v1/chat/completions`-compatible server) that executes model calls. Configured globally in Nomad settings via `ai_base_url` and `ai_default_model`. Not bundled; user-managed separately.
+_Avoid_: local model, AI server, LLM backend
+
+**AI Config**:
+The `/ai/` folder inside a Drive, containing `system.md` (the system prompt) and optionally a `tools/` directory. A Drive has an AI Config when it includes this folder. Any Drive can opt into AI behaviour by adding an `ai` key to its `/index.json` — either an inline object `{ "model": "..." }` or a pointer string `"hyper://..."` delegating to another Drive's AI Config.
+_Avoid_: agent config, AI settings, model config
+
+**Chat Bubble**:
+A floating chat overlay Nomad injects into a Drive page when `"chatBubble": true` is set in the Drive's `/index.json`. The overlay is provided entirely by Nomad (a Lit custom element injected via the main process); the Drive author does not need to write any chat UI code. The bubble uses `beaker.ai.chat()` resolved against the same Drive's AI Config.
+_Avoid_: chat widget, chat overlay, embedded chat
+
+### Social data
+
+**Profile Drive**:
+A Drive with `type: "walled.garden/person"` in its `/index.json`. Represents a user's public social identity — name, avatar, bio, and a structured links array. Distinct from the Root Drive, which is always private. Referenced in the Drive Registry under a `profile` tag.
+_Avoid_: identity drive, person drive, social profile
+
+**Writer Keys**:
+The list of device-level writer keypairs belonging to a single Profile Drive owner, published at `/.data/walled.garden/writer-keys.json` inside the Profile Drive. Allows resolving multiple device writers back to one identity.
+
 ### User model
 
 **Space**:

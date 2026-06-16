@@ -82,7 +82,38 @@ const cssStr = css`
     flex: 1;
   }
 
-  .item .date {
+  .header {
+    display: flex;
+    align-items: center;
+    padding: 2px 4px;
+    border-bottom: 1px solid var(--file-list--item-border-color);
+  }
+
+  .header > * {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--file-list--color-itemprop);
+    opacity: 0.6;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .header .author {
+    width: 100px;
+  }
+
+  .header .icon {
+    width: 30px;
+  }
+
+  .header .name {
+    flex: 1;
+  }
+
+  .item .date,
+  .header .date {
     width: 160px;
   }
 
@@ -90,7 +121,8 @@ const cssStr = css`
     opacity: 0.75;
   }
 
-  .item .size {
+  .item .size,
+  .header .size {
     width: 100px;
     text-align: right;
   }

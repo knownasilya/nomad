@@ -206,7 +206,10 @@ export class ExplorerApp extends LitElement {
     }
 
     // read location information
-    var drive = beaker.hyperdrive.drive(loc.getOrigin());
+    this.isAutobase = await beaker.autobase.isCollaborativeDrive(loc.getOrigin()).catch(() => false);
+    var drive = this.isAutobase
+      ? beaker.autobase.collaborativeDrive(loc.getOrigin())
+      : beaker.hyperdrive.drive(loc.getOrigin());
     try {
       this.driveInfo = await this.attempt(
         `Reading drive information (${loc.getOrigin()})`,
@@ -224,6 +227,8 @@ export class ExplorerApp extends LitElement {
         `Reading path information (${loc.getPath()})`,
         () => drive.stat(loc.getPath())
       );
+      // stat() returns null when the path has no entry and no implicit children
+      if (!this.pathInfo) throw new Error('NotFoundError: ' + loc.getPath());
       await this.readPathAncestry();
     } catch (e) {
       if (e.message.includes('NotFoundError')) {
@@ -240,7 +245,9 @@ export class ExplorerApp extends LitElement {
       this.inlineMode = Boolean(getGlobalSavedConfig('inline-mode', false));
       this.sortMode = getGlobalSavedConfig('sort-mode', 'name');
       if (!this.watchStream) {
-        let currentDrive = beaker.hyperdrive.drive(this.currentDriveInfo.url);
+        let currentDrive = this.isAutobase
+          ? beaker.autobase.collaborativeDrive(this.currentDriveInfo.url)
+          : beaker.hyperdrive.drive(this.currentDriveInfo.url);
         this.watchStream = currentDrive.watch(this.realPathname);
         var hackSetupTime = Date.now();
         this.watchStream.addEventListener('changed', (e) => {
@@ -296,20 +303,24 @@ export class ExplorerApp extends LitElement {
 
   async readPathAncestry() {
     var ancestry = [];
-    var drive = beaker.hyperdrive.drive(loc.getOrigin());
+    var drive = this.isAutobase
+      ? beaker.autobase.collaborativeDrive(loc.getOrigin())
+      : beaker.hyperdrive.drive(loc.getOrigin());
     var pathParts = loc.getPath().split('/').filter(Boolean);
     while (pathParts.length) {
       let name = pathParts[pathParts.length - 1];
       let path = '/' + pathParts.join('/') + '/';
       let stat = undefined;
       let mount = undefined;
-      if (path === loc.getPath()) {
+      // path always has a trailing slash; loc.getPath() may not (e.g. for files)
+      if (path === loc.getPath() || path.replace(/\/$/, '') === loc.getPath()) {
         stat = this.pathInfo;
       } else {
         stat = await this.attempt(`Reading path information (${path})`, () =>
           drive.stat(path).catch((e) => undefined)
         );
       }
+      if (!stat) { pathParts.pop(); continue; }
       if (stat.mount) {
         mount = await this.attempt(
           `Reading site information (${stat.mount.key}) for parent mount at ${path}`,
@@ -534,7 +545,7 @@ export class ExplorerApp extends LitElement {
         ${this.pathInfo.isFile()
           ? html`
               <span class="date"
-                >${timeDifference(this.pathInfo.mtime, true, 'ago')}</span
+                >${this.pathInfo.mtime?.getTime() > 0 ? timeDifference(this.pathInfo.mtime, true, 'ago') : '—'}</span
               >
             `
           : ''}

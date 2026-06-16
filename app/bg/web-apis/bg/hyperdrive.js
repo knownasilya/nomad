@@ -16,6 +16,7 @@ import * as auditLog from '../../dbs/audit-log';
 import { timer } from '../../../lib/time';
 import * as filesystem from '../../filesystem/index';
 import * as spacesDb from '../../dbs/spaces';
+import { findTab } from '../../ui/tabs/manager';
 import { query } from '../../filesystem/query';
 import drivesAPI from './drives';
 import {
@@ -36,6 +37,11 @@ import {
   InvalidPathError,
 } from 'beaker-error-constants';
 import * as wcTrust from '../../wc-trust';
+
+// Returns the space ID for the given webContents — works for both tab panes and modal views.
+function getSenderSpaceId(sender) {
+  return findTab(sender)?.spaceId ?? filesystem.getSpaceIdForWebContents(sender?.id);
+}
 
 // exported api
 // =
@@ -102,7 +108,7 @@ const hyperdriveAPI = {
 
       const meta = { title, description };
       const newDrive = await drives.createNewDrive(meta);
-      await filesystem.configDriveForSpace(newDrive.url, { tags }, spacesDb.getCachedActiveId());
+      await filesystem.configDriveForSpace(newDrive.url, { tags }, getSenderSpaceId(this.sender));
       newDriveUrl = newDrive.url;
 
       if (importFolder) {
@@ -150,8 +156,9 @@ const hyperdriveAPI = {
       await assertCreateDrivePermission(this.sender, { title, tags });
 
       const key = await lookupUrlDriveKey(url);
+      const senderSpaceId = getSenderSpaceId(this.sender);
       if (!filesystem.getDriveConfig(key)) {
-        await filesystem.configDriveForSpace(key, {}, spacesDb.getCachedActiveId());
+        await filesystem.configDriveForSpace(key, {}, senderSpaceId);
       }
 
       const newDrive = await drives.forkDrive(key, {
@@ -162,7 +169,7 @@ const hyperdriveAPI = {
       await filesystem.configDriveForSpace(newDrive.url, {
         tags,
         forkOf: detached ? undefined : { key, label },
-      }, spacesDb.getCachedActiveId());
+      }, senderSpaceId);
       newDriveUrl = newDrive.url;
     }
 
@@ -216,7 +223,7 @@ const hyperdriveAPI = {
         if (!settings || typeof settings !== 'object') throw new Error('Invalid argument');
 
         if ('tags' in settings && wcTrust.isWcTrusted(this.sender)) {
-          await filesystem.configDriveForSpace(drive.url, { tags: settings.tags }, spacesDb.getCachedActiveId());
+          await filesystem.configDriveForSpace(drive.url, { tags: settings.tags }, getSenderSpaceId(this.sender));
         }
 
         if (!wcTrust.isWcTrusted(this.sender)) {
@@ -298,10 +305,12 @@ const hyperdriveAPI = {
         await assertWritePermission(drive, this.sender, filepath);
         await assertQuotaPermission(drive, senderOrigin, sourceSize);
         assertValidFilePath(filepath);
-        assertUnprotectedFilePath(filepath, this.sender);
         resume();
 
-        const putOpts = opts.metadata ? { metadata: opts.metadata } : undefined;
+        const now = Date.now();
+        const existing = await checkoutFS.drive.entry(filepath).catch(() => null);
+        const ctime = existing?.value?.metadata?.ctime || now;
+        const putOpts = { metadata: { ctime, mtime: now, ...opts.metadata } };
         return checkoutFS.drive.put(filepath, buf, putOpts);
       })
     );
@@ -639,44 +648,70 @@ const hyperdriveAPI = {
       return { mode: 16384 /* IFDIR */, size: 0, offset: 0, blocks: 0, downloaded: 0, mtime: 0, ctime: 0, metadata: {} };
     }
     const e = await hyperdriveAPI.entry.call(this, url, opts || {});
-    if (!e) return null;
-    const isFile = !!e.value?.blob;
-    return {
-      mode: isFile ? 32768 /* IFREG */ : 16384 /* IFDIR */,
-      size: e.value?.blob?.byteLength || 0,
-      offset: 0,
-      blocks: 0,
-      downloaded: 0,
-      mtime: 0,
-      ctime: 0,
-      metadata: e.value?.metadata || {},
-    };
+    if (e) {
+      const isFile = !!e.value?.blob;
+      const mtime = e.value?.metadata?.mtime || 0;
+      const ctime = e.value?.metadata?.ctime || mtime;
+      return {
+        mode: isFile ? 32768 /* IFREG */ : 16384 /* IFDIR */,
+        size: e.value?.blob?.byteLength || 0,
+        offset: 0,
+        blocks: 0,
+        downloaded: 0,
+        mtime,
+        ctime,
+        metadata: e.value?.metadata || {},
+      };
+    }
+    // Hyperdrive v11 directories are implicit (no Hyperbee entry of their own).
+    // Check if any children exist under this path — if so, treat it as a directory.
+    const children = await hyperdriveAPI.list.call(this, url, { recursive: false });
+    if (children.length > 0) {
+      return { mode: 16384 /* IFDIR */, size: 0, offset: 0, blocks: 0, downloaded: 0, mtime: 0, ctime: 0, metadata: {} };
+    }
+    return null;
   },
   async unlink(url, opts) {
     return hyperdriveAPI.del.call(this, url, opts || {});
   },
   async readdir(url, opts = {}) {
+    const urlp = parseDriveUrl(url);
+    const filepath = normalizeFilepath(urlp.pathname || '');
     const entries = await hyperdriveAPI.list.call(this, url, { recursive: opts.recursive || false });
+
+    // shallowReadStream pushes the raw Hyperbee node even for directory entries,
+    // where e.key is the first *file* found inside the subdirectory, not the dir itself.
+    // Mirror shallowReadStream's own name computation (std(folder, true) strips trailing slash).
+    const normalizedPath = filepath === '/' ? '' : filepath.replace(/\/$/, '');
+    const shallowName = (key) => {
+      const suffix = key.slice(normalizedPath.length + 1); // e.g. 'history/abc.json' or 'index.html'
+      const i = suffix.indexOf('/');
+      return i === -1 ? suffix : suffix.slice(0, i);
+    };
+
     if (opts.includeStats) {
       return entries.map((e) => {
-        const isFile = !!e.value?.blob;
+        const name = shallowName(e.key);
+        const isFile = !e.key.slice(normalizedPath.length + 1).includes('/') && !!e.value?.blob;
+        const mtime = isFile ? (e.value?.metadata?.mtime || 0) : 0;
+        const ctime = isFile ? (e.value?.metadata?.ctime || mtime) : 0;
         return {
-          name: path.basename(e.key),
+          name,
           stat: {
             // mode encodes file vs directory so fg-side createStat() can reconstruct isFile/isDirectory
             mode: isFile ? 32768 /* IFREG */ : 16384 /* IFDIR */,
-            size: e.value?.blob?.byteLength || 0,
+            size: isFile ? (e.value?.blob?.byteLength || 0) : 0,
             offset: 0,
             blocks: 0,
             downloaded: 0,
-            mtime: 0,
-            ctime: 0,
-            metadata: e.value?.metadata || {},
+            mtime,
+            ctime,
+            metadata: isFile ? (e.value?.metadata || {}) : {},
           },
         };
       });
     }
-    return entries.map((e) => path.basename(e.key));
+    return entries.map((e) => shallowName(e.key));
   },
   async symlink() { /* no-op: symlinks removed in v11 */ },
   async mount() { /* no-op: mounts removed in v11 */ },
@@ -718,7 +753,8 @@ async function assertReadPermission(drive, sender, filepath = undefined) {
   const ident = filesystem.getDriveIdent(driveUrl);
   if (ident.system) {
     const origin = archivesDb.extractOrigin(sender.getURL()) + '/';
-    if (wcTrust.isWcTrusted(sender) || filesystem.isRootUrl(origin)) return true;
+    const senderUrl = sender.getURL();
+    if (wcTrust.isWcTrusted(sender) || filesystem.isRootUrl(origin) || senderUrl.startsWith('hyper://')) return true;
     throw new PermissionsError('Cannot read the hyper://private/ drive');
   }
   return true;
@@ -782,7 +818,16 @@ export async function lookupDrive(sender, driveHostname, version, dontGetDrive =
   }
 
   if (!driveKey) {
-    driveKey = await drives.fromURLToKey(driveHostname, true);
+    if (driveHostname === 'private' && sender?.id) {
+      const spaceId = filesystem.getSpaceIdForWebContents(sender.id);
+      const spaceUrl = spaceId ? filesystem.getSpaceRootDriveUrl(spaceId) : null;
+      if (spaceUrl) {
+        driveKey = await drives.fromURLToKey(spaceUrl, true);
+      }
+    }
+    if (!driveKey) {
+      driveKey = await drives.fromURLToKey(driveHostname, true);
+    }
   }
 
   if (dontGetDrive) return { driveKey, version };

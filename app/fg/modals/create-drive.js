@@ -17,6 +17,7 @@ class CreateDriveModal extends LitElement {
       fromGit: { type: Boolean },
       gitUrl: { type: String },
       isPear: { type: Boolean },
+      isCollaborative: { type: Boolean },
     };
   }
 
@@ -87,6 +88,7 @@ class CreateDriveModal extends LitElement {
     this.fromGit = false;
     this.gitUrl = undefined;
     this.isPear = false;
+    this.isCollaborative = false;
     this.errors = {};
   }
 
@@ -100,6 +102,7 @@ class CreateDriveModal extends LitElement {
         : params.tags
       : '';
     this.author = undefined; // this.author = params.author
+    if (params.collaborative) this.isCollaborative = true;
     await this.requestUpdate();
   }
 
@@ -119,7 +122,7 @@ class CreateDriveModal extends LitElement {
     return html`
       <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
       <div class="wrapper">
-        <h1 class="title">Create New Hyperdrive</h1>
+        <h1 class="title">${this.isCollaborative ? 'Create Collaborative Drive' : 'Create New Hyperdrive'}</h1>
         <form @submit=${this.onSubmit}>
           <div>
             <input
@@ -153,6 +156,11 @@ class CreateDriveModal extends LitElement {
               <div class="switch"></div>
               <span class="text">Create as Pear app</span>
             </label>
+            <label class="toggle non-fullwidth">
+              <input type="checkbox" ?checked=${this.isCollaborative} @click=${this.onToggleCollaborative} />
+              <div class="switch"></div>
+              <span class="text">Collaborative drive (multi-writer)</span>
+            </label>
             ${this.fromFolderPath
               ? html`
                   <div class="from-folder-path">
@@ -170,7 +178,7 @@ class CreateDriveModal extends LitElement {
               type="button"
               @click=${this.onClickFromFolder}
               tabindex="8"
-              ?disabled=${this.isProcessing || this.fromGit}
+              ?disabled=${this.isProcessing || this.fromGit || this.isCollaborative}
             >
               From Folder
             </button>
@@ -178,7 +186,7 @@ class CreateDriveModal extends LitElement {
               type="button"
               @click=${this.onClickFromGit}
               tabindex="7"
-              ?disabled=${this.isProcessing || !!this.fromFolderPath}
+              ?disabled=${this.isProcessing || !!this.fromFolderPath || this.isCollaborative}
             >
               From Git Repo
               ${this.fromGit ? html`<span class="fas fa-times"></span>` : ''}
@@ -278,27 +286,35 @@ class CreateDriveModal extends LitElement {
     this.isProcessing = true;
 
     try {
-      var url = await bg.hyperdrive.createDrive({
-        title: this.title,
-        description: this.description,
-        tags: this.tags.split(' '),
-        author: this.author,
-        fromGitUrl: this.fromGit ? this.gitUrl : undefined,
-        prompt: false,
-      });
-      if (this.isPear) {
+      var url;
+      if (this.isCollaborative) {
+        url = await bg.autobase.createCollaborativeDrive({
+          title: this.title,
+          description: this.description,
+        });
+      } else {
+        url = await bg.hyperdrive.createDrive({
+          title: this.title,
+          description: this.description,
+          tags: this.tags.split(' '),
+          author: this.author,
+          fromGitUrl: this.fromGit ? this.gitUrl : undefined,
+          prompt: false,
+        });
+      }
+      if (this.isPear && !this.isCollaborative) {
         if (this.fromFolderPath) {
           await bg.folderSync.set(url, { localPath: this.fromFolderPath });
         }
         this.cbs.resolve({ url, gotoSync: !!this.fromFolderPath, isPear: true, pearName: this.title });
         return;
       }
-      if (this.fromFolderPath) {
+      if (this.fromFolderPath && !this.isCollaborative) {
         await bg.folderSync.set(url, { localPath: this.fromFolderPath });
       }
-      this.cbs.resolve({ url, gotoSync: !!this.fromFolderPath });
+      this.cbs.resolve({ url, gotoSync: !this.isCollaborative && !!this.fromFolderPath });
     } catch (e) {
-      if (e.message.includes('git')) {
+      if (e.message && e.message.includes('git')) {
         this.isProcessing = false;
         this.errors = { gitUrl: e.message };
         return;
@@ -321,6 +337,10 @@ class CreateDriveModal extends LitElement {
 
   onTogglePear() {
     this.isPear = !this.isPear;
+  }
+
+  onToggleCollaborative() {
+    this.isCollaborative = !this.isCollaborative;
   }
 
   onClickFromGit(e) {
