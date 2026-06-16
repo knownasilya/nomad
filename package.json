@@ -34,6 +34,17 @@
   "volta": {
     "node": "22.15.0"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "fd-lock",
+      "fsctl",
+      "leveldown",
+      "re2",
+      "sodium-native",
+      "sqlite3",
+      "utp-native"
+    ]
+  },
   "devDependencies": {
     "@electron/rebuild": "^3.7.1",
     "@types/node": "^25.9.1",
