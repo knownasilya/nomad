@@ -2,5 +2,5 @@ import { z } from 'zod'
 
 export const FollowsSchema = z.object({
   type: z.literal('walled.garden/follows'),
-  urls: z.array(z.string().url())
+  urls: z.array(z.url())
 })

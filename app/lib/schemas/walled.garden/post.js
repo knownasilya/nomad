@@ -5,10 +5,10 @@ export const PostSchema = z.object({
   title: z.string().max(280),
   body: z.string(),
   category: z.string().max(100).optional(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime().optional(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime().optional(),
   author: z.object({
-    url: z.string().url().nullish(),
+    url: z.url().nullish(),
     writerKey: z.string().optional()
   }).optional()
 })

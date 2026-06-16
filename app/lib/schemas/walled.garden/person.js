@@ -7,6 +7,6 @@ export const PersonSchema = z.object({
   thumb: z.string().optional(),
   links: z.array(z.object({
     label: z.string().max(100),
-    href: z.string().url()
+    href: z.url()
   })).optional()
 })
