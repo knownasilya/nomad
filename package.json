@@ -8,7 +8,7 @@
     "test": "tests"
   },
   "scripts": {
-    "postinstall": "electron-builder install-app-deps && cd app && npm install",
+    "postinstall": "patch-package && electron-builder install-app-deps && cd app && npm install",
     "test": "node_modules/.bin/vitest run",
     "typecheck": "tsc --project tsconfig.json",
     "lint": "eslint --ignore-pattern 'color-thief.js' --ignore-pattern 'app/node_modules' --ignore-pattern 'app/userland' --ignore-pattern 'vendor' --ignore-pattern '*.build.js' --ignore-pattern 'assets' app",

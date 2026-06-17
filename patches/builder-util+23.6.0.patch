@@ -1,0 +1,16 @@
+diff --git a/node_modules/builder-util/out/fs.js b/node_modules/builder-util/out/fs.js
+index 2a98c4b..fdb83c0 100644
+--- a/node_modules/builder-util/out/fs.js
++++ b/node_modules/builder-util/out/fs.js
+@@ -166,6 +166,11 @@ function copyOrLinkFile(src, dest, stats, isUseHardLink, exDevErrorHandler) {
+                 }
+                 return doCopyFile(src, dest, stats);
+             }
++            else if (e.code === "EEXIST") {
++                // destination already created by a concurrent task copying the same
++                // hoisted package from a parent node_modules — safe to ignore
++                return;
++            }
+             else {
+                 throw e;
+             }
