@@ -1,0 +1,10 @@
+onlyBuiltDependencies:
+  - fd-lock
+  - fsctl
+  - leveldown
+  - re2
+  - sodium-native
+  - sqlite3
+  - utp-native
+
+blockExoticSubdeps: false
