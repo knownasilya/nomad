@@ -1,7 +1,8 @@
 name: Release
 
 on:
-  push:
+  release:
+    types: [published]
 
 jobs:
   build:
@@ -60,4 +61,4 @@ jobs:
           # macOS notarization (only runs when CSC_LINK is set)
           appleId: ${{ secrets.APPLE_ID || '' }}
           appleIdPassword: ${{ secrets.APPLE_ID_PASSWORD || '' }}
-        run: npx electron-builder --publish never
+        run: npx electron-builder --publish always
