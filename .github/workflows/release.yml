@@ -55,10 +55,19 @@ jobs:
       - name: Package and upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # macOS code signing (optional — unsigned builds skip notarization)
-          CSC_LINK: ${{ secrets.MAC_CERTS || '' }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD || '' }}
-          # macOS notarization (only runs when CSC_LINK is set)
-          appleId: ${{ secrets.APPLE_ID || '' }}
-          appleIdPassword: ${{ secrets.APPLE_ID_PASSWORD || '' }}
-        run: npx electron-builder --publish always
+          # Pass secrets as neutral names; the run script wires them conditionally
+          # to avoid setting CSC_LINK='' which electron-builder resolves to CWD.
+          _MAC_CERTS: ${{ secrets.MAC_CERTS }}
+          _MAC_CERTS_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD }}
+          _APPLE_ID: ${{ secrets.APPLE_ID }}
+          _APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+        run: |
+          if [ -n "$_MAC_CERTS" ]; then
+            export CSC_LINK="$_MAC_CERTS"
+            export CSC_KEY_PASSWORD="$_MAC_CERTS_PASSWORD"
+            export appleId="$_APPLE_ID"
+            export appleIdPassword="$_APPLE_ID_PASSWORD"
+          else
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          npx electron-builder --publish always
