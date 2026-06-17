@@ -22,11 +22,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: latest
-
       - name: Setup Node.js
         uses: volta-cli/action@v5
 
@@ -49,13 +44,10 @@ jobs:
             libasound2-dev
 
       - name: Install dependencies
-        run: pnpm install --ignore-scripts
-
-      - name: Install app native modules and app deps
-        run: node_modules/.bin/electron-builder install-app-deps && cd app && npm install
+        run: npm install
 
       - name: Build
-        run: pnpm run build
+        run: npm run build
 
       - name: Package and upload to release
         env:
@@ -66,4 +58,4 @@ jobs:
           # macOS notarization (only runs when CSC_LINK is set)
           appleId: ${{ secrets.APPLE_ID || '' }}
           appleIdPassword: ${{ secrets.APPLE_ID_PASSWORD || '' }}
-        run: pnpm exec electron-builder --publish always
+        run: npx electron-builder --publish always
