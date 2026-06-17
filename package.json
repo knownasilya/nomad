@@ -32,7 +32,8 @@
   },
   "homepage": "https://github.com/knownasilya/nomad#readme",
   "volta": {
-    "node": "22.15.0"
+    "node": "22.15.0",
+    "npm": "10.9.2"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.1",
