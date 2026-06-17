@@ -36,6 +36,18 @@ media-src 'self' beaker: hyper:;
 style-src 'self' 'unsafe-inline' beaker:;
 child-src 'self' beaker:;
 `.replace(/\n/g, '');
+// The editor hosts the Monaco TypeScript language service, which spawns web
+// workers from beaker://assets/vs/* (a different host than the beaker://editor
+// page). Allow those cross-host + blob: workers via worker-src/child-src.
+const EDITOR_CSP = `
+default-src 'self' beaker:;
+img-src beaker: asset: data: blob: hyper: http: https;
+script-src 'self' beaker: blob: 'unsafe-eval';
+media-src 'self' beaker: hyper:;
+style-src 'self' 'unsafe-inline' beaker:;
+child-src 'self' beaker: blob:;
+worker-src 'self' beaker: blob:;
+`.replace(/\n/g, '');
 
 // exported api
 // =
@@ -506,7 +518,8 @@ async function beakerProtocol(request, respond) {
     return serveAppAsset(
       requestUrl,
       path.join(__dirname, 'userland', 'editor'),
-      cb
+      cb,
+      { CSP: EDITOR_CSP }
     );
   }
   if (

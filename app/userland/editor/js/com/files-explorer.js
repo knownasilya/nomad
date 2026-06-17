@@ -12,6 +12,7 @@ class FilesExplorer extends LitElement {
   static get properties() {
     return {
       url: { type: String, reflect: true },
+      isCollaborative: { type: Boolean, attribute: 'is-collaborative' },
       openFilePath: { type: String, attribute: 'open-file-path' },
       isLoading: { type: Boolean },
       readOnly: { type: Boolean },
@@ -28,7 +29,10 @@ class FilesExplorer extends LitElement {
   }
 
   get drive() {
-    return beaker.hyperdrive.drive(this.url);
+    // Collaborative (autobase) drives are read through beaker.autobase.
+    return this.isCollaborative
+      ? beaker.autobase.collaborativeDrive(this.url)
+      : beaker.hyperdrive.drive(this.url);
   }
 
   get origin() {
@@ -51,6 +55,7 @@ class FilesExplorer extends LitElement {
   constructor() {
     super();
     this.url = '';
+    this.isCollaborative = false;
     this.openFilePath = undefined;
     this.isLoading = true;
     this.readOnly = true;
@@ -70,73 +75,99 @@ class FilesExplorer extends LitElement {
 
   async load() {
     this.isLoading = true;
-
-    if (this.watcher && this.watchingDriveUrl !== this.origin) {
-      this.watcher.close();
-      this.watcher = undefined;
-    }
-
     var items = [];
-    if (this.isDrive) {
-      let drive = this.drive;
-
-      let info = await drive.getInfo();
-      this.readOnly = !info.writable;
-
-      let st;
-      let folderPath = this.pathname;
-      while (!st && folderPath !== '/') {
-        try {
-          st = await drive.stat(folderPath);
-        } catch (e) {
-          /* ignore */
-        }
-        if (!st || !st.isDirectory()) {
-          folderPath =
-            '/' + folderPath.split('/').slice(0, -1).filter(Boolean).join('/');
-        }
+    try {
+      if (this.watcher && this.watchingDriveUrl !== this.origin) {
+        this.watcher.close();
+        this.watcher = undefined;
       }
-      this.folderPath = folderPath;
 
-      var parentDrive = await this.getParentDriveInfo();
-      items = await drive.readdir(folderPath, { includeStats: true });
-      items.forEach((item) => {
-        item.path = joinPath(this.folderPath, item.name);
-        item.url = joinPath(drive.url, item.path);
-        item.shareUrl = joinPath(
-          parentDrive.info.url,
-          item.path.replace(parentDrive.path, '')
-        );
-      });
-      items.sort((a, b) => {
-        if (a.stat.isDirectory() && !b.stat.isDirectory()) return -1;
-        if (!a.stat.isDirectory() && b.stat.isDirectory()) return 1;
-        return a.name.localeCompare(b.name);
-      });
+      if (this.isDrive) {
+        let drive = this.drive;
 
-      this.currentFolder = await drive.stat(folderPath);
-      this.currentFolder.path = folderPath;
-      this.currentFolder.name = folderPath.split('/').pop() || '/';
+        let info = await drive.getInfo();
+        this.readOnly = !info.writable;
 
-      if (!this.watcher) {
-        let isFirstWatchEvent = true;
-        this.watchingDriveUrl = this.origin;
-        this.watcher = drive.watch((e) => {
-          // HACK
-          // for some reason, the watchstream is firing 'changed' immediately
-          // ignore the first emit
-          // -prf
-          if (isFirstWatchEvent) {
-            isFirstWatchEvent = false;
-            return;
+        // find the nearest containing directory. stat each candidate with a
+        // timeout — a hung stat (e.g. statting the file itself) must not block
+        // the tree; on timeout we just walk up to the parent.
+        const statT = (path) =>
+          Promise.race([
+            drive.stat(path),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('stat timed out: ' + path)), 2500)
+            ),
+          ]);
+        let st;
+        let folderPath = this.pathname;
+        while (!st && folderPath !== '/') {
+          try {
+            st = await statT(folderPath);
+          } catch (e) {
+            /* ignore — treat as not a directory and walk up */
           }
-          this.load();
-        });
-      }
-    }
+          if (!st || !st.isDirectory()) {
+            st = undefined;
+            folderPath =
+              '/' +
+              folderPath.split('/').slice(0, -1).filter(Boolean).join('/');
+          }
+        }
+        this.folderPath = folderPath;
 
-    this.items = items;
-    this.isLoading = false;
+        var parentDrive = await this.getParentDriveInfo();
+        // bound the listing so an unavailable/missing entry can't hang the tree
+        items = await Promise.race([
+          drive.readdir(folderPath, { includeStats: true }),
+          new Promise((_, reject) =>
+            setTimeout(
+              () => reject(new Error('readdir timed out: ' + folderPath)),
+              6000
+            )
+          ),
+        ]);
+        items.forEach((item) => {
+          item.path = joinPath(this.folderPath, item.name);
+          item.url = joinPath(drive.url, item.path);
+          item.shareUrl = joinPath(
+            parentDrive.info.url,
+            item.path.replace(parentDrive.path, '')
+          );
+        });
+        items.sort((a, b) => {
+          if (a.stat.isDirectory() && !b.stat.isDirectory()) return -1;
+          if (!a.stat.isDirectory() && b.stat.isDirectory()) return 1;
+          return a.name.localeCompare(b.name);
+        });
+
+        this.currentFolder = await drive.stat(folderPath);
+        this.currentFolder.path = folderPath;
+        this.currentFolder.name = folderPath.split('/').pop() || '/';
+
+        if (!this.watcher) {
+          let isFirstWatchEvent = true;
+          this.watchingDriveUrl = this.origin;
+          this.watcher = drive.watch((e) => {
+            // HACK
+            // for some reason, the watchstream is firing 'changed' immediately
+            // ignore the first emit
+            // -prf
+            if (isFirstWatchEvent) {
+              isFirstWatchEvent = false;
+              return;
+            }
+            this.load();
+          });
+        }
+      }
+    } catch (e) {
+      // never let the tree get stuck on "Loading..." if a drive read fails/hangs
+      console.error('files-explorer failed to load', e);
+    } finally {
+      this.items = items;
+      this.isLoading = false;
+      this.requestUpdate();
+    }
   }
 
   async getParentDriveInfo() {
@@ -145,7 +176,7 @@ class FilesExplorer extends LitElement {
     while (pathParts.length) {
       let path = '/' + pathParts.join('/');
       let stat = await drive.stat(path).catch((e) => undefined);
-      if (stat.mount) {
+      if (stat && stat.mount) {
         return {
           path,
           info: await beaker.hyperdrive.drive(stat.mount.key).getInfo(),
@@ -190,12 +221,12 @@ class FilesExplorer extends LitElement {
       <div class="path">
         <a>
           <span
-            class="fa-fw ${this.currentFolder.mount
+            class="fa-fw ${this.currentFolder?.mount
               ? 'fas fa-external-link-square-alt'
               : 'far fa-folder'}"
           ></span>
-          ${this.currentFolder.name}
-          ${this.currentFolder.mount
+          ${this.currentFolder?.name || this.folderPath || '/'}
+          ${this.currentFolder?.mount
             ? html`(<code>${this.currentFolder.mount.key.slice(
                 0,
                 4

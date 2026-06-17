@@ -14,6 +14,8 @@ import { writeToClipboard } from '../../app-stdlib/js/clipboard.js';
 import * as toast from '../../app-stdlib/js/com/toast.js';
 import './com/files-explorer.js';
 import { ResizeImagePopup } from './com/resize-image-popup.js';
+import { configureLanguageService } from './language-service.js';
+import { registerHtmlEmbeddedProviders } from './html-embedded-ts.js';
 
 class EditorApp extends LitElement {
   static get properties() {
@@ -34,7 +36,11 @@ class EditorApp extends LitElement {
   }
 
   get drive() {
-    return beaker.hyperdrive.drive(this.url);
+    // Collaborative (autobase) drives store their files in the autobase view, not
+    // a plain hyperdrive — read/write them through beaker.autobase instead.
+    return this.isCollaborative
+      ? beaker.autobase.collaborativeDrive(this.url)
+      : beaker.hyperdrive.drive(this.url);
   }
 
   get origin() {
@@ -109,6 +115,7 @@ class EditorApp extends LitElement {
     this.isBinary = false;
     this.resolvedPath = '';
     this.setFocusOnLoad = false;
+    this.isCollaborative = false;
 
     beaker.panes.addEventListener('pane-attached', (e) => {
       this.attachedPane = beaker.panes.getAttachedPane();
@@ -195,47 +202,81 @@ class EditorApp extends LitElement {
   async createEditor() {
     this.ensureEditorEl();
     return new Promise((resolve, reject) => {
+      // Monaco's language workers live at beaker://assets, a different origin
+      // than this page (beaker://editor), so `new Worker(crossOriginUrl)` is
+      // blocked by the same-origin policy and Monaco falls back to running them
+      // on the main thread (UI freezes + "Duplicate definition of module" spam +
+      // broken lib loading). Spawn each worker from a same-origin blob that
+      // importScripts the real worker instead. (EDITOR_CSP allows blob: workers.)
+      if (!window.MonacoEnvironment) {
+        window.MonacoEnvironment = {
+          getWorkerUrl: function () {
+            var code = [
+              "self.MonacoEnvironment = { baseUrl: 'beaker://assets/' };",
+              "importScripts('beaker://assets/vs/base/worker/workerMain.js');",
+            ].join('\n');
+            return URL.createObjectURL(
+              new Blob([code], { type: 'application/javascript' })
+            );
+          },
+        };
+      }
       window.require.config({ baseUrl: 'beaker://assets/' });
       window.require(['vs/editor/editor.main'], () => {
-        // update monaco to syntax-highlight <script type="module">
-        var jsLang = monaco.languages
-          .getLanguages()
-          .find((lang) => lang.id === 'javascript');
-        if (jsLang) {
-          jsLang.mimetypes.push('module');
-          monaco.languages.register(jsLang);
-        }
-
-        // we have load monaco outside of the shadow dom
-        monaco.editor.defineTheme('custom-dark', {
-          base: 'vs-dark',
-          inherit: true,
-          rules: [{ background: '222222' }],
-          colors: {
-            'editor.background': '#222222',
-          },
-        });
-        let opts = {
-          automaticLayout: true,
-          contextmenu: false,
-          fixedOverflowWidgets: true,
-          folding: false,
-          lineNumbersMinChars: 4,
-          links: false,
-          minimap: { enabled: false },
-          renderLineHighlight: 'all',
-          roundedSelection: false,
-          theme: 'custom-dark',
-          value: '',
-        };
-        this.editor = monaco.editor.create(this.editorEl, opts);
-        this.editor.addCommand(
-          monaco.KeyMod.CtrlCmd | monaco.KeyCode.KEY_S,
-          function () {
-            document.querySelector('editor-app').onClickSave();
+        try {
+          // update monaco to syntax-highlight <script type="module">
+          var jsLang = monaco.languages
+            .getLanguages()
+            .find((lang) => lang.id === 'javascript');
+          if (jsLang) {
+            jsLang.mimetypes.push('module');
+            monaco.languages.register(jsLang);
           }
-        );
-        resolve();
+
+          // we have load monaco outside of the shadow dom
+          monaco.editor.defineTheme('custom-dark', {
+            base: 'vs-dark',
+            inherit: true,
+            rules: [{ background: '222222' }],
+            colors: {
+              'editor.background': '#222222',
+            },
+          });
+          let opts = {
+            automaticLayout: true,
+            contextmenu: false,
+            fixedOverflowWidgets: true,
+            folding: false,
+            lineNumbersMinChars: 4,
+            links: false,
+            minimap: { enabled: false },
+            renderLineHighlight: 'all',
+            roundedSelection: false,
+            theme: 'custom-dark',
+            value: '',
+          };
+          this.editor = monaco.editor.create(this.editorEl, opts);
+          this.editor.addCommand(
+            monaco.KeyMod.CtrlCmd | monaco.KeyCode.KEY_S,
+            function () {
+              document.querySelector('editor-app').onClickSave();
+            }
+          );
+
+          // wire up the TypeScript language service: beaker.* + schema types,
+          // DOM/JS built-ins, and autocomplete/hover inside HTML <script>
+          // blocks. Wrapped so a setup failure can never block editor creation.
+          try {
+            configureLanguageService(monaco);
+            registerHtmlEmbeddedProviders(monaco);
+          } catch (e) {
+            console.error('Failed to set up editor language services', e);
+          }
+        } catch (e) {
+          console.error('Editor failed to initialize', e);
+        } finally {
+          resolve();
+        }
       });
     });
   }
@@ -250,6 +291,7 @@ class EditorApp extends LitElement {
     this.dne = false;
     this.isBinary = false;
     this.resolvedPath = '';
+    this.isCollaborative = false;
     this.showLoadingNotice = true;
   }
 
@@ -335,10 +377,14 @@ class EditorApp extends LitElement {
         }
 
         this.editor.updateOptions({
-          // only enable autocomplete for html/css/js
-          quickSuggestions: ['html', 'css', 'javascript'].includes(
-            model.getModeId()
-          ),
+          // only enable autocomplete for html/css/js/ts/json
+          quickSuggestions: [
+            'html',
+            'css',
+            'javascript',
+            'typescript',
+            'json',
+          ].includes(model.getModeId()),
           wordBasedSuggestions: false,
           wordWrap: 'on',
           readOnly: this.readOnly,
@@ -352,15 +398,22 @@ class EditorApp extends LitElement {
         });
       }
 
-      this.isLoading = false;
-      this.showLoadingNotice = false;
       this.requestUpdate();
 
       if (this.setFocusOnLoad) {
         setTimeout(() => this.editor.focus(), 1);
         this.setFocusOnLoad = false;
       }
+    } catch (e) {
+      // surface the real error instead of silently hanging on "Loading..."
+      console.error('Editor failed to load', url, e);
+      toast.create('Editor failed to load: ' + (e && e.message ? e.message : e), 'error', 15000);
     } finally {
+      // always clear the loading state, even on error/early-return, so the
+      // editor can never get stuck showing "Loading..." indefinitely
+      this.isLoading = false;
+      this.showLoadingNotice = false;
+      this.requestUpdate();
       release();
     }
   }
@@ -368,19 +421,27 @@ class EditorApp extends LitElement {
   async loadDrive(url) {
     var body;
 
+    // Bound each drive read so a hung/slow read (e.g. a key the daemon can't
+    // serve) can't block the load indefinitely. Optional reads use a short
+    // timeout; the essential file read passes a longer one.
+    const step = (label, p, ms = 2500) =>
+      Promise.race([
+        p,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('timed out at: ' + label)), ms)
+        ),
+      ]);
+
+    // Collaborative (autobase) drives must be read through beaker.autobase, not
+    // beaker.hyperdrive — detect once so this.drive routes correctly.
+    this.isCollaborative = await step(
+      'isCollaborativeDrive',
+      beaker.autobase.isCollaborativeDrive(url)
+    ).catch(() => false);
+
     // load drive meta
-    let drive = beaker.hyperdrive.drive(url);
-    let [info, manifest] = await Promise.all([
-      drive.getInfo(),
-      drive.readFile('/index.json', 'utf8').catch((e) => ''),
-    ]);
-    try {
-      manifest = JSON.parse(manifest);
-    } catch (e) {
-      console.debug('Failed to parse manifest', { e, manifest });
-      manifest = null;
-    }
-    console.log(info);
+    let drive = this.drive;
+    let info = await step('getInfo', drive.getInfo());
     this.readOnly = !info.writable;
 
     // readonly if viewing historic version
@@ -392,33 +453,40 @@ class EditorApp extends LitElement {
       }
     }
 
-    // determine the entry to load
-    var entry = await datServeResolvePath(drive, manifest, url, '*/*');
-    this.resolvedPath = entry ? entry.path : this.pathname;
-    var stat = await drive.stat(this.resolvedPath);
-    if (!stat.isFile()) throw new Error('Not a file');
-    this.stat = stat;
-
-    // check for mount information
-    this.mountInfo = undefined;
-    {
-      let pathParts = this.resolvedPath.split('/').filter(Boolean);
-      let realPathParts = [pathParts.pop()];
-      while (pathParts.length) {
-        let path = '/' + pathParts.join('/');
-        let stat = await drive.stat(path).catch((e) => undefined);
-        if (stat && stat.mount) {
-          this.mountInfo = await beaker.hyperdrive
-            .drive(stat.mount.key)
-            .getInfo();
-          this.mountInfo.resolvedPath = '/' + realPathParts.join('/');
-          break;
-        }
-        realPathParts.unshift(pathParts.pop());
+    // Determine the entry to load. For an explicit file path (has an extension)
+    // we already know the file — open it directly and DON'T read the manifest or
+    // run datServeResolvePath. Both of those read possibly-missing paths
+    // (/index.json, <file>.html, <file>.md); a missing-path read can wedge the
+    // drive's daemon for a long time and block the real readFile behind it.
+    if (this.hasFileExt) {
+      this.resolvedPath = this.pathname;
+    } else {
+      // directory / extensionless URL: need the manifest for index resolution
+      let manifest = await Promise.race([
+        drive.readFile('/index.json', 'utf8').catch(() => ''),
+        new Promise((resolve) =>
+          setTimeout(() => {
+            console.warn(
+              'editor: /index.json read did not return in time; continuing without a manifest'
+            );
+            resolve('');
+          }, 2500)
+        ),
+      ]);
+      try {
+        manifest = JSON.parse(manifest);
+      } catch (e) {
+        manifest = null;
       }
+      let entry = await step(
+        'datServeResolvePath',
+        Promise.resolve(datServeResolvePath(drive, manifest, url, '*/*'))
+      );
+      this.resolvedPath = entry ? entry.path : this.pathname;
     }
-
-    // figure out if it's binary
+    // stat is only metadata (size/mtime/isFile) — make it best-effort so a
+    // hung/missing stat can't block reading the file, which is what matters.
+    // figure out if it's binary (filename-based — no drive read)
     {
       let filename = this.resolvedPath.split('/').pop();
       if (filename.includes('.') && isFilenameBinary(filename)) {
@@ -428,14 +496,60 @@ class EditorApp extends LitElement {
       }
     }
 
-    // fetch the file
+    // Fetch the file FIRST — it's the only essential read. Doing it before stat
+    // matters: a slow/hung stat keeps running on the backend and can wedge the
+    // drive's daemon, blocking the content read behind it.
     if (!this.isBinary) {
       try {
         if (!this.resolvedPath) throw new Error('dne');
-        body = await drive.readFile(this.resolvedPath, 'utf8');
+        // This is the one essential read and the content may need fetching from
+        // a peer (slow on first read), so give it a longer timeout than the
+        // optional metadata reads — but bounded, since a hung read also blocks
+        // other drive operations (e.g. the file tree) behind it.
+        body = await step(
+          'readFile(' + this.resolvedPath + ')',
+          drive.readFile(this.resolvedPath, 'utf8'),
+          10000
+        );
       } catch (e) {
         this.dne = true;
         body = '';
+      }
+    }
+
+    // stat + mount detection are optional metadata (file size, mount info). For
+    // an explicit file we already have the content from readFile above, so skip
+    // them — their backend reads can keep running and wedge the daemon, blocking
+    // load completion. The UI guards against a missing this.stat/this.mountInfo.
+    this.stat = undefined;
+    this.mountInfo = undefined;
+    if (!this.hasFileExt) {
+      this.stat = await step(
+        'stat(' + this.resolvedPath + ')',
+        drive.stat(this.resolvedPath)
+      ).catch((e) => {
+        console.warn('editor: stat did not return; continuing', e);
+        return undefined;
+      });
+
+      let pathParts = this.resolvedPath.split('/').filter(Boolean);
+      let realPathParts = [pathParts.pop()];
+      while (pathParts.length) {
+        let path = '/' + pathParts.join('/');
+        let stat = await step('mountStat(' + path + ')', drive.stat(path)).catch(
+          (e) => undefined
+        );
+        if (stat && stat.mount) {
+          this.mountInfo = await step(
+            'mountGetInfo',
+            beaker.hyperdrive.drive(stat.mount.key).getInfo()
+          ).catch((e) => undefined);
+          if (this.mountInfo) {
+            this.mountInfo.resolvedPath = '/' + realPathParts.join('/');
+          }
+          break;
+        }
+        realPathParts.unshift(pathParts.pop());
       }
     }
 
@@ -444,7 +558,11 @@ class EditorApp extends LitElement {
 
   loadExplorer() {
     try {
-      this.querySelector('files-explorer').load();
+      let fe = this.querySelector('files-explorer');
+      // set directly (don't wait on attribute reflection) so the tree reads the
+      // collaborative drive through the right API
+      fe.isCollaborative = this.isCollaborative;
+      fe.load();
     } catch (e) {
       console.warn(e);
     }
@@ -602,6 +720,7 @@ class EditorApp extends LitElement {
         ? html`
             <files-explorer
               url=${this.url}
+              ?is-collaborative=${this.isCollaborative}
               open-file-path=${this.resolvedPath}
               @open=${this.onOpenFile}
               @show-menu=${this.onShowMenu}

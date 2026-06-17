@@ -2,6 +2,7 @@
 'use strict';
 
 var pathUtil = require('path');
+var { execFileSync } = require('child_process');
 var bundle = require('./tasks/build/bundle');
 
 var appDir = pathUtil.resolve(__dirname, '../app');
@@ -9,7 +10,18 @@ var fgDir = pathUtil.join(appDir, 'fg');
 var userlandDir = pathUtil.join(appDir, 'userland');
 var p = (base, rel) => pathUtil.join(base, rel);
 
+// Generate the editor's schema type declarations from the Zod schemas. Must run
+// before the editor bundle is built so it can import the generated module.
+function genSchemaTypes() {
+  execFileSync(
+    process.execPath,
+    [pathUtil.join(__dirname, 'gen-schema-dts.mjs')],
+    { stdio: 'inherit' }
+  );
+}
+
 function bundleApplication() {
+  genSchemaTypes();
   return Promise.all([
     bundle(p(appDir, 'main.js'), p(appDir, 'main.build.js')),
     bundle(
