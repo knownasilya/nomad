@@ -7,6 +7,11 @@ module.exports = async function (params) {
   if (process.platform !== 'darwin') {
     return;
   }
+
+  // Skip notarization if credentials are not provided.
+  if (!process.env.appleId || !process.env.appleIdPassword) {
+    return;
+  }
   console.log('afterSign hook triggered', params);
 
   // Same appId in electron-builder.
