@@ -1,6 +1,6 @@
 {
   "name": "nomad",
-  "version": "1.2.17",
+  "version": "1.2.18",
   "description": "A peer-to-peer/decentralized web browser",
   "main": "index.js",
   "private": true,
