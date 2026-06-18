@@ -18,6 +18,7 @@ import * as sitedataDb from '../../dbs/sitedata';
 import * as historyDb from '../../dbs/history';
 import * as folderSyncDb from '../../dbs/folder-sync';
 import * as filesystem from '../../filesystem/index';
+import { registerForPartition } from '../../protocols/index';
 import * as bookmarks from '../../filesystem/bookmarks';
 import hyper from '../../hyper/index';
 
@@ -122,7 +123,15 @@ export class Pane extends EventEmitter {
     };
     // Only set partition for non-default sessions — leaving it unset keeps the
     // default session (with its protocol handlers and adblocker) intact.
-    if (tab.partition) webPrefs.partition = tab.partition;
+    if (tab.partition) {
+      // Register beaker://, asset://, hyper:// on this partition's session
+      // BEFORE the view is created and starts loading. Otherwise the tab's
+      // assets (e.g. beaker://assets/font-awesome.css) can race the startup
+      // partition registration and fail with ERR_UNKNOWN_URL_SCHEME, dropping
+      // the page to chrome-error. registerForPartition is idempotent.
+      registerForPartition(tab.partition);
+      webPrefs.partition = tab.partition;
+    }
     this.browserView = new BrowserView({ webPreferences: webPrefs });
     this.browserView.setBackgroundColor('#fff');
 
