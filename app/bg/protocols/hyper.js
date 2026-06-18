@@ -278,7 +278,10 @@ export const protocolHandler = async function (request, respond) {
       } catch (e) {}
 
       // check to see if we actually have data from the drive
-      if (checkoutFS.drive.version === 0) {
+      // Hyperbee's version getter returns Math.max(1, core.length), so it is never
+      // literally 0 — version <= 1 means either no blocks at all or only the
+      // bootstrap header, i.e. no usable file entries have been replicated yet.
+      if (checkoutFS.drive.version <= 1) {
         logger.silly(`Drive not found ${logUrl}`, { url: request.url });
         return respondError(404, 'Site not found', {
           title: 'Site Not Found',
