@@ -179,19 +179,23 @@ a.link { color: #007aff; text-decoration: underline; }
 `;
 
 /**
+ * @typedef {Object} ErrorPageInput
+ * @property {string} [resource]
+ * @property {number} [errorCode]
+ * @property {string} [errorDescription]
+ * @property {string} [errorInfo]
+ * @property {string} [title]
+ * @property {string} [validatedURL]
+ * @property {boolean} [isInsecureResponse]
+ */
+
+/**
  * Generate an error page HTML
- * @param {Object} e
- * @param {string} e.resource
- * @param {number} e.errorCode
- * @param {string} e.errorDescription
- * @param {string} e.errorInfo
- * @param {string} e.title
- * @param {string} e.validatedURL
- * @param {boolean} e.isInsecureResponse
+ * @param {ErrorPageInput|string} e
  * @returns {string}
  */
 export default function (e) {
-  if (e.isInsecureResponse) {
+  if (typeof e === 'object' && e.isInsecureResponse) {
     return renderCertError(e);
   }
   return renderGenericError(e);

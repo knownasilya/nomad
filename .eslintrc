@@ -32,7 +32,9 @@
     "CustomEvent": true,
     "localStorage": true,
     "FileReader": true,
-    "Blob": true
+    "Blob": true,
+    "Response": true,
+    "ReadableStream": true
   },
 
   "rules": {

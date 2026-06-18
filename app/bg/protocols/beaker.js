@@ -2,10 +2,9 @@ import errorPage from '../lib/error-page';
 import * as mime from '../lib/mime';
 import { drivesDebugPage } from '../hyper/debugging';
 import path from 'path';
-import once from 'once';
 import fs from 'fs';
+import { Readable } from 'stream';
 import jetpack from 'fs-jetpack';
-import intoStream from 'into-stream';
 import ICO from 'icojs';
 
 // constants
@@ -53,36 +52,34 @@ worker-src 'self' beaker: blob:;
 // =
 
 export function register(protocol) {
-  // setup the protocol handler
-  protocol.registerStreamProtocol('beaker', beakerProtocol);
+  protocol.handle('beaker', beakerProtocol);
 }
 
 // internal methods
 // =
 
-async function beakerProtocol(request, respond) {
-  var cb = once((statusCode, status, contentType, path, CSP) => {
+async function beakerProtocol(request) {
+  var cb = (statusCode, status, contentType, filePath, CSP) => {
     const headers = {
       'Cache-Control': 'no-cache',
       'Content-Type': contentType || 'text/html; charset=utf-8',
       'Content-Security-Policy': CSP || BEAKER_CSP,
       'Access-Control-Allow-Origin': '*',
     };
-    if (typeof path === 'string') {
-      respond({ statusCode, headers, data: fs.createReadStream(path) });
-    } else if (typeof path === 'function') {
-      respond({ statusCode, headers, data: intoStream(path()) });
+    let body;
+    if (typeof filePath === 'string') {
+      body = Readable.toWeb(fs.createReadStream(filePath));
+    } else if (typeof filePath === 'function') {
+      body = filePath();
     } else {
-      respond({
-        statusCode,
-        headers,
-        data: intoStream(errorPage(statusCode + ' ' + status)),
-      });
+      body = errorPage({ errorCode: statusCode, errorDescription: status });
     }
-  });
-  async function serveICO(path, size = 16) {
+    return new Response(body, { status: statusCode, headers });
+  };
+
+  async function serveICO(filePath, size = 16) {
     // read the file
-    const data = await jetpack.readAsync(path, 'buffer');
+    const data = await jetpack.readAsync(filePath, 'buffer');
 
     // parse the ICO to get the 16x16
     const images = await ICO.parse(data, 'image/png');
@@ -94,7 +91,7 @@ async function beakerProtocol(request, respond) {
     }
 
     // serve
-    cb(200, 'OK', 'image/png', () => Buffer.from(image.buffer));
+    return cb(200, 'OK', 'image/png', () => Buffer.from(image.buffer));
   }
 
   let requestUrl = request.url;
@@ -650,26 +647,6 @@ async function beakerProtocol(request, respond) {
   if (requestUrl === 'beaker://active-drives/') {
     return cb(200, 'OK', 'text/html; charset=utf-8', drivesDebugPage);
   }
-  // TODO replace?
-  // if (requestUrl.startsWith('beaker://debug-log/')) {
-  //   const PAGE_SIZE = 1e6
-  //   var start = queryParams.start ? (+queryParams.start) : 0
-  //   let content = await beakerCore.getLogFileContent(start, start + PAGE_SIZE)
-  //   var pagination = `<h2>Showing bytes ${start} - ${start + PAGE_SIZE}. <a href="beaker://debug-log/?start=${start + PAGE_SIZE}">Next page</a></h2>`
-  //   return respond({
-  //     statusCode: 200,
-  //     headers: {
-  //       'Content-Type': 'text/html; charset=utf-8',
-  //       'Content-Security-Policy': BEAKER_CSP,
-  //       'Access-Control-Allow-Origin': '*'
-  //     },
-  //     data: intoStream(`
-  //       ${pagination}
-  //       <pre>${content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
-  //       ${pagination}
-  //     `)
-  //   })
-  // }
 
   return cb(404, 'Not Found');
 }
@@ -704,5 +681,5 @@ async function serveAppAsset(
   var contentType = mime.identify(filepath);
 
   // serve
-  cb(200, 'OK', contentType, filepath, CSP);
+  return cb(200, 'OK', contentType, filepath, CSP);
 }
