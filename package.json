@@ -18,6 +18,8 @@
     "rebuild": "node scripts/tasks/rebuild.js",
     "prerelease": "npm run build",
     "release": "electron-builder -p onTagOrDraft",
+    "pack": "npm run build && electron-builder --mac dir -p never",
+    "dist": "npm run build && electron-builder --mac -p never",
     "start": "node scripts/build.js && node scripts/tasks/start-cli.js",
     "watch": "node scripts/watch.js"
   },

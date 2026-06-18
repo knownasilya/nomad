@@ -2,7 +2,6 @@ import errorPage from '../lib/error-page';
 import * as mime from '../lib/mime';
 import { drivesDebugPage } from '../hyper/debugging';
 import * as logLib from '../logger';
-import { net } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import jetpack from 'fs-jetpack';
@@ -62,6 +61,8 @@ export function register(protocol) {
 // =
 
 async function beakerProtocol(request) {
+  logger.silly('beaker protocol request', { url: request.url });
+  try {
   var cb = async (statusCode, status, contentType, filePath, CSP) => {
     const headers = {
       'Cache-Control': 'no-cache',
@@ -72,10 +73,9 @@ async function beakerProtocol(request) {
     let body;
     if (typeof filePath === 'string') {
       try {
-        const fileRes = await net.fetch(`file://${filePath}`);
-        return new Response(fileRes.body, { status: statusCode, headers });
+        body = await fs.promises.readFile(filePath);
       } catch (e) {
-        logger.warn('Failed to serve beaker asset', { filePath, err: e })
+        logger.warn('Failed to serve beaker asset', { filePath, err: e });
         return new Response(errorPage({ errorCode: 404, errorDescription: 'Not Found' }), {
           status: 404,
           headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' },
@@ -661,6 +661,13 @@ async function beakerProtocol(request) {
   }
 
   return cb(404, 'Not Found');
+  } catch (e) {
+    logger.error('beaker protocol handler error', { url: request.url, err: e });
+    return new Response(errorPage({ errorCode: 500, errorDescription: 'Internal Error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' },
+    });
+  }
 }
 
 // helper to serve requests to app packages
