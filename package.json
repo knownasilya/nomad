@@ -36,6 +36,7 @@
     "npm": "10.9.2"
   },
   "devDependencies": {
+    "@electron/notarize": "^3.1.1",
     "@electron/rebuild": "^3.7.1",
     "@types/node": "^25.9.1",
     "electron": "^42.3.0",
@@ -62,7 +63,7 @@
   },
   "build": {
     "afterSign": "./scripts/afterSignHook.js",
-    "appId": "com.bluelinklabs.beaker-browser",
+    "appId": "com.knownasilya.nomad",
     "asar": false,
     "asarUnpack": [
       "./fg/json-renderer/index.build.js",
@@ -101,7 +102,9 @@
       }
     ],
     "linux": {
-      "target": ["AppImage"]
+      "target": [
+        "AppImage"
+      ]
     },
     "appImage": {
       "category": "Network",

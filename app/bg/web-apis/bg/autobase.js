@@ -17,7 +17,9 @@ import {
   ArchiveNotWritableError,
   InvalidURLError,
   InvalidPathError,
+  UserDeniedError,
 } from 'beaker-error-constants'
+import * as modals from '../../ui/subwindows/modals'
 
 const to = (opts) =>
   opts && typeof opts.timeout !== 'undefined' ? opts.timeout : DEFAULT_DRIVE_API_TIMEOUT
@@ -29,7 +31,22 @@ const autobaseAPI = {
   // Drive lifecycle
   // =
 
-  async createCollaborativeDrive({ title, description, type } = {}) {
+  async createCollaborativeDrive({ title, description, type, prompt } = {}) {
+    if (prompt !== false) {
+      let res
+      try {
+        res = await modals.create(this.sender, 'create-drive', {
+          title,
+          description,
+          collaborative: true,
+        })
+      } catch (e) {
+        if (e.name !== 'Error') throw e
+      }
+      if (!res || !res.url) throw new UserDeniedError()
+      return res.url
+    }
+
     const meta = {}
     if (title) meta.title = title
     if (description) meta.description = description
@@ -192,6 +209,39 @@ const autobaseAPI = {
     return timer(to(opts), async () => {
       const { sess } = await _lookupWithPath(url)
       assertWritable(sess)
+    })
+  },
+
+  async deleteMetadata(url, keys, opts = {}) {
+    // Hyperbee-backed view does not store file metadata; no-op
+    return timer(to(opts), async () => {
+      const { sess } = await _lookupWithPath(url)
+      assertWritable(sess)
+    })
+  },
+
+  async copy(srcUrl, dstUrl, opts = {}) {
+    return timer(to(opts), async () => {
+      const { sess: srcSess, filepath: srcPath } = await _lookupWithPath(srcUrl)
+      const { sess: dstSess, filepath: dstPath } = await _lookupWithPath(dstUrl)
+      assertWritable(dstSess)
+      assertValidFilePath(dstPath)
+      const node = await srcSess.drive.get(srcPath)
+      if (!node) throw new Error('Source not found: ' + srcPath)
+      await dstSess.base.append({
+        op: 'put',
+        path: dstPath,
+        data: b4a.toString(node.value, 'base64'),
+        encoding: 'base64',
+      })
+      await dstSess.base.update()
+    })
+  },
+
+  async rename(srcUrl, dstUrl, opts = {}) {
+    return timer(to(opts), async () => {
+      await autobaseAPI.copy.call(this, srcUrl, dstUrl, opts)
+      await autobaseAPI.del.call(this, srcUrl, opts)
     })
   },
 

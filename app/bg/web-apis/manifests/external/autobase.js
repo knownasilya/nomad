@@ -18,7 +18,10 @@ export default {
   del: 'promise',
   mkdir: 'promise',
   rmdir: 'promise',
+  copy: 'promise',
+  rename: 'promise',
   updateMetadata: 'promise',
+  deleteMetadata: 'promise',
 
   // Writer management
   createInvite: 'promise',

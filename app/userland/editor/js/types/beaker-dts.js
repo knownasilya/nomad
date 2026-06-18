@@ -134,8 +134,11 @@ declare namespace Beaker {
     list(path?: string, opts?: object): Promise<any[]>;
     mkdir(path: string, opts?: object): Promise<void>;
     rmdir(path: string, opts?: object): Promise<void>;
+    copy(path: string, dstPath: string, opts?: object): Promise<void>;
+    rename(path: string, dstPath: string, opts?: object): Promise<void>;
     diff(other: number, opts?: object): Promise<DiffEntry[]>;
     updateMetadata(path: string, metadata: Record<string, string>, opts?: object): Promise<void>;
+    deleteMetadata(path: string, keys: string | string[], opts?: object): Promise<void>;
     watch(pathSpec?: string | ((path: string) => void) | null, onChanged?: (path: string) => void): DriveWatcher;
     stat(path: string, opts?: object): Promise<Stat>;
     readFile(path: string, opts?: ReadOptions['encoding'] | ReadOptions): Promise<any>;
@@ -153,7 +156,7 @@ declare namespace Beaker {
 
   interface Autobase {
     collaborativeDrive(url: string): CollaborativeDrive;
-    createCollaborativeDrive(opts?: { title?: string; description?: string }): Promise<CollaborativeDrive>;
+    createCollaborativeDrive(opts?: { title?: string; description?: string; prompt?: false }): Promise<CollaborativeDrive>;
     claimInvite(inviteUrl: string, opts?: object): Promise<any>;
     requestAccess(url: string, opts?: object): Promise<any>;
     getInfo(url: string, opts?: object): Promise<DriveInfo>;

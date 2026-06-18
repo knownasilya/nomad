@@ -55,9 +55,18 @@ export function setup(rpc) {
       async list(path = '/', opts = {}) { return autobaseRPC.list(joinPath(url, path), opts) },
       async mkdir(path, opts = {}) { return autobaseRPC.mkdir(joinPath(url, path), opts) },
       async rmdir(path, opts = {}) { return autobaseRPC.rmdir(joinPath(url, path), opts) },
+      async copy(src, dst, opts = {}) {
+        return autobaseRPC.copy(joinPath(url, src), joinPath(url, dst), opts)
+      },
+      async rename(src, dst, opts = {}) {
+        return autobaseRPC.rename(joinPath(url, src), joinPath(url, dst), opts)
+      },
       async diff(other, opts = {}) { return autobaseRPC.diff(url, other, opts) },
       async updateMetadata(path, metadata, opts = {}) {
         return autobaseRPC.updateMetadata(joinPath(url, path), metadata, opts)
+      },
+      async deleteMetadata(path, keys, opts = {}) {
+        return autobaseRPC.deleteMetadata(joinPath(url, path), keys, opts)
       },
 
       watch(pathSpec = null, onChanged = null) {

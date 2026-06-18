@@ -291,6 +291,7 @@ class CreateDriveModal extends LitElement {
         url = await bg.autobase.createCollaborativeDrive({
           title: this.title,
           description: this.description,
+          prompt: false,
         });
       } else {
         url = await bg.hyperdrive.createDrive({

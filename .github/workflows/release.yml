@@ -62,6 +62,7 @@ jobs:
           _MAC_CERTS_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD }}
           _APPLE_ID: ${{ secrets.APPLE_ID }}
           _APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           if [ -n "$_MAC_CERTS" ]; then
             export CSC_LINK="$_MAC_CERTS"

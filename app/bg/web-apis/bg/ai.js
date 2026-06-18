@@ -49,6 +49,46 @@ await beaker.hyperdrive.configure(url, { title, description })
 const watcher = drive.watch('/', onChanged) // EventTarget, emits 'changed'
 \`\`\`
 
+## beaker.autobase — Multi-writer Collaborative Drives
+
+Collaborative Drives allow multiple writers. The read/write API mirrors \`beaker.hyperdrive\`.
+
+\`\`\`js
+// Check drive type
+const isCollab = await beaker.autobase.isCollaborativeDrive(url)  // Boolean
+
+// Drive instance — scope all ops to one collaborative drive
+const drive = beaker.autobase.collaborativeDrive('hyper://key...')
+
+// Create a new collaborative drive (shows modal by default)
+const drive = await beaker.autobase.createCollaborativeDrive({ title, description })
+// Skip modal: pass prompt: false
+const drive = await beaker.autobase.createCollaborativeDrive({ title, description, prompt: false })
+
+// Read — same shape as beaker.hyperdrive
+const info    = await drive.getInfo()
+const entries = await drive.list('/')
+const text    = await drive.readFile('/index.html')
+
+// Write — same shape as beaker.hyperdrive
+await drive.put('/path', data)
+await drive.writeFile('/path', text)
+await drive.del('/path')
+await drive.copy('/src', '/dst')
+await drive.rename('/old', '/new')
+await drive.rmdir('/dir')
+
+// Writer management (owner only)
+const inviteUrl = await drive.createInvite()                        // share this URL
+await beaker.autobase.claimInvite(inviteUrl, { profileUrl })        // recipient calls this
+await beaker.autobase.requestAccess(url, { profileUrl })            // stranger request
+const requests  = await drive.listRequests()                        // [{ writerKey, profileUrl }]
+await drive.approveRequest(writerKey)
+await drive.denyRequest(writerKey)
+await drive.removeWriter(writerKey)
+const writers = await drive.listWriters()                           // [{ writerKey, profileUrl }]
+\`\`\`
+
 ## beaker.shell — Browser dialogs and library management
 
 \`\`\`js

@@ -1,42 +1,37 @@
 const fs = require('fs');
 const path = require('path');
-var electron_notarize = require('electron-notarize');
+const { notarize } = require('@electron/notarize');
 
 module.exports = async function (params) {
-  // Only notarize the app on Mac OS only.
   if (process.platform !== 'darwin') {
     return;
   }
 
-  // Skip notarization if credentials are not provided.
-  if (!process.env.appleId || !process.env.appleIdPassword) {
+  if (!process.env.appleId || !process.env.appleIdPassword || !process.env.APPLE_TEAM_ID) {
+    console.log('Skipping notarization: missing appleId, appleIdPassword, or APPLE_TEAM_ID');
     return;
   }
-  console.log('afterSign hook triggered', params);
 
-  // Same appId in electron-builder.
-  let appId = 'com.bluelinklabs.beaker-browser';
-
-  let appPath = path.join(
+  const appId = 'com.knownasilya.nomad';
+  const appPath = path.join(
     params.appOutDir,
     `${params.packager.appInfo.productFilename}.app`
   );
+
   if (!fs.existsSync(appPath)) {
     throw new Error(`Cannot find application at: ${appPath}`);
   }
 
-  console.log(`Notarizing ${appId} found at ${appPath}`);
+  console.log(`Notarizing ${appId} at ${appPath}`);
 
-  try {
-    await electron_notarize.notarize({
-      appBundleId: appId,
-      appPath: appPath,
-      appleId: process.env.appleId,
-      appleIdPassword: process.env.appleIdPassword,
-    });
-  } catch (error) {
-    console.error(error);
-  }
+  await notarize({
+    tool: 'notarytool',
+    appBundleId: appId,
+    appPath: appPath,
+    appleId: process.env.appleId,
+    appleIdPassword: process.env.appleIdPassword,
+    teamId: process.env.APPLE_TEAM_ID,
+  });
 
   console.log(`Done notarizing ${appId}`);
 };
