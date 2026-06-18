@@ -1,6 +1,7 @@
 import errorPage from '../lib/error-page';
 import * as mime from '../lib/mime';
 import { drivesDebugPage } from '../hyper/debugging';
+import * as logLib from '../logger';
 import { net } from 'electron';
 import path from 'path';
 import fs from 'fs';
@@ -48,6 +49,8 @@ child-src 'self' beaker: blob:;
 worker-src 'self' beaker: blob:;
 `.replace(/\n/g, '');
 
+const logger = logLib.child({ category: 'beaker', subcategory: 'beaker-scheme' });
+
 // exported api
 // =
 
@@ -68,8 +71,16 @@ async function beakerProtocol(request) {
     };
     let body;
     if (typeof filePath === 'string') {
-      const fileRes = await net.fetch(`file://${filePath}`);
-      return new Response(fileRes.body, { status: statusCode, headers });
+      try {
+        const fileRes = await net.fetch(`file://${filePath}`);
+        return new Response(fileRes.body, { status: statusCode, headers });
+      } catch (e) {
+        logger.warn('Failed to serve beaker asset', { filePath, err: e })
+        return new Response(errorPage({ errorCode: 404, errorDescription: 'Not Found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' },
+        });
+      }
     } else if (typeof filePath === 'function') {
       body = filePath();
     } else {
