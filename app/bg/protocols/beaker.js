@@ -74,8 +74,15 @@ async function beakerProtocol(request) {
     let body;
     if (typeof filePath === 'string') {
       try {
-        const fileRes = await net.fetch(`file://${filePath}`);
-        return new Response(fileRes.body, { status: statusCode, headers });
+        // Read the file into a buffer and hand the whole body to Electron at
+        // once. Re-wrapping a net.fetch() ReadableStream in a new Response
+        // (`new Response(fileRes.body)`) races the stream pump across the
+        // protocol.handle boundary on Electron 42 — intermittently the bytes
+        // never reach the renderer, so beaker://desktop/ resolves with no
+        // document and the tab falls to chrome-error / ERR_UNKNOWN_URL_SCHEME.
+        // Buffering removes the race; beaker:// assets are small.
+        const data = await fs.promises.readFile(filePath);
+        return new Response(data, { status: statusCode, headers });
       } catch (e) {
         logger.warn('Failed to serve beaker asset', { filePath, err: e });
         return new Response(errorPage({ errorCode: 404, errorDescription: 'Not Found' }), {

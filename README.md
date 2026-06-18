@@ -29,6 +29,11 @@ Nomad is a fork of the [Beaker Browser](https://github.com/beakerbrowser/beaker)
 
 **Visit the [Releases Page](https://github.com/knownasilya/nomad/releases) to find the installer you need.**
 
+> **macOS:** the builds are signed but **not notarized**, so after dragging Nomad to
+> `/Applications` you must clear the download quarantine flag once, or the app will fail to
+> start correctly (blank window / `beaker://` errors). See
+> [macOS unsigned builds](#macos-unsigned-builds) below.
+
 ### Building from source
 
 Requires node 14 or higher.
@@ -95,6 +100,25 @@ If you're doing development, `npm run watch` to have assets build automatically.
 See [SECURITY.md](./SECURITY.md) for reporting security issues and vulnerabilities.
 
 ## Known issues
+
+### macos unsigned builds
+
+Nomad's macOS builds are ad-hoc signed but **not notarized** (notarization needs a paid Apple
+Developer ID). Any app you *download* — including the official Releases — is flagged with
+`com.apple.quarantine`, and on Apple Silicon Gatekeeper then runs quarantined, non-notarized
+apps from a randomized read-only path (**App Translocation**). In that state Nomad fails to
+start correctly: the window is blank or `beaker://desktop/` errors with `ERR_UNKNOWN_URL_SCHEME`.
+
+Fix: after copying Nomad to `/Applications`, clear the quarantine flag once (do this **before**
+first launch; quit Nomad first if it's already open):
+
+```
+xattr -dr com.apple.quarantine /Applications/Nomad.app
+```
+
+Note: right-click → Open is **not** enough — it dismisses the Gatekeeper warning but still
+translocates the app. The `xattr` command is required. The same applies to locally built apps
+that aren't signed with a real certificate.
 
 ### tmux
 
