@@ -1,9 +1,9 @@
 import errorPage from '../lib/error-page';
 import * as mime from '../lib/mime';
 import { drivesDebugPage } from '../hyper/debugging';
+import { net } from 'electron';
 import path from 'path';
 import fs from 'fs';
-import { Readable } from 'stream';
 import jetpack from 'fs-jetpack';
 import ICO from 'icojs';
 
@@ -59,7 +59,7 @@ export function register(protocol) {
 // =
 
 async function beakerProtocol(request) {
-  var cb = (statusCode, status, contentType, filePath, CSP) => {
+  var cb = async (statusCode, status, contentType, filePath, CSP) => {
     const headers = {
       'Cache-Control': 'no-cache',
       'Content-Type': contentType || 'text/html; charset=utf-8',
@@ -68,7 +68,8 @@ async function beakerProtocol(request) {
     };
     let body;
     if (typeof filePath === 'string') {
-      body = Readable.toWeb(fs.createReadStream(filePath));
+      const fileRes = await net.fetch(`file://${filePath}`);
+      return new Response(fileRes.body, { status: statusCode, headers });
     } else if (typeof filePath === 'function') {
       body = filePath();
     } else {
