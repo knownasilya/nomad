@@ -10,6 +10,42 @@ import concat from 'concat-stream';
 mime.default_type = 'text/plain';
 const TEXT_TYPE_RE = /^text\/|^application\/(javascript|json)/;
 
+// Version-agnostic mime lookup. mime@1 exposes `.lookup(name)`, mime@2/3 expose
+// `.getType(name)`, and a mis-resolved install can expose neither — which used
+// to throw here and break every serveAppAsset() response (beaker://desktop/ and
+// all userland apps would fall to chrome-error). Resolve across APIs and fall
+// back to a small built-in table for the types the UI actually depends on.
+const FALLBACK_TYPES = {
+  html: 'text/html',
+  htm: 'text/html',
+  css: 'text/css',
+  js: 'application/javascript',
+  mjs: 'application/javascript',
+  json: 'application/json',
+  svg: 'image/svg+xml',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  ico: 'image/x-icon',
+  woff: 'font/woff',
+  woff2: 'font/woff2',
+  ttf: 'font/ttf',
+  txt: 'text/plain',
+  wasm: 'application/wasm',
+};
+function lookupMime(name, fallback = 'text/plain') {
+  try {
+    if (typeof mime.lookup === 'function') return mime.lookup(name) || fallback;
+    if (typeof mime.getType === 'function') return mime.getType(name) || fallback;
+  } catch (e) {
+    /* fall through to the table */
+  }
+  const ext = String(name).slice(String(name).lastIndexOf('.') + 1).toLowerCase();
+  return FALLBACK_TYPES[ext] || fallback;
+}
+
 // typedefs
 // =
 
@@ -31,14 +67,14 @@ export function identify(name, chunk) {
   var identifiedExt = chunk ? identifyFiletype(chunk) : false;
   if (identifiedExt === 'html') identifiedExt = false; // HACK- never let HTML be determined by file content -prf
   if (identifiedExt) {
-    mimeType = mime.lookup(identifiedExt, 'text/plain');
+    mimeType = lookupMime(identifiedExt, 'text/plain');
   }
   if (!mimeType) {
     // fallback to using the entry name
     if (name.endsWith('.goto')) {
       mimeType = 'application/goto'; // this one's a little new
     } else {
-      mimeType = mime.lookup(name, 'text/plain');
+      mimeType = lookupMime(name, 'text/plain');
     }
   }
   mimeType = correctSomeMimeTypes(mimeType, name);
@@ -47,7 +83,7 @@ export function identify(name, chunk) {
   // the svg test can be a bit aggressive: html pages with
   // inline svgs can be falsely interpretted as svgs
   // double check that
-  if (identifiedExt === 'svg' && mime.lookup(name) === 'text/html') {
+  if (identifiedExt === 'svg' && lookupMime(name) === 'text/html') {
     return 'text/html; charset=utf8';
   }
 

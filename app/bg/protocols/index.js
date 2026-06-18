@@ -1,7 +1,10 @@
 import { session } from 'electron';
+import * as logLib from '../logger';
 import * as beakerProtocol from './beaker';
 import * as assetProtocol from './asset';
 import * as hyperProtocol from './hyper';
+
+const logger = logLib.child({ category: 'browser', subcategory: 'protocols' });
 
 // Track which partitions have already been registered so we don't double-register
 const registered = new Set();
@@ -13,9 +16,30 @@ const registered = new Set();
  */
 export function registerForPartition(partition) {
   if (!partition || registered.has(partition)) return;
-  registered.add(partition);
   const sess = session.fromPartition(partition);
-  beakerProtocol.register(sess.protocol);
-  assetProtocol.register(sess.protocol);
-  hyperProtocol.register(sess.protocol);
+  // Register each scheme independently so a failure in one doesn't prevent the
+  // others — most importantly, a throw must never leave a partition marked as
+  // registered (poisoning the Set) while beaker:// is actually unhandled, which
+  // strands the session's tabs on ERR_UNKNOWN_URL_SCHEME.
+  let beakerOk = false;
+  try {
+    beakerProtocol.register(sess.protocol);
+    beakerOk = true;
+  } catch (e) {
+    logger.error('Failed to register beaker:// for partition', { partition, err: e });
+  }
+  try {
+    assetProtocol.register(sess.protocol);
+  } catch (e) {
+    logger.error('Failed to register asset:// for partition', { partition, err: e });
+  }
+  try {
+    hyperProtocol.register(sess.protocol);
+  } catch (e) {
+    logger.error('Failed to register hyper:// for partition', { partition, err: e });
+  }
+  // Only consider the partition done once beaker:// (the one tabs depend on for
+  // their own assets) is actually handled. Otherwise leave it out of the Set so
+  // a later call can retry.
+  if (beakerOk) registered.add(partition);
 }
