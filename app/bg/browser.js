@@ -924,8 +924,8 @@ function setUpdaterState(state) {
 function getAutoUpdaterFeedSettings() {
   return {
     provider: 'github',
-    repo: 'knownasilya',
-    owner: 'nomad',
+    repo: 'nomad',
+    owner: 'knownasilya',
     vPrefixedTagName: true,
     private: false,
   };

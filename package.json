@@ -64,8 +64,8 @@
     "rcedit": "^0.5.0"
   },
   "build": {
+    "afterPack": "./scripts/afterPackHook.js",
     "afterSign": "./scripts/afterSignHook.js",
-    "afterAllArtifactBuild": "./scripts/afterAllArtifactBuildHook.js",
     "appId": "com.knownasilya.nomad",
     "asar": false,
     "asarUnpack": [
