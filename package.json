@@ -65,6 +65,7 @@
   },
   "build": {
     "afterSign": "./scripts/afterSignHook.js",
+    "afterAllArtifactBuild": "./scripts/afterAllArtifactBuildHook.js",
     "appId": "com.knownasilya.nomad",
     "asar": false,
     "asarUnpack": [
