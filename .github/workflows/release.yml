@@ -85,3 +85,18 @@ jobs:
             export CSC_IDENTITY_AUTO_DISCOVERY=false
           fi
           npx electron-builder --publish always
+          # When no real certificate is available, ad-hoc sign the macOS app so
+          # entitlements (JIT, unsigned-executable-memory) are enforced and the
+          # sandboxed renderers can start. The app still triggers Gatekeeper on
+          # first launch — right-click → Open to bypass.
+          if [ -z "$_MAC_CERTS" ] && [ "$(uname)" = "Darwin" ]; then
+            APP=$(find dist -maxdepth 3 -name "*.app" -type d | head -1)
+            if [ -n "$APP" ]; then
+              echo "Ad-hoc signing $APP with entitlements"
+              codesign --deep --force --sign - \
+                --options runtime \
+                --entitlements build/entitlements.plist \
+                "$APP"
+              echo "Ad-hoc signing done"
+            fi
+          fi
