@@ -53,6 +53,18 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Verify build output
+        run: |
+          echo "=== Checking main bundle ==="
+          if grep -q 'protocol.handle("beaker"' app/main.build.js; then
+            echo "✓ protocol.handle found in main.build.js"
+          else
+            echo "✗ protocol.handle MISSING — build may be stale or failed"
+            exit 1
+          fi
+          echo "=== Checking preload ==="
+          test -f app/fg/webview-preload/index.build.js && echo "✓ preload bundle exists" || (echo "✗ preload bundle MISSING" && exit 1)
+
       - name: Package and upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

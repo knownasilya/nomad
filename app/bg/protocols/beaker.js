@@ -2,6 +2,7 @@ import errorPage from '../lib/error-page';
 import * as mime from '../lib/mime';
 import { drivesDebugPage } from '../hyper/debugging';
 import * as logLib from '../logger';
+import { net } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import jetpack from 'fs-jetpack';
@@ -73,7 +74,8 @@ async function beakerProtocol(request) {
     let body;
     if (typeof filePath === 'string') {
       try {
-        body = await fs.promises.readFile(filePath);
+        const fileRes = await net.fetch(`file://${filePath}`);
+        return new Response(fileRes.body, { status: statusCode, headers });
       } catch (e) {
         logger.warn('Failed to serve beaker asset', { filePath, err: e });
         return new Response(errorPage({ errorCode: 404, errorDescription: 'Not Found' }), {
