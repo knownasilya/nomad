@@ -63,8 +63,20 @@ const autobaseAPI = {
 
   async isCollaborativeDrive(url) {
     const key = _keyFromUrl(url)
+    // Local drive registry (fast path: drives created/added in this profile).
     const cfg = filesystem.getDriveConfig(key)
-    return !!(cfg && cfg.type === 'autobase')
+    if (cfg && cfg.type === 'autobase') return true
+    // Already loaded as a collaborative session — e.g. the protocol handler loaded it
+    // when the page was viewed. Covers drives opened by URL that aren't registered in
+    // this profile (the reason a forum that worked in dev failed in a fresh packaged
+    // profile: getDriveConfig was empty, so the editor read it as a Hyperdrive and hung).
+    if (autobases.getCollaborativeDrive(key)) return true
+    // Persisted metadata (set when the drive was created locally).
+    try {
+      const meta = await archivesDb.getMeta(key)
+      if (meta && meta.type === 'autobase') return true
+    } catch {}
+    return false
   },
 
   async loadDrive(url) {
