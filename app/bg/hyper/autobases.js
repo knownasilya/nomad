@@ -65,13 +65,22 @@ export async function loadCollaborativeDrive(key) {
     ackInterval: 1000
   })
   await base.ready()
-  await base.update()
+
+  // Join the swarm BEFORE updating. A remote collaborative drive must replicate its
+  // bootstrap from peers, so a connection has to be in place first — createHyperdriveSession
+  // joins during setup for the same reason. Without this, base.update() runs with no peers
+  // and waits for data that can never arrive, so the page spins forever. Bound the update so
+  // a drive with no reachable peers fails fast and can be retried with a reload.
+  _joinSwarm(base)
+  await Promise.race([
+    base.update(),
+    new Promise((resolve) => setTimeout(resolve, 7000)),
+  ])
 
   const writable = base.writable
   const sess = _makeSession(keyStr, base, writable)
   sessions[keyStr] = sess
 
-  _joinSwarm(base)
   logger.info('Loaded collaborative drive', { key: keyStr, writable })
   return sess
 }
