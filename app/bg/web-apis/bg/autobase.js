@@ -150,6 +150,19 @@ const autobaseAPI = {
     return emitter
   },
 
+  // Emits 'changed' whenever a writer-access request arrives over the network for this
+  // drive, so an owner's UI can refresh listRequests() live instead of polling.
+  async watchRequests(url) {
+    const { EventEmitter } = await import('events')
+    const emitter = new EventEmitter()
+    const key = _keyFromUrl(url)
+    const onRequest = (req) => { if (req && req.key === key) emitter.emit('changed', {}) }
+    autobases.events.on('request', onRequest)
+    // pauls-electron-rpc calls close() when the renderer tears down the stream
+    emitter.close = () => autobases.events.removeListener('request', onRequest)
+    return emitter
+  },
+
   // Write methods (go through autobase.append for linearization)
   // =
 

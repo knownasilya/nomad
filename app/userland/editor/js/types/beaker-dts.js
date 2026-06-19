@@ -148,6 +148,8 @@ declare namespace Beaker {
     /** Create an invite link granting write access. */
     createInvite(opts?: object): Promise<string>;
     listRequests(): Promise<any[]>;
+    /** Watch for writer-access requests arriving over the network; emits 'changed'. */
+    watchRequests(onRequest?: (e: any) => void): DriveWatcher;
     approveRequest(writerKey: string, opts?: object): Promise<void>;
     denyRequest(writerKey: string): Promise<void>;
     removeWriter(writerKey: string): Promise<void>;

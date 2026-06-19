@@ -28,6 +28,7 @@ export default {
   claimInvite: 'promise',
   requestAccess: 'promise',
   listRequests: 'promise',
+  watchRequests: 'readable',
   approveRequest: 'promise',
   denyRequest: 'promise',
   removeWriter: 'promise',

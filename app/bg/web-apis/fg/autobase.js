@@ -96,6 +96,11 @@ export function setup(rpc) {
       // Writer management (scoped to this drive)
       async createInvite(opts = {}) { return autobaseRPC.createInvite(url, opts) },
       async listRequests() { return autobaseRPC.listRequests(url) },
+      watchRequests(onRequest = null) {
+        const evts = fromEventStream(autobaseRPC.watchRequests(url))
+        if (onRequest) evts.addEventListener('changed', onRequest)
+        return evts
+      },
       async approveRequest(writerKey, opts = {}) {
         return autobaseRPC.approveRequest(url, writerKey, opts)
       },

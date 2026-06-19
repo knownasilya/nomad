@@ -83,6 +83,7 @@ const inviteUrl = await drive.createInvite()                        // share thi
 await beaker.autobase.claimInvite(inviteUrl, { profileUrl })        // recipient calls this
 await beaker.autobase.requestAccess(url, { profileUrl })            // stranger request
 const requests  = await drive.listRequests()                        // [{ writerKey, profileUrl }]
+drive.watchRequests(onChanged)                                      // live updates, emits 'changed'
 await drive.approveRequest(writerKey)
 await drive.denyRequest(writerKey)
 await drive.removeWriter(writerKey)

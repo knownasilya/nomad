@@ -5,12 +5,17 @@ import Protomux from 'protomux'
 import c from 'compact-encoding'
 import b4a from 'b4a'
 import { randomBytes } from 'crypto'
+import { EventEmitter } from 'events'
 import * as logLib from '../logger'
 import * as daemon from './daemon'
 import * as archivesDb from '../dbs/archives'
 
 const baseLogger = logLib.get()
 const logger = baseLogger.child({ category: 'hyper', subcategory: 'autobases' })
+
+// Module events. 'request' fires when a writer-access request arrives over the network for
+// a drive we have loaded — { key, writerKey, profileUrl } — so the UI can refresh live.
+export const events = new EventEmitter()
 
 // bootstrapKey (hex) → AutobaseSession
 var sessions = {}
@@ -315,6 +320,7 @@ function _openControlChannel(conn, keyStr) {
           if (msg && msg.type === 'writer-request' && msg.writerKey) {
             addPendingRequest(keyStr, { writerKey: msg.writerKey, profileUrl: msg.profileUrl || null })
             logger.info('Received writer request over network', { key: keyStr, writerKey: msg.writerKey })
+            events.emit('request', { key: keyStr, writerKey: msg.writerKey, profileUrl: msg.profileUrl || null })
           }
         },
       },
