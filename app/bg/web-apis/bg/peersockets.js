@@ -7,6 +7,7 @@ import b4a from 'b4a';
 import { Duplex, Readable } from 'streamx';
 import * as drives from '../../hyper/drives';
 import * as daemon from '../../hyper/daemon';
+import * as autobases from '../../hyper/autobases';
 import { PermissionsError } from 'beaker-error-constants';
 
 const PROTOCOL = 'nomad/peersocket';
@@ -181,5 +182,12 @@ async function getSenderDrive(sender) {
       'PeerSockets are only available on hyper:// origins'
     );
   }
+  // Collaborative (autobase) origins aren't Hyperdrives — getOrLoadDrive would choke on the
+  // autobase core. If this origin is a loaded collaborative drive, use its session, which
+  // exposes a .key just like a Hyperdrive session (rooms keyed by it work over the same swarm).
+  let key;
+  try { key = new URL(url).hostname; } catch {}
+  const collab = key && autobases.getCollaborativeDrive(key);
+  if (collab) return collab;
   return drives.getOrLoadDrive(url);
 }
