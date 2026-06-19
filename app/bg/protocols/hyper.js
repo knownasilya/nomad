@@ -503,6 +503,11 @@ async function serveAutobase(driveKey, urlp, request, respond, respondError, res
 
   const bee = sess.drive;
 
+  // Pull any newly-replicated state before reading. A drive that was empty on its first
+  // load (no peer had delivered the bootstrap yet) keeps replicating in the background, so
+  // refreshing here lets a reload serve content that arrived after the initial "not found".
+  try { await sess.base.update(); } catch {}
+
   let filepath = decodeURIComponent(urlp.path);
   if (!filepath) filepath = '/';
   if (filepath.indexOf('?') !== -1) filepath = filepath.slice(0, filepath.indexOf('?'));

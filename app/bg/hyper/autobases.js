@@ -13,6 +13,11 @@ const logger = baseLogger.child({ category: 'hyper', subcategory: 'autobases' })
 // bootstrapKey (hex) → AutobaseSession
 var sessions = {}
 
+// bootstrapKey (hex) → in-flight load Promise (dedupes concurrent loads of the same
+// drive — e.g. the document request plus its subresources — so we never open two
+// Autobase instances on the same key and deadlock on the shared 'local' core).
+var loadPromises = {}
+
 // pending writer requests: bootstrapKey → [{ writerKey, profileUrl, requestedAt, token }]
 var pendingRequests = {}
 
@@ -49,13 +54,25 @@ export async function createCollaborativeDrive(meta = {}) {
   return sess
 }
 
+// How long to wait for a remote base's bootstrap to replicate before serving.
+const LOAD_REPLICATION_TIMEOUT = 15000
+
 export async function loadCollaborativeDrive(key) {
   const keyStr = typeof key === 'string' ? key : b4a.toString(key, 'hex')
   if (sessions[keyStr]) {
     sessions[keyStr]._lastUsed = Date.now()
     return sessions[keyStr]
   }
+  if (loadPromises[keyStr]) return loadPromises[keyStr]
 
+  const p = _loadCollaborativeDriveInner(keyStr)
+  loadPromises[keyStr] = p
+  const clear = () => { delete loadPromises[keyStr] }
+  p.then(clear, clear)
+  return p
+}
+
+async function _loadCollaborativeDriveInner(keyStr) {
   const store = daemon.getCorestore()
   const keyBuf = b4a.from(keyStr, 'hex')
   const base = new Autobase(store, keyBuf, {
@@ -68,21 +85,41 @@ export async function loadCollaborativeDrive(key) {
 
   // Join the swarm BEFORE updating. A remote collaborative drive must replicate its
   // bootstrap from peers, so a connection has to be in place first — createHyperdriveSession
-  // joins during setup for the same reason. Without this, base.update() runs with no peers
-  // and waits for data that can never arrive, so the page spins forever. Bound the update so
-  // a drive with no reachable peers fails fast and can be retried with a reload.
+  // joins during setup for the same reason.
   _joinSwarm(base)
-  await Promise.race([
-    base.update(),
-    new Promise((resolve) => setTimeout(resolve, 7000)),
-  ])
 
-  const writable = base.writable
-  const sess = _makeSession(keyStr, base, writable)
+  const sess = _makeSession(keyStr, base, base.writable)
   sessions[keyStr] = sess
 
-  logger.info('Loaded collaborative drive', { key: keyStr, writable })
+  // base.update() returns immediately with an EMPTY view if no peer has delivered the
+  // bootstrap yet — and a peer typically connects a beat after we join. So poll update()
+  // until the view has content or the deadline passes (mirrors the hyperdrive warm-up).
+  // A reachable drive serves as soon as it syncs; an unreachable one fails fast and stays
+  // reloadable instead of hanging or returning a premature "not found".
+  const deadline = Date.now() + LOAD_REPLICATION_TIMEOUT
+  await base.update()
+  while (_viewEmpty(base) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    await base.update()
+  }
+
+  sess.writable = base.writable
+  logger.info('Loaded collaborative drive', {
+    key: keyStr,
+    writable: base.writable,
+    synced: !_viewEmpty(base)
+  })
   return sess
+}
+
+// True until the linearised view has at least one block (i.e. some content replicated).
+// Hyperbee.version is Math.max(1, length) so it can't be used here — read the core length.
+function _viewEmpty(base) {
+  try {
+    return !base.view || !base.view.core || base.view.core.length === 0
+  } catch {
+    return true
+  }
 }
 
 export function getCollaborativeDrive(key) {
