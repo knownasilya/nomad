@@ -130,11 +130,15 @@ class BrowserMenu extends LitElement {
                     ? 'No connections'
                     : `${this.daemonStatus.connections} peer${this.daemonStatus.connections === 1 ? '' : 's'}`}
                 </div>
-                <div class="network-status-line">
-                  ${this.daemonStatus.relayed
-                    ? html`<span class="fa-fw fas fa-exchange-alt"></span> Via relay`
-                    : html`<span class="fa-fw fas fa-check"></span> Direct`}
-                </div>
+                ${this.daemonStatus.connections > 0
+                  ? html`
+                      <div class="network-status-line">
+                        ${this.daemonStatus.relayed
+                          ? html`<span class="fa-fw fas fa-exchange-alt"></span> Via relay`
+                          : html`<span class="fa-fw fas fa-check"></span> Direct`}
+                      </div>
+                    `
+                  : ''}
               </div>
             `
           : ''}
