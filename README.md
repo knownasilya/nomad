@@ -113,7 +113,7 @@ Fix: after copying Nomad to `/Applications`, clear the quarantine flag once (do 
 first launch; quit Nomad first if it's already open):
 
 ```
-xattr -dr com.apple.quarantine /Applications/Nomad.app
+xattr -cr /Applications/Nomad.app
 ```
 
 Note: right-click → Open is **not** enough — it dismisses the Gatekeeper warning but still
