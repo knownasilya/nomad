@@ -5,9 +5,11 @@ import {
 import * as toast from 'beaker://app-stdlib/js/com/toast.js';
 import { findParent } from 'beaker://app-stdlib/js/dom.js';
 import { EditBookmarkPopup } from 'beaker://app-stdlib/js/com/popups/edit-bookmark.js';
+import { AddContactPopup } from './com/add-contact-popup.js';
 import mainCSS from '../css/main.css.js';
 import './views/drives.js';
 import './views/bookmarks.js';
+import './views/contacts.js';
 import './views/history.js';
 import './views/downloads.js';
 
@@ -120,6 +122,11 @@ export class LibraryApp extends LitElement {
                 <span class="label">Bookmarks</span>`
             )}
             ${pageNav(
+              'contacts',
+              html`<span class="far fa-fw fa-address-card"></span>
+                <span class="label">Contacts</span>`
+            )}
+            ${pageNav(
               'history',
               html`<span class="fas fa-fw fa-history"></span>
                 <span class="label">History</span>`
@@ -152,6 +159,16 @@ export class LibraryApp extends LitElement {
                 ></bookmarks-view>
               `
             : ''}
+          ${this.view === 'contacts'
+            ? html`
+                <contacts-view
+                  class="full-size"
+                  .filter=${this.filter}
+                  .viewMode=${this.viewMode}
+                  loadable
+                ></contacts-view>
+              `
+            : ''}
           ${this.view === 'history'
             ? html`
                 <history-view
@@ -176,7 +193,12 @@ export class LibraryApp extends LitElement {
   }
 
   renderViewToggle() {
-    if (this.view !== 'drives' && this.view !== 'bookmarks') return '';
+    if (
+      this.view !== 'drives' &&
+      this.view !== 'bookmarks' &&
+      this.view !== 'contacts'
+    )
+      return '';
     return html`
       <span class="view-toggle">
         <button
@@ -200,6 +222,9 @@ export class LibraryApp extends LitElement {
     if (this.view === 'bookmarks') {
       return html`<button class="new-action-btn" @click=${this.onCreateBookmark}>New Bookmark</button>`;
     }
+    if (this.view === 'contacts') {
+      return html`<button class="new-action-btn" @click=${this.onCreateContact}>New Contact</button>`;
+    }
   }
 
   // events
@@ -222,6 +247,18 @@ export class LibraryApp extends LitElement {
     toast.create('Bookmark added');
     if (this.view === 'bookmarks') {
       this.shadowRoot.querySelector('bookmarks-view').load();
+    }
+  }
+
+  async onCreateContact() {
+    try {
+      await AddContactPopup.create();
+    } catch (e) {
+      return; // cancelled
+    }
+    toast.create('Contact added');
+    if (this.view === 'contacts') {
+      this.shadowRoot.querySelector('contacts-view').load();
     }
   }
 }
