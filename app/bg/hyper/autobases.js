@@ -1,6 +1,8 @@
 // @ts-nocheck
 import Autobase from 'autobase'
 import Hyperbee from 'hyperbee'
+import Protomux from 'protomux'
+import c from 'compact-encoding'
 import b4a from 'b4a'
 import { randomBytes } from 'crypto'
 import * as logLib from '../logger'
@@ -181,6 +183,16 @@ export function removePendingRequest(bootstrapKey, writerKey) {
   pendingRequests[bootstrapKey] = pendingRequests[bootstrapKey].filter(r => r.writerKey !== writerKey)
 }
 
+// Send a writer-access request to the drive's peers (owner + existing writers) over the
+// swarm. pendingRequests is per-process, so without this the owner never learns a remote
+// peer wants access. The request is remembered and re-sent to any peer that connects until
+// we actually become a writer, so it survives a not-yet-connected owner.
+export function requestWriterAccess(bootstrapKey, { writerKey, profileUrl }) {
+  outgoingRequests[bootstrapKey] = { writerKey, profileUrl: profileUrl || null }
+  const peers = controlChannels[bootstrapKey]
+  if (peers) for (const peerId of peers.keys()) _sendOutgoingTo(bootstrapKey, peerId)
+}
+
 // internal
 // =
 
@@ -246,5 +258,94 @@ function _joinSwarm(base) {
   // Use store-level replication — swarm connection handler in daemon.js already calls store.replicate(conn)
   // so just join the discovery key for the autobase
   swarm.join(base.discoveryKey)
+
+  // Open the writer-request control channel on this base's peers (existing + future).
+  const keyStr = b4a.toString(base.key, 'hex')
+  _ensureControlSwarmListener()
+  for (const conn of swarm.connections) _openControlChannel(conn, keyStr)
+
   logger.debug('Joined swarm for collaborative drive', { discoveryKey: discKeyStr })
+}
+
+// Writer-request control channel
+// =
+// A lightweight Protomux channel layered onto the same swarm connections used for
+// replication (the corestore replication mux — same pattern as peersockets). It carries
+// out-of-band control messages that can't go through the autobase oplog because the
+// requester isn't a writer yet. Today: 'writer-request'. Approval flows back through the
+// oplog (addWriter) and replicates normally, so only the request direction needs this.
+
+const CONTROL_PROTOCOL = 'nomad/autobase-control'
+
+// bootstrapKey (hex) -> Map(peerId hex -> { channel, msg })
+const controlChannels = {}
+// bootstrapKey (hex) -> outgoing writer request to (re)send until we become a writer
+const outgoingRequests = {}
+let controlSwarmListenerInstalled = false
+
+function _ensureControlSwarmListener() {
+  if (controlSwarmListenerInstalled) return
+  const swarm = daemon.getSwarm()
+  if (!swarm) return
+  controlSwarmListenerInstalled = true
+  swarm.on('connection', (conn) => {
+    // Open a control channel for every collaborative drive we currently have loaded.
+    for (const keyStr of Object.keys(sessions)) _openControlChannel(conn, keyStr)
+  })
+}
+
+function _openControlChannel(conn, keyStr) {
+  const peerId = conn.remotePublicKey ? b4a.toString(conn.remotePublicKey, 'hex') : null
+  if (!peerId) return
+  if (!controlChannels[keyStr]) controlChannels[keyStr] = new Map()
+  if (controlChannels[keyStr].has(peerId)) return
+
+  let mux
+  try { mux = Protomux.from(conn) } catch { return }
+
+  const channel = mux.createChannel({
+    protocol: CONTROL_PROTOCOL,
+    id: b4a.from(keyStr, 'hex'),
+    messages: [
+      {
+        encoding: c.buffer,
+        onmessage(data) {
+          let msg
+          try { msg = JSON.parse(b4a.toString(data)) } catch { return }
+          if (msg && msg.type === 'writer-request' && msg.writerKey) {
+            addPendingRequest(keyStr, { writerKey: msg.writerKey, profileUrl: msg.profileUrl || null })
+            logger.info('Received writer request over network', { key: keyStr, writerKey: msg.writerKey })
+          }
+        },
+      },
+    ],
+    onopen() {
+      _sendOutgoingTo(keyStr, peerId)
+    },
+    onclose() {
+      const peers = controlChannels[keyStr]
+      if (peers) peers.delete(peerId)
+    },
+  })
+  if (!channel) return // a channel for this {protocol,id} already exists on the mux
+
+  controlChannels[keyStr].set(peerId, { channel, msg: channel.messages[0] })
+  channel.open()
+}
+
+function _sendOutgoingTo(keyStr, peerId) {
+  // Stop pestering peers once we're an actual writer (the approval already replicated).
+  const sess = sessions[keyStr]
+  if (sess?.base?.writable) { delete outgoingRequests[keyStr]; return }
+
+  const req = outgoingRequests[keyStr]
+  const entry = controlChannels[keyStr]?.get(peerId)
+  if (!req || !entry?.msg) return
+  try {
+    entry.msg.send(b4a.from(JSON.stringify({
+      type: 'writer-request',
+      writerKey: req.writerKey,
+      profileUrl: req.profileUrl || null,
+    })))
+  } catch {}
 }

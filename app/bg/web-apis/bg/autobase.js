@@ -341,7 +341,7 @@ const autobaseAPI = {
     if (!invite) throw new Error('Invite token not found or already used')
 
     const writerKey = b4a.toString(sess.base.local.key, 'hex')
-    autobases.addPendingRequest(key, { writerKey, profileUrl })
+    autobases.requestWriterAccess(key, { writerKey, profileUrl })
     autobases.consumeInvite(token)
     return { writerKey }
   },
@@ -351,7 +351,7 @@ const autobaseAPI = {
     const sess = await autobases.getOrLoadCollaborativeDrive(key)
     if (!sess) throw new Error('Could not connect to collaborative drive')
     const writerKey = b4a.toString(sess.base.local.key, 'hex')
-    autobases.addPendingRequest(key, { writerKey, profileUrl })
+    autobases.requestWriterAccess(key, { writerKey, profileUrl })
     return { writerKey }
   },
 
