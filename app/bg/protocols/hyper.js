@@ -236,9 +236,11 @@ export const protocolHandler = async function (request, respond) {
     { url: urlp.origin, path: urlp.pathname },
     undefined,
     async () => {
-      // check if this URL belongs to an autobase collaborative drive
+      // check if this URL belongs to an autobase collaborative drive. getDriveConfig only
+      // knows locally-registered drives, so also honor an already-loaded collaborative session
+      // (covers remote drives navigated to by URL that aren't in the local registry).
       const driveCfg = filesystem.getDriveConfig(driveKey);
-      if (driveCfg && driveCfg.type === 'autobase') {
+      if ((driveCfg && driveCfg.type === 'autobase') || autobases.getCollaborativeDrive(driveKey)) {
         logger.silly(`Serving autobase drive ${logUrl}`, { url: request.url });
         return serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect);
       }
@@ -248,8 +250,12 @@ export const protocolHandler = async function (request, respond) {
         logger.silly(`Loading drive for ${logUrl}`, { url: request.url });
         drive = await drives.getOrLoadDrive(driveKey);
       } catch (err) {
-        logger.warn(`Failed to open drive ${driveKey}`, { err });
-        return respondError(500, 'Failed');
+        // The key may be a collaborative (Autobase) drive that isn't registered locally yet —
+        // e.g. one navigated to by URL on another machine. A Hyperdrive open fails on an
+        // autobase core, so fall back to serving it as an autobase before giving up. Once
+        // loaded, the cached collaborative session routes future loads via the check above.
+        logger.warn(`Failed to open drive ${driveKey} as Hyperdrive; trying Autobase`, { err });
+        return serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect);
       }
 
       // parse path
