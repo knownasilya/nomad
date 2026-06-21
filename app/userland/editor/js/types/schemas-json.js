@@ -3,7 +3,7 @@
 // Registered with monaco.languages.json.jsonDefaults so a .json file whose "type"
 // field matches a walled.garden schema gets that schema's autocomplete/validation.
 
-export const WALLED_GARDEN_TYPES = ["walled.garden/person","walled.garden/post","walled.garden/writer-keys","walled.garden/bookmark","walled.garden/comment","walled.garden/follows","walled.garden/reaction","walled.garden/status","walled.garden/vote"];
+export const WALLED_GARDEN_TYPES = ["walled.garden/person","walled.garden/post","walled.garden/feed","walled.garden/writer-keys","walled.garden/bookmark","walled.garden/comment","walled.garden/follows","walled.garden/reaction","walled.garden/status","walled.garden/vote"];
 export const WALLED_GARDEN_JSON_SCHEMA = {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "walled.garden records & drive manifest",
@@ -221,12 +221,27 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "type": "string",
             "description": "Manifest: SPA fallback page path"
           },
+          "summary": {
+            "type": "string",
+            "maxLength": 560
+          },
           "body": {
             "type": "string"
           },
           "category": {
             "type": "string",
             "maxLength": 100
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 100,
+              "pattern": "^[A-Za-z][A-Za-z0-9\\-_?]*$"
+            }
+          },
+          "draft": {
+            "type": "boolean"
           },
           "createdAt": {
             "type": "string",
@@ -242,8 +257,128 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
         "required": [
           "type",
           "title",
-          "body",
           "createdAt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "const": "walled.garden/feed"
+          }
+        }
+      },
+      "then": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 280
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "type": {
+            "type": "string",
+            "const": "walled.garden/feed"
+          },
+          "thumb": {
+            "type": "string",
+            "description": "Manifest: path within the drive to the thumbnail image"
+          },
+          "author": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri"
+              }
+            },
+            "required": [
+              "url"
+            ],
+            "additionalProperties": false
+          },
+          "forkOf": {
+            "type": "string",
+            "description": "Manifest: hyper:// URL this drive was forked from"
+          },
+          "links": {
+            "type": "object",
+            "description": "Manifest: map of named link arrays",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "href": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "csp": {
+            "type": "string",
+            "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
+          },
+          "ai": {
+            "description": "Manifest: opts the drive into beaker.ai — inline config or a pointer hyper:// URL",
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Pointer: delegate to another drive's AI config"
+              },
+              {
+                "type": "object",
+                "description": "Inline AI config",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "description": "Model identifier, e.g. llama3.2:3b"
+                  }
+                }
+              }
+            ]
+          },
+          "chatBubble": {
+            "type": "boolean",
+            "description": "Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)"
+          },
+          "web_root": {
+            "type": "string",
+            "description": "Manifest: directory to serve as the web root"
+          },
+          "fallback_page": {
+            "type": "string",
+            "description": "Manifest: SPA fallback page path"
+          },
+          "itemsPath": {
+            "type": "string",
+            "maxLength": 280
+          },
+          "itemType": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "language": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "icon": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title"
         ],
         "additionalProperties": false
       }
@@ -1097,6 +1232,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
               "enum": [
                 "walled.garden/person",
                 "walled.garden/post",
+                "walled.garden/feed",
                 "walled.garden/writer-keys",
                 "walled.garden/bookmark",
                 "walled.garden/comment",

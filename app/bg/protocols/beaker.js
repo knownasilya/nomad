@@ -607,6 +607,18 @@ async function beakerProtocol(request) {
     );
   }
   if (
+    requestUrl === 'beaker://reader' ||
+    requestUrl.startsWith('beaker://reader/')
+  ) {
+    return serveAppAsset(
+      requestUrl,
+      path.join(__dirname, 'userland', 'reader'),
+      cb,
+      // @ts-ignore
+      { fallbackToIndexHTML: true }
+    );
+  }
+  if (
     requestUrl === 'beaker://settings' ||
     requestUrl.startsWith('beaker://settings/')
   ) {

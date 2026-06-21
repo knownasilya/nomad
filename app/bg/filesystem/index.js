@@ -140,7 +140,7 @@ export async function setup() {
 
 export function getDriveIdent(url) {
   const system = isRootUrl(url);
-  return { system, internal: system, profile: false };
+  return { system, internal: system, profile: false, feed: false };
 }
 
 export async function getDriveIdentFull(url) {
@@ -151,6 +151,18 @@ export async function getDriveIdentFull(url) {
     const hostname = new URL(url).hostname;
     if (HYPERDRIVE_HASH_REGEX.test(hostname)) {
       if (getDriveConfig(hostname)?.type === 'autobase' || autobases.getCollaborativeDrive(hostname)) {
+        // Autobase drive: getOrLoadDrive would hang, so read the manifest from the
+        // already-loaded collaborative session (if present) to recognize feeds.
+        try {
+          const sess = autobases.getCollaborativeDrive(hostname);
+          if (sess) {
+            const node = await sess.drive.get('/index.json');
+            if (node && node.value) {
+              const manifest = JSON.parse(Buffer.from(node.value).toString('utf8'));
+              ident.feed = manifest.type === 'walled.garden/feed';
+            }
+          }
+        } catch {}
         return ident;
       }
     }
@@ -159,6 +171,7 @@ export async function getDriveIdentFull(url) {
     if (buf) {
       const manifest = JSON.parse(buf.toString());
       ident.profile = manifest.type === 'walled.garden/person';
+      ident.feed = manifest.type === 'walled.garden/feed';
     }
   } catch {}
   return ident;

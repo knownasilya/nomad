@@ -1,5 +1,6 @@
 import { PersonSchema } from './person.js'
 import { PostSchema } from './post.js'
+import { FeedSchema } from './feed.js'
 import { WriterKeysSchema } from './writer-keys.js'
 import { BookmarkSchema } from './bookmark.js'
 import { CommentSchema } from './comment.js'
@@ -11,6 +12,7 @@ import { VoteSchema } from './vote.js'
 export {
   PersonSchema,
   PostSchema,
+  FeedSchema,
   WriterKeysSchema,
   BookmarkSchema,
   CommentSchema,
@@ -23,6 +25,7 @@ export {
 export const SCHEMAS = {
   'walled.garden/person': PersonSchema,
   'walled.garden/post': PostSchema,
+  'walled.garden/feed': FeedSchema,
   'walled.garden/writer-keys': WriterKeysSchema,
   'walled.garden/bookmark': BookmarkSchema,
   'walled.garden/comment': CommentSchema,

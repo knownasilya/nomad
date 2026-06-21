@@ -97,6 +97,14 @@ class BrowserMenu extends LitElement {
 
           <div
             class="menu-item"
+            @click=${(e) => this.onOpenPage(e, 'beaker://reader')}
+          >
+            <img class="favicon" src="asset:favicon:beaker://reader/" />
+            <span class="label">Reader</span>
+          </div>
+
+          <div
+            class="menu-item"
             @click=${(e) => this.onOpenPage(e, 'beaker://settings')}
           >
             <img class="favicon" src="asset:favicon:beaker://settings/" />

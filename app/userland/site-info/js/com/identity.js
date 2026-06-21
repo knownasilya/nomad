@@ -78,6 +78,19 @@ class Identity extends LitElement {
                           No identity information found
                         </div>
                       `}
+                  ${this.cert.ident && this.cert.ident.feed
+                    ? html`
+                        <div class="field-group">
+                          <button
+                            style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:6px;font-size:13px"
+                            @click=${this.onSubscribe}
+                          >
+                            <span class="fa-fw fas fa-rss"></span> Subscribe in
+                            Reader
+                          </button>
+                        </div>
+                      `
+                    : ''}
                 `
               : ''}
           `
@@ -101,6 +114,11 @@ class Identity extends LitElement {
 
   // events
   // =
+
+  onSubscribe() {
+    if (!this.url) return;
+    window.open('beaker://reader/?subscribe=' + encodeURIComponent(this.url));
+  }
 }
 
 customElements.define('identity-signals', Identity);
