@@ -188,6 +188,13 @@ export async function getOrSetupSpaceDrive(space) {
   return drive;
 }
 
+// Drop a space's cached Root Drive session so the next getOrSetupSpaceDrive reloads it from the
+// (possibly changed) root_drive_url. Used after the Vault migration converts a Root Drive to an
+// Autobase, which gives it a new key/url.
+export function resetSpaceRootDrive(spaceId) {
+  delete spaceRootDrives[spaceId];
+}
+
 export function getSpaceRootDrive(spaceId) {
   return spaceRootDrives[spaceId];
 }

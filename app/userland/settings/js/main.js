@@ -9,6 +9,7 @@ import './views/general.js';
 import './views/blocking.js';
 import './views/ai.js';
 import './views/security.js';
+import './views/devices.js';
 import './views/info.js';
 import './views/network.js';
 import './views/fs-audit-log.js';
@@ -83,6 +84,7 @@ class SettingsApp extends LitElement {
       ${item('blocking', 'fas fa-ban', 'Content Blocking')}
       ${item('ai', 'fas fa-brain', 'AI')}
       ${item('security', 'fas fa-shield-alt', 'Security')}
+      ${item('devices', 'fas fa-laptop', 'Devices')}
       <hr />
       ${item('general-logs', 'fas fa-clipboard-list', 'General Logs')}
       ${item('network', 'fas fa-share-alt', 'Network Stats')}
@@ -105,6 +107,8 @@ class SettingsApp extends LitElement {
         return html`<ai-settings-view loadable></ai-settings-view>`;
       case 'security':
         return html`<security-settings-view loadable></security-settings-view>`;
+      case 'devices':
+        return html`<devices-view loadable></devices-view>`;
       case 'info':
         return html`<info-settings-view loadable></info-settings-view>`;
       case 'network':

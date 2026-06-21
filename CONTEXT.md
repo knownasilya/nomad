@@ -61,10 +61,34 @@ A Drive with `type: "walled.garden/person"` in its `/index.json`. Represents a u
 _Avoid_: identity drive, person drive, social profile
 
 **Writer Keys**:
-The list of device-level writer keypairs belonging to a single Profile Drive owner, published at `/.data/walled.garden/writer-keys.json` inside the Profile Drive. Allows resolving multiple device writers back to one identity.
+The set of a user's Device keys. The Vault is their canonical source; they are also published as `/.data/walled.garden/writer-keys.json` inside the Profile Drive so other peers can resolve multiple Device writers back to one identity.
+
+**Feed**:
+A Drive that declares `type: "walled.garden/feed"` in its `/index.json`, advertising channel metadata (title, description, author, icon, language) and where its items live (`itemsPath`, `itemType`). The unit a Reader subscribes to.
+_Avoid_: channel, source, rss
+
+**Blog**:
+A Feed whose items are Posts, implemented as a Collaborative Drive so all the user's Devices are Writers under one stable URL. References a Profile Drive for author identity. Distinct from a Profile Drive, which is the identity itself rather than a publication.
+_Avoid_: site, publication
+
+**Post**:
+A single blog entry: a directory under a Blog's `/posts/` holding a `post.json` (`walled.garden/post` metadata) plus a body file (`index.html`, `index.md`, or `index.txt`) and any co-located assets. Addressable by its own URL.
+_Avoid_: article, entry, page
+
+**Reader**:
+The in-browser feature that subscribes to Feeds and presents their Posts as an aggregated, RSS-like stream.
+_Avoid_: feed reader, aggregator, rss client
 
 ### User model
 
 **Space**:
-A named user context with its own Root Drive and browser session isolation (separate cookies, localStorage, and Electron partition). The user can have multiple Spaces; one is active at a time.
+A named user context with its own Root Drive and browser session isolation (separate cookies, localStorage, and Electron partition). The user can have multiple Spaces; one is active at a time. Spaces belong to a Vault.
 _Avoid_: profile, account, identity, workspace
+
+**Vault**:
+The private, identity-level Collaborative Drive that indexes a single user's Spaces (by Root Drive key) and trusted Devices. It is the root of trust for multi-device: every Device the user owns is a Writer of the Vault, and a new Device joins by pairing into it. Distinct from a Space — the Vault is the parent that ties one user's Spaces and Devices together.
+_Avoid_: account, identity, profile, keyring, sync base
+
+**Device**:
+A single installation of Nomad holding its own keypair. A user's trusted Devices are all Writers of that user's Vault and of every Drive the Vault indexes, so any Device can edit anything the user owns. A Device is added by pairing into the Vault (see Writer Keys).
+_Avoid_: machine, client, peer, node, seat

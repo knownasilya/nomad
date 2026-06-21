@@ -2,7 +2,6 @@ import errorPage from '../lib/error-page';
 import * as mime from '../lib/mime';
 import { drivesDebugPage } from '../hyper/debugging';
 import * as logLib from '../logger';
-import { net } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import jetpack from 'fs-jetpack';
@@ -473,6 +472,7 @@ async function beakerProtocol(request) {
       requestUrl,
       path.join(__dirname, 'userland', 'library'),
       cb,
+      // @ts-ignore
       { fallbackToIndexHTML: true }
     );
   }
@@ -504,6 +504,7 @@ async function beakerProtocol(request) {
       requestUrl,
       path.join(__dirname, 'userland', 'site-info'),
       cb,
+      // @ts-ignore
       { fallbackToIndexHTML: true }
     );
   }
@@ -515,6 +516,7 @@ async function beakerProtocol(request) {
       requestUrl,
       path.join(__dirname, 'userland', 'setup'),
       cb,
+      // @ts-ignore
       { fallbackToIndexHTML: true }
     );
   }
@@ -526,6 +528,7 @@ async function beakerProtocol(request) {
       requestUrl,
       path.join(__dirname, 'userland', 'init'),
       cb,
+      // @ts-ignore
       { fallbackToIndexHTML: true }
     );
   }
@@ -537,6 +540,7 @@ async function beakerProtocol(request) {
       requestUrl,
       path.join(__dirname, 'userland', 'editor'),
       cb,
+      // @ts-ignore
       { CSP: EDITOR_CSP }
     );
   }
@@ -548,6 +552,7 @@ async function beakerProtocol(request) {
       requestUrl,
       path.join(__dirname, 'userland', 'explorer'),
       cb,
+      // @ts-ignore
       { fallbackToIndexHTML: true }
     );
   }
@@ -559,6 +564,7 @@ async function beakerProtocol(request) {
       requestUrl,
       path.join(__dirname, 'userland', 'hypercore-tools'),
       cb,
+      // @ts-ignore
       { fallbackToIndexHTML: true }
     );
   }

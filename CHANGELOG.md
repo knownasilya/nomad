@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## Unreleased
+
+### Features
+
+* **Devices / multi-device:** link multiple devices to one identity so they all read and edit your Spaces and Drives. Adds the **Vault** (an identity-level Collaborative Drive indexing your Spaces and Devices), device pairing via `blind-pairing` (invite code + explicit approval), and a **Settings → Devices** subpage. Profile Drives stay multi-writer by `writer-keys` aggregation (URL preserved). See `docs/multi-device-protocol.md`, ADR-0006, ADR-0007. Mirrored in Nomad mobile.
+
 ### [1.2.4](https://github.com/knownasilya/nomad/compare/v1.2.3...v1.2.4) (2022-03-25)
 
 

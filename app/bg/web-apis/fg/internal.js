@@ -11,6 +11,7 @@ import historyManifest from '../manifests/internal/history';
 import hyperdebugManifest from '../manifests/internal/hyperdebug';
 import sitedataManifest from '../manifests/internal/sitedata';
 import watchlistManifest from '../manifests/internal/watchlist';
+import vaultManifest from '../manifests/internal/vault';
 
 export const setup = function (rpc) {
   const internal = {};
@@ -30,6 +31,7 @@ export const setup = function (rpc) {
   const hyperdebugRPC = rpc.importAPI('hyperdebug', hyperdebugManifest, opts);
   const sitedataRPC = rpc.importAPI('sitedata', sitedataManifest, opts);
   const watchlistRPC = rpc.importAPI('watchlist', watchlistManifest, opts);
+  const vaultRPC = rpc.importAPI('vault', vaultManifest, opts);
 
   // attach APIs
   internal.browser = Object.assign({}, beakerBrowserRPC);
@@ -52,6 +54,11 @@ export const setup = function (rpc) {
   internal.watchlist = Object.assign({}, watchlistRPC);
   internal.watchlist.createEventsStream = () =>
     fromEventStream(watchlistRPC.createEventsStream());
+  internal.vault = Object.assign({}, vaultRPC);
+  internal.vault.watchPendingRequests = () =>
+    fromEventStream(vaultRPC.watchPendingRequests());
+  internal.vault.watchMigration = () =>
+    fromEventStream(vaultRPC.watchMigration());
 
   // internal.drives
   internal.drives = new EventTarget();

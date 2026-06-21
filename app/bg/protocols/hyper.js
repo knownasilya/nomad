@@ -25,6 +25,13 @@ const md = markdown({
   highlight: undefined,
 });
 
+// How long to keep waiting for a freshly-resolved drive to replicate content
+// before serving "Site not found". A drive just created on another device (e.g.
+// a phone) can take several seconds to discover peers and replicate — longer than
+// the fixed 5s warm-up in loadDrive() — so without this the first hit 404s and
+// only a manual reload (by which point the peer has connected) succeeds.
+const DRIVE_REPLICATE_TIMEOUT = 10000;
+
 class WhackAMoleStream {
   constructor(stream) {
     this.onreadable = noop;
@@ -287,6 +294,21 @@ export const protocolHandler = async function (request, respond) {
       // Hyperbee's version getter returns Math.max(1, core.length), so it is never
       // literally 0 — version <= 1 means either no blocks at all or only the
       // bootstrap header, i.e. no usable file entries have been replicated yet.
+      //
+      // On the FIRST hit to a freshly-created remote drive, peer discovery +
+      // replication often hasn't finished. The session keeps connecting in the
+      // background, so wait a bounded while for content to arrive rather than
+      // 404ing immediately and forcing a manual reload. Only when serving the live
+      // drive — a pinned +version that is genuinely empty should still fail fast.
+      if (!driveVersion && checkoutFS.drive.version <= 1) {
+        const deadline = Date.now() + DRIVE_REPLICATE_TIMEOUT;
+        while (checkoutFS.drive.version <= 1 && Date.now() < deadline) {
+          try { await checkoutFS.drive.update({ wait: true }); } catch (e) {}
+          if (checkoutFS.drive.version > 1) break;
+          await new Promise((r) => setTimeout(r, 250));
+        }
+      }
+
       if (checkoutFS.drive.version <= 1) {
         logger.silly(`Drive not found ${logUrl}`, { url: request.url });
         return respondError(404, 'Site not found', {
@@ -491,6 +513,16 @@ function intoStream(text) {
   });
 }
 
+// True until the linearised Autobase view has at least one block (some content
+// replicated). Mirrors the mobile reader's viewEmpty check.
+function _autobaseViewEmpty(base) {
+  try {
+    return !base.view || !base.view.core || base.view.core.length === 0;
+  } catch {
+    return true;
+  }
+}
+
 async function serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect) {
   let sess;
   try {
@@ -504,9 +536,15 @@ async function serveAutobase(driveKey, urlp, request, respond, respondError, res
   const bee = sess.drive;
 
   // Pull any newly-replicated state before reading. A drive that was empty on its first
-  // load (no peer had delivered the bootstrap yet) keeps replicating in the background, so
-  // refreshing here lets a reload serve content that arrived after the initial "not found".
+  // load (no peer had delivered the bootstrap yet) keeps replicating in the background.
+  // Wait a bounded while for the linearised view to gain content so the FIRST hit to a
+  // freshly-created remote drive serves it, instead of 404ing until a manual reload.
+  const abDeadline = Date.now() + DRIVE_REPLICATE_TIMEOUT;
   try { await sess.base.update(); } catch {}
+  while (_autobaseViewEmpty(sess.base) && Date.now() < abDeadline) {
+    await new Promise((r) => setTimeout(r, 250));
+    try { await sess.base.update(); } catch {}
+  }
 
   let filepath = decodeURIComponent(urlp.path);
   if (!filepath) filepath = '/';
