@@ -88,6 +88,9 @@ class CreateDriveModal extends LitElement {
     this.fromGit = false;
     this.gitUrl = undefined;
     this.isPear = false;
+    // ADR-0010: every drive is an Autobase, but "Collaborative" now means "accepts writer-access
+    // requests" (a policy lock). Default LOCKED / single-writer — the safer default; the drive can
+    // be unlocked later without changing its URL (or automatically when you invite a writer).
     this.isCollaborative = false;
     this.errors = {};
   }
@@ -122,7 +125,7 @@ class CreateDriveModal extends LitElement {
     return html`
       <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
       <div class="wrapper">
-        <h1 class="title">${this.isCollaborative ? 'Create Collaborative Drive' : 'Create New Hyperdrive'}</h1>
+        <h1 class="title">${this.isCollaborative ? 'Create Collaborative Drive' : 'Create New Drive'}</h1>
         <form @submit=${this.onSubmit}>
           <div>
             <input
@@ -288,15 +291,17 @@ class CreateDriveModal extends LitElement {
     try {
       var url;
       if (this.isCollaborative) {
-        url = await bg.autobase.createCollaborativeDrive({
+        url = await bg.fs.createCollaborativeDrive({
           title: this.title,
           description: this.description,
+          collaborative: true, // accepts writer-access requests
           prompt: false,
         });
       } else {
-        url = await bg.hyperdrive.createDrive({
+        url = await bg.fs.createDrive({
           title: this.title,
           description: this.description,
+          collaborative: false, // locked / single-writer (unlock later, same URL)
           tags: this.tags.split(' '),
           author: this.author,
           fromGitUrl: this.fromGit ? this.gitUrl : undefined,

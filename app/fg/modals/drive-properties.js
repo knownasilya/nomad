@@ -210,18 +210,18 @@ class DrivePropertiesModal extends LitElement {
       reader.readAsArrayBuffer(file);
 
       await Promise.all([
-        bg.hyperdrive
+        bg.fs
           .unlink(joinPath(this.url, '/thumb.png'))
           .catch((e) => null),
-        bg.hyperdrive
+        bg.fs
           .unlink(joinPath(this.url, '/thumb.jpg'))
           .catch((e) => null),
-        bg.hyperdrive
+        bg.fs
           .unlink(joinPath(this.url, '/thumb.jpeg'))
           .catch((e) => null),
       ]);
       let newThumbPath = `thumb.${ext}`;
-      await bg.hyperdrive.writeFile(
+      await bg.fs.writeFile(
         joinPath(this.url, `/${newThumbPath}`),
         await bufPromise
       );
@@ -229,7 +229,7 @@ class DrivePropertiesModal extends LitElement {
     }
 
     // handle props (configure also awaits asset cache update)
-    await bg.hyperdrive.configure(this.url, newProps).catch((e) => null);
+    await bg.fs.configure(this.url, newProps).catch((e) => null);
 
     this.cbs.resolve();
   }

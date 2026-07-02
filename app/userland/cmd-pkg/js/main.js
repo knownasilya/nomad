@@ -19,7 +19,7 @@ export class CommandViewer extends LitElement {
   }
 
   async load() {
-    var drive = beaker.hyperdrive.drive(location);
+    var drive = beaker.fs.drive(location);
     this.info = await drive.getInfo();
     await this.requestUpdate();
   }

@@ -4,10 +4,10 @@
  * Helper protocol to serve site favicons and avatars from the cache.
  * Examples:
  *
- *  - asset:favicon:hyper://beakerbrowser.com
- *  - asset:favicon-32:hyper://beakerbrowser.com
- *  - asset:thumb:hyper://beakerbrowser.com
- *  - asset:cover:hyper://beakerbrowser.com
+ *  - asset:favicon:hyper://nomad.pages.dev
+ *  - asset:favicon-32:hyper://nomad.pages.dev
+ *  - asset:thumb:hyper://nomad.pages.dev
+ *  - asset:cover:hyper://nomad.pages.dev
  **/
 
 import { screen, nativeImage } from 'electron';

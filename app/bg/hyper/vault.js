@@ -4,7 +4,7 @@
 // their Spaces (by Root Drive key) and trusted Devices (by writer key). It is the root of
 // trust for multi-device sync — every Device the user owns is a Writer of the Vault.
 //
-// See docs/multi-device-protocol.md, ADR-0006 (the Vault) and ADR-0007 (Profile aggregation).
+// See docs/multi-device-protocol.md and ADR-0006 (the Vault).
 //
 // The Vault reuses the exact Autobase shape of every Collaborative Drive (autobases.js
 // _openFn/_applyFn): a single Hyperbee view, ops { op:'put'|'del', path, data, encoding? },
@@ -22,13 +22,11 @@ import * as pdb from '../dbs/profile-data-db'
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'vault' })
 
 const VAULT_KEY_SETTING = 'vault_key'
-const PROFILE_CONTENT_KEY_SETTING = 'profile_content_key'
 const VAULT_VERSION = 1
 
 const META_PATH = '/.vault/meta.json'
 const SPACES_PREFIX = '/.vault/spaces/'
 const DEVICES_PREFIX = '/.vault/devices/'
-const WRITER_KEYS_PATH = '/.data/walled.garden/writer-keys.json'
 
 // Identity & lifecycle
 // =
@@ -126,7 +124,7 @@ export async function registerSpace(space, rootDriveKey) {
 // Add a Device: make its key a Writer of the Vault AND of every indexed Root Drive (fan-out),
 // then record human-readable metadata. The Autobase oplog (addWriter) is the security boundary;
 // the device record is for naming/management.
-export async function addDevice(deviceKey, { name, platform, profileContentKey } = {}) {
+export async function addDevice(deviceKey, { name, platform } = {}) {
   const sess = await ensureVault()
   logger.info('addDevice: appending addWriter', { deviceKey })
   await sess.base.append({ addWriter: deviceKey })
@@ -136,14 +134,12 @@ export async function addDevice(deviceKey, { name, platform, profileContentKey }
     key: deviceKey,
     name: name || 'Unnamed device',
     platform: platform || 'unknown',
-    profileContentKey: profileContentKey || null,
     addedAt: new Date().toISOString()
   })
   logger.info('Added device to vault', { deviceKey, platform })
-  // Background — do NOT block the approval on slow per-space-drive replication or profile-drive
-  // maintenance. The device is already a Vault writer; fan-out and writer-keys catch up async.
+  // Background — do NOT block the approval on slow per-space-drive replication.
+  // The device is already a Vault writer; fan-out catches up async.
   fanOutAddWriter(deviceKey).catch((e) => logger.warn('addWriter fan-out failed', { error: e.toString() }))
-  syncWriterKeys().catch((e) => logger.warn('writer-keys sync failed', { error: e.toString() }))
 }
 
 // Ensure THIS Device has its own record in the Vault index. The creating/owner Device is the
@@ -169,7 +165,6 @@ export async function registerOwnDevice({ name, platform } = {}) {
     key,
     name: name || 'This device',
     platform: platform || 'unknown',
-    profileContentKey: null,
     addedAt: new Date().toISOString()
   })
   _ownDeviceRegistered = true
@@ -177,7 +172,7 @@ export async function registerOwnDevice({ name, platform } = {}) {
 }
 
 // Rename a Device. Any writer can update the record (it's a plain put into the Vault); the change
-// replicates to all Devices. No writer-keys re-sync needed — the name is cosmetic.
+// replicates to all Devices. The name is cosmetic.
 export async function renameDevice(deviceKey, name) {
   const sess = await getVault()
   if (!sess) return
@@ -201,43 +196,15 @@ export async function removeDevice(deviceKey) {
   logger.info('Removed device from vault', { deviceKey })
   // Background — see addDevice.
   fanOutRemoveWriter(deviceKey).catch((e) => logger.warn('removeWriter fan-out failed', { error: e.toString() }))
-  syncWriterKeys().catch((e) => logger.warn('writer-keys sync failed', { error: e.toString() }))
 }
 
-// Profile aggregation (ADR-0007)
+// Profile
 // =
 
 // The canonical public Profile Drive URL (single-writer, owned by the origin Device).
 export async function getProfileUrl() {
   const row = await pdb.get('SELECT url FROM profiles WHERE id = 0')
   return row?.url || null
-}
-
-// This Device's own profile content drive — where it publishes social posts when it does NOT own
-// the canonical Profile Drive. Created once; key persisted and advertised during pairing so the
-// canonical owner can list it in writer-keys.json.
-export async function ensureProfileContentDrive() {
-  const existing = await settingsDb.get(PROFILE_CONTENT_KEY_SETTING)
-  if (existing) return existing
-  const drive = await drives.createNewDrive({ type: 'walled.garden/person' })
-  const key = drives.fromURLToKey(drive.url)
-  await settingsDb.set(PROFILE_CONTENT_KEY_SETTING, key)
-  return key
-}
-
-// Owner-only projection: write every Device's profile content-drive key into writer-keys.json on
-// the canonical Profile Drive, so readers aggregate posts across Devices as one identity. Only the
-// Device that owns the canonical profile (where it is writable) maintains the file; others no-op.
-export async function syncWriterKeys() {
-  const url = await getProfileUrl()
-  if (!url) return
-  const drive = await drives.getOrLoadDrive(url)
-  if (!drive || !drive.writable) return
-  const devices = await listDevices()
-  const keys = devices.map((d) => d.profileContentKey).filter(Boolean)
-  const record = { type: 'walled.garden/writer-keys', keys }
-  await drive.drive.put(WRITER_KEYS_PATH, b4a.from(JSON.stringify(record, null, 2)))
-  logger.info('Synced writer-keys.json', { count: keys.length })
 }
 
 // Writer fan-out
@@ -270,87 +237,6 @@ async function _forEachSpaceDrive(fn) {
   }
 }
 
-// Migration: single-writer Hyperdrive Root Drive -> Collaborative Drive (Autobase)
-// =
-
-// Convert one Space's Root Drive to an Autobase, copying its files, and register it in the Vault.
-// Returns the new hyper:// url. Idempotent-ish: skips spaces whose root drive is already an Autobase.
-// (ADR-0006) Converting changes the drive's key/url; we rewrite spaces.root_drive_url. /drives.json
-// content is carried over by the file copy; in-memory caches in filesystem/index.js must be reset
-// by the caller after migration.
-export async function migrateSpaceRootDrive(space) {
-  if (!space.root_drive_url) {
-    // No root drive yet — nothing to copy; just ensure one exists as an Autobase.
-    const sess = await autobases.createCollaborativeDrive({ type: 'unwalled.garden/person' })
-    await spacesDb.update(space.id, { rootDriveUrl: sess.url })
-    await registerSpace(space, sess.keyStr)
-    return sess.url
-  }
-
-  // Already collaborative? skip.
-  const existingKey = drives.fromURLToKey(space.root_drive_url)
-  if (autobases.getCollaborativeDrive(existingKey)) {
-    await registerSpace(space, existingKey)
-    return space.root_drive_url
-  }
-
-  const srcDrive = await drives.getOrLoadDrive(space.root_drive_url)
-  if (!srcDrive) throw new Error(`Could not load root drive for space ${space.id}`)
-
-  // Carry over the index.json as the new drive's metadata seed.
-  let meta = {}
-  try {
-    const buf = await srcDrive.drive.get('/index.json')
-    if (buf) meta = JSON.parse(b4a.toString(buf))
-  } catch {}
-
-  const dst = await autobases.createCollaborativeDrive(meta)
-
-  // Copy every file from the single-writer Hyperdrive into the Autobase view via put-ops.
-  const ignore = new Set(['/.dat', '/.git'])
-  for await (const entry of srcDrive.drive.list('/')) {
-    if (ignore.has(entry.key)) continue
-    const buf = await srcDrive.drive.get(entry.key)
-    if (!buf) continue
-    await dst.base.append({ op: 'put', path: entry.key, data: b4a.toString(buf, 'base64'), encoding: 'base64' })
-  }
-  await dst.base.update()
-
-  await spacesDb.update(space.id, { rootDriveUrl: dst.url })
-  await registerSpace(space, dst.keyStr)
-  logger.info('Migrated space root drive to autobase', {
-    spaceId: space.id,
-    from: space.root_drive_url,
-    to: dst.url
-  })
-  return dst.url
-}
-
-// Migrate every Space. Reports progress via onProgress({ spaceId, done, total }).
-// Runs on first device-link (ADR-0006). Best-effort per space; a failure is logged and surfaced
-// so the caller can retry rather than leaving a half-migrated identity silently.
-export async function migrateAllSpaces({ onProgress } = {}) {
-  await ensureVault()
-  const spaces = await spacesDb.list()
-  const failures = []
-  const migratedSpaceIds = []
-  let done = 0
-  for (const space of spaces) {
-    try {
-      await migrateSpaceRootDrive(space)
-      migratedSpaceIds.push(space.id)
-    } catch (e) {
-      logger.error('Space migration failed', { spaceId: space.id, error: e.toString() })
-      failures.push({ spaceId: space.id, error: e.toString() })
-    }
-    done++
-    if (onProgress) onProgress({ spaceId: space.id, done, total: spaces.length })
-  }
-  // migratedSpaceIds lets the caller reset filesystem's in-memory root-drive cache for the
-  // spaces whose URL just changed (kept out of this module to avoid a filesystem import cycle).
-  return { total: spaces.length, migrated: migratedSpaceIds.length, migratedSpaceIds, failures }
-}
-
 // Candidate side: after pairing into a Vault, mirror its Space index into the local spaces DB so
 // the joined Device shows the same Spaces. Idempotent — skips Spaces already present locally
 // (matched by Root Drive key). New Spaces' Root Drives are set up lazily on first activation.
@@ -381,24 +267,17 @@ export async function syncSpacesFromVault() {
 // =
 
 async function _putRecord(sess, path, obj) {
-  await sess.base.append({ op: 'put', path, data: JSON.stringify(obj) })
-  await sess.base.update()
+  // Vault index records are small JSON control records — stored inline in the view.
+  await autobases.putInline(sess, path, obj)
 }
 
 async function _delRecord(sess, path) {
-  await sess.base.append({ op: 'del', path })
-  await sess.base.update()
+  await autobases.deletePath(sess, path)
 }
 
 async function _readRecord(sess, path) {
   await sess.base.update()
-  const node = await sess.drive.get(path)
-  if (!node || !node.value) return null
-  try {
-    return JSON.parse(b4a.toString(node.value))
-  } catch {
-    return null
-  }
+  return autobases.readJson(sess, path)
 }
 
 async function _readPrefix(sess, prefix) {
@@ -406,7 +285,8 @@ async function _readPrefix(sess, prefix) {
   const out = []
   for await (const node of sess.drive.createReadStream({ gte: prefix, lt: prefix + '\xff' })) {
     try {
-      out.push(JSON.parse(b4a.toString(node.value)))
+      const buf = await autobases.resolveRecordContent(node.value)
+      if (buf) out.push(JSON.parse(b4a.toString(buf)))
     } catch {}
   }
   return out

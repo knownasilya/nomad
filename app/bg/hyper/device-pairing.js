@@ -140,7 +140,6 @@ async function _processCandidate(candidate, resolve) {
     resolve,
     name: data.name || 'Unnamed device',
     platform: data.platform || 'unknown',
-    profileContentKey: data.profileContentKey || null,
     requestedAt: new Date().toISOString()
   }
   logger.info('Device pairing request received', { deviceKey: data.key, platform: data.platform })
@@ -166,8 +165,7 @@ export async function approveDevice(deviceKey) {
 
   await vault.addDevice(deviceKey, {
     name: req.name,
-    platform: req.platform,
-    profileContentKey: req.profileContentKey
+    platform: req.platform
   })
   logger.info('Confirming device', { deviceKey, hasEncryptionKey: !!sess.base.encryptionKey })
   try {
@@ -212,19 +210,12 @@ export async function submitInvite(code, { name, platform = 'desktop' } = {}) {
   const localKey = b4a.toString(core.key, 'hex')
   await core.close()
 
-  // This Device's own profile content drive — advertised so the canonical profile owner can list
-  // it in writer-keys.json (ADR-0007). Best-effort; pairing still works without it.
-  let profileContentKey = null
-  try {
-    profileContentKey = await vault.ensureProfileContentDrive()
-  } catch {}
-
   return await new Promise((resolve, reject) => {
     let candidate
     try {
       candidate = _bp().addCandidate({
         invite: z32.decode(code),
-        userData: b4a.from(JSON.stringify({ key: localKey, name, platform, profileContentKey })),
+        userData: b4a.from(JSON.stringify({ key: localKey, name, platform })),
         onadd: async (result) => {
           try {
             const vaultKey = b4a.toString(result.key, 'hex')

@@ -107,7 +107,7 @@ export class ResizeImagePopup extends BasePopup {
   // =
 
   async loadImg(url) {
-    var base64buf = await beaker.hyperdrive.readFile(url, 'base64');
+    var base64buf = await beaker.fs.readFile(url, 'base64');
     this.img = document.createElement('img');
     this.img.src = `data:image/${url.split('.').pop()};base64,${base64buf}`;
     this.img.onload = () => {

@@ -1,7 +1,7 @@
 // @ts-nocheck
 //
 // Internal web API: beaker.vault — backs the Devices settings subpage. Available only to beaker://
-// pages (internalOnly). Delegates to hyper/vault.js (the Vault primitive + migration) and
+// pages (internalOnly). Delegates to hyper/vault.js (the Vault primitive) and
 // hyper/device-pairing.js (the blind-pairing handshake). See docs/multi-device-protocol.md.
 
 import os from 'os'
@@ -9,10 +9,6 @@ import b4a from 'b4a'
 import { EventEmitter } from 'events'
 import * as vault from '../../hyper/vault'
 import * as pairing from '../../hyper/device-pairing'
-import * as filesystem from '../../filesystem/index'
-import * as spacesDb from '../../dbs/spaces'
-
-const migrationEvents = new EventEmitter()
 
 function thisPlatform() {
   return 'desktop'
@@ -66,8 +62,7 @@ export default {
     return vault.listSpaces()
   },
 
-  // Member side: ensure a Vault exists (creating + migrating on first use is the caller's choice
-  // via migrate()), then mint an invite code.
+  // Member side: ensure a Vault exists, then mint an invite code.
   async createInvite() {
     const code = await pairing.createInvite()
     // createInvite ensures the Vault exists; record the owner now so the device you're about to
@@ -118,33 +113,5 @@ export default {
 
   async removeDevice(deviceKey) {
     return vault.removeDevice(deviceKey)
-  },
-
-  // First device-link: create the Vault and eagerly migrate every Space Root Drive to Autobase.
-  // After migration each migrated Space's Root Drive has a new key/url, so drop its cached session
-  // and re-establish the active Space's drive (+ private alias) so the running UI uses the new one.
-  async migrate() {
-    const res = await vault.migrateAllSpaces({
-      onProgress: (p) => migrationEvents.emit('progress', p)
-    })
-    for (const spaceId of res.migratedSpaceIds || []) {
-      filesystem.resetSpaceRootDrive(spaceId)
-    }
-    try {
-      const active = await spacesDb.getActive()
-      if (active) {
-        const drive = await filesystem.getOrSetupSpaceDrive(active)
-        if (drive?.url) filesystem.setPrivateAlias(drive.url)
-      }
-    } catch {}
-    return res
-  },
-
-  watchMigration() {
-    const emitter = new EventEmitter()
-    const onProgress = (p) => emitter.emit('progress', p)
-    migrationEvents.on('progress', onProgress)
-    emitter.close = () => migrationEvents.removeListener('progress', onProgress)
-    return emitter
   }
 }

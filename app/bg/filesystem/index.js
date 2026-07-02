@@ -63,7 +63,7 @@ export async function setup() {
     !browsingProfile.url ||
     (typeof browsingProfile.url === 'string' && browsingProfile.url.startsWith('dat:'))
   ) {
-    const drive = await hyper.drives.createNewRootDrive();
+    const drive = await _createRootDrive();
     logger.info('Root drive created', { url: drive.url });
     await db.run(`UPDATE profiles SET url = ? WHERE id = 0`, [drive.url]);
     browsingProfile.url = drive.url;
@@ -72,13 +72,20 @@ export async function setup() {
   if (!browsingProfile.url.endsWith('/')) browsingProfile.url += '/';
 
   logger.info('Loading root drive', { url: browsingProfile.url });
-  rootDrive = await hyper.drives.getOrLoadDrive(browsingProfile.url, { persistSession: true });
+  rootDrive = await _loadRootDrive(browsingProfile.url);
 
-  // If the drive from a previous session is not writable (keypair not in this Corestore),
-  // the data isn't local and reads will hang waiting for peers. Treat as fresh install.
-  if (!rootDrive.writable) {
-    logger.info('Root drive keypair missing from Corestore — creating new root drive');
-    const newDrive = await hyper.drives.createNewRootDrive();
+  // Recreate the root drive when the stored one can't serve as our writable Autobase:
+  //  - not writable (keypair not in this Corestore), OR
+  //  - writable but its linearised view is empty (ADR-0010): a profile created BEFORE the
+  //    Autobase re-home stored a Hyperdrive URL; opening that key as an Autobase yields a
+  //    writable-but-empty base, and writing to it hangs. An owned Autobase root always has local
+  //    content, so writable+empty means stale/incompatible — mint a fresh one instead of hanging.
+  const rootUnusable = !rootDrive.writable || (!isInitialCreation && autobases.viewEmpty(rootDrive));
+  if (rootUnusable) {
+    logger.info('Root drive not a usable Autobase (missing keypair or empty view) — creating a fresh one', {
+      writable: rootDrive.writable,
+    });
+    const newDrive = await _createRootDrive();
     await db.run(`UPDATE profiles SET url = ? WHERE id = 0`, [newDrive.url]);
     browsingProfile.url = newDrive.url;
     if (!browsingProfile.url.endsWith('/')) browsingProfile.url += '/';
@@ -91,7 +98,7 @@ export async function setup() {
   if (isInitialCreation) {
     await _driveWriteFile(rootDrive, `/bookmarks/beaker-dev-docs-templates.goto`, '', {
       href: 'https://nomad.pages.dev/docs/templates/',
-      title: 'Hyperdrive Templates',
+      title: 'Drive Templates',
     });
     await _driveWriteFile(rootDrive, `/bookmarks/twitter.goto`, '', { href: 'https://twitter.com/', title: 'Twitter' });
     await _driveWriteFile(rootDrive, `/bookmarks/reddit.goto`, '', { href: 'https://reddit.com/', title: 'Reddit' });
@@ -106,7 +113,7 @@ export async function setup() {
 
   let hostKeys = [];
   try {
-    const drivesBuf = await rootDrive.drive.get('/drives.json');
+    const drivesBuf = await _get(rootDrive, '/drives.json');
     if (drivesBuf) {
       drives = JSON.parse(b4a.toString(drivesBuf)).drives;
       hostKeys = hostKeys.concat(drives.filter(d => d.type !== 'autobase').map((d) => d.key));
@@ -156,9 +163,8 @@ export async function getDriveIdentFull(url) {
         try {
           const sess = autobases.getCollaborativeDrive(hostname);
           if (sess) {
-            const node = await sess.drive.get('/index.json');
-            if (node && node.value) {
-              const manifest = JSON.parse(Buffer.from(node.value).toString('utf8'));
+            const manifest = await autobases.readJson(sess, '/index.json');
+            if (manifest) {
               ident.feed = manifest.type === 'walled.garden/feed';
             }
           }
@@ -189,12 +195,12 @@ export async function getOrSetupSpaceDrive(space) {
   if (space.root_drive_url) {
     let url = space.root_drive_url;
     if (!url.endsWith('/')) url += '/';
-    const drive = await hyper.drives.getOrLoadDrive(url, { persistSession: true });
+    const drive = await _loadRootDrive(url);
     spaceRootDrives[space.id] = drive;
     return drive;
   }
 
-  const drive = await hyper.drives.createNewRootDrive();
+  const drive = await _createRootDrive();
   logger.info('Created root drive for space', { spaceId: space.id, url: drive.url });
   await spacesDb.update(space.id, { rootDriveUrl: drive.url });
   spaceRootDrives[space.id] = drive;
@@ -245,7 +251,7 @@ export async function configDriveForSpace(url, opts = {}, spaceId = 1) {
     var key = await hyper.drives.fromURLToKey(url, true);
     if (!spaceDrivesMap[spaceId]) {
       try {
-        const buf = await spaceDrive.drive.get('/drives.json');
+        const buf = await _get(spaceDrive, '/drives.json');
         spaceDrivesMap[spaceId] = buf ? JSON.parse(b4a.toString(buf)).drives || [] : [];
       } catch (e) {
         spaceDrivesMap[spaceId] = [];
@@ -258,7 +264,7 @@ export async function configDriveForSpace(url, opts = {}, spaceId = 1) {
       if (opts.forkOf) driveCfg.forkOf = opts.forkOf;
       spaceDrives.push(driveCfg);
     }
-    await spaceDrive.drive.put('/drives.json', b4a.from(JSON.stringify({ drives: spaceDrives }, null, 2)));
+    await _put(spaceDrive, '/drives.json', b4a.from(JSON.stringify({ drives: spaceDrives }, null, 2)));
   } finally {
     release();
   }
@@ -286,7 +292,7 @@ export async function listDrivesForSpace(spaceId, { includeSystem } = {}) {
         return listDrives({ includeSystem });
       }
       try {
-        const buf = await spaceDrive.drive.get('/drives.json');
+        const buf = await _get(spaceDrive, '/drives.json');
         spaceDrivesMap[spaceId] = buf ? JSON.parse(b4a.toString(buf)).drives || [] : [];
       } catch (e) {
         spaceDrivesMap[spaceId] = [];
@@ -359,7 +365,7 @@ export async function configDrive(url, { forkOf, tags } = {}) {
         else delete driveCfg.forkOf;
       }
     }
-    await rootDrive.drive.put('/drives.json', b4a.from(JSON.stringify({ drives }, null, 2)));
+    await _put(rootDrive, '/drives.json', b4a.from(JSON.stringify({ drives }, null, 2)));
   } finally {
     release();
   }
@@ -381,7 +387,7 @@ export async function configAutobaseDrive(url, { tags } = {}) {
       driveCfg.type = 'autobase';
       if (tags && Array.isArray(tags)) driveCfg.tags = tags.filter(Boolean);
     }
-    await rootDrive.drive.put('/drives.json', b4a.from(JSON.stringify({ drives }, null, 2)));
+    await _put(rootDrive, '/drives.json', b4a.from(JSON.stringify({ drives }, null, 2)));
   } finally {
     release();
   }
@@ -404,7 +410,7 @@ export async function removeDrive(url) {
     }
     await trash.add(key);
     drives.splice(driveIndex, 1);
-    await rootDrive.drive.put('/drives.json', b4a.from(JSON.stringify({ drives }, null, 2)));
+    await _put(rootDrive, '/drives.json', b4a.from(JSON.stringify({ drives }, null, 2)));
   } finally {
     release();
   }
@@ -423,7 +429,8 @@ export async function removeDriveForSpace(url, spaceId = 1) {
     const idx = spaceDrivesMap[spaceId].findIndex((d) => d.key === key);
     if (idx === -1) return;
     spaceDrivesMap[spaceId].splice(idx, 1);
-    await spaceDrive.drive.put(
+    await _put(
+      spaceDrive,
       '/drives.json',
       b4a.from(JSON.stringify({ drives: spaceDrivesMap[spaceId] }, null, 2))
     );
@@ -435,7 +442,7 @@ export async function removeDriveForSpace(url, spaceId = 1) {
 export async function getAvailableName(containingPath, basename, ext = undefined, joiningChar = '-', drive = rootDrive) {
   for (let i = 1; i < 1e9; i++) {
     const name = (i === 1 ? basename : `${basename}${joiningChar}${i}`) + (ext ? `.${ext}` : '');
-    const entry = await drive.drive.entry(joinPath(containingPath, name));
+    const entry = await _entry(drive,joinPath(containingPath, name));
     if (!entry) return name;
   }
   throw new Error('Unable to find an available name for ' + basename);
@@ -445,7 +452,7 @@ export async function ensureDir(path, drive = rootDrive) {
   // In Hyperdrive v11, directories are implicit — no mkdir needed.
   // Warn only if a file already exists at this exact path (unexpected).
   try {
-    const entry = await drive.drive.entry(path);
+    const entry = await _entry(drive,path);
     if (entry) {
       logger.error('Filesystem expects a folder but an unexpected file exists.', { path });
     }
@@ -457,7 +464,7 @@ export async function ensureDir(path, drive = rootDrive) {
 export async function migrateAddressBook() {
   let addressBook;
   try {
-    const buf = await rootDrive.drive.get('/address-book.json');
+    const buf = await _get(rootDrive, '/address-book.json');
     if (!buf) return;
     addressBook = JSON.parse(b4a.toString(buf));
   } catch (e) {
@@ -478,19 +485,53 @@ export async function migrateAddressBook() {
       if (!tags.includes('contact')) existing.tags = tags.concat(['contact']);
     }
   }
-  await rootDrive.drive.put('/drives.json', b4a.from(JSON.stringify({ drives }, null, 2)));
-  await rootDrive.drive.del('/address-book.json');
+  await _put(rootDrive, '/drives.json', b4a.from(JSON.stringify({ drives }, null, 2)));
+  await _del(rootDrive, '/address-book.json');
 }
 
 // internal helpers
 // =
+// The root + space drives are Autobase (ADR-0010 Phase 4). These small helpers dispatch on the
+// session type so the module works whether a session is an Autobase (has `.base`) or a legacy
+// Hyperdrive (`.drive` is a Hyperdrive). Autobase content goes through the shared fs-core helpers
+// (inline value for these small control records / JSON bodies; see autobases.js).
 
-/**
- * Write a file to a drive. Content is a string or Buffer.
- * metadata is an optional object stored as drive entry metadata.
- */
-async function _driveWriteFile(drive, path, content, metadata = undefined) {
+async function _createRootDrive() {
+  return autobases.createCollaborativeDrive({});
+}
+
+async function _loadRootDrive(url) {
+  const key = await hyper.drives.fromURLToKey(url, true);
+  return autobases.getOrLoadCollaborativeDrive(key);
+}
+
+async function _get(sess, path) {
+  if (sess && sess.base) return autobases.readContent(sess, path); // Autobase → bytes | null
+  const buf = await sess.drive.get(path);
+  return buf || null;
+}
+
+async function _put(sess, path, content) {
   const buf = typeof content === 'string' ? b4a.from(content) : content;
-  const opts = metadata ? { metadata } : undefined;
-  await drive.drive.put(path, buf, opts);
+  if (sess && sess.base) return autobases.putInline(sess, path, buf); // small control record → inline
+  return sess.drive.put(path, buf);
+}
+
+async function _del(sess, path) {
+  if (sess && sess.base) return autobases.deletePath(sess, path);
+  return sess.drive.del(path);
+}
+
+// Existence check: Autobase view is a Hyperbee (`.get` → node|null); Hyperdrive uses `.entry`.
+async function _entry(sess, path) {
+  if (sess && sess.base) return sess.drive.get(path);
+  return sess.drive.entry(path);
+}
+
+// Write a bookmark/control file. On Autobase the bookmark href/title live in the file BODY (JSON),
+// not entry metadata (which is now filesystem stat). The serve path's .goto handler reads href from
+// the body; see bg/protocols/hyper.js.
+async function _driveWriteFile(drive, path, content, metadata = undefined) {
+  const body = metadata ? JSON.stringify(metadata) : (typeof content === 'string' ? content : content);
+  await _put(drive, path, body);
 }

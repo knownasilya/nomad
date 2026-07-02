@@ -17,77 +17,43 @@ import { findTab } from '../../ui/tabs/manager';
 const NOMAD_API_REFERENCE = `\
 You are an AI assistant embedded in Nomad, a peer-to-peer web browser that hosts and serves websites via Hyperdrive (hyper:// protocol). Pages running in Nomad have access to the following JavaScript APIs under the global \`beaker\` object:
 
-## beaker.hyperdrive — Read/write Hyperdrive files
+## beaker.fs — The filesystem API for hyper:// drives
 
-Methods work with full \`hyper://\` URLs or plain paths (relative to the current drive).
-
-\`\`\`js
-// Drive instance — scope all ops to one drive
-const drive = beaker.hyperdrive.drive('hyper://key...')
-
-// Create a new drive
-const drive = await beaker.hyperdrive.createDrive({ title, description })
-
-// Read
-const info    = await beaker.hyperdrive.getInfo(url)          // { key, url, writable, version, title, description }
-const stat    = await beaker.hyperdrive.stat(url)             // { isFile(), isDirectory(), size, mtime, metadata }
-const text    = await beaker.hyperdrive.readFile(url)         // string (utf8 default)
-const binary  = await beaker.hyperdrive.readFile(url, 'binary')
-const entries = await beaker.hyperdrive.readdir(url)          // string[]
-const entries = await beaker.hyperdrive.readdir(url, { includeStats: true }) // { name, stat }[]
-
-// Write (requires permission for other drives)
-await beaker.hyperdrive.writeFile(url, data)
-await beaker.hyperdrive.mkdir(url)
-await beaker.hyperdrive.copy(srcUrl, dstUrl)
-await beaker.hyperdrive.rename(srcUrl, dstUrl)
-await beaker.hyperdrive.unlink(url)
-await beaker.hyperdrive.rmdir(url, { recursive: true })
-await beaker.hyperdrive.configure(url, { title, description })
-
-// Watch for changes
-const watcher = drive.watch('/', onChanged) // EventTarget, emits 'changed'
-\`\`\`
-
-## beaker.autobase — Multi-writer Collaborative Drives
-
-Collaborative Drives allow multiple writers. The read/write API mirrors \`beaker.hyperdrive\`.
+\`beaker.fs\` is THE API for reading and writing \`hyper://\` drives. Every drive is a multi-writer
+Autobase (a drive can gain writers via invites without ever changing its URL); \`beaker.fs\` handles
+files, drive lifecycle, and writer management through one surface. \`stat\` carries real
+\`mtime\`/\`ctime\`/\`size\`, and \`get(path, 'json')\` parses JSON for you.
 
 \`\`\`js
-// Check drive type
-const isCollab = await beaker.autobase.isCollaborativeDrive(url)  // Boolean
+// Scoped handle (paths are relative to the drive) …
+const drive = beaker.fs.drive('hyper://key...')
+const info  = await drive.getInfo()
+const st    = await drive.stat('/index.json')          // { isFile(), size, mtime, ctime, ... }
+const text  = await drive.readFile('/index.html')
+const obj   = await drive.get('/index.json', 'json')   // real JSON decode (parsed for you)
+const list  = await drive.list('/')
+await drive.writeFile('/notes.txt', 'hello')
+await drive.put('/data.bin', bytes)
+await drive.del('/old.txt')
+await drive.copy('/a', '/b'); await drive.rename('/b', '/c')
+drive.watch('/', () => { /* changed */ })
 
-// Drive instance — scope all ops to one collaborative drive
-const drive = beaker.autobase.collaborativeDrive('hyper://key...')
+// … or url-first helpers (no scoped instance)
+const text2 = await beaker.fs.readFile('hyper://key.../index.html')
+await beaker.fs.writeFile('hyper://key.../notes.txt', 'hello')
+const entries = await beaker.fs.query('hyper://key.../posts/')   // listing under a prefix
 
-// Create a new collaborative drive (shows modal by default)
-const drive = await beaker.autobase.createCollaborativeDrive({ title, description })
-// Skip modal: pass prompt: false
-const drive = await beaker.autobase.createCollaborativeDrive({ title, description, prompt: false })
+// Every drive is multi-writer-capable and keeps its URL forever, but "collaborative" is a policy
+// flag — LOCKED (single-writer) by default. Unlock without changing the URL:
+await beaker.fs.configure(url, { collaborative: true })   // or pass { collaborative: true } to createDrive
+const { collaborative } = await beaker.fs.getInfo(url)    // is it accepting writers?
 
-// Read — same shape as beaker.hyperdrive
-const info    = await drive.getInfo()
-const entries = await drive.list('/')
-const text    = await drive.readFile('/index.html')
-
-// Write — same shape as beaker.hyperdrive
-await drive.put('/path', data)
-await drive.writeFile('/path', text)
-await drive.del('/path')
-await drive.copy('/src', '/dst')
-await drive.rename('/old', '/new')
-await drive.rmdir('/dir')
-
-// Writer management (owner only)
-const inviteUrl = await drive.createInvite()                        // share this URL
-await beaker.autobase.claimInvite(inviteUrl, { profileUrl })        // recipient calls this
-await beaker.autobase.requestAccess(url, { profileUrl })            // stranger request
-const requests  = await drive.listRequests()                        // [{ writerKey, profileUrl }]
-drive.watchRequests(onChanged)                                      // live updates, emits 'changed'
+// Multi-writer: invite/approve writers so others can write to the same drive (this also unlocks it)
+const inviteUrl = await drive.createInvite()
+await beaker.fs.claimInvite(inviteUrl)                 // recipient calls this
+const requests = await drive.listRequests()            // [{ writerKey, profileUrl }]
 await drive.approveRequest(writerKey)
-await drive.denyRequest(writerKey)
-await drive.removeWriter(writerKey)
-const writers = await drive.listWriters()                           // [{ writerKey, profileUrl }]
+const writers = await drive.listWriters()
 \`\`\`
 
 ## beaker.shell — Browser dialogs and library management
@@ -171,7 +137,7 @@ When a user asks you to edit the current page, derive the target file path from 
    Read the drive to find which one exists, then edit that file.
 3. **Extensionless path** — treat it as a directory (append \`/\`) and apply the same index-file lookup above.
 
-Example: on \`hyper://abc.../\` you would check for \`/index.html\` first, then \`/index.md\`, then \`/index.txt\`, and edit whichever one exists. Use \`beaker.hyperdrive.stat()\` to test existence.`;
+Example: on \`hyper://abc.../\` you would check for \`/index.html\` first, then \`/index.md\`, then \`/index.txt\`, and edit whichever one exists. Use \`beaker.fs.stat()\` to test existence.`;
 
 // Built-in tools exposed to the model
 const BUILTIN_TOOLS = [

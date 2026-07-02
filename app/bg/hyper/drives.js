@@ -16,6 +16,7 @@ import * as hyperDnsDb from '../dbs/dat-dns';
 import * as daemon from './daemon';
 import * as driveAssets from './assets';
 import * as hyperDns from './dns';
+import * as autobases from './autobases';
 
 // fs modules
 import * as filesystem from '../filesystem/index';
@@ -246,6 +247,9 @@ export function getDrive(key) {
 }
 
 export async function getDriveCheckout(drive, version) {
+  // ADR-0010: Autobase drives have no point-in-time checkout (Q5) — always serve the live view.
+  // Prevents callers from opening an autobase core as a versioned Hyperdrive (which hangs).
+  if (drive && drive.base) return { isHistoric: false, checkoutFS: drive };
   let isHistoric = false;
   let checkoutFS = drive;
   if (typeof version !== 'undefined' && version !== null) {
@@ -269,6 +273,11 @@ export async function getDriveCheckout(drive, version) {
 
 export async function getOrLoadDrive(key, opts) {
   key = await fromURLToKey(key, true);
+  // ADR-0010: root/space/collaborative drives are Autobase — opening one as a Hyperdrive hangs.
+  // A loaded collaborative session is the right handle; return it so downstream `.base`-aware
+  // code paths (filesystem helpers, getDriveCheckout) work and Hyperdrive open is never attempted.
+  const ab = autobases.getCollaborativeDrive(key);
+  if (ab) return ab;
   const drive = getDrive(key);
   if (drive) return drive;
   return loadDrive(key, opts);

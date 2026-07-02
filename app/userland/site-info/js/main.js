@@ -50,11 +50,11 @@ class SiteInfoApp extends LitElement {
   }
 
   get isRootDrive() {
-    return this.origin === beaker.hyperdrive.drive('hyper://private/').url;
+    return this.origin === beaker.fs.drive('hyper://private/').url;
   }
 
   get drive() {
-    return beaker.hyperdrive.drive(this.url);
+    return beaker.fs.drive(this.url);
   }
 
   get origin() {
@@ -171,7 +171,7 @@ class SiteInfoApp extends LitElement {
           if (isHyperHashRegex.test(permParam)) {
             let driveInfo;
             try {
-              driveInfo = await beaker.beaker.hyperdrive
+              driveInfo = await beaker.fs
                 .drive(permParam)
                 .getInfo();
             } catch (e) {
@@ -439,7 +439,7 @@ class SiteInfoApp extends LitElement {
   }
 
   async onForkDrive() {
-    var drive = await beaker.hyperdrive.forkDrive(this.url, {
+    var drive = await beaker.fs.forkDrive(this.url, {
       detached: false,
     });
     beaker.browser.openUrl(drive.url, { setActive: true });

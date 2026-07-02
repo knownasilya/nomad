@@ -36,6 +36,8 @@ declare namespace Beaker {
     version: number;
     title: string;
     description: string;
+    /** Whether the drive currently accepts writer-access requests (locked/single-writer by default). */
+    collaborative?: boolean;
     /** Tags applied to the drive in the local library. */
     tags?: string[];
   }
@@ -275,10 +277,100 @@ declare namespace Beaker {
     [method: string]: (...args: any[]) => any;
   }
 
+  /** A filesystem handle scoped to one drive, returned by beaker.fs.drive(url). */
+  interface FsDrive {
+    readonly url: string;
+    getInfo(opts?: object): Promise<DriveInfo>;
+    entry(path: string, opts?: object): Promise<any>;
+    stat(path: string, opts?: object): Promise<Stat>;
+    /** Read a file. encoding 'utf8'|'binary'|'base64'|'hex'|'json' (json parses for you). */
+    get(path: string, opts?: object | string): Promise<any>;
+    readFile(path: string, opts?: object | string): Promise<any>;
+    list(path?: string, opts?: object): Promise<any[]>;
+    readdir(path?: string, opts?: object): Promise<any[]>;
+    query(path?: string, opts?: object): Promise<any[]>;
+    diff(other: string, opts?: object): Promise<any[]>;
+    put(path: string, data: any, opts?: object | string): Promise<void>;
+    writeFile(path: string, data: any, opts?: object | string): Promise<void>;
+    del(path: string, opts?: object): Promise<void>;
+    unlink(path: string, opts?: object): Promise<void>;
+    mkdir(path: string, opts?: object): Promise<void>;
+    rmdir(path: string, opts?: object): Promise<void>;
+    copy(src: string, dst: string, opts?: object): Promise<void>;
+    rename(src: string, dst: string, opts?: object): Promise<void>;
+    watch(pathSpec?: string | null, onChanged?: (e: any) => void): EventTarget;
+    configure(info: object, opts?: object): Promise<void>;
+    forkDrive(opts?: object): Promise<FsDrive>;
+    updateMetadata(path: string, metadata: object, opts?: object): Promise<void>;
+    deleteMetadata(path: string, keys: string[], opts?: object): Promise<void>;
+    mount(path: string, key: string, opts?: object): Promise<void>;
+    unmount(path: string, opts?: object): Promise<void>;
+    // collaborative-drive writer management (this drive)
+    createInvite(opts?: object): Promise<string>;
+    listRequests(): Promise<any[]>;
+    watchRequests(onRequest?: (e: any) => void): EventTarget;
+    approveRequest(writerKey: string, opts?: object): Promise<void>;
+    denyRequest(writerKey: string): Promise<void>;
+    removeWriter(writerKey: string): Promise<void>;
+    listWriters(): Promise<any[]>;
+  }
+
+  /**
+   * Unified, backend-agnostic filesystem API over the drive backend — single-writer
+   * Hyperdrives AND multi-writer Autobase collaborative drives. It detects the backend for a
+   * hyper:// URL and dispatches, so one code path works for any drive (no more "try hyperdrive,
+   * fall back to autobase"). Use beaker.fs.drive(url) for a scoped handle, or the url-first
+   * helpers below. stat carries real mtime/ctime/size; get(..., 'json') parses.
+   */
+  interface Fs {
+    drive(url: string): FsDrive;
+    getInfo(url: string, opts?: object): Promise<DriveInfo>;
+    entry(url: string, opts?: object): Promise<any>;
+    stat(url: string, opts?: object): Promise<Stat>;
+    get(url: string, opts?: object | string): Promise<any>;
+    readFile(url: string, opts?: object | string): Promise<any>;
+    list(url: string, opts?: object): Promise<any[]>;
+    readdir(url: string, opts?: object): Promise<any[]>;
+    query(url: string, opts?: object): Promise<any[]>;
+    diff(url: string, other: string, opts?: object): Promise<any[]>;
+    put(url: string, data: any, opts?: object | string): Promise<void>;
+    writeFile(url: string, data: any, opts?: object | string): Promise<void>;
+    del(url: string, opts?: object): Promise<void>;
+    unlink(url: string, opts?: object): Promise<void>;
+    mkdir(url: string, opts?: object): Promise<void>;
+    rmdir(url: string, opts?: object): Promise<void>;
+    copy(src: string, dst: string, opts?: object): Promise<void>;
+    rename(src: string, dst: string, opts?: object): Promise<void>;
+    watch(url: string, pathSpec?: string | null, onChanged?: (e: any) => void): EventTarget;
+    // drive lifecycle (new drives are Autobase-from-birth)
+    createDrive(opts?: object): Promise<FsDrive>;
+    createCollaborativeDrive(opts?: object): Promise<FsDrive>;
+    forkDrive(url: string, opts?: object): Promise<FsDrive>;
+    loadDrive(url: string): Promise<any>;
+    configure(url: string, info: object, opts?: object): Promise<void>;
+    isCollaborativeDrive(url: string): Promise<boolean>;
+    updateMetadata(url: string, metadata: object, opts?: object): Promise<void>;
+    deleteMetadata(url: string, keys: string[], opts?: object): Promise<void>;
+    mount(url: string, key: string, opts?: object): Promise<void>;
+    unmount(url: string, opts?: object): Promise<void>;
+    importFromFilesystem(opts?: object): Promise<any>;
+    exportToFilesystem(opts?: object): Promise<any>;
+    exportToDrive(opts?: object): Promise<any>;
+    // collaborative-drive writer management (url-first)
+    createInvite(url: string, opts?: object): Promise<string>;
+    claimInvite(inviteUrl: string, opts?: object): Promise<any>;
+    requestAccess(url: string, opts?: object): Promise<any>;
+    listRequests(url: string): Promise<any[]>;
+    watchRequests(url: string, onRequest?: (e: any) => void): EventTarget;
+    approveRequest(url: string, writerKey: string, opts?: object): Promise<void>;
+    denyRequest(url: string, writerKey: string): Promise<void>;
+    removeWriter(url: string, writerKey: string): Promise<void>;
+    listWriters(url: string): Promise<any[]>;
+  }
+
   /** The global beaker object. Some namespaces are gated by page protocol. */
   interface Root {
-    hyperdrive: Hyperdrive;
-    autobase: Autobase;
+    fs: Fs;
     ai: Ai;
     shell: Shell;
     panes: Panes;

@@ -36,11 +36,9 @@ class EditorApp extends LitElement {
   }
 
   get drive() {
-    // Collaborative (autobase) drives store their files in the autobase view, not
-    // a plain hyperdrive — read/write them through beaker.autobase instead.
-    return this.isCollaborative
-      ? beaker.autobase.collaborativeDrive(this.url)
-      : beaker.hyperdrive.drive(this.url);
+    // beaker.fs auto-detects the backend (Hyperdrive or Autobase collaborative
+    // drive) and dispatches reads/writes to the right one.
+    return beaker.fs.drive(this.url);
   }
 
   get origin() {
@@ -432,13 +430,6 @@ class EditorApp extends LitElement {
         ),
       ]);
 
-    // Collaborative (autobase) drives must be read through beaker.autobase, not
-    // beaker.hyperdrive — detect once so this.drive routes correctly.
-    this.isCollaborative = await step(
-      'isCollaborativeDrive',
-      beaker.autobase.isCollaborativeDrive(url)
-    ).catch(() => false);
-
     // load drive meta
     let drive = this.drive;
     let info = await step('getInfo', drive.getInfo());
@@ -542,7 +533,7 @@ class EditorApp extends LitElement {
         if (stat && stat.mount) {
           this.mountInfo = await step(
             'mountGetInfo',
-            beaker.hyperdrive.drive(stat.mount.key).getInfo()
+            beaker.fs.drive(stat.mount.key).getInfo()
           ).catch((e) => undefined);
           if (this.mountInfo) {
             this.mountInfo.resolvedPath = '/' + realPathParts.join('/');
@@ -1283,7 +1274,7 @@ class EditorApp extends LitElement {
 
   async onClickFork(e) {
     var urlp = new URL(this.url);
-    var newDrive = await beaker.hyperdrive.forkDrive(this.url);
+    var newDrive = await beaker.fs.forkDrive(this.url);
     var newDriveUrlp = new URL(newDrive.url);
     urlp.hostname = newDriveUrlp.hostname;
 

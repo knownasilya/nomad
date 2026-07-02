@@ -1,6 +1,7 @@
 import ms from 'ms';
 import b4a from 'b4a';
 import * as filesystem from './index';
+import * as autobases from '../hyper/autobases';
 import {
   PATHS,
   TRASH_FIRST_COLLECT_WAIT,
@@ -94,7 +95,7 @@ export async function collect({ olderThan } = {}) {
 
 async function _read(rootDrive) {
   try {
-    const buf = await rootDrive.drive.get(PATHS.TRASH);
+    const buf = await autobases.readContent(rootDrive, PATHS.TRASH);
     if (!buf) return [];
     return JSON.parse(b4a.toString(buf));
   } catch {
@@ -103,7 +104,7 @@ async function _read(rootDrive) {
 }
 
 async function _write(rootDrive, items) {
-  await rootDrive.drive.put(PATHS.TRASH, b4a.from(JSON.stringify(items)));
+  await autobases.putInline(rootDrive, PATHS.TRASH, b4a.from(JSON.stringify(items)));
 }
 
 function schedule(time) {

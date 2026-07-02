@@ -18,8 +18,4 @@ export default {
   // managing
   renameDevice: 'promise',
   removeDevice: 'promise',
-
-  // migration (first device-link)
-  migrate: 'promise', // -> { total, migrated, failures }
-  watchMigration: 'readable',
 };

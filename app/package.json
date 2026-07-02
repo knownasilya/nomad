@@ -46,6 +46,7 @@
     "graphql": "^15.3.0",
     "graphql-fields": "^2.0.3",
     "hyperbee": "^2.27.3",
+    "hyperblobs": "^2.12.1",
     "hyperdrive": "^11.0.0",
     "hyperswarm": "^4.0.0",
     "icojs": "^0.16.1",

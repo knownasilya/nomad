@@ -164,7 +164,7 @@ class ForkDriveModal extends LitElement {
     await this.requestUpdate();
 
     // fetch drive info
-    this.driveInfo = await bg.hyperdrive.getInfo(this.base.url);
+    this.driveInfo = await bg.fs.getInfo(this.base.url);
     this.title =
       typeof params.title === 'string'
         ? params.title
@@ -418,7 +418,7 @@ class ForkDriveModal extends LitElement {
 
   async onChangeBase(e) {
     this.base = this.forks.find((fork) => fork.url === e.currentTarget.value);
-    this.driveInfo = await bg.hyperdrive.getInfo(this.base.url);
+    this.driveInfo = await bg.fs.getInfo(this.base.url);
     this.requestUpdate();
   }
 
@@ -457,7 +457,7 @@ class ForkDriveModal extends LitElement {
 
     this.state = STATES.CLONING;
     try {
-      var url = await bg.hyperdrive.forkDrive(this.base.url, {
+      var url = await bg.fs.forkDrive(this.base.url, {
         detached: this.isDetached,
         title: this.isDetached ? this.title : this.driveInfo.title,
         description: this.isDetached

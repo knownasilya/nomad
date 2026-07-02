@@ -57,8 +57,6 @@ export const setup = function (rpc) {
   internal.vault = Object.assign({}, vaultRPC);
   internal.vault.watchPendingRequests = () =>
     fromEventStream(vaultRPC.watchPendingRequests());
-  internal.vault.watchMigration = () =>
-    fromEventStream(vaultRPC.watchMigration());
 
   // internal.drives
   internal.drives = new EventTarget();

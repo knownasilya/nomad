@@ -9,7 +9,7 @@ import { URL } from 'url';
 // =
 
 const API_DOCS_URL =
-  'https://beakerbrowser.com/docs/apis/experimental-globalfetch.html';
+  'https://nomad.pages.dev/docs/api/';
 const API_PERM_ID = 'experimentalGlobalFetch';
 const LAB_API_ID = 'globalFetch';
 

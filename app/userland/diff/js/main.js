@@ -87,9 +87,9 @@ export class CompareApp extends LitElement {
       })();
     }
 
-    this.baseDrive = this.base ? beaker.hyperdrive.drive(this.base) : undefined;
+    this.baseDrive = this.base ? beaker.fs.drive(this.base) : undefined;
     this.targetDrive = this.target
-      ? beaker.hyperdrive.drive(this.target)
+      ? beaker.fs.drive(this.target)
       : undefined;
     await this.attempt('Reading information about the drives', async () => {
       let [baseInfo, targetInfo] = await Promise.allSettled([
@@ -753,7 +753,7 @@ class CompareDiffItemContent extends LitElement {
   renderLeftColumn() {
     if (this.diff.change === 'del' || this.diff.change === 'mod') {
       return this.renderFileContent(
-        beaker.hyperdrive.drive(this.targetOrigin),
+        beaker.fs.drive(this.targetOrigin),
         this.diff.targetPath,
         this.diff.targetMountKey
       );
@@ -764,7 +764,7 @@ class CompareDiffItemContent extends LitElement {
   renderRightColumn() {
     if (this.diff.change === 'add' || this.diff.change === 'mod') {
       return this.renderFileContent(
-        beaker.hyperdrive.drive(this.baseOrigin),
+        beaker.fs.drive(this.baseOrigin),
         this.diff.basePath,
         this.diff.baseMountKey
       );
@@ -801,13 +801,13 @@ class CompareDiffItemContent extends LitElement {
     if (!editorEl) return;
     var [baseContent, targetContent] = await Promise.all([
       this.diff.change === 'del' || this.diff.change === 'mod'
-        ? beaker.hyperdrive
+        ? beaker.fs
             .drive(this.targetOrigin)
             .readFile(this.diff.targetPath)
             .catch((e) => '')
         : '',
       this.diff.change === 'add' || this.diff.change === 'mod'
-        ? beaker.hyperdrive
+        ? beaker.fs
             .drive(this.baseOrigin)
             .readFile(this.diff.basePath)
             .catch((e) => '')

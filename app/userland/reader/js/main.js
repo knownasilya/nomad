@@ -3,7 +3,7 @@
 // - Subscriptions: walled.garden/follows at hyper://private/.data/walled.garden/follows.json
 //   (per-Space, multi-device via the Root Drive).
 // - Reads any feed whether it's a plain Hyperdrive or an Autobase Collaborative Drive,
-//   via a local bridge (try Hyperdrive, fall back to Autobase; cache the result).
+//   via beaker.fs (the unified, backend-agnostic filesystem API).
 // - Post discovery by directory enumeration (itemsPath/*/post.json), newest-first.
 // - Read-state synced to hyper://private/.data/reader/read-state.json (debounced, pruned).
 // - Hybrid rendering: an aggregated card stream; opening a post navigates to its
@@ -22,7 +22,6 @@ const state = {
   readSet: new Set(),
 }
 
-const backendCache = {}   // driveRootUrl -> 'hyperdrive' | 'autobase'
 let saveReadTimer = null
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
@@ -57,7 +56,7 @@ async function init() {
 
 async function loadFollows() {
   try {
-    const j = JSON.parse(await beaker.hyperdrive.readFile(FOLLOWS_PATH))
+    const j = JSON.parse(await beaker.fs.readFile(FOLLOWS_PATH))
     return (j.urls || []).map(driveRoot).filter(Boolean)
   } catch { return [] }
 }
@@ -66,7 +65,7 @@ async function saveFollows(urls) {
   const rec = { type: 'walled.garden/follows', urls }
   const valid = beaker.schemas.validate('walled.garden/follows', rec)
   if (!valid.success) throw new Error(valid.error)
-  await beaker.hyperdrive.writeFile(FOLLOWS_PATH, JSON.stringify(valid.data, null, 2))
+  await beaker.fs.writeFile(FOLLOWS_PATH, JSON.stringify(valid.data, null, 2))
 }
 
 async function addFeed(rawUrl) {
@@ -91,7 +90,7 @@ async function removeFeed(root) {
 
 async function loadReadState() {
   try {
-    const j = JSON.parse(await beaker.hyperdrive.readFile(READSTATE_PATH))
+    const j = JSON.parse(await beaker.fs.readFile(READSTATE_PATH))
     return new Set(j.read || [])
   } catch { return new Set() }
 }
@@ -120,11 +119,11 @@ async function flushReadState() {
   const pruned = [...state.readSet].filter((u) => known.has(u))
   state.readSet = new Set(pruned)
   try {
-    await beaker.hyperdrive.writeFile(READSTATE_PATH, JSON.stringify({ read: pruned }, null, 2))
+    await beaker.fs.writeFile(READSTATE_PATH, JSON.stringify({ read: pruned }, null, 2))
   } catch (e) { console.warn('[reader] read-state save failed', e) }
 }
 
-// ── Data: feeds (the Hyperdrive/Autobase bridge) ──────────────────────────────
+// ── Data: feeds (via beaker.fs, the backend-agnostic bridge) ──────────────────
 
 async function refreshAll() {
   state.loading = true
@@ -168,55 +167,14 @@ async function loadFeed(root) {
 }
 
 // Return an adapter { readText(path), listPostMetaPaths(itemsPath) } for the feed,
-// detecting the backend by attempting a read and caching the result.
+// backed by beaker.fs (which auto-detects the backend — Hyperdrive or Autobase — so
+// no more try-then-fall-back-and-cache dance is needed).
 async function openFeed(root) {
-  if (backendCache[root] === 'autobase') return autobaseAdapter(root)
-  if (backendCache[root] === 'hyperdrive') return hyperdriveAdapter(root)
-
-  // Fast path: a drive we already know is collaborative.
-  try {
-    if (await beaker.autobase.isCollaborativeDrive(root)) {
-      backendCache[root] = 'autobase'
-      return autobaseAdapter(root)
-    }
-  } catch {}
-
-  // Try Hyperdrive (its open fails fast on an Autobase core).
-  try {
-    const h = hyperdriveAdapter(root)
-    await h.readText('/index.json')
-    backendCache[root] = 'hyperdrive'
-    return h
-  } catch {}
-
-  // Fall back to Autobase (throws if genuinely unreachable — surfaced per-feed).
-  const a = autobaseAdapter(root)
-  await a.readText('/index.json')
-  backendCache[root] = 'autobase'
-  return a
-}
-
-function hyperdriveAdapter(root) {
-  const d = beaker.hyperdrive.drive(root)
+  const d = beaker.fs.drive(root)
   return {
     async readText(path) { return d.readFile(path) },          // rejects if missing
     async listPostMetaPaths(itemsPath) {
-      const res = await beaker.hyperdrive.query({ drive: root, path: itemsPath + '*/post.json' })
-      return res.map((r) => r.path)
-    },
-  }
-}
-
-function autobaseAdapter(root) {
-  const d = beaker.autobase.collaborativeDrive(root)
-  return {
-    async readText(path) {
-      const s = await d.get(path)
-      if (s == null) throw new Error('not found: ' + path)
-      return s
-    },
-    async listPostMetaPaths(itemsPath) {
-      const entries = await d.list(itemsPath)
+      const entries = await d.list(itemsPath, { recursive: true })
       return entries.map((e) => e.key).filter((k) => k.endsWith('/post.json'))
     },
   }

@@ -3,7 +3,7 @@
 // Registered with monaco.languages.json.jsonDefaults so a .json file whose "type"
 // field matches a walled.garden schema gets that schema's autocomplete/validation.
 
-export const WALLED_GARDEN_TYPES = ["walled.garden/person","walled.garden/post","walled.garden/feed","walled.garden/writer-keys","walled.garden/bookmark","walled.garden/comment","walled.garden/follows","walled.garden/reaction","walled.garden/status","walled.garden/vote"];
+export const WALLED_GARDEN_TYPES = ["walled.garden/person","walled.garden/post","walled.garden/feed","walled.garden/bookmark","walled.garden/comment","walled.garden/follows","walled.garden/reaction","walled.garden/status","walled.garden/vote"];
 export const WALLED_GARDEN_JSON_SCHEMA = {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "walled.garden records & drive manifest",
@@ -379,115 +379,6 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
         "required": [
           "type",
           "title"
-        ],
-        "additionalProperties": false
-      }
-    },
-    {
-      "if": {
-        "required": [
-          "type"
-        ],
-        "properties": {
-          "type": {
-            "const": "walled.garden/writer-keys"
-          }
-        }
-      },
-      "then": {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string",
-            "description": "Manifest: human-readable name for the drive"
-          },
-          "description": {
-            "type": "string",
-            "description": "Manifest: short description of the drive's contents"
-          },
-          "type": {
-            "type": "string",
-            "const": "walled.garden/writer-keys"
-          },
-          "thumb": {
-            "type": "string",
-            "description": "Manifest: path within the drive to the thumbnail image"
-          },
-          "author": {
-            "type": "object",
-            "description": "Manifest: information about the drive author",
-            "properties": {
-              "url": {
-                "type": "string",
-                "description": "The author profile drive's hyper:// URL"
-              }
-            }
-          },
-          "forkOf": {
-            "type": "string",
-            "description": "Manifest: hyper:// URL this drive was forked from"
-          },
-          "links": {
-            "type": "object",
-            "description": "Manifest: map of named link arrays",
-            "additionalProperties": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "href": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          },
-          "csp": {
-            "type": "string",
-            "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
-          },
-          "ai": {
-            "description": "Manifest: opts the drive into beaker.ai — inline config or a pointer hyper:// URL",
-            "oneOf": [
-              {
-                "type": "string",
-                "description": "Pointer: delegate to another drive's AI config"
-              },
-              {
-                "type": "object",
-                "description": "Inline AI config",
-                "properties": {
-                  "model": {
-                    "type": "string",
-                    "description": "Model identifier, e.g. llama3.2:3b"
-                  }
-                }
-              }
-            ]
-          },
-          "chatBubble": {
-            "type": "boolean",
-            "description": "Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)"
-          },
-          "web_root": {
-            "type": "string",
-            "description": "Manifest: directory to serve as the web root"
-          },
-          "fallback_page": {
-            "type": "string",
-            "description": "Manifest: SPA fallback page path"
-          },
-          "keys": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "type",
-          "keys"
         ],
         "additionalProperties": false
       }
@@ -1233,7 +1124,6 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
                 "walled.garden/person",
                 "walled.garden/post",
                 "walled.garden/feed",
-                "walled.garden/writer-keys",
                 "walled.garden/bookmark",
                 "walled.garden/comment",
                 "walled.garden/follows",

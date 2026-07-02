@@ -29,10 +29,8 @@ class FilesExplorer extends LitElement {
   }
 
   get drive() {
-    // Collaborative (autobase) drives are read through beaker.autobase.
-    return this.isCollaborative
-      ? beaker.autobase.collaborativeDrive(this.url)
-      : beaker.hyperdrive.drive(this.url);
+    // beaker.fs auto-detects the backend (Hyperdrive or Autobase collaborative drive).
+    return beaker.fs.drive(this.url);
   }
 
   get origin() {
@@ -179,7 +177,7 @@ class FilesExplorer extends LitElement {
       if (stat && stat.mount) {
         return {
           path,
-          info: await beaker.hyperdrive.drive(stat.mount.key).getInfo(),
+          info: await beaker.fs.drive(stat.mount.key).getInfo(),
         };
       }
       pathParts.pop();

@@ -233,7 +233,7 @@ class WebTerm extends LitElement {
   }
 
   async loadInstalledCommands() {
-    var installed = await beaker.hyperdrive
+    var installed = await beaker.fs
       .readFile('hyper://private/webterm/installed.json')
       .then(JSON.parse)
       .catch((e) => []);
@@ -352,7 +352,7 @@ class WebTerm extends LitElement {
 
   async loadEnvVars() {
     try {
-      this.envVars = await beaker.hyperdrive.readFile(
+      this.envVars = await beaker.fs.readFile(
         'hyper://private/webterm/env.json',
         'json'
       );
@@ -367,7 +367,7 @@ class WebTerm extends LitElement {
     var envVars = JSON.parse(JSON.stringify(this.envVars));
     delete envVars['@'];
     delete envVars.cwd;
-    await beaker.hyperdrive.writeFile(
+    await beaker.fs.writeFile(
       'hyper://private/webterm/env.json',
       envVars,
       'json'

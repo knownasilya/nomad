@@ -1,31 +1,18 @@
 import b4a from 'b4a';
 import * as filesystem from './index';
-import { query } from './query';
+import * as autobases from '../hyper/autobases';
 import { normalizeUrl } from '../../lib/urls';
 
 // exported api
 // =
 
 export async function setup() {
-  var privateDrive = filesystem.get();
-  const entry = await privateDrive.drive.entry('/beaker/pins.json').catch(() => null);
-  if (entry) return;
-
-  // migrate bookmarks
-  var pins = [];
-  for (let bookmark of await query(privateDrive, { path: '/bookmarks/*.goto' })) {
-    const meta = bookmark.stat?.metadata || bookmark.metadata || {};
-    if (meta.pinned || meta['beaker/pinned']) {
-      pins.push(normalizeUrl(meta.href));
-      // Remove pin flags from metadata
-      const newMeta = Object.assign({}, meta);
-      delete newMeta.pinned;
-      delete newMeta['beaker/pinned'];
-      const buf = await privateDrive.drive.get(bookmark.path);
-      await privateDrive.drive.put(bookmark.path, buf || b4a.alloc(0), { metadata: newMeta });
-    }
-  }
-  await write(pins);
+  // The private drive is an Autobase (ADR-0010); pins live in the file body of /beaker/pins.json.
+  // Fresh drives have no legacy metadata-encoded pins to migrate, so just ensure the file exists.
+  const sess = filesystem.get();
+  const existing = await autobases.readContent(sess, '/beaker/pins.json');
+  if (existing) return;
+  await write([]);
 }
 
 export async function getCurrent() {
@@ -58,7 +45,7 @@ export async function remove(url) {
 async function read() {
   var data;
   try {
-    const buf = await filesystem.get().drive.get('/beaker/pins.json');
+    const buf = await autobases.readContent(filesystem.get(), '/beaker/pins.json');
     data = buf ? JSON.parse(b4a.toString(buf)) : [];
   } catch (e) {
     data = [];
@@ -69,5 +56,5 @@ async function read() {
 async function write(data) {
   data = data && Array.isArray(data) ? data : [];
   data = data.filter((b) => b && typeof b === 'string');
-  await filesystem.get().drive.put('/beaker/pins.json', b4a.from(JSON.stringify(data, null, 2)));
+  await autobases.putInline(filesystem.get(), '/beaker/pins.json', b4a.from(JSON.stringify(data, null, 2)));
 }
