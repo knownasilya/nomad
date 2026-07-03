@@ -18,90 +18,29 @@ import autobaseAPI from './autobase'
 import * as filesystem from '../../filesystem/index'
 import * as drives from '../../hyper/drives'
 import { parseDriveUrl } from '../../../lib/urls'
+import { createFsRouter } from './fs-router'
 
-const HEX_KEY = /^[0-9a-f]{64}$/i
-
-function _keyFromUrl(url) {
-  try { return parseDriveUrl(url).hostname } catch { return url }
-}
-
-// Resolve a hyper:// URL's hostname to its canonical hex-key URL BEFORE we detect/dispatch. This is
-// load-bearing for `hyper://private/`: after the Vault migration the root/space drives are
-// Autobases, but detection on the literal host 'private' matches no autobase and mis-routes the read
-// to the Hyperdrive backend, which then hangs opening the autobase key as a Hyperdrive (~60s timeout
-// — the blog boot() + explorer "reading directory / Timed out" symptom). Resolving the alias to the
-// real key lets both detection AND the backend impl operate on the loaded collaborative session.
-// Mirrors the per-space `private` resolution in the protocol handler (bg/protocols/hyper.js).
-async function _resolveKey(ctx, url) {
-  if (_keyFromUrl(url) === 'private' && ctx?.sender?.id) {
+// The backend-routing decisions (alias canonicalisation, autobase-vs-hyperdrive detection, the
+// no-wrong-backend-fallback gate) live in a pure, testable module. Here we just wire in the real
+// Electron-coupled collaborators. See fs-router.js + tests/unit/fs-router.test.js.
+const router = createFsRouter({
+  hyperdriveAPI,
+  autobaseAPI,
+  isCollaborativeDrive: (url) => autobaseAPI.isCollaborativeDrive(url),
+  isRootUrl: filesystem.isRootUrl,
+  getDriveConfig: filesystem.getDriveConfig,
+  fromURLToKey: drives.fromURLToKey,
+  // Per-space `private` resolution, mirroring the protocol handler (bg/protocols/hyper.js).
+  spaceRootKeyForSender: async (ctx) => {
+    if (!ctx?.sender?.id) return null
     const spaceId = filesystem.getSpaceIdForWebContents(ctx.sender.id)
     const spaceUrl = spaceId ? filesystem.getSpaceRootDriveUrl(spaceId) : null
-    if (spaceUrl) return drives.fromURLToKey(spaceUrl, true)
-  }
-  return drives.fromURLToKey(url, true)
-}
-async function _canonical(ctx, url) {
-  try {
-    const key = await _resolveKey(ctx, url)
-    if (key && HEX_KEY.test(key)) {
-      const urlp = parseDriveUrl(url)
-      const version = urlp.version ? `+${urlp.version}` : ''
-      return `hyper://${key}${version}${urlp.pathname || '/'}${urlp.search || ''}`
-    }
-  } catch {}
-  return url
-}
-
-// Detection is reliable for locally-known/loaded drives (registry, loaded session, or persisted
-// meta). isCollaborativeDrive needs no sender context, so a plain call is safe. Callers pass an
-// already-canonicalised (hex-key) URL so the `private`/named aliases resolve correctly.
-async function _isAutobase(url) {
-  try { return await autobaseAPI.isCollaborativeDrive(url) } catch { return false }
-}
-// Canonicalise + pick the backend in one step. Returns the resolved URL alongside the api so the
-// backend impl sees the real key too.
-async function _dispatch(ctx, url) {
-  const u = await _canonical(ctx, url)
-  const isAutobase = await _isAutobase(u)
-  return { api: isAutobase ? autobaseAPI : hyperdriveAPI, url: u, isAutobase }
-}
-function _other(api) {
-  return api === autobaseAPI ? hyperdriveAPI : autobaseAPI
-}
-
-// True when the drive's backend is known locally, so a "not here" result is AUTHORITATIVE and we
-// must NOT retry under the other backend. Opening a Hyperdrive key as an Autobase (or vice-versa)
-// blocks for minutes on ready()/update. A genuinely-unknown remote drive (never registered, no
-// session) still gets the try-both fallback. `url` here is already canonical (hex key).
-function _backendKnown(url, isAutobase) {
-  if (isAutobase) return true // known Autobase: session, registry, or persisted meta
-  try {
-    if (filesystem.isRootUrl(url)) return true // a root/space drive is always local — miss is real
-    if (filesystem.getDriveConfig(_keyFromUrl(url))) return true // locally-registered → type known
-  } catch {}
-  return false
-}
-
-// Read with a single fallback to the other backend when the detected one returns nothing (covers
-// remote drives whose type isn't known locally yet). Treats null / empty-array as "not here".
-// The fallback is SKIPPED for drives whose backend is known (see _backendKnown) — otherwise a
-// missing file would trigger a multi-minute hang opening the drive under the wrong backend.
-async function _read(ctx, method, url, rest) {
-  const { api: primary, url: u, isAutobase } = await _dispatch(ctx, url)
-  const other = _other(primary)
-  const known = _backendKnown(u, isAutobase)
-  const empty = (r) => r == null || (Array.isArray(r) && r.length === 0)
-  try {
-    const res = await primary[method].call(ctx, u, ...rest)
-    if (known || !empty(res)) return res
-    try { const alt = await other[method].call(ctx, u, ...rest); if (!empty(alt)) return alt } catch {}
-    return res
-  } catch (e) {
-    if (known) throw e
-    try { return await other[method].call(ctx, u, ...rest) } catch {}
-    throw e
-  }
-}
+    return spaceUrl ? drives.fromURLToKey(spaceUrl, true) : null
+  },
+  parseDriveUrl,
+})
+const _dispatch = (ctx, url) => router.dispatch(ctx, url)
+const _read = (ctx, method, url, rest) => router.read(ctx, method, url, rest)
 
 const fsAPI = {
   async getInfo(url, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.getInfo.call(this, u, opts) },

@@ -221,3 +221,18 @@ export function decodeInlineJson (record, b4a) {
   if (!record || record.value == null) return null
   try { return JSON.parse(b4a.toString(b4a.from(record.value, 'base64'))) } catch { return null }
 }
+
+// True when the view has at least one key under `dirPath/` — i.e. the path is a DIRECTORY. The
+// linearized view is a flat Hyperbee of file keys with no directory entries, so directory-ness is
+// "has any child key". The serve path uses this to decide whether a path with no file/index should
+// render the builtin file view (directory) or 404 (genuinely missing). `bee` is any Hyperbee-like
+// view exposing createReadStream({ gte, lt, limit }).
+export async function viewDirHasChildren (bee, dirPath) {
+  const prefix = dirPath.endsWith('/') ? dirPath : dirPath + '/'
+  try {
+    for await (const _ of bee.createReadStream({ gte: prefix, lt: prefix + '\xff', limit: 1 })) {
+      return true
+    }
+  } catch { /* treat read errors as "no children" */ }
+  return false
+}

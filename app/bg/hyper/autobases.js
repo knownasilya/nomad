@@ -9,7 +9,7 @@ import { randomBytes } from 'crypto'
 import { EventEmitter } from 'events'
 import {
   createFsCore, createBlobStore, createContentReader,
-  makeMetadata, AUTOBASE_OPTS, BLOBS_CORE_NAME
+  makeMetadata, AUTOBASE_OPTS, BLOBS_CORE_NAME, viewDirHasChildren
 } from '../../../shared/fs-core.mjs'
 import * as logLib from '../logger'
 import * as daemon from './daemon'
@@ -274,6 +274,11 @@ export function viewEmpty(sess) {
 // Resolve a record's content bytes (used when you already hold the record). `range` optional.
 export function resolveRecordContent(record, range) {
   return _content.readContent(record, { store: daemon.getCorestore(), range })
+}
+
+// True when `dirPath` has children in the linearized view (i.e. it is a directory). See fs-core.
+export function dirHasChildren(sess, dirPath) {
+  return viewDirHasChildren(sess.drive, dirPath)
 }
 
 // Invite management

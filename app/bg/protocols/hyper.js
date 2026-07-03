@@ -523,18 +523,6 @@ function _autobaseViewEmpty(base) {
   }
 }
 
-// True when the linearised view has at least one key under `dirPath/` — i.e. the path is a
-// directory (the flat Hyperbee has no directory entries, only file keys).
-async function _autobaseDirHasChildren(bee, dirPath) {
-  const prefix = dirPath.endsWith('/') ? dirPath : dirPath + '/'
-  try {
-    for await (const _ of bee.createReadStream({ gte: prefix, lt: prefix + '\xff', limit: 1 })) {
-      return true
-    }
-  } catch { /* ignore */ }
-  return false
-}
-
 async function serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect, respondBuiltinFrontend) {
   let sess;
   try {
@@ -603,7 +591,7 @@ async function serveAutobase(driveKey, urlp, request, respond, respondError, res
     // No file/index at this path. If it's a DIRECTORY (has children in the view), serve the builtin
     // file view — matching the Hyperdrive serve path — instead of 404ing. Redirect a bare directory
     // path to a trailing slash first so relative links resolve.
-    const isDir = filepath === '/' || hasTrailingSlash || await _autobaseDirHasChildren(bee, lookupPath)
+    const isDir = filepath === '/' || hasTrailingSlash || await autobases.dirHasChildren(sess, lookupPath)
     if (isDir) {
       if (filepath !== '/' && !hasTrailingSlash) {
         return respondRedirect(
