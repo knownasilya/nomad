@@ -15,38 +15,96 @@
 
 import hyperdriveAPI from './hyperdrive'
 import autobaseAPI from './autobase'
+import * as filesystem from '../../filesystem/index'
+import * as drives from '../../hyper/drives'
+import { parseDriveUrl } from '../../../lib/urls'
+
+const HEX_KEY = /^[0-9a-f]{64}$/i
+
+function _keyFromUrl(url) {
+  try { return parseDriveUrl(url).hostname } catch { return url }
+}
+
+// Resolve a hyper:// URL's hostname to its canonical hex-key URL BEFORE we detect/dispatch. This is
+// load-bearing for `hyper://private/`: after the Vault migration the root/space drives are
+// Autobases, but detection on the literal host 'private' matches no autobase and mis-routes the read
+// to the Hyperdrive backend, which then hangs opening the autobase key as a Hyperdrive (~60s timeout
+// — the blog boot() + explorer "reading directory / Timed out" symptom). Resolving the alias to the
+// real key lets both detection AND the backend impl operate on the loaded collaborative session.
+// Mirrors the per-space `private` resolution in the protocol handler (bg/protocols/hyper.js).
+async function _resolveKey(ctx, url) {
+  if (_keyFromUrl(url) === 'private' && ctx?.sender?.id) {
+    const spaceId = filesystem.getSpaceIdForWebContents(ctx.sender.id)
+    const spaceUrl = spaceId ? filesystem.getSpaceRootDriveUrl(spaceId) : null
+    if (spaceUrl) return drives.fromURLToKey(spaceUrl, true)
+  }
+  return drives.fromURLToKey(url, true)
+}
+async function _canonical(ctx, url) {
+  try {
+    const key = await _resolveKey(ctx, url)
+    if (key && HEX_KEY.test(key)) {
+      const urlp = parseDriveUrl(url)
+      const version = urlp.version ? `+${urlp.version}` : ''
+      return `hyper://${key}${version}${urlp.pathname || '/'}${urlp.search || ''}`
+    }
+  } catch {}
+  return url
+}
 
 // Detection is reliable for locally-known/loaded drives (registry, loaded session, or persisted
-// meta). isCollaborativeDrive needs no sender context, so a plain call is safe.
+// meta). isCollaborativeDrive needs no sender context, so a plain call is safe. Callers pass an
+// already-canonicalised (hex-key) URL so the `private`/named aliases resolve correctly.
 async function _isAutobase(url) {
   try { return await autobaseAPI.isCollaborativeDrive(url) } catch { return false }
 }
-async function _pick(url) {
-  return (await _isAutobase(url)) ? autobaseAPI : hyperdriveAPI
+// Canonicalise + pick the backend in one step. Returns the resolved URL alongside the api so the
+// backend impl sees the real key too.
+async function _dispatch(ctx, url) {
+  const u = await _canonical(ctx, url)
+  const isAutobase = await _isAutobase(u)
+  return { api: isAutobase ? autobaseAPI : hyperdriveAPI, url: u, isAutobase }
 }
 function _other(api) {
   return api === autobaseAPI ? hyperdriveAPI : autobaseAPI
 }
 
+// True when the drive's backend is known locally, so a "not here" result is AUTHORITATIVE and we
+// must NOT retry under the other backend. Opening a Hyperdrive key as an Autobase (or vice-versa)
+// blocks for minutes on ready()/update. A genuinely-unknown remote drive (never registered, no
+// session) still gets the try-both fallback. `url` here is already canonical (hex key).
+function _backendKnown(url, isAutobase) {
+  if (isAutobase) return true // known Autobase: session, registry, or persisted meta
+  try {
+    if (filesystem.isRootUrl(url)) return true // a root/space drive is always local — miss is real
+    if (filesystem.getDriveConfig(_keyFromUrl(url))) return true // locally-registered → type known
+  } catch {}
+  return false
+}
+
 // Read with a single fallback to the other backend when the detected one returns nothing (covers
 // remote drives whose type isn't known locally yet). Treats null / empty-array as "not here".
+// The fallback is SKIPPED for drives whose backend is known (see _backendKnown) — otherwise a
+// missing file would trigger a multi-minute hang opening the drive under the wrong backend.
 async function _read(ctx, method, url, rest) {
-  const primary = await _pick(url)
+  const { api: primary, url: u, isAutobase } = await _dispatch(ctx, url)
   const other = _other(primary)
+  const known = _backendKnown(u, isAutobase)
   const empty = (r) => r == null || (Array.isArray(r) && r.length === 0)
   try {
-    const res = await primary[method].call(ctx, url, ...rest)
-    if (!empty(res)) return res
-    try { const alt = await other[method].call(ctx, url, ...rest); if (!empty(alt)) return alt } catch {}
+    const res = await primary[method].call(ctx, u, ...rest)
+    if (known || !empty(res)) return res
+    try { const alt = await other[method].call(ctx, u, ...rest); if (!empty(alt)) return alt } catch {}
     return res
   } catch (e) {
-    try { return await other[method].call(ctx, url, ...rest) } catch {}
+    if (known) throw e
+    try { return await other[method].call(ctx, u, ...rest) } catch {}
     throw e
   }
 }
 
 const fsAPI = {
-  async getInfo(url, opts = {}) { return (await _pick(url)).getInfo.call(this, url, opts) },
+  async getInfo(url, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.getInfo.call(this, u, opts) },
 
   // --- Read ---
   async entry(url, opts = {}) { return _read(this, 'entry', url, [opts]) },
@@ -55,7 +113,7 @@ const fsAPI = {
   async readFile(url, opts = {}) { return _read(this, 'readFile', url, [opts]) },
   async list(url, opts = {}) { return _read(this, 'list', url, [opts]) },
   async readdir(url, opts = {}) { return _read(this, 'readdir', url, [opts]) },
-  async diff(url, other, opts = {}) { return (await _pick(url)).diff.call(this, url, other, opts) },
+  async diff(url, other, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.diff.call(this, u, other, opts) },
 
   // Uniform, backend-agnostic listing under a drive/prefix (the ADR goal: a query() that spans
   // Autobase too, not just Hyperdrive). Returns the backend's entry list; pass a path in the URL
@@ -63,17 +121,17 @@ const fsAPI = {
   async query(url, opts = {}) { return _read(this, 'list', url, [opts]) },
 
   // --- Write (require a writable drive; no fallback — the backend is known) ---
-  async put(url, data, opts = {}) { return (await _pick(url)).put.call(this, url, data, opts) },
-  async writeFile(url, data, opts = {}) { return (await _pick(url)).writeFile.call(this, url, data, opts) },
-  async del(url, opts = {}) { return (await _pick(url)).del.call(this, url, opts) },
-  async unlink(url, opts = {}) { return (await _pick(url)).unlink.call(this, url, opts) },
-  async mkdir(url, opts = {}) { return (await _pick(url)).mkdir.call(this, url, opts) },
-  async rmdir(url, opts = {}) { return (await _pick(url)).rmdir.call(this, url, opts) },
-  async updateMetadata(url, metadata, opts = {}) { return (await _pick(url)).updateMetadata.call(this, url, metadata, opts) },
-  async deleteMetadata(url, keys, opts = {}) { return (await _pick(url)).deleteMetadata.call(this, url, keys, opts) },
-  async mount(url, key, opts = {}) { return (await _pick(url)).mount.call(this, url, key, opts) },
-  async unmount(url, opts = {}) { return (await _pick(url)).unmount.call(this, url, opts) },
-  async symlink(url, target, opts = {}) { return (await _pick(url)).symlink.call(this, url, target, opts) },
+  async put(url, data, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.put.call(this, u, data, opts) },
+  async writeFile(url, data, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.writeFile.call(this, u, data, opts) },
+  async del(url, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.del.call(this, u, opts) },
+  async unlink(url, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.unlink.call(this, u, opts) },
+  async mkdir(url, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.mkdir.call(this, u, opts) },
+  async rmdir(url, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.rmdir.call(this, u, opts) },
+  async updateMetadata(url, metadata, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.updateMetadata.call(this, u, metadata, opts) },
+  async deleteMetadata(url, keys, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.deleteMetadata.call(this, u, keys, opts) },
+  async mount(url, key, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.mount.call(this, u, key, opts) },
+  async unmount(url, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.unmount.call(this, u, opts) },
+  async symlink(url, target, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.symlink.call(this, u, target, opts) },
 
   // Bulk filesystem import/export. (Delegates to the Hyperdrive impl; Autobase-target import is a
   // known gap tracked for the backend-unification pass.)
@@ -94,15 +152,15 @@ const fsAPI = {
   },
 
   // --- Change notifications ('readable' — return the backend's emitter) ---
-  async watch(url, pathPattern) { return (await _pick(url)).watch.call(this, url, pathPattern) },
+  async watch(url, pathPattern) { const { api, url: u } = await _dispatch(this, url); return api.watch.call(this, u, pathPattern) },
 
   // --- Drive lifecycle ---
   // New drives are Autobase-from-birth (ADR-0010): a drive can gain writers without changing URL.
   async createDrive(opts = {}) { return autobaseAPI.createCollaborativeDrive.call(this, opts) },
   async createCollaborativeDrive(opts = {}) { return autobaseAPI.createCollaborativeDrive.call(this, opts) },
-  async forkDrive(url, opts = {}) { return (await _pick(url)).forkDrive.call(this, url, opts) },
+  async forkDrive(url, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.forkDrive.call(this, u, opts) },
   async loadDrive(url) { return autobaseAPI.loadDrive.call(this, url) },
-  async configure(url, settings, opts = {}) { return (await _pick(url)).configure.call(this, url, settings, opts) },
+  async configure(url, settings, opts = {}) { const { api, url: u } = await _dispatch(this, url); return api.configure.call(this, u, settings, opts) },
   async isCollaborativeDrive(url) { return autobaseAPI.isCollaborativeDrive.call(this, url) },
 
   // query accepts either a url-first form fs.query(url, opts) or the legacy hyperdrive object

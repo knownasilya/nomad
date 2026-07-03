@@ -249,7 +249,7 @@ export const protocolHandler = async function (request, respond) {
       const driveCfg = filesystem.getDriveConfig(driveKey);
       if ((driveCfg && driveCfg.type === 'autobase') || autobases.getCollaborativeDrive(driveKey)) {
         logger.silly(`Serving autobase drive ${logUrl}`, { url: request.url });
-        return serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect);
+        return serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect, respondBuiltinFrontend);
       }
 
       try {
@@ -262,7 +262,7 @@ export const protocolHandler = async function (request, respond) {
         // autobase core, so fall back to serving it as an autobase before giving up. Once
         // loaded, the cached collaborative session routes future loads via the check above.
         logger.warn(`Failed to open drive ${driveKey} as Hyperdrive; trying Autobase`, { err });
-        return serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect);
+        return serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect, respondBuiltinFrontend);
       }
 
       // parse path
@@ -523,7 +523,19 @@ function _autobaseViewEmpty(base) {
   }
 }
 
-async function serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect) {
+// True when the linearised view has at least one key under `dirPath/` — i.e. the path is a
+// directory (the flat Hyperbee has no directory entries, only file keys).
+async function _autobaseDirHasChildren(bee, dirPath) {
+  const prefix = dirPath.endsWith('/') ? dirPath : dirPath + '/'
+  try {
+    for await (const _ of bee.createReadStream({ gte: prefix, lt: prefix + '\xff', limit: 1 })) {
+      return true
+    }
+  } catch { /* ignore */ }
+  return false
+}
+
+async function serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect, respondBuiltinFrontend) {
   let sess;
   try {
     sess = await autobases.getOrLoadCollaborativeDrive(driveKey);
@@ -588,6 +600,21 @@ async function serveAutobase(driveKey, urlp, request, respond, respondError, res
   }
 
   if (!node) {
+    // No file/index at this path. If it's a DIRECTORY (has children in the view), serve the builtin
+    // file view — matching the Hyperdrive serve path — instead of 404ing. Redirect a bare directory
+    // path to a trailing slash first so relative links resolve.
+    const isDir = filepath === '/' || hasTrailingSlash || await _autobaseDirHasChildren(bee, lookupPath)
+    if (isDir) {
+      if (filepath !== '/' && !hasTrailingSlash) {
+        return respondRedirect(
+          `hyper://${urlp.host}${urlp.version ? '+' + urlp.version : ''}${urlp.pathname || ''}/${urlp.search || ''}`
+        );
+      }
+      const wantsHTML = mime.acceptHeaderWantsHTML(request.headers.Accept)
+      if (wantsHTML && typeof respondBuiltinFrontend === 'function') {
+        return respondBuiltinFrontend();
+      }
+    }
     return respondError(404, 'File Not Found', {
       errorDescription: 'File Not Found',
       errorInfo: `Could not find ${urlp.path} in this collaborative drive`,
