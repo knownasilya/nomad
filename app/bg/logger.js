@@ -9,8 +9,7 @@ import through2 from 'through2';
 import { Readable } from 'stream';
 import os from 'os';
 import { join } from 'path';
-const { combine, timestamp, json, simple, colorize, padLevels } =
-  winston.format;
+const { combine, timestamp, json, simple, colorize, padLevels } = winston.format;
 import tailFile from './lib/tail-file';
 
 // typedefs
@@ -160,10 +159,7 @@ function shortenObjKeys(obj) {
       shortenObjKeys(obj[key]);
     }
     if (typeof obj[key] === 'string') {
-      obj[key] = obj[key].replace(
-        /[0-9a-f]{64}/gi,
-        (k) => `${k.slice(0, 4)}..${k.slice(-2)}`
-      );
+      obj[key] = obj[key].replace(/[0-9a-f]{64}/gi, (k) => `${k.slice(0, 4)}..${k.slice(-2)}`);
     }
   }
 }
@@ -240,8 +236,7 @@ function readPipeline(readStream, opts, nosplit = false) {
         row = JSON.parse(row);
 
         // timestamp range filter
-        var ts =
-          opts.since || opts.until ? new Date(row.timestamp).getTime() : null;
+        var ts = opts.since || opts.until ? new Date(row.timestamp).getTime() : null;
         if ('since' in opts && ts < opts.since) return cb();
         if ('until' in opts && ts > opts.until) return cb();
 

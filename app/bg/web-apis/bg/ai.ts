@@ -216,13 +216,15 @@ export default {
     const stream = emitStream(emitter);
     const sender = this.sender;
 
-    runChat(messages, sender, emitter).then(() => {
-      stream.end();
-    }).catch((err) => {
-      console.error('[ai] chat error:', err);
-      emitter.emit('error', { message: err.message });
-      stream.end();
-    });
+    runChat(messages, sender, emitter)
+      .then(() => {
+        stream.end();
+      })
+      .catch((err) => {
+        console.error('[ai] chat error:', err);
+        emitter.emit('error', { message: err.message });
+        stream.end();
+      });
 
     return stream;
   },
@@ -237,7 +239,9 @@ async function runChat(messages, sender, emitter) {
   const baseUrl = (await settingsDb.get('ai_base_url')) || 'http://localhost:11434/v1';
 
   if (!model) {
-    throw new Error('No AI model configured. Set ai_default_model in settings or add {"ai": {"model": "..."}} to your Drive\'s index.json.');
+    throw new Error(
+      'No AI model configured. Set ai_default_model in settings or add {"ai": {"model": "..."}} to your Drive\'s index.json.'
+    );
   }
 
   const systemContent = systemPrompt
@@ -421,7 +425,9 @@ function fetchText(url) {
     proto
       .get(url, (res) => {
         let data = '';
-        res.on('data', (chunk) => { data += chunk; });
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
         res.on('end', () => resolve(data));
         res.on('error', reject);
       })
@@ -440,10 +446,15 @@ function fetchJson(url) {
           return reject(new Error(`Server returned ${res.statusCode}`));
         }
         let data = '';
-        res.on('data', (chunk) => { data += chunk; });
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
         res.on('end', () => {
-          try { resolve(JSON.parse(data)); }
-          catch { reject(new Error('Invalid JSON response')); }
+          try {
+            resolve(JSON.parse(data));
+          } catch {
+            reject(new Error('Invalid JSON response'));
+          }
         });
         res.on('error', reject);
       })
@@ -497,7 +508,11 @@ function streamCompletion(baseUrl, model, messages, tools, emitter) {
             if (data === '[DONE]') continue;
 
             let parsed;
-            try { parsed = JSON.parse(data); } catch { continue; }
+            try {
+              parsed = JSON.parse(data);
+            } catch {
+              continue;
+            }
 
             const choice = parsed.choices?.[0];
             if (!choice) continue;
@@ -523,7 +538,8 @@ function streamCompletion(baseUrl, model, messages, tools, emitter) {
                 }
                 if (tc.id) toolCallAccum[idx].id += tc.id;
                 if (tc.function?.name) toolCallAccum[idx].function.name += tc.function.name;
-                if (tc.function?.arguments) toolCallAccum[idx].function.arguments += tc.function.arguments;
+                if (tc.function?.arguments)
+                  toolCallAccum[idx].function.arguments += tc.function.arguments;
               }
             }
           }

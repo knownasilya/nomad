@@ -86,14 +86,10 @@ export async function get(url, key, opts) {
   if (!origin) return null;
   if (opts && opts.normalizeUrl) origin = normalizeUrl(origin);
   return cbPromise((cb) => {
-    db.get(
-      `SELECT value FROM sitedata WHERE origin = ? AND key = ?`,
-      [origin, key],
-      (err, res) => {
-        if (err) return cb(err);
-        cb(null, res && res.value);
-      }
-    );
+    db.get(`SELECT value FROM sitedata WHERE origin = ? AND key = ?`, [origin, key], (err, res) => {
+      if (err) return cb(err);
+      cb(null, res && res.value);
+    });
   });
 }
 

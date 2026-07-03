@@ -34,8 +34,7 @@ class BookmarkMenu extends LitElement {
       this.pinned = this.existingBookmark.pinned;
     } else {
       this.href = params.url;
-      this.title =
-        params.metadata && params.metadata.title ? params.metadata.title : '';
+      this.title = params.metadata && params.metadata.title ? params.metadata.title : '';
     }
     await this.requestUpdate();
 
@@ -90,11 +89,7 @@ class BookmarkMenu extends LitElement {
           </div>
 
           <div class="buttons">
-            <button
-              type="button"
-              class="btn remove"
-              @click=${this.onClickCancel}
-            >
+            <button type="button" class="btn remove" @click=${this.onClickCancel}>
               ${this.existingBookmark ? 'Delete' : 'Cancel'}
             </button>
             <button class="btn primary" type="submit">

@@ -33,9 +33,7 @@ export const removeListener = events.removeListener.bind(events);
  * @returns {Promise<DatDnsRecord>}
  */
 export const getCurrentByName = async function (name) {
-  return massageDNSRecord(
-    await db.get(knex('dat_dns').where({ name, isCurrent: 1 }))
-  );
+  return massageDNSRecord(await db.get(knex('dat_dns').where({ name, isCurrent: 1 })));
 };
 
 /**
@@ -43,9 +41,7 @@ export const getCurrentByName = async function (name) {
  * @returns {Promise<DatDnsRecord>}
  */
 export const getCurrentByKey = async function (key) {
-  return massageDNSRecord(
-    await db.get(knex('dat_dns').where({ key, isCurrent: 1 }))
-  );
+  return massageDNSRecord(await db.get(knex('dat_dns').where({ key, isCurrent: 1 })));
 };
 
 /**
@@ -79,9 +75,7 @@ export const update = async function ({ key, name }) {
     } else {
       // update current
       await db.run(
-        knex('dat_dns')
-          .update({ lastConfirmedAt: Date.now(), isCurrent: 1 })
-          .where({ name, key })
+        knex('dat_dns').update({ lastConfirmedAt: Date.now(), isCurrent: 1 }).where({ name, key })
       );
     }
     events.emit('updated', { key, name });

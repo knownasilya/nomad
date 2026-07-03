@@ -30,9 +30,7 @@ class BasicAuthModal extends LitElement {
       <div class="wrapper">
         <h1 class="title">Login required</h1>
 
-        <p class="help-text">
-          ${this.authInfo.host} requires a username and password
-        </p>
+        <p class="help-text">${this.authInfo.host} requires a username and password</p>
 
         <form @submit=${this.onSubmit}>
           <label for="username">Username</label>
@@ -56,17 +54,10 @@ class BasicAuthModal extends LitElement {
           />
 
           <div class="form-actions">
-            <button
-              type="button"
-              @click=${this.onClickCancel}
-              class="btn"
-              tabindex="4"
-            >
+            <button type="button" @click=${this.onClickCancel} class="btn" tabindex="4">
               Cancel
             </button>
-            <button type="submit" class="btn primary" tabindex="5">
-              Log In
-            </button>
+            <button type="submit" class="btn primary" tabindex="5">Log In</button>
           </div>
         </form>
       </div>

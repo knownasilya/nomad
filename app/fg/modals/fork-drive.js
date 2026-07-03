@@ -79,7 +79,9 @@ class ForkDriveModal extends LitElement {
           padding: 5px 12px;
           font-size: 12px;
           font-weight: 500;
-          transition: background 0.1s, color 0.1s;
+          transition:
+            background 0.1s,
+            color 0.1s;
         }
 
         .tabbed-nav a.active {
@@ -156,8 +158,7 @@ class ForkDriveModal extends LitElement {
     // store params
     this.cbs = cbs;
     this.forks = params.forks;
-    this.base =
-      this.forks.find((fork) => fork.url === params.url) || this.forks[0];
+    this.base = this.forks.find((fork) => fork.url === params.url) || this.forks[0];
     this.isDetached = params.detached || false;
     this.isTemplate = params.isTemplate || false;
     this.label = params.label || '';
@@ -165,10 +166,7 @@ class ForkDriveModal extends LitElement {
 
     // fetch drive info
     this.driveInfo = await bg.fs.getInfo(this.base.url);
-    this.title =
-      typeof params.title === 'string'
-        ? params.title
-        : this.driveInfo.title || '';
+    this.title = typeof params.title === 'string' ? params.title : this.driveInfo.title || '';
     this.description =
       typeof params.description === 'string'
         ? params.description
@@ -211,37 +209,21 @@ class ForkDriveModal extends LitElement {
         </button>`;
         break;
       case STATES.DOWNLOADING:
-        progressEl = html`<div class="fork-dat-progress">
-          Downloading remaining files...
-        </div>`;
-        actionBtn = html`<button
-          type="submit"
-          class="btn"
-          disabled
-          tabindex="5"
-        >
+        progressEl = html`<div class="fork-dat-progress">Downloading remaining files...</div>`;
+        actionBtn = html`<button type="submit" class="btn" disabled tabindex="5">
           <span class="spinner"></span>
         </button>`;
         break;
       case STATES.CLONING:
-        progressEl = html`<div class="fork-dat-progress">
-          Downloading and copying...
-        </div>`;
-        actionBtn = html`<button
-          type="submit"
-          class="btn"
-          disabled
-          tabindex="5"
-        >
+        progressEl = html`<div class="fork-dat-progress">Downloading and copying...</div>`;
+        actionBtn = html`<button type="submit" class="btn" disabled tabindex="5">
           <span class="spinner"></span>
         </button>`;
         break;
     }
 
     const navItem = (v, label) => html`
-      <a
-        class=${this.isDetached === v ? 'active' : ''}
-        @click=${(e) => this.onSetDetached(v)}
+      <a class=${this.isDetached === v ? 'active' : ''} @click=${(e) => this.onSetDetached(v)}
         >${label}</a
       >
     `;
@@ -272,9 +254,7 @@ class ForkDriveModal extends LitElement {
                   ${this.isTemplate
                     ? html`
                         Using
-                        <a @click=${this.onClickTemplate}
-                          >${shorten(this.driveInfo.title, 20)}</a
-                        >
+                        <a @click=${this.onClickTemplate}>${shorten(this.driveInfo.title, 20)}</a>
                         as a template.
                       `
                     : 'Make an independent copy of the drive.'}
@@ -308,24 +288,17 @@ class ForkDriveModal extends LitElement {
               `
             : html`
                 <p class="help with-icon">
-                  <span class="fas fa-fw fa-info"></span> A fork is a linked
-                  copy of the drive which is used for making changes and then
-                  merging into the original.
+                  <span class="fas fa-fw fa-info"></span> A fork is a linked copy of the drive which
+                  is used for making changes and then merging into the original.
                 </p>
                 <div class="columns">
                   <div>
                     <label for="base">Base</label>
                     <div style="margin: 5px 0 8px">
-                      <select
-                        name="base"
-                        tabindex="1"
-                        @change=${this.onChangeBase}
-                      >
+                      <select name="base" tabindex="1" @change=${this.onChangeBase}>
                         ${baseOpt(this.forks[0])}
                         <optgroup label="Forks">
-                          ${repeat(this.forks.slice(1), (fork) =>
-                            baseOpt(fork)
-                          )}
+                          ${repeat(this.forks.slice(1), (fork) => baseOpt(fork))}
                         </optgroup>
                       </select>
                     </div>
@@ -342,9 +315,7 @@ class ForkDriveModal extends LitElement {
                       autofocus
                       required
                     />
-                    <p class="help">
-                      The label will help you identify the fork.
-                    </p>
+                    <p class="help">The label will help you identify the fork.</p>
 
                     <label for="tags">Tags</label>
                     <input
@@ -363,12 +334,7 @@ class ForkDriveModal extends LitElement {
           <div class="form-actions">
             ${progressEl}
             <div>
-              <button
-                type="button"
-                class="btn cancel"
-                @click=${this.onClickCancel}
-                tabindex="4"
-              >
+              <button type="button" class="btn cancel" @click=${this.onClickCancel} tabindex="4">
                 Cancel
               </button>
               ${actionBtn}
@@ -387,17 +353,10 @@ class ForkDriveModal extends LitElement {
           <div class="form-actions">
             <div></div>
             <div>
-              <button
-                type="button"
-                class="btn cancel"
-                @click=${this.onClickCancel}
-                tabindex="4"
-              >
+              <button type="button" class="btn cancel" @click=${this.onClickCancel} tabindex="4">
                 Cancel
               </button>
-              <button type="submit" class="btn" tabindex="5" disabled>
-                Create
-              </button>
+              <button type="submit" class="btn" tabindex="5" disabled>Create</button>
             </div>
           </div>
         </form>
@@ -460,9 +419,7 @@ class ForkDriveModal extends LitElement {
       var url = await bg.fs.forkDrive(this.base.url, {
         detached: this.isDetached,
         title: this.isDetached ? this.title : this.driveInfo.title,
-        description: this.isDetached
-          ? this.description
-          : this.driveInfo.description,
+        description: this.isDetached ? this.description : this.driveInfo.description,
         tags: this.tags.split(' '),
         label: this.label,
         prompt: false,

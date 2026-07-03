@@ -32,22 +32,14 @@ if (!process.env.__WG_GEN_STRIP) {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appDir = path.resolve(__dirname, '../app');
-const OUT_FILE = path.join(
-  appDir,
-  'userland/editor/js/types/schemas-dts.js'
-);
-const OUT_FILE_JSON = path.join(
-  appDir,
-  'userland/editor/js/types/schemas-json.js'
-);
+const OUT_FILE = path.join(appDir, 'userland/editor/js/types/schemas-dts.js');
+const OUT_FILE_JSON = path.join(appDir, 'userland/editor/js/types/schemas-json.js');
 
 // Resolve zod + the schemas from the app's node_modules (zod lives under app/).
 const appRequire = createRequire(path.join(appDir, 'package.json'));
 const { z } = await import(pathToFileURL(appRequire.resolve('zod')).href);
 const { SCHEMAS } = await import(
-  pathToFileURL(
-    path.join(appDir, 'lib/schemas/walled.garden/index.ts')
-  ).href
+  pathToFileURL(path.join(appDir, 'lib/schemas/walled.garden/index.ts')).href
 );
 
 // 'walled.garden/person' -> 'Person'
@@ -97,9 +89,7 @@ function objectType(schema, indent) {
   const closePad = '  '.repeat(indent);
   const lines = Object.entries(props).map(([key, sub]) => {
     const optional = required.has(key) ? '' : '?';
-    const safeKey = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)
-      ? key
-      : JSON.stringify(key);
+    const safeKey = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : JSON.stringify(key);
     return `${pad}${safeKey}${optional}: ${tsType(sub, indent + 1)};`;
   });
   if (!lines.length) return 'Record<string, never>';
@@ -144,7 +134,10 @@ console.log(
 // additionalProperties:false flagging them.
 const MANIFEST_PROPERTIES = {
   title: { type: 'string', description: 'Manifest: human-readable name for the drive' },
-  description: { type: 'string', description: "Manifest: short description of the drive's contents" },
+  description: {
+    type: 'string',
+    description: "Manifest: short description of the drive's contents",
+  },
   type: { type: 'string', description: 'Manifest: type identifier (e.g. unwalled.garden/website)' },
   thumb: { type: 'string', description: 'Manifest: path within the drive to the thumbnail image' },
   author: {
@@ -166,21 +159,28 @@ const MANIFEST_PROPERTIES = {
       },
     },
   },
-  csp: { type: 'string', description: 'Manifest: Content-Security-Policy applied to pages served from the drive' },
+  csp: {
+    type: 'string',
+    description: 'Manifest: Content-Security-Policy applied to pages served from the drive',
+  },
   ai: {
-    description: 'Manifest: opts the drive into beaker.ai — inline config or a pointer hyper:// URL',
+    description:
+      'Manifest: opts the drive into beaker.ai — inline config or a pointer hyper:// URL',
     oneOf: [
       { type: 'string', description: "Pointer: delegate to another drive's AI config" },
       {
         type: 'object',
         description: 'Inline AI config',
-        properties: { model: { type: 'string', description: 'Model identifier, e.g. llama3.2:3b' } },
+        properties: {
+          model: { type: 'string', description: 'Model identifier, e.g. llama3.2:3b' },
+        },
       },
     ],
   },
   chatBubble: {
     type: 'boolean',
-    description: 'Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)',
+    description:
+      'Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)',
   },
   web_root: { type: 'string', description: 'Manifest: directory to serve as the web root' },
   fallback_page: { type: 'string', description: 'Manifest: SPA fallback page path' },

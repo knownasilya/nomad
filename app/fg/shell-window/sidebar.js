@@ -8,7 +8,16 @@ import * as bg from './bg-process-rpc';
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 480;
 
-const SPACE_COLORS = ['#6c6cff', '#e85d4a', '#e8a025', '#3ab36e', '#2b9fd4', '#9b59b6', '#e91e8c', '#607d8b'];
+const SPACE_COLORS = [
+  '#6c6cff',
+  '#e85d4a',
+  '#e8a025',
+  '#3ab36e',
+  '#2b9fd4',
+  '#9b59b6',
+  '#e91e8c',
+  '#607d8b',
+];
 
 class ShellWindowSidebar extends LitElement {
   static get properties() {
@@ -103,7 +112,9 @@ class ShellWindowSidebar extends LitElement {
       'side-right': !isLeft,
       darwin: isDarwin,
     });
-    const pinnedTabs = this.tabs.map((tab, index) => ({ tab, index })).filter(({ tab }) => tab.isPinned);
+    const pinnedTabs = this.tabs
+      .map((tab, index) => ({ tab, index }))
+      .filter(({ tab }) => tab.isPinned);
     const hasPinned = pinnedTabs.length > 0;
     return html`
       <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
@@ -115,20 +126,30 @@ class ShellWindowSidebar extends LitElement {
           </button>
         </div>
         <div class="sidebar-tabs">
-          ${hasPinned ? html`
-            ${repeat(pinnedTabs, ({ index }) => `pin:${index}`, ({ tab, index }) => this._renderTab(tab, index))}
-            <div class="tab-separator"></div>
-          ` : ''}
+          ${hasPinned
+            ? html`
+                ${repeat(
+                  pinnedTabs,
+                  ({ index }) => `pin:${index}`,
+                  ({ tab, index }) => this._renderTab(tab, index)
+                )}
+                <div class="tab-separator"></div>
+              `
+            : ''}
           ${this._renderUngroupedTabs()}
-          ${repeat(this.groups || [], (g) => g.id, (g) => this._renderGroup(g))}
+          ${repeat(
+            this.groups || [],
+            (g) => g.id,
+            (g) => this._renderGroup(g)
+          )}
           <button class="new-tab-inline" title="New tab" @click=${this._onClickNew}>
             <span class="new-tab-icon fas fa-plus"></span>
             <span class="new-tab-label">New tab</span>
           </button>
         </div>
-        ${this._renderSpacesDropdown() ? html`
-          <div class="sidebar-footer">${this._renderSpacesDropdown()}</div>
-        ` : ''}
+        ${this._renderSpacesDropdown()
+          ? html` <div class="sidebar-footer">${this._renderSpacesDropdown()}</div> `
+          : ''}
         ${this._renderResizeHandle(isLeft)}
       </div>
     `;
@@ -212,20 +233,24 @@ class ShellWindowSidebar extends LitElement {
               ? html`<div class="spinner"></div>`
               : html`<div class="spinner reverse"></div>`
             : faviconUrl
-            ? html`<img
-                src="${faviconUrl}"
-                @load=${(e) => this._onFaviconLoad(e, index)}
-                @error=${(e) => this._onFaviconError(e, index)}
-              />`
-            : html`<img src="asset:favicon:${tab.url}?cache=${Date.now()}" />`}
+              ? html`<img
+                  src="${faviconUrl}"
+                  @load=${(e) => this._onFaviconLoad(e, index)}
+                  @error=${(e) => this._onFaviconError(e, index)}
+                />`
+              : html`<img src="asset:favicon:${tab.url}?cache=${Date.now()}" />`}
         </div>
         <div class="tab-title">${tab.title || tab.url}</div>
         ${tab.isAudioMuted
           ? html`<span class="fas fa-volume-mute tab-audio"></span>`
           : tab.isCurrentlyAudible
-          ? html`<span class="fas fa-volume-up tab-audio"></span>`
-          : ''}
-        <div class="tab-close" title="Close tab" @click=${(e) => this._onClickClose(e, index)}></div>
+            ? html`<span class="fas fa-volume-up tab-audio"></span>`
+            : ''}
+        <div
+          class="tab-close"
+          title="Close tab"
+          @click=${(e) => this._onClickClose(e, index)}
+        ></div>
       </div>
     `;
   }
@@ -246,59 +271,95 @@ class ShellWindowSidebar extends LitElement {
     const space = this.activeSpace;
     const isLeft = this.sidebarSide !== 'right';
     return html`
-      ${this.spacesPopupOpen ? html`
-        <div class="spaces-popup" style="${isLeft ? 'left:0' : 'right:0'}">
-          <div class="spaces-popup-header">Spaces</div>
-          <div class="spaces-popup-list">
-            ${this.spaces.map((s) => html`
-              <div
-                class="spaces-popup-item ${s.id === this.activeSpace?.id ? 'active' : ''}"
-                @click=${() => this._onSwitchSpace(s.id)}
-              >
-                <span class="space-dot" style="background:${s.color}"></span>
-                <span class="spaces-popup-name">${s.name}</span>
-                ${s.id === this.activeSpace?.id ? html`<span class="fas fa-check spaces-popup-check"></span>` : ''}
+      ${this.spacesPopupOpen
+        ? html`
+            <div class="spaces-popup" style="${isLeft ? 'left:0' : 'right:0'}">
+              <div class="spaces-popup-header">Spaces</div>
+              <div class="spaces-popup-list">
+                ${this.spaces.map(
+                  (s) => html`
+                    <div
+                      class="spaces-popup-item ${s.id === this.activeSpace?.id ? 'active' : ''}"
+                      @click=${() => this._onSwitchSpace(s.id)}
+                    >
+                      <span class="space-dot" style="background:${s.color}"></span>
+                      <span class="spaces-popup-name">${s.name}</span>
+                      ${s.id === this.activeSpace?.id
+                        ? html`<span class="fas fa-check spaces-popup-check"></span>`
+                        : ''}
+                    </div>
+                  `
+                )}
               </div>
-            `)}
-          </div>
-          <div class="spaces-popup-divider"></div>
-          ${this.isCreatingSpace ? html`
-            <div class="spaces-create-form">
-              <input
-                class="spaces-name-input"
-                type="text"
-                placeholder="Space name"
-                .value=${this.newSpaceName}
-                @input=${(e) => { this.newSpaceName = e.target.value; }}
-                @keydown=${this._onSpaceNameKeydown}
-                @click=${(e) => e.stopPropagation()}
-              />
-              <div class="spaces-color-row">
-                ${SPACE_COLORS.map((c) => html`
-                  <button
-                    class="spaces-swatch ${c === this.newSpaceColor ? 'selected' : ''}"
-                    style="background:${c}"
-                    @click=${(e) => { e.stopPropagation(); this.newSpaceColor = c; }}
-                  ></button>
-                `)}
-              </div>
-              <div class="spaces-form-btns">
-                <button class="spaces-cancel-btn" @click=${(e) => { e.stopPropagation(); this.isCreatingSpace = false; }}>Cancel</button>
-                <button class="spaces-create-btn" ?disabled=${!this.newSpaceName.trim()} @click=${(e) => { e.stopPropagation(); this._onCreateSpace(); }}>Create</button>
-              </div>
+              <div class="spaces-popup-divider"></div>
+              ${this.isCreatingSpace
+                ? html`
+                    <div class="spaces-create-form">
+                      <input
+                        class="spaces-name-input"
+                        type="text"
+                        placeholder="Space name"
+                        .value=${this.newSpaceName}
+                        @input=${(e) => {
+                          this.newSpaceName = e.target.value;
+                        }}
+                        @keydown=${this._onSpaceNameKeydown}
+                        @click=${(e) => e.stopPropagation()}
+                      />
+                      <div class="spaces-color-row">
+                        ${SPACE_COLORS.map(
+                          (c) => html`
+                            <button
+                              class="spaces-swatch ${c === this.newSpaceColor ? 'selected' : ''}"
+                              style="background:${c}"
+                              @click=${(e) => {
+                                e.stopPropagation();
+                                this.newSpaceColor = c;
+                              }}
+                            ></button>
+                          `
+                        )}
+                      </div>
+                      <div class="spaces-form-btns">
+                        <button
+                          class="spaces-cancel-btn"
+                          @click=${(e) => {
+                            e.stopPropagation();
+                            this.isCreatingSpace = false;
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          class="spaces-create-btn"
+                          ?disabled=${!this.newSpaceName.trim()}
+                          @click=${(e) => {
+                            e.stopPropagation();
+                            this._onCreateSpace();
+                          }}
+                        >
+                          Create
+                        </button>
+                      </div>
+                    </div>
+                  `
+                : html`
+                    <div
+                      class="spaces-popup-new"
+                      @click=${(e) => {
+                        e.stopPropagation();
+                        this.isCreatingSpace = true;
+                        this.newSpaceName = '';
+                        this.newSpaceColor = SPACE_COLORS[0];
+                      }}
+                    >
+                      <span class="fas fa-plus"></span> New space
+                    </div>
+                  `}
             </div>
-          ` : html`
-            <div class="spaces-popup-new" @click=${(e) => { e.stopPropagation(); this.isCreatingSpace = true; this.newSpaceName = ''; this.newSpaceColor = SPACE_COLORS[0]; }}>
-              <span class="fas fa-plus"></span> New space
-            </div>
-          `}
-        </div>
-      ` : ''}
-      <button
-        class="spaces-btn"
-        title="Switch space"
-        @click=${this._onClickSpaces}
-      >
+          `
+        : ''}
+      <button class="spaces-btn" title="Switch space" @click=${this._onClickSpaces}>
         <span class="space-dot" style="background:${space?.color || '#6c6cff'}"></span>
         <span class="space-name">${space?.name || 'Spaces'}</span>
       </button>
@@ -308,7 +369,10 @@ class ShellWindowSidebar extends LitElement {
   updated(changedProperties) {
     if (this.editingGroupId) {
       const input = this.shadowRoot.querySelector('.group-name-input');
-      if (input) { input.focus(); input.select(); }
+      if (input) {
+        input.focus();
+        input.select();
+      }
     }
     if (this.isCreatingSpace) {
       const input = this.shadowRoot.querySelector('.spaces-name-input');
@@ -356,7 +420,9 @@ class ShellWindowSidebar extends LitElement {
   _onSpaceNameKeydown(e) {
     e.stopPropagation();
     if (e.key === 'Enter') this._onCreateSpace();
-    if (e.key === 'Escape') { this.isCreatingSpace = false; }
+    if (e.key === 'Escape') {
+      this.isCreatingSpace = false;
+    }
   }
 
   _onClickNew() {
@@ -433,9 +499,7 @@ class ShellWindowSidebar extends LitElement {
     const isLeft = this.sidebarSide !== 'right';
 
     const onMove = (moveE) => {
-      const delta = isLeft
-        ? moveE.clientX - startX
-        : startX - moveE.clientX;
+      const delta = isLeft ? moveE.clientX - startX : startX - moveE.clientX;
       const newW = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startW + delta));
       this.sidebarWidth = newW;
       bg.views.setSidebarWidth(newW);
@@ -453,9 +517,7 @@ class ShellWindowSidebar extends LitElement {
 }
 
 ShellWindowSidebar.styles = css`
-  ${spinnerCSS}
-
-  :host {
+  ${spinnerCSS}: host {
     display: block;
   }
 
@@ -469,7 +531,10 @@ ShellWindowSidebar.styles = css`
     flex-direction: column;
     z-index: 10;
     box-sizing: border-box;
-    font-family: system-ui, -apple-system, sans-serif;
+    font-family:
+      system-ui,
+      -apple-system,
+      sans-serif;
     font-size: 13px;
   }
 
@@ -514,7 +579,9 @@ ShellWindowSidebar.styles = css`
     justify-content: center;
     font-size: 11px;
     opacity: 0.4;
-    transition: opacity 0.15s, background 0.15s;
+    transition:
+      opacity 0.15s,
+      background 0.15s;
   }
 
   .close-btn:hover {
@@ -612,7 +679,9 @@ ShellWindowSidebar.styles = css`
     font-size: 15px;
     line-height: 1;
     color: var(--text-color--tab--close);
-    transition: opacity 0.1s, background 0.1s;
+    transition:
+      opacity 0.1s,
+      background 0.1s;
   }
 
   .tab-close::before {
@@ -704,7 +773,9 @@ ShellWindowSidebar.styles = css`
     opacity: 0.5;
     -webkit-user-select: none;
     user-select: none;
-    transition: background 0.1s, opacity 0.1s;
+    transition:
+      background 0.1s,
+      opacity 0.1s;
     margin-top: 2px;
   }
 
@@ -742,7 +813,7 @@ ShellWindowSidebar.styles = css`
     background: var(--bg-color--background);
     border: 1px solid var(--border-color--tab);
     border-radius: 6px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
     z-index: 100;
     overflow: hidden;
     margin-bottom: 4px;
@@ -856,7 +927,8 @@ ShellWindowSidebar.styles = css`
     justify-content: flex-end;
   }
 
-  .spaces-cancel-btn, .spaces-create-btn {
+  .spaces-cancel-btn,
+  .spaces-create-btn {
     padding: 3px 10px;
     border-radius: 3px;
     border: 1px solid var(--border-color--tab);
@@ -931,7 +1003,6 @@ ShellWindowSidebar.styles = css`
     background: var(--highlight-color--tab--current, #5b5ef4);
     opacity: 0.3;
   }
-
 `;
 
 customElements.define('shell-window-sidebar', ShellWindowSidebar);

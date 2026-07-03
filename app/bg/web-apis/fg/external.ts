@@ -12,11 +12,7 @@ import shellManifest from '../manifests/external/shell';
 const RPC_OPTS = { timeout: false, errors };
 
 export const setup = function (rpc) {
-  const capabilities = rpc.importAPI(
-    'capabilities',
-    capabilitiesManifest,
-    RPC_OPTS
-  );
+  const capabilities = rpc.importAPI('capabilities', capabilitiesManifest, RPC_OPTS);
   const contacts = rpc.importAPI('contacts', contactsManifest, RPC_OPTS);
   const markdown = rpc.importAPI('markdown', markdownManifest, RPC_OPTS);
   const schemas = rpc.importAPI('schemas', schemasManifest, RPC_OPTS);
@@ -29,11 +25,7 @@ export const setup = function (rpc) {
     delete shell.exportFilesDialog;
   }
 
-  const peersocketsRPC = rpc.importAPI(
-    'peersockets',
-    peersocketsManifest,
-    RPC_OPTS
-  );
+  const peersocketsRPC = rpc.importAPI('peersockets', peersocketsManifest, RPC_OPTS);
   const peersockets = {
     join(topic) {
       var stream = peersocketsRPC.join(topic);
@@ -67,9 +59,7 @@ export const setup = function (rpc) {
   const _terminalCommands = [];
   const terminal = {
     getCommands() {
-      return (_terminalCommands || [])
-        .slice()
-        .map((obj) => Object.assign({}, obj));
+      return (_terminalCommands || []).slice().map((obj) => Object.assign({}, obj));
     },
     registerCommand(command) {
       if (!command || typeof command !== 'object') {
@@ -88,16 +78,12 @@ export const setup = function (rpc) {
         throw new Error('The `usage` attribute on a command must be a string');
       }
       if (command.options && !Array.isArray(command.options)) {
-        throw new Error(
-          'The `options` attribute on a command must be an array'
-        );
+        throw new Error('The `options` attribute on a command must be an array');
       }
 
       let i = _terminalCommands.findIndex((c) => c.name === command.name);
       if (i !== -1) {
-        throw new Error(
-          'A "' + command.name + '" command has already been registered'
-        );
+        throw new Error('A "' + command.name + '" command has already been registered');
       }
 
       _terminalCommands.push({

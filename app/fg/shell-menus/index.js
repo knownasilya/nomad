@@ -65,11 +65,7 @@ class MenusWrapper extends LitElement {
     window.addEventListener('blur', (e) => {
       try {
         // check if any menu needs to stay open
-        if (
-          this.shadowRoot
-            .querySelector('[active-menu]')
-            .hasAttribute('stay-open')
-        ) {
+        if (this.shadowRoot.querySelector('[active-menu]').hasAttribute('stay-open')) {
           return;
         }
       } catch (e) {
@@ -103,9 +99,7 @@ class MenusWrapper extends LitElement {
   }
 
   render() {
-    return html`<div @contextmenu=${this.onContextMenu}>
-      ${this.renderMenu()}
-    </div>`;
+    return html`<div @contextmenu=${this.onContextMenu}>${this.renderMenu()}</div>`;
   }
 
   renderMenu() {
@@ -145,10 +139,8 @@ customElements.define('menus-wrapper', MenusWrapper);
 // we can solve this by forcing a recalculation after every resize
 // -prf
 
-const forceUpdateDragRegions = _debounce(
-  () => ipcRenderer.send('resize-hackfix'),
-  100,
-  { leading: true }
-);
+const forceUpdateDragRegions = _debounce(() => ipcRenderer.send('resize-hackfix'), 100, {
+  leading: true,
+});
 window.addEventListener('resize', forceUpdateDragRegions);
 document.addEventListener('DOMContentLoaded', forceUpdateDragRegions);

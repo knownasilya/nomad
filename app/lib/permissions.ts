@@ -225,7 +225,7 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
     if (api) api.createTab(url);
     else beaker.browser.openUrl(url, { setActive: true });
   };
-  const mediaTypeToTool = (v) => ({ video: 'camera', audio: 'microphone' }[v]);
+  const mediaTypeToTool = (v) => ({ video: 'camera', audio: 'microphone' })[v];
   switch (permId) {
     case 'js':
       return 'Run Javascript';
@@ -246,10 +246,7 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
     case 'fullscreen':
       return 'Go fullscreen';
     case 'openExternal':
-      return `Open this URL in another program: ${shorten(
-        permOpts.externalURL,
-        128
-      )}`;
+      return `Open this URL in another program: ${shorten(permOpts.externalURL, 128)}`;
     case 'experimentalLibrary':
       return 'Read and modify your Library';
     case 'experimentalDatPeers':
@@ -271,23 +268,20 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return html`<span>Download ${permOpts.filename}</span>`;
 
     case 'createDrive':
-      if (permOpts.tags)
-        return `Create a new hyperdrive tagged "${permOpts.tags.join(', ')}"`;
+      if (permOpts.tags) return `Create a new hyperdrive tagged "${permOpts.tags.join(', ')}"`;
       if (permOpts.title) return `Create a new hyperdrive, "${permOpts.title}"`;
       return 'Create a new hyperdrive';
 
     case 'modifyDrive': {
       let viewArchive = openUrl(permParam);
-      return html`<span
-        >Write files to <a @click=${viewArchive}>${permOpts.title}</a></span
-      >`;
+      return html`<span>Write files to <a @click=${viewArchive}>${permOpts.title}</a></span>`;
     }
 
     case 'deleteDrive': {
       let viewArchive = openUrl(permParam);
       return html`<span
-        >Remove the hyperdrive
-        <a @click=${viewArchive}>${permOpts.title}</a> from your library</span
+        >Remove the hyperdrive <a @click=${viewArchive}>${permOpts.title}</a> from your
+        library</span
       >`;
     }
 
@@ -300,36 +294,27 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
     }
 
     case 'listDrives':
-      if (permParam)
-        return `Read the hyperdrives tagged "${permParam}" in your library`;
+      if (permParam) return `Read the hyperdrives tagged "${permParam}" in your library`;
       return `Read all the hyperdrives in your library`;
 
     case 'experimentalLibraryRequestAdd': {
       let viewArchive = openUrl(permParam);
-      return html`<span
-        >Host <a @click=${viewArchive}>${permOpts.title}</a></span
-      >`;
+      return html`<span>Host <a @click=${viewArchive}>${permOpts.title}</a></span>`;
     }
 
     case 'experimentalLibraryRequestRemove': {
       let viewArchive = openUrl(permParam);
-      return html`<span
-        >Stop hosting <a @click=${viewArchive}>${permOpts.title}</a></span
-      >`;
+      return html`<span>Stop hosting <a @click=${viewArchive}>${permOpts.title}</a></span>`;
     }
 
     case 'experimentalGlobalFetch': {
       let viewPage = openUrl(permParam);
-      return html`<span
-        >Fetch data from <a @click=${viewPage}>${permParam}</a></span
-      >`;
+      return html`<span>Fetch data from <a @click=${viewPage}>${permParam}</a></span>`;
     }
 
     case 'experimentalCapturePage': {
       let viewPage = openUrl(permParam);
-      return html`<span
-        >Take a screenshot of <a @click=${viewPage}>${permParam}</a></span
-      >`;
+      return html`<span>Take a screenshot of <a @click=${viewPage}>${permParam}</a></span>`;
     }
   }
 }

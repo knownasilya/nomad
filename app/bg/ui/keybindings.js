@@ -35,9 +35,7 @@ export function unregisterGlobalKeybinding(win, accelerator, callback) {
   // remove the keybinding
   var keyEvent = toKeyEvent(accelerator);
   if (win.id in registeredKBs) {
-    var kbIdx = registeredKBs[win.id].findIndex((kb) =>
-      equals(kb.eventStamp, keyEvent)
-    );
+    var kbIdx = registeredKBs[win.id].findIndex((kb) => equals(kb.eventStamp, keyEvent));
     if (kbIdx !== -1) registeredKBs[win.id].splice(kbIdx, 1);
   }
 }
@@ -95,9 +93,7 @@ function extractKeybindings(menuNode, menuLabel) {
       menuLabel,
     };
   } else if (menuNode.submenu) {
-    return menuNode.submenu
-      .map((item) => extractKeybindings(item, menuNode.label))
-      .filter(Boolean);
+    return menuNode.submenu.map((item) => extractKeybindings(item, menuNode.label)).filter(Boolean);
   } else if (Array.isArray(menuNode)) {
     return menuNode.map(extractKeybindings).filter(Boolean).flat(Infinity);
   }

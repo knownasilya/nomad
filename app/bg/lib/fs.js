@@ -10,8 +10,7 @@ export async function checkFolderIsEmpty(dst, { noPrompt } = {}) {
       // ask the user if they're sure
       var { response } = await dialog.showMessageBox({
         type: 'question',
-        message:
-          'This folder is not empty. Some files may be overwritten. Continue?',
+        message: 'This folder is not empty. Some files may be overwritten. Continue?',
         buttons: ['Yes', 'No, cancel'],
       });
       if (response != 0) {

@@ -23,10 +23,7 @@ export class ImgFallbacks extends LitElement {
   }
 
   render() {
-    return html`<slot
-      name="img${this.currentImage}"
-      @slotchange=${this.onSlotChange}
-    ></slot>`;
+    return html`<slot name="img${this.currentImage}" @slotchange=${this.onSlotChange}></slot>`;
   }
 
   onSlotChange(e) {

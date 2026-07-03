@@ -5,7 +5,4 @@ import permPromptManifest from '../../bg/rpc-manifests/perm-prompt';
 
 export const beakerBrowser = rpc.importAPI('beaker-browser', browserManifest);
 export const fs = rpc.importAPI('fs', fsManifest);
-export const permPrompt = rpc.importAPI(
-  'background-process-perm-prompt',
-  permPromptManifest
-);
+export const permPrompt = rpc.importAPI('background-process-perm-prompt', permPromptManifest);

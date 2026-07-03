@@ -17,11 +17,7 @@ export const setup = function (rpc) {
   const opts = { timeout: false, errors };
 
   const loggerRPC = rpc.importAPI('logger', loggerManifest, opts);
-  const beakerBrowserRPC = rpc.importAPI(
-    'beaker-browser',
-    beakerBrowserManifest,
-    opts
-  );
+  const beakerBrowserRPC = rpc.importAPI('beaker-browser', beakerBrowserManifest, opts);
   const bookmarksRPC = rpc.importAPI('bookmarks', bookmarksManifest, opts);
   const downloadsRPC = rpc.importAPI('downloads', downloadsManifest, opts);
   const drivesRPC = rpc.importAPI('drives', drivesManifest, opts);
@@ -38,8 +34,7 @@ export const setup = function (rpc) {
     fromEventStream(beakerBrowserRPC.createEventsStream());
   internal.bookmarks = Object.assign({}, bookmarksRPC);
   internal.downloads = Object.assign({}, downloadsRPC);
-  internal.downloads.createEventsStream = () =>
-    fromEventStream(downloadsRPC.createEventsStream());
+  internal.downloads.createEventsStream = () => fromEventStream(downloadsRPC.createEventsStream());
   internal.folderSync = Object.assign({}, folderSyncRPC);
   internal.history = Object.assign({}, historyRPC);
   internal.hyperdebug = Object.assign({}, hyperdebugRPC);
@@ -47,15 +42,12 @@ export const setup = function (rpc) {
     fromEventStream(hyperdebugRPC.createCoreEventStream(key));
   internal.logger = Object.assign({}, loggerRPC);
   internal.logger.stream = (opts) => fromEventStream(loggerRPC.stream(opts));
-  internal.logger.streamAuditLog = (opts) =>
-    fromEventStream(loggerRPC.streamAuditLog(opts));
+  internal.logger.streamAuditLog = (opts) => fromEventStream(loggerRPC.streamAuditLog(opts));
   internal.sitedata = Object.assign({}, sitedataRPC);
   internal.watchlist = Object.assign({}, watchlistRPC);
-  internal.watchlist.createEventsStream = () =>
-    fromEventStream(watchlistRPC.createEventsStream());
+  internal.watchlist.createEventsStream = () => fromEventStream(watchlistRPC.createEventsStream());
   internal.vault = Object.assign({}, vaultRPC);
-  internal.vault.watchPendingRequests = () =>
-    fromEventStream(vaultRPC.watchPendingRequests());
+  internal.vault.watchPendingRequests = () => fromEventStream(vaultRPC.watchPendingRequests());
 
   // internal.drives
   internal.drives = new EventTarget();
@@ -71,8 +63,7 @@ export const setup = function (rpc) {
   internal.drives.clearFileCache = drivesRPC.clearFileCache;
   internal.drives.clearDnsCache = drivesRPC.clearDnsCache;
   internal.drives.getDebugLog = drivesRPC.getDebugLog;
-  internal.drives.createDebugStream = () =>
-    fromEventStream(drivesRPC.createDebugStream());
+  internal.drives.createDebugStream = () => fromEventStream(drivesRPC.createDebugStream());
   // window.addEventListener('load', () => {
   //   try {
   //     bindEventStream(drivesRPC.createEventStream(), internal.drives)

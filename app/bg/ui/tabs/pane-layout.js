@@ -23,9 +23,7 @@ export class PaneLayout extends EventEmitter {
         url: b.pane.url,
         title: b.pane.title,
         status: b.pane.currentStatus,
-        attachedPaneId: b.pane.attachedPane
-          ? b.pane.attachedPane.id
-          : undefined,
+        attachedPaneId: b.pane.attachedPane ? b.pane.attachedPane.id : undefined,
         wantsAttachedPane: b.pane.wantsAttachedPane,
       });
     }
@@ -153,8 +151,7 @@ export class PaneLayout extends EventEmitter {
     let stackX = x;
     let stackWidths = this.computeStackWidths(width);
     let isMultiplePanes =
-      this.stacks.length > 1 ||
-      (this.stacks[0] && this.stacks[0].panes.length > 1);
+      this.stacks.length > 1 || (this.stacks[0] && this.stacks[0].panes.length > 1);
     for (let i = 0; i < this.stacks.length; i++) {
       let stack = this.stacks[i];
       let stackWidth = stackWidths[i];
@@ -231,10 +228,7 @@ export class PaneLayout extends EventEmitter {
     var total = this.stacks.reduce((acc, s) => acc + s.layoutWidth, 0);
     var scale = 100 / total;
     for (let stack of this.stacks) {
-      stack.layoutWidth = Math.max(
-        Math.round(stack.layoutWidth * scale),
-        MIN_DIM_PCT + 1
-      );
+      stack.layoutWidth = Math.max(Math.round(stack.layoutWidth * scale), MIN_DIM_PCT + 1);
     }
 
     // make sure we add up to 100
@@ -250,9 +244,7 @@ export class PaneLayout extends EventEmitter {
   }
 
   computeStackWidths(width) {
-    return this.stacks.map((stack) =>
-      Math.round((stack.layoutWidth / 100) * width)
-    );
+    return this.stacks.map((stack) => Math.round((stack.layoutWidth / 100) * width));
   }
 
   getBoundsForPane(pane) {
@@ -309,10 +301,7 @@ class PaneLayoutStack {
     var total = this.panes.reduce((acc, p) => acc + p.layoutHeight, 0);
     var scale = 100 / total;
     for (let pane of this.panes) {
-      pane.layoutHeight = Math.max(
-        Math.round(pane.layoutHeight * scale),
-        MIN_DIM_PCT + 1
-      );
+      pane.layoutHeight = Math.max(Math.round(pane.layoutHeight * scale), MIN_DIM_PCT + 1);
     }
 
     // make sure we add up to 100
@@ -328,9 +317,7 @@ class PaneLayoutStack {
   }
 
   computePaneHeights(height) {
-    return this.panes.map((pane) =>
-      Math.round((pane.layoutHeight / 100) * height)
-    );
+    return this.panes.map((pane) => Math.round((pane.layoutHeight / 100) * height));
   }
 }
 

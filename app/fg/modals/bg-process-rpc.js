@@ -12,8 +12,5 @@ export const contacts = rpc.importAPI('contacts', contactsManifest);
 export const drives = rpc.importAPI('drives', drivesManifest);
 export const folderSync = rpc.importAPI('folder-sync', folderSyncManifest);
 export const fs = rpc.importAPI('fs', fsManifest);
-export const modals = rpc.importAPI(
-  'background-process-modals',
-  modalsManifest
-);
+export const modals = rpc.importAPI('background-process-modals', modalsManifest);
 export const beakerFs = rpc.importAPI('beaker-filesystem', beakerFsManifest);

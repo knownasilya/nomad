@@ -18,8 +18,7 @@ module.exports = async function (context) {
   if (context.electronPlatformName !== 'darwin') return;
 
   const hasRealIdentity =
-    !!process.env.CSC_LINK ||
-    process.env.CSC_IDENTITY_AUTO_DISCOVERY !== 'false';
+    !!process.env.CSC_LINK || process.env.CSC_IDENTITY_AUTO_DISCOVERY !== 'false';
   if (hasRealIdentity) {
     console.log(
       'afterPack: real signing identity configured — leaving signing to electron-builder'

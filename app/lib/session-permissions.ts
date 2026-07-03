@@ -14,8 +14,7 @@ const VALID_ACCESS = ['read', 'write'];
  */
 
 export function validateAndNormalizePermissions(permissions) {
-  if (typeof permissions !== 'object')
-    throw new Error(`Permissions must be an object`);
+  if (typeof permissions !== 'object') throw new Error(`Permissions must be an object`);
   for (let key in permissions) {
     if (key === 'publicFiles' || key === 'privateFiles') {
       if (!Array.isArray(permissions[key]))
@@ -29,19 +28,14 @@ export function validateAndNormalizePermissions(permissions) {
         v.access = v.access || 'read';
         if (!VALID_ACCESS.includes(v.access))
           throw new Error(
-            `'${key}' permissions .access must be one of: ${VALID_ACCESS.join(
-              ', '
-            )}`
+            `'${key}' permissions .access must be one of: ${VALID_ACCESS.join(', ')}`
           );
 
         if (!v.prefix.startsWith('/')) v.prefix = `/${v.prefix}`;
         while (v.prefix.endsWith('/')) v.prefix = v.prefix.slice(0, -1);
         if (!v.prefix || v.prefix === '/')
           throw new Error(`'${key}' permissions .path can not be '/'`);
-        if (!v.extension)
-          throw new Error(
-            `'${key}' permissions .path must include an extension`
-          );
+        if (!v.extension) throw new Error(`'${key}' permissions .path must include an extension`);
       }
     } else {
       throw new Error(`Invalid permission key: ${key}`);
@@ -101,9 +95,7 @@ export function sessionCan(access, session, driveUrl, filepath) {
   if (extension) {
     // individual file
     let prefix = dirname(filepath);
-    perm = session.permissions[key]?.find(
-      (p) => p.prefix === prefix && p.extension === extension
-    );
+    perm = session.permissions[key]?.find((p) => p.prefix === prefix && p.extension === extension);
   } else {
     // folder
     let prefix = filepath;

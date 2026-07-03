@@ -23,13 +23,9 @@ export class Hoverable extends LitElement {
 
   render() {
     if (this.isHovered) {
-      return html`<span @mouseleave=${this.onMouseleave}
-        ><slot name="hover"></slot
-      ></span>`;
+      return html`<span @mouseleave=${this.onMouseleave}><slot name="hover"></slot></span>`;
     }
-    return html`<span @mouseenter=${this.onMouseenter}
-      ><slot name="default"></slot
-    ></span>`;
+    return html`<span @mouseenter=${this.onMouseenter}><slot name="default"></slot></span>`;
   }
 
   onMouseenter() {

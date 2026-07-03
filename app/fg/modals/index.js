@@ -57,9 +57,7 @@ class ModalsWrapper extends LitElement {
     await this.updateComplete;
     return new Promise((resolve, reject) => {
       this.cbs = { resolve, reject };
-      this.shadowRoot
-        .querySelector(`${name}-modal`)
-        .init(params, { resolve, reject });
+      this.shadowRoot.querySelector(`${name}-modal`).init(params, { resolve, reject });
     }).then(
       (v) => {
         window.isModalActive = false;
@@ -117,10 +115,8 @@ customElements.define('modals-wrapper', ModalsWrapper);
 // we can solve this by forcing a recalculation after every resize
 // -prf
 
-const forceUpdateDragRegions = _debounce(
-  () => ipcRenderer.send('resize-hackfix'),
-  100,
-  { leading: true }
-);
+const forceUpdateDragRegions = _debounce(() => ipcRenderer.send('resize-hackfix'), 100, {
+  leading: true,
+});
 window.addEventListener('resize', forceUpdateDragRegions);
 document.addEventListener('DOMContentLoaded', forceUpdateDragRegions);

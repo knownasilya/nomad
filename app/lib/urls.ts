@@ -102,9 +102,7 @@ export function createResourceSlug(href, title) {
       slug = slugify(title.trim());
     } else {
       // use parts of the url
-      slug = slugify(
-        hrefp.hostname + hrefp.pathname + hrefp.search + hrefp.hash
-      );
+      slug = slugify(hrefp.hostname + hrefp.pathname + hrefp.search + hrefp.hash);
     }
   } catch (e) {
     // weird URL, just use slugified version of it
@@ -144,13 +142,8 @@ export function isSameOrigin(a, b) {
  */
 export function normalizeUrl(url, base = undefined) {
   try {
-    let { protocol, hostname, port, pathname, search, hash } = new URL(
-      url,
-      base
-    );
-    return `${protocol}//${hostname}${port ? `:${port}` : ''}${
-      pathname || '/'
-    }${search}${hash}`;
+    let { protocol, hostname, port, pathname, search, hash } = new URL(url, base);
+    return `${protocol}//${hostname}${port ? `:${port}` : ''}${pathname || '/'}${search}${hash}`;
   } catch {
     return url;
   }

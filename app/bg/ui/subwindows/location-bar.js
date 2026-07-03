@@ -109,9 +109,7 @@ export async function runCmd(parentWindow, cmd, opts) {
         return;
       }
     }
-    return view.webContents.executeJavaScript(
-      `command("${cmd}", ${JSON.stringify(opts)})`
-    );
+    return view.webContents.executeJavaScript(`command("${cmd}", ${JSON.stringify(opts)})`);
   }
 }
 

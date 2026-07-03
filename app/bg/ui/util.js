@@ -67,10 +67,16 @@ export async function exportDriveToFilesystem(sourceUrl, targetPath) {
   return _exportToFs(drive.drive, '/', targetPath, { overwriteExisting: true });
 }
 
-export async function importFilesystemToDrive(srcPath, targetUrl, { preserveFolder } = { preserveFolder: false }) {
+export async function importFilesystemToDrive(
+  srcPath,
+  targetUrl,
+  { preserveFolder } = { preserveFolder: false }
+) {
   const targetUrlp = new URL(targetUrl);
   const drive = await hyper.drives.getOrLoadDrive(targetUrlp.hostname);
-  return _importFsFolder(drive.drive, srcPath, targetUrlp.pathname || '/', { inplace: !preserveFolder });
+  return _importFsFolder(drive.drive, srcPath, targetUrlp.pathname || '/', {
+    inplace: !preserveFolder,
+  });
 }
 
 // internal helpers
@@ -98,7 +104,10 @@ async function _exportToFs(drive, srcFolder, dstPath, { overwriteExisting = true
     const relPath = entry.key.slice(srcFolder.length).replace(/^\//, '');
     const dstFile = joinPath(dstPath, relPath);
     if (!overwriteExisting) {
-      try { await nodefs.access(dstFile); continue; } catch {}
+      try {
+        await nodefs.access(dstFile);
+        continue;
+      } catch {}
     }
     const buf = await drive.get(entry.key);
     if (buf) {

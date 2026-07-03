@@ -14,10 +14,7 @@ export const beakerBrowser = rpc.importAPI('beaker-browser', browserManifest);
 export const folderSync = rpc.importAPI('folder-sync', folderSyncManifest);
 export const history = rpc.importAPI('history', historyManifest);
 export const fs = rpc.importAPI('fs', fsManifest);
-export const overlay = rpc.importAPI(
-  'background-process-overlay',
-  overlayManifest
-);
+export const overlay = rpc.importAPI('background-process-overlay', overlayManifest);
 export const spaces = rpc.importAPI('background-process-spaces', spacesManifest);
 export const views = rpc.importAPI('background-process-views', viewsManifest);
 export const watchlist = rpc.importAPI('watchlist', watchlistManifest);

@@ -18,11 +18,7 @@ class ShellWindowSpacesDropdown extends LitElement {
   render() {
     const space = this.activeSpace;
     return html`
-      <button
-        class="spaces-btn"
-        @click=${this.onToggle}
-        title="Switch space"
-      >
+      <button class="spaces-btn" @click=${this.onToggle} title="Switch space">
         <span class="dot" style="background:${space?.color || '#6c6cff'}"></span>
         <span class="name">${space?.name || 'Spaces'}</span>
         <span class="caret">▾</span>

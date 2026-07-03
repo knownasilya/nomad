@@ -123,25 +123,14 @@ class UserSelectModal extends LitElement {
 
         <form @submit=${this.onSubmit}>
           <div class="users">
-            ${repeat(this.users, (user) => this.renderUser(user))}
-            ${this.renderCreateUser()}
+            ${repeat(this.users, (user) => this.renderUser(user))} ${this.renderCreateUser()}
           </div>
 
           <div class="form-actions">
-            <button
-              type="button"
-              @click=${this.onClickCancel}
-              class="btn cancel"
-              tabindex="4"
-            >
+            <button type="button" @click=${this.onClickCancel} class="btn cancel" tabindex="4">
               Cancel
             </button>
-            <button
-              type="submit"
-              class="btn primary"
-              tabindex="5"
-              ?disabled=${!this.selection}
-            >
+            <button type="submit" class="btn primary" tabindex="5" ?disabled=${!this.selection}>
               OK
             </button>
           </div>

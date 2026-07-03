@@ -72,7 +72,7 @@ export class EventTargetFromStream extends EventTarget {
 }
 
 export class Event {
-  [key: string]: any
+  [key: string]: any;
 
   constructor(type, opts) {
     this.type = type;

@@ -62,9 +62,7 @@ export default {
     });
     let infos = await Promise.all(
       urls.map((url) =>
-        drives
-          .getDriveInfo(url, { ignoreCache: false, onlyCache: true })
-          .catch((e) => ({}))
+        drives.getDriveInfo(url, { ignoreCache: false, onlyCache: true }).catch((e) => ({}))
       )
     );
     return infos.map((info) => ({

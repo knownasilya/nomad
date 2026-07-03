@@ -7,8 +7,7 @@ import { URL } from 'url';
 // constants
 // =
 
-const API_DOCS_URL =
-  'https://nomad.pages.dev/docs/api/';
+const API_DOCS_URL = 'https://nomad.pages.dev/docs/api/';
 const API_PERM_ID = 'experimentalGlobalFetch';
 const LAB_API_ID = 'globalFetch';
 

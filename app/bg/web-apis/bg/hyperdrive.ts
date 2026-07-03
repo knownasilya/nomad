@@ -46,9 +46,7 @@ function getSenderSpaceId(sender) {
 // =
 
 const to = (opts) =>
-  opts && typeof opts.timeout !== 'undefined'
-    ? opts.timeout
-    : DEFAULT_DRIVE_API_TIMEOUT;
+  opts && typeof opts.timeout !== 'undefined' ? opts.timeout : DEFAULT_DRIVE_API_TIMEOUT;
 
 const hyperdriveAPI = {
   async createDrive({
@@ -165,10 +163,14 @@ const hyperdriveAPI = {
         description: detached ? description : undefined,
         detached,
       });
-      await filesystem.configDriveForSpace(newDrive.url, {
-        tags,
-        forkOf: detached ? undefined : { key, label },
-      }, senderSpaceId);
+      await filesystem.configDriveForSpace(
+        newDrive.url,
+        {
+          tags,
+          forkOf: detached ? undefined : { key, label },
+        },
+        senderSpaceId
+      );
       newDriveUrl = newDrive.url;
     }
 
@@ -187,7 +189,10 @@ const hyperdriveAPI = {
       timer(to(opts), async (checkin, pause, resume) => {
         const urlp = parseDriveUrl(url);
         const { driveKey, version } = await lookupDrive(
-          this.sender, urlp.hostname, urlp.version, true
+          this.sender,
+          urlp.hostname,
+          urlp.version,
+          true
         );
         const info = await drives.getDriveInfo(driveKey);
         info.tags = filesystem.getDriveConfig(driveKey)?.tags || [];
@@ -216,13 +221,19 @@ const hyperdriveAPI = {
       timer(to(opts), async (checkin, pause, resume) => {
         const urlp = parseDriveUrl(url);
         const { drive, checkoutFS, isHistoric } = await lookupDrive(
-          this.sender, urlp.hostname, urlp.version
+          this.sender,
+          urlp.hostname,
+          urlp.version
         );
         if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
         if (!settings || typeof settings !== 'object') throw new Error('Invalid argument');
 
         if ('tags' in settings && wcTrust.isWcTrusted(this.sender)) {
-          await filesystem.configDriveForSpace(drive.url, { tags: settings.tags }, getSenderSpaceId(this.sender));
+          await filesystem.configDriveForSpace(
+            drive.url,
+            { tags: settings.tags },
+            getSenderSpaceId(this.sender)
+          );
         }
 
         if (!wcTrust.isWcTrusted(this.sender)) {
@@ -236,7 +247,11 @@ const hyperdriveAPI = {
         pause();
         const senderOrigin = archivesDb.extractOrigin(this.sender.getURL());
         await assertWritePermission(drive, this.sender);
-        await assertQuotaPermission(drive, senderOrigin, Buffer.byteLength(JSON.stringify(settings), 'utf8'));
+        await assertQuotaPermission(
+          drive,
+          senderOrigin,
+          Buffer.byteLength(JSON.stringify(settings), 'utf8')
+        );
         resume();
 
         // Merge into /index.json
@@ -295,7 +310,9 @@ const hyperdriveAPI = {
     return auditLog.record(this.sender.getURL(), 'put', { url, filepath }, sourceSize, () =>
       timer(to(opts), async (checkin, pause, resume) => {
         const { drive, checkoutFS, isHistoric } = await lookupDrive(
-          this.sender, urlp.hostname, urlp.version
+          this.sender,
+          urlp.hostname,
+          urlp.version
         );
         if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
 
@@ -322,7 +339,9 @@ const hyperdriveAPI = {
     return auditLog.record(this.sender.getURL(), 'del', { url, filepath }, undefined, () =>
       timer(to(opts), async (checkin, pause, resume) => {
         const { drive, checkoutFS, isHistoric } = await lookupDrive(
-          this.sender, urlp.hostname, urlp.version
+          this.sender,
+          urlp.hostname,
+          urlp.version
         );
         if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
 
@@ -348,7 +367,9 @@ const hyperdriveAPI = {
         await assertReadPermission(checkoutFS, this.sender, filepath);
         resume();
         const results = [];
-        for await (const entry of checkoutFS.drive.list(filepath, { recursive: opts.recursive || false })) {
+        for await (const entry of checkoutFS.drive.list(filepath, {
+          recursive: opts.recursive || false,
+        })) {
           results.push(entry);
         }
         return results;
@@ -362,9 +383,7 @@ const hyperdriveAPI = {
     const filepath = normalizeFilepath(urlp.pathname || '');
     return auditLog.record(this.sender.getURL(), 'mkdir', { url, filepath }, undefined, () =>
       timer(to(opts), async (checkin, pause, resume) => {
-        const { drive, isHistoric } = await lookupDrive(
-          this.sender, urlp.hostname, urlp.version
-        );
+        const { drive, isHistoric } = await lookupDrive(this.sender, urlp.hostname, urlp.version);
         if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
         pause();
         await assertWritePermission(drive, this.sender);
@@ -383,7 +402,9 @@ const hyperdriveAPI = {
     return auditLog.record(this.sender.getURL(), 'rmdir', { url, filepath }, undefined, () =>
       timer(to(opts), async (checkin, pause, resume) => {
         const { drive, checkoutFS, isHistoric } = await lookupDrive(
-          this.sender, urlp.hostname, urlp.version
+          this.sender,
+          urlp.hostname,
+          urlp.version
         );
         if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
         pause();
@@ -404,11 +425,17 @@ const hyperdriveAPI = {
     return auditLog.record(this.sender.getURL(), 'copy', { url, srcpath, dstpath }, undefined, () =>
       timer(to(opts), async (checkin, pause, resume) => {
         const src = await lookupDrive(this.sender, urlp.hostname, urlp.version);
-        const dstHostname = dstpath.includes('://') ? parseDriveUrl(dstpath).hostname : urlp.hostname;
+        const dstHostname = dstpath.includes('://')
+          ? parseDriveUrl(dstpath).hostname
+          : urlp.hostname;
         const dst = await lookupDrive(this.sender, dstHostname);
 
-        const srcFinal = srcpath.includes('://') ? normalizeFilepath(new URL(srcpath).pathname) : srcpath;
-        const dstFinal = dstpath.includes('://') ? normalizeFilepath(new URL(dstpath).pathname) : dstpath;
+        const srcFinal = srcpath.includes('://')
+          ? normalizeFilepath(new URL(srcpath).pathname)
+          : srcpath;
+        const dstFinal = dstpath.includes('://')
+          ? normalizeFilepath(new URL(dstpath).pathname)
+          : dstpath;
 
         pause();
         const senderOrigin = archivesDb.extractOrigin(this.sender.getURL());
@@ -422,7 +449,9 @@ const hyperdriveAPI = {
 
         const buf = await src.checkoutFS.drive.get(srcFinal);
         await assertQuotaPermission(dst.drive, senderOrigin, buf ? buf.byteLength : 0);
-        return dst.checkoutFS.drive.put(dstFinal, buf || b4a.alloc(0), { metadata: srcEntry.value?.metadata });
+        return dst.checkoutFS.drive.put(dstFinal, buf || b4a.alloc(0), {
+          metadata: srcEntry.value?.metadata,
+        });
       })
     );
   },
@@ -431,77 +460,104 @@ const hyperdriveAPI = {
     const urlp = parseDriveUrl(url);
     const srcpath = normalizeFilepath(urlp.pathname || '');
     dstpath = normalizeFilepath(dstpath || '');
-    return auditLog.record(this.sender.getURL(), 'rename', { url, srcpath, dstpath }, undefined, () =>
-      timer(to(opts), async (checkin, pause, resume) => {
-        const src = await lookupDrive(this.sender, urlp.hostname, urlp.version);
-        const dstHostname = dstpath.includes('://') ? parseDriveUrl(dstpath).hostname : urlp.hostname;
-        const dst = await lookupDrive(this.sender, dstHostname);
+    return auditLog.record(
+      this.sender.getURL(),
+      'rename',
+      { url, srcpath, dstpath },
+      undefined,
+      () =>
+        timer(to(opts), async (checkin, pause, resume) => {
+          const src = await lookupDrive(this.sender, urlp.hostname, urlp.version);
+          const dstHostname = dstpath.includes('://')
+            ? parseDriveUrl(dstpath).hostname
+            : urlp.hostname;
+          const dst = await lookupDrive(this.sender, dstHostname);
 
-        const srcFinal = srcpath.includes('://') ? normalizeFilepath(new URL(srcpath).pathname) : srcpath;
-        const dstFinal = dstpath.includes('://') ? normalizeFilepath(new URL(dstpath).pathname) : dstpath;
+          const srcFinal = srcpath.includes('://')
+            ? normalizeFilepath(new URL(srcpath).pathname)
+            : srcpath;
+          const dstFinal = dstpath.includes('://')
+            ? normalizeFilepath(new URL(dstpath).pathname)
+            : dstpath;
 
-        pause();
-        await assertWritePermission(src.drive, this.sender, srcFinal);
-        await assertWritePermission(dst.drive, this.sender, dstFinal);
-        assertValidPath(dstFinal);
-        assertUnprotectedFilePath(srcFinal, this.sender);
-        assertUnprotectedFilePath(dstFinal, this.sender);
-        resume();
+          pause();
+          await assertWritePermission(src.drive, this.sender, srcFinal);
+          await assertWritePermission(dst.drive, this.sender, dstFinal);
+          assertValidPath(dstFinal);
+          assertUnprotectedFilePath(srcFinal, this.sender);
+          assertUnprotectedFilePath(dstFinal, this.sender);
+          resume();
 
-        const srcEntry = await src.checkoutFS.drive.entry(srcFinal);
-        if (!srcEntry) throw new InvalidPathError('Source path does not exist');
-        const buf = await src.checkoutFS.drive.get(srcFinal);
-        await dst.checkoutFS.drive.put(dstFinal, buf || b4a.alloc(0), { metadata: srcEntry.value?.metadata });
-        await src.checkoutFS.drive.del(srcFinal);
-      })
+          const srcEntry = await src.checkoutFS.drive.entry(srcFinal);
+          if (!srcEntry) throw new InvalidPathError('Source path does not exist');
+          const buf = await src.checkoutFS.drive.get(srcFinal);
+          await dst.checkoutFS.drive.put(dstFinal, buf || b4a.alloc(0), {
+            metadata: srcEntry.value?.metadata,
+          });
+          await src.checkoutFS.drive.del(srcFinal);
+        })
     );
   },
 
   async updateMetadata(url, metadata, opts: any = {}) {
     const urlp = parseDriveUrl(url);
     const filepath = normalizeFilepath(urlp.pathname || '');
-    return auditLog.record(this.sender.getURL(), 'updateMetadata', { url, filepath, metadata }, undefined, () =>
-      timer(to(opts), async (checkin, pause, resume) => {
-        const { drive, checkoutFS, isHistoric } = await lookupDrive(
-          this.sender, urlp.hostname, urlp.version
-        );
-        if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
-        pause();
-        await assertWritePermission(drive, this.sender, filepath);
-        assertValidPath(filepath);
-        resume();
+    return auditLog.record(
+      this.sender.getURL(),
+      'updateMetadata',
+      { url, filepath, metadata },
+      undefined,
+      () =>
+        timer(to(opts), async (checkin, pause, resume) => {
+          const { drive, checkoutFS, isHistoric } = await lookupDrive(
+            this.sender,
+            urlp.hostname,
+            urlp.version
+          );
+          if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
+          pause();
+          await assertWritePermission(drive, this.sender, filepath);
+          assertValidPath(filepath);
+          resume();
 
-        const entry = await checkoutFS.drive.entry(filepath);
-        if (!entry) throw new InvalidPathError('Path does not exist');
-        const existingMeta = entry.value?.metadata || {};
-        const newMeta = Object.assign({}, existingMeta, metadata);
-        const buf = await checkoutFS.drive.get(filepath);
-        return checkoutFS.drive.put(filepath, buf || b4a.alloc(0), { metadata: newMeta });
-      })
+          const entry = await checkoutFS.drive.entry(filepath);
+          if (!entry) throw new InvalidPathError('Path does not exist');
+          const existingMeta = entry.value?.metadata || {};
+          const newMeta = Object.assign({}, existingMeta, metadata);
+          const buf = await checkoutFS.drive.get(filepath);
+          return checkoutFS.drive.put(filepath, buf || b4a.alloc(0), { metadata: newMeta });
+        })
     );
   },
 
   async deleteMetadata(url, keys, opts: any = {}) {
     const urlp = parseDriveUrl(url);
     const filepath = normalizeFilepath(urlp.pathname || '');
-    return auditLog.record(this.sender.getURL(), 'deleteMetadata', { url, filepath, keys }, undefined, () =>
-      timer(to(opts), async (checkin, pause, resume) => {
-        const { drive, checkoutFS, isHistoric } = await lookupDrive(
-          this.sender, urlp.hostname, urlp.version
-        );
-        if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
-        pause();
-        await assertWritePermission(drive, this.sender, filepath);
-        assertValidPath(filepath);
-        resume();
+    return auditLog.record(
+      this.sender.getURL(),
+      'deleteMetadata',
+      { url, filepath, keys },
+      undefined,
+      () =>
+        timer(to(opts), async (checkin, pause, resume) => {
+          const { drive, checkoutFS, isHistoric } = await lookupDrive(
+            this.sender,
+            urlp.hostname,
+            urlp.version
+          );
+          if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
+          pause();
+          await assertWritePermission(drive, this.sender, filepath);
+          assertValidPath(filepath);
+          resume();
 
-        const entry = await checkoutFS.drive.entry(filepath);
-        if (!entry) throw new InvalidPathError('Path does not exist');
-        const newMeta = Object.assign({}, entry.value?.metadata || {});
-        for (const k of (Array.isArray(keys) ? keys : [keys])) delete newMeta[k];
-        const buf = await checkoutFS.drive.get(filepath);
-        return checkoutFS.drive.put(filepath, buf || b4a.alloc(0), { metadata: newMeta });
-      })
+          const entry = await checkoutFS.drive.entry(filepath);
+          if (!entry) throw new InvalidPathError('Path does not exist');
+          const newMeta = Object.assign({}, entry.value?.metadata || {});
+          for (const k of Array.isArray(keys) ? keys : [keys]) delete newMeta[k];
+          const buf = await checkoutFS.drive.get(filepath);
+          return checkoutFS.drive.put(filepath, buf || b4a.alloc(0), { metadata: newMeta });
+        })
     );
   },
 
@@ -549,7 +605,7 @@ const hyperdriveAPI = {
     await assertReadPermission(drive, this.sender);
     const emitter = new EventEmitter();
     const folder = pathPattern || '/';
-    ;(async () => {
+    (async () => {
       for await (const diff of drive.drive.watch(folder)) {
         emitter.emit('changed', diff);
       }
@@ -561,8 +617,10 @@ const hyperdriveAPI = {
 
   async beakerDiff(srcUrl, dstUrl, opts) {
     assertBeakerOnly(this.sender);
-    if (!srcUrl || typeof srcUrl !== 'string') throw new InvalidURLError('First param must be a hyper URL');
-    if (!dstUrl || typeof dstUrl !== 'string') throw new InvalidURLError('Second param must be a hyper URL');
+    if (!srcUrl || typeof srcUrl !== 'string')
+      throw new InvalidURLError('First param must be a hyper URL');
+    if (!dstUrl || typeof dstUrl !== 'string')
+      throw new InvalidURLError('Second param must be a hyper URL');
     const [src, dst] = await Promise.all([
       lookupDrive(this.sender, srcUrl),
       lookupDrive(this.sender, dstUrl),
@@ -576,8 +634,10 @@ const hyperdriveAPI = {
 
   async beakerMerge(srcUrl, dstUrl, opts) {
     assertBeakerOnly(this.sender);
-    if (!srcUrl || typeof srcUrl !== 'string') throw new InvalidURLError('First param must be a hyper URL');
-    if (!dstUrl || typeof dstUrl !== 'string') throw new InvalidURLError('Second param must be a hyper URL');
+    if (!srcUrl || typeof srcUrl !== 'string')
+      throw new InvalidURLError('First param must be a hyper URL');
+    if (!dstUrl || typeof dstUrl !== 'string')
+      throw new InvalidURLError('Second param must be a hyper URL');
     const [src, dst] = await Promise.all([
       lookupDrive(this.sender, srcUrl),
       lookupDrive(this.sender, dstUrl),
@@ -587,7 +647,9 @@ const hyperdriveAPI = {
     const srcFolder = src.filepath || '/';
     const dstFolder = dst.filepath || '/';
     for await (const entry of src.checkoutFS.drive.list(srcFolder, { recursive: true })) {
-      const relPath = entry.key.slice(srcFolder.endsWith('/') ? srcFolder.length : srcFolder.length + 1);
+      const relPath = entry.key.slice(
+        srcFolder.endsWith('/') ? srcFolder.length : srcFolder.length + 1
+      );
       const dstPath = dstFolder.endsWith('/') ? dstFolder + relPath : dstFolder + '/' + relPath;
       const buf = await src.checkoutFS.drive.get(entry.key);
       if (buf) await dst.checkoutFS.drive.put(dstPath, buf, { metadata: entry.value?.metadata });
@@ -623,7 +685,8 @@ const hyperdriveAPI = {
     for await (const entry of src.checkoutFS.drive.list(srcFolder, { recursive: true })) {
       if (ignore.has(entry.key)) continue;
       const relPath = entry.key.slice(srcFolder.length);
-      const dstPath = (dstFolder.endsWith('/') ? dstFolder : dstFolder + '/') + relPath.replace(/^\//, '');
+      const dstPath =
+        (dstFolder.endsWith('/') ? dstFolder : dstFolder + '/') + relPath.replace(/^\//, '');
       const buf = await src.checkoutFS.drive.get(entry.key);
       if (buf) await dst.checkoutFS.drive.put(dstPath, buf, { metadata: entry.value?.metadata });
     }
@@ -644,7 +707,16 @@ const hyperdriveAPI = {
     // Root is always a directory in Hyperdrive v11 — no entry exists for '/', and
     // hyperdrive throws "Invalid filename: /" if you try to look it up.
     if (filepath === '/') {
-      return { mode: 16384 /* IFDIR */, size: 0, offset: 0, blocks: 0, downloaded: 0, mtime: 0, ctime: 0, metadata: {} };
+      return {
+        mode: 16384 /* IFDIR */,
+        size: 0,
+        offset: 0,
+        blocks: 0,
+        downloaded: 0,
+        mtime: 0,
+        ctime: 0,
+        metadata: {},
+      };
     }
     const e = await hyperdriveAPI.entry.call(this, url, opts || {});
     if (e) {
@@ -666,7 +738,16 @@ const hyperdriveAPI = {
     // Check if any children exist under this path — if so, treat it as a directory.
     const children = await hyperdriveAPI.list.call(this, url, { recursive: false });
     if (children.length > 0) {
-      return { mode: 16384 /* IFDIR */, size: 0, offset: 0, blocks: 0, downloaded: 0, mtime: 0, ctime: 0, metadata: {} };
+      return {
+        mode: 16384 /* IFDIR */,
+        size: 0,
+        offset: 0,
+        blocks: 0,
+        downloaded: 0,
+        mtime: 0,
+        ctime: 0,
+        metadata: {},
+      };
     }
     return null;
   },
@@ -676,7 +757,9 @@ const hyperdriveAPI = {
   async readdir(url, opts: any = {}) {
     const urlp = parseDriveUrl(url);
     const filepath = normalizeFilepath(urlp.pathname || '');
-    const entries = await hyperdriveAPI.list.call(this, url, { recursive: opts.recursive || false });
+    const entries = await hyperdriveAPI.list.call(this, url, {
+      recursive: opts.recursive || false,
+    });
 
     // shallowReadStream pushes the raw Hyperbee node even for directory entries,
     // where e.key is the first *file* found inside the subdirectory, not the dir itself.
@@ -692,29 +775,35 @@ const hyperdriveAPI = {
       return entries.map((e) => {
         const name = shallowName(e.key);
         const isFile = !e.key.slice(normalizedPath.length + 1).includes('/') && !!e.value?.blob;
-        const mtime = isFile ? (e.value?.metadata?.mtime || 0) : 0;
-        const ctime = isFile ? (e.value?.metadata?.ctime || mtime) : 0;
+        const mtime = isFile ? e.value?.metadata?.mtime || 0 : 0;
+        const ctime = isFile ? e.value?.metadata?.ctime || mtime : 0;
         return {
           name,
           stat: {
             // mode encodes file vs directory so fg-side createStat() can reconstruct isFile/isDirectory
             mode: isFile ? 32768 /* IFREG */ : 16384 /* IFDIR */,
-            size: isFile ? (e.value?.blob?.byteLength || 0) : 0,
+            size: isFile ? e.value?.blob?.byteLength || 0 : 0,
             offset: 0,
             blocks: 0,
             downloaded: 0,
             mtime,
             ctime,
-            metadata: isFile ? (e.value?.metadata || {}) : {},
+            metadata: isFile ? e.value?.metadata || {} : {},
           },
         };
       });
     }
     return entries.map((e) => shallowName(e.key));
   },
-  async symlink() { /* no-op: symlinks removed in v11 */ },
-  async mount() { /* no-op: mounts removed in v11 */ },
-  async unmount() { /* no-op: mounts removed in v11 */ },
+  async symlink() {
+    /* no-op: symlinks removed in v11 */
+  },
+  async mount() {
+    /* no-op: mounts removed in v11 */
+  },
+  async unmount() {
+    /* no-op: mounts removed in v11 */
+  },
   async createNetworkActivityStream() {
     const { EventEmitter } = require('events');
     return new EventEmitter();
@@ -753,7 +842,12 @@ async function assertReadPermission(drive, sender, filepath = undefined) {
   if (ident.system) {
     const origin = archivesDb.extractOrigin(sender.getURL()) + '/';
     const senderUrl = sender.getURL();
-    if (wcTrust.isWcTrusted(sender) || filesystem.isRootUrl(origin) || senderUrl.startsWith('hyper://')) return true;
+    if (
+      wcTrust.isWcTrusted(sender) ||
+      filesystem.isRootUrl(origin) ||
+      senderUrl.startsWith('hyper://')
+    )
+      return true;
     throw new PermissionsError('Cannot read the hyper://private/ drive');
   }
   return true;
@@ -794,7 +888,8 @@ function assertValidFilePath(filepath) {
 }
 
 function assertValidPath(fileOrFolderPath) {
-  if (!DRIVE_VALID_PATH_REGEX.test(fileOrFolderPath)) throw new InvalidPathError('Path contains invalid characters');
+  if (!DRIVE_VALID_PATH_REGEX.test(fileOrFolderPath))
+    throw new InvalidPathError('Path contains invalid characters');
 }
 
 function normalizeFilepath(str) {
@@ -803,7 +898,12 @@ function normalizeFilepath(str) {
   return str;
 }
 
-export async function lookupDrive(sender, driveHostname, version?, dontGetDrive = false): Promise<any> {
+export async function lookupDrive(
+  sender,
+  driveHostname,
+  version?,
+  dontGetDrive = false
+): Promise<any> {
   let driveKey;
 
   if (driveHostname && driveHostname.endsWith('.cap')) {
@@ -851,7 +951,11 @@ async function lookupUrlDriveKey(url) {
 async function _readIndexJson(drive) {
   const buf = await drive.get('/index.json');
   if (!buf) return {};
-  try { return JSON.parse(b4a.toString(buf)); } catch { return {}; }
+  try {
+    return JSON.parse(b4a.toString(buf));
+  } catch {
+    return {};
+  }
 }
 
 function _toBuffer(data, opts: any = {}) {
@@ -881,7 +985,12 @@ async function _importFsFolder(drive, srcPath, dstPath, { ignore = [] }: any = {
   }
 }
 
-async function _exportToFs(drive, srcFolder, dstPath, { ignore = [], overwriteExisting = true }: any = {}) {
+async function _exportToFs(
+  drive,
+  srcFolder,
+  dstPath,
+  { ignore = [], overwriteExisting = true }: any = {}
+) {
   const ignoreSet = new Set(ignore);
   await nodefs.mkdir(dstPath, { recursive: true });
   for await (const entry of drive.list(srcFolder, { recursive: true })) {
@@ -889,7 +998,10 @@ async function _exportToFs(drive, srcFolder, dstPath, { ignore = [], overwriteEx
     const relPath = entry.key.slice(srcFolder.length).replace(/^\//, '');
     const dstFile = dstPath.endsWith('/') ? dstPath + relPath : dstPath + '/' + relPath;
     if (!overwriteExisting) {
-      try { await nodefs.access(dstFile); continue; } catch {}
+      try {
+        await nodefs.access(dstFile);
+        continue;
+      } catch {}
     }
     const buf = await drive.get(entry.key);
     if (buf) {

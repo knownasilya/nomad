@@ -33,9 +33,7 @@ class PeersMenu extends LitElement {
   async init(params) {
     this.isLoading = true;
     this.url = params.url;
-    this.driveInfo = (
-      await bg.views.getTabState('active', { driveInfo: true })
-    ).driveInfo;
+    this.driveInfo = (await bg.views.getTabState('active', { driveInfo: true })).driveInfo;
     this.driveCfg = await bg.drives.get(this.url);
     const getPeers = async () => {
       var state = await bg.views.getNetworkState('active');

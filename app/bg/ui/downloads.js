@@ -6,11 +6,7 @@ import speedometer from 'speedometer';
 import emitStream from 'emit-stream';
 import EventEmitter from 'events';
 import parseDataURL from 'data-urls';
-import {
-  openOrFocusDownloadsPage,
-  findTab,
-  remove as removeTab,
-} from './tabs/manager';
+import { openOrFocusDownloadsPage, findTab, remove as removeTab } from './tabs/manager';
 
 // globals
 // =
@@ -140,9 +136,7 @@ export function registerListener(win, opts = {}) {
   };
 
   win.webContents.session.prependListener('will-download', listener);
-  win.on('close', () =>
-    win.webContents.session.removeListener('will-download', listener)
-  );
+  win.on('close', () => win.webContents.session.removeListener('will-download', listener));
 }
 
 export function download(win, wc, url, opts) {
@@ -248,9 +242,7 @@ function toJSON(item, overrides) {
     url: item.getURL(),
     state: overrides ? overrides.state : item.getState(),
     isPaused: item.isPaused(),
-    receivedBytes: overrides
-      ? overrides.receivedBytes
-      : item.getReceivedBytes(),
+    receivedBytes: overrides ? overrides.receivedBytes : item.getReceivedBytes(),
     totalBytes: overrides ? overrides.totalBytes : item.getTotalBytes(),
     downloadSpeed: item.downloadSpeed(),
   };
@@ -264,10 +256,8 @@ function capture(item, overrides) {
   item.getURL = () => item.url;
   item.getState = () => (overrides === true ? 'completed' : item.state);
   item.isPaused = () => false;
-  item.getReceivedBytes = () =>
-    overrides ? overrides.receivedBytes : item.receivedBytes;
-  item.getTotalBytes = () =>
-    overrides ? overrides.totalBytes : item.totalBytes;
+  item.getReceivedBytes = () => (overrides ? overrides.receivedBytes : item.receivedBytes);
+  item.getTotalBytes = () => (overrides ? overrides.totalBytes : item.totalBytes);
   item.getSavePath = () => savePath;
   item.downloadSpeed = () => dlspeed;
   return item;
@@ -275,18 +265,12 @@ function capture(item, overrides) {
 
 // sum of received bytes
 function getSumReceivedBytes() {
-  return getActiveDownloads().reduce(
-    (acc, item) => acc + item.getReceivedBytes(),
-    0
-  );
+  return getActiveDownloads().reduce((acc, item) => acc + item.getReceivedBytes(), 0);
 }
 
 // sum of total bytes
 function getSumTotalBytes() {
-  return getActiveDownloads().reduce(
-    (acc, item) => acc + item.getTotalBytes(),
-    0
-  );
+  return getActiveDownloads().reduce((acc, item) => acc + item.getTotalBytes(), 0);
 }
 
 function getActiveDownloads() {

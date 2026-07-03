@@ -33,10 +33,10 @@ export async function addSite(profileId, url, opts) {
     var ts = (Date.now() / 1000) | 0;
 
     // check if site already being watched
-    var site = await db.get(
-      'SELECT rowid, * from watchlist WHERE profileId = ? AND url = ?',
-      [profileId, url]
-    );
+    var site = await db.get('SELECT rowid, * from watchlist WHERE profileId = ? AND url = ?', [
+      profileId,
+      url,
+    ]);
     if (!site) {
       // add site to watch list
       await db.run(
@@ -47,10 +47,7 @@ export async function addSite(profileId, url, opts) {
   } finally {
     release();
   }
-  return db.get(
-    'SELECT rowid, * from watchlist WHERE profileId = ? AND url = ?',
-    [profileId, url]
-  );
+  return db.get('SELECT rowid, * from watchlist WHERE profileId = ? AND url = ?', [profileId, url]);
 }
 
 /**
@@ -87,8 +84,5 @@ export async function updateWatchlist(profileId, site) {
  * @return {Promise<any>}
  */
 export async function removeSite(profileId, url) {
-  return db.run(`DELETE FROM watchlist WHERE profileId = ? AND url = ?`, [
-    profileId,
-    url,
-  ]);
+  return db.run(`DELETE FROM watchlist WHERE profileId = ? AND url = ?`, [profileId, url]);
 }

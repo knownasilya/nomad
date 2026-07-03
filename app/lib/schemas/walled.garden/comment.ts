@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from 'zod';
 
 export const CommentSchema = z.object({
   type: z.literal('walled.garden/comment'),
@@ -6,7 +6,7 @@ export const CommentSchema = z.object({
   replyTo: z.url().optional(),
   body: z.string(),
   createdAt: z.iso.datetime(),
-  updatedAt: z.iso.datetime().optional()
-})
+  updatedAt: z.iso.datetime().optional(),
+});
 
-export type Comment = z.infer<typeof CommentSchema>
+export type Comment = z.infer<typeof CommentSchema>;

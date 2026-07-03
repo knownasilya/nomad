@@ -1,10 +1,18 @@
 import { TimeoutError } from 'beaker-error-constants';
 
 const relativeFormatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
-const shortDateFormatter = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' });
+const shortDateFormatter = new Intl.DateTimeFormat('en', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
 const downloadFormatter = new Intl.DateTimeFormat('en', {
-  weekday: 'short', month: 'short', day: 'numeric',
-  hour: 'numeric', minute: '2-digit', hour12: true,
+  weekday: 'short',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
 });
 
 function startOfDay(date) {
@@ -94,11 +102,7 @@ export function timer(ms, fn) {
     };
     const onTimeout = () => {
       isTimedOut = true;
-      reject(
-        new TimeoutError(
-          currentAction ? `Timed out while ${currentAction}` : undefined
-        )
-      );
+      reject(new TimeoutError(currentAction ? `Timed out while ${currentAction}` : undefined));
     };
 
     // call the fn to get the promise

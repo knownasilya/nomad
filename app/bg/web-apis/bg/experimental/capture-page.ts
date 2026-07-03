@@ -5,8 +5,7 @@ import { URL } from 'url';
 // constants
 // =
 
-const API_DOCS_URL =
-  'https://nomad.pages.dev/docs/api/';
+const API_DOCS_URL = 'https://nomad.pages.dev/docs/api/';
 const API_PERM_ID = 'experimentalCapturePage';
 const LAB_API_ID = 'capturePage';
 
@@ -24,14 +23,12 @@ export default {
     }
     if (opts) {
       if ('width' in opts) {
-        if (typeof opts.width !== 'number')
-          throw new Error('The width option must be a number');
+        if (typeof opts.width !== 'number') throw new Error('The width option must be a number');
         if (opts.width <= 0 || opts.width > 1600)
           throw new Error('The width option must between 1 and 1600');
       }
       if ('height' in opts) {
-        if (typeof opts.height !== 'number')
-          throw new Error('The height option must be a number');
+        if (typeof opts.height !== 'number') throw new Error('The height option must be a number');
         if (opts.height <= 0 || opts.height > 1200)
           throw new Error('The height option must between 1 and 1200');
       }
@@ -42,17 +39,13 @@ export default {
           if (typeof opts.resizeTo.width !== 'number')
             throw new Error('The resizeTo.width option must be a number');
           if (opts.resizeTo.width <= 0 || opts.resizeTo.width > 1600)
-            throw new Error(
-              'The resizeTo.width option must between 1 and 1600'
-            );
+            throw new Error('The resizeTo.width option must between 1 and 1600');
         }
         if ('height' in opts.resizeTo) {
           if (typeof opts.resizeTo.height !== 'number')
             throw new Error('The resizeTo.height option must be a number');
           if (opts.resizeTo.height <= 0 || opts.resizeTo.height > 1200)
-            throw new Error(
-              'The resizeTo.height option must between 1 and 1200'
-            );
+            throw new Error('The resizeTo.height option must between 1 and 1200');
         }
       }
     }
@@ -66,9 +59,7 @@ export default {
     }
 
     if (['http:', 'https:', 'hyper:'].indexOf(urlp.protocol) === -1) {
-      throw new Error(
-        'Can only capture pages served over http, https, or hyper'
-      );
+      throw new Error('Can only capture pages served over http, https, or hyper');
     }
 
     // check perms

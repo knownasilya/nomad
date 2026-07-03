@@ -31,8 +31,7 @@ export default {
       defaultPath: current ? current.localPath : undefined,
       properties: ['openDirectory', 'createDirectory'],
     });
-    if (res.filePaths.length !== 1)
-      return current ? current.localPath : undefined;
+    if (res.filePaths.length !== 1) return current ? current.localPath : undefined;
     if (current) {
       await folderSyncDb.update(key, {
         localPath: res.filePaths[0],
@@ -152,7 +151,7 @@ function sync(url) {
   const stream = new Readable();
   stream.objectMode = true;
 
-  ;(async () => {
+  (async () => {
     let drive, current;
     try {
       drive = await getDrive(url);
@@ -281,10 +280,7 @@ function stopAutosync(key) {
 }
 
 function createIgnoreFilter(ignoredFiles) {
-  var ignoreRegexes = (ignoredFiles || '')
-    .split('\n')
-    .filter(Boolean)
-    .map(globToRegex);
+  var ignoreRegexes = (ignoredFiles || '').split('\n').filter(Boolean).map(globToRegex);
   if (ignoreRegexes.length === 0) return;
   return (filepath) => {
     for (let re of ignoreRegexes) {

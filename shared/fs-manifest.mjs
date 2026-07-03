@@ -64,4 +64,4 @@ export default {
   denyRequest: 'promise',
   removeWriter: 'promise',
   listWriters: 'promise',
-}
+};

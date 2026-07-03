@@ -3,8 +3,14 @@ import * as bg from './bg-process-rpc';
 import buttonsCSS from './buttons2.css';
 
 const COLORS = [
-  '#6c6cff', '#e85d4a', '#e8a025', '#3ab36e',
-  '#2b9fd4', '#9b59b6', '#e91e8c', '#607d8b',
+  '#6c6cff',
+  '#e85d4a',
+  '#e8a025',
+  '#3ab36e',
+  '#2b9fd4',
+  '#9b59b6',
+  '#e91e8c',
+  '#607d8b',
 ];
 
 class SpacesMenu extends LitElement {
@@ -42,25 +48,27 @@ class SpacesMenu extends LitElement {
       <div class="wrapper">
         <div class="header">Spaces</div>
         <div class="spaces-list">
-          ${(this.spaces || []).map((s) => html`
-            <div
-              class="space-item ${s.id === this.activeSpace?.id ? 'active' : ''}"
-              @click=${() => this.onSwitch(s.id)}
-            >
-              <span class="dot" style="background:${s.color}"></span>
-              <span class="name">${s.name}</span>
-              ${s.id === this.activeSpace?.id
-                ? html`<span class="fa fa-check"></span>`
-                : ''}
-            </div>
-          `)}
+          ${(this.spaces || []).map(
+            (s) => html`
+              <div
+                class="space-item ${s.id === this.activeSpace?.id ? 'active' : ''}"
+                @click=${() => this.onSwitch(s.id)}
+              >
+                <span class="dot" style="background:${s.color}"></span>
+                <span class="name">${s.name}</span>
+                ${s.id === this.activeSpace?.id ? html`<span class="fa fa-check"></span>` : ''}
+              </div>
+            `
+          )}
         </div>
         <div class="divider"></div>
-        ${this.isCreating ? this.renderForm() : html`
-          <div class="new-btn" @click=${this.onStartCreate}>
-            <span class="fa fa-plus"></span> New space
-          </div>
-        `}
+        ${this.isCreating
+          ? this.renderForm()
+          : html`
+              <div class="new-btn" @click=${this.onStartCreate}>
+                <span class="fa fa-plus"></span> New space
+              </div>
+            `}
       </div>
     `;
   }
@@ -73,25 +81,29 @@ class SpacesMenu extends LitElement {
           type="text"
           placeholder="Space name"
           .value=${this.newName}
-          @input=${(e) => { this.newName = e.target.value; }}
+          @input=${(e) => {
+            this.newName = e.target.value;
+          }}
           @keydown=${this.onKeydown}
         />
         <div class="color-row">
-          ${COLORS.map((c) => html`
-            <button
-              class="swatch ${c === this.newColor ? 'selected' : ''}"
-              style="background:${c}"
-              @click=${() => { this.newColor = c; }}
-            ></button>
-          `)}
+          ${COLORS.map(
+            (c) => html`
+              <button
+                class="swatch ${c === this.newColor ? 'selected' : ''}"
+                style="background:${c}"
+                @click=${() => {
+                  this.newColor = c;
+                }}
+              ></button>
+            `
+          )}
         </div>
         <div class="form-btns">
           <button class="cancel" @click=${this.onCancel}>Cancel</button>
-          <button
-            class="create"
-            ?disabled=${!this.newName.trim()}
-            @click=${this.onCreate}
-          >Create</button>
+          <button class="create" ?disabled=${!this.newName.trim()} @click=${this.onCreate}>
+            Create
+          </button>
         </div>
       </div>
     `;
@@ -173,7 +185,7 @@ SpacesMenu.styles = [
     }
 
     .space-item:hover {
-      background: var(--bg-color--hover, rgba(0,0,0,0.05));
+      background: var(--bg-color--hover, rgba(0, 0, 0, 0.05));
     }
 
     .space-item.active {
@@ -208,7 +220,7 @@ SpacesMenu.styles = [
     }
 
     .new-btn:hover {
-      background: var(--bg-color--hover, rgba(0,0,0,0.05));
+      background: var(--bg-color--hover, rgba(0, 0, 0, 0.05));
     }
 
     .create-form {
@@ -256,7 +268,8 @@ SpacesMenu.styles = [
       justify-content: flex-end;
     }
 
-    .cancel, .create {
+    .cancel,
+    .create {
       padding: 3px 10px;
       border-radius: 3px;
       border: 1px solid var(--border-color--default);

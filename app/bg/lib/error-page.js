@@ -243,12 +243,16 @@ function renderGenericError(e) {
       case -106:
         iconClass = 'info';
         title = 'No internet connection';
-        info = '<p>Your computer is not connected to the internet.</p><ul><li>Reset your Wi-Fi connection</li><li>Check your router and modem</li></ul>';
+        info =
+          '<p>Your computer is not connected to the internet.</p><ul><li>Reset your Wi-Fi connection</li><li>Check your router and modem</li></ul>';
         break;
       case -105:
         iconClass = 'sad';
         icon = 'fa-frown-o';
-        info = '<p>Could not resolve the DNS address for <strong>' + stripOrigin(e.validatedURL) + '</strong>.</p>';
+        info =
+          '<p>Could not resolve the DNS address for <strong>' +
+          stripOrigin(e.validatedURL) +
+          '</strong>.</p>';
         break;
       case 404:
         iconClass = 'sad';
@@ -259,7 +263,8 @@ function renderGenericError(e) {
       case 504:
         icon = 'fa-share-alt';
         title = 'Nomad could not reach this ' + (e.resource || 'page');
-        info = '<p>The p2p ' + (e.resource || 'resource') + ' was not reachable on the network.</p>';
+        info =
+          '<p>The p2p ' + (e.resource || 'resource') + ' was not reachable on the network.</p>';
         break;
       default:
         if (e.errorInfo) info = '<p>' + e.errorInfo + '</p>';
@@ -282,7 +287,7 @@ function renderGenericError(e) {
 }
 
 function renderShell(body) {
-  return (`
+  return `
     <html>
       <head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8" /></head>
       <body>
@@ -290,7 +295,7 @@ function renderShell(body) {
         <link rel="stylesheet" href="beaker://assets/font-awesome.css">
         <div class="error-card">${body}</div>
       </body>
-    </html>`).replace(/\n/g, '');
+    </html>`.replace(/\n/g, '');
 }
 
 function stripOrigin(url) {

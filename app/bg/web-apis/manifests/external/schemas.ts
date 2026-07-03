@@ -1,4 +1,4 @@
 export default {
   validate: 'sync',
-  list: 'sync'
-}
+  list: 'sync',
+};

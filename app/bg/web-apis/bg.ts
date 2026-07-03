@@ -80,24 +80,9 @@ const IFRAME_WHITELIST = [
 
 export const setup = function () {
   // internal apis
-  rpc.exportAPI(
-    'logger',
-    loggerManifest,
-    Object.assign({}, auditLogAPI, loggerAPI),
-    internalOnly
-  );
-  rpc.exportAPI(
-    'beaker-browser',
-    beakerBrowserManifest,
-    beakerBrowserAPI,
-    internalOnly
-  );
-  rpc.exportAPI(
-    'beaker-filesystem',
-    beakerFilesystemManifest,
-    beakerFilesystemAPI,
-    internalOnly
-  );
+  rpc.exportAPI('logger', loggerManifest, Object.assign({}, auditLogAPI, loggerAPI), internalOnly);
+  rpc.exportAPI('beaker-browser', beakerBrowserManifest, beakerBrowserAPI, internalOnly);
+  rpc.exportAPI('beaker-filesystem', beakerFilesystemManifest, beakerFilesystemAPI, internalOnly);
   rpc.exportAPI('bookmarks', bookmarksManifest, bookmarksAPI, internalOnly);
   rpc.exportAPI('downloads', downloadsManifest, downloadsAPI, internalOnly);
   rpc.exportAPI('drives', drivesManifest, drivesAPI, internalOnly);
@@ -110,28 +95,13 @@ export const setup = function () {
 
   // external apis
   rpc.exportAPI('ai', aiManifest, aiAPI, secureOnly('ai'));
-  rpc.exportAPI(
-    'capabilities',
-    capabilitiesManifest,
-    capabilitiesAPI,
-    secureOnly('capabilities')
-  );
-  rpc.exportAPI(
-    'contacts',
-    contactsManifest,
-    contactsAPI,
-    secureOnly('contacts')
-  );
+  rpc.exportAPI('capabilities', capabilitiesManifest, capabilitiesAPI, secureOnly('capabilities'));
+  rpc.exportAPI('contacts', contactsManifest, contactsAPI, secureOnly('contacts'));
   rpc.exportAPI('fs', fsManifest, fsAPI, secureOnly('fs'));
   rpc.exportAPI('markdown', markdownManifest, markdownAPI);
   rpc.exportAPI('panes', panesManifest, panesAPI, secureOnly('panes'));
   rpc.exportAPI('schemas', schemasManifest, schemasAPI);
-  rpc.exportAPI(
-    'peersockets',
-    peersocketsManifest,
-    peersocketsAPI,
-    secureOnly('peersockets')
-  );
+  rpc.exportAPI('peersockets', peersocketsManifest, peersocketsAPI, secureOnly('peersockets'));
   rpc.exportAPI('shell', shellManifest, shellAPI, secureOnly('shell'));
 
   // experimental apis

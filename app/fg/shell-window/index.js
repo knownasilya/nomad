@@ -104,22 +104,16 @@ class ShellWindowUI extends LitElement {
       }
       this.stateHasChanged();
     });
-    viewEvents.addEventListener(
-      'update-panes-state',
-      ({ index, paneLayout }) => {
-        if (this.tabs[index]) {
-          this.tabs[index].paneLayout = paneLayout;
-        }
-        this.shadowRoot.querySelector('shell-window-panes').requestUpdate();
+    viewEvents.addEventListener('update-panes-state', ({ index, paneLayout }) => {
+      if (this.tabs[index]) {
+        this.tabs[index].paneLayout = paneLayout;
       }
-    );
+      this.shadowRoot.querySelector('shell-window-panes').requestUpdate();
+    });
 
     // listen to state updates on the auto-updater
     var browserEvents = fromEventStream(bg.beakerBrowser.createEventsStream());
-    browserEvents.addEventListener(
-      'updater-state-changed',
-      this.onUpdaterStateChange.bind(this)
-    );
+    browserEvents.addEventListener('updater-state-changed', this.onUpdaterStateChange.bind(this));
 
     // listen to state updates on the watchlist
     var wlEvents = fromEventStream(bg.watchlist.createEventsStream());
@@ -185,7 +179,9 @@ class ShellWindowUI extends LitElement {
     const navbarStyle = [
       navbarMargin ? `margin-${isLeft ? 'left' : 'right'}: ${navbarMargin}px` : '',
       navbarPadding ? `padding-${isLeft ? 'left' : 'right'}: ${navbarPadding}px` : '',
-    ].filter(Boolean).join('; ');
+    ]
+      .filter(Boolean)
+      .join('; ');
     return html`
       ${this.isWindows ? html`<shell-window-win32></shell-window-win32>` : ''}
       ${this.isShellInterfaceHidden
@@ -203,17 +199,17 @@ class ShellWindowUI extends LitElement {
                   ></shell-window-sidebar>
                 `
               : !isSidebar
-              ? html`
-                  <shell-window-tabs
-                    .tabs=${this.tabs}
-                    .spaces=${this.spaces}
-                    .activeSpace=${this.activeSpace}
-                    .groups=${this.groups}
-                    ?is-fullscreen=${this.isFullscreen}
-                    ?has-bg-tabs=${this.hasBgTabs}
-                  ></shell-window-tabs>
-                `
-              : ''}
+                ? html`
+                    <shell-window-tabs
+                      .tabs=${this.tabs}
+                      .spaces=${this.spaces}
+                      .activeSpace=${this.activeSpace}
+                      .groups=${this.groups}
+                      ?is-fullscreen=${this.isFullscreen}
+                      ?has-bg-tabs=${this.hasBgTabs}
+                    ></shell-window-tabs>
+                  `
+                : ''}
             <shell-window-navbar
               .activeTabIndex=${this.activeTabIndex}
               .activeTab=${this.activeTab}

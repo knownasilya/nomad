@@ -49,8 +49,7 @@ const logger = logLib.child({ category: 'browser' });
 
 const IS_FROM_SOURCE =
   process.defaultApp || /node_modules[\\/]electron[\\/]/.test(process.execPath);
-const IS_LINUX =
-  !/^win/.test(process.platform) && process.platform !== 'darwin';
+const IS_LINUX = !/^win/.test(process.platform) && process.platform !== 'darwin';
 const DOT_DESKTOP_FILENAME = 'appimagekit-nomad.desktop';
 const isBrowserUpdatesSupported = !(IS_LINUX || IS_FROM_SOURCE); // linux is temporarily not supported
 
@@ -87,17 +86,9 @@ var certOnceExceptions = new Set(); // Set<hostname>, cleared after each load
 var browserEvents = new EventEmitter();
 
 process.on('unhandledRejection', (reason, p) => {
-  console.error(
-    'Unhandled Rejection at: Promise',
-    p,
-    'reason:',
-    reason,
-    reason.stack
-  );
+  console.error('Unhandled Rejection at: Promise', p, 'reason:', reason, reason.stack);
   logger.error(
-    `Unhandled Rejection at: Promise ${p.toString()} reason: ${reason.toString()} ${
-      reason.stack
-    }`
+    `Unhandled Rejection at: Promise ${p.toString()} reason: ${reason.toString()} ${reason.stack}`
   );
 });
 process.on('uncaughtException', (err) => {
@@ -160,10 +151,7 @@ export async function setup() {
       if (details.resourceType === 'mainFrame') {
         // allow toplevel navigation
         return cb({ cancel: false });
-      } else if (
-        details.webContentsId &&
-        wcTrust.isWcTrusted(details.webContentsId)
-      ) {
+      } else if (details.webContentsId && wcTrust.isWcTrusted(details.webContentsId)) {
         // allow trusted WCs
         return cb({ cancel: false });
       } else if (details.webContentsId) {
@@ -233,7 +221,11 @@ export async function setup() {
     // settings.js JSON-encodes the value before emitting, so we may receive a string
     let list = val;
     if (typeof list === 'string') {
-      try { list = JSON.parse(list); } catch (e) { return; }
+      try {
+        list = JSON.parse(list);
+      } catch (e) {
+        return;
+      }
     }
     certPersistentExceptions.clear();
     if (Array.isArray(list)) {
@@ -604,9 +596,7 @@ export async function getDefaultProtocolSettings() {
       // If there is no default specified, be sure to catch any error
       // from exec and return '' otherwise Promise.all errors out.
       exec('xdg-mime query default "x-scheme-handler/http"').catch((err) => ''),
-      exec('xdg-mime query default "x-scheme-handler/hyper"').catch(
-        (err) => ''
-      ),
+      exec('xdg-mime query default "x-scheme-handler/hyper"').catch((err) => ''),
     ]);
     if (httpHandler && httpHandler.stdout) httpHandler = httpHandler.stdout;
     if (hyperHandler && hyperHandler.stdout) hyperHandler = hyperHandler.stdout;
@@ -631,9 +621,7 @@ export async function setAsDefaultProtocolClient(protocol) {
     // we can just use xdg-mime directly instead
     // see https://github.com/beakerbrowser/beaker/issues/915
     // -prf
-    await exec(
-      `xdg-mime default ${DOT_DESKTOP_FILENAME} "x-scheme-handler/${protocol}"`
-    );
+    await exec(`xdg-mime default ${DOT_DESKTOP_FILENAME} "x-scheme-handler/${protocol}"`);
     return true;
   }
   return Promise.resolve(app.setAsDefaultProtocolClient(protocol));
@@ -668,10 +656,12 @@ export async function getDaemonStatus() {
 
 export async function getDaemonNetworkStatus() {
   const status = await hyperDaemon.getDaemonStatus();
-  return [{
-    key: 'all',
-    peers: status.connections > 0 ? hyperDaemon.listPeerAddresses() || [] : [],
-  }];
+  return [
+    {
+      key: 'all',
+      peers: status.connections > 0 ? hyperDaemon.listPeerAddresses() || [] : [],
+    },
+  ];
 }
 
 export function checkForUpdates(opts = {}) {
@@ -737,9 +727,7 @@ export async function capturePage(url, opts = {}) {
     height,
     show: false,
     webPreferences: {
-      preload:
-        'file://' +
-        path.join(app.getAppPath(), 'fg', 'webview-preload', 'index.build.js'),
+      preload: 'file://' + path.join(app.getAppPath(), 'fg', 'webview-preload', 'index.build.js'),
       contextIsolation: true,
       webviewTag: false,
       sandbox: true,
@@ -959,9 +947,7 @@ function onUpdateNotAvailable() {
 }
 
 function onUpdateDownloaded() {
-  logger.info(
-    '[AUTO-UPDATE] New browser version downloaded. Ready to install.'
-  );
+  logger.info('[AUTO-UPDATE] New browser version downloaded. Ready to install.');
   setUpdaterState(UPDATER_STATUS_DOWNLOADED);
 }
 
@@ -972,10 +958,7 @@ function onUpdateError(e) {
 
   let message = (e.toString() || '').split('\n')[0];
   if (message.includes('[object Object]')) {
-    message =
-      typeof e.message === 'string'
-        ? e.message
-        : 'Updater failed to contact the server';
+    message = typeof e.message === 'string' ? e.message : 'Updater failed to contact the server';
   }
   updaterError = { message };
   browserEvents.emit('updater-error', updaterError);
@@ -1042,11 +1025,7 @@ async function setRunOnStartup(desiredState) {
   const opts = {};
   if (process.platform !== 'darwin') {
     // mac
-    opts.path = path.resolve(
-      path.dirname(process.execPath),
-      '..',
-      'Update.exe'
-    );
+    opts.path = path.resolve(path.dirname(process.execPath), '..', 'Update.exe');
     opts.args = [
       '--processStart',
       `"${path.basename(process.execPath)}"`,

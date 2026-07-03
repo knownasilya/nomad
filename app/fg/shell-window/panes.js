@@ -42,8 +42,9 @@ class ShellWindowPanes extends LitElement {
       }
       .pane-status-bar {
         position: fixed;
-        font-family: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI',
-          Ubuntu, Cantarell, 'Oxygen Sans', 'Helvetica Neue', sans-serif;
+        font-family:
+          -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Ubuntu, Cantarell,
+          'Oxygen Sans', 'Helvetica Neue', sans-serif;
         background: var(--bg-color--pane-status-bar);
         color: var(--text-color--pane-status-bar);
         z-index: 2;
@@ -123,18 +124,17 @@ class ShellWindowPanes extends LitElement {
         : html`
             <div
               class="pane-background"
-              style="left: ${pane.bounds.x}px; top: ${pane.bounds
-                .y}px; width: ${pane.bounds.width}px; height: ${pane.bounds
-                .height}px"
+              style="left: ${pane.bounds.x}px; top: ${pane.bounds.y}px; width: ${pane.bounds
+                .width}px; height: ${pane.bounds.height}px"
             ></div>
           `;
     const horzLine = (pane, y, edge) => html`
       <div
-        class="pane-border horz ${!pane.isEdge[edge]
-          ? 'movable'
-          : ''} ${edge === 'top' && pane.isActive ? 'active' : ''}"
-        style="left: ${pane.bounds.x - 2}px; top: ${y}px; width: ${pane.bounds
-          .width + 4}px"
+        class="pane-border horz ${!pane.isEdge[edge] ? 'movable' : ''} ${edge === 'top' &&
+        pane.isActive
+          ? 'active'
+          : ''}"
+        style="left: ${pane.bounds.x - 2}px; top: ${y}px; width: ${pane.bounds.width + 4}px"
         @mousedown=${(e) => this.onMouseDown(e, pane, edge)}
         @mousemove=${this.onMouseMove}
         @mouseup=${this.onMouseUp}
@@ -143,8 +143,7 @@ class ShellWindowPanes extends LitElement {
     const vertLine = (pane, x, edge) => html`
       <div
         class="pane-border vert ${!pane.isEdge[edge] ? 'movable' : ''}"
-        style="left: ${x}px; top: ${pane.bounds.y}px; height: ${pane.bounds
-          .height + 2}px"
+        style="left: ${x}px; top: ${pane.bounds.y}px; height: ${pane.bounds.height + 2}px"
         @mousedown=${(e) => this.onMouseDown(e, pane, edge)}
         @mousemove=${this.onMouseMove}
         @mouseup=${this.onMouseUp}
@@ -155,12 +154,9 @@ class ShellWindowPanes extends LitElement {
         class="pane-status-bar ${pane.isActive ? 'active' : ''}"
         style="left: ${pane.bounds.x}px; top: ${pane.bounds.y +
         pane.bounds.height -
-        STATUS_BAR_HEIGHT}px; width: ${pane.bounds
-          .width}px; height: ${STATUS_BAR_HEIGHT}px"
+        STATUS_BAR_HEIGHT}px; width: ${pane.bounds.width}px; height: ${STATUS_BAR_HEIGHT}px"
       >
-        ${pane.isActive && hasMultiple
-          ? html`<span class="fas fa-circle indicator"></span>`
-          : ''}
+        ${pane.isActive && hasMultiple ? html`<span class="fas fa-circle indicator"></span>` : ''}
         <button @click=${(e) => this.onClickPaneMenu(e, pane)}>
           <span class="fa fa-bars"></span>
         </button>
@@ -176,8 +172,8 @@ class ShellWindowPanes extends LitElement {
                 ${pane.attachedPaneId
                   ? html` Attached <span class="icon">⚯</span> `
                   : pane.wantsAttachedPane
-                  ? html` <span class="icon">⚬</span> `
-                  : ''}
+                    ? html` <span class="icon">⚬</span> `
+                    : ''}
               </button>
             `
           : ''}
@@ -204,12 +200,8 @@ class ShellWindowPanes extends LitElement {
         (pane) => pane.id,
         (pane) => html`
           ${background(pane)} ${horzLine(pane, pane.bounds.y - 2, 'top')}
-          ${!pane.isEdge.bottom
-            ? horzLine(pane, pane.bounds.y + pane.bounds.height, 'bottom')
-            : ''}
-          ${!pane.isEdge.right
-            ? vertLine(pane, pane.bounds.x + pane.bounds.width, 'right')
-            : ''}
+          ${!pane.isEdge.bottom ? horzLine(pane, pane.bounds.y + pane.bounds.height, 'bottom') : ''}
+          ${!pane.isEdge.right ? vertLine(pane, pane.bounds.x + pane.bounds.width, 'right') : ''}
           ${statusBar(pane)}
         `
       )}

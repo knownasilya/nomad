@@ -9,9 +9,7 @@ export const setup = function () {
   // setup APIs
   var beaker: any = {};
   if (
-    ['beaker:', 'hyper:', 'https:', 'http:', 'data:'].includes(
-      window.location.protocol
-    ) ||
+    ['beaker:', 'hyper:', 'https:', 'http:', 'data:'].includes(window.location.protocol) ||
     window.location.hostname.endsWith('hyperdrive.network') /* TEMPRARY */
   ) {
     // ADR-0010: beaker.hyperdrive + beaker.autobase are gone — one unified beaker.fs over the

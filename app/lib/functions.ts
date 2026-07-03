@@ -3,9 +3,7 @@
  * @example
  * cbPromise(cb => myNodeStyleMethod(cb)).then(...)
  */
-export function cbPromise<T = any> (
-  method: (cb: (err: any, value?: T) => void) => any
-): Promise<T> {
+export function cbPromise<T = any>(method: (cb: (err: any, value?: T) => void) => any): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     method((err, value) => {
       if (err) reject(err);

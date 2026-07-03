@@ -138,14 +138,10 @@ class CreateSessionModal extends LitElement {
           <div class="permissions">
             <h3>Permissions (public data):</h3>
             <ul>
-              <li class="permission">
-                <strong>Read</strong> all of your public profile data
-              </li>
+              <li class="permission"><strong>Read</strong> all of your public profile data</li>
               ${(this.publicPerms || []).map(
                 (perm) => html`
-                  <li class="permission">
-                    <strong>Write</strong> your ${perm.recordType}
-                  </li>
+                  <li class="permission"><strong>Write</strong> your ${perm.recordType}</li>
                 `
               )}
             </ul>
@@ -175,12 +171,7 @@ class CreateSessionModal extends LitElement {
           </div>
 
           <div class="form-actions">
-            <button
-              type="button"
-              @click=${this.onClickCancel}
-              class="btn cancel"
-              tabindex="4"
-            >
+            <button type="button" @click=${this.onClickCancel} class="btn cancel" tabindex="4">
               Cancel
             </button>
             <button type="submit" class="btn primary" tabindex="5">OK</button>

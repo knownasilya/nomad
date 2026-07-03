@@ -20,9 +20,7 @@ var activeRequests = [];
 
 export function setup() {
   // wire up handlers
-  session.defaultSession.setPermissionRequestHandler(
-    onPermissionRequestHandler
-  );
+  session.defaultSession.setPermissionRequestHandler(onPermissionRequestHandler);
 }
 
 export function requestPermission(permission, webContents, opts) {
@@ -32,8 +30,7 @@ export function requestPermission(permission, webContents, opts) {
 }
 
 export function grantPermission(permission, webContents) {
-  var siteURL =
-    typeof webContents === 'string' ? webContents : webContents.getURL();
+  var siteURL = typeof webContents === 'string' ? webContents : webContents.getURL();
 
   // update the DB
   const PERM = PERMS[getPermId(permission)];
@@ -44,8 +41,7 @@ export function grantPermission(permission, webContents) {
 }
 
 export function revokePermission(permission, webContents) {
-  var siteURL =
-    typeof webContents === 'string' ? webContents : webContents.getURL();
+  var siteURL = typeof webContents === 'string' ? webContents : webContents.getURL();
 
   // update the DB
   const PERM = PERMS[getPermId(permission)];
@@ -83,12 +79,12 @@ export async function checkLabsPerm({ perm, labApi, apiDocsUrl, sender }) {
     let isOptedIn = false;
     let drive = hyper.drives.getDrive(key);
     if (drive) {
-      let { checkoutFS } = await hyper.drives.getDriveCheckout(
-        drive,
-        urlp.version
-      );
+      let { checkoutFS } = await hyper.drives.getDriveCheckout(drive, urlp.version);
       let indexJson = {};
-      try { const buf = await checkoutFS.drive.get('/index.json'); if (buf) indexJson = JSON.parse(buf.toString()); } catch {}
+      try {
+        const buf = await checkoutFS.drive.get('/index.json');
+        if (buf) indexJson = JSON.parse(buf.toString());
+      } catch {}
       let apis = indexJson?.experimental?.apis;
       if (apis && Array.isArray(apis)) {
         isOptedIn = apis.includes(labApi);
@@ -131,28 +127,20 @@ async function onPermissionRequestHandler(webContents, permission, cb, opts) {
   }
 
   // check the sitedatadb
-  var res = await sitedata
-    .getPermission(url, permission)
-    .catch((err) => undefined);
+  var res = await sitedata.getPermission(url, permission).catch((err) => undefined);
   if (res === 1) return cb(true);
   if (res === 0) return cb(false);
 
   // look up the containing window
   var { win, tab } = getContaining(webContents);
   if (!win) {
-    console.error(
-      'Warning: failed to find containing window of permission request, ' +
-        permission
-    );
+    console.error('Warning: failed to find containing window of permission request, ' + permission);
     return cb(false);
   }
 
   // if we're already tracking this kind of permission request, and the perm is idempotent, then bundle them
   var req = PERM.idempotent
-    ? activeRequests.find(
-        (req) =>
-          req.webContents === webContents && req.permission === permission
-      )
+    ? activeRequests.find((req) => req.webContents === webContents && req.permission === permission)
     : false;
   if (req) {
     req.cbs.push(cb);

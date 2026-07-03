@@ -12,9 +12,7 @@ export function defaultWindowState() {
   // check for existence for now, see #690
   // -prf
   const screen = require('electron').screen;
-  var bounds = screen
-    ? screen.getPrimaryDisplay().bounds
-    : { width: 800, height: 600 };
+  var bounds = screen ? screen.getPrimaryDisplay().bounds : { width: 800, height: 600 };
   var width = Math.max(800, Math.min(1800, bounds.width - 50));
   var height = Math.max(600, Math.min(1200, bounds.height - 50));
   var minWidth = 400;

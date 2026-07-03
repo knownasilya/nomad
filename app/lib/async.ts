@@ -42,5 +42,5 @@ export function throttle(fn, wait) {
  * @returns {Object}
  */
 export function pick(obj, keys) {
-  return Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));
+  return Object.fromEntries(keys.filter((k) => k in obj).map((k) => [k, obj[k]]));
 }

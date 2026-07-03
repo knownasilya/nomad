@@ -182,8 +182,7 @@ export function handleContextMenu(webContents, targetWindow, can, props) {
     });
     menuItems.push({
       label: 'Open Image in New Tab',
-      click: (item, win) =>
-        tabManager.create(win, props.srcURL, { adjacentActive: true }),
+      click: (item, win) => tabManager.create(win, props.srcURL, { adjacentActive: true }),
     });
   }
   if (props.isEditable) {
@@ -213,9 +212,7 @@ rpc.exportAPI('background-process-modals', modalsRPCManifest, {
   },
 
   async resizeSelf(dimensions) {
-    var view = Object.values(views).find(
-      (view) => view.webContents === this.sender
-    );
+    var view = Object.values(views).find((view) => view.webContents === this.sender);
     if (!view) return;
     var parentWindow = findWebContentsParentWindow(this.sender);
     setBounds(view, parentWindow, dimensions);
@@ -255,10 +252,7 @@ function setBounds(view, parentWindow, { width, height } = {}) {
     parentBounds.height - 20
   );
   view.setBounds({
-    x:
-      Math.round(parentBounds.width / 2) -
-      Math.round(view.currentBounds.width / 2) -
-      MARGIN_SIZE, // centered
+    x: Math.round(parentBounds.width / 2) - Math.round(view.currentBounds.width / 2) - MARGIN_SIZE, // centered
     y: 70,
     width: view.currentBounds.width + MARGIN_SIZE * 2,
     height: view.currentBounds.height + MARGIN_SIZE * 2 + SHADOW_EXTRA,

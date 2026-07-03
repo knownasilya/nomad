@@ -25,11 +25,7 @@ export function shorten(str, n = 6) {
 
 export function shortenHash(str, n = 6) {
   if (str.startsWith('hyper://')) {
-    return (
-      'hyper://' +
-      shortenHash(str.slice('hyper://'.length).replace(/\/$/, '')) +
-      '/'
-    );
+    return 'hyper://' + shortenHash(str.slice('hyper://'.length).replace(/\/$/, '')) + '/';
   }
   if (str.length > n + 5) {
     return str.slice(0, n) + '..' + str.slice(-2);
@@ -38,11 +34,7 @@ export function shortenHash(str, n = 6) {
 }
 
 export function makeSafe(str = '') {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return str.replace(/&/g, '&amp;').replace(/"/g, '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 export function highlight(str = '', nonce = 0) {
@@ -81,10 +73,7 @@ export function toNiceUrl(str) {
   try {
     var urlParsed = new URL(str);
     if (DRIVE_KEY_REGEX.test(urlParsed.hostname)) {
-      urlParsed.hostname = `${urlParsed.hostname.slice(
-        0,
-        6
-      )}..${urlParsed.hostname.slice(-2)}`;
+      urlParsed.hostname = `${urlParsed.hostname.slice(0, 6)}..${urlParsed.hostname.slice(-2)}`;
     }
     return urlParsed.toString();
   } catch (e) {
@@ -97,10 +86,7 @@ const reservedChars = /[^A-Za-z0-9]/g;
 const continuousDashes = /(-[-]+)/g;
 const endingDashes = /([-]+$)/g;
 export function slugify(str = '') {
-  return str
-    .replace(reservedChars, '-')
-    .replace(continuousDashes, '-')
-    .replace(endingDashes, '');
+  return str.replace(reservedChars, '-').replace(continuousDashes, '-').replace(endingDashes, '');
 }
 
 export function slugifyUrl(str = '') {
@@ -115,8 +101,7 @@ export function slugifyUrl(str = '') {
 
 export function toHex(buf) {
   return buf.reduce(
-    (memo, i) =>
-      memo + ('0' + i.toString(16)).slice(-2), // pad with leading 0 if <16
+    (memo, i) => memo + ('0' + i.toString(16)).slice(-2), // pad with leading 0 if <16
     ''
   );
 }

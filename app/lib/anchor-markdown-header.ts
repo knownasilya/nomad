@@ -37,10 +37,7 @@ function basicGithubId(text) {
       // single chars that are removed
       .replace(/[\/?!:\[\]`.,()*"';{}+=<>~\$|#@&–—]/g, '')
       // CJK punctuations that are removed
-      .replace(
-        /[。？！，、；：“”【】（）〔〕［］﹃﹄“ ”‘’﹁﹂—…－～《》〈〉「」]/g,
-        ''
-      )
+      .replace(/[。？！，、；：“”【】（）〔〕［］﹃﹄“ ”‘’﹁﹂—…－～《》〈〉「」]/g, '')
   );
 }
 

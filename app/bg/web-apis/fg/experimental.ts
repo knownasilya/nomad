@@ -22,9 +22,7 @@ export const setup = function (rpc) {
     experimental.globalFetch = async function globalFetch(input, init) {
       var request = new Request(input, init);
       if (request.method !== 'HEAD' && request.method !== 'GET') {
-        throw new Error(
-          'Only HEAD and GET requests are currently supported by globalFetch()'
-        );
+        throw new Error('Only HEAD and GET requests are currently supported by globalFetch()');
       }
       try {
         var responseData = await globalFetchRPC.fetch({
@@ -47,7 +45,6 @@ export const setup = function (rpc) {
 
     // experimental.capturePage
     experimental.capturePage = capturePageRPC.capturePage;
-
   }
 
   return experimental;

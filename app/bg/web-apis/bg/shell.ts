@@ -15,10 +15,7 @@ import { isHyperUrl, parseDriveUrl } from '../../../lib/urls';
 import { joinPath } from '../../../lib/strings';
 import * as permissions from '../../ui/permissions';
 import assert from 'assert';
-import {
-  UserDeniedError,
-  ArchiveNotWritableError,
-} from 'beaker-error-constants';
+import { UserDeniedError, ArchiveNotWritableError } from 'beaker-error-constants';
 import { pick } from '../../../lib/async';
 import * as wcTrust from '../../wc-trust';
 
@@ -71,26 +68,17 @@ export async function drivePropertiesDialog(url) {
 export async function selectFileDialog(opts: any = {}) {
   // validate
   assert(opts && typeof opts === 'object', 'Must pass an options object');
-  assert(
-    !opts.title || typeof opts.title === 'string',
-    '.title must be a string'
-  );
+  assert(!opts.title || typeof opts.title === 'string', '.title must be a string');
   assert(
     !opts.buttonLabel || typeof opts.buttonLabel === 'string',
     '.buttonLabel must be a string'
   );
-  assert(
-    !opts.drive || typeof opts.drive === 'string',
-    '.drive must be a string'
-  );
+  assert(!opts.drive || typeof opts.drive === 'string', '.drive must be a string');
   assert(
     !opts.defaultPath || typeof opts.defaultPath === 'string',
     '.defaultPath must be a string'
   );
-  assert(
-    !opts.select || isStrArray(opts.select),
-    '.select must be an array of strings'
-  );
+  assert(!opts.select || isStrArray(opts.select), '.select must be an array of strings');
   if (opts.filters) {
     assert(typeof opts.filters === 'object', '.filters must be an object');
     assert(
@@ -121,9 +109,7 @@ export async function selectFileDialog(opts: any = {}) {
     while (true) {
       res = await modals.create(this.sender, 'select-file', opts);
       if (res && res.gotoCreateDrive) {
-        res = await modals
-          .create(this.sender, 'create-drive')
-          .catch((e) => undefined);
+        res = await modals.create(this.sender, 'create-drive').catch((e) => undefined);
         if (res && res.gotoSync) {
           await modals.create(this.sender, 'folder-sync', {
             url: res.url,
@@ -160,18 +146,12 @@ export async function selectFileDialog(opts: any = {}) {
 export async function saveFileDialog(opts: any = {}) {
   // validate
   assert(opts && typeof opts === 'object', 'Must pass an options object');
-  assert(
-    !opts.title || typeof opts.title === 'string',
-    '.title must be a string'
-  );
+  assert(!opts.title || typeof opts.title === 'string', '.title must be a string');
   assert(
     !opts.buttonLabel || typeof opts.buttonLabel === 'string',
     '.buttonLabel must be a string'
   );
-  assert(
-    !opts.drive || typeof opts.drive === 'string',
-    '.drive must be a string'
-  );
+  assert(!opts.drive || typeof opts.drive === 'string', '.drive must be a string');
   assert(
     !opts.defaultPath || typeof opts.defaultPath === 'string',
     '.defaultPath must be a string'
@@ -199,9 +179,7 @@ export async function saveFileDialog(opts: any = {}) {
     while (true) {
       res = await modals.create(this.sender, 'select-file', opts);
       if (res && res.gotoCreateDrive) {
-        res = await modals
-          .create(this.sender, 'create-drive')
-          .catch((e) => undefined);
+        res = await modals.create(this.sender, 'create-drive').catch((e) => undefined);
         if (res && res.gotoSync) {
           await modals.create(this.sender, 'folder-sync', {
             url: res.url,
@@ -235,27 +213,18 @@ export async function saveFileDialog(opts: any = {}) {
 export async function selectDriveDialog(opts: any = {}) {
   // validate
   assert(opts && typeof opts === 'object', 'Must pass an options object');
-  assert(
-    !opts.title || typeof opts.title === 'string',
-    '.title must be a string'
-  );
+  assert(!opts.title || typeof opts.title === 'string', '.title must be a string');
   assert(
     !opts.buttonLabel || typeof opts.buttonLabel === 'string',
     '.buttonLabel must be a string'
   );
   assert(!opts.tag || typeof opts.tag === 'string', '.tag must be a string');
-  assert(
-    !opts.writable || typeof opts.writable === 'boolean',
-    '.writable must be a boolean'
-  );
+  assert(!opts.writable || typeof opts.writable === 'boolean', '.writable must be a boolean');
   assert(
     !opts.allowMultiple || typeof opts.allowMultiple === 'boolean',
     '.allowMultiple must be a boolean'
   );
-  assert(
-    !opts.template || typeof opts.template === 'string',
-    '.template must be a string'
-  );
+  assert(!opts.template || typeof opts.template === 'string', '.template must be a string');
   if (opts.template && !isHyperUrl(opts.template)) {
     throw new Error('.template must be a hyper:// URL');
   }
@@ -330,10 +299,7 @@ export async function listDrives(opts: any = {}) {
   // validate
   assert(opts && typeof opts === 'object', 'Must pass an options object');
   assert(!opts.tag || typeof opts.tag === 'string', '.tag must be a string');
-  assert(
-    !opts.writable || typeof opts.writable === 'boolean',
-    '.writable must be a boolean'
-  );
+  assert(!opts.writable || typeof opts.writable === 'boolean', '.writable must be a boolean');
 
   let perm = opts.tag ? `listDrives:${opts.tag || ''}` : 'listDrives';
   if (!(await permissions.requestPermission(perm, this.sender))) {
@@ -381,8 +347,7 @@ export async function tagDrive(url, tags) {
   if (!tags) throw new Error('Tags must be a string or array of strings');
   if (Array.isArray(tags)) {
     tags = tags.filter((v) => typeof v === 'string');
-    if (tags.length === 0)
-      throw new Error('Tags must be a string or array of strings');
+    if (tags.length === 0) throw new Error('Tags must be a string or array of strings');
   } else if (typeof tags !== 'string') {
     throw new Error('Tags must be a string or array of strings');
   } else {
@@ -463,11 +428,7 @@ export async function exportFilesDialog(urls) {
     urls = Array.isArray(urls) ? urls : [urls];
     for (let srcUrl of urls) {
       var urlp = parseDriveUrl(srcUrl);
-      let { checkoutFS } = await lookupDrive(
-        this.sender,
-        urlp.hostname,
-        urlp.version
-      );
+      let { checkoutFS } = await lookupDrive(this.sender, urlp.hostname, urlp.version);
       let dstPath = joinPath(baseDstPath, urlp.pathname.split('/').pop());
       await _exportToFs(checkoutFS.drive, urlp.pathname, dstPath, { overwriteExisting: false });
     }
@@ -485,19 +446,16 @@ function isStrArray(v) {
 
 async function doImport(wc, url, filePaths) {
   var urlp = parseDriveUrl(url);
-  var { checkoutFS, isHistoric } = await lookupDrive(
-    wc,
-    urlp.hostname,
-    urlp.version
-  );
-  if (isHistoric)
-    throw new ArchiveNotWritableError('Cannot modify a historic version');
+  var { checkoutFS, isHistoric } = await lookupDrive(wc, urlp.hostname, urlp.version);
+  if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
 
   var numImported = 0;
   var prompt = await prompts.create(wc, 'progress', { label: 'Importing files...' });
   try {
     for (let srcPath of filePaths) {
-      numImported += await _importFsItem(checkoutFS.drive, srcPath, urlp.pathname || '/', { ignore: ['index.json'] });
+      numImported += await _importFsItem(checkoutFS.drive, srcPath, urlp.pathname || '/', {
+        ignore: ['index.json'],
+      });
     }
   } finally {
     prompts.close((prompt as any).tab);
@@ -543,7 +501,10 @@ async function _exportToFs(drive, srcFolder, dstPath, { overwriteExisting = true
     const relPath = entry.key.slice(srcFolder.length).replace(/^\//, '');
     const dstFile = joinPath2(dstPath, relPath);
     if (!overwriteExisting) {
-      try { await nodefs.access(dstFile); continue; } catch {}
+      try {
+        await nodefs.access(dstFile);
+        continue;
+      } catch {}
     }
     const buf = await drive.get(entry.key);
     if (buf) {

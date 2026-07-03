@@ -69,9 +69,7 @@ export default {
           swarm.removeListener('connection', onConn);
           return;
         }
-        const peerId = conn.remotePublicKey
-          ? b4a.toString(conn.remotePublicKey, 'hex')
-          : null;
+        const peerId = conn.remotePublicKey ? b4a.toString(conn.remotePublicKey, 'hex') : null;
         if (!peerId) return;
         stream.push(['join', { peerId }]);
         conn.on('close', () => {
@@ -90,11 +88,11 @@ export default {
 // =
 
 class Room {
-  id: any
-  idHex: string
-  joinStreams: Set<any>
-  watchStreams: Set<any>
-  channels: Map<any, any>
+  id: any;
+  idHex: string;
+  joinStreams: Set<any>;
+  watchStreams: Set<any>;
+  channels: Map<any, any>;
 
   constructor(id) {
     this.id = id;
@@ -105,9 +103,7 @@ class Room {
   }
 
   openOnConn(conn) {
-    const peerId = conn.remotePublicKey
-      ? b4a.toString(conn.remotePublicKey, 'hex')
-      : null;
+    const peerId = conn.remotePublicKey ? b4a.toString(conn.remotePublicKey, 'hex') : null;
     if (!peerId || this.channels.has(peerId)) return;
 
     let mux;
@@ -155,7 +151,9 @@ class Room {
   _maybeCleanup() {
     if (this.joinStreams.size === 0 && this.watchStreams.size === 0) {
       for (const { channel } of this.channels.values()) {
-        try { channel.close(); } catch {}
+        try {
+          channel.close();
+        } catch {}
       }
       rooms.delete(this.idHex);
     }
@@ -183,15 +181,15 @@ function _ensureSwarmListener() {
 async function getSenderDrive(sender) {
   var url = sender.getURL();
   if (!url.startsWith('hyper://')) {
-    throw new PermissionsError(
-      'PeerSockets are only available on hyper:// origins'
-    );
+    throw new PermissionsError('PeerSockets are only available on hyper:// origins');
   }
   // Collaborative (autobase) origins aren't Hyperdrives — getOrLoadDrive would choke on the
   // autobase core. If this origin is a loaded collaborative drive, use its session, which
   // exposes a .key just like a Hyperdrive session (rooms keyed by it work over the same swarm).
   let key;
-  try { key = new URL(url).hostname; } catch {}
+  try {
+    key = new URL(url).hostname;
+  } catch {}
   const collab = key && autobases.getCollaborativeDrive(key);
   if (collab) return collab;
   return drives.getOrLoadDrive(url);

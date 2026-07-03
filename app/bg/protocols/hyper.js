@@ -146,16 +146,14 @@ export const protocolHandler = async function (request, respond) {
         'Allow-CSP-From': '*',
         'Content-Security-Policy': cspHeader,
       },
-      data: intoStream(b4a.toString(await checkoutFS.drive.get('/.ui/ui.html') || b4a.alloc(0))),
+      data: intoStream(b4a.toString((await checkoutFS.drive.get('/.ui/ui.html')) || b4a.alloc(0))),
     });
   };
   const respondRedirect = (url) => {
     respond({
       statusCode: 200,
       headers: { 'Content-Type': 'text/html', 'Allow-CSP-From': '*' },
-      data: intoStream(
-        `<!doctype html><meta http-equiv="refresh" content="0; url=${url}">`
-      ),
+      data: intoStream(`<!doctype html><meta http-equiv="refresh" content="0; url=${url}">`),
     });
   };
   const respondError = (code, status, errorPageInfo) => {
@@ -249,7 +247,15 @@ export const protocolHandler = async function (request, respond) {
       const driveCfg = filesystem.getDriveConfig(driveKey);
       if ((driveCfg && driveCfg.type === 'autobase') || autobases.getCollaborativeDrive(driveKey)) {
         logger.silly(`Serving autobase drive ${logUrl}`, { url: request.url });
-        return serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect, respondBuiltinFrontend);
+        return serveAutobase(
+          driveKey,
+          urlp,
+          request,
+          respond,
+          respondError,
+          respondRedirect,
+          respondBuiltinFrontend
+        );
       }
 
       try {
@@ -262,7 +268,15 @@ export const protocolHandler = async function (request, respond) {
         // autobase core, so fall back to serving it as an autobase before giving up. Once
         // loaded, the cached collaborative session routes future loads via the check above.
         logger.warn(`Failed to open drive ${driveKey} as Hyperdrive; trying Autobase`, { err });
-        return serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect, respondBuiltinFrontend);
+        return serveAutobase(
+          driveKey,
+          urlp,
+          request,
+          respond,
+          respondError,
+          respondRedirect,
+          respondBuiltinFrontend
+        );
       }
 
       // parse path
@@ -303,7 +317,9 @@ export const protocolHandler = async function (request, respond) {
       if (!driveVersion && checkoutFS.drive.version <= 1) {
         const deadline = Date.now() + DRIVE_REPLICATE_TIMEOUT;
         while (checkoutFS.drive.version <= 1 && Date.now() < deadline) {
-          try { await checkoutFS.drive.update({ wait: true }); } catch (e) {}
+          try {
+            await checkoutFS.drive.update({ wait: true });
+          } catch (e) {}
           if (checkoutFS.drive.version > 1) break;
           await new Promise((r) => setTimeout(r, 250));
         }
@@ -314,8 +330,7 @@ export const protocolHandler = async function (request, respond) {
         return respondError(404, 'Site not found', {
           title: 'Site Not Found',
           errorDescription: 'No peers hosting this site were found',
-          errorInfo:
-            'You may still be connecting to peers - try reloading the page.',
+          errorInfo: 'You may still be connecting to peers - try reloading the page.',
         });
       }
 
@@ -381,10 +396,10 @@ export const protocolHandler = async function (request, respond) {
       if (entry.path.endsWith('.goto') && entry.metadata.href) {
         try {
           let u = new URL(entry.metadata.href); // make sure it's a valid url
-          logger.silly(
-            `Redirecting for .goto ${logUrl} to ${entry.metadata.href}`,
-            { url: request.url, href: entry.metadata.href }
-          );
+          logger.silly(`Redirecting for .goto ${logUrl} to ${entry.metadata.href}`, {
+            url: request.url,
+            href: entry.metadata.href,
+          });
           return respondRedirect(entry.metadata.href);
         } catch (e) {
           // pass through
@@ -410,8 +425,7 @@ export const protocolHandler = async function (request, respond) {
         statusCode = 206;
         length = range.end - range.start + 1;
         headers['Content-Length'] = '' + length;
-        headers['Content-Range'] =
-          'bytes ' + range.start + '-' + range.end + '/' + entry.size;
+        headers['Content-Range'] = 'bytes ' + range.start + '-' + range.end + '/' + entry.size;
       } else {
         if (entry.size) {
           length = entry.size;
@@ -523,7 +537,15 @@ function _autobaseViewEmpty(base) {
   }
 }
 
-async function serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect, respondBuiltinFrontend) {
+async function serveAutobase(
+  driveKey,
+  urlp,
+  request,
+  respond,
+  respondError,
+  respondRedirect,
+  respondBuiltinFrontend
+) {
   let sess;
   try {
     sess = await autobases.getOrLoadCollaborativeDrive(driveKey);
@@ -540,10 +562,14 @@ async function serveAutobase(driveKey, urlp, request, respond, respondError, res
   // Wait a bounded while for the linearised view to gain content so the FIRST hit to a
   // freshly-created remote drive serves it, instead of 404ing until a manual reload.
   const abDeadline = Date.now() + DRIVE_REPLICATE_TIMEOUT;
-  try { await sess.base.update(); } catch {}
+  try {
+    await sess.base.update();
+  } catch {}
   while (_autobaseViewEmpty(sess.base) && Date.now() < abDeadline) {
     await new Promise((r) => setTimeout(r, 250));
-    try { await sess.base.update(); } catch {}
+    try {
+      await sess.base.update();
+    } catch {}
   }
 
   let filepath = decodeURIComponent(urlp.path);
@@ -556,9 +582,9 @@ async function serveAutobase(driveKey, urlp, request, respond, respondError, res
   const uiNode = await bee.get('/.ui/ui.html').catch(() => null);
   if (uiNode) {
     // Any HTML-wanting request to a "directory-like" path → serve the UI
-    const wantsHTML = mime.acceptHeaderWantsHTML(request.headers.Accept)
+    const wantsHTML = mime.acceptHeaderWantsHTML(request.headers.Accept);
     if (wantsHTML && (filepath === '/' || hasTrailingSlash || !filepath.includes('.'))) {
-      const buf = await autobases.resolveRecordContent(uiNode.value)
+      const buf = await autobases.resolveRecordContent(uiNode.value);
       return respond({
         statusCode: 200,
         headers: {
@@ -573,17 +599,20 @@ async function serveAutobase(driveKey, urlp, request, respond, respondError, res
   }
 
   // Serve the requested file from the Hyperbee view.
-  const lookupPath = filepath.replace(/\/$/, '') || '/'
+  const lookupPath = filepath.replace(/\/$/, '') || '/';
 
   // Try exact path first
-  let node = await bee.get(lookupPath).catch(() => null)
+  let node = await bee.get(lookupPath).catch(() => null);
 
   // Try directory index files
   if (!node) {
-    const prefix = lookupPath.endsWith('/') ? lookupPath : lookupPath + '/'
+    const prefix = lookupPath.endsWith('/') ? lookupPath : lookupPath + '/';
     for (const name of ['index.html', 'index.md']) {
-      node = await bee.get(prefix + name).catch(() => null)
-      if (node) { filepath = prefix + name; break }
+      node = await bee.get(prefix + name).catch(() => null);
+      if (node) {
+        filepath = prefix + name;
+        break;
+      }
     }
   }
 
@@ -591,14 +620,15 @@ async function serveAutobase(driveKey, urlp, request, respond, respondError, res
     // No file/index at this path. If it's a DIRECTORY (has children in the view), serve the builtin
     // file view — matching the Hyperdrive serve path — instead of 404ing. Redirect a bare directory
     // path to a trailing slash first so relative links resolve.
-    const isDir = filepath === '/' || hasTrailingSlash || await autobases.dirHasChildren(sess, lookupPath)
+    const isDir =
+      filepath === '/' || hasTrailingSlash || (await autobases.dirHasChildren(sess, lookupPath));
     if (isDir) {
       if (filepath !== '/' && !hasTrailingSlash) {
         return respondRedirect(
           `hyper://${urlp.host}${urlp.version ? '+' + urlp.version : ''}${urlp.pathname || ''}/${urlp.search || ''}`
         );
       }
-      const wantsHTML = mime.acceptHeaderWantsHTML(request.headers.Accept)
+      const wantsHTML = mime.acceptHeaderWantsHTML(request.headers.Accept);
       if (wantsHTML && typeof respondBuiltinFrontend === 'function') {
         return respondBuiltinFrontend();
       }
@@ -612,18 +642,23 @@ async function serveAutobase(driveKey, urlp, request, respond, respondError, res
 
   // v1 record: real size comes from the record; content resolves from inline value or a blob
   // in the owning writer's Hyperblobs core (ranged reads supported for <video>/<img> etc.).
-  const record = node.value
-  const size = autobases.recordByteLength(record)
-  const mimeType = mime.identify(node.key)
+  const record = node.value;
+  const size = autobases.recordByteLength(record);
+  const mimeType = mime.identify(node.key);
 
   // .goto redirect — on Autobase the href lives in the file body (JSON), not entry metadata
   // (which is now filesystem stat). Mirrors the Hyperdrive serve path's .goto handling.
   if (node.key.endsWith('.goto')) {
     try {
-      const gotoBuf = await autobases.resolveRecordContent(record)
-      const href = gotoBuf && JSON.parse(b4a.toString(gotoBuf)).href
-      if (href) { new URL(href); return respondRedirect(href) }
-    } catch { /* not a valid .goto — fall through to normal serve */ }
+      const gotoBuf = await autobases.resolveRecordContent(record);
+      const href = gotoBuf && JSON.parse(b4a.toString(gotoBuf)).href;
+      if (href) {
+        new URL(href);
+        return respondRedirect(href);
+      }
+    } catch {
+      /* not a valid .goto — fall through to normal serve */
+    }
   }
 
   // Markdown → HTML (parity with the Hyperdrive serve path). Skipped for ranged requests.
@@ -632,13 +667,13 @@ async function serveAutobase(driveKey, urlp, request, respond, respondError, res
     mime.acceptHeaderWantsHTML(request.headers.Accept) &&
     !(request.headers.Range || request.headers.range)
   ) {
-    const mdBuf = await autobases.resolveRecordContent(record)
+    const mdBuf = await autobases.resolveRecordContent(record);
     if (mdBuf) {
       const html = `<!doctype html>
 <html><head><meta charset="utf8"><style>
 body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 0 10px; line-height: 1.4; }
 body * { max-width: 100%; }
-</style></head><body>${md.render(b4a.toString(mdBuf))}</body></html>`
+</style></head><body>${md.render(b4a.toString(mdBuf))}</body></html>`;
       return respond({
         statusCode: 200,
         headers: {
@@ -648,7 +683,7 @@ body * { max-width: 100%; }
           'Cache-Control': 'no-cache',
         },
         data: intoStream(html),
-      })
+      });
     }
   }
 
@@ -658,24 +693,24 @@ body * { max-width: 100%; }
     'Allow-CSP-From': '*',
     'Cache-Control': 'no-cache',
     'Accept-Ranges': 'bytes',
-  }
+  };
 
-  let statusCode = 200
-  let readRange = null
-  let range = request.headers.Range || request.headers.range
-  if (range) range = parseRange(size, range)
+  let statusCode = 200;
+  let readRange = null;
+  let range = request.headers.Range || request.headers.range;
+  if (range) range = parseRange(size, range);
   if (range && range.type === 'bytes' && range[0]) {
-    const r = range[0] // only handle the first range
-    statusCode = 206
-    const length = r.end - r.start + 1
-    headers['Content-Length'] = '' + length
-    headers['Content-Range'] = 'bytes ' + r.start + '-' + r.end + '/' + size
-    readRange = { start: r.start, length }
+    const r = range[0]; // only handle the first range
+    statusCode = 206;
+    const length = r.end - r.start + 1;
+    headers['Content-Length'] = '' + length;
+    headers['Content-Range'] = 'bytes ' + r.start + '-' + r.end + '/' + size;
+    readRange = { start: r.start, length };
   } else if (size) {
-    headers['Content-Length'] = '' + size
+    headers['Content-Length'] = '' + size;
   }
 
-  const buf = await autobases.resolveRecordContent(record, readRange)
+  const buf = await autobases.resolveRecordContent(record, readRange);
   if (buf == null) {
     return respondError(404, 'File Not Found', {
       errorDescription: 'File Not Found',
@@ -708,7 +743,9 @@ async function _resolveEntry(drive, filepath, hasTrailingSlash) {
       path: entry.key,
       size: entry.value.blob.byteLength || 0,
       metadata: entry.value.metadata || {},
-      isDirectory() { return false; },
+      isDirectory() {
+        return false;
+      },
     };
   }
 
@@ -719,13 +756,22 @@ async function _resolveEntry(drive, filepath, hasTrailingSlash) {
     if (idxEntry && idxEntry.value?.blob) {
       if (!hasTrailingSlash) {
         // Signal caller to redirect (return as directory so redirect fires)
-        return { path: prefix, size: 0, metadata: {}, isDirectory() { return true; } };
+        return {
+          path: prefix,
+          size: 0,
+          metadata: {},
+          isDirectory() {
+            return true;
+          },
+        };
       }
       return {
         path: prefix + name,
         size: idxEntry.value.blob.byteLength || 0,
         metadata: idxEntry.value.metadata || {},
-        isDirectory() { return false; },
+        isDirectory() {
+          return false;
+        },
       };
     }
   }
@@ -733,7 +779,14 @@ async function _resolveEntry(drive, filepath, hasTrailingSlash) {
   // Check if any entries exist under this prefix (i.e., it's a directory)
   // eslint-disable-next-line no-unreachable-loop
   for await (const _e of drive.list(prefix, { recursive: false })) {
-    return { path: prefix, size: 0, metadata: {}, isDirectory() { return true; } };
+    return {
+      path: prefix,
+      size: 0,
+      metadata: {},
+      isDirectory() {
+        return true;
+      },
+    };
   }
 
   return null;

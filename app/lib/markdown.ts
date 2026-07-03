@@ -8,11 +8,11 @@ export default function create({
   hrefMassager,
   highlight,
 }: {
-  allowHTML?: boolean
-  useHeadingIds?: boolean
-  useHeadingAnchors?: boolean
-  hrefMassager?: Function
-  highlight?: Function
+  allowHTML?: boolean;
+  useHeadingIds?: boolean;
+  useHeadingAnchors?: boolean;
+  hrefMassager?: Function;
+  highlight?: Function;
 } = {}) {
   var md = MarkdownIt({
     html: allowHTML, // Enable HTML tags in source
@@ -36,25 +36,15 @@ export default function create({
   if (useHeadingAnchors || useHeadingIds) {
     var numRepetitions = {};
     // heading anchor rendering
-    md.renderer.rules.heading_open = function (
-      tokens,
-      idx /*, options, env */
-    ) {
+    md.renderer.rules.heading_open = function (tokens, idx /*, options, env */) {
       var txt = tokens[idx + 1].content || '';
       numRepetitions[txt] = numRepetitions[txt] ? numRepetitions[txt] + 1 : 0;
       return (
-        '<' +
-        tokens[idx].tag +
-        ' id="' +
-        anchorMarkdownHeader(txt, numRepetitions[txt]) +
-        '">'
+        '<' + tokens[idx].tag + ' id="' + anchorMarkdownHeader(txt, numRepetitions[txt]) + '">'
       );
     };
     if (useHeadingAnchors) {
-      md.renderer.rules.heading_close = function (
-        tokens,
-        idx /*, options, env */
-      ) {
+      md.renderer.rules.heading_close = function (tokens, idx /*, options, env */) {
         var txt = tokens[idx - 1].content || '';
         return (
           '<a class="anchor-link" href="#' +

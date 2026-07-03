@@ -104,7 +104,9 @@ async function readAsset(drive, pathname) {
     let images = await ICO.parse(buf, 'image/png');
     let image = images[0];
     for (let i = 1; i < images.length; i++) {
-      if (Math.abs(images[i].width - IDEAL_FAVICON_SIZE) < Math.abs(image.width - IDEAL_FAVICON_SIZE)) {
+      if (
+        Math.abs(images[i].width - IDEAL_FAVICON_SIZE) < Math.abs(image.width - IDEAL_FAVICON_SIZE)
+      ) {
         image = images[i];
       }
     }

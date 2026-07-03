@@ -40,28 +40,21 @@ module.exports.getEnvName = function () {
 
 module.exports.getSigningId = function (manifest) {
   return (
-    argv.sign ||
-    (manifest.osx.codeSignIdentitiy
-      ? manifest.osx.codeSignIdentitiy.dmg
-      : undefined)
+    argv.sign || (manifest.osx.codeSignIdentitiy ? manifest.osx.codeSignIdentitiy.dmg : undefined)
   );
 };
 
 module.exports.getMASSigningId = function (manifest) {
   return (
     argv['mas-sign'] ||
-    (manifest.osx.codeSignIdentitiy
-      ? manifest.osx.codeSignIdentitiy.MAS
-      : undefined)
+    (manifest.osx.codeSignIdentitiy ? manifest.osx.codeSignIdentitiy.MAS : undefined)
   );
 };
 
 module.exports.getMASInstallerSigningId = function (manifest) {
   return (
     argv['mas-installer-sign'] ||
-    (manifest.osx.codeSignIdentitiy
-      ? manifest.osx.codeSignIdentitiy.MASInstaller
-      : undefined)
+    (manifest.osx.codeSignIdentitiy ? manifest.osx.codeSignIdentitiy.MASInstaller : undefined)
   );
 };
 

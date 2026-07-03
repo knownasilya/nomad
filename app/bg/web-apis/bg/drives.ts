@@ -27,9 +27,7 @@ export default {
     const spaceId = getSenderSpaceId(this.sender);
     const drivesList = await listDrivesForSpace(spaceId);
     var drive = drivesList.find((d) => d.key === key);
-    var info = await drives
-      .getDriveInfo(key, { onlyCache: true })
-      .catch((e) => ({}));
+    var info = await drives.getDriveInfo(key, { onlyCache: true }).catch((e) => ({}));
     var url = `hyper://${key}/`;
     var ident = getDriveIdent(url);
     return {
@@ -63,9 +61,7 @@ export default {
       !seenKeys.has(rootDrive.forkOf.key)
     ) {
       seenKeys.add(rootDrive.key);
-      rootDrive = drivesList.find(
-        (drive2) => drive2.key === rootDrive.forkOf.key
-      );
+      rootDrive = drivesList.find((drive2) => drive2.key === rootDrive.forkOf.key);
     }
     if (!rootDrive) return [];
 

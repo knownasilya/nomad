@@ -93,9 +93,7 @@ class ShareMenu extends LitElement {
 
         // find the drive that owns the location
         while (pathParts.length > 0) {
-          let st = await bg.fs.stat(
-            joinPath(urlp.origin, pathParts.join('/'))
-          );
+          let st = await bg.fs.stat(joinPath(urlp.origin, pathParts.join('/')));
           if (st.mount) {
             driveInfo = await bg.fs.getInfo(st.mount.key);
             break;
@@ -108,8 +106,7 @@ class ShareMenu extends LitElement {
 
         // make sure it can be shared
         if (driveInfo && driveInfo.url !== 'hyper://private/') {
-          shareableUrl =
-            driveInfo.url + '/' + pathAcc.join('/') + urlp.search + urlp.hash;
+          shareableUrl = driveInfo.url + '/' + pathAcc.join('/') + urlp.search + urlp.hash;
         }
       } catch (e) {
         console.debug(e);
@@ -141,9 +138,7 @@ class ShareMenu extends LitElement {
         ${this.canShare
           ? html`
               ${this.hasCopied
-                ? html`<span class="copied-notice"
-                    >Copied to your clipboard</span
-                  >`
+                ? html`<span class="copied-notice">Copied to your clipboard</span>`
                 : ''}
               <h4>Share this location</h4>
               <p>Anyone with the link can view this location.</p>
@@ -151,18 +146,14 @@ class ShareMenu extends LitElement {
                 <button class="primary" @click=${this.onClickCopy}>
                   <span class="fas fa-fw fa-copy"></span> Copy
                 </button>
-                <input
-                  type="text"
-                  value="${this.url}"
-                  @keypress=${(e) => e.preventDefault()}
-                />
+                <input type="text" value="${this.url}" @keypress=${(e) => e.preventDefault()} />
               </div>
             `
           : html`
               <h4>Share this location</h4>
               <div>
-                <span class="fas fa-fw fa-lock"></span> This location is private
-                and cannot be shared.
+                <span class="fas fa-fw fa-lock"></span> This location is private and cannot be
+                shared.
               </div>
             `}
       </div>

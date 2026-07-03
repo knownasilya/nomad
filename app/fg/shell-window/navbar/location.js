@@ -164,11 +164,9 @@ class NavbarLocation extends LitElement {
         ?autocomplete-open=${this.isAutocompleteOpen}
       >
       </shell-window-navbar-site-info>
-      ${this.renderLocation()} ${this.renderZoom()}
-      ${this.renderLiveReloadingBtn()}
-      ${this.renderFolderSyncBtn()} ${this.renderPeers()}
-      ${this.renderDonateBtn()} ${'' /* DISABLED this.renderShareBtn()*/}
-      ${this.renderBookmarkBtn()} ${this.renderSiteBtn()}
+      ${this.renderLocation()} ${this.renderZoom()} ${this.renderLiveReloadingBtn()}
+      ${this.renderFolderSyncBtn()} ${this.renderPeers()} ${this.renderDonateBtn()}
+      ${'' /* DISABLED this.renderShareBtn()*/} ${this.renderBookmarkBtn()} ${this.renderSiteBtn()}
     `;
   }
 
@@ -221,11 +219,7 @@ class NavbarLocation extends LitElement {
         var cls = 'protocol';
         // if (['beaker:'].includes(protocol)) cls += ' protocol-trusted'
         // if (['https:'].includes(protocol) && !this.loadError) cls += ' protocol-trusted'
-        if (
-          ['https:'].includes(protocol) &&
-          this.loadError &&
-          this.loadError.isInsecureResponse
-        )
+        if (['https:'].includes(protocol) && this.loadError && this.loadError.isInsecureResponse)
           cls += ' protocol-untrusted';
         // if (['dat:'].includes(protocol)) cls += ' protocol-trusted'
         // if (['beaker:'].includes(protocol)) cls += ' protocol-trusted'
@@ -241,11 +235,7 @@ class NavbarLocation extends LitElement {
         // invalid URL, fallback to default
       }
     }
-    return html`
-      <div class="input-pretty" @mouseup=${this.onClickLocation}>
-        ${this.url}
-      </div>
-    `;
+    return html` <div class="input-pretty" @mouseup=${this.onClickLocation}>${this.url}</div> `;
   }
 
   renderZoom() {
@@ -269,12 +259,9 @@ class NavbarLocation extends LitElement {
       4.5: 500,
     }[this.zoom];
     return html`
-      <button @click=${this.onClickZoom} title="Zoom: ${zoomPct}%" class="zoom">
-        ${zoomPct}%
-      </button>
+      <button @click=${this.onClickZoom} title="Zoom: ${zoomPct}%" class="zoom">${zoomPct}%</button>
     `;
   }
-
 
   renderLiveReloadingBtn() {
     if (!this.isLiveReloading) {
@@ -297,11 +284,7 @@ class NavbarLocation extends LitElement {
     }
     var cls = classMap({ 'folder-sync': true });
     return html`
-      <button
-        class=${cls}
-        @click=${this.onClickFolderSyncBtn}
-        title="Folder Sync"
-      >
+      <button class=${cls} @click=${this.onClickFolderSyncBtn} title="Folder Sync">
         <i class="fas fa-sync"></i>
         <i class="far fa-folder-open"></i>
       </button>
@@ -334,11 +317,7 @@ class NavbarLocation extends LitElement {
 
   renderBookmarkBtn() {
     return html`
-      <button
-        class="bookmark"
-        @click=${this.onClickBookmark}
-        title="Bookmark this page"
-      >
+      <button class="bookmark" @click=${this.onClickBookmark} title="Bookmark this page">
         <span class="${this.isBookmarked ? 'fas' : 'far'} fa-star"></span>
       </button>
     `;
@@ -445,11 +424,7 @@ class NavbarLocation extends LitElement {
 
   onInputLocation(e) {
     this.autocompleteState.inputValue = e.currentTarget.value.trim();
-    queryAutocomplete(
-      bg,
-      this.autocompleteState,
-      this.onAutocompleteResults.bind(this)
-    );
+    queryAutocomplete(bg, this.autocompleteState, this.onAutocompleteResults.bind(this));
   }
 
   async onKeydownLocation(e) {
@@ -467,18 +442,15 @@ class NavbarLocation extends LitElement {
       return;
     }
 
-    var up =
-      (e.key === 'Tab' && e.shiftKey) ||
-      e.key === 'ArrowUp' ||
-      (e.ctrlKey && e.key === 'p');
+    var up = (e.key === 'Tab' && e.shiftKey) || e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'p');
     var down =
-      (e.key === 'Tab' && !e.shiftKey) ||
-      e.key === 'ArrowDown' ||
-      (e.ctrlKey && e.key === 'n');
+      (e.key === 'Tab' && !e.shiftKey) || e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'n');
     if (up || down) {
       e.preventDefault();
-      this.shadowRoot.querySelector('input').value =
-        await bg.views.runLocationBarCmd('move-selection', { up, down });
+      this.shadowRoot.querySelector('input').value = await bg.views.runLocationBarCmd(
+        'move-selection',
+        { up, down }
+      );
     }
   }
 
@@ -513,10 +485,7 @@ class NavbarLocation extends LitElement {
       let rangeStart = this.autocompleteState.inputValue.length;
       let input = this.shadowRoot.querySelector('input');
       input.value = this.autocompleteState.urlGuess.input;
-      input.setSelectionRange(
-        rangeStart,
-        this.autocompleteState.urlGuess.input.length
-      );
+      input.setSelectionRange(rangeStart, this.autocompleteState.urlGuess.input.length);
     }
   }
 
@@ -692,8 +661,7 @@ NavbarLocation.styles = [
     button.live-reload .fa {
       font-size: 14px;
       color: var(--text-color--location-live-reload-btn);
-      -webkit-text-stroke: 1px
-        var(--text-stroke-color--location-live-reload-btn);
+      -webkit-text-stroke: 1px var(--text-stroke-color--location-live-reload-btn);
       text-shadow: 0 0 8px var(--text-shadow-color--location-live-reload-btn);
       animation: bolt-glow 2s infinite linear;
     }
@@ -753,8 +721,9 @@ NavbarLocation.styles = [
       background: var(--bg-color--location-input);
       font-size: 12.5px;
       line-height: 27px;
-      font-family: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI',
-        Ubuntu, Cantarell, 'Oxygen Sans', 'Helvetica Neue', sans-serif;
+      font-family:
+        -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Ubuntu, Cantarell, 'Oxygen Sans',
+        'Helvetica Neue', sans-serif;
       font-weight: 400;
       letter-spacing: 0.5px;
     }

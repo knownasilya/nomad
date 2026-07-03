@@ -148,9 +148,15 @@ class FolderSyncModal extends LitElement {
           color: var(--m-text-default);
         }
 
-        .revision-indicator.add { background: #44c35a; }
-        .revision-indicator.mod { background: #fac800; }
-        .revision-indicator.del { background: #d93229; }
+        .revision-indicator.add {
+          background: #44c35a;
+        }
+        .revision-indicator.mod {
+          background: #fac800;
+        }
+        .revision-indicator.del {
+          background: #d93229;
+        }
 
         .ignores,
         .log {
@@ -284,13 +290,8 @@ class FolderSyncModal extends LitElement {
   setDirCollapsed(change, collapsed) {
     change.collapsed = collapsed;
     this.iterateChildChanges(change.path, (c) => {
-      if (
-        collapsed === false &&
-        !isLeftImmediateChildOfRight(c.path, change.path)
-      )
-        return;
-      if (collapsed === true && c.type === 'dir')
-        c.collapsed = change.collapsed;
+      if (collapsed === false && !isLeftImmediateChildOfRight(c.path, change.path)) return;
+      if (collapsed === true && c.type === 'dir') c.collapsed = change.collapsed;
       c.hidden = change.collapsed;
     });
   }
@@ -392,56 +393,36 @@ ${this.ignoredFiles.join('\n')}</textarea
             : ''}
           <details @toggle=${this.adjustHeight}>
             <summary>Sync log</summary>
-            <textarea
-              class="log"
-              @input=${_debounce(this.onChangeIgnores, 1e3)}
-              disabled
-            >
+            <textarea class="log" @input=${_debounce(this.onChangeIgnores, 1e3)} disabled>
 ${this.syncLog.join('\n')}</textarea
             >
           </details>
         </main>
         <div class="form-actions">
-          <button
-            type="button"
-            @click=${this.onClickClose}
-            class="cancel"
-            tabindex="6"
-          >
+          <button type="button" @click=${this.onClickClose} class="cancel" tabindex="6">
             Close
           </button>
           <span>
             ${this.syncStream
               ? html`
-                  <button tabindex="5" @click=${this.onClickAbortSync}>
-                    Abort
-                  </button>
+                  <button tabindex="5" @click=${this.onClickAbortSync}>Abort</button>
                   <button type="submit" class="primary" tabindex="4" disabled>
                     <span class="spinner"></span> Syncing
                   </button>
                 `
               : this.isAutoSyncing
-              ? html`
-                  <button tabindex="5" @click=${this.onClickStopAutosync}>
-                    Stop Autosync
-                  </button>
-                  <button type="submit" class="primary" tabindex="4" disabled>
-                    <span class="spinner"></span> Syncing
-                  </button>
-                `
-              : html`
-                  <button tabindex="5" @click=${this.onClickStartAutosync}>
-                    Start Autosync
-                  </button>
-                  <button
-                    type="submit"
-                    class="primary"
-                    tabindex="4"
-                    @click=${this.onClickSync}
-                  >
-                    Sync
-                  </button>
-                `}
+                ? html`
+                    <button tabindex="5" @click=${this.onClickStopAutosync}>Stop Autosync</button>
+                    <button type="submit" class="primary" tabindex="4" disabled>
+                      <span class="spinner"></span> Syncing
+                    </button>
+                  `
+                : html`
+                    <button tabindex="5" @click=${this.onClickStartAutosync}>Start Autosync</button>
+                    <button type="submit" class="primary" tabindex="4" @click=${this.onClickSync}>
+                      Sync
+                    </button>
+                  `}
           </span>
         </div>
       </div>
@@ -479,9 +460,7 @@ ${this.syncLog.join('\n')}</textarea
               change.type === 'dir'
                 ? html`
                     <span class="icon">
-                      <span
-                        class="fas fa-folder${change.collapsed ? '' : '-open'}"
-                      ></span>
+                      <span class="fas fa-folder${change.collapsed ? '' : '-open'}"></span>
                     </span>
                   `
                 : html`
@@ -489,8 +468,7 @@ ${this.syncLog.join('\n')}</textarea
                       <span class="far fa-file"></span>
                     </span>
                   `;
-            const subdirSpacers = () =>
-              pathParts.map((_) => html`<span class="spacer"></span>`);
+            const subdirSpacers = () => pathParts.map((_) => html`<span class="spacer"></span>`);
             const onClick =
               change.type === 'dir'
                 ? (e) => {
@@ -500,9 +478,9 @@ ${this.syncLog.join('\n')}</textarea
                 : undefined;
             return html`
               <div
-                class="change ${change.type === 'dir'
-                  ? 'clickable'
-                  : ''} ${isIgnored ? 'ignored' : ''}"
+                class="change ${change.type === 'dir' ? 'clickable' : ''} ${isIgnored
+                  ? 'ignored'
+                  : ''}"
               >
                 ${subdirSpacers()}
                 <span class="path" @click=${onClick}>
@@ -578,9 +556,8 @@ ${this.syncLog.join('\n')}</textarea
   }
 
   async onClickSync() {
-    this.shadowRoot.querySelector(
-      'button[type="submit"]'
-    ).innerHTML = `<div class="spinner"></div> Syncing`;
+    this.shadowRoot.querySelector('button[type="submit"]').innerHTML =
+      `<div class="spinner"></div> Syncing`;
     await this.doSync();
     this.shadowRoot.querySelector('button[type="submit"]').innerHTML = `Sync`;
     if (this.closeAfterSync) return this.cbs.resolve();

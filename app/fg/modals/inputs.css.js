@@ -13,7 +13,9 @@ export default css`
     font-size: 13px;
     font-family: inherit;
     box-sizing: border-box;
-    transition: border-color 0.08s, box-shadow 0.08s;
+    transition:
+      border-color 0.08s,
+      box-shadow 0.08s;
   }
 
   input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,

@@ -9,11 +9,7 @@ var timeout = 0;
 var isWindows = process.platform === 'win32';
 
 function main() {
-  var projectDir = __dirname
-    .split(path.sep)
-    .filter(Boolean)
-    .slice(0, -2)
-    .join(path.sep);
+  var projectDir = __dirname.split(path.sep).filter(Boolean).slice(0, -2).join(path.sep);
   if (!isWindows) projectDir = path.sep + projectDir;
   var appDir = path.join(projectDir, 'app');
   rmNodeModules(projectDir);
@@ -61,8 +57,7 @@ function rimrafSync(p) {
     else fs.unlinkSync(p);
   } catch (er) {
     if (er.code === 'ENOENT') return;
-    if (er.code === 'EPERM')
-      return isWindows ? fixWinEPERMSync(p, er) : rmdirSync(p, er);
+    if (er.code === 'EPERM') return isWindows ? fixWinEPERMSync(p, er) : rmdirSync(p, er);
     if (er.code !== 'EISDIR') throw er;
 
     rmdirSync(p, er);
@@ -75,8 +70,7 @@ function rmdirSync(p, originalEr) {
   } catch (er) {
     if (er.code === 'ENOENT') return;
     if (er.code === 'ENOTDIR') throw originalEr;
-    if (er.code === 'ENOTEMPTY' || er.code === 'EEXIST' || er.code === 'EPERM')
-      rmkidsSync(p);
+    if (er.code === 'ENOTEMPTY' || er.code === 'EEXIST' || er.code === 'EPERM') rmkidsSync(p);
   }
 }
 

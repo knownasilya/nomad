@@ -17,7 +17,9 @@ const cssStr = css`
     cursor: pointer;
     outline: 0;
     white-space: nowrap;
-    transition: background 0.08s, border-color 0.08s;
+    transition:
+      background 0.08s,
+      border-color 0.08s;
   }
 
   button:hover {

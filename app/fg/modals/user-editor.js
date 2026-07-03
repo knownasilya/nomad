@@ -109,20 +109,10 @@ class UserEditorModal extends LitElement {
         <form @submit=${this.onSubmit}>
           <div class="img-ctrl">
             <img
-              src=${this.thumbDataURL ||
-              `asset:thumb:${this.userUrl}?cache_buster=${Date.now()}`}
+              src=${this.thumbDataURL || `asset:thumb:${this.userUrl}?cache_buster=${Date.now()}`}
             />
-            <input
-              type="file"
-              accept=".jpg,.jpeg,.png"
-              @change=${this.onChooseThumbFile}
-            />
-            <button
-              type="button"
-              @click=${this.onClickChangeThumb}
-              class="btn"
-              tabindex="4"
-            >
+            <input type="file" accept=".jpg,.jpeg,.png" @change=${this.onChooseThumbFile} />
+            <button type="button" @click=${this.onClickChangeThumb} class="btn" tabindex="4">
               Choose Picture
             </button>
           </div>
@@ -137,9 +127,7 @@ class UserEditorModal extends LitElement {
             @change=${this.onChangeTitle}
             class=${this.errors.title ? 'has-error' : ''}
           />
-          ${this.errors.title
-            ? html`<div class="error">${this.errors.title}</div>`
-            : ''}
+          ${this.errors.title ? html`<div class="error">${this.errors.title}</div>` : ''}
 
           <label for="description">Bio / Description</label>
           <input
@@ -155,17 +143,10 @@ class UserEditorModal extends LitElement {
             : ''}
 
           <div class="form-actions">
-            <button
-              type="button"
-              @click=${this.onClickCancel}
-              class="btn cancel"
-              tabindex="4"
-            >
+            <button type="button" @click=${this.onClickCancel} class="btn cancel" tabindex="4">
               Cancel
             </button>
-            <button type="submit" class="btn primary" tabindex="5">
-              Create User
-            </button>
+            <button type="submit" class="btn primary" tabindex="5">Create User</button>
           </div>
         </form>
       </div>
@@ -221,9 +202,7 @@ class UserEditorModal extends LitElement {
     }
 
     try {
-      var thumbBase64 = this.thumbDataURL
-        ? this.thumbDataURL.split(',').pop()
-        : undefined;
+      var thumbBase64 = this.thumbDataURL ? this.thumbDataURL.split(',').pop() : undefined;
       this.cbs.resolve({
         title: this.title,
         description: this.description,

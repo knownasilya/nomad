@@ -32,12 +32,7 @@ class NavbarInpageFind extends LitElement {
     return html`
       <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
       <div class="input-container">
-        <input
-          type="text"
-          placeholder="Find in page"
-          @keyup=${this.onKeyup}
-          autofocus
-        />
+        <input type="text" placeholder="Find in page" @keyup=${this.onKeyup} autofocus />
         <button @click=${this.onClickPrev}>
           <i class="fas fa-angle-up"></i>
         </button>
@@ -120,8 +115,9 @@ NavbarInpageFind.styles = [
 
       color: var(--text-color--input);
       font-size: 13.5px;
-      font-family: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI',
-        Ubuntu, Cantarell, 'Oxygen Sans', 'Helvetica Neue', sans-serif;
+      font-family:
+        -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Ubuntu, Cantarell, 'Oxygen Sans',
+        'Helvetica Neue', sans-serif;
       font-weight: 500;
       letter-spacing: -0.2px;
     }

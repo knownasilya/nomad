@@ -38,8 +38,10 @@ import * as auditLog from '../dbs/audit-log';
 export async function query(root, opts) {
   if (!opts || !opts.path) throw new Error('The `path` parameter is required');
   if (
-    !(typeof opts.path === 'string' ||
-      (Array.isArray(opts.path) && opts.path.every((v) => typeof v === 'string')))
+    !(
+      typeof opts.path === 'string' ||
+      (Array.isArray(opts.path) && opts.path.every((v) => typeof v === 'string'))
+    )
   ) {
     throw new Error('The `path` parameter must be a string or array of strings');
   }
@@ -90,11 +92,15 @@ export async function query(root, opts) {
     );
   } else if (opts.sort === 'mtime') {
     results.sort((a, b) =>
-      opts.reverse ? (b.stat?.mtime || 0) - (a.stat?.mtime || 0) : (a.stat?.mtime || 0) - (b.stat?.mtime || 0)
+      opts.reverse
+        ? (b.stat?.mtime || 0) - (a.stat?.mtime || 0)
+        : (a.stat?.mtime || 0) - (b.stat?.mtime || 0)
     );
   } else if (opts.sort === 'ctime') {
     results.sort((a, b) =>
-      opts.reverse ? (b.stat?.ctime || 0) - (a.stat?.ctime || 0) : (a.stat?.ctime || 0) - (b.stat?.ctime || 0)
+      opts.reverse
+        ? (b.stat?.ctime || 0) - (a.stat?.ctime || 0)
+        : (a.stat?.ctime || 0) - (b.stat?.ctime || 0)
     );
   }
 
@@ -132,7 +138,8 @@ async function _expandPattern(drive, pattern, driveUrl) {
           for await (const entry of drive.list(candidate.prefix, { recursive: false })) {
             const name = basename(entry.key);
             if (!re.test(name)) continue;
-            const entryPath = (candidate.prefix.endsWith('/') ? candidate.prefix : candidate.prefix + '/') + name;
+            const entryPath =
+              (candidate.prefix.endsWith('/') ? candidate.prefix : candidate.prefix + '/') + name;
             if (isLast) {
               newCandidates.push({ prefix: entryPath, entry, isLeaf: true });
             } else {
@@ -150,7 +157,8 @@ async function _expandPattern(drive, pattern, driveUrl) {
         break; // ** consumes all remaining segments
       } else {
         // Exact segment
-        const exactPath = (candidate.prefix.endsWith('/') ? candidate.prefix : candidate.prefix + '/') + seg;
+        const exactPath =
+          (candidate.prefix.endsWith('/') ? candidate.prefix : candidate.prefix + '/') + seg;
         const exactPathNorm = exactPath.replace(/\/+/g, '/');
         if (isLast) {
           const entry = await drive.entry(exactPathNorm).catch(() => null);
@@ -191,17 +199,19 @@ async function _expandPattern(drive, pattern, driveUrl) {
       path,
       url: joinPath(driveUrl, path),
       drive: driveUrl,
-      stat: entry ? {
-        size: entry.value?.blob?.byteLength || 0,
-        metadata: entry.value?.metadata || {},
-        mtime: 0,
-        ctime: 0,
-      } : {
-        size: 0,
-        metadata: {},
-        mtime: 0,
-        ctime: 0,
-      },
+      stat: entry
+        ? {
+            size: entry.value?.blob?.byteLength || 0,
+            metadata: entry.value?.metadata || {},
+            mtime: 0,
+            ctime: 0,
+          }
+        : {
+            size: 0,
+            metadata: {},
+            mtime: 0,
+            ctime: 0,
+          },
       origin: {
         path,
         drive: driveUrl,
