@@ -77,7 +77,7 @@ export async function create(webContents, promptName, params = {}) {
   view.webContents.on('console-message', (e) => {
     console.log('Prompts window says:', e.message);
   });
-  view.webContents.loadURL('beaker://prompts/');
+  view.webContents.loadURL('nomad://prompts/');
   await view.webContents.executeJavaScript(
     `showPrompt("${promptName}", ${JSON.stringify(params)}); undefined`
   );

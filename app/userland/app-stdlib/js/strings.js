@@ -92,7 +92,7 @@ export function makeSafe(str = '') {
     .replace(/>/g, '&gt;');
 }
 
-// search results are returned from beaker's search APIs with nonces wrapping the highlighted sections
+// search results are returned from nomad's search APIs with nonces wrapping the highlighted sections
 // e.g. a search for "test" might return "the {500}test{/500} result"
 // this enables us to safely escape the HTML, then replace the nonces with <strong> tags
 export function highlightSearchResult(str = '', nonce = 0) {
@@ -264,7 +264,7 @@ export async function* fancyUrlAsync(str) {
     yield fancyUrl(str);
     // TODO
     // if (url.protocol === 'hyper:') {
-    //   let {site} = await beaker.index.gql(`
+    //   let {site} = await nomad.index.gql(`
     //     query Site ($origin: String!) {
     //       site(url: $origin, cached: true) { title }
     //     }

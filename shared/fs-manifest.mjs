@@ -1,13 +1,13 @@
-// The canonical beaker.fs API surface — the single source of truth for the method list, shared by
+// The canonical nomad.fs API surface — the single source of truth for the method list, shared by
 // BOTH runtimes (ADR-0010). Desktop imports it as the pauls-electron-rpc manifest; mobile references
-// it when wiring its WebView `window.beaker.fs` shim + Bare-backend dispatcher. Pure data (no
+// it when wiring its WebView `window.nomad.fs` shim + Bare-backend dispatcher. Pure data (no
 // platform deps), so it resolves under Electron/Node, Bare, and RN/Metro alike.
 //
 // Value is the RPC call type: 'promise' (async → value) or 'readable' (returns an event stream).
 // Keep in sync with app/bg/web-apis/bg/fs.js (impl), fg/fs.js (desktop shim), and the mobile shim
-// (mobile/lib/types.ts BEAKER_SHIM + mobile/backend/backend.mjs dispatchBeaker).
+// (mobile/lib/types.ts NOMAD_SHIM + mobile/backend/backend.mjs dispatchNomad).
 
-/** The RPC call type for a `beaker.fs` method. @typedef {'promise' | 'readable'} RpcCallType */
+/** The RPC call type for a `nomad.fs` method. @typedef {'promise' | 'readable'} RpcCallType */
 
 /** @satisfies {Record<string, RpcCallType>} */
 export default {

@@ -223,7 +223,7 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
     e.stopPropagation();
     url = isDriveRegex.test(url) ? `hyper://${url}/` : url;
     if (api) api.createTab(url);
-    else beaker.browser.openUrl(url, { setActive: true });
+    else nomad.browser.openUrl(url, { setActive: true });
   };
   const mediaTypeToTool = (v) => ({ video: 'camera', audio: 'microphone' })[v];
   switch (permId) {

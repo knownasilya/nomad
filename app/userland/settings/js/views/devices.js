@@ -3,7 +3,7 @@ import viewCSS from '../../css/views/devices.css.js';
 import * as toast from '../../../app-stdlib/js/com/toast.js';
 
 // Devices settings subpage — manage the Devices linked to your Vault (the identity-level store
-// that lets all your Devices read and edit all your Spaces). Backed by beaker.vault.
+// that lets all your Devices read and edit all your Spaces). Backed by nomad.vault.
 // See ~/maintained/nomad/docs/multi-device-protocol.md and ADR-0006 / ADR-0007.
 class DevicesView extends LitElement {
   static get properties() {
@@ -51,7 +51,7 @@ class DevicesView extends LitElement {
     this.loading = true;
     this.error = '';
     try {
-      const status = await beaker.vault.getStatus();
+      const status = await nomad.vault.getStatus();
       this.hasVault = status.hasVault;
       this.thisDevice = status.thisDevice;
       if (this.hasVault) {
@@ -97,15 +97,15 @@ class DevicesView extends LitElement {
   }
 
   async _refresh() {
-    this.devices = (await beaker.vault.listDevices()) || [];
-    this.pending = (await beaker.vault.listPendingRequests()) || [];
+    this.devices = (await nomad.vault.listDevices()) || [];
+    this.pending = (await nomad.vault.listPendingRequests()) || [];
     this.requestUpdate();
   }
 
   _watchPending() {
     if (this._pendingStream) return;
     try {
-      this._pendingStream = beaker.vault.watchPendingRequests();
+      this._pendingStream = nomad.vault.watchPendingRequests();
       this._pendingStream.addEventListener('changed', () => this._refresh());
     } catch {
       // fall back to no live updates; manual reload still works
@@ -117,7 +117,7 @@ class DevicesView extends LitElement {
 
   render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       ${this.loading
         ? html`<div class="loading">
             <span class="spinner"></span> Loading devices…
@@ -343,7 +343,7 @@ class DevicesView extends LitElement {
     try {
       // Create the Vault for this identity (drives are already collaborative from birth, so there is
       // nothing to migrate). createInvite ensures the Vault exists and records this Device in it.
-      await beaker.vault.createInvite();
+      await nomad.vault.createInvite();
       toast.create('This device is set up. You can now add more devices.', 'success');
       await this.load();
     } catch (e) {
@@ -358,7 +358,7 @@ class DevicesView extends LitElement {
   async onClickCreateInvite() {
     this.busy = true;
     try {
-      const { code } = await beaker.vault.createInvite();
+      const { code } = await nomad.vault.createInvite();
       this.inviteCode = code;
     } catch (e) {
       toast.create(e.message || String(e), 'error');
@@ -378,7 +378,7 @@ class DevicesView extends LitElement {
   async onClickApprove(req) {
     this.busy = true;
     try {
-      await beaker.vault.approveDevice(req.deviceKey);
+      await nomad.vault.approveDevice(req.deviceKey);
       toast.create(`Approved ${req.name}`, 'success');
       await this._refresh();
     } catch (e) {
@@ -392,7 +392,7 @@ class DevicesView extends LitElement {
   async onClickDeny(req) {
     this.busy = true;
     try {
-      await beaker.vault.denyDevice(req.deviceKey);
+      await nomad.vault.denyDevice(req.deviceKey);
       await this._refresh();
     } catch (e) {
       toast.create(e.message || String(e), 'error');
@@ -423,7 +423,7 @@ class DevicesView extends LitElement {
     }
     this.busy = true;
     try {
-      await beaker.vault.renameDevice(device.key, trimmed);
+      await nomad.vault.renameDevice(device.key, trimmed);
       this.editingKey = '';
       this.editName = '';
       toast.create('Device renamed');
@@ -439,7 +439,7 @@ class DevicesView extends LitElement {
   async onConfirmRemove(device) {
     this.busy = true;
     try {
-      await beaker.vault.removeDevice(device.key);
+      await nomad.vault.removeDevice(device.key);
       this.confirmingKey = '';
       toast.create(`Removed ${device.name}`);
       await this._refresh();
@@ -456,7 +456,7 @@ class DevicesView extends LitElement {
     this.busy = true;
     this.error = '';
     try {
-      await beaker.vault.submitInvite(this._joinCode.trim());
+      await nomad.vault.submitInvite(this._joinCode.trim());
       toast.create('Request sent. Approve it on your other device.', 'success');
       this._joinCode = '';
       await this.load();

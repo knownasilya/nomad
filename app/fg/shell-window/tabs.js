@@ -101,7 +101,7 @@ class ShellWindowTabs extends LitElement {
     });
     const items = this.buildItems(this.tabsState);
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div
         class="${shellCls}"
         @mousedown=${this.onMousedownShell}
@@ -177,7 +177,7 @@ class ShellWindowTabs extends LitElement {
   renderTab(tab, index) {
     const faviconUrl = this.getFavicon(index);
     const showFavicon = Boolean(
-      tab.isLoading || tab.isPinned || faviconUrl || tab.url.startsWith('beaker:')
+      tab.isLoading || tab.isPinned || faviconUrl || tab.url.startsWith('nomad:')
     );
     const group = tab.groupId ? (this.groups || []).find((g) => g.id === tab.groupId) : null;
     const cls = classMap({

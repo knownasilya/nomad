@@ -42,7 +42,7 @@ export function setup(parentWindow) {
   view.webContents.on('console-message', (e) => {
     console.log('Site-Info window says:', e.message);
   });
-  view.webContents.loadURL('beaker://site-info/');
+  view.webContents.loadURL('nomad://site-info/');
 }
 
 export function destroy(parentWindow) {

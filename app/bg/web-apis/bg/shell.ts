@@ -23,7 +23,7 @@ import * as wcTrust from '../../wc-trust';
 // =
 
 /**
- * @typedef {Object} BeakerShellPublicAPIDriveRecord
+ * @typedef {Object} NomadShellPublicAPIDriveRecord
  * @prop {string} url
  * @prop {string} title
  * @prop {string} description
@@ -293,7 +293,7 @@ export async function saveDriveDialog(url, { tags } = { tags: '' }) {
  * @param {Object} [opts]
  * @param {boolean} [opts.writable]
  * @param {string} [opts.tag]
- * @returns {Promise<BeakerShellPublicAPIDriveRecord[]>}
+ * @returns {Promise<NomadShellPublicAPIDriveRecord[]>}
  */
 export async function listDrives(opts: any = {}) {
   // validate

@@ -1,7 +1,7 @@
 import {
   LitElement,
   html,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
 import mainCSS from '../css/main.css.js';
 import './views/about.js';
 import './views/file.js';
@@ -19,7 +19,7 @@ export class CommandViewer extends LitElement {
   }
 
   async load() {
-    var drive = beaker.fs.drive(location);
+    var drive = nomad.fs.drive(location);
     this.info = await drive.getInfo();
     await this.requestUpdate();
   }
@@ -30,7 +30,7 @@ export class CommandViewer extends LitElement {
   render() {
     if (!this.info) return html``;
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="header">
         <h1>${this.info.title}</h1>
         <div class="description">
@@ -45,7 +45,7 @@ export class CommandViewer extends LitElement {
   }
 
   renderSaveBtn() {
-    if (location.protocol === 'beaker:') {
+    if (location.protocol === 'nomad:') {
       return html`<div style="margin-top: 10px"><small><span class="fas fa-check"></span> Builtin (cannot be uninstalled)</button></small></div>`;
     }
     return undefined;
@@ -66,9 +66,9 @@ export class CommandViewer extends LitElement {
 
   async onToggleInstalled(e) {
     if (this.isInstalled) {
-      // await beaker.programs.uninstallProgram(this.info.url)
+      // await nomad.programs.uninstallProgram(this.info.url)
     } else {
-      // await beaker.programs.installProgram(this.info.url)
+      // await nomad.programs.installProgram(this.info.url)
     }
     this.load();
   }

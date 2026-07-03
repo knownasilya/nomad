@@ -1,4 +1,4 @@
-/* globals beaker */
+/* globals nomad */
 
 // Read/write helpers for the contacts address book.
 //
@@ -40,7 +40,7 @@ export async function readAddressBook() {
   try {
     // NOTE: readFile's 'json' encoding isn't honored on the read path (it
     // returns the raw string), so parse it ourselves like loadProfile does.
-    let raw = await beaker.fs.readFile(ADDRESS_BOOK_PATH);
+    let raw = await nomad.fs.readFile(ADDRESS_BOOK_PATH);
     return normalize(JSON.parse(raw));
   } catch (e) {
     // A missing file is expected for a fresh profile - start empty.
@@ -52,7 +52,7 @@ export async function readAddressBook() {
 }
 
 export async function writeAddressBook(addressBook) {
-  await beaker.fs.writeFile(
+  await nomad.fs.writeFile(
     ADDRESS_BOOK_PATH,
     JSON.stringify(addressBook, null, 2)
   );

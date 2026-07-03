@@ -1,4 +1,4 @@
-// beaker.fs — a unified filesystem API over BOTH drive backends (ADR-0010 Phase 2).
+// nomad.fs — a unified filesystem API over BOTH drive backends (ADR-0010 Phase 2).
 //
 // This is a FACADE: it detects whether a hyper:// URL resolves to a single-writer Hyperdrive or
 // a multi-writer Autobase collaborative drive, and delegates to the matching implementation

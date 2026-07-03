@@ -44,7 +44,7 @@ class LogSettingsView extends LitElement {
     var filter = { level: this.settings.level };
     if (this.settings.category !== 'all')
       filter.category = this.settings.category;
-    this.rows = await beaker.logger.query({
+    this.rows = await nomad.logger.query({
       limit: 5e2,
       filter,
       until: this.pauseTime,
@@ -54,7 +54,7 @@ class LogSettingsView extends LitElement {
 
     if (this.readStream) this.readStream.close();
     if (!this.isPaused) {
-      this.readStream = beaker.logger.stream({ since: Date.now(), filter });
+      this.readStream = nomad.logger.stream({ since: Date.now(), filter });
       this.readStream.addEventListener('data', (row) => {
         if (!this.applyCustomRules(row)) return;
         this.rows.unshift(row);
@@ -105,13 +105,13 @@ class LogSettingsView extends LitElement {
   render() {
     if (!this.rows) {
       return html`
-        <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+        <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
         <div class="logger loading">Loading...</div>
       `;
     }
 
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="logger">
         ${this.renderControls()}
         <table class="rows">

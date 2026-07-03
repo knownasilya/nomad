@@ -42,7 +42,7 @@ class DriveForks extends LitElement {
       return html``;
     }
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       ${this.forks.length > 1
         ? html`
             <div class="list">
@@ -108,7 +108,7 @@ class DriveForks extends LitElement {
   async onClickNewFork(e) {
     e.preventDefault();
     e.stopPropagation();
-    var drive = await beaker.fs.forkDrive(this.origin);
+    var drive = await nomad.fs.forkDrive(this.origin);
     emit(this, 'change-url', {
       detail: { url: this.url.replace(this.origin, drive.url) },
     });
@@ -130,11 +130,11 @@ class DriveForks extends LitElement {
   onClickDiff(e, fork) {
     e.preventDefault();
     e.stopPropagation();
-    beaker.browser.openUrl(
-      `beaker://diff/?base=${fork.url}&target=${this.forks[0].url}`,
+    nomad.browser.openUrl(
+      `nomad://diff/?base=${fork.url}&target=${this.forks[0].url}`,
       { setActive: true }
     );
-    beaker.browser.toggleSiteInfo(false);
+    nomad.browser.toggleSiteInfo(false);
   }
 
   async onClickDelete(e, fork) {
@@ -143,7 +143,7 @@ class DriveForks extends LitElement {
     if (!confirm(`Delete "${fork.forkOf.label}"?`)) {
       return;
     }
-    await beaker.drives.remove(fork.url);
+    await nomad.drives.remove(fork.url);
     this.forks.splice(this.forks.indexOf(fork), 1);
     this.requestUpdate();
   }

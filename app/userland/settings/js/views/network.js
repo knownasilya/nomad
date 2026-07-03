@@ -53,9 +53,9 @@ class NetworkView extends LitElement {
   async load() {
     this.error = undefined;
     try {
-      var networkStatus = await beaker.browser.getDaemonNetworkStatus();
+      var networkStatus = await nomad.browser.getDaemonNetworkStatus();
       for (let item of networkStatus) {
-        item.drive = await beaker.drives.get(item.key);
+        item.drive = await nomad.drives.get(item.key);
         item.peers.sort((a, b) =>
           a.remoteAddress.localeCompare(b.remoteAddress)
         ); // helps spot dupes
@@ -76,7 +76,7 @@ class NetworkView extends LitElement {
 
   render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <h3>Active Drives</h3>
       ${this.error
         ? html` <pre>${this.error.toString()}</pre> `

@@ -1,8 +1,8 @@
 import {
   LitElement,
   html,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import { until } from 'beaker://app-stdlib/vendor/lit-element/lit-html/directives/until.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import { until } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/until.js';
 import fileCSS from '../../css/views/file.css.js';
 
 export class FileView extends LitElement {
@@ -12,7 +12,7 @@ export class FileView extends LitElement {
 
   async readFile() {
     try {
-      var drive = beaker.fs.drive(location);
+      var drive = nomad.fs.drive(location);
       return await drive.readFile(location.pathname, 'utf8');
     } catch (e) {
       return e.toString();

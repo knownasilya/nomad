@@ -54,7 +54,7 @@ export const addVisit = async function (profileId, { url, title, spaceId = 1 }) 
     await db.run('BEGIN TRANSACTION;');
 
     var ts = Date.now();
-    if (!url.startsWith('beaker://')) {
+    if (!url.startsWith('nomad://')) {
       // dont log stats on internal sites, keep them out of the search
       // get current stats
       var stats = await db.get('SELECT * FROM visit_stats WHERE url = ?;', [url]);

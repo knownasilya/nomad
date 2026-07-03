@@ -1,8 +1,8 @@
-import { css } from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import inputsCSS from 'beaker://app-stdlib/css/inputs.css.js';
-import buttons2CSS from 'beaker://app-stdlib/css/buttons2.css.js';
-import tooltipCSS from 'beaker://app-stdlib/css/tooltip.css.js';
-import spinnerCSS from 'beaker://app-stdlib/css/com/spinner.css.js';
+import { css } from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import inputsCSS from 'nomad://app-stdlib/css/inputs.css.js';
+import buttons2CSS from 'nomad://app-stdlib/css/buttons2.css.js';
+import tooltipCSS from 'nomad://app-stdlib/css/tooltip.css.js';
+import spinnerCSS from 'nomad://app-stdlib/css/com/spinner.css.js';
 
 const cssStr = css`
   ${inputsCSS}

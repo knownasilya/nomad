@@ -2,9 +2,9 @@ import {
   LitElement,
   html,
   css,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import { repeat } from 'beaker://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
-import bytes from 'beaker://app-stdlib/vendor/bytes/index.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
+import bytes from 'nomad://app-stdlib/vendor/bytes/index.js';
 
 class DriveView extends LitElement {
   static get styles() {
@@ -101,7 +101,7 @@ class DriveView extends LitElement {
 
   constructor() {
     super();
-    this.drive = beaker.fs.drive(location);
+    this.drive = nomad.fs.drive(location);
     this.info = undefined;
     this.entries = [];
     this.load();
@@ -123,7 +123,7 @@ class DriveView extends LitElement {
   render() {
     if (!this.info) return html``;
     return html`
-      <link rel="stylesheet" href="beaker://app-stdlib/css/fontawesome.css" />
+      <link rel="stylesheet" href="nomad://app-stdlib/css/fontawesome.css" />
       <header>
         <h1>
           <img
@@ -202,7 +202,7 @@ class DriveView extends LitElement {
 
   async onClickEditProperties(e) {
     e.preventDefault();
-    await beaker.shell.drivePropertiesDialog(location.origin);
+    await nomad.shell.drivePropertiesDialog(location.origin);
     this.load();
   }
 

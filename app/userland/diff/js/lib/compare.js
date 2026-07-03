@@ -1,4 +1,4 @@
-import { joinPath } from 'beaker://app-stdlib/js/strings.js';
+import { joinPath } from 'nomad://app-stdlib/js/strings.js';
 
 export async function diff(
   baseDrive,

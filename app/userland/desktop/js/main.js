@@ -1,16 +1,16 @@
 import {
   LitElement,
   html,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import { repeat } from 'beaker://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
-import { EditBookmarkPopup } from 'beaker://app-stdlib/js/com/popups/edit-bookmark.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
+import { EditBookmarkPopup } from 'nomad://app-stdlib/js/com/popups/edit-bookmark.js';
 import { AddLinkPopup } from './com/add-link-popup.js';
-import * as toast from 'beaker://app-stdlib/js/com/toast.js';
-import { writeToClipboard } from 'beaker://app-stdlib/js/clipboard.js';
+import * as toast from 'nomad://app-stdlib/js/com/toast.js';
+import { writeToClipboard } from 'nomad://app-stdlib/js/clipboard.js';
 import * as desktop from './lib/desktop.js';
 import * as addressBook from './lib/address-book.js';
 import css from '../css/main.css.js';
-import 'beaker://app-stdlib/js/com/img-fallbacks.js';
+import 'nomad://app-stdlib/js/com/img-fallbacks.js';
 
 const VERSION_ID = (major, minor, patch, pre) =>
   major * 1e9 + minor * 1e6 + patch * 1e3 + pre;
@@ -62,10 +62,10 @@ class DesktopApp extends LitElement {
 
   render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div id="topright">
         <a href="#" @click=${this.onClickNewHyperdrive}>+ New Hyperdrive</a>
-        <a href="beaker://library/" title="Library">My Library</a>
+        <a href="nomad://library/" title="Library">My Library</a>
         <a href="https://nomad.pages.dev/docs/api/" title="Help">Help</a>
       </div>
 
@@ -125,11 +125,11 @@ class DesktopApp extends LitElement {
   // =
 
   async onClickNewHyperdrive(e) {
-    var drive = await beaker.fs.createDrive();
+    var drive = await nomad.fs.createDrive();
     toast.create('Drive created');
-    beaker.browser.openUrl(drive.url, {
+    nomad.browser.openUrl(drive.url, {
       setActive: true,
-      addedPaneUrls: ['beaker://editor/'],
+      addedPaneUrls: ['nomad://editor/'],
     });
   }
 
@@ -167,7 +167,7 @@ class DesktopApp extends LitElement {
       fns[id] = items[i].click;
       delete items[i].click;
     }
-    var choice = await beaker.browser.showContextMenu(items);
+    var choice = await nomad.browser.showContextMenu(items);
     if (fns[choice]) fns[choice]();
   }
 
@@ -182,7 +182,7 @@ class DesktopApp extends LitElement {
   }
 
   async onClickUnpinBookmark(bookmark) {
-    await beaker.bookmarks.add(Object.assign({}, bookmark, { pinned: false }));
+    await nomad.bookmarks.add(Object.assign({}, bookmark, { pinned: false }));
     toast.create('Bookmark unpinned', '', 10e3);
     this.load();
   }

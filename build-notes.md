@@ -1,4 +1,4 @@
-beaker browser was cloned from [electron-boilerplate](https://github.com/szwacz/electron-boilerplate).
+nomad browser was cloned from [electron-boilerplate](https://github.com/szwacz/electron-boilerplate).
 
 # Structure
 

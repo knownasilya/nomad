@@ -10,7 +10,7 @@ export const ANALYTICS_CHECKIN_INTERVAL = ms('6h');
 // hyperdrive FS file paths
 export const PATHS = {
   BOOKMARKS: '/bookmarks',
-  TRASH: '/beaker/trash.json',
+  TRASH: '/nomad/trash.json',
 };
 
 // hyperdrive trash management
@@ -31,7 +31,7 @@ export const DAT_SWARM_PORT = 3282;
 export const DRIVE_MANIFEST_FILENAME = 'index.json';
 let quotaEnvVar =
   process.env.NOMAD_DAT_QUOTA_DEFAULT_BYTES_ALLOWED ||
-  process.env.beaker_dat_quota_default_bytes_allowed;
+  process.env.nomad_dat_quota_default_bytes_allowed;
 export const DAT_QUOTA_DEFAULT_BYTES_ALLOWED = bytes.parse(quotaEnvVar || '500mb');
 export const DAT_CACHE_TIME = ms('7d');
 export const DEFAULT_DAT_DNS_TTL = ms('1h');

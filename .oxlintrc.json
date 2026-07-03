@@ -22,7 +22,7 @@
     "es2024": true
   },
   "globals": {
-    "beaker": "readonly",
+    "nomad": "readonly",
     "DatArchive": "readonly",
     "uwg": "readonly"
   },

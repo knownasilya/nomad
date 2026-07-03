@@ -30,7 +30,7 @@ class NavbarInpageFind extends LitElement {
       return html`<div></div>`;
     }
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="input-container">
         <input type="text" placeholder="Find in page" @keyup=${this.onKeyup} autofocus />
         <button @click=${this.onClickPrev}>

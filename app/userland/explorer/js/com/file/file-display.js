@@ -92,7 +92,7 @@ export class FileDisplay extends LitElement {
 
   renderIcon(icon) {
     return html`
-      <link rel="stylesheet" href="beaker://explorer/css/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://explorer/css/font-awesome.css" />
       <div class="icon">
         <span class="${icon}"></span>
         ${this.info.subicon
@@ -104,7 +104,7 @@ export class FileDisplay extends LitElement {
 
   async renderAndRenderMount() {
     return html`
-      <link rel="stylesheet" href="beaker://explorer/css/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://explorer/css/font-awesome.css" />
       <div class="mount">
         <img
           src="asset:thumb:${this.info.mount.url}?cache_buster=${Date.now()}"
@@ -119,7 +119,7 @@ export class FileDisplay extends LitElement {
 
   async readAndRenderFile() {
     try {
-      var drive = beaker.fs.drive(this.driveUrl);
+      var drive = nomad.fs.drive(this.driveUrl);
       var file = await drive.readFile(this.pathname, 'utf8');
 
       if (this.pathname.endsWith('.md') && this.renderMode !== 'raw') {
@@ -130,7 +130,7 @@ export class FileDisplay extends LitElement {
         return html`
           <link
             rel="stylesheet"
-            href="beaker://explorer/css/font-awesome.css"
+            href="nomad://explorer/css/font-awesome.css"
           />
           <div class="goto">
             <div class="title">

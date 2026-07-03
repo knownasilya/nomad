@@ -9,7 +9,7 @@ const { execFileSync } = require('child_process');
 // are built — so the published artifacts shipped the unsigned app (the default
 // Apple-linker signature, Identifier=Electron, flags=adhoc,linker-signed). That
 // app's hardened renderer/helper processes fail to launch, so windows render
-// blank and beaker:// pages fall through to chrome-error (ERR_UNKNOWN_URL_SCHEME).
+// blank and nomad:// pages fall through to chrome-error (ERR_UNKNOWN_URL_SCHEME).
 // Only the throwaway loose copy in dist/mac-*/ got signed, which never ships.
 //
 // When a real signing identity IS configured, do nothing — electron-builder

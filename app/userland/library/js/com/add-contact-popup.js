@@ -1,10 +1,10 @@
-/* globals beaker */
+/* globals nomad */
 import {
   html,
   css,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import { BasePopup } from 'beaker://app-stdlib/js/com/popups/base.js';
-import popupsCSS from 'beaker://app-stdlib/css/com/popups.css.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import { BasePopup } from 'nomad://app-stdlib/js/com/popups/base.js';
+import popupsCSS from 'nomad://app-stdlib/css/com/popups.css.js';
 import { addContact } from '../lib/contacts.js';
 
 // exported api
@@ -63,7 +63,7 @@ export class AddContactPopup extends BasePopup {
 
   renderBody() {
     return html`
-      <link rel="stylesheet" href="beaker://app-stdlib/css/fontawesome.css" />
+      <link rel="stylesheet" href="nomad://app-stdlib/css/fontawesome.css" />
       <form @submit=${this.onSubmit}>
         <div>
           <label for="key-input">Hyperdrive link or key</label>

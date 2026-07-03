@@ -18,7 +18,7 @@ export function examineLocationInput(v) {
       isHyperHashRegex.test(v) ||
       v.startsWith('localhost') ||
       v.includes('://') ||
-      v.startsWith('beaker:') ||
+      v.startsWith('nomad:') ||
       v.startsWith('data:') ||
       v.startsWith('intent:') ||
       v.startsWith('about:'));
@@ -29,7 +29,7 @@ export function examineLocationInput(v) {
     !isPath.test(v) &&
     !v.includes('://') &&
     !(
-      v.startsWith('beaker:') ||
+      v.startsWith('nomad:') ||
       v.startsWith('data:') ||
       v.startsWith('intent:') ||
       v.startsWith('about:')

@@ -1,5 +1,5 @@
 //
-// Internal web API: beaker.vault — backs the Devices settings subpage. Available only to beaker://
+// Internal web API: nomad.vault — backs the Devices settings subpage. Available only to nomad://
 // pages (internalOnly). Delegates to hyper/vault.js (the Vault primitive) and
 // hyper/device-pairing.js (the blind-pairing handshake). See docs/multi-device-protocol.md.
 

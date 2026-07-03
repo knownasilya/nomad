@@ -28,12 +28,12 @@ class FsAuditLogView extends LitElement {
     this.isLoading = true;
     this.requestUpdate();
 
-    this.rows = await beaker.logger.listAuditLog({ keys: [], limit: 5e3 });
+    this.rows = await nomad.logger.listAuditLog({ keys: [], limit: 5e3 });
 
     this.isLoading = false;
     this.requestUpdate();
 
-    this.stats = await beaker.logger.getAuditLogStats();
+    this.stats = await nomad.logger.getAuditLogStats();
     this.requestUpdate();
   }
 
@@ -45,14 +45,14 @@ class FsAuditLogView extends LitElement {
   render() {
     if (!this.rows) {
       return html`
-        <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+        <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
         <div class="logger loading">Loading...</div>
       `;
     }
 
     var lastRow;
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="stats">
         ${this.stats
           ? html`

@@ -11,63 +11,63 @@ import ICO from 'icojs';
 // =
 
 // content security policies
-const BEAKER_CSP = `
-  default-src 'self' beaker:;
-  img-src beaker: asset: data: blob: hyper: http: https;
-  script-src 'self' beaker: 'unsafe-eval';
-  media-src 'self' beaker: hyper:;
-  style-src 'self' 'unsafe-inline' beaker:;
+const NOMAD_CSP = `
+  default-src 'self' nomad:;
+  img-src nomad: asset: data: blob: hyper: http: https;
+  script-src 'self' nomad: 'unsafe-eval';
+  media-src 'self' nomad: hyper:;
+  style-src 'self' 'unsafe-inline' nomad:;
   child-src 'self';
 `.replace(/\n/g, '');
-const BEAKER_APP_CSP = `
-  default-src 'self' beaker:;
-  img-src beaker: asset: data: blob: hyper: http: https;
-  script-src 'self' beaker: hyper: 'unsafe-eval';
-  media-src 'self' beaker: hyper:;
-  style-src 'self' 'unsafe-inline' beaker:;
+const NOMAD_APP_CSP = `
+  default-src 'self' nomad:;
+  img-src nomad: asset: data: blob: hyper: http: https;
+  script-src 'self' nomad: hyper: 'unsafe-eval';
+  media-src 'self' nomad: hyper:;
+  style-src 'self' 'unsafe-inline' nomad:;
   child-src 'self' hyper:;
 `.replace(/\n/g, '');
 const SIDEBAR_CSP = `
-default-src 'self' beaker:;
-img-src beaker: asset: data: blob: hyper: http: https;
-script-src 'self' beaker: hyper: blob: 'unsafe-eval';
-media-src 'self' beaker: hyper:;
-style-src 'self' 'unsafe-inline' beaker:;
-child-src 'self' beaker:;
+default-src 'self' nomad:;
+img-src nomad: asset: data: blob: hyper: http: https;
+script-src 'self' nomad: hyper: blob: 'unsafe-eval';
+media-src 'self' nomad: hyper:;
+style-src 'self' 'unsafe-inline' nomad:;
+child-src 'self' nomad:;
 `.replace(/\n/g, '');
 // The editor hosts the Monaco TypeScript language service, which spawns web
-// workers from beaker://assets/vs/* (a different host than the beaker://editor
+// workers from nomad://assets/vs/* (a different host than the nomad://editor
 // page). Allow those cross-host + blob: workers via worker-src/child-src.
 const EDITOR_CSP = `
-default-src 'self' beaker:;
-img-src beaker: asset: data: blob: hyper: http: https;
-script-src 'self' beaker: blob: 'unsafe-eval';
-media-src 'self' beaker: hyper:;
-style-src 'self' 'unsafe-inline' beaker:;
-child-src 'self' beaker: blob:;
-worker-src 'self' beaker: blob:;
+default-src 'self' nomad:;
+img-src nomad: asset: data: blob: hyper: http: https;
+script-src 'self' nomad: blob: 'unsafe-eval';
+media-src 'self' nomad: hyper:;
+style-src 'self' 'unsafe-inline' nomad:;
+child-src 'self' nomad: blob:;
+worker-src 'self' nomad: blob:;
 `.replace(/\n/g, '');
 
-const logger = logLib.child({ category: 'beaker', subcategory: 'beaker-scheme' });
+const logger = logLib.child({ category: 'nomad', subcategory: 'nomad-scheme' });
 
 // exported api
 // =
 
 export function register(protocol) {
-  protocol.handle('beaker', beakerProtocol);
+  protocol.handle('nomad', nomadProtocol);
 }
 
 // internal methods
 // =
 
-async function beakerProtocol(request) {
-  logger.silly('beaker protocol request', { url: request.url });
+async function nomadProtocol(request) {
+  logger.silly('nomad protocol request', { url: request.url });
   try {
     var cb = async (statusCode, status, contentType, filePath, CSP) => {
       const headers = {
         'Cache-Control': 'no-cache',
         'Content-Type': contentType || 'text/html; charset=utf-8',
-        'Content-Security-Policy': CSP || BEAKER_CSP,
+        'Content-Security-Policy': CSP || NOMAD_CSP,
         'Access-Control-Allow-Origin': '*',
       };
       let body;
@@ -77,13 +77,13 @@ async function beakerProtocol(request) {
           // once. Re-wrapping a net.fetch() ReadableStream in a new Response
           // (`new Response(fileRes.body)`) races the stream pump across the
           // protocol.handle boundary on Electron 42 — intermittently the bytes
-          // never reach the renderer, so beaker://desktop/ resolves with no
+          // never reach the renderer, so nomad://desktop/ resolves with no
           // document and the tab falls to chrome-error / ERR_UNKNOWN_URL_SCHEME.
-          // Buffering removes the race; beaker:// assets are small.
+          // Buffering removes the race; nomad:// assets are small.
           const data = await fs.promises.readFile(filePath);
           return new Response(data, { status: statusCode, headers });
         } catch (e) {
-          logger.warn('Failed to serve beaker asset', { filePath, err: e });
+          logger.warn('Failed to serve nomad asset', { filePath, err: e });
           return new Response(errorPage({ errorCode: 404, errorDescription: 'Not Found' }), {
             status: 404,
             headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' },
@@ -127,17 +127,17 @@ async function beakerProtocol(request) {
     }
 
     // redirects from old pages
-    if (requestUrl.startsWith('beaker://start/')) {
+    if (requestUrl.startsWith('nomad://start/')) {
       return cb(
         200,
         'OK',
         'text/html',
-        () => `<!doctype html><meta http-equiv="refresh" content="0; url=beaker://desktop/">`
+        () => `<!doctype html><meta http-equiv="refresh" content="0; url=nomad://desktop/">`
       );
     }
 
     // browser ui
-    if (requestUrl === 'beaker://shell-window/') {
+    if (requestUrl === 'nomad://shell-window/') {
       return cb(
         200,
         'OK',
@@ -145,7 +145,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'fg', 'shell-window', 'index.html')
       );
     }
-    if (requestUrl === 'beaker://shell-window/main.js') {
+    if (requestUrl === 'nomad://shell-window/main.js') {
       return cb(
         200,
         'OK',
@@ -153,7 +153,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'fg', 'shell-window', 'index.build.js')
       );
     }
-    if (requestUrl === 'beaker://location-bar/') {
+    if (requestUrl === 'nomad://location-bar/') {
       return cb(
         200,
         'OK',
@@ -161,7 +161,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'fg', 'location-bar', 'index.html')
       );
     }
-    if (requestUrl === 'beaker://shell-menus/') {
+    if (requestUrl === 'nomad://shell-menus/') {
       return cb(
         200,
         'OK',
@@ -169,7 +169,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'fg', 'shell-menus', 'index.html')
       );
     }
-    if (requestUrl === 'beaker://prompts/') {
+    if (requestUrl === 'nomad://prompts/') {
       return cb(
         200,
         'OK',
@@ -177,7 +177,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'fg', 'prompts', 'index.html')
       );
     }
-    if (requestUrl === 'beaker://perm-prompt/') {
+    if (requestUrl === 'nomad://perm-prompt/') {
       return cb(
         200,
         'OK',
@@ -185,7 +185,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'fg', 'perm-prompt', 'index.html')
       );
     }
-    if (requestUrl === 'beaker://modals/') {
+    if (requestUrl === 'nomad://modals/') {
       return cb(
         200,
         'OK',
@@ -193,7 +193,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'fg', 'modals', 'index.html')
       );
     }
-    if (requestUrl === 'beaker://assets/syntax-highlight.js') {
+    if (requestUrl === 'nomad://assets/syntax-highlight.js') {
       return cb(
         200,
         'OK',
@@ -201,7 +201,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/js/syntax-highlight.js')
       );
     }
-    if (requestUrl === 'beaker://assets/syntax-highlight.css') {
+    if (requestUrl === 'nomad://assets/syntax-highlight.css') {
       return cb(
         200,
         'OK',
@@ -209,7 +209,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/css/syntax-highlight.css')
       );
     }
-    if (requestUrl === 'beaker://assets/design-tokens.css') {
+    if (requestUrl === 'nomad://assets/design-tokens.css') {
       return cb(
         200,
         'OK',
@@ -217,7 +217,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/css/design-tokens.css')
       );
     }
-    if (requestUrl === 'beaker://assets/font-awesome.css') {
+    if (requestUrl === 'nomad://assets/font-awesome.css') {
       return cb(
         200,
         'OK',
@@ -225,7 +225,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/css/fa-all.min.css')
       );
     }
-    if (requestUrl === 'beaker://assets/webfonts/fa-regular-400.woff2') {
+    if (requestUrl === 'nomad://assets/webfonts/fa-regular-400.woff2') {
       return cb(
         200,
         'OK',
@@ -233,7 +233,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/fonts/fa-regular-400.woff2')
       );
     }
-    if (requestUrl === 'beaker://assets/webfonts/fa-regular-400.woff') {
+    if (requestUrl === 'nomad://assets/webfonts/fa-regular-400.woff') {
       return cb(
         200,
         'OK',
@@ -241,7 +241,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/fonts/fa-regular-400.woff')
       );
     }
-    if (requestUrl === 'beaker://assets/webfonts/fa-regular-400.svg') {
+    if (requestUrl === 'nomad://assets/webfonts/fa-regular-400.svg') {
       return cb(
         200,
         'OK',
@@ -249,7 +249,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/fonts/fa-regular-400.svg')
       );
     }
-    if (requestUrl === 'beaker://assets/webfonts/fa-solid-900.woff2') {
+    if (requestUrl === 'nomad://assets/webfonts/fa-solid-900.woff2') {
       return cb(
         200,
         'OK',
@@ -257,7 +257,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/fonts/fa-solid-900.woff2')
       );
     }
-    if (requestUrl === 'beaker://assets/webfonts/fa-solid-900.woff') {
+    if (requestUrl === 'nomad://assets/webfonts/fa-solid-900.woff') {
       return cb(
         200,
         'OK',
@@ -265,7 +265,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/fonts/fa-solid-900.woff')
       );
     }
-    if (requestUrl === 'beaker://assets/webfonts/fa-solid-900.svg') {
+    if (requestUrl === 'nomad://assets/webfonts/fa-solid-900.svg') {
       return cb(
         200,
         'OK',
@@ -273,7 +273,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/fonts/fa-solid-900.svg')
       );
     }
-    if (requestUrl === 'beaker://assets/webfonts/fa-brands-400.woff2') {
+    if (requestUrl === 'nomad://assets/webfonts/fa-brands-400.woff2') {
       return cb(
         200,
         'OK',
@@ -281,7 +281,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/fonts/fa-brands-400.woff2')
       );
     }
-    if (requestUrl === 'beaker://assets/webfonts/fa-brands-400.woff') {
+    if (requestUrl === 'nomad://assets/webfonts/fa-brands-400.woff') {
       return cb(
         200,
         'OK',
@@ -289,7 +289,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/fonts/fa-brands-400.woff')
       );
     }
-    if (requestUrl === 'beaker://assets/webfonts/fa-brands-400.svg') {
+    if (requestUrl === 'nomad://assets/webfonts/fa-brands-400.svg') {
       return cb(
         200,
         'OK',
@@ -297,7 +297,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/fonts/fa-brands-400.svg')
       );
     }
-    if (requestUrl === 'beaker://assets/font-photon-entypo') {
+    if (requestUrl === 'nomad://assets/font-photon-entypo') {
       return cb(
         200,
         'OK',
@@ -305,7 +305,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/fonts/photon-entypo.woff')
       );
     }
-    if (requestUrl === 'beaker://assets/font-source-sans-pro') {
+    if (requestUrl === 'nomad://assets/font-source-sans-pro') {
       return cb(
         200,
         'OK',
@@ -313,7 +313,7 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/fonts/source-sans-pro.woff2')
       );
     }
-    if (requestUrl === 'beaker://assets/font-source-sans-pro-le') {
+    if (requestUrl === 'nomad://assets/font-source-sans-pro-le') {
       return cb(
         200,
         'OK',
@@ -321,28 +321,28 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/fonts/source-sans-pro-le.woff2')
       );
     }
-    if (requestUrl === 'beaker://assets/logo-black.svg') {
+    if (requestUrl === 'nomad://assets/logo-black.svg') {
       return cb(200, 'OK', 'image/svg+xml', path.join(__dirname, 'assets/img/logo-black.svg'));
     }
-    if (requestUrl === 'beaker://assets/spinner.gif') {
+    if (requestUrl === 'nomad://assets/spinner.gif') {
       return cb(200, 'OK', 'image/gif', path.join(__dirname, 'assets/img/spinner.gif'));
     }
-    if (requestUrl.startsWith('beaker://assets/logo2')) {
+    if (requestUrl.startsWith('nomad://assets/logo2')) {
       return cb(200, 'OK', 'image/png', path.join(__dirname, 'assets/img/logo2.png'));
     }
-    if (requestUrl.startsWith('beaker://assets/logo-ondark')) {
+    if (requestUrl.startsWith('nomad://assets/logo-ondark')) {
       return cb(200, 'OK', 'image/png', path.join(__dirname, 'assets/img/logo-ondark.png'));
     }
-    if (requestUrl.startsWith('beaker://assets/logo')) {
+    if (requestUrl.startsWith('nomad://assets/logo')) {
       return cb(200, 'OK', 'image/png', path.join(__dirname, 'assets/img/logo.png'));
     }
-    if (requestUrl.startsWith('beaker://assets/default-user-thumb')) {
+    if (requestUrl.startsWith('nomad://assets/default-user-thumb')) {
       return cb(200, 'OK', 'image/jpeg', path.join(__dirname, 'assets/img/default-user-thumb.jpg'));
     }
-    if (requestUrl.startsWith('beaker://assets/default-thumb')) {
+    if (requestUrl.startsWith('nomad://assets/default-thumb')) {
       return cb(200, 'OK', 'image/jpeg', path.join(__dirname, 'assets/img/default-thumb.jpg'));
     }
-    if (requestUrl.startsWith('beaker://assets/default-frontend-thumb')) {
+    if (requestUrl.startsWith('nomad://assets/default-frontend-thumb')) {
       return cb(
         200,
         'OK',
@@ -350,19 +350,19 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/img/default-frontend-thumb.jpg')
       );
     }
-    if (requestUrl.startsWith('beaker://assets/search-icon-large')) {
+    if (requestUrl.startsWith('nomad://assets/search-icon-large')) {
       return cb(200, 'OK', 'image/jpeg', path.join(__dirname, 'assets/img/search-icon-large.png'));
     }
-    if (requestUrl.startsWith('beaker://assets/favicons/')) {
+    if (requestUrl.startsWith('nomad://assets/favicons/')) {
       return serveICO(
         path.join(
           __dirname,
           'assets/favicons',
-          requestUrl.slice('beaker://assets/favicons/'.length)
+          requestUrl.slice('nomad://assets/favicons/'.length)
         )
       );
     }
-    if (requestUrl.startsWith('beaker://assets/search-engines/')) {
+    if (requestUrl.startsWith('nomad://assets/search-engines/')) {
       return cb(
         200,
         'OK',
@@ -370,31 +370,31 @@ async function beakerProtocol(request) {
         path.join(
           __dirname,
           'assets/img/search-engines',
-          requestUrl.slice('beaker://assets/search-engines/'.length)
+          requestUrl.slice('nomad://assets/search-engines/'.length)
         )
       );
     }
-    if (requestUrl.startsWith('beaker://assets/img/templates/')) {
-      let imgPath = requestUrl.slice('beaker://assets/img/templates/'.length);
+    if (requestUrl.startsWith('nomad://assets/img/templates/')) {
+      let imgPath = requestUrl.slice('nomad://assets/img/templates/'.length);
       return cb(200, 'OK', 'image/png', path.join(__dirname, `assets/img/templates/${imgPath}`));
     }
-    if (requestUrl.startsWith('beaker://assets/img/frontends/')) {
-      let imgPath = requestUrl.slice('beaker://assets/img/frontends/'.length);
+    if (requestUrl.startsWith('nomad://assets/img/frontends/')) {
+      let imgPath = requestUrl.slice('nomad://assets/img/frontends/'.length);
       return cb(200, 'OK', 'image/png', path.join(__dirname, `assets/img/frontends/${imgPath}`));
     }
-    if (requestUrl.startsWith('beaker://assets/img/drive-types/')) {
-      let imgPath = requestUrl.slice('beaker://assets/img/drive-types/'.length);
+    if (requestUrl.startsWith('nomad://assets/img/drive-types/')) {
+      let imgPath = requestUrl.slice('nomad://assets/img/drive-types/'.length);
       return cb(200, 'OK', 'image/png', path.join(__dirname, `assets/img/drive-types/${imgPath}`));
     }
 
     // userland
-    if (requestUrl === 'beaker://app-stdlib' || requestUrl.startsWith('beaker://app-stdlib/')) {
+    if (requestUrl === 'nomad://app-stdlib' || requestUrl.startsWith('nomad://app-stdlib/')) {
       return serveAppAsset(requestUrl, path.join(__dirname, 'userland', 'app-stdlib'), cb);
     }
-    if (requestUrl === 'beaker://diff' || requestUrl.startsWith('beaker://diff/')) {
+    if (requestUrl === 'nomad://diff' || requestUrl.startsWith('nomad://diff/')) {
       return serveAppAsset(requestUrl, path.join(__dirname, 'userland', 'diff'), cb);
     }
-    if (requestUrl === 'beaker://library' || requestUrl.startsWith('beaker://library/')) {
+    if (requestUrl === 'nomad://library' || requestUrl.startsWith('nomad://library/')) {
       return serveAppAsset(
         requestUrl,
         path.join(__dirname, 'userland', 'library'),
@@ -403,13 +403,13 @@ async function beakerProtocol(request) {
         { fallbackToIndexHTML: true }
       );
     }
-    if (requestUrl === 'beaker://drive-view' || requestUrl.startsWith('beaker://drive-view/')) {
+    if (requestUrl === 'nomad://drive-view' || requestUrl.startsWith('nomad://drive-view/')) {
       return serveAppAsset(requestUrl, path.join(__dirname, 'userland', 'drive-view'), cb);
     }
-    if (requestUrl === 'beaker://cmd-pkg' || requestUrl.startsWith('beaker://cmd-pkg/')) {
+    if (requestUrl === 'nomad://cmd-pkg' || requestUrl.startsWith('nomad://cmd-pkg/')) {
       return serveAppAsset(requestUrl, path.join(__dirname, 'userland', 'cmd-pkg'), cb);
     }
-    if (requestUrl === 'beaker://site-info' || requestUrl.startsWith('beaker://site-info/')) {
+    if (requestUrl === 'nomad://site-info' || requestUrl.startsWith('nomad://site-info/')) {
       return serveAppAsset(
         requestUrl,
         path.join(__dirname, 'userland', 'site-info'),
@@ -418,7 +418,7 @@ async function beakerProtocol(request) {
         { fallbackToIndexHTML: true }
       );
     }
-    if (requestUrl === 'beaker://setup' || requestUrl.startsWith('beaker://setup/')) {
+    if (requestUrl === 'nomad://setup' || requestUrl.startsWith('nomad://setup/')) {
       return serveAppAsset(
         requestUrl,
         path.join(__dirname, 'userland', 'setup'),
@@ -427,7 +427,7 @@ async function beakerProtocol(request) {
         { fallbackToIndexHTML: true }
       );
     }
-    if (requestUrl === 'beaker://init' || requestUrl.startsWith('beaker://init/')) {
+    if (requestUrl === 'nomad://init' || requestUrl.startsWith('nomad://init/')) {
       return serveAppAsset(
         requestUrl,
         path.join(__dirname, 'userland', 'init'),
@@ -436,7 +436,7 @@ async function beakerProtocol(request) {
         { fallbackToIndexHTML: true }
       );
     }
-    if (requestUrl === 'beaker://editor' || requestUrl.startsWith('beaker://editor/')) {
+    if (requestUrl === 'nomad://editor' || requestUrl.startsWith('nomad://editor/')) {
       return serveAppAsset(
         requestUrl,
         path.join(__dirname, 'userland', 'editor'),
@@ -445,7 +445,7 @@ async function beakerProtocol(request) {
         { CSP: EDITOR_CSP }
       );
     }
-    if (requestUrl === 'beaker://explorer' || requestUrl.startsWith('beaker://explorer/')) {
+    if (requestUrl === 'nomad://explorer' || requestUrl.startsWith('nomad://explorer/')) {
       return serveAppAsset(
         requestUrl,
         path.join(__dirname, 'userland', 'explorer'),
@@ -455,8 +455,8 @@ async function beakerProtocol(request) {
       );
     }
     if (
-      requestUrl === 'beaker://hypercore-tools' ||
-      requestUrl.startsWith('beaker://hypercore-tools/')
+      requestUrl === 'nomad://hypercore-tools' ||
+      requestUrl.startsWith('nomad://hypercore-tools/')
     ) {
       return serveAppAsset(
         requestUrl,
@@ -466,22 +466,22 @@ async function beakerProtocol(request) {
         { fallbackToIndexHTML: true }
       );
     }
-    if (requestUrl === 'beaker://webterm' || requestUrl.startsWith('beaker://webterm/')) {
+    if (requestUrl === 'nomad://webterm' || requestUrl.startsWith('nomad://webterm/')) {
       return serveAppAsset(requestUrl, path.join(__dirname, 'userland', 'webterm'), cb, {
         fallbackToIndexHTML: true,
         CSP: SIDEBAR_CSP,
       });
     }
-    if (requestUrl === 'beaker://desktop' || requestUrl.startsWith('beaker://desktop/')) {
+    if (requestUrl === 'nomad://desktop' || requestUrl.startsWith('nomad://desktop/')) {
       return serveAppAsset(requestUrl, path.join(__dirname, 'userland', 'desktop'), cb, {
-        CSP: BEAKER_APP_CSP,
+        CSP: NOMAD_APP_CSP,
         fallbackToIndexHTML: true,
       });
     }
-    if (requestUrl === 'beaker://history' || requestUrl.startsWith('beaker://history/')) {
+    if (requestUrl === 'nomad://history' || requestUrl.startsWith('nomad://history/')) {
       return serveAppAsset(requestUrl, path.join(__dirname, 'userland', 'history'), cb);
     }
-    if (requestUrl === 'beaker://reader' || requestUrl.startsWith('beaker://reader/')) {
+    if (requestUrl === 'nomad://reader' || requestUrl.startsWith('nomad://reader/')) {
       return serveAppAsset(
         requestUrl,
         path.join(__dirname, 'userland', 'reader'),
@@ -490,14 +490,14 @@ async function beakerProtocol(request) {
         { fallbackToIndexHTML: true }
       );
     }
-    if (requestUrl === 'beaker://settings' || requestUrl.startsWith('beaker://settings/')) {
+    if (requestUrl === 'nomad://settings' || requestUrl.startsWith('nomad://settings/')) {
       return serveAppAsset(requestUrl, path.join(__dirname, 'userland', 'settings'), cb);
     }
-    if (requestUrl.startsWith('beaker://assets/img/onboarding/')) {
-      let imgPath = requestUrl.slice('beaker://assets/img/onboarding/'.length);
+    if (requestUrl.startsWith('nomad://assets/img/onboarding/')) {
+      let imgPath = requestUrl.slice('nomad://assets/img/onboarding/'.length);
       return cb(200, 'OK', 'image/png', path.join(__dirname, `assets/img/onboarding/${imgPath}`));
     }
-    if (requestUrl === 'beaker://assets/monaco.js') {
+    if (requestUrl === 'nomad://assets/monaco.js') {
       return cb(
         200,
         'OK',
@@ -505,8 +505,8 @@ async function beakerProtocol(request) {
         path.join(__dirname, 'assets/js/editor/monaco.js')
       );
     }
-    if (requestUrl.startsWith('beaker://assets/vs/') && requestUrl.endsWith('.js')) {
-      let filePath = requestUrl.slice('beaker://assets/vs/'.length);
+    if (requestUrl.startsWith('nomad://assets/vs/') && requestUrl.endsWith('.js')) {
+      let filePath = requestUrl.slice('nomad://assets/vs/'.length);
       return cb(
         200,
         'OK',
@@ -514,8 +514,8 @@ async function beakerProtocol(request) {
         path.join(__dirname, `assets/js/editor/vs/${filePath}`)
       );
     }
-    if (requestUrl.startsWith('beaker://assets/vs/') && requestUrl.endsWith('.css')) {
-      let filePath = requestUrl.slice('beaker://assets/vs/'.length);
+    if (requestUrl.startsWith('nomad://assets/vs/') && requestUrl.endsWith('.css')) {
+      let filePath = requestUrl.slice('nomad://assets/vs/'.length);
       return cb(
         200,
         'OK',
@@ -523,19 +523,19 @@ async function beakerProtocol(request) {
         path.join(__dirname, `assets/js/editor/vs/${filePath}`)
       );
     }
-    if (requestUrl.startsWith('beaker://assets/vs/') && requestUrl.endsWith('.ttf')) {
-      let filePath = requestUrl.slice('beaker://assets/vs/'.length);
+    if (requestUrl.startsWith('nomad://assets/vs/') && requestUrl.endsWith('.ttf')) {
+      let filePath = requestUrl.slice('nomad://assets/vs/'.length);
       return cb(200, 'OK', 'font/ttf', path.join(__dirname, `assets/js/editor/vs/${filePath}`));
     }
 
     // debugging
-    if (requestUrl === 'beaker://active-drives/') {
+    if (requestUrl === 'nomad://active-drives/') {
       return cb(200, 'OK', 'text/html; charset=utf-8', drivesDebugPage);
     }
 
     return cb(404, 'Not Found');
   } catch (e) {
-    logger.error('beaker protocol handler error', { url: request.url, err: e });
+    logger.error('nomad protocol handler error', { url: request.url, err: e });
     return new Response(errorPage({ errorCode: 500, errorDescription: 'Internal Error' }), {
       status: 500,
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' },

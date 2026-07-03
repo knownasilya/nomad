@@ -49,7 +49,7 @@ class BrowserMenu extends LitElement {
     }
 
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
         ${autoUpdaterEl}
 
@@ -73,23 +73,23 @@ class BrowserMenu extends LitElement {
         </div>
 
         <div class="section">
-          <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'beaker://library')}>
-            <img class="favicon" src="asset:favicon:beaker://library/" />
+          <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'nomad://library')}>
+            <img class="favicon" src="asset:favicon:nomad://library/" />
             <span class="label">My Library</span>
           </div>
 
-          <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'beaker://history')}>
-            <img class="favicon" src="asset:favicon:beaker://history/" />
+          <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'nomad://history')}>
+            <img class="favicon" src="asset:favicon:nomad://history/" />
             <span class="label">History</span>
           </div>
 
-          <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'beaker://reader')}>
-            <img class="favicon" src="asset:favicon:beaker://reader/" />
+          <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'nomad://reader')}>
+            <img class="favicon" src="asset:favicon:nomad://reader/" />
             <span class="label">Reader</span>
           </div>
 
-          <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'beaker://settings')}>
-            <img class="favicon" src="asset:favicon:beaker://settings/" />
+          <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'nomad://settings')}>
+            <img class="favicon" src="asset:favicon:nomad://settings/" />
             <span class="label">Settings</span>
           </div>
         </div>
@@ -166,7 +166,7 @@ class BrowserMenu extends LitElement {
     const url = await bg.fs.createDrive();
     bg.beakerBrowser.openUrl(url, {
       setActive: true,
-      addedPaneUrls: ['beaker://editor/'],
+      addedPaneUrls: ['nomad://editor/'],
     });
   }
 

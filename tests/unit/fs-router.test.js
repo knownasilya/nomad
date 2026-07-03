@@ -1,4 +1,4 @@
-// Tests for the beaker.fs backend router (app/bg/web-apis/bg/fs-router.js).
+// Tests for the nomad.fs backend router (app/bg/web-apis/bg/fs-router.js).
 //
 // Regression cover for the autobase-port breakage where `hyper://private/` (a root drive the Vault
 // migration converted to an Autobase) was mis-routed to the Hyperdrive backend and hung ~60s:

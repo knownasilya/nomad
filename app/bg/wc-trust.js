@@ -4,11 +4,11 @@
  * This is a slightly bizarre system that's written in reaction to some electron limitations.
  *
  * We need a way to determine if a given webContents is currently viewing a "trusted interface."
- * Anything served by beaker:// is trusted, as is certain hyper:// resources which have a trusted
+ * Anything served by nomad:// is trusted, as is certain hyper:// resources which have a trusted
  * interface injected as the response (ie when it's not HTML and there's no custom frontend).
  *
  * The way we determine whether a trusted interface was served by hyper:// is by examining the
- * response headers, which Nomad has control over for hyper:// requests. If 'Beaker-Trusted-Interface'
+ * response headers, which Nomad has control over for hyper:// requests. If 'Nomad-Trusted-Interface'
  * is present, then we know to mark the WC as viewing a trusted interface.
  *
  * This knowledge needs to be tracked by each specific WC because there's the possibility that
@@ -19,7 +19,7 @@
  * and noting the target URL. When the target URL is loaded, we find the WC with "unknown" trust
  * and the same target URL and then update the trust-rating accordingly.
  *
- * If a WC is trusted, it can be treated as beaker's internal code and therefore receive its
+ * If a WC is trusted, it can be treated as nomad's internal code and therefore receive its
  * permissions.
  *
  * NOTES
@@ -71,11 +71,11 @@ export function onWebRequestCompleted(details) {
     if (!wcInfo) {
       return;
     }
-    if (details.url.startsWith('beaker://')) {
+    if (details.url.startsWith('nomad://')) {
       wcInfo.trust = TRUST.TRUSTED;
     } else if (
       isHyperOrPearUrl(details.url) &&
-      details.responseHeaders['Beaker-Trusted-Interface']
+      details.responseHeaders['Nomad-Trusted-Interface']
     ) {
       wcInfo.trust = TRUST.TRUSTED;
     } else {
@@ -97,11 +97,11 @@ function trackWc(wc) {
       wcInfos[id].trust = TRUST.UNKNOWN;
     }
   });
-  // session.webRequest.onCompleted does not fire for custom protocols (beaker://).
-  // Set trust directly on navigation commit for beaker:// pages.
+  // session.webRequest.onCompleted does not fire for custom protocols (nomad://).
+  // Set trust directly on navigation commit for nomad:// pages.
   // For hyper:// pages, trust is set directly by the protocol handler (see protocols/hyper.js).
   wc.on('did-navigate', (e, url) => {
-    if (wcInfos[id] && wcInfos[id].trust === TRUST.UNKNOWN && url.startsWith('beaker://')) {
+    if (wcInfos[id] && wcInfos[id].trust === TRUST.UNKNOWN && url.startsWith('nomad://')) {
       wcInfos[id].trust = TRUST.TRUSTED;
     }
   });

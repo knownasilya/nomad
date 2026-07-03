@@ -1,6 +1,6 @@
 import { session } from 'electron';
 import * as logLib from '../logger';
-import * as beakerProtocol from './beaker';
+import * as nomadProtocol from './nomad';
 import * as assetProtocol from './asset';
 import * as hyperProtocol from './hyper';
 
@@ -10,7 +10,7 @@ const logger = logLib.child({ category: 'browser', subcategory: 'protocols' });
 const registered = new Set();
 
 /**
- * Register beaker://, asset://, and hyper:// on a non-default session partition.
+ * Register nomad://, asset://, and hyper:// on a non-default session partition.
  * Safe to call multiple times for the same partition (idempotent).
  * @param {string} partition  e.g. 'persist:space-2'
  */
@@ -19,14 +19,14 @@ export function registerForPartition(partition) {
   const sess = session.fromPartition(partition);
   // Register each scheme independently so a failure in one doesn't prevent the
   // others — most importantly, a throw must never leave a partition marked as
-  // registered (poisoning the Set) while beaker:// is actually unhandled, which
+  // registered (poisoning the Set) while nomad:// is actually unhandled, which
   // strands the session's tabs on ERR_UNKNOWN_URL_SCHEME.
-  let beakerOk = false;
+  let nomadOk = false;
   try {
-    beakerProtocol.register(sess.protocol);
-    beakerOk = true;
+    nomadProtocol.register(sess.protocol);
+    nomadOk = true;
   } catch (e) {
-    logger.error('Failed to register beaker:// for partition', { partition, err: e });
+    logger.error('Failed to register nomad:// for partition', { partition, err: e });
   }
   try {
     assetProtocol.register(sess.protocol);
@@ -38,8 +38,8 @@ export function registerForPartition(partition) {
   } catch (e) {
     logger.error('Failed to register hyper:// for partition', { partition, err: e });
   }
-  // Only consider the partition done once beaker:// (the one tabs depend on for
+  // Only consider the partition done once nomad:// (the one tabs depend on for
   // their own assets) is actually handled. Otherwise leave it out of the Set so
   // a later call can retry.
-  if (beakerOk) registered.add(partition);
+  if (nomadOk) registered.add(partition);
 }

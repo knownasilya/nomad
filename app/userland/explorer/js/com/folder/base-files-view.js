@@ -103,7 +103,7 @@ export class BaseFilesView extends LitElement {
       true
     );
     return html`
-      <link rel="stylesheet" href="beaker://explorer/css/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://explorer/css/font-awesome.css" />
       <div
         class="container"
         @click=${this.onClickContainer}

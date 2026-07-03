@@ -1,12 +1,12 @@
 import {
   LitElement,
   html,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import { repeat } from 'beaker://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
-import { writeToClipboard } from 'beaker://app-stdlib/js/clipboard.js';
-import { emit } from 'beaker://app-stdlib/js/dom.js';
-import * as toast from 'beaker://app-stdlib/js/com/toast.js';
-import { EditBookmarkPopup } from 'beaker://app-stdlib/js/com/popups/edit-bookmark.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
+import { writeToClipboard } from 'nomad://app-stdlib/js/clipboard.js';
+import { emit } from 'nomad://app-stdlib/js/dom.js';
+import * as toast from 'nomad://app-stdlib/js/com/toast.js';
+import { EditBookmarkPopup } from 'nomad://app-stdlib/js/com/popups/edit-bookmark.js';
 import bookmarksCSS from '../../css/views/bookmarks.css.js';
 
 export class BookmarksView extends LitElement {
@@ -35,7 +35,7 @@ export class BookmarksView extends LitElement {
   }
 
   async load() {
-    var bookmarks = await beaker.bookmarks.list();
+    var bookmarks = await nomad.bookmarks.list();
     bookmarks.sort((a, b) => a.title.localeCompare(b.title));
     this.bookmarks = bookmarks;
   }
@@ -69,7 +69,7 @@ export class BookmarksView extends LitElement {
       fns[id] = items[i].click;
       delete items[i].click;
     }
-    var choice = await beaker.browser.showContextMenu(items);
+    var choice = await nomad.browser.showContextMenu(items);
     if (fns[choice]) fns[choice]();
   }
 
@@ -87,7 +87,7 @@ export class BookmarksView extends LitElement {
     }
     const isCard = this.viewMode === 'card';
     return html`
-      <link rel="stylesheet" href="beaker://app-stdlib/css/fontawesome.css" />
+      <link rel="stylesheet" href="nomad://app-stdlib/css/fontawesome.css" />
       ${bookmarks
         ? html`
             ${!isCard
@@ -166,11 +166,11 @@ export class BookmarksView extends LitElement {
       e.stopPropagation();
     }
     if (bookmark.pinned) {
-      await beaker.bookmarks.add(
+      await nomad.bookmarks.add(
         Object.assign({}, bookmark, { pinned: false })
       );
     } else {
-      await beaker.bookmarks.add(Object.assign({}, bookmark, { pinned: true }));
+      await nomad.bookmarks.add(Object.assign({}, bookmark, { pinned: true }));
     }
     this.load();
     emit(this, 'update-pins');
@@ -187,7 +187,7 @@ export class BookmarksView extends LitElement {
 
   async onClickRemove(bookmark) {
     if (!confirm('Are you sure?')) return;
-    await beaker.bookmarks.remove(bookmark.href);
+    await nomad.bookmarks.remove(bookmark.href);
     toast.create('Bookmark removed', '', 10e3);
     this.load();
   }

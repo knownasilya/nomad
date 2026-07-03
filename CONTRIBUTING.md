@@ -57,7 +57,7 @@ If you're doing development, `npm run watch` to have assets build automatically.
 
 To debug the background process start electron with the `--inspect` argument pointing to the `app` directory, e.g. `script/node_modules/.bin/electron --inspect app`. You can then attach an external debugger (e.g. Chrome devtools).
 
-To debug the shell window itself (i.e. the beaker browser chrome), press `CmdOrCtrl+alt+shift+I` to open the devtools.
+To debug the shell window itself (i.e. the nomad browser chrome), press `CmdOrCtrl+alt+shift+I` to open the devtools.
 
 To debug a built-in pages (e.g. the Settings or Library pages), press `CmdOrCtrl+shift+I` to open the devtools.
 
@@ -79,6 +79,6 @@ If you have any questions, create an [issue](https://github.com/knownasilya/noma
 
 ### Contributors
 
-Thank you to all the people who have already contributed to Nomad and beaker in the past!
+Thank you to all the people who have already contributed to Nomad and nomad in the past!
 
 <!-- This `CONTRIBUTING.md` is based on @nayafia's template https://github.com/nayafia/contributing-template -->

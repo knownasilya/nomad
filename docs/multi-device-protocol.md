@@ -92,7 +92,7 @@ known Devices at creation time.
 > **not** to Spaces it was merely paired into. The spike shows the fix is a **per-drive device writer key**
 > (a distinct keypair per `(device, drive)`, added via fan-out instead of the single `deviceKey`) — that
 > opens without deadlock; making it fully writable + updating pairing/fan-out on both apps is a follow-up
-> protocol change that needs live-runtime verification. Until then, mobile's `beaker.fs` writes correctly
+> protocol change that needs live-runtime verification. Until then, mobile's `nomad.fs` writes correctly
 > reject on paired-into drives rather than hang.
 
 ## 4. Profile Drives — aggregation, not Autobase (ADR-0007)
@@ -121,7 +121,7 @@ small JSON, or a `blob` for larger content), keyed by path — never in Hyperdri
 metadata. (v1 records *do* carry `metadata.mtime`/`ctime`, but that is filesystem stat, not a place
 for app data.)
 
-- **Bookmarks** — `/bookmarks/<slug>.json`, body `{ type: 'beaker/bookmark', href, title, createdAt }`,
+- **Bookmarks** — `/bookmarks/<slug>.json`, body `{ type: 'nomad/bookmark', href, title, createdAt }`,
   written as an **inline** control record (both apps use `putInline` / `{ inline: true }`).
   The `slug` only needs to be unique+stable (mobile uses `hash(href)` hex); lookups/dedup are by
   `href`, so Devices don't need an identical slug algorithm. (Legacy nomad used empty `/bookmarks/*.goto`

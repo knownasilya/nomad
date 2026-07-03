@@ -117,16 +117,16 @@ class CreateSessionModal extends LitElement {
 
   render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
         <h1 class="title">This site would like to sign in as...</h1>
 
         <form @submit=${this.onSubmit}>
           <div class="user">
-            <beaker-img-fallbacks>
+            <nomad-img-fallbacks>
               <img src="asset:thumb-30:${this.user?.url}" slot="img1" />
-              <img src="beaker://assets/default-user-thumb" slot="img2" />
-            </beaker-img-fallbacks>
+              <img src="nomad://assets/default-user-thumb" slot="img2" />
+            </nomad-img-fallbacks>
             <div class="title">
               <span>${this.user?.title || 'Anonymous'}</span>
             </div>

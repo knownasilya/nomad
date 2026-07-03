@@ -23,8 +23,8 @@ class InfoSettingsView extends LitElement {
   }
 
   async load() {
-    this.browserInfo = await beaker.browser.getInfo();
-    this.daemonStatus = await beaker.browser.getDaemonStatus();
+    this.browserInfo = await nomad.browser.getInfo();
+    this.daemonStatus = await nomad.browser.getDaemonStatus();
     console.log('loaded', {
       browserInfo: this.browserInfo,
       daemonStatus: this.daemonStatus,
@@ -38,7 +38,7 @@ class InfoSettingsView extends LitElement {
   render() {
     if (!this.browserInfo) return html``;
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="section">
         <h2 id="information" class="subtitle-heading">About Nomad</h2>
         <p>

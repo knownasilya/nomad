@@ -5,7 +5,7 @@ import * as filesystem from '../../filesystem/index';
 // =
 
 /**
- * @typedef {Object} BeakerFilesystemPublicAPIRootRecord
+ * @typedef {Object} NomadFilesystemPublicAPIRootRecord
  * @prop {string} url
  */
 
@@ -14,10 +14,10 @@ import * as filesystem from '../../filesystem/index';
 
 export default {
   /**
-   * @returns {BeakerFilesystemPublicAPIRootRecord}
+   * @returns {NomadFilesystemPublicAPIRootRecord}
    */
   get() {
-    if (!this.sender.getURL().startsWith('beaker:')) {
+    if (!this.sender.getURL().startsWith('nomad:')) {
       throw new PermissionsError();
     }
     return {

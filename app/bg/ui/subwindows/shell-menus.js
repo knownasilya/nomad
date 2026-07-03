@@ -43,7 +43,7 @@ export function setup(parentWindow) {
   view.webContents.on('console-message', (e) => {
     console.log('Shell-Menus window says:', e.message);
   });
-  view.webContents.loadURL('beaker://shell-menus/');
+  view.webContents.loadURL('nomad://shell-menus/');
 }
 
 export function destroy(parentWindow) {

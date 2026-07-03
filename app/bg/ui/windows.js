@@ -276,7 +276,7 @@ export function createShellWindow(windowState, createOpts = { dontInitPages: fal
     subwindows[k].setup(win);
   }
   downloads.registerListener(win);
-  win.loadURL('beaker://shell-window');
+  win.loadURL('nomad://shell-window');
   sessionWatcher.watchWindow(win, state);
 
   numActiveWindows++;
@@ -329,13 +329,13 @@ export function createShellWindow(windowState, createOpts = { dontInitPages: fal
       // -prf
       // run setup modal
       // let isTestDriverActive = !!getEnvVar('NOMAD_TEST_DRIVER')
-      // let hasDoneSetup = Number(await sitedataDb.get('beaker://shell-window', 'has_done_setup')) === 1
-      // if (!!getEnvVar('BEAKER_RUN_SETUP_FLOW')) {
+      // let hasDoneSetup = Number(await sitedataDb.get('nomad://shell-window', 'has_done_setup')) === 1
+      // if (!!getEnvVar('NOMAD_RUN_SETUP_FLOW')) {
       //   hasDoneSetup = false
       // }
       // if (!isTestDriverActive && !hasDoneSetup) {
       //   subwindows.modals.create(win.webContents, 'setup')
-      //   await sitedataDb.set('beaker://shell-window', 'has_done_setup', 1)
+      //   await sitedataDb.set('nomad://shell-window', 'has_done_setup', 1)
       // }
     }
   }
@@ -407,9 +407,9 @@ export function restoreLastShellWindow() {
 export function getActiveWindow() {
   // try to pull the `focus`ed window; if there isnt one, fallback to the last created
   var win = BrowserWindow.getFocusedWindow();
-  if (!win || win.webContents.getURL() !== 'beaker://shell-window/') {
+  if (!win || win.webContents.getURL() !== 'nomad://shell-window/') {
     win = BrowserWindow.getAllWindows()
-      .filter((win) => win.webContents.getURL() === 'beaker://shell-window/')
+      .filter((win) => win.webContents.getURL() === 'nomad://shell-window/')
       .pop();
   }
   return win;

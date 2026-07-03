@@ -15,4 +15,4 @@ ADR-0007 chose aggregation *only* because a Profile Drive's URL was already the 
 
 - A third multi-writer shape now coexists with the two from ADR-0006/0007: Autobase for private Root Drives, aggregation for public Profile Drives, and **Autobase for public Blogs**. A reader of the code must not assume "public drive ⇒ aggregation."
 - A Blog is distinct from a Profile Drive: it references a Profile Drive via the feed descriptor's `author.url` for identity, rather than being the identity.
-- Autobase has no cross-drive query: `beaker.hyperdrive.query()` cannot span Blogs (it opens cores as Hyperdrives and fails on an Autobase core). Consumers must read Blogs via `beaker.autobase`, or detect-and-dispatch per drive. See ADR-0009.
+- Autobase has no cross-drive query: `nomad.hyperdrive.query()` cannot span Blogs (it opens cores as Hyperdrives and fails on an Autobase core). Consumers must read Blogs via `nomad.autobase`, or detect-and-dispatch per drive. See ADR-0009.

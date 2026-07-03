@@ -1,10 +1,10 @@
 import {
   LitElement,
   html,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import { findParent } from 'beaker://app-stdlib/js/dom.js';
-import _debounce from 'beaker://app-stdlib/vendor/lodash.debounce.js';
-import moment from 'beaker://app-stdlib/vendor/moment.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import { findParent } from 'nomad://app-stdlib/js/dom.js';
+import _debounce from 'nomad://app-stdlib/vendor/lodash.debounce.js';
+import moment from 'nomad://app-stdlib/vendor/moment.js';
 import mainCSS from '../css/main.css.js';
 
 // how many px from bottom till more is loaded?
@@ -19,8 +19,8 @@ export class HistoryApp extends LitElement {
 
   constructor() {
     super();
-    beaker.panes.setAttachable();
-    beaker.panes.attachToLastActivePane();
+    nomad.panes.setAttachable();
+    nomad.panes.attachToLastActivePane();
 
     this.onUpdateSearchQueryDebounced = _debounce(
       this.onUpdateSearchQuery.bind(this),
@@ -39,14 +39,14 @@ export class HistoryApp extends LitElement {
 
     this.addEventListener('click', (e) => {
       // route navigations to the attached pane if present
-      var attachedPane = beaker.panes.getAttachedPane();
+      var attachedPane = nomad.panes.getAttachedPane();
       if (!attachedPane) return;
       let anchor = findParent(e.path[0], (el) => el.tagName === 'A');
       if (anchor) {
         if (!e.metaKey && anchor.getAttribute('target') !== '_blank') {
           e.stopPropagation();
           e.preventDefault();
-          beaker.panes.navigate(attachedPane.id, anchor.getAttribute('href'));
+          nomad.panes.navigate(attachedPane.id, anchor.getAttribute('href'));
         }
       }
     });
@@ -86,7 +86,7 @@ export class HistoryApp extends LitElement {
       after = moment().subtract(1, 'day').startOf('day');
       before = moment().startOf('day');
     }
-    var rows = await beaker.history.getVisitHistory({
+    var rows = await nomad.history.getVisitHistory({
       before: +before,
       after: +after,
       offset,
@@ -128,7 +128,7 @@ export class HistoryApp extends LitElement {
       >
     `;
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <header>
         <nav>
           ${navItem(false, 'All')} ${navItem(true, 'Recently Closed Tabs')}
@@ -275,7 +275,7 @@ export class HistoryApp extends LitElement {
     if (!confirm('Are you sure?')) return;
     var v = this.visits[i];
     this.visits.splice(i, 1);
-    beaker.history.removeVisit(v.url);
+    nomad.history.removeVisit(v.url);
     this.requestUpdate();
   }
 
@@ -286,14 +286,14 @@ export class HistoryApp extends LitElement {
     // clear all history
     if (period === 'all') {
       this.visits = [];
-      beaker.history.removeAllVisits();
+      nomad.history.removeAllVisits();
       this.requestUpdate();
     } else {
       var threshold = moment().startOf(period).valueOf();
 
       // filter out visits that with a timestamp >= threshold
       this.visits = this.visits.filter((v) => v.ts < threshold);
-      beaker.history.removeVisitsAfter(threshold);
+      nomad.history.removeVisitsAfter(threshold);
 
       // fetch and render more visits if possible
       this.fetchMore();

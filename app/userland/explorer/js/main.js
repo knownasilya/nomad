@@ -52,7 +52,7 @@ export class ExplorerApp extends LitElement {
 
   constructor() {
     super();
-    beaker.panes.setAttachable();
+    nomad.panes.setAttachable();
 
     // location information
     this.driveInfo = undefined;
@@ -75,30 +75,30 @@ export class ExplorerApp extends LitElement {
 
     window.addEventListener('explorer-files-changed', () => this.load());
 
-    beaker.panes.addEventListener('pane-attached', (e) => {
-      this.attachedPane = beaker.panes.getAttachedPane();
+    nomad.panes.addEventListener('pane-attached', (e) => {
+      this.attachedPane = nomad.panes.getAttachedPane();
       if (loc.getUrl() !== this.attachedPane.url) {
         loc.setUrl(this.attachedPane.url);
       }
     });
-    beaker.panes.addEventListener('pane-detached', (e) => {
+    nomad.panes.addEventListener('pane-detached', (e) => {
       this.attachedPane = undefined;
     });
-    beaker.panes.addEventListener('pane-navigated', (e) => {
+    nomad.panes.addEventListener('pane-navigated', (e) => {
       if (loc.getUrl() !== e.detail.url) {
         loc.setUrl(e.detail.url);
       }
     });
     (async () => {
-      this.attachedPane = beaker.panes.getAttachedPane();
+      this.attachedPane = nomad.panes.getAttachedPane();
       if (this.attachedPane) {
         // already attached, drive them
         if (loc.getUrl() && loc.getUrl() !== this.attachedPane.url) {
-          beaker.panes.navigate(this.attachedPane.id, loc.getUrl());
+          nomad.panes.navigate(this.attachedPane.id, loc.getUrl());
         }
       } else {
         // try to attach and then follow their url
-        this.attachedPane = await beaker.panes.attachToLastActivePane();
+        this.attachedPane = await nomad.panes.attachToLastActivePane();
         if (this.attachedPane && loc.getUrl() !== this.attachedPane.url) {
           loc.setUrl(this.attachedPane.url);
           return;
@@ -206,7 +206,7 @@ export class ExplorerApp extends LitElement {
     }
 
     // read location information
-    var drive = beaker.fs.drive(loc.getOrigin());
+    var drive = nomad.fs.drive(loc.getOrigin());
     try {
       this.driveInfo = await this.attempt(
         `Reading drive information (${loc.getOrigin()})`,
@@ -242,7 +242,7 @@ export class ExplorerApp extends LitElement {
       this.inlineMode = Boolean(getGlobalSavedConfig('inline-mode', false));
       this.sortMode = getGlobalSavedConfig('sort-mode', 'name');
       if (!this.watchStream) {
-        let currentDrive = beaker.fs.drive(this.currentDriveInfo.url);
+        let currentDrive = nomad.fs.drive(this.currentDriveInfo.url);
         this.watchStream = currentDrive.watch(this.realPathname);
         var hackSetupTime = Date.now();
         this.watchStream.addEventListener('changed', (e) => {
@@ -298,7 +298,7 @@ export class ExplorerApp extends LitElement {
 
   async readPathAncestry() {
     var ancestry = [];
-    var drive = beaker.fs.drive(loc.getOrigin());
+    var drive = nomad.fs.drive(loc.getOrigin());
     var pathParts = loc.getPath().split('/').filter(Boolean);
     while (pathParts.length) {
       let name = pathParts[pathParts.length - 1];
@@ -317,7 +317,7 @@ export class ExplorerApp extends LitElement {
       if (stat.mount) {
         mount = await this.attempt(
           `Reading site information (${stat.mount.key}) for parent mount at ${path}`,
-          () => beaker.fs.drive(stat.mount.key).getInfo()
+          () => nomad.fs.drive(stat.mount.key).getInfo()
         );
       }
       ancestry.unshift({ name, path, stat, mount });
@@ -345,7 +345,7 @@ export class ExplorerApp extends LitElement {
       if (item.stat.mount) {
         item.mount = await this.attempt(
           `Reading site information (${item.stat.mount.key}) for mounted site at ${item.path}`,
-          () => beaker.fs.drive(item.stat.mount.key).getInfo()
+          () => nomad.fs.drive(item.stat.mount.key).getInfo()
         );
       }
       item.shareUrl = this.getShareUrl(item);
@@ -378,9 +378,9 @@ export class ExplorerApp extends LitElement {
             item.realUrl = item.url;
             item.url = joinPath(loc.getOrigin(), item.path);
             item.shareUrl = this.getShareUrl(item);
-            item.drive = await beaker.fs.drive(item.drive).getInfo();
+            item.drive = await nomad.fs.drive(item.drive).getInfo();
             item.mount = item.mount
-              ? beaker.fs.drive(item.mount).getInfo()
+              ? nomad.fs.drive(item.mount).getInfo()
               : undefined;
             this.setItemIcons(item);
           })
@@ -471,7 +471,7 @@ export class ExplorerApp extends LitElement {
 
   render() {
     return html`
-      <link rel="stylesheet" href="beaker://explorer/css/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://explorer/css/font-awesome.css" />
       <div
         class=${classMap({
           layout: true,
@@ -749,7 +749,7 @@ export class ExplorerApp extends LitElement {
     }
     if (this.attachedPane) {
       if (newWindow) window.open(url);
-      else beaker.panes.navigate(this.attachedPane.id, url);
+      else nomad.panes.navigate(this.attachedPane.id, url);
     } else {
       if (leaveExplorer) {
         if (newWindow) window.open(url);
@@ -826,7 +826,7 @@ export class ExplorerApp extends LitElement {
     var filename = prompt('Enter the name of your new file');
     if (filename) {
       var pathname = joinPath(this.realPathname, filename);
-      var drive = beaker.fs.drive(this.currentDriveInfo.url);
+      var drive = nomad.fs.drive(this.currentDriveInfo.url);
       if (await drive.stat(pathname).catch((e) => false)) {
         toast.create('A file or folder already exists at that name');
         return;
@@ -840,7 +840,7 @@ export class ExplorerApp extends LitElement {
       }
       this.load();
       var url = joinPath(loc.getUrl(), filename);
-      window.open(`beaker://editor/?url=${url}`);
+      window.open(`nomad://editor/?url=${url}`);
     }
   }
 
@@ -849,7 +849,7 @@ export class ExplorerApp extends LitElement {
     var foldername = prompt('Enter the name of your new folder');
     if (foldername) {
       var pathname = joinPath(this.realPathname, foldername);
-      var drive = beaker.fs.drive(this.currentDriveInfo.url);
+      var drive = nomad.fs.drive(this.currentDriveInfo.url);
       try {
         await drive.mkdir(pathname);
         this.load();
@@ -862,11 +862,11 @@ export class ExplorerApp extends LitElement {
 
   async onNewMount(e) {
     if (!this.currentDriveInfo.writable) return;
-    var drive = beaker.fs.drive(this.currentDriveInfo.url);
-    var targetUrl = await beaker.shell.selectDriveDialog({
+    var drive = nomad.fs.drive(this.currentDriveInfo.url);
+    var targetUrl = await nomad.shell.selectDriveDialog({
       title: 'Select a site',
     });
-    var target = beaker.fs.drive(targetUrl);
+    var target = nomad.fs.drive(targetUrl);
     var info = await target.getInfo();
     var name = await getAvailableName(drive, this.realPathname, info.title);
     name = prompt('Enter the mount name', name);
@@ -880,13 +880,13 @@ export class ExplorerApp extends LitElement {
   }
 
   async onForkDrive(e) {
-    var drive = await beaker.fs.forkDrive(this.currentDriveInfo.url);
+    var drive = await nomad.fs.forkDrive(this.currentDriveInfo.url);
     toast.create('Site created');
     loc.setUrl(drive.url);
   }
 
   async onDriveProperties(e) {
-    await beaker.shell.drivePropertiesDialog(this.currentDriveInfo.url);
+    await nomad.shell.drivePropertiesDialog(this.currentDriveInfo.url);
     this.load();
   }
 
@@ -894,7 +894,7 @@ export class ExplorerApp extends LitElement {
     if (!this.currentDriveInfo.writable) return;
     toast.create('Importing...');
     try {
-      var { numImported } = await beaker.shell.importFilesDialog(loc.getUrl());
+      var { numImported } = await nomad.shell.importFilesDialog(loc.getUrl());
       if (numImported > 0) toast.create('Import complete', 'success');
       else toast.destroy();
     } catch (e) {
@@ -907,7 +907,7 @@ export class ExplorerApp extends LitElement {
     if (!this.currentDriveInfo.writable) return;
     toast.create('Importing...');
     try {
-      var { numImported } = await beaker.shell.importFoldersDialog(
+      var { numImported } = await nomad.shell.importFoldersDialog(
         loc.getUrl()
       );
       if (numImported > 0) toast.create('Import complete', 'success');
@@ -924,7 +924,7 @@ export class ExplorerApp extends LitElement {
     );
     toast.create('Exporting...');
     try {
-      var { numExported } = await beaker.shell.exportFilesDialog(urls);
+      var { numExported } = await nomad.shell.exportFilesDialog(urls);
       if (numExported > 0) toast.create('Export complete', 'success');
       else toast.destroy();
     } catch (e) {
@@ -942,7 +942,7 @@ export class ExplorerApp extends LitElement {
         ? joinPath(this.realPathname, oldName)
         : this.realPathname;
       var newPath = oldPath.split('/').slice(0, -1).concat([newName]).join('/');
-      var drive = beaker.fs.drive(this.currentDriveInfo.url);
+      var drive = nomad.fs.drive(this.currentDriveInfo.url);
       try {
         await drive.rename(oldPath, newPath);
       } catch (e) {
@@ -963,7 +963,7 @@ export class ExplorerApp extends LitElement {
   async onDelete(e) {
     if (!this.currentDriveInfo.writable) return;
 
-    var drive = beaker.fs.drive(this.currentDriveInfo.url);
+    var drive = nomad.fs.drive(this.currentDriveInfo.url);
     const del = async (path, stat) => {
       if (stat.mount && stat.mount.key) {
         await drive.unmount(path);
@@ -1023,7 +1023,7 @@ export class ExplorerApp extends LitElement {
   async onUpdateFileMetadata(e) {
     if (!this.currentDriveInfo.writable) return;
     var { newMetadata, deletedKeys } = e.detail;
-    var drive = beaker.fs.drive(this.currentDriveInfo.url);
+    var drive = nomad.fs.drive(this.currentDriveInfo.url);
     try {
       if (this.selection.length) {
         for (let sel of this.selection) {
@@ -1049,8 +1049,8 @@ export class ExplorerApp extends LitElement {
     var items = constructContextMenuItems(this);
     if (
       !useAppMenuAlways &&
-      typeof beaker !== 'undefined' &&
-      typeof beaker.browser !== 'undefined'
+      typeof nomad !== 'undefined' &&
+      typeof nomad.browser !== 'undefined'
     ) {
       let fns = {};
       for (let i = 0; i < items.length; i++) {
@@ -1062,7 +1062,7 @@ export class ExplorerApp extends LitElement {
         delete items[i].icon;
         delete items[i].click;
       }
-      var choice = await beaker.browser.showContextMenu(items, true);
+      var choice = await nomad.browser.showContextMenu(items, true);
       if (fns[choice]) fns[choice]();
     } else {
       return contextMenu.create({
@@ -1072,7 +1072,7 @@ export class ExplorerApp extends LitElement {
         top: e.detail.y > document.body.scrollHeight / 2,
         roomy: false,
         noBorders: true,
-        fontAwesomeCSSUrl: 'beaker://explorer/css/font-awesome.css',
+        fontAwesomeCSSUrl: 'nomad://explorer/css/font-awesome.css',
         style: `padding: 4px 0`,
         items: items.filter((item) => !item.ctxOnly),
       });
@@ -1098,13 +1098,13 @@ export class ExplorerApp extends LitElement {
 
   async doDiff(base) {
     if (this.attachedMode)
-      beaker.browser.gotoUrl(`beaker://diff/?base=${base}`);
-    else window.open(`beaker://diff/?base=${base}`);
+      nomad.browser.gotoUrl(`nomad://diff/?base=${base}`);
+    else window.open(`nomad://diff/?base=${base}`);
   }
 
   async onSelectDrive(e) {
     e.preventDefault();
-    var drive = await beaker.shell.selectDriveDialog();
+    var drive = await nomad.shell.selectDriveDialog();
     loc.setUrl(drive);
   }
 }

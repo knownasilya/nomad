@@ -1,5 +1,5 @@
 // Bridges <script> blocks inside HTML files to Monaco's TypeScript language
-// service so embedded JS gets the same beaker.* + schema autocomplete, hover, and
+// service so embedded JS gets the same nomad.* + schema autocomplete, hover, and
 // signature help as standalone .js files.
 //
 // Monaco's HTML worker handles embedded JS itself and ignores the TS defaults'

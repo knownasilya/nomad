@@ -1,4 +1,4 @@
-/* globals Event beaker */
+/* globals Event nomad */
 
 export function pushUrl(e) {
   // ignore ctrl/cmd+click
@@ -65,7 +65,7 @@ export function adjustWindowHeight(sel) {
     // windows and linux need added height for their title bars
     height += 39;
   }
-  beaker.browser.setWindowDimensions({ height });
+  nomad.browser.setWindowDimensions({ height });
 }
 
 export function emit(name, detail = null) {

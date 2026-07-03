@@ -8,7 +8,7 @@ const CANVAS_HEIGHT = 200;
 // exported api
 // =
 
-export class BeakerEditCoverPhoto extends BasePopup {
+export class NomadEditCoverPhoto extends BasePopup {
   static get properties() {
     return {
       currentImgUrl: { type: String },
@@ -29,12 +29,12 @@ export class BeakerEditCoverPhoto extends BasePopup {
   //
 
   static async create(siteUrl, existingCoverPath) {
-    return BasePopup.create(BeakerEditCoverPhoto, siteUrl, existingCoverPath);
+    return BasePopup.create(NomadEditCoverPhoto, siteUrl, existingCoverPath);
   }
 
   static async runFlow(profiles) {
     var profile = await profiles.me();
-    var drive = beaker.fs.drive(profile.url);
+    var drive = nomad.fs.drive(profile.url);
 
     // find the existing cover
     var existingCoverPath = null;
@@ -48,7 +48,7 @@ export class BeakerEditCoverPhoto extends BasePopup {
     await test('/cover.png');
 
     // run the modal
-    var img = await BeakerEditCoverPhoto.create(profile.url, existingCoverPath);
+    var img = await NomadEditCoverPhoto.create(profile.url, existingCoverPath);
     if (!img) return;
 
     // replace any existing cover
@@ -59,7 +59,7 @@ export class BeakerEditCoverPhoto extends BasePopup {
   }
 
   static destroy() {
-    return BasePopup.destroy('beaker-edit-cover-photo');
+    return BasePopup.destroy('nomad-edit-cover-photo');
   }
 
   // rendering
@@ -132,7 +132,7 @@ export class BeakerEditCoverPhoto extends BasePopup {
     this.dispatchEvent(new CustomEvent('resolve', { detail: this.loadedImg }));
   }
 }
-BeakerEditCoverPhoto.styles = [
+NomadEditCoverPhoto.styles = [
   popupsCSS,
   css`
     img {
@@ -168,4 +168,4 @@ BeakerEditCoverPhoto.styles = [
   `,
 ];
 
-customElements.define('beaker-edit-cover-photo', BeakerEditCoverPhoto);
+customElements.define('nomad-edit-cover-photo', NomadEditCoverPhoto);

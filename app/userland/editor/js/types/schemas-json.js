@@ -78,7 +78,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into beaker.ai — inline config or a pointer hyper:// URL",
+            "description": "Manifest: opts the drive into nomad.ai — inline config or a pointer hyper:// URL",
             "oneOf": [
               {
                 "type": "string",
@@ -191,7 +191,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into beaker.ai — inline config or a pointer hyper:// URL",
+            "description": "Manifest: opts the drive into nomad.ai — inline config or a pointer hyper:// URL",
             "oneOf": [
               {
                 "type": "string",
@@ -330,7 +330,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into beaker.ai — inline config or a pointer hyper:// URL",
+            "description": "Manifest: opts the drive into nomad.ai — inline config or a pointer hyper:// URL",
             "oneOf": [
               {
                 "type": "string",
@@ -448,7 +448,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into beaker.ai — inline config or a pointer hyper:// URL",
+            "description": "Manifest: opts the drive into nomad.ai — inline config or a pointer hyper:// URL",
             "oneOf": [
               {
                 "type": "string",
@@ -576,7 +576,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into beaker.ai — inline config or a pointer hyper:// URL",
+            "description": "Manifest: opts the drive into nomad.ai — inline config or a pointer hyper:// URL",
             "oneOf": [
               {
                 "type": "string",
@@ -702,7 +702,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into beaker.ai — inline config or a pointer hyper:// URL",
+            "description": "Manifest: opts the drive into nomad.ai — inline config or a pointer hyper:// URL",
             "oneOf": [
               {
                 "type": "string",
@@ -812,7 +812,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into beaker.ai — inline config or a pointer hyper:// URL",
+            "description": "Manifest: opts the drive into nomad.ai — inline config or a pointer hyper:// URL",
             "oneOf": [
               {
                 "type": "string",
@@ -928,7 +928,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into beaker.ai — inline config or a pointer hyper:// URL",
+            "description": "Manifest: opts the drive into nomad.ai — inline config or a pointer hyper:// URL",
             "oneOf": [
               {
                 "type": "string",
@@ -1046,7 +1046,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into beaker.ai — inline config or a pointer hyper:// URL",
+            "description": "Manifest: opts the drive into nomad.ai — inline config or a pointer hyper:// URL",
             "oneOf": [
               {
                 "type": "string",
@@ -1188,7 +1188,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into beaker.ai — inline config or a pointer hyper:// URL",
+            "description": "Manifest: opts the drive into nomad.ai — inline config or a pointer hyper:// URL",
             "oneOf": [
               {
                 "type": "string",

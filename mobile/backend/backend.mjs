@@ -36,8 +36,8 @@ import {
   RPC_FS_RESULT,
   RPC_SPACE_DRIVES_RESULT,
   RPC_BOOKMARKS_RESULT,
-  RPC_BEAKER,
-  RPC_BEAKER_RESULT,
+  RPC_NOMAD,
+  RPC_NOMAD_RESULT,
   DRIVE_HYPERDRIVE,
   DRIVE_AUTOBASE
 } from '../rpc-commands.mjs'
@@ -79,7 +79,7 @@ function saveVaultKey (key) {
 }
 
 // Namespaces of drives CREATED on this device, keyed by drive key (hex). Lets the in-page
-// beaker.fs bridge reopen an owned drive WRITABLE across restarts (the RN UI passes `ns` for its
+// nomad.fs bridge reopen an owned drive WRITABLE across restarts (the RN UI passes `ns` for its
 // own writes; the WebView bridge only sees a URL, so we resolve `ns` from here). A drive with no
 // entry here is read-only on this device — manager.writeFile throws a clear error for that.
 const drivesNsPath = join(storagePath, 'drives-ns.json')
@@ -123,7 +123,7 @@ const rpc = new RPC(IPC, (req) => {
   else if (req.command === RPC_FS_DELETE) handleFsDelete(msg)
   else if (req.command === RPC_FS_RENAME) handleFsRename(msg)
   else if (req.command === RPC_FS_MKDIR) handleFsMkdir(msg)
-  else if (req.command === RPC_BEAKER) handleBeaker(msg)
+  else if (req.command === RPC_NOMAD) handleNomad(msg)
 })
 
 // --- file-system ops on writable drives you own --------------------------
@@ -174,39 +174,39 @@ async function handleFsMkdir ({ reqId, driveType, key, ns, path }) {
   } catch (err) { fsFail(reqId, err) }
 }
 
-// --- in-page beaker.* bridge ---------------------------------------------
-// Backs the window.beaker shim injected into drive WebViews (see lib/types.ts
-// BEAKER_SHIM). Each call from a page is forwarded here and replied to with a
-// single RPC_BEAKER_RESULT keyed by reqId. Only the surface the blog template
+// --- in-page nomad.* bridge ---------------------------------------------
+// Backs the window.nomad shim injected into drive WebViews (see lib/types.ts
+// NOMAD_SHIM). Each call from a page is forwarded here and replied to with a
+// single RPC_NOMAD_RESULT keyed by reqId. Only the surface the blog template
 // uses is implemented; reads work, writing/writer-management are stubbed until
 // the mobile Vault exposes writable drives.
-async function handleBeaker ({ reqId, api, method, url, args = [] }) {
+async function handleNomad ({ reqId, api, method, url, args = [] }) {
   try {
-    const value = await dispatchBeaker(api, method, url, args)
-    send(RPC_BEAKER_RESULT, { reqId, ok: true, value })
+    const value = await dispatchNomad(api, method, url, args)
+    send(RPC_NOMAD_RESULT, { reqId, ok: true, value })
   } catch (err) {
-    send(RPC_BEAKER_RESULT, { reqId, ok: false, error: err.message || String(err) })
+    send(RPC_NOMAD_RESULT, { reqId, ok: false, error: err.message || String(err) })
   }
 }
 
-// beaker.fs methods NOT yet supported on mobile: per-drive writer management (mobile's writer story
+// nomad.fs methods NOT yet supported on mobile: per-drive writer management (mobile's writer story
 // is Vault device-pairing, not per-drive invites) + Hyperdrive-only / metadata ops. File writes
 // (put/writeFile/del/mkdir) and createDrive ARE supported for drives owned on this device.
-const BEAKER_UNSUPPORTED_METHODS = [
+const NOMAD_UNSUPPORTED_METHODS = [
   'createInvite', 'claimInvite', 'requestAccess', 'approveRequest', 'denyRequest', 'removeWriter',
   'listWriters', 'listRequests', 'forkDrive', 'configure', 'updateMetadata', 'deleteMetadata',
   'mount', 'unmount', 'symlink', 'importFromFilesystem', 'exportToFilesystem', 'exportToDrive',
   'diff', 'loadDrive'
 ]
 
-async function dispatchBeaker (api, method, url, args) {
+async function dispatchNomad (api, method, url, args) {
   if (api === 'markdown' && method === 'toHTML') return manager.bridgeMarkdown(args[0])
   if (api === 'schemas' && method === 'validate') return validateRecord(args[0], args[1])
   if (api === 'hyperdrive' && method === 'readFile') {
     const { key, path } = parseHyperUrl(url)
     return manager.bridgeRead(DRIVE_HYPERDRIVE, key, path)
   }
-  // beaker.fs — the unified API (ADR-0010). All Nomad drives are Autobase. Reads route to the
+  // nomad.fs — the unified API (ADR-0010). All Nomad drives are Autobase. Reads route to the
   // Autobase bridge; writes go through the owned-drive path (ns resolved from drivesNs), so a page
   // can edit a drive this device created. Per-drive writer management is still deferred (see list).
   if (api === 'fs') {
@@ -239,8 +239,8 @@ async function dispatchBeaker (api, method, url, args) {
       return true
     }
 
-    if (BEAKER_UNSUPPORTED_METHODS.includes(method)) {
-      throw new Error(`beaker.fs.${method} isn’t supported on mobile yet`)
+    if (NOMAD_UNSUPPORTED_METHODS.includes(method)) {
+      throw new Error(`nomad.fs.${method} isn’t supported on mobile yet`)
     }
 
     // Reads
@@ -250,12 +250,12 @@ async function dispatchBeaker (api, method, url, args) {
       return (await manager.bridgeListKeys(DRIVE_AUTOBASE, key, path)).map((k) => ({ key: k }))
     }
     // stat/entry not wired yet (bridge has no per-file stat) — reject clearly rather than fake it.
-    throw new Error(`beaker.fs.${method} isn’t supported on mobile yet`)
+    throw new Error(`nomad.fs.${method} isn’t supported on mobile yet`)
   }
-  throw new Error(`Unsupported beaker call: ${api}.${method}`)
+  throw new Error(`Unsupported nomad call: ${api}.${method}`)
 }
 
-// Minimal stand-in for beaker.schemas.validate on mobile (the full Zod schemas
+// Minimal stand-in for nomad.schemas.validate on mobile (the full Zod schemas
 // live in the desktop app). Enough for read-time use; real validation happens on
 // the writing device.
 function validateRecord (type, data) {

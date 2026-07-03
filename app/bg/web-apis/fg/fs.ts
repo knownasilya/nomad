@@ -4,8 +4,8 @@ import fsManifest from '../manifests/external/fs';
 import { fromEventStream } from './event-target';
 import { createStat } from './stat';
 
-// beaker.fs — the unified, backend-agnostic filesystem API (ADR-0010 Phase 2). Mirrors the
-// beaker.hyperdrive / beaker.autobase fg shape: `beaker.fs.drive(url)` returns a scoped handle,
+// nomad.fs — the unified, backend-agnostic filesystem API (ADR-0010 Phase 2). Mirrors the
+// nomad.hyperdrive / nomad.autobase fg shape: `nomad.fs.drive(url)` returns a scoped handle,
 // and top-level helpers take a full hyper:// URL. The bg facade routes each call to the right
 // backend, so userland writes one code path for both Hyperdrives and collaborative drives.
 
@@ -167,10 +167,10 @@ export function setup(rpc) {
   }
 
   // A PLAIN OBJECT (not a callable function): Electron's contextBridge exposes a function as
-  // callable but drops its attached properties, which would make beaker.fs.createDrive/drive/etc.
-  // vanish in userland. Plain object → every method survives the bridge (like beaker.hyperdrive did).
+  // callable but drops its attached properties, which would make nomad.fs.createDrive/drive/etc.
+  // vanish in userland. Plain object → every method survives the bridge (like nomad.hyperdrive did).
   const api: any = {};
-  // `beaker.fs.drive(url)` — scoped handle (parallels the old beaker.hyperdrive.drive).
+  // `nomad.fs.drive(url)` — scoped handle (parallels the old nomad.hyperdrive.drive).
   api.drive = (url) => createScopedAPI(url);
 
   // Top-level helpers that take a full hyper:// URL (no scoped instance needed).

@@ -1,4 +1,4 @@
-import { html } from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
+import { html } from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
 
 export async function ls() {
   var apps = await readInstalled();
@@ -29,7 +29,7 @@ export async function install(opts = {}, name, url) {
   }
   let description = undefined;
   if (url.startsWith('hyper://')) {
-    let info = await beaker.fs.getInfo(url);
+    let info = await nomad.fs.getInfo(url);
     description = info.description;
   }
   apps.push({ url, name, description });
@@ -49,7 +49,7 @@ export async function uninstall(opts = {}, name) {
 }
 
 async function readInstalled() {
-  return beaker.fs
+  return nomad.fs
     .drive('hyper://private/')
     .readFile('/webterm/installed.json')
     .then(JSON.parse)
@@ -57,11 +57,11 @@ async function readInstalled() {
 }
 
 async function saveInstalled(urls) {
-  await beaker.fs
+  await nomad.fs
     .drive('hyper://private/')
     .mkdir('/webterm')
     .catch((e) => undefined);
-  await beaker.fs
+  await nomad.fs
     .drive('hyper://private/')
     .writeFile('/webterm/installed.json', JSON.stringify(urls, null, 2));
 }

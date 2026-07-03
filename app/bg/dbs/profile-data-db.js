@@ -157,7 +157,7 @@ migrations = [
   migration(V13),
   migration(V14),
   migration(V15),
-  migration(V16, { canFail: true }), // set canFail because we made a mistake in the rollout of this update, see https://github.com/beakerbrowser/beaker/issues/934
+  migration(V16, { canFail: true }), // set canFail because we made a mistake in the rollout of this update, see https://github.com/beakerbrowser/nomad/issues/934
   migration(V17),
   migration(V18),
   migration(V19),

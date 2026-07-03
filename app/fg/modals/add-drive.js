@@ -128,7 +128,7 @@ class AddDriveModal extends LitElement {
 
   render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
         <h1 class="title">Add Hyperdrive to My Library</h1>
         <form @submit=${this.onSubmit}>
@@ -141,10 +141,10 @@ class AddDriveModal extends LitElement {
             : this.info
               ? html`
                   <div class="drive">
-                    <beaker-img-fallbacks>
+                    <nomad-img-fallbacks>
                       <img src="${this.info.url}/thumb" slot="img1" />
-                      <img src="beaker://assets/default-thumb" slot="img2" />
-                    </beaker-img-fallbacks>
+                      <img src="nomad://assets/default-thumb" slot="img2" />
+                    </nomad-img-fallbacks>
                     <div class="info">
                       <div class="title"><span>${this.info.title}</span></div>
                       <div class="description">

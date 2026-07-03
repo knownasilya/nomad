@@ -8,7 +8,7 @@ import browserManifest from '../../bg/web-apis/manifests/internal/browser';
 import historyManifest from '../../bg/web-apis/manifests/internal/history';
 import locationBarManifest from '../../bg/rpc-manifests/location-bar';
 const bg = {
-  beakerBrowser: rpc.importAPI('beaker-browser', browserManifest),
+  beakerBrowser: rpc.importAPI('nomad-browser', browserManifest),
   history: rpc.importAPI('history', historyManifest),
   locationBar: rpc.importAPI('background-process-location-bar', locationBarManifest),
 };
@@ -79,13 +79,13 @@ class LocationBar extends LitElement {
           @mouseleave=${this.onMouseleaveSearch}
           @click=${this.onClickSearch}
         >
-          <img src="beaker://assets/search-engines/${label.toLowerCase()}.png" />
+          <img src="nomad://assets/search-engines/${label.toLowerCase()}.png" />
         </a>
       `;
     };
 
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
         <div class="autocomplete-results">
           ${repeat(this.results, (r, i) => this.renderAutocompleteResult(r, i))}
@@ -97,7 +97,7 @@ class LocationBar extends LitElement {
               : html`Search for <strong>${this.query}</strong> with:`}
           </div>
           <div class="list">
-            ${searchLink('Nomad', `beaker://desktop/?q=${encodeURIComponent(this.query)}`)}
+            ${searchLink('Nomad', `nomad://desktop/?q=${encodeURIComponent(this.query)}`)}
             ${searchLink(
               'Startpage',
               `https://startpage.com/do/dsearch?query=${encodeURIComponent(this.query)}`
@@ -122,7 +122,7 @@ class LocationBar extends LitElement {
             )}
             ${searchLink('Reddit', `https://reddit.com/search?q=${encodeURIComponent(this.query)}`)}
             ${
-              '' /* TODO restore at some point searchLink('Nomad', `beaker://search/?q=${encodeURIComponent(this.query)}`) */
+              '' /* TODO restore at some point searchLink('Nomad', `nomad://search/?q=${encodeURIComponent(this.query)}`) */
             }
           </div>
         </div>

@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { useTheme, radius, type Theme } from '../lib/theme'
-import { type DirEntry, CONSOLE_SHIM, BEAKER_SHIM } from '../lib/types'
+import { type DirEntry, CONSOLE_SHIM, NOMAD_SHIM } from '../lib/types'
 import { shortKey } from '../lib/hyperUrl'
 
 export type HyperRender =
@@ -28,7 +28,7 @@ export default function HyperView ({ render, onNavigate, onMessage, registerWebV
   const s = useMemo(() => makeStyles(t), [t])
   const webProps = {
     originWhitelist: ['*'],
-    injectedJavaScriptBeforeContentLoaded: CONSOLE_SHIM + BEAKER_SHIM,
+    injectedJavaScriptBeforeContentLoaded: CONSOLE_SHIM + NOMAD_SHIM,
     webviewDebuggingEnabled: true,
     onMessage: (e: any) => onMessage(e.nativeEvent.data)
   }
@@ -66,7 +66,7 @@ export default function HyperView ({ render, onNavigate, onMessage, registerWebV
       <WebView
         ref={registerWebView}
         {...webProps}
-        injectedJavaScriptBeforeContentLoaded={baseJs + CONSOLE_SHIM + BEAKER_SHIM}
+        injectedJavaScriptBeforeContentLoaded={baseJs + CONSOLE_SHIM + NOMAD_SHIM}
         source={{ html: render.html }}
         style={s.web}
         setSupportMultipleWindows={false}

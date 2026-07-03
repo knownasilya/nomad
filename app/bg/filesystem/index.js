@@ -97,7 +97,7 @@ export async function setup() {
   hyper.dns.setLocal('private', browsingProfile.url);
 
   if (isInitialCreation) {
-    await _driveWriteFile(rootDrive, `/bookmarks/beaker-dev-docs-templates.goto`, '', {
+    await _driveWriteFile(rootDrive, `/bookmarks/nomad-dev-docs-templates.goto`, '', {
       href: 'https://nomad.pages.dev/docs/templates/',
       title: 'Drive Templates',
     });
@@ -115,7 +115,7 @@ export async function setup() {
     });
     await _driveWriteFile(
       rootDrive,
-      `/beaker/pins.json`,
+      `/nomad/pins.json`,
       JSON.stringify(
         [
           'https://nomad.pages.dev/docs/templates/',

@@ -1,11 +1,11 @@
 import {
   LitElement,
   html,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import { repeat } from 'beaker://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
-import { writeToClipboard } from 'beaker://app-stdlib/js/clipboard.js';
-import bytes from 'beaker://app-stdlib/vendor/bytes/index.js';
-import { toNiceDomain } from 'beaker://app-stdlib/js/strings.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
+import { writeToClipboard } from 'nomad://app-stdlib/js/clipboard.js';
+import bytes from 'nomad://app-stdlib/vendor/bytes/index.js';
+import { toNiceDomain } from 'nomad://app-stdlib/js/strings.js';
 import downloadsCSS from '../../css/views/downloads.css.js';
 
 export class DownloadsView extends LitElement {
@@ -28,8 +28,8 @@ export class DownloadsView extends LitElement {
   }
 
   async load() {
-    this.downloads = await beaker.downloads.getDownloads();
-    var dlEvents = beaker.downloads.createEventsStream();
+    this.downloads = await nomad.downloads.getDownloads();
+    var dlEvents = nomad.downloads.createEventsStream();
     dlEvents.addEventListener('updated', this.onUpdateDownload.bind(this));
     dlEvents.addEventListener('done', this.onUpdateDownload.bind(this));
   }
@@ -45,7 +45,7 @@ export class DownloadsView extends LitElement {
       );
     }
     return html`
-      <link rel="stylesheet" href="beaker://app-stdlib/css/fontawesome.css" />
+      <link rel="stylesheet" href="nomad://app-stdlib/css/fontawesome.css" />
       ${downloads
         ? html`
             <div class="downloads">
@@ -190,15 +190,15 @@ export class DownloadsView extends LitElement {
   }
 
   onPauseDownload(download) {
-    beaker.downloads.pause(download.id);
+    nomad.downloads.pause(download.id);
   }
 
   onResumeDownload(download) {
-    beaker.downloads.resume(download.id);
+    nomad.downloads.resume(download.id);
   }
 
   onCancelDownload(download) {
-    beaker.downloads.cancel(download.id);
+    nomad.downloads.cancel(download.id);
   }
 
   onCopyDownloadLink(download) {
@@ -206,21 +206,21 @@ export class DownloadsView extends LitElement {
   }
 
   onShowDownload(download) {
-    beaker.downloads.showInFolder(download.id).catch((err) => {
+    nomad.downloads.showInFolder(download.id).catch((err) => {
       download.fileNotFound = true;
       this.requestUpdate();
     });
   }
 
   onOpenDownload(download) {
-    beaker.downloads.open(download.id).catch((err) => {
+    nomad.downloads.open(download.id).catch((err) => {
       download.fileNotFound = true;
       this.requestUpdate();
     });
   }
 
   onRemoveDownload(download) {
-    beaker.downloads.remove(download.id);
+    nomad.downloads.remove(download.id);
     this.downloads.splice(this.downloads.indexOf(download), 1);
     this.requestUpdate();
   }

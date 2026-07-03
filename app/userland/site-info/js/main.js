@@ -7,7 +7,7 @@ import { toNiceDomain } from '../../app-stdlib/js/strings.js';
 import { writeToClipboard } from '../../app-stdlib/js/clipboard.js';
 import * as contextMenu from '../../app-stdlib/js/com/context-menu.js';
 import * as toast from '../../app-stdlib/js/com/toast.js';
-import * as beakerPermissions from '../../../lib/permissions';
+import * as nomadPermissions from '../../../lib/permissions';
 import mainCSS from '../css/main.css.js';
 import './com/site-perms.js';
 import './com/identity.js';
@@ -45,16 +45,16 @@ class SiteInfoApp extends LitElement {
     return this.url && this.url.startsWith('http:');
   }
 
-  get isBeaker() {
-    return this.url && this.url.startsWith('beaker:');
+  get isNomad() {
+    return this.url && this.url.startsWith('nomad:');
   }
 
   get isRootDrive() {
-    return this.origin === beaker.fs.drive('hyper://private/').url;
+    return this.origin === nomad.fs.drive('hyper://private/').url;
   }
 
   get drive() {
-    return beaker.fs.drive(this.url);
+    return nomad.fs.drive(this.url);
   }
 
   get origin() {
@@ -78,13 +78,13 @@ class SiteInfoApp extends LitElement {
 
     // global event listeners
     window.addEventListener('blur', (e) => {
-      beaker.browser.toggleSiteInfo(false);
+      nomad.browser.toggleSiteInfo(false);
       this.reset();
     });
     window.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        beaker.browser.toggleSiteInfo(false);
+        nomad.browser.toggleSiteInfo(false);
       }
     });
     const globalAnchorClickHandler = (isPopup) => (e) => {
@@ -95,13 +95,13 @@ class SiteInfoApp extends LitElement {
       );
       if (a) {
         var href = a.getAttribute('href');
-        if (href && href !== '#' && !href.startsWith('beaker://')) {
+        if (href && href !== '#' && !href.startsWith('nomad://')) {
           if (isPopup || e.metaKey || a.getAttribute('target') === '_blank') {
-            beaker.browser.openUrl(href, { setActive: true });
+            nomad.browser.openUrl(href, { setActive: true });
           } else {
-            beaker.browser.gotoUrl(href);
+            nomad.browser.gotoUrl(href);
           }
-          beaker.browser.toggleSiteInfo(false);
+          nomad.browser.toggleSiteInfo(false);
         }
       }
     };
@@ -141,8 +141,8 @@ class SiteInfoApp extends LitElement {
         let drive = this.drive;
         [this.info, this.driveCfg, this.forks] = await Promise.all([
           drive.getInfo(),
-          beaker.drives.get(this.url),
-          beaker.drives.getForks(this.url),
+          nomad.drives.get(this.url),
+          nomad.drives.getForks(this.url),
         ]);
       } else {
         this.info = {
@@ -158,8 +158,8 @@ class SiteInfoApp extends LitElement {
       // all sites: get cert and requested perms
       var perms;
       [perms, this.cert] = await Promise.all([
-        beaker.sitedata.getPermissions(this.origin),
-        beaker.browser.getCertificate(this.url),
+        nomad.sitedata.getPermissions(this.origin),
+        nomad.browser.getCertificate(this.url),
       ]);
       if (this.cert && this.cert.type === 'hyperdrive') {
         this.cert.driveInfo = this.info;
@@ -167,11 +167,11 @@ class SiteInfoApp extends LitElement {
       this.requestedPerms = await Promise.all(
         Object.entries(perms).map(async ([perm, value]) => {
           var opts = {};
-          var permParam = beakerPermissions.getPermParam(perm);
+          var permParam = nomadPermissions.getPermParam(perm);
           if (isHyperHashRegex.test(permParam)) {
             let driveInfo;
             try {
-              driveInfo = await beaker.fs
+              driveInfo = await nomad.fs
                 .drive(permParam)
                 .getInfo();
             } catch (e) {
@@ -213,7 +213,7 @@ class SiteInfoApp extends LitElement {
       `;
     }
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div>
         ${this.renderSiteInfo()} ${this.renderNav()} ${this.renderView()}
       </div>
@@ -364,7 +364,7 @@ class SiteInfoApp extends LitElement {
       // adjust height based on rendering
       var height = this.shadowRoot.querySelector('div').clientHeight;
       if (!height) return;
-      beaker.browser.resizeSiteInfo({ height });
+      nomad.browser.resizeSiteInfo({ height });
     }, 50);
   }
 
@@ -378,7 +378,7 @@ class SiteInfoApp extends LitElement {
 
   onChangeUrl(e) {
     this.url = e.detail.url;
-    beaker.browser.gotoUrl(this.url);
+    nomad.browser.gotoUrl(this.url);
     this.load();
   }
 
@@ -388,15 +388,15 @@ class SiteInfoApp extends LitElement {
   }
 
   async onClickDriveProperties(e) {
-    await beaker.shell.drivePropertiesDialog(this.url);
+    await nomad.shell.drivePropertiesDialog(this.url);
     this.load();
   }
 
   async onToggleSaveDrive(e) {
     if (this.driveCfg && this.driveCfg.saved) {
-      await beaker.drives.remove(this.origin);
+      await nomad.drives.remove(this.origin);
     } else {
-      await beaker.drives.configure(this.origin);
+      await nomad.drives.configure(this.origin);
     }
     this.load();
   }
@@ -411,7 +411,7 @@ class SiteInfoApp extends LitElement {
       right: true,
       roomy: false,
       noBorders: true,
-      fontAwesomeCSSUrl: 'beaker://assets/font-awesome.css',
+      fontAwesomeCSSUrl: 'nomad://assets/font-awesome.css',
       style: `padding: 4px 0`,
       items: [
         {
@@ -424,8 +424,8 @@ class SiteInfoApp extends LitElement {
               icon: 'far fa-fw fa-folder-open',
               label: 'Sync with local folder',
               click: async () => {
-                await beaker.folderSync.syncDialog(this.info.url);
-                await beaker.browser.refreshTabState();
+                await nomad.folderSync.syncDialog(this.info.url);
+                await nomad.browser.refreshTabState();
               },
             }
           : undefined,
@@ -439,14 +439,14 @@ class SiteInfoApp extends LitElement {
   }
 
   async onForkDrive() {
-    var drive = await beaker.fs.forkDrive(this.url, {
+    var drive = await nomad.fs.forkDrive(this.url, {
       detached: false,
     });
-    beaker.browser.openUrl(drive.url, { setActive: true });
+    nomad.browser.openUrl(drive.url, { setActive: true });
   }
 
   async onDriveProps() {
-    await beaker.shell.drivePropertiesDialog(this.url);
+    await nomad.shell.drivePropertiesDialog(this.url);
     this.load();
   }
 }

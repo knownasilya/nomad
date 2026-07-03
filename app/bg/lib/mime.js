@@ -12,7 +12,7 @@ const TEXT_TYPE_RE = /^text\/|^application\/(javascript|json)/;
 
 // Version-agnostic mime lookup. mime@1 exposes `.lookup(name)`, mime@2/3 expose
 // `.getType(name)`, and a mis-resolved install can expose neither — which used
-// to throw here and break every serveAppAsset() response (beaker://desktop/ and
+// to throw here and break every serveAppAsset() response (nomad://desktop/ and
 // all userland apps would fall to chrome-error). Resolve across APIs and fall
 // back to a small built-in table for the types the UI actually depends on.
 const FALLBACK_TYPES = {

@@ -24,7 +24,7 @@ class AiSettingsView extends LitElement {
   }
 
   async load() {
-    this.settings = await beaker.browser.getSettings();
+    this.settings = await nomad.browser.getSettings();
     this.requestUpdate();
   }
 
@@ -38,7 +38,7 @@ class AiSettingsView extends LitElement {
     const baseUrl = this.settings.ai_base_url || 'http://localhost:11434/v1';
     const model = this.settings.ai_default_model || '';
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="form-group">
         <h2>
           AI
@@ -49,12 +49,12 @@ class AiSettingsView extends LitElement {
             Nomad can connect to a local OpenAI-compatible inference server
             (e.g. <a href="https://ollama.com" target="_blank">Ollama</a> or
             <a href="https://lmstudio.ai" target="_blank">LM Studio</a>) and
-            expose it to Drive pages via <code>beaker.ai.chat()</code>.
+            expose it to Drive pages via <code>nomad.ai.chat()</code>.
           </p>
           <p>
             The model runtime and downloads are managed by your inference
             server — Nomad only connects to it.
-            <a href="https://nomad.pages.dev/docs/api/apis/beaker.ai/" target="_blank">API documentation</a>
+            <a href="https://nomad.pages.dev/docs/api/apis/nomad.ai/" target="_blank">API documentation</a>
           </p>
         </div>
         <div class="section">
@@ -115,18 +115,18 @@ class AiSettingsView extends LitElement {
   async onTestConnection() {
     this.testStatus = 'testing';
     const baseUrl = this.settings.ai_base_url || 'http://localhost:11434/v1';
-    this.testStatus = await beaker.ai.testConnection(baseUrl);
+    this.testStatus = await nomad.ai.testConnection(baseUrl);
   }
 
   onAiBaseUrlChange(e) {
     this.settings.ai_base_url = e.currentTarget.value;
-    beaker.browser.setSetting('ai_base_url', this.settings.ai_base_url);
+    nomad.browser.setSetting('ai_base_url', this.settings.ai_base_url);
     toast.create('Setting updated');
   }
 
   onAiDefaultModelChange(e) {
     this.settings.ai_default_model = e.currentTarget.value;
-    beaker.browser.setSetting('ai_default_model', this.settings.ai_default_model);
+    nomad.browser.setSetting('ai_default_model', this.settings.ai_default_model);
     toast.create('Setting updated');
   }
 }

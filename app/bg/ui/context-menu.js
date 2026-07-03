@@ -38,10 +38,10 @@ export default function registerContextMenu() {
       var targetTab = tabManager.getActive(targetWindow);
 
       // handle shell UI specially
-      if (props.pageURL == 'beaker://shell-window/') {
+      if (props.pageURL == 'nomad://shell-window/') {
         return;
       }
-      if (props.pageURL.startsWith('beaker://modals')) {
+      if (props.pageURL.startsWith('nomad://modals')) {
         return modals.handleContextMenu(webContents, targetWindow, can, props);
       }
 
@@ -334,7 +334,7 @@ export default function registerContextMenu() {
           click: async (item, win) => {
             if (targetTab)
               targetTab.createOrFocusPaneByOrigin({
-                url: 'beaker://editor/',
+                url: 'nomad://editor/',
                 setActive: true,
               });
           },
@@ -344,7 +344,7 @@ export default function registerContextMenu() {
           click: async (item, win) => {
             if (targetTab)
               targetTab.createOrFocusPaneByOrigin({
-                url: 'beaker://explorer/',
+                url: 'nomad://explorer/',
                 setActive: true,
               });
           },

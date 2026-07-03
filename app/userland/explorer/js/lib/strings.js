@@ -84,7 +84,7 @@ export function makeSafe(str = '') {
     .replace(/"/g, '&quot;');
 }
 
-// search results are returned from beaker's search APIs with nonces wrapping the highlighted sections
+// search results are returned from nomad's search APIs with nonces wrapping the highlighted sections
 // e.g. a search for "test" might return "the {500}test{/500} result"
 // this enables us to safely escape the HTML, then replace the nonces with <strong> tags
 export function highlightSearchResult(str = '', nonce = 0) {

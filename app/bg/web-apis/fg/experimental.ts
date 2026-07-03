@@ -7,7 +7,7 @@ export const setup = function (rpc) {
   const opts = { timeout: false, errors };
 
   // hyperdrive or internal only
-  if (['beaker:', 'hyper:'].includes(window.location.protocol)) {
+  if (['nomad:', 'hyper:'].includes(window.location.protocol)) {
     const globalFetchRPC = rpc.importAPI(
       'experimental-global-fetch',
       experimentalGlobalFetchManifest,

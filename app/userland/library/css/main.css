@@ -1,5 +1,5 @@
-@import 'beaker://app-stdlib/css/common.css';
-@import 'beaker://app-stdlib/css/fontawesome.css';
+@import 'nomad://app-stdlib/css/common.css';
+@import 'nomad://app-stdlib/css/fontawesome.css';
 
 body {
   --lib-search-bg: rgba(0, 0, 0, 0.055);

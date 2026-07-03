@@ -1,10 +1,10 @@
 import {
   LitElement,
   html,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import { repeat } from 'beaker://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
-import { writeToClipboard } from 'beaker://app-stdlib/js/clipboard.js';
-import * as toast from 'beaker://app-stdlib/js/com/toast.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
+import { writeToClipboard } from 'nomad://app-stdlib/js/clipboard.js';
+import * as toast from 'nomad://app-stdlib/js/com/toast.js';
 import { listContacts, removeContact } from '../lib/contacts.js';
 import contactsCSS from '../../css/views/contacts.css.js';
 
@@ -35,7 +35,7 @@ export class ContactsView extends LitElement {
     await Promise.all(
       contacts.map(async (c) => {
         try {
-          let info = await beaker.fs.drive(c.url).getInfo();
+          let info = await nomad.fs.drive(c.url).getInfo();
           if (info) {
             if (!c.title && info.title) c.title = info.title;
             if (typeof info.peers !== 'undefined') c.peers = info.peers;
@@ -72,7 +72,7 @@ export class ContactsView extends LitElement {
       fns[id] = items[i].click;
       delete items[i].click;
     }
-    var choice = await beaker.browser.showContextMenu(items);
+    var choice = await nomad.browser.showContextMenu(items);
     if (fns[choice]) fns[choice]();
   }
 
@@ -91,7 +91,7 @@ export class ContactsView extends LitElement {
     }
     const isCard = this.viewMode === 'card';
     return html`
-      <link rel="stylesheet" href="beaker://app-stdlib/css/fontawesome.css" />
+      <link rel="stylesheet" href="nomad://app-stdlib/css/fontawesome.css" />
       ${contacts
         ? html`
             <div class="${isCard ? 'contacts card-view' : 'contacts'}">

@@ -1,8 +1,8 @@
-// Ambient TypeScript declarations for the global `beaker` API, fed to the Monaco
+// Ambient TypeScript declarations for the global `nomad` API, fed to the Monaco
 // language service via monaco.languages.typescript.*Defaults.addExtraLib().
 //
 // KEEP IN SYNC with the actual API surface. Per ../../../../CLAUDE.md, when a
-// beaker.* method is added or changed, update all three:
+// nomad.* method is added or changed, update all three:
 //   1. nomad.dev/content/docs/api/apis/<api-name>.md
 //   2. NOMAD_API_REFERENCE in app/bg/web-apis/bg/ai.js
 //   3. this file
@@ -10,8 +10,8 @@
 // Authored as a JS module exporting a template-literal string so it bundles with
 // the editor with zero extra build config (no .d.ts asset handling needed).
 
-export const BEAKER_DTS = `
-declare namespace Beaker {
+export const NOMAD_DTS = `
+declare namespace Nomad {
   /** A stat object describing a file or directory in a hyperdrive. */
   interface Stat {
     isFile(): boolean;
@@ -188,7 +188,7 @@ declare namespace Beaker {
     unsaveDrive(url: string): Promise<void>;
     listDrives(opts?: { tag?: string; writable?: boolean }): Promise<DriveInfo[]>;
     drivePropertiesDialog(url: string): Promise<void>;
-    /** Internal (beaker: pages only). */
+    /** Internal (nomad: pages only). */
     importFilesAndFolders?(opts?: object): Promise<any>;
     importFilesDialog?(opts?: object): Promise<any>;
     importFoldersDialog?(opts?: object): Promise<any>;
@@ -264,7 +264,7 @@ declare namespace Beaker {
     unregisterCommand(name: string): void;
   }
 
-  /** Browser-control API (available only on beaker: pages, not hyper:// sites). */
+  /** Browser-control API (available only on nomad: pages, not hyper:// sites). */
   interface Browser {
     openUrl(url: string, opts?: object): Promise<void>;
     gotoUrl(url: string): Promise<void>;
@@ -277,7 +277,7 @@ declare namespace Beaker {
     [method: string]: (...args: any[]) => any;
   }
 
-  /** A filesystem handle scoped to one drive, returned by beaker.fs.drive(url). */
+  /** A filesystem handle scoped to one drive, returned by nomad.fs.drive(url). */
   interface FsDrive {
     readonly url: string;
     getInfo(opts?: object): Promise<DriveInfo>;
@@ -319,7 +319,7 @@ declare namespace Beaker {
    * Unified, backend-agnostic filesystem API over the drive backend — single-writer
    * Hyperdrives AND multi-writer Autobase collaborative drives. It detects the backend for a
    * hyper:// URL and dispatches, so one code path works for any drive (no more "try hyperdrive,
-   * fall back to autobase"). Use beaker.fs.drive(url) for a scoped handle, or the url-first
+   * fall back to autobase"). Use nomad.fs.drive(url) for a scoped handle, or the url-first
    * helpers below. stat carries real mtime/ctime/size; get(..., 'json') parses.
    */
   interface Fs {
@@ -368,7 +368,7 @@ declare namespace Beaker {
     listWriters(url: string): Promise<any[]>;
   }
 
-  /** The global beaker object. Some namespaces are gated by page protocol. */
+  /** The global nomad object. Some namespaces are gated by page protocol. */
   interface Root {
     fs: Fs;
     ai: Ai;
@@ -380,10 +380,10 @@ declare namespace Beaker {
     schemas: Schemas;
     capabilities: Capabilities;
     terminal: Terminal;
-    /** Available only on beaker: pages. */
+    /** Available only on nomad: pages. */
     browser: Browser;
   }
 }
 
-declare const beaker: Beaker.Root;
+declare const nomad: Nomad.Root;
 `;

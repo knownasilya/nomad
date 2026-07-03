@@ -123,7 +123,7 @@ class CreateDriveModal extends LitElement {
 
   render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
         <h1 class="title">
           ${this.isCollaborative ? 'Create Collaborative Drive' : 'Create New Drive'}

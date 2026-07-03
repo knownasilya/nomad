@@ -59,7 +59,7 @@ export const setup = async function (opts) {
     auto_update_enabled: 1,
     auto_redirect_to_dat: 1,
     custom_start_page: 'blank',
-    new_tab: 'beaker://desktop/',
+    new_tab: 'nomad://desktop/',
     new_tabs_in_foreground: 0,
     run_background: 1,
     default_zoom: 0,
@@ -78,7 +78,7 @@ export const setup = async function (opts) {
         name: 'DuckDuckGo',
         url: 'https://www.duckduckgo.com/?q=',
       },
-      { name: 'Nomad', url: 'beaker://desktop/?q=' },
+      { name: 'Nomad', url: 'nomad://desktop/?q=' },
       { name: 'Google', url: 'https://www.google.com/search?q=' },
     ],
     tab_layout: 'top-bar',
@@ -172,7 +172,7 @@ export function setCachedValue(key, value) {
 export const get = function (key) {
   // env variables
   if (key === 'no_welcome_tab') {
-    return Number(getEnvVar('BEAKER_NO_WELCOME_TAB')) === 1;
+    return Number(getEnvVar('NOMAD_NO_WELCOME_TAB')) === 1;
   }
   // stored values
   return setupPromise.then(() =>
@@ -221,7 +221,7 @@ export const getAll = function () {
         });
 
         obj = Object.assign({}, defaultSettings, obj);
-        obj.no_welcome_tab = Number(getEnvVar('BEAKER_NO_WELCOME_TAB')) === 1;
+        obj.no_welcome_tab = Number(getEnvVar('NOMAD_NO_WELCOME_TAB')) === 1;
         cb(null, obj);
       });
     })
@@ -291,7 +291,7 @@ export async function getAllForSpace(spaceId) {
     obj[row.key] = val;
   }
 
-  obj.no_welcome_tab = Number(getEnvVar('BEAKER_NO_WELCOME_TAB')) === 1;
+  obj.no_welcome_tab = Number(getEnvVar('NOMAD_NO_WELCOME_TAB')) === 1;
   return obj;
 }
 

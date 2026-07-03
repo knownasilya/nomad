@@ -185,7 +185,7 @@ class ShellWindowPanes extends LitElement {
 
     if (!hasMultiple) {
       return html`
-        <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+        <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
         ${repeat(
           this.activeTab.paneLayout,
           (pane) => pane.id,
@@ -194,7 +194,7 @@ class ShellWindowPanes extends LitElement {
       `;
     }
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       ${repeat(
         this.activeTab.paneLayout,
         (pane) => pane.id,

@@ -1,11 +1,11 @@
 // Configures Monaco's JavaScript/TypeScript language service for the editor:
 // compiler options (DOM + ESNext built-ins), diagnostics, and the ambient
-// beaker.* + walled.garden schema type declarations.
+// nomad.* + walled.garden schema type declarations.
 //
 // Call configureLanguageService(monaco) once, after vs/editor/editor.main has
 // loaded and before creating the editor. Re-entry is a no-op.
 
-import { BEAKER_DTS } from './types/beaker-dts.js';
+import { NOMAD_DTS } from './types/nomad-dts.js';
 import { SCHEMAS_DTS } from './types/schemas-dts.js';
 import { WALLED_GARDEN_JSON_SCHEMA } from './types/schemas-json.js';
 
@@ -52,7 +52,7 @@ export function configureLanguageService(monaco) {
   // (not per-model), so it persists across the editor's model disposal — add
   // once, never re-add.
   for (const defaults of [ts.javascriptDefaults, ts.typescriptDefaults]) {
-    defaults.addExtraLib(BEAKER_DTS, 'ts:beaker.d.ts');
+    defaults.addExtraLib(NOMAD_DTS, 'ts:nomad.d.ts');
     defaults.addExtraLib(SCHEMAS_DTS, 'ts:walled-garden-schemas.d.ts');
   }
 
@@ -69,7 +69,7 @@ export function configureLanguageService(monaco) {
         {
           // walled.garden records (discriminated on `type`) + a manifest branch
           // for non-record .json files; see scripts/gen-schema-dts.mjs
-          uri: 'beaker://editor/schemas/walled-garden.json',
+          uri: 'nomad://editor/schemas/walled-garden.json',
           fileMatch: ['*.json'],
           schema: WALLED_GARDEN_JSON_SCHEMA,
         },

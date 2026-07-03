@@ -2,7 +2,7 @@ import { FiltersEngine, Request } from '@cliqz/adblocker';
 import fetch from 'cross-fetch';
 import * as settingsDb from '../bg/dbs/settings';
 
-const beakerUrls = /^(beaker|blob)/;
+const nomadUrls = /^(nomad|blob)/;
 
 // globals
 // =
@@ -37,6 +37,6 @@ export function onBeforeRequest(details, callback) {
     // exception, // instance of NetworkFilter exception if any
     // filter, // instance of NetworkFilter which matched
   } = blocker.match(Request.fromRawDetails({ url: details.url }));
-  const shouldBeBlocked = !details.url.match(beakerUrls) && match;
+  const shouldBeBlocked = !details.url.match(nomadUrls) && match;
   callback({ cancel: shouldBeBlocked, redirectURL: redirect });
 }

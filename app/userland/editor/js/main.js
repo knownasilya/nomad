@@ -36,9 +36,9 @@ class EditorApp extends LitElement {
   }
 
   get drive() {
-    // beaker.fs auto-detects the backend (Hyperdrive or Autobase collaborative
+    // nomad.fs auto-detects the backend (Hyperdrive or Autobase collaborative
     // drive) and dispatches reads/writes to the right one.
-    return beaker.fs.drive(this.url);
+    return nomad.fs.drive(this.url);
   }
 
   get origin() {
@@ -97,7 +97,7 @@ class EditorApp extends LitElement {
 
   constructor() {
     super();
-    beaker.panes.setAttachable();
+    nomad.panes.setAttachable();
     this.editorEl = undefined;
     this.editor = undefined; // monaco instance
     this.attachedPane = undefined;
@@ -115,24 +115,24 @@ class EditorApp extends LitElement {
     this.setFocusOnLoad = false;
     this.isCollaborative = false;
 
-    beaker.panes.addEventListener('pane-attached', (e) => {
-      this.attachedPane = beaker.panes.getAttachedPane();
+    nomad.panes.addEventListener('pane-attached', (e) => {
+      this.attachedPane = nomad.panes.getAttachedPane();
       this.requestUpdate();
       if (this.url !== this.attachedPane.url) {
         this.load(this.attachedPane.url);
       }
     });
-    beaker.panes.addEventListener('pane-detached', (e) => {
+    nomad.panes.addEventListener('pane-detached', (e) => {
       this.attachedPane = undefined;
       this.requestUpdate();
     });
-    beaker.panes.addEventListener('pane-navigated', (e) => {
+    nomad.panes.addEventListener('pane-navigated', (e) => {
       if (!this.url || this.dne) {
         this.load(e.detail.url);
       }
     });
     (async () => {
-      this.attachedPane = await beaker.panes.attachToLastActivePane();
+      this.attachedPane = await nomad.panes.attachToLastActivePane();
       if (this.attachedPane) {
         this.load(this.attachedPane.url);
       } else {
@@ -165,7 +165,7 @@ class EditorApp extends LitElement {
       this.editorEl = document.createElement('div');
       this.editorEl.id = 'monaco-editor';
       this.editorEl.addEventListener('contextmenu', async (e) => {
-        var choice = await beaker.browser.showContextMenu([
+        var choice = await nomad.browser.showContextMenu([
           { id: 'cut', label: 'Cut' },
           { id: 'copy', label: 'Copy' },
           { id: 'paste', label: 'Paste' },
@@ -200,8 +200,8 @@ class EditorApp extends LitElement {
   async createEditor() {
     this.ensureEditorEl();
     return new Promise((resolve, reject) => {
-      // Monaco's language workers live at beaker://assets, a different origin
-      // than this page (beaker://editor), so `new Worker(crossOriginUrl)` is
+      // Monaco's language workers live at nomad://assets, a different origin
+      // than this page (nomad://editor), so `new Worker(crossOriginUrl)` is
       // blocked by the same-origin policy and Monaco falls back to running them
       // on the main thread (UI freezes + "Duplicate definition of module" spam +
       // broken lib loading). Spawn each worker from a same-origin blob that
@@ -210,8 +210,8 @@ class EditorApp extends LitElement {
         window.MonacoEnvironment = {
           getWorkerUrl: function () {
             var code = [
-              "self.MonacoEnvironment = { baseUrl: 'beaker://assets/' };",
-              "importScripts('beaker://assets/vs/base/worker/workerMain.js');",
+              "self.MonacoEnvironment = { baseUrl: 'nomad://assets/' };",
+              "importScripts('nomad://assets/vs/base/worker/workerMain.js');",
             ].join('\n');
             return URL.createObjectURL(
               new Blob([code], { type: 'application/javascript' })
@@ -219,7 +219,7 @@ class EditorApp extends LitElement {
           },
         };
       }
-      window.require.config({ baseUrl: 'beaker://assets/' });
+      window.require.config({ baseUrl: 'nomad://assets/' });
       window.require(['vs/editor/editor.main'], () => {
         try {
           // update monaco to syntax-highlight <script type="module">
@@ -261,7 +261,7 @@ class EditorApp extends LitElement {
             }
           );
 
-          // wire up the TypeScript language service: beaker.* + schema types,
+          // wire up the TypeScript language service: nomad.* + schema types,
           // DOM/JS built-ins, and autocomplete/hover inside HTML <script>
           // blocks. Wrapped so a setup failure can never block editor creation.
           try {
@@ -334,7 +334,7 @@ class EditorApp extends LitElement {
           this.isFilesOpen = !body;
         } else if (url.startsWith('http:') || url.startsWith('https:')) {
           this.isFilesOpen = false;
-          body = await beaker.browser.fetchBody(url);
+          body = await nomad.browser.fetchBody(url);
         } else {
           this.isFilesOpen = false;
           let res = await fetch(url);
@@ -357,7 +357,7 @@ class EditorApp extends LitElement {
 
         // override the model syntax highlighting when the URL doesnt give enough info (no extension)
         if (body && model.getModeId() === 'plaintext') {
-          let type = await beaker.browser.getResourceContentType(url);
+          let type = await nomad.browser.getResourceContentType(url);
           if (type) {
             if (type.includes('text/html')) {
               monaco.editor.setModelLanguage(model, 'html');
@@ -533,7 +533,7 @@ class EditorApp extends LitElement {
         if (stat && stat.mount) {
           this.mountInfo = await step(
             'mountGetInfo',
-            beaker.fs.drive(stat.mount.key).getInfo()
+            nomad.fs.drive(stat.mount.key).getInfo()
           ).catch((e) => undefined);
           if (this.mountInfo) {
             this.mountInfo.resolvedPath = '/' + realPathParts.join('/');
@@ -573,7 +573,7 @@ class EditorApp extends LitElement {
       items.push({
         label: 'Open in New Tab',
         click() {
-          beaker.browser.openUrl(item.url);
+          nomad.browser.openUrl(item.url);
         },
       });
       items.push({
@@ -604,13 +604,13 @@ class EditorApp extends LitElement {
       items.push({
         label: 'Open in Pane Right',
         click: () => {
-          beaker.browser.newPane(item.shareUrl, { splitDir: 'vert' });
+          nomad.browser.newPane(item.shareUrl, { splitDir: 'vert' });
         },
       });
       items.push({
         label: 'Open in Pane Below',
         click: () => {
-          beaker.browser.newPane(item.shareUrl, { splitDir: 'horz' });
+          nomad.browser.newPane(item.shareUrl, { splitDir: 'horz' });
         },
       });
       items.push({ type: 'separator' });
@@ -691,7 +691,7 @@ class EditorApp extends LitElement {
       delete items[i].click;
     }
 
-    var choice = await beaker.browser.showContextMenu(items);
+    var choice = await nomad.browser.showContextMenu(items);
     if (fns[choice]) fns[choice]();
   }
 
@@ -705,7 +705,7 @@ class EditorApp extends LitElement {
       this.classList.remove('files-open');
     }
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       ${this.renderToolbar()}
       ${!this.isUnloaded && this.isFilesOpen
         ? html`
@@ -941,7 +941,7 @@ class EditorApp extends LitElement {
       x: (rect.left + rect.right) / 2,
       y: rect.bottom,
       center: true,
-      fontAwesomeCSSUrl: 'beaker://assets/font-awesome.css',
+      fontAwesomeCSSUrl: 'nomad://assets/font-awesome.css',
       noBorders: true,
       roomy: true,
       rounded: true,
@@ -959,8 +959,8 @@ class EditorApp extends LitElement {
   }
 
   onClickEditReal(e) {
-    beaker.browser.openUrl(
-      `beaker://editor?url=${this.mountInfo.url + this.mountInfo.resolvedPath}`,
+    nomad.browser.openUrl(
+      `nomad://editor?url=${this.mountInfo.url + this.mountInfo.resolvedPath}`,
       {
         setActive: true,
         adjacentActive: true,
@@ -1011,7 +1011,7 @@ class EditorApp extends LitElement {
             .removeAttribute('disabled');
         };
         return html`
-          <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+          <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
           <style>
             .dropdown-items {
               padding: 12px;
@@ -1125,11 +1125,11 @@ class EditorApp extends LitElement {
   }
 
   async onClickView() {
-    this.attachedPane = beaker.panes.getAttachedPane();
+    this.attachedPane = nomad.panes.getAttachedPane();
     if (!this.attachedPane) {
-      this.attachedPane = await beaker.panes.create(this.url, { attach: true });
+      this.attachedPane = await nomad.panes.create(this.url, { attach: true });
     } else {
-      beaker.panes.navigate(this.attachedPane.id, this.url);
+      nomad.panes.navigate(this.attachedPane.id, this.url);
     }
   }
 
@@ -1143,8 +1143,8 @@ class EditorApp extends LitElement {
     });
     this.lastSavedVersionId = model.getAlternativeVersionId();
     if (this.attachedPane) {
-      this.attachedPane = beaker.panes.getAttachedPane();
-      beaker.panes.navigate(this.attachedPane.id, this.attachedPane.url);
+      this.attachedPane = nomad.panes.getAttachedPane();
+      nomad.panes.navigate(this.attachedPane.id, this.attachedPane.url);
     }
     this.setSaveBtnState();
     this.setFocus();
@@ -1166,9 +1166,9 @@ class EditorApp extends LitElement {
       urlp.pathname = newpath;
       this.load(urlp.toString());
       if (this.attachedPane) {
-        this.attachedPane = beaker.panes.getAttachedPane();
+        this.attachedPane = nomad.panes.getAttachedPane();
         if (this.attachedPane.url === oldurl) {
-          beaker.panes.navigate(this.attachedPane.id, urlp.toString());
+          nomad.panes.navigate(this.attachedPane.id, urlp.toString());
         }
       }
     }
@@ -1188,9 +1188,9 @@ class EditorApp extends LitElement {
 
       this.loadExplorer();
       if (this.attachedPane) {
-        this.attachedPane = beaker.panes.getAttachedPane();
+        this.attachedPane = nomad.panes.getAttachedPane();
         if (this.attachedPane.url === this.url) {
-          beaker.panes.navigate(this.attachedPane.id, this.url);
+          nomad.panes.navigate(this.attachedPane.id, this.url);
         }
       }
       if (this.resolvedPath === path) {
@@ -1222,7 +1222,7 @@ class EditorApp extends LitElement {
 
   async onClickNewMount(folderPath) {
     if (this.readOnly) return;
-    var url = await beaker.shell.selectDriveDialog();
+    var url = await nomad.shell.selectDriveDialog();
     if (!url) return;
     var name = await prompt('Enter the new mount name');
     if (!name) return;
@@ -1233,7 +1233,7 @@ class EditorApp extends LitElement {
   async onClickImportFiles(folderPath) {
     toast.create('Importing...');
     try {
-      var { numImported } = await beaker.shell.importFilesDialog(
+      var { numImported } = await nomad.shell.importFilesDialog(
         joinPath(this.drive.url, folderPath)
       );
       if (numImported > 0) toast.create('Import complete', 'success');
@@ -1248,7 +1248,7 @@ class EditorApp extends LitElement {
   async onClickImportFolders(folderPath) {
     toast.create('Importing...');
     try {
-      var { numImported } = await beaker.shell.importFoldersDialog(
+      var { numImported } = await nomad.shell.importFoldersDialog(
         joinPath(this.drive.url, folderPath)
       );
       if (numImported > 0) toast.create('Import complete', 'success');
@@ -1263,7 +1263,7 @@ class EditorApp extends LitElement {
   async onClickExportFiles(urls) {
     toast.create('Exporting...');
     try {
-      var { numExported } = await beaker.shell.exportFilesDialog(urls);
+      var { numExported } = await nomad.shell.exportFilesDialog(urls);
       if (numExported > 0) toast.create('Export complete', 'success');
       else toast.destroy();
     } catch (e) {
@@ -1274,11 +1274,11 @@ class EditorApp extends LitElement {
 
   async onClickFork(e) {
     var urlp = new URL(this.url);
-    var newDrive = await beaker.fs.forkDrive(this.url);
+    var newDrive = await nomad.fs.forkDrive(this.url);
     var newDriveUrlp = new URL(newDrive.url);
     urlp.hostname = newDriveUrlp.hostname;
 
-    beaker.browser.gotoUrl(urlp.toString());
+    nomad.browser.gotoUrl(urlp.toString());
     this.load(urlp.toString());
   }
 }

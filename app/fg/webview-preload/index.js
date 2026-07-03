@@ -21,5 +21,5 @@ setupChatBubble();
 
 window.addEventListener('focus', (e) => {
   // track focus
-  ipcRenderer.send('BEAKER_WC_FOCUSED');
+  ipcRenderer.send('NOMAD_WC_FOCUSED');
 });

@@ -83,8 +83,8 @@ export function buildWindowMenu(opts = {}) {
         label: 'Preferences',
         accelerator: 'Cmd+,',
         click(item) {
-          if (win) tabManager.create(win, 'beaker://settings', { setActive: true });
-          else createShellWindow({ pages: ['beaker://settings'] });
+          if (win) tabManager.create(win, 'nomad://settings', { setActive: true });
+          else createShellWindow({ pages: ['nomad://settings'] });
         },
       },
       { type: 'separator' },
@@ -514,7 +514,7 @@ export function buildWindowMenu(opts = {}) {
         label: 'Explore Files',
         enabled: !noWindows && !!isDriveSite,
         click: async function (item) {
-          if (tab) tab.togglePaneByOrigin({ url: 'beaker://explorer/' });
+          if (tab) tab.togglePaneByOrigin({ url: 'nomad://explorer/' });
         },
       },
       { type: 'separator' },
@@ -535,7 +535,7 @@ export function buildWindowMenu(opts = {}) {
         enabled: !!isDriveSite,
         async click(item) {
           if (win)
-            tabManager.create(win, `beaker://diff/?base=${url}`, {
+            tabManager.create(win, `nomad://diff/?base=${url}`, {
               setActive: true,
             });
         },
@@ -678,8 +678,8 @@ export function buildWindowMenu(opts = {}) {
         label: 'Show Full History',
         accelerator: showHistoryAccelerator,
         click: function (item) {
-          if (win) tabManager.create(win, 'beaker://history', { setActive: true });
-          else createShellWindow({ pages: ['beaker://history'] });
+          if (win) tabManager.create(win, 'nomad://history', { setActive: true });
+          else createShellWindow({ pages: ['nomad://history'] });
         },
       },
       { type: 'separator' },
@@ -714,7 +714,7 @@ export function buildWindowMenu(opts = {}) {
         enabled: !noWindows,
         accelerator: 'CmdOrCtrl+B',
         click: async function (item) {
-          if (tab) tab.togglePaneByOrigin({ url: 'beaker://editor/' });
+          if (tab) tab.togglePaneByOrigin({ url: 'nomad://editor/' });
         },
       },
       {
@@ -723,7 +723,7 @@ export function buildWindowMenu(opts = {}) {
         enabled: !noWindows,
         accelerator: 'Ctrl+`',
         click: function (item) {
-          if (tab) tab.togglePaneByOrigin({ url: 'beaker://webterm/' });
+          if (tab) tab.togglePaneByOrigin({ url: 'nomad://webterm/' });
         },
       },
       {
@@ -731,7 +731,7 @@ export function buildWindowMenu(opts = {}) {
         label: 'Toggle Hypercore Devtools',
         enabled: !noWindows,
         click: async function (item) {
-          if (tab) tab.togglePaneByOrigin({ url: 'beaker://hypercore-tools/' });
+          if (tab) tab.togglePaneByOrigin({ url: 'nomad://hypercore-tools/' });
         },
       },
       {
@@ -745,7 +745,7 @@ export function buildWindowMenu(opts = {}) {
     ],
   };
 
-  if (getEnvVar('BEAKER_DEV_MODE')) {
+  if (getEnvVar('NOMAD_DEV_MODE')) {
     developerMenu.submenu.unshift({
       type: 'submenu',
       label: 'Advanced Tools',
@@ -896,7 +896,7 @@ export function buildWindowMenu(opts = {}) {
     role: 'help',
     submenu: [
       {
-        id: 'beakerHelp',
+        id: 'nomadHelp',
         label: 'Nomad Help',
         accelerator: 'F1',
         click: function (item) {
@@ -918,7 +918,7 @@ export function buildWindowMenu(opts = {}) {
         },
       },
       {
-        id: 'beakerDiscussions',
+        id: 'nomadDiscussions',
         label: 'Discussion Forum',
         click: function (item) {
           if (win)
@@ -935,7 +935,7 @@ export function buildWindowMenu(opts = {}) {
       label: 'About',
       role: 'about',
       click: function (item) {
-        if (win) tabManager.create(win, 'beaker://settings', { setActive: true });
+        if (win) tabManager.create(win, 'nomad://settings', { setActive: true });
       },
     });
   }

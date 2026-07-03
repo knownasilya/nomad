@@ -130,9 +130,9 @@ export class Pane extends EventEmitter {
     // Only set partition for non-default sessions — leaving it unset keeps the
     // default session (with its protocol handlers and adblocker) intact.
     if (tab.partition) {
-      // Register beaker://, asset://, hyper:// on this partition's session
+      // Register nomad://, asset://, hyper:// on this partition's session
       // BEFORE the view is created and starts loading. Otherwise the tab's
-      // assets (e.g. beaker://assets/font-awesome.css) can race the startup
+      // assets (e.g. nomad://assets/font-awesome.css) can race the startup
       // partition registration and fail with ERR_UNKNOWN_URL_SCHEME, dropping
       // the page to chrome-error. registerForPartition is idempotent.
       registerForPartition(tab.partition);
@@ -247,7 +247,7 @@ export class Pane extends EventEmitter {
           return 'My Private Drive';
         }
       }
-      if (urlp.protocol === 'beaker:') {
+      if (urlp.protocol === 'nomad:') {
         if (urlp.hostname === 'diff') return 'Nomad Diff/Merge Tool';
         if (urlp.hostname === 'explorer') return 'Nomad Files Explorer';
         if (urlp.hostname === 'history') return 'Nomad History';
@@ -286,8 +286,8 @@ export class Pane extends EventEmitter {
     if (url.startsWith('https:') && !(this.loadError && this.loadError.isInsecureResponse)) {
       return 'fas fa-check-circle';
     }
-    if (url.startsWith('beaker:')) {
-      return 'beaker-logo';
+    if (url.startsWith('nomad:')) {
+      return 'nomad-logo';
     }
     return undefined; // no icon
   }
@@ -298,7 +298,7 @@ export class Pane extends EventEmitter {
       if (this.loadError && this.loadError.isInsecureResponse) {
         return 'untrusted';
       }
-      if (['https:', 'beaker:'].includes(urlp.protocol)) {
+      if (['https:', 'nomad:'].includes(urlp.protocol)) {
         return 'trusted';
       }
       if (urlp.protocol === 'http:') {
@@ -407,7 +407,7 @@ export class Pane extends EventEmitter {
   }
 
   destroy() {
-    if (this.url && !this.url.startsWith('beaker://')) {
+    if (this.url && !this.url.startsWith('nomad://')) {
       historyDb.addTabClose(0, { url: this.url, title: this.title });
     }
     this.hide();
@@ -452,7 +452,7 @@ export class Pane extends EventEmitter {
   async updateHistory() {
     var url = this.url;
     var title = this.title;
-    if (url && !url.startsWith('beaker://')) {
+    if (url && !url.startsWith('nomad://')) {
       historyDb.addVisit(0, { url, title, spaceId: this.tab.spaceId || 1 });
     }
   }
@@ -731,11 +731,11 @@ export class Pane extends EventEmitter {
   }
 
   async onWillNavigate(e, url) {
-    if (!url.startsWith('beaker://cert-bypass-')) return;
+    if (!url.startsWith('nomad://cert-bypass-')) return;
     e.preventDefault();
     await this._handleCertBypass(
-      url.startsWith('beaker://cert-bypass-always') ? 'always' : 'once',
-      url.replace(/^beaker:\/\/cert-bypass-(?:once|always)\?url=/, '')
+      url.startsWith('nomad://cert-bypass-always') ? 'always' : 'once',
+      url.replace(/^nomad:\/\/cert-bypass-(?:once|always)\?url=/, '')
     );
   }
 

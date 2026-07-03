@@ -17,7 +17,7 @@ export const setup = function (rpc) {
   const opts = { timeout: false, errors };
 
   const loggerRPC = rpc.importAPI('logger', loggerManifest, opts);
-  const beakerBrowserRPC = rpc.importAPI('beaker-browser', beakerBrowserManifest, opts);
+  const beakerBrowserRPC = rpc.importAPI('nomad-browser', beakerBrowserManifest, opts);
   const bookmarksRPC = rpc.importAPI('bookmarks', bookmarksManifest, opts);
   const downloadsRPC = rpc.importAPI('downloads', downloadsManifest, opts);
   const drivesRPC = rpc.importAPI('drives', drivesManifest, opts);

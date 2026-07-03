@@ -68,7 +68,7 @@ export async function create(parentWindow, tab, params) {
   view.webContents.on('console-message', (e) => {
     console.log('Perm-Prompt window says:', e.message);
   });
-  view.webContents.loadURL('beaker://perm-prompt/');
+  view.webContents.loadURL('nomad://perm-prompt/');
   view.webContents.focus();
 
   // run the prompt flow

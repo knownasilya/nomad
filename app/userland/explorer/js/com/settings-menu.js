@@ -32,7 +32,7 @@ export function create(app, { x, y }) {
         </option>
       `;
       return html`
-        <link rel="stylesheet" href="beaker://explorer/css/font-awesome.css" />
+        <link rel="stylesheet" href="nomad://explorer/css/font-awesome.css" />
         <div class="settings-menu">
           ${renderModes.length
             ? html`

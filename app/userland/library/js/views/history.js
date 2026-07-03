@@ -1,8 +1,8 @@
 import {
   LitElement,
   html,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import { repeat } from 'beaker://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
 import css from '../../css/views/history.css.js';
 
 export class HistoryView extends LitElement {
@@ -44,7 +44,7 @@ export class HistoryView extends LitElement {
   }
 
   async load() {
-    var links = await beaker.history.getVisitHistory({
+    var links = await nomad.history.getVisitHistory({
       search: this.filter,
       limit: 300,
     });
@@ -57,7 +57,7 @@ export class HistoryView extends LitElement {
   render() {
     var links = this.links;
     return html`
-      <link rel="stylesheet" href="beaker://app-stdlib/css/fontawesome.css" />
+      <link rel="stylesheet" href="nomad://app-stdlib/css/fontawesome.css" />
       ${links
         ? html`
             <div class="history-header">
