@@ -249,7 +249,7 @@ export const protocolHandler = async function (request, respond) {
       const driveCfg = filesystem.getDriveConfig(driveKey);
       if ((driveCfg && driveCfg.type === 'autobase') || autobases.getCollaborativeDrive(driveKey)) {
         logger.silly(`Serving autobase drive ${logUrl}`, { url: request.url });
-        return serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect);
+        return serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect, respondBuiltinFrontend);
       }
 
       try {
@@ -262,7 +262,7 @@ export const protocolHandler = async function (request, respond) {
         // autobase core, so fall back to serving it as an autobase before giving up. Once
         // loaded, the cached collaborative session routes future loads via the check above.
         logger.warn(`Failed to open drive ${driveKey} as Hyperdrive; trying Autobase`, { err });
-        return serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect);
+        return serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect, respondBuiltinFrontend);
       }
 
       // parse path
@@ -523,7 +523,7 @@ function _autobaseViewEmpty(base) {
   }
 }
 
-async function serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect) {
+async function serveAutobase(driveKey, urlp, request, respond, respondError, respondRedirect, respondBuiltinFrontend) {
   let sess;
   try {
     sess = await autobases.getOrLoadCollaborativeDrive(driveKey);
@@ -551,13 +551,14 @@ async function serveAutobase(driveKey, urlp, request, respond, respondError, res
   if (filepath.indexOf('?') !== -1) filepath = filepath.slice(0, filepath.indexOf('?'));
   const hasTrailingSlash = filepath.endsWith('/');
 
-  // Check for custom frontend at /.ui/ui.html
+  // Check for custom frontend at /.ui/ui.html. Records are v1 { metadata, blob, value };
+  // resolve the content (inline or blob) rather than reading raw bytes off the view.
   const uiNode = await bee.get('/.ui/ui.html').catch(() => null);
   if (uiNode) {
     // Any HTML-wanting request to a "directory-like" path → serve the UI
     const wantsHTML = mime.acceptHeaderWantsHTML(request.headers.Accept)
     if (wantsHTML && (filepath === '/' || hasTrailingSlash || !filepath.includes('.'))) {
-      const buf = uiNode.value
+      const buf = await autobases.resolveRecordContent(uiNode.value)
       return respond({
         statusCode: 200,
         headers: {
@@ -571,7 +572,7 @@ async function serveAutobase(driveKey, urlp, request, respond, respondError, res
     }
   }
 
-  // Serve the requested file from Hyperbee
+  // Serve the requested file from the Hyperbee view.
   const lookupPath = filepath.replace(/\/$/, '') || '/'
 
   // Try exact path first
@@ -587,6 +588,21 @@ async function serveAutobase(driveKey, urlp, request, respond, respondError, res
   }
 
   if (!node) {
+    // No file/index at this path. If it's a DIRECTORY (has children in the view), serve the builtin
+    // file view — matching the Hyperdrive serve path — instead of 404ing. Redirect a bare directory
+    // path to a trailing slash first so relative links resolve.
+    const isDir = filepath === '/' || hasTrailingSlash || await autobases.dirHasChildren(sess, lookupPath)
+    if (isDir) {
+      if (filepath !== '/' && !hasTrailingSlash) {
+        return respondRedirect(
+          `hyper://${urlp.host}${urlp.version ? '+' + urlp.version : ''}${urlp.pathname || ''}/${urlp.search || ''}`
+        );
+      }
+      const wantsHTML = mime.acceptHeaderWantsHTML(request.headers.Accept)
+      if (wantsHTML && typeof respondBuiltinFrontend === 'function') {
+        return respondBuiltinFrontend();
+      }
+    }
     return respondError(404, 'File Not Found', {
       errorDescription: 'File Not Found',
       errorInfo: `Could not find ${urlp.path} in this collaborative drive`,
@@ -594,16 +610,85 @@ async function serveAutobase(driveKey, urlp, request, respond, respondError, res
     });
   }
 
-  const buf = node.value
+  // v1 record: real size comes from the record; content resolves from inline value or a blob
+  // in the owning writer's Hyperblobs core (ranged reads supported for <video>/<img> etc.).
+  const record = node.value
+  const size = autobases.recordByteLength(record)
   const mimeType = mime.identify(node.key)
+
+  // .goto redirect — on Autobase the href lives in the file body (JSON), not entry metadata
+  // (which is now filesystem stat). Mirrors the Hyperdrive serve path's .goto handling.
+  if (node.key.endsWith('.goto')) {
+    try {
+      const gotoBuf = await autobases.resolveRecordContent(record)
+      const href = gotoBuf && JSON.parse(b4a.toString(gotoBuf)).href
+      if (href) { new URL(href); return respondRedirect(href) }
+    } catch { /* not a valid .goto — fall through to normal serve */ }
+  }
+
+  // Markdown → HTML (parity with the Hyperdrive serve path). Skipped for ranged requests.
+  if (
+    (node.key.endsWith('.md') || node.key.endsWith('.markdown')) &&
+    mime.acceptHeaderWantsHTML(request.headers.Accept) &&
+    !(request.headers.Range || request.headers.range)
+  ) {
+    const mdBuf = await autobases.resolveRecordContent(record)
+    if (mdBuf) {
+      const html = `<!doctype html>
+<html><head><meta charset="utf8"><style>
+body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 0 10px; line-height: 1.4; }
+body * { max-width: 100%; }
+</style></head><body>${md.render(b4a.toString(mdBuf))}</body></html>`
+      return respond({
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'text/html',
+          'Access-Control-Allow-Origin': '*',
+          'Allow-CSP-From': '*',
+          'Cache-Control': 'no-cache',
+        },
+        data: intoStream(html),
+      })
+    }
+  }
+
+  const headers = {
+    'Content-Type': mimeType || 'application/octet-stream',
+    'Access-Control-Allow-Origin': '*',
+    'Allow-CSP-From': '*',
+    'Cache-Control': 'no-cache',
+    'Accept-Ranges': 'bytes',
+  }
+
+  let statusCode = 200
+  let readRange = null
+  let range = request.headers.Range || request.headers.range
+  if (range) range = parseRange(size, range)
+  if (range && range.type === 'bytes' && range[0]) {
+    const r = range[0] // only handle the first range
+    statusCode = 206
+    const length = r.end - r.start + 1
+    headers['Content-Length'] = '' + length
+    headers['Content-Range'] = 'bytes ' + r.start + '-' + r.end + '/' + size
+    readRange = { start: r.start, length }
+  } else if (size) {
+    headers['Content-Length'] = '' + size
+  }
+
+  const buf = await autobases.resolveRecordContent(record, readRange)
+  if (buf == null) {
+    return respondError(404, 'File Not Found', {
+      errorDescription: 'File Not Found',
+      errorInfo: `Could not read ${urlp.path} in this collaborative drive`,
+      title: 'File Not Found',
+    });
+  }
+  if (request.method === 'HEAD') {
+    return respond({ statusCode: 204, headers, data: intoStream('') });
+  }
   return respond({
-    statusCode: 200,
-    headers: {
-      'Content-Type': mimeType || 'application/octet-stream',
-      'Access-Control-Allow-Origin': '*',
-      'Allow-CSP-From': '*',
-      'Cache-Control': 'no-cache',
-    },
+    statusCode,
+    headers,
     data: new WhackAMoleStream(Readable.from(buf)),
   });
 }

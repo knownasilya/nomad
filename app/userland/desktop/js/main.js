@@ -17,7 +17,7 @@ const VERSION_ID = (major, minor, patch, pre) =>
 const CURRENT_VERSION = VERSION_ID(1, 2, 1, 0);
 const RELEASE = {
   label: '1.2.1',
-  url: 'https://beakerbrowser.com/2020/12/08/beaker-1.1.html',
+  url: 'https://nomad.pages.dev/docs/',
 };
 
 class DesktopApp extends LitElement {
@@ -125,7 +125,7 @@ class DesktopApp extends LitElement {
   // =
 
   async onClickNewHyperdrive(e) {
-    var drive = await beaker.hyperdrive.createDrive();
+    var drive = await beaker.fs.createDrive();
     toast.create('Drive created');
     beaker.browser.openUrl(drive.url, {
       setActive: true,

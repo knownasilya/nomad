@@ -65,7 +65,7 @@ so that errors can be smoothly generated
 
 export function createDrive(url) {
   if (url.startsWith('hyper:')) {
-    return beaker.hyperdrive.drive(url);
+    return beaker.fs.drive(url);
   }
   return new Proxy(
     {},

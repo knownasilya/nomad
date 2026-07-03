@@ -1,0 +1,19 @@
+node_modules/
+.expo/
+dist/
+ios/
+android/
+npm-debug.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+*.bundle
+*.bundle.js
+web-build/
+
+# local p2p storage / publisher test stores
+.publish-store-*/
+hyper-browser/

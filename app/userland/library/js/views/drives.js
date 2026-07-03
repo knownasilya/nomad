@@ -126,7 +126,7 @@ export class DrivesView extends LitElement {
   }
 
   async forkDrive(drive) {
-    var drive = await beaker.hyperdrive.forkDrive(drive.url);
+    var drive = await beaker.fs.forkDrive(drive.url);
     toast.create('Drive created');
     window.open(drive.url);
     this.load();

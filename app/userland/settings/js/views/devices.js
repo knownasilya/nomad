@@ -133,24 +133,16 @@ class DevicesView extends LitElement {
     `;
   }
 
-  // No Vault yet on this device: either set one up (migrate this identity to multi-device) or
-  // join an identity from another device.
+  // No Vault yet on this device: either set one up or join an identity from another device.
   renderSetup() {
     return html`
       <div class="section">
         <h2>Devices</h2>
         <p class="hint">
           Linking devices lets every device you own read and edit all your spaces and
-          drives. To do this, your spaces are upgraded to a multi-writer format and grouped
-          under a private <strong>Vault</strong>.
+          drives. Your spaces are grouped under a private <strong>Vault</strong> that every
+          linked device is a writer of.
         </p>
-        <div class="message warning">
-          <span class="fas fa-fw fa-info-circle"></span>
-          <span
-            >Setting up converts each space's root drive to a collaborative drive. This is a
-            one-time change and can take a moment for large spaces.</span
-          >
-        </div>
         <div class="actions">
           <button class="btn primary" ?disabled=${this.migrating} @click=${this.onClickSetup}>
             ${this.migrating
@@ -158,11 +150,6 @@ class DevicesView extends LitElement {
               : html`<span class="fas fa-fw fa-laptop-house"></span> Set up this device`}
           </button>
         </div>
-        ${this.migrating && this.migrateProgress
-          ? html`<p class="hint">
-              Migrating spaces ${this.migrateProgress.done}/${this.migrateProgress.total}…
-            </p>`
-          : ''}
       </div>
 
       <div class="section">
@@ -353,26 +340,15 @@ class DevicesView extends LitElement {
   async onClickSetup() {
     this.migrating = true;
     this.error = '';
-    let stream;
     try {
-      stream = beaker.vault.watchMigration();
-      stream.addEventListener('progress', (p) => {
-        this.migrateProgress = p;
-        this.requestUpdate();
-      });
-    } catch {}
-    try {
-      const res = await beaker.vault.migrate();
-      if (res.failures && res.failures.length) {
-        this.error = `${res.failures.length} space(s) failed to migrate. You can retry.`;
-      } else {
-        toast.create('This device is set up. You can now add more devices.', 'success');
-      }
+      // Create the Vault for this identity (drives are already collaborative from birth, so there is
+      // nothing to migrate). createInvite ensures the Vault exists and records this Device in it.
+      await beaker.vault.createInvite();
+      toast.create('This device is set up. You can now add more devices.', 'success');
       await this.load();
     } catch (e) {
       this.error = e.message || String(e);
     } finally {
-      if (stream) try { stream.close(); } catch {}
       this.migrating = false;
       this.migrateProgress = null;
       this.requestUpdate();

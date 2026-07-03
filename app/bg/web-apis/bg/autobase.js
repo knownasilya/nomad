@@ -31,14 +31,13 @@ const autobaseAPI = {
   // Drive lifecycle
   // =
 
-  async createCollaborativeDrive({ title, description, type, prompt } = {}) {
+  async createCollaborativeDrive({ title, description, type, collaborative, prompt } = {}) {
     if (prompt !== false) {
       let res
       try {
         res = await modals.create(this.sender, 'create-drive', {
           title,
           description,
-          collaborative: true,
         })
       } catch (e) {
         if (e.name !== 'Error') throw e
@@ -51,6 +50,8 @@ const autobaseAPI = {
     if (title) meta.title = title
     if (description) meta.description = description
     if (type) meta.type = type
+    // Locked (single-writer) by default; the toggle in the create modal sets this.
+    if (typeof collaborative !== 'undefined') meta.collaborative = !!collaborative
     const sess = await autobases.createCollaborativeDrive(meta)
     // Use configAutobaseDrive instead of configDriveForSpace — the latter calls
     // getOrLoadDrive() which tries to open the URL as a Hyperdrive and hangs.
@@ -97,7 +98,8 @@ const autobaseAPI = {
         title: manifest.title || '',
         description: manifest.description || '',
         type: manifest.type || '',
-        isCollaborative: true,
+        isCollaborative: true, // always an Autobase (backend type)
+        collaborative: !!sess.collaborative, // accepts writer-access requests (unlocked)
       }
     })
   },
@@ -108,9 +110,12 @@ const autobaseAPI = {
   async entry(url, opts = {}) {
     return timer(to(opts), async () => {
       const { sess, filepath } = await _lookupWithPath(url)
-      const node = await sess.drive.get(filepath)
-      if (!node) return null
-      return { key: node.key, value: { blob: { byteLength: node.value ? node.value.byteLength : 0 }, metadata: {} } }
+      const record = await autobases.readRecord(sess, filepath)
+      if (!record) return null
+      return {
+        key: filepath,
+        value: { blob: { byteLength: autobases.recordByteLength(record) }, metadata: record.metadata || {} }
+      }
     })
   },
 
@@ -118,12 +123,12 @@ const autobaseAPI = {
     if (typeof opts === 'string') opts = { encoding: opts }
     return timer(to(opts), async () => {
       const { sess, filepath } = await _lookupWithPath(url)
-      const node = await sess.drive.get(filepath)
-      if (!node) return null
-      const buf = node.value
+      const buf = await autobases.readContent(sess, filepath)
+      if (buf == null) return null
       if (opts.encoding === 'binary') return buf
       if (opts.encoding === 'base64') return b4a.toString(buf, 'base64')
       if (opts.encoding === 'hex') return b4a.toString(buf, 'hex')
+      if (opts.encoding === 'json') { try { return JSON.parse(b4a.toString(buf)) } catch { return null } }
       return b4a.toString(buf)
     })
   },
@@ -186,13 +191,8 @@ const autobaseAPI = {
       assertValidFilePath(filepath)
 
       const buf = _toBuffer(data, opts)
-      await sess.base.append({
-        op: 'put',
-        path: filepath,
-        data: b4a.toString(buf, 'base64'),
-        encoding: 'base64',
-      })
-      await sess.base.update()
+      // File content is stored as a blob (bytes stay out of the oplog).
+      await autobases.writeFile(sess, filepath, buf)
     })
   },
 
@@ -200,8 +200,7 @@ const autobaseAPI = {
     return timer(to(opts), async () => {
       const { sess, filepath } = await _lookupWithPath(url)
       assertWritable(sess)
-      await sess.base.append({ op: 'del', path: filepath })
-      await sess.base.update()
+      await autobases.deletePath(sess, filepath)
     })
   },
 
@@ -251,15 +250,9 @@ const autobaseAPI = {
       const { sess: dstSess, filepath: dstPath } = await _lookupWithPath(dstUrl)
       assertWritable(dstSess)
       assertValidFilePath(dstPath)
-      const node = await srcSess.drive.get(srcPath)
-      if (!node) throw new Error('Source not found: ' + srcPath)
-      await dstSess.base.append({
-        op: 'put',
-        path: dstPath,
-        data: b4a.toString(node.value, 'base64'),
-        encoding: 'base64',
-      })
-      await dstSess.base.update()
+      const buf = await autobases.readContent(srcSess, srcPath)
+      if (buf == null) throw new Error('Source not found: ' + srcPath)
+      await autobases.writeFile(dstSess, dstPath, buf)
     })
   },
 
@@ -275,20 +268,17 @@ const autobaseAPI = {
       const sess = await _lookup(url)
       assertWritable(sess)
       const existing = await _readIndexJson(sess)
-      const allowed = ['title', 'description', 'type', 'thumb', 'links']
+      const allowed = ['title', 'description', 'type', 'thumb', 'links', 'collaborative']
       const updates = {}
       for (const k of allowed) {
         if (k in settings) updates[k] = settings[k]
       }
       const updated = Object.assign({}, existing, updates)
-      const buf = b4a.from(JSON.stringify(updated, null, 2))
-      await sess.base.append({
-        op: 'put',
-        path: '/index.json',
-        data: b4a.toString(buf, 'base64'),
-        encoding: 'base64'
-      })
-      await sess.base.update()
+      // index.json is a small control record — inline (readable without a blob core).
+      await autobases.putInline(sess, '/index.json', JSON.stringify(updated, null, 2))
+      // Lock/unlock: applying `collaborative` opens/closes the writer-request channel live
+      // (URL unchanged). This is the "create locked, unlock later" path (ADR-0010).
+      if ('collaborative' in settings) await autobases.setCollaborative(sess, !!settings.collaborative)
     })
   },
 
@@ -302,20 +292,15 @@ const autobaseAPI = {
     return autobaseAPI.put.call(this, url, data, opts || {})
   },
   async stat(url, opts) {
-    const e = await autobaseAPI.entry.call(this, url, opts || {})
-    if (e) {
-      const isFile = true
-      const size = e.value?.blob?.byteLength || 0
-      return { mode: 32768, size, offset: 0, blocks: 0, downloaded: 0, mtime: 0, ctime: 0, metadata: {} }
-    }
+    const { sess, filepath } = await _lookupWithPath(url)
+    const record = await autobases.readRecord(sess, filepath)
+    if (record) return _statFromRecord(record)
     const children = await autobaseAPI.list.call(this, url, { recursive: false })
-    if (children.length > 0) {
-      return { mode: 16384, size: 0, offset: 0, blocks: 0, downloaded: 0, mtime: 0, ctime: 0, metadata: {} }
-    }
+    if (children.length > 0) return _dirStat()
     return null
   },
   async readdir(url, opts = {}) {
-    const { filepath } = await _lookupWithPath(url)
+    const { sess, filepath } = await _lookupWithPath(url)
     const entries = await autobaseAPI.list.call(this, url, {})
     const normalizedPath = filepath === '/' ? '' : filepath.replace(/\/$/, '')
     // Build a map of shallow child name → isDirectory
@@ -331,10 +316,13 @@ const autobaseAPI = {
       }
     }
     if (opts.includeStats) {
-      return Array.from(childMap.entries()).map(([name, isDir]) => ({
-        name,
-        stat: { mode: isDir ? 16384 : 32768, size: 0, offset: 0, blocks: 0, downloaded: 0, mtime: 0, ctime: 0, metadata: {} },
-      }))
+      const out = []
+      for (const [name, isDir] of childMap) {
+        if (isDir) { out.push({ name, stat: _dirStat() }); continue }
+        const record = await autobases.readRecord(sess, `${normalizedPath}/${name}`)
+        out.push({ name, stat: record ? _statFromRecord(record) : _dirStat() })
+      }
+      return out
     }
     return Array.from(childMap.keys())
   },
@@ -349,6 +337,9 @@ const autobaseAPI = {
   async createInvite(url, { multiUse = false } = {}) {
     const sess = await _lookup(url)
     assertOwner(sess)
+    // Inviting a writer is the owner opting into collaboration — unlock the drive so incoming
+    // access requests are accepted (same URL). A locked drive otherwise never opens the channel.
+    await autobases.setCollaborative(sess, true).catch(() => {})
     const token = autobases.createInvite(sess.keyStr, { multiUse })
     return `${sess.url}?invite=${token}`
   },
@@ -394,6 +385,8 @@ const autobaseAPI = {
     }
     await sess.base.append({ addWriter: writerKey, profileUrl })
     await sess.base.update()
+    // Approving a writer makes the drive genuinely multi-writer — keep the flag consistent.
+    await autobases.setCollaborative(sess, true).catch(() => {})
     autobases.removePendingRequest(sess.keyStr, writerKey)
   },
 
@@ -416,9 +409,10 @@ const autobaseAPI = {
     const results = []
     const prefix = '/.data/walled.garden/writers/'
     for await (const node of sess.drive.createReadStream({ gte: prefix, lt: prefix + '\xff' })) {
-      try {
-        results.push(JSON.parse(b4a.toString(node.value)))
-      } catch {}
+      // Writer-records are inline records: { metadata, blob:null, value: base64(JSON) }.
+      const rec = node.value
+      if (!rec || rec.value == null) continue
+      try { results.push(JSON.parse(b4a.toString(b4a.from(rec.value, 'base64')))) } catch {}
     }
     return results
   },
@@ -487,11 +481,26 @@ function assertValidFilePath(filepath) {
 }
 
 async function _readIndexJson(sess) {
-  const node = await sess.drive.get('/index.json')
-  if (!node) return {}
-  try {
-    return JSON.parse(b4a.toString(node.value))
-  } catch {
-    return {}
+  const obj = await autobases.readJson(sess, '/index.json')
+  return obj || {}
+}
+
+// Build a Hyperdrive-shaped stat from a v1 view record (real mtime/ctime/size now).
+function _statFromRecord(record) {
+  const md = record.metadata || {}
+  const size = autobases.recordByteLength(record)
+  return {
+    mode: md.executable ? 33261 : 32768, // 0100755 / 0100644
+    size,
+    offset: 0,
+    blocks: 0,
+    downloaded: size,
+    mtime: md.mtime || 0,
+    ctime: md.ctime || 0,
+    metadata: {},
   }
+}
+
+function _dirStat() {
+  return { mode: 16384, size: 0, offset: 0, blocks: 0, downloaded: 0, mtime: 0, ctime: 0, metadata: {} }
 }

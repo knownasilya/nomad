@@ -88,7 +88,7 @@ export async function cd(opts = {}, location = '') {
   if (cwd.startsWith('hyper://')) {
     // make sure the target location can be visited
     let urlp = new URL(cwd);
-    let drive = beaker.hyperdrive.drive(urlp.origin);
+    let drive = beaker.fs.drive(urlp.origin);
     let st;
     try {
       st = await drive.stat(urlp.pathname);
@@ -259,7 +259,7 @@ export async function meta(opts, location, key = undefined, ...value) {
 }
 
 export async function mkdrive(opts) {
-  var drive = await beaker.hyperdrive.createDrive({
+  var drive = await beaker.fs.createDrive({
     title: opts.title,
     description: opts.description,
     prompt: false,

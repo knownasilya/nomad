@@ -323,7 +323,7 @@ class SelectFileModal extends LitElement {
     }
 
     this.driveInfo = !this.isVirtualListing
-      ? await bg.hyperdrive.getInfo(this.drive)
+      ? await bg.fs.getInfo(this.drive)
       : undefined;
     await this.readdir();
     this.updateComplete.then((_) => {
@@ -437,7 +437,7 @@ class SelectFileModal extends LitElement {
       return this.readvirtual();
     }
 
-    var files = await bg.hyperdrive.readdir(joinPath(this.drive, this.path), {
+    var files = await bg.fs.readdir(joinPath(this.drive, this.path), {
       includeStats: true,
     });
     files.forEach((file) => {
@@ -735,7 +735,7 @@ class SelectFileModal extends LitElement {
     if (this.isVirtualListing) {
       this.drive = this.selectedPaths[0];
       if (this.drive.startsWith('hyper://')) {
-        this.driveInfo = await bg.hyperdrive.getInfo(this.drive);
+        this.driveInfo = await bg.fs.getInfo(this.drive);
       }
       return this.goto('/');
     }

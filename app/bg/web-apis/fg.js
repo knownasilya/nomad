@@ -1,6 +1,5 @@
 import * as rpc from 'pauls-electron-rpc';
-import * as hyperdrive from './fg/hyperdrive';
-import * as autobase from './fg/autobase';
+import * as fs from './fg/fs';
 import * as internal from './fg/internal';
 import * as external from './fg/external';
 import * as experimental from './fg/experimental';
@@ -15,8 +14,9 @@ export const setup = function () {
     ) ||
     window.location.hostname.endsWith('hyperdrive.network') /* TEMPRARY */
   ) {
-    beaker.hyperdrive = hyperdrive.setup(rpc);
-    beaker.autobase = autobase.setup(rpc);
+    // ADR-0010: beaker.hyperdrive + beaker.autobase are gone — one unified beaker.fs over the
+    // (Autobase) drive backend. (bg still keeps hyperdrive/autobase impls internally behind fs.)
+    beaker.fs = fs.setup(rpc);
     Object.assign(beaker, external.setup(rpc));
   }
   if (['beaker:', 'hyper:'].includes(window.location.protocol)) {

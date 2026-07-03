@@ -35,7 +35,7 @@ export class ContactsView extends LitElement {
     await Promise.all(
       contacts.map(async (c) => {
         try {
-          let info = await beaker.hyperdrive.drive(c.url).getInfo();
+          let info = await beaker.fs.drive(c.url).getInfo();
           if (info) {
             if (!c.title && info.title) c.title = info.title;
             if (typeof info.peers !== 'undefined') c.peers = info.peers;

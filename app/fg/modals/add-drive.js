@@ -111,7 +111,7 @@ class AddDriveModal extends LitElement {
   async tryFetch() {
     try {
       this.error = undefined;
-      var info = await bg.hyperdrive.getInfo(this.url);
+      var info = await bg.fs.getInfo(this.url);
       if (info.version === 0) {
         this.error = 'Unable to find this site on the network';
       } else {

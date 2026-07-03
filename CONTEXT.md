@@ -7,23 +7,25 @@ A peer-to-peer browser built on Hypercore Protocol. Users author and browse cont
 ### Core data
 
 **Drive**:
-A Hyperdrive v11 content store identified by a public key. The atomic unit of P2P data in Nomad. Each Drive is owned by exactly one keypair; other peers replicate it read-only.
-_Avoid_: hyperdrive, site, archive, dat
+A content store identified by a public key — the atomic unit of P2P data in Nomad. Every Drive is
+an Autobase (a linearised Hyperbee view over one or more writers' oplogs; ADR-0010). A Drive born
+with one writer can gain more via `addWriter` **without changing its key/URL**; a single-writer Drive
+is just a Drive with one writer. All access goes through the one backend-agnostic **`beaker.fs`** API.
+_Avoid_: hyperdrive, collaborative drive, site, archive, dat
 
 **Root Drive**:
-The Drive backing a Space. Contains `/drives.json` and any user-created content for that Space. Created automatically when a Space is first used.
+The Drive backing a Space. Contains `/drives.json` and any user-created content for that Space. Created
+automatically (as an Autobase) when a Space is first used.
 _Avoid_: home drive, profile drive, user drive
 
 **Drive Registry**:
 The `/drives.json` file inside a Space's Root Drive. Lists the Drive keys the Space knows about.
 _Avoid_: drive list, drive catalog, drive index
 
-**Collaborative Drive**:
-A multi-writer Drive backed by Autobase. Multiple Writers can append to it; reads are linearised across all writers. Exposed via `beaker.autobase`; API shape mirrors `beaker.hyperdrive`.
-_Avoid_: shared drive, multi-user drive, autobase drive
-
 **Writer**:
-A keypair that has been granted append access to a Collaborative Drive. Writers are added explicitly via `inviteWriter` / `addWriter`; they are not inferred from replication.
+A keypair granted append access to a Drive. Writers are added explicitly via `addWriter` (through
+pairing/invites); they are not inferred from replication. A Drive's writer set (its Autobase oplog) is
+the security boundary.
 _Avoid_: author, contributor, collaborator
 
 ### Shell chrome

@@ -26,7 +26,7 @@ export class BeakerEditThumb extends BasePopup {
 
   static async runFlow(profiles) {
     var profile = await profiles.me();
-    var drive = beaker.hyperdrive.drive(profile.url);
+    var drive = beaker.fs.drive(profile.url);
 
     // find the existing thumb: prefer index.json manifest, fall back to legacy paths
     var info = await drive.getInfo();

@@ -206,10 +206,7 @@ export class ExplorerApp extends LitElement {
     }
 
     // read location information
-    this.isAutobase = await beaker.autobase.isCollaborativeDrive(loc.getOrigin()).catch(() => false);
-    var drive = this.isAutobase
-      ? beaker.autobase.collaborativeDrive(loc.getOrigin())
-      : beaker.hyperdrive.drive(loc.getOrigin());
+    var drive = beaker.fs.drive(loc.getOrigin());
     try {
       this.driveInfo = await this.attempt(
         `Reading drive information (${loc.getOrigin()})`,
@@ -245,9 +242,7 @@ export class ExplorerApp extends LitElement {
       this.inlineMode = Boolean(getGlobalSavedConfig('inline-mode', false));
       this.sortMode = getGlobalSavedConfig('sort-mode', 'name');
       if (!this.watchStream) {
-        let currentDrive = this.isAutobase
-          ? beaker.autobase.collaborativeDrive(this.currentDriveInfo.url)
-          : beaker.hyperdrive.drive(this.currentDriveInfo.url);
+        let currentDrive = beaker.fs.drive(this.currentDriveInfo.url);
         this.watchStream = currentDrive.watch(this.realPathname);
         var hackSetupTime = Date.now();
         this.watchStream.addEventListener('changed', (e) => {
@@ -303,9 +298,7 @@ export class ExplorerApp extends LitElement {
 
   async readPathAncestry() {
     var ancestry = [];
-    var drive = this.isAutobase
-      ? beaker.autobase.collaborativeDrive(loc.getOrigin())
-      : beaker.hyperdrive.drive(loc.getOrigin());
+    var drive = beaker.fs.drive(loc.getOrigin());
     var pathParts = loc.getPath().split('/').filter(Boolean);
     while (pathParts.length) {
       let name = pathParts[pathParts.length - 1];
@@ -324,7 +317,7 @@ export class ExplorerApp extends LitElement {
       if (stat.mount) {
         mount = await this.attempt(
           `Reading site information (${stat.mount.key}) for parent mount at ${path}`,
-          () => beaker.hyperdrive.drive(stat.mount.key).getInfo()
+          () => beaker.fs.drive(stat.mount.key).getInfo()
         );
       }
       ancestry.unshift({ name, path, stat, mount });
@@ -352,7 +345,7 @@ export class ExplorerApp extends LitElement {
       if (item.stat.mount) {
         item.mount = await this.attempt(
           `Reading site information (${item.stat.mount.key}) for mounted site at ${item.path}`,
-          () => beaker.hyperdrive.drive(item.stat.mount.key).getInfo()
+          () => beaker.fs.drive(item.stat.mount.key).getInfo()
         );
       }
       item.shareUrl = this.getShareUrl(item);
@@ -385,9 +378,9 @@ export class ExplorerApp extends LitElement {
             item.realUrl = item.url;
             item.url = joinPath(loc.getOrigin(), item.path);
             item.shareUrl = this.getShareUrl(item);
-            item.drive = await beaker.hyperdrive.drive(item.drive).getInfo();
+            item.drive = await beaker.fs.drive(item.drive).getInfo();
             item.mount = item.mount
-              ? beaker.hyperdrive.drive(item.mount).getInfo()
+              ? beaker.fs.drive(item.mount).getInfo()
               : undefined;
             this.setItemIcons(item);
           })
@@ -833,7 +826,7 @@ export class ExplorerApp extends LitElement {
     var filename = prompt('Enter the name of your new file');
     if (filename) {
       var pathname = joinPath(this.realPathname, filename);
-      var drive = beaker.hyperdrive.drive(this.currentDriveInfo.url);
+      var drive = beaker.fs.drive(this.currentDriveInfo.url);
       if (await drive.stat(pathname).catch((e) => false)) {
         toast.create('A file or folder already exists at that name');
         return;
@@ -856,7 +849,7 @@ export class ExplorerApp extends LitElement {
     var foldername = prompt('Enter the name of your new folder');
     if (foldername) {
       var pathname = joinPath(this.realPathname, foldername);
-      var drive = beaker.hyperdrive.drive(this.currentDriveInfo.url);
+      var drive = beaker.fs.drive(this.currentDriveInfo.url);
       try {
         await drive.mkdir(pathname);
         this.load();
@@ -869,11 +862,11 @@ export class ExplorerApp extends LitElement {
 
   async onNewMount(e) {
     if (!this.currentDriveInfo.writable) return;
-    var drive = beaker.hyperdrive.drive(this.currentDriveInfo.url);
+    var drive = beaker.fs.drive(this.currentDriveInfo.url);
     var targetUrl = await beaker.shell.selectDriveDialog({
       title: 'Select a site',
     });
-    var target = beaker.hyperdrive.drive(targetUrl);
+    var target = beaker.fs.drive(targetUrl);
     var info = await target.getInfo();
     var name = await getAvailableName(drive, this.realPathname, info.title);
     name = prompt('Enter the mount name', name);
@@ -887,7 +880,7 @@ export class ExplorerApp extends LitElement {
   }
 
   async onForkDrive(e) {
-    var drive = await beaker.hyperdrive.forkDrive(this.currentDriveInfo.url);
+    var drive = await beaker.fs.forkDrive(this.currentDriveInfo.url);
     toast.create('Site created');
     loc.setUrl(drive.url);
   }
@@ -949,7 +942,7 @@ export class ExplorerApp extends LitElement {
         ? joinPath(this.realPathname, oldName)
         : this.realPathname;
       var newPath = oldPath.split('/').slice(0, -1).concat([newName]).join('/');
-      var drive = beaker.hyperdrive.drive(this.currentDriveInfo.url);
+      var drive = beaker.fs.drive(this.currentDriveInfo.url);
       try {
         await drive.rename(oldPath, newPath);
       } catch (e) {
@@ -970,7 +963,7 @@ export class ExplorerApp extends LitElement {
   async onDelete(e) {
     if (!this.currentDriveInfo.writable) return;
 
-    var drive = beaker.hyperdrive.drive(this.currentDriveInfo.url);
+    var drive = beaker.fs.drive(this.currentDriveInfo.url);
     const del = async (path, stat) => {
       if (stat.mount && stat.mount.key) {
         await drive.unmount(path);
@@ -1030,7 +1023,7 @@ export class ExplorerApp extends LitElement {
   async onUpdateFileMetadata(e) {
     if (!this.currentDriveInfo.writable) return;
     var { newMetadata, deletedKeys } = e.detail;
-    var drive = beaker.hyperdrive.drive(this.currentDriveInfo.url);
+    var drive = beaker.fs.drive(this.currentDriveInfo.url);
     try {
       if (this.selection.length) {
         for (let sel of this.selection) {

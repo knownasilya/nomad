@@ -157,7 +157,7 @@ export class EditBookmarkPopup extends BasePopup {
     if (typeof beaker.bookmarks === 'undefined') {
       // userland
       b.href = normalizeUrl(b.href);
-      let drive = beaker.hyperdrive.drive('hyper://private/');
+      let drive = beaker.fs.drive('hyper://private/');
       let slug = createResourceSlug(b.href, b.title);
       let filename = await getAvailableName('/bookmarks', slug, drive, 'goto'); // avoid collisions
       let path = joinPath('/bookmarks', filename);

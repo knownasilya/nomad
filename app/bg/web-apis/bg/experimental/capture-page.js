@@ -6,7 +6,7 @@ import { URL } from 'url';
 // =
 
 const API_DOCS_URL =
-  'https://beakerbrowser.com/docs/apis/experimental-capturepage.html';
+  'https://nomad.pages.dev/docs/api/';
 const API_PERM_ID = 'experimentalCapturePage';
 const LAB_API_ID = 'capturePage';
 

@@ -25,7 +25,7 @@ class SiteMenu extends LitElement {
 
     if (isHyperOrPearUrl(this.url)) {
       try {
-        this.driveInfo = await bg.hyperdrive.getInfo(this.url);
+        this.driveInfo = await bg.fs.getInfo(this.url);
       } catch (e) {
         console.debug(e);
       }

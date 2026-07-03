@@ -97,6 +97,14 @@ class BrowserMenu extends LitElement {
 
           <div
             class="menu-item"
+            @click=${(e) => this.onOpenPage(e, 'beaker://reader')}
+          >
+            <img class="favicon" src="asset:favicon:beaker://reader/" />
+            <span class="label">Reader</span>
+          </div>
+
+          <div
+            class="menu-item"
             @click=${(e) => this.onOpenPage(e, 'beaker://settings')}
           >
             <img class="favicon" src="asset:favicon:beaker://settings/" />
@@ -174,7 +182,7 @@ class BrowserMenu extends LitElement {
 
   async onNewHyperdrive() {
     bg.shellMenus.close();
-    const url = await bg.hyperdrive.createDrive();
+    const url = await bg.fs.createDrive();
     bg.beakerBrowser.openUrl(url, {
       setActive: true,
       addedPaneUrls: ['beaker://editor/'],
@@ -191,11 +199,11 @@ class BrowserMenu extends LitElement {
     });
     if (!folder || !folder.length) return;
 
-    var url = await bg.hyperdrive.createDrive({
+    var url = await bg.fs.createDrive({
       title: folder[0].split('/').pop(),
       prompt: false,
     });
-    await bg.hyperdrive.importFromFilesystem({ src: folder[0], dst: url });
+    await bg.fs.importFromFilesystem({ src: folder[0], dst: url });
 
     bg.beakerBrowser.openUrl(url, { setActive: true });
   }

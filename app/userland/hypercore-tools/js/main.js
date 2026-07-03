@@ -98,7 +98,7 @@ class HypercoreToolsApp extends LitElement {
       this.requestUpdate();
 
       try {
-        drive.files = await beaker.hyperdrive.readdir(drive.url, {
+        drive.files = await beaker.fs.readdir(drive.url, {
           recursive: true,
           includeStats: true,
         });

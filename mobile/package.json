@@ -1,0 +1,69 @@
+{
+  "private": true,
+  "name": "nomad-mobile",
+  "description": "Nomad mobile — a P2P companion browser for Pear: tabs, the web, and hyper:// drives",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "bundle": "bare-pack --linked --host ios-arm64 --host ios-arm64-simulator --host android-arm64 --host android-arm --host android-x64 --out app/app.bundle.mjs backend/backend.mjs",
+    "logs": "adb logcat -v time | grep --line-buffered -F '[nomad]'",
+    "logs:fresh": "adb logcat -c && adb logcat -v time | grep --line-buffered -F '[nomad]'",
+    "logs:ios": "xcrun simctl spawn booted log stream --level debug --style compact --predicate 'eventMessage CONTAINS \"[nomad]\"'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/holepunchto/bare-expo.git"
+  },
+  "author": "Holepunch",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/holepunchto/bare-expo/issues"
+  },
+  "homepage": "https://github.com/holepunchto/bare-expo#readme",
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "autobase": "^7.28.1",
+    "b4a": "^1.8.1",
+    "bare-fs": "^4.7.2",
+    "bare-path": "^3.0.1",
+    "bare-rpc": "^1.3.3",
+    "bare-url": "^2.4.5",
+    "blind-pairing": "^2.3.1",
+    "corestore": "^7.10.1",
+    "expo": "~55.0.23",
+    "expo-build-properties": "~55.0.9",
+    "expo-clipboard": "~55.0.13",
+    "expo-constants": "~55.0.7",
+    "expo-file-system": "~55.0.22",
+    "expo-linking": "~55.0.15",
+    "expo-router": "~55.0.14",
+    "expo-system-ui": "~55.0.17",
+    "graceful-goodbye": "^1.3.3",
+    "hyperbee": "^2.27.3",
+    "hyperblobs": "^2.12.1",
+    "hypercore-crypto": "^3.7.0",
+    "hyperdrive": "^13.3.2",
+    "hyperswarm": "^4.17.0",
+    "marked": "^18.0.5",
+    "mime": "^4.1.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.6",
+    "react-native-b4a": "^0.0.4",
+    "react-native-bare-kit": "^0.13.3",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.23.0",
+    "react-native-webview": "13.16.0",
+    "z32": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/b4a": "^1.6.5",
+    "@types/react": "~19.2.10",
+    "bare-pack": "^2.1.3",
+    "prettier": "^3.3.3",
+    "prettier-config-holepunch": "^2.0.0",
+    "typescript": "^5.3.3"
+  }
+}

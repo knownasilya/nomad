@@ -3,7 +3,7 @@
 // Registered with monaco.languages.json.jsonDefaults so a .json file whose "type"
 // field matches a walled.garden schema gets that schema's autocomplete/validation.
 
-export const WALLED_GARDEN_TYPES = ["walled.garden/person","walled.garden/post","walled.garden/writer-keys","walled.garden/bookmark","walled.garden/comment","walled.garden/follows","walled.garden/reaction","walled.garden/status","walled.garden/vote"];
+export const WALLED_GARDEN_TYPES = ["walled.garden/person","walled.garden/post","walled.garden/feed","walled.garden/bookmark","walled.garden/comment","walled.garden/follows","walled.garden/reaction","walled.garden/status","walled.garden/vote"];
 export const WALLED_GARDEN_JSON_SCHEMA = {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "walled.garden records & drive manifest",
@@ -221,12 +221,27 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "type": "string",
             "description": "Manifest: SPA fallback page path"
           },
+          "summary": {
+            "type": "string",
+            "maxLength": 560
+          },
           "body": {
             "type": "string"
           },
           "category": {
             "type": "string",
             "maxLength": 100
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 100,
+              "pattern": "^[A-Za-z][A-Za-z0-9\\-_?]*$"
+            }
+          },
+          "draft": {
+            "type": "boolean"
           },
           "createdAt": {
             "type": "string",
@@ -242,7 +257,6 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
         "required": [
           "type",
           "title",
-          "body",
           "createdAt"
         ],
         "additionalProperties": false
@@ -255,7 +269,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
         ],
         "properties": {
           "type": {
-            "const": "walled.garden/writer-keys"
+            "const": "walled.garden/feed"
           }
         }
       },
@@ -265,15 +279,15 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
         "properties": {
           "title": {
             "type": "string",
-            "description": "Manifest: human-readable name for the drive"
+            "maxLength": 280
           },
           "description": {
             "type": "string",
-            "description": "Manifest: short description of the drive's contents"
+            "maxLength": 1000
           },
           "type": {
             "type": "string",
-            "const": "walled.garden/writer-keys"
+            "const": "walled.garden/feed"
           },
           "thumb": {
             "type": "string",
@@ -281,13 +295,16 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
           },
           "author": {
             "type": "object",
-            "description": "Manifest: information about the drive author",
             "properties": {
               "url": {
                 "type": "string",
-                "description": "The author profile drive's hyper:// URL"
+                "format": "uri"
               }
-            }
+            },
+            "required": [
+              "url"
+            ],
+            "additionalProperties": false
           },
           "forkOf": {
             "type": "string",
@@ -343,16 +360,25 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "type": "string",
             "description": "Manifest: SPA fallback page path"
           },
-          "keys": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          "itemsPath": {
+            "type": "string",
+            "maxLength": 280
+          },
+          "itemType": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "language": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "icon": {
+            "type": "string"
           }
         },
         "required": [
           "type",
-          "keys"
+          "title"
         ],
         "additionalProperties": false
       }
@@ -1097,7 +1123,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
               "enum": [
                 "walled.garden/person",
                 "walled.garden/post",
-                "walled.garden/writer-keys",
+                "walled.garden/feed",
                 "walled.garden/bookmark",
                 "walled.garden/comment",
                 "walled.garden/follows",

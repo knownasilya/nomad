@@ -231,7 +231,7 @@ export class LibraryApp extends LitElement {
   // =
 
   async onCreateDrive() {
-    var drive = await beaker.hyperdrive.createDrive();
+    var drive = await beaker.fs.createDrive();
     toast.create('Drive created');
     beaker.browser.openUrl(drive.url, {
       setActive: true,

@@ -63,7 +63,7 @@ class PermPrompt extends LitElement {
       let driveKey = this.permParam;
       let driveInfo;
       try {
-        driveInfo = await bg.hyperdrive.getInfo(driveKey);
+        driveInfo = await bg.fs.getInfo(driveKey);
       } catch (e) {
         /* ignore */
       }

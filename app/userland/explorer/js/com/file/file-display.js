@@ -119,7 +119,7 @@ export class FileDisplay extends LitElement {
 
   async readAndRenderFile() {
     try {
-      var drive = beaker.hyperdrive.drive(this.driveUrl);
+      var drive = beaker.fs.drive(this.driveUrl);
       var file = await drive.readFile(this.pathname, 'utf8');
 
       if (this.pathname.endsWith('.md') && this.renderMode !== 'raw') {

@@ -2,21 +2,35 @@
 import b4a from 'b4a';
 import { joinPath } from '../../lib/strings.js';
 import { normalizeUrl, createResourceSlug } from '../../lib/urls';
-import * as drives from '../hyper/drives';
-import { query } from './query';
+import * as autobases from '../hyper/autobases';
 import * as filesystem from './index';
 import * as pinsAPI from './pins';
 import { URL } from 'url';
 import * as profileDb from '../dbs/profile-data-db';
 
+// Bookmarks live in the private drive (an Autobase; ADR-0010) as JSON file BODIES —
+// `/bookmarks/<slug>.goto` (or `.json`) with `{ href, title }` — NOT Hyperdrive entry metadata
+// (which no longer round-trips). We read both `.goto` and `.json` so mobile-written bookmarks
+// (`/bookmarks/<hash>.json`) are visible here too (see docs/multi-device-protocol.md §5).
+
 // exported
 // =
 
 export async function list() {
-  var privateDrive = filesystem.get();
-  var bookmarks = await query(privateDrive, { path: '/bookmarks/*.goto' });
+  var sess = filesystem.get();
   var pins = await pinsAPI.getCurrent();
-  return bookmarks.map((r) => massageBookmark(r, pins));
+  var out = [];
+  for (const { path, record } of await autobases.listRecords(sess, '/bookmarks/')) {
+    if (!(path.endsWith('.goto') || path.endsWith('.json'))) continue;
+    let data;
+    try {
+      const buf = await autobases.resolveRecordContent(record);
+      data = buf ? JSON.parse(b4a.toString(buf)) : null;
+    } catch { data = null; }
+    if (!data || !data.href) continue;
+    out.push(massageBookmark({ url: joinPath(sess.url, path), href: data.href, title: data.title }, pins));
+  }
+  return out;
 }
 
 export async function get(href) {
@@ -27,7 +41,7 @@ export async function get(href) {
 
 export async function add({ href, title, pinned }) {
   href = normalizeUrl(href);
-  var drive = filesystem.get();
+  var sess = filesystem.get();
 
   let existing = await get(href);
   if (existing) {
@@ -35,13 +49,7 @@ export async function add({ href, title, pinned }) {
     if (typeof pinned === 'undefined') pinned = existing.pinned;
 
     let urlp = new URL(existing.bookmarkUrl);
-    // Update metadata: read entry, merge, re-put
-    const entry = await drive.drive.entry(urlp.pathname);
-    const existingMeta = entry?.value?.metadata || {};
-    const buf = await drive.drive.get(urlp.pathname);
-    await drive.drive.put(urlp.pathname, buf || b4a.alloc(0), {
-      metadata: Object.assign({}, existingMeta, { href, title }),
-    });
+    await autobases.putInline(sess, urlp.pathname, JSON.stringify({ href, title }));
     if (pinned !== existing.pinned) {
       if (pinned) await pinsAPI.add(href);
       else await pinsAPI.remove(href);
@@ -49,11 +57,11 @@ export async function add({ href, title, pinned }) {
     return;
   }
 
-  // new bookmark
+  // new bookmark — data in the JSON body
   var slug = createResourceSlug(href, title);
-  var filename = await filesystem.getAvailableName('/bookmarks', slug, 'goto', drive);
+  var filename = await filesystem.getAvailableName('/bookmarks', slug, 'goto', sess);
   var path = joinPath('/bookmarks', filename);
-  await drive.drive.put(path, b4a.alloc(0), { metadata: { href, title } });
+  await autobases.putInline(sess, path, JSON.stringify({ href, title }));
   if (pinned) await pinsAPI.add(href);
   return path;
 }
@@ -62,8 +70,7 @@ export async function remove(href) {
   let existing = await get(href);
   if (!existing) return;
   let urlp = new URL(existing.bookmarkUrl);
-  let drive = await drives.getOrLoadDrive(urlp.hostname);
-  await drive.drive.del(urlp.pathname);
+  await autobases.deletePath(filesystem.get(), urlp.pathname);
   if (existing.pinned) await pinsAPI.remove(existing.href);
 }
 
@@ -78,11 +85,11 @@ export async function migrateBookmarksFromSqlite() {
 // =
 
 function massageBookmark(result, pins) {
-  let href = normalizeUrl(result.stat?.metadata?.href || result.metadata?.href) || '';
+  let href = normalizeUrl(result.href) || '';
   return {
     bookmarkUrl: result.url,
     href,
-    title: (result.stat?.metadata?.title || result.metadata?.title || href || ''),
+    title: result.title || href || '',
     pinned: pins.includes(href),
   };
 }
