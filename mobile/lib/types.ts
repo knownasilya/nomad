@@ -60,13 +60,13 @@ export const CONSOLE_SHIM = `(function(){
   true;
 })();`
 
-// Injected into drive WebViews so in-page `beaker.fs.*` calls (used by app frontends like the blog
-// template) work on mobile. Exposes the SAME `beaker.fs` surface as desktop (ADR-0010) — the method
+// Injected into drive WebViews so in-page `nomad.fs.*` calls (used by app frontends like the blog
+// template) work on mobile. Exposes the SAME `nomad.fs` surface as desktop (ADR-0010) — the method
 // list is the canonical shared/fs-manifest.mjs — over a postMessage bridge to the Bare backend
-// (resolved by window.__beakerResolve). Reads work today; writes + writer-management currently
-// reject (see backend dispatchBeaker) until the mobile Vault exposes writable drives through the bridge.
-export const BEAKER_SHIM = `(function(){
-  if (window.beaker) return;
+// (resolved by window.__nomadResolve). Reads work today; writes + writer-management currently
+// reject (see backend dispatchNomad) until the mobile Vault exposes writable drives through the bridge.
+export const NOMAD_SHIM = `(function(){
+  if (window.nomad) return;
   var pending = {}, seq = 0;
   function rpc(method, url, args){
     return new Promise(function(resolve, reject){
@@ -74,16 +74,16 @@ export const BEAKER_SHIM = `(function(){
       pending[id] = { resolve: resolve, reject: reject };
       try {
         window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'beaker-rpc',
+          type: 'nomad-rpc',
           payload: { id: id, api: 'fs', method: method, url: url || null, args: args || [] }
         }));
       } catch (e) { delete pending[id]; reject(e); }
     });
   }
-  window.__beakerResolve = function(id, result){
+  window.__nomadResolve = function(id, result){
     var p = pending[id]; if (!p) return; delete pending[id];
     if (result && result.ok) p.resolve(result.value);
-    else p.reject(new Error((result && result.error) || 'beaker bridge error'));
+    else p.reject(new Error((result && result.error) || 'nomad bridge error'));
   };
   function join(base, path){
     if (!path) return base;
@@ -138,7 +138,7 @@ export const BEAKER_SHIM = `(function(){
   fs.createDrive = function(o){ return rpc('createDrive', null, [o || {}]).then(function(u){ return driveApi(u); }); };
   fs.createCollaborativeDrive = function(o){ return rpc('createCollaborativeDrive', null, [o || {}]).then(function(u){ return driveApi(u); }); };
   fs.watch = noopStream;
-  window.beaker = {
+  window.nomad = {
     fs: fs,
     schemas: {
       validate: function(type, data){ return rpcApi('schemas', 'validate', null, [type, data]); }
@@ -154,7 +154,7 @@ export const BEAKER_SHIM = `(function(){
       pending[id] = { resolve: resolve, reject: reject };
       try {
         window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'beaker-rpc',
+          type: 'nomad-rpc',
           payload: { id: id, api: api, method: method, url: url || null, args: args || [] }
         }));
       } catch (e) { delete pending[id]; reject(e); }

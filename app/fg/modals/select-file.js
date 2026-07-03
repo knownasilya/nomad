@@ -396,8 +396,8 @@ class SelectFileModal extends LitElement {
           ? html`<img
               class="favicon"
               srcset="
-                beaker://assets/img/drive-types/files.png    1x,
-                beaker://assets/img/drive-types/files-64.png 2x
+                nomad://assets/img/drive-types/files.png    1x,
+                nomad://assets/img/drive-types/files-64.png 2x
               "
             />`
           : html`<img class="favicon" src="asset:favicon:${url}" />`
@@ -510,7 +510,7 @@ class SelectFileModal extends LitElement {
 
   render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div>
         <div class="title">${this.title}</div>
         <div class="wrapper">

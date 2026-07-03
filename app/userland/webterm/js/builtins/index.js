@@ -1,4 +1,4 @@
-import { html } from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
+import { html } from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
 import { resolveParse, parseLocation, joinPath } from './util.js';
 import * as termModule from './term.js';
 
@@ -88,7 +88,7 @@ export async function cd(opts = {}, location = '') {
   if (cwd.startsWith('hyper://')) {
     // make sure the target location can be visited
     let urlp = new URL(cwd);
-    let drive = beaker.fs.drive(urlp.origin);
+    let drive = nomad.fs.drive(urlp.origin);
     let st;
     try {
       st = await drive.stat(urlp.pathname);
@@ -259,7 +259,7 @@ export async function meta(opts, location, key = undefined, ...value) {
 }
 
 export async function mkdrive(opts) {
-  var drive = await beaker.fs.createDrive({
+  var drive = await nomad.fs.createDrive({
     title: opts.title,
     description: opts.description,
     prompt: false,
@@ -287,7 +287,7 @@ export async function mkgoto(opts, location, href) {
 export async function bookmark(opts = {}, href = '.') {
   href = this.env.resolve(href || '.');
   let site = 'hyper://private';
-  await beaker.bookmarks.add({
+  await nomad.bookmarks.add({
     href,
     title: opts.title || href,
     site,
@@ -346,7 +346,7 @@ export async function edit(opts = {}, location = '') {
   let st = await urlp.drive.stat(urlp.pathname).catch((e) => undefined);
   if (!st) await urlp.drive.writeFile(urlp.pathname, '');
 
-  await this.page.goto(`beaker://editor/?url=${location}`);
+  await this.page.goto(`nomad://editor/?url=${location}`);
 }
 
 export function clear() {
@@ -438,7 +438,7 @@ export const system = {
       }
     }
 
-    var stream = await beaker.logger.streamAuditLog();
+    var stream = await nomad.logger.streamAuditLog();
     stream.addEventListener('data', (e) => {
       if (opts.caller && !isOriginEq(opts.caller, e.detail.caller)) return;
       if (opts.target && !isOriginEq(opts.target, e.detail.target)) return;

@@ -11,7 +11,7 @@ import { ipcRenderer, contextBridge, webFrame } from 'electron';
 export default function () {
   contextBridge.exposeInMainWorld('__internalOpen__', {
     close: () => {
-      return ipcRenderer.sendSync('BEAKER_SCRIPTCLOSE_SELF');
+      return ipcRenderer.sendSync('NOMAD_SCRIPTCLOSE_SELF');
     },
   });
   webFrame.executeJavaScript(`

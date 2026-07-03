@@ -613,10 +613,10 @@ const hyperdriveAPI = {
     return emitter;
   },
 
-  // Beaker-internal helpers (shell UI only)
+  // Nomad-internal helpers (shell UI only)
 
-  async beakerDiff(srcUrl, dstUrl, opts) {
-    assertBeakerOnly(this.sender);
+  async nomadDiff(srcUrl, dstUrl, opts) {
+    assertNomadOnly(this.sender);
     if (!srcUrl || typeof srcUrl !== 'string')
       throw new InvalidURLError('First param must be a hyper URL');
     if (!dstUrl || typeof dstUrl !== 'string')
@@ -632,8 +632,8 @@ const hyperdriveAPI = {
     return results;
   },
 
-  async beakerMerge(srcUrl, dstUrl, opts) {
-    assertBeakerOnly(this.sender);
+  async nomadMerge(srcUrl, dstUrl, opts) {
+    assertNomadOnly(this.sender);
     if (!srcUrl || typeof srcUrl !== 'string')
       throw new InvalidURLError('First param must be a hyper URL');
     if (!dstUrl || typeof dstUrl !== 'string')
@@ -657,7 +657,7 @@ const hyperdriveAPI = {
   },
 
   async importFromFilesystem(opts) {
-    assertBeakerOnly(this.sender);
+    assertNomadOnly(this.sender);
     const { checkoutFS, filepath, isHistoric } = await lookupDrive(this.sender, opts.dst);
     if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
     return _importFsFolder(checkoutFS.drive, opts.src, filepath || '/', {
@@ -666,7 +666,7 @@ const hyperdriveAPI = {
   },
 
   async exportToFilesystem(opts) {
-    assertBeakerOnly(this.sender);
+    assertNomadOnly(this.sender);
     const { checkoutFS, filepath } = await lookupDrive(this.sender, opts.src);
     return _exportToFs(checkoutFS.drive, filepath || '/', opts.dst, {
       ignore: opts.ignore,
@@ -675,7 +675,7 @@ const hyperdriveAPI = {
   },
 
   async exportToDrive(opts) {
-    assertBeakerOnly(this.sender);
+    assertNomadOnly(this.sender);
     const src = await lookupDrive(this.sender, opts.src);
     const dst = await lookupDrive(this.sender, opts.dst);
     if (dst.isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
@@ -820,7 +820,7 @@ function assertUnprotectedFilePath(filepath, sender) {
   if (filepath === '/' + DRIVE_MANIFEST_FILENAME) throw new ProtectedFileNotWritableError();
 }
 
-function assertBeakerOnly(sender) {
+function assertNomadOnly(sender) {
   if (!wcTrust.isWcTrusted(sender)) throw new PermissionsError();
 }
 
@@ -875,7 +875,7 @@ async function assertWritePermission(drive, sender, filepath = undefined) {
 }
 
 async function assertQuotaPermission(drive, senderOrigin, byteLength) {
-  if (senderOrigin.startsWith('beaker:')) return;
+  if (senderOrigin.startsWith('nomad:')) return;
   const meta = await archivesDb.getMeta(drive.key);
   const bytesAllowed = DAT_QUOTA_DEFAULT_BYTES_ALLOWED;
   const newSize = (meta.size || 0) + byteLength;

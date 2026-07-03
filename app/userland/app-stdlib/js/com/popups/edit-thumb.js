@@ -7,7 +7,7 @@ const CANVAS_SIZE = 125;
 // exported api
 // =
 
-export class BeakerEditThumb extends BasePopup {
+export class NomadEditThumb extends BasePopup {
   constructor(siteUrl, existingThumbPath) {
     super();
     this.siteUrl = siteUrl;
@@ -21,12 +21,12 @@ export class BeakerEditThumb extends BasePopup {
   //
 
   static async create(siteUrl, existingThumbPath) {
-    return BasePopup.create(BeakerEditThumb, siteUrl, existingThumbPath);
+    return BasePopup.create(NomadEditThumb, siteUrl, existingThumbPath);
   }
 
   static async runFlow(profiles) {
     var profile = await profiles.me();
-    var drive = beaker.fs.drive(profile.url);
+    var drive = nomad.fs.drive(profile.url);
 
     // find the existing thumb: prefer index.json manifest, fall back to legacy paths
     var info = await drive.getInfo();
@@ -47,7 +47,7 @@ export class BeakerEditThumb extends BasePopup {
     }
 
     // run the modal
-    var img = await BeakerEditThumb.create(profile.url, existingThumbPath);
+    var img = await NomadEditThumb.create(profile.url, existingThumbPath);
     if (!img) return;
 
     // replace any existing thumb
@@ -64,7 +64,7 @@ export class BeakerEditThumb extends BasePopup {
   }
 
   static destroy() {
-    return BasePopup.destroy('beaker-edit-thumb');
+    return BasePopup.destroy('nomad-edit-thumb');
   }
 
   // rendering
@@ -167,7 +167,7 @@ export class BeakerEditThumb extends BasePopup {
     this.dispatchEvent(new CustomEvent('resolve', { detail: this.loadedImg }));
   }
 }
-BeakerEditThumb.styles = [
+NomadEditThumb.styles = [
   popupsCSS,
   css`
     canvas {
@@ -203,4 +203,4 @@ BeakerEditThumb.styles = [
   `,
 ];
 
-customElements.define('beaker-edit-thumb', BeakerEditThumb);
+customElements.define('nomad-edit-thumb', NomadEditThumb);

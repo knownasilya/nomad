@@ -10,7 +10,7 @@ A peer-to-peer browser built on Hypercore Protocol. Users author and browse cont
 A content store identified by a public key — the atomic unit of P2P data in Nomad. Every Drive is
 an Autobase (a linearised Hyperbee view over one or more writers' oplogs; ADR-0010). A Drive born
 with one writer can gain more via `addWriter` **without changing its key/URL**; a single-writer Drive
-is just a Drive with one writer. All access goes through the one backend-agnostic **`beaker.fs`** API.
+is just a Drive with one writer. All access goes through the one backend-agnostic **`nomad.fs`** API.
 _Avoid_: hyperdrive, collaborative drive, site, archive, dat
 
 **Root Drive**:
@@ -53,7 +53,7 @@ The `/ai/` folder inside a Drive, containing `system.md` (the system prompt) and
 _Avoid_: agent config, AI settings, model config
 
 **Chat Bubble**:
-A floating chat overlay Nomad injects into a Drive page when `"chatBubble": true` is set in the Drive's `/index.json`. The overlay is provided entirely by Nomad (a Lit custom element injected via the main process); the Drive author does not need to write any chat UI code. The bubble uses `beaker.ai.chat()` resolved against the same Drive's AI Config.
+A floating chat overlay Nomad injects into a Drive page when `"chatBubble": true` is set in the Drive's `/index.json`. The overlay is provided entirely by Nomad (a Lit custom element injected via the main process); the Drive author does not need to write any chat UI code. The bubble uses `nomad.ai.chat()` resolved against the same Drive's AI Config.
 _Avoid_: chat widget, chat overlay, embedded chat
 
 ### Social data

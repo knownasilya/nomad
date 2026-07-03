@@ -1,16 +1,16 @@
 import {
   LitElement,
   html,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
 import * as QP from './lib/qp.js';
 import css from '../css/main.css.js';
 import {
   toHex,
   isSameOrigin,
   shorten,
-} from 'beaker://app-stdlib/js/strings.js';
-import bytes from 'beaker://app-stdlib/vendor/bytes/index.js';
-import 'beaker://app-stdlib/js/com/hover-card.js';
+} from 'nomad://app-stdlib/js/strings.js';
+import bytes from 'nomad://app-stdlib/vendor/bytes/index.js';
+import 'nomad://app-stdlib/js/com/hover-card.js';
 
 class HypercoreToolsApp extends LitElement {
   static get styles() {
@@ -28,7 +28,7 @@ class HypercoreToolsApp extends LitElement {
 
   constructor() {
     super();
-    beaker.panes.setAttachable();
+    nomad.panes.setAttachable();
     this.selectedDrive = undefined;
     this.currentView = 'hypercores';
     this.currentDriveView = 'cores';
@@ -39,18 +39,18 @@ class HypercoreToolsApp extends LitElement {
     this.auditLogStream = undefined;
 
     var ignoreNextAttachEvent = false;
-    beaker.panes.addEventListener('pane-attached', (e) => {
+    nomad.panes.addEventListener('pane-attached', (e) => {
       if (!ignoreNextAttachEvent) {
-        this.load(beaker.panes.getAttachedPane().url);
+        this.load(nomad.panes.getAttachedPane().url);
       }
       ignoreNextAttachEvent = false;
     });
-    beaker.panes.addEventListener('pane-navigated', (e) => {
+    nomad.panes.addEventListener('pane-navigated', (e) => {
       this.load(e.detail.url);
     });
     (async () => {
       var url = QP.getParam('url');
-      var attachedPane = await beaker.panes.attachToLastActivePane();
+      var attachedPane = await nomad.panes.attachToLastActivePane();
       ignoreNextAttachEvent = !!attachedPane;
       if (url) {
         this.load(url);
@@ -69,7 +69,7 @@ class HypercoreToolsApp extends LitElement {
       this.selectedDrive = undefined;
     }
     this.url = url;
-    this.drivecores = await beaker.hyperdebug.listCores(url);
+    this.drivecores = await nomad.hyperdebug.listCores(url);
     console.log(this.drivecores);
     this.requestUpdate();
     this.apiCallLog = [];
@@ -79,7 +79,7 @@ class HypercoreToolsApp extends LitElement {
       drive.url = `hyper://${toHex(drive.metadata.key)}`;
 
       drive.metadata.downloadedBlockBits =
-        await beaker.hyperdebug.hasCoreBlocks(
+        await nomad.hyperdebug.hasCoreBlocks(
           drive.metadata.key,
           0,
           drive.metadata.totalBlocks
@@ -88,7 +88,7 @@ class HypercoreToolsApp extends LitElement {
       this.bindCoreLogEvents(drive.metadata, drive.url, 'metadata');
       this.requestUpdate();
 
-      drive.content.downloadedBlockBits = await beaker.hyperdebug.hasCoreBlocks(
+      drive.content.downloadedBlockBits = await nomad.hyperdebug.hasCoreBlocks(
         drive.content.key,
         0,
         drive.content.totalBlocks
@@ -98,7 +98,7 @@ class HypercoreToolsApp extends LitElement {
       this.requestUpdate();
 
       try {
-        drive.files = await beaker.fs.readdir(drive.url, {
+        drive.files = await nomad.fs.readdir(drive.url, {
           recursive: true,
           includeStats: true,
         });
@@ -113,7 +113,7 @@ class HypercoreToolsApp extends LitElement {
   async bindApiLogEvents() {
     this.selectedAPICall = undefined;
     if (this.auditLogStream) this.auditLogStream.close();
-    this.auditLogStream = await beaker.logger.streamAuditLog({
+    this.auditLogStream = await nomad.logger.streamAuditLog({
       caller: this.url,
       includeResponse: true,
     });
@@ -130,7 +130,7 @@ class HypercoreToolsApp extends LitElement {
       core.log.unshift(args.join(' '));
       this.requestUpdate();
     };
-    var events = beaker.hyperdebug.createCoreEventStream(url, corename);
+    var events = nomad.hyperdebug.createCoreEventStream(url, corename);
     events.addEventListener('ready', () => log('Ready'));
     events.addEventListener('opened', () => log('Opened'));
     events.addEventListener('error', (err) => log('Error', err));
@@ -186,7 +186,7 @@ class HypercoreToolsApp extends LitElement {
       >
     `;
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div id="hover-el"></div>
       <span id="close-btn" @click=${window.close}
         ><span class="fas fa-times"></span
@@ -342,12 +342,12 @@ class HypercoreToolsApp extends LitElement {
       <section class="core">
         <div class="label">
           ${label} Core
-          <beaker-hover-card>
+          <nomad-hover-card>
             <span slot="el" class="discovery-key-icon fas fa-info-circle"></span>
             <div slot="card" class="discovery-key"><strong>Discovery Key:</strong><br>${toHex(
               core.discoveryKey
             )}</div></div>
-          </beaker-hover-card>
+          </nomad-hover-card>
         </div>
         <div class="key">
           ${toHex(core.key)}

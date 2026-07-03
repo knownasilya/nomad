@@ -49,10 +49,10 @@ class SetupModal extends LitElement {
 
   renderStage1() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
         <div class="intro">
-          <img class="intro-logo" src="beaker://assets/logo" />
+          <img class="intro-logo" src="nomad://assets/logo" />
           <h1 class="intro-title">Welcome to Nomad</h1>
           <p class="intro-text">The browser that <strong>does more</strong>.</p>
         </div>
@@ -68,7 +68,7 @@ class SetupModal extends LitElement {
 
   renderStage2() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
         <div class="intro">
           <h1 class="intro-title" style="margin: 10px 0 30px; font-size: 52px;">

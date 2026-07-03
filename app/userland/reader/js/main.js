@@ -1,9 +1,9 @@
-// beaker://reader — an RSS-like reader for walled.garden/feed drives.
+// nomad://reader — an RSS-like reader for walled.garden/feed drives.
 //
 // - Subscriptions: walled.garden/follows at hyper://private/.data/walled.garden/follows.json
 //   (per-Space, multi-device via the Root Drive).
 // - Reads any feed whether it's a plain Hyperdrive or an Autobase Collaborative Drive,
-//   via beaker.fs (the unified, backend-agnostic filesystem API).
+//   via nomad.fs (the unified, backend-agnostic filesystem API).
 // - Post discovery by directory enumeration (itemsPath/*/post.json), newest-first.
 // - Read-state synced to hyper://private/.data/reader/read-state.json (debounced, pruned).
 // - Hybrid rendering: an aggregated card stream; opening a post navigates to its
@@ -36,7 +36,7 @@ async function init() {
   state.readSet = await loadReadState()
   state.follows = await loadFollows()
 
-  // Deep-link: beaker://reader/?subscribe=<feed url> (used by the chrome Subscribe action).
+  // Deep-link: nomad://reader/?subscribe=<feed url> (used by the chrome Subscribe action).
   const sub = new URLSearchParams(location.search).get('subscribe')
   if (sub) {
     const root = driveRoot(sub)
@@ -56,16 +56,16 @@ async function init() {
 
 async function loadFollows() {
   try {
-    const j = JSON.parse(await beaker.fs.readFile(FOLLOWS_PATH))
+    const j = JSON.parse(await nomad.fs.readFile(FOLLOWS_PATH))
     return (j.urls || []).map(driveRoot).filter(Boolean)
   } catch { return [] }
 }
 
 async function saveFollows(urls) {
   const rec = { type: 'walled.garden/follows', urls }
-  const valid = beaker.schemas.validate('walled.garden/follows', rec)
+  const valid = nomad.schemas.validate('walled.garden/follows', rec)
   if (!valid.success) throw new Error(valid.error)
-  await beaker.fs.writeFile(FOLLOWS_PATH, JSON.stringify(valid.data, null, 2))
+  await nomad.fs.writeFile(FOLLOWS_PATH, JSON.stringify(valid.data, null, 2))
 }
 
 async function addFeed(rawUrl) {
@@ -90,7 +90,7 @@ async function removeFeed(root) {
 
 async function loadReadState() {
   try {
-    const j = JSON.parse(await beaker.fs.readFile(READSTATE_PATH))
+    const j = JSON.parse(await nomad.fs.readFile(READSTATE_PATH))
     return new Set(j.read || [])
   } catch { return new Set() }
 }
@@ -119,11 +119,11 @@ async function flushReadState() {
   const pruned = [...state.readSet].filter((u) => known.has(u))
   state.readSet = new Set(pruned)
   try {
-    await beaker.fs.writeFile(READSTATE_PATH, JSON.stringify({ read: pruned }, null, 2))
+    await nomad.fs.writeFile(READSTATE_PATH, JSON.stringify({ read: pruned }, null, 2))
   } catch (e) { console.warn('[reader] read-state save failed', e) }
 }
 
-// ── Data: feeds (via beaker.fs, the backend-agnostic bridge) ──────────────────
+// ── Data: feeds (via nomad.fs, the backend-agnostic bridge) ──────────────────
 
 async function refreshAll() {
   state.loading = true
@@ -167,10 +167,10 @@ async function loadFeed(root) {
 }
 
 // Return an adapter { readText(path), listPostMetaPaths(itemsPath) } for the feed,
-// backed by beaker.fs (which auto-detects the backend — Hyperdrive or Autobase — so
+// backed by nomad.fs (which auto-detects the backend — Hyperdrive or Autobase — so
 // no more try-then-fall-back-and-cache dance is needed).
 async function openFeed(root) {
-  const d = beaker.fs.drive(root)
+  const d = nomad.fs.drive(root)
   return {
     async readText(path) { return d.readFile(path) },          // rejects if missing
     async listPostMetaPaths(itemsPath) {

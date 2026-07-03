@@ -53,7 +53,7 @@ export async function runSetupFlow() {
       icon: ICON_PATH,
       show: true,
     });
-    setupWindow.loadURL(`beaker://setup/?${new URLSearchParams(setupState).toString()}`);
+    setupWindow.loadURL(`nomad://setup/?${new URLSearchParams(setupState).toString()}`);
     await new Promise((r) => setupWindow.once('close', r));
     setupWindow = undefined;
   }

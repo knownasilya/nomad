@@ -117,7 +117,7 @@ class ShellWindowSidebar extends LitElement {
       .filter(({ tab }) => tab.isPinned);
     const hasPinned = pinnedTabs.length > 0;
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="${cls}" style=${sidebarStyle}>
         <div class="sidebar-header">
           ${isDarwin && isLeft ? html`<div class="traffic-light-spacer"></div>` : ''}
@@ -211,7 +211,7 @@ class ShellWindowSidebar extends LitElement {
   _renderTab(tab, index, inGroup = false) {
     const faviconUrl = this.getFavicon(index);
     const showFavicon = Boolean(
-      tab.isLoading || tab.isPinned || faviconUrl || tab.url.startsWith('beaker:')
+      tab.isLoading || tab.isPinned || faviconUrl || tab.url.startsWith('nomad:')
     );
     const cls = classMap({
       'sidebar-tab': true,

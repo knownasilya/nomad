@@ -16,7 +16,7 @@ export const RPC_SPACE_DRIVES = 9 // { reqId, rootDriveKey, ns? } read a space's
 export const RPC_REMOVE_DEVICE = 16 // { reqId, deviceKey, self } removeWriter + drop record; self => also forget the Vault on this device
 export const RPC_SPACE_ADD_DRIVE = 17 // { reqId, rootDriveKey, ns?, key, type? } add a drive to a space's /drives.json registry
 export const RPC_BOOKMARKS = 26 // { reqId, action:'list'|'add'|'remove', rootDriveKey, ns?, href?, title? }
-export const RPC_BEAKER = 40 // { reqId, api, method, url?, args } an in-page beaker.* call from a drive WebView
+export const RPC_NOMAD = 40 // { reqId, api, method, url?, args } an in-page nomad.* call from a drive WebView
 
 // UI -> backend: file-system ops on a writable drive you own (identified by ns).
 // `key` is the drive key hex; `path` is a drive-absolute path ('/a/b.txt').
@@ -37,7 +37,7 @@ export const RPC_VAULT = 15 // { reqId, hasVault, vaultKey?, devices?, spaces?, 
 export const RPC_FS_RESULT = 30 // { reqId, ok, entries?, writable?, base64?, mime?, exists?, message? } reply to any RPC_FS_*
 export const RPC_SPACE_DRIVES_RESULT = 31 // { reqId, ok, drives?, message? } reply to RPC_SPACE_DRIVES
 export const RPC_BOOKMARKS_RESULT = 32 // { reqId, ok, bookmarks?, message? } reply to RPC_BOOKMARKS
-export const RPC_BEAKER_RESULT = 41 // { reqId, ok, value?, error? } reply to RPC_BEAKER
+export const RPC_NOMAD_RESULT = 41 // { reqId, ok, value?, error? } reply to RPC_NOMAD
 
 // Drive types understood by the backend resolver.
 export const DRIVE_HYPERDRIVE = 'hyperdrive'

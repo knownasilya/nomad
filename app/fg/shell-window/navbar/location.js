@@ -108,8 +108,8 @@ class NavbarLocation extends LitElement {
     }
   }
 
-  get isBeaker() {
-    return this.url.startsWith('beaker://');
+  get isNomad() {
+    return this.url.startsWith('nomad://');
   }
 
   get isHyperdrive() {
@@ -118,7 +118,7 @@ class NavbarLocation extends LitElement {
 
   get modifiedUrl() {
     var url = this.url;
-    if (url.startsWith('beaker://desktop')) {
+    if (url.startsWith('nomad://desktop')) {
       url = '';
     } else if (url.includes('://')) {
       try {
@@ -148,7 +148,7 @@ class NavbarLocation extends LitElement {
 
   render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <shell-window-navbar-site-info
         url=${this.url}
         siteTitle=${this.siteTitle}
@@ -160,7 +160,7 @@ class NavbarLocation extends LitElement {
         ?writable=${this.writable}
         .loadError=${this.loadError}
         ?hide-origin=${this.hasExpanded}
-        ?rounded=${false /*this.url.startsWith('beaker://desktop')*/}
+        ?rounded=${false /*this.url.startsWith('nomad://desktop')*/}
         ?autocomplete-open=${this.isAutocompleteOpen}
       >
       </shell-window-navbar-site-info>
@@ -189,14 +189,14 @@ class NavbarLocation extends LitElement {
   }
 
   renderInputPretty() {
-    if (this.url.startsWith('beaker://desktop')) {
+    if (this.url.startsWith('nomad://desktop')) {
       return html`
         <div class="input-pretty" @mouseup=${this.onClickLocation}>
           <span class="syntax">Search or enter your address here</span>
         </div>
       `;
     }
-    if (/^(hyper|http|https|beaker|dat):\/\//.test(this.url)) {
+    if (/^(hyper|http|https|nomad|dat):\/\//.test(this.url)) {
       try {
         var { protocol, host, pathname, search, hash } = new URL(this.url);
         // TODO just show path?
@@ -217,12 +217,12 @@ class NavbarLocation extends LitElement {
           }
         }
         var cls = 'protocol';
-        // if (['beaker:'].includes(protocol)) cls += ' protocol-trusted'
+        // if (['nomad:'].includes(protocol)) cls += ' protocol-trusted'
         // if (['https:'].includes(protocol) && !this.loadError) cls += ' protocol-trusted'
         if (['https:'].includes(protocol) && this.loadError && this.loadError.isInsecureResponse)
           cls += ' protocol-untrusted';
         // if (['dat:'].includes(protocol)) cls += ' protocol-trusted'
-        // if (['beaker:'].includes(protocol)) cls += ' protocol-trusted'
+        // if (['nomad:'].includes(protocol)) cls += ' protocol-trusted'
         return html`
           <div class="input-pretty" @mouseup=${this.onClickLocation}>
             ${
@@ -376,7 +376,7 @@ class NavbarLocation extends LitElement {
 
   async onFocusLocation(e) {
     var input = e.currentTarget;
-    if (!this.url.startsWith('beaker://desktop')) {
+    if (!this.url.startsWith('nomad://desktop')) {
       input.value = this.url;
     } else {
       input.value = '';

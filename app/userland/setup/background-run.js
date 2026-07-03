@@ -5,11 +5,11 @@ customElements.define(
   class extends BaseSlideView {
     constructor() {
       super();
-      beaker.browser.updateSetupState({ profileSetup: 1 });
+      nomad.browser.updateSetupState({ profileSetup: 1 });
       var checkbox = this.shadowRoot.querySelector('input');
       checkbox.checked = true;
       checkbox.addEventListener('change', (e) => {
-        beaker.browser.setSetting('run_background', checkbox.checked ? 1 : 0);
+        nomad.browser.setSetting('run_background', checkbox.checked ? 1 : 0);
       });
     }
 
@@ -44,7 +44,7 @@ label {
 </style>
 <h1><strong>Nomad uses a peer-to-peer network</strong>.</h1>
 <p>To help keep your data online, Nomad can run in the background even if it's not active.</p>
-<p><img src="beaker://assets/img/onboarding/setup-tray-icon.png"></p>
+<p><img src="nomad://assets/img/onboarding/setup-tray-icon.png"></p>
 <hr>
 <p>
   <label>

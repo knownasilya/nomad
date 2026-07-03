@@ -29,8 +29,8 @@ class FilesExplorer extends LitElement {
   }
 
   get drive() {
-    // beaker.fs auto-detects the backend (Hyperdrive or Autobase collaborative drive).
-    return beaker.fs.drive(this.url);
+    // nomad.fs auto-detects the backend (Hyperdrive or Autobase collaborative drive).
+    return nomad.fs.drive(this.url);
   }
 
   get origin() {
@@ -177,7 +177,7 @@ class FilesExplorer extends LitElement {
       if (stat && stat.mount) {
         return {
           path,
-          info: await beaker.fs.drive(stat.mount.key).getInfo(),
+          info: await nomad.fs.drive(stat.mount.key).getInfo(),
         };
       }
       pathParts.pop();
@@ -198,7 +198,7 @@ class FilesExplorer extends LitElement {
     }
     if (!this.isDrive) {
       return html`
-        <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+        <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
         <div class="empty">
           <span class="fas fa-fw fa-info-circle"></span> This site doesn't
           support file listings
@@ -215,7 +215,7 @@ class FilesExplorer extends LitElement {
       return html`<span class="fa-fw far fa-file"></span>`;
     };
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="path">
         <a>
           <span

@@ -32,8 +32,8 @@ import {
   RPC_SPACE_DRIVES_RESULT,
   RPC_BOOKMARKS,
   RPC_BOOKMARKS_RESULT,
-  RPC_BEAKER,
-  RPC_BEAKER_RESULT
+  RPC_NOMAD,
+  RPC_NOMAD_RESULT
 } from '../rpc-commands.mjs'
 
 export interface Bookmark { href: string; title: string; createdAt?: string }
@@ -102,12 +102,12 @@ export interface Backend {
   fsDelete: (driveType: DriveType, key: string, ns: string, path: string, isDir: boolean) => Promise<FsResult>
   fsRename: (driveType: DriveType, key: string, ns: string, from: string, to: string, isDir: boolean) => Promise<FsResult>
   fsMkdir: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
-  beaker: (payload: BeakerCall) => Promise<BeakerResult>
+  nomad: (payload: NomadCall) => Promise<NomadResult>
 }
 
-// An in-page beaker.* call forwarded from a drive WebView (see BEAKER_SHIM).
-export interface BeakerCall { id?: string; api: string; method: string; url?: string | null; args?: unknown[] }
-export interface BeakerResult { ok: boolean; value?: unknown; error?: string }
+// An in-page nomad.* call forwarded from a drive WebView (see NOMAD_SHIM).
+export interface NomadCall { id?: string; api: string; method: string; url?: string | null; args?: unknown[] }
+export interface NomadResult { ok: boolean; value?: unknown; error?: string }
 
 // Boots the Bare worklet (the P2P backend) once and wires up RPC. The returned
 // `open`/`close` functions post commands to the backend; responses are routed
@@ -136,7 +136,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
       if (req.command === RPC_STATUS) h.onStatus(msg)
       else if (req.command === RPC_CONTENT) h.onContent(msg)
       else if (req.command === RPC_ERROR) h.onError(msg)
-      else if (req.command === RPC_CREATED || req.command === RPC_PAIRED || req.command === RPC_VAULT || req.command === RPC_FS_RESULT || req.command === RPC_SPACE_DRIVES_RESULT || req.command === RPC_BOOKMARKS_RESULT || req.command === RPC_BEAKER_RESULT) {
+      else if (req.command === RPC_CREATED || req.command === RPC_PAIRED || req.command === RPC_VAULT || req.command === RPC_FS_RESULT || req.command === RPC_SPACE_DRIVES_RESULT || req.command === RPC_BOOKMARKS_RESULT || req.command === RPC_NOMAD_RESULT) {
         pending.current[msg.reqId]?.(msg)
         delete pending.current[msg.reqId]
       }
@@ -167,25 +167,25 @@ export function useBackend (handlers: BackendHandlers): Backend {
     })
   }
 
-  // An in-page beaker.* call from a drive WebView: forward to the backend and
+  // An in-page nomad.* call from a drive WebView: forward to the backend and
   // resolve with its reply ({ ok, value | error }). Always resolves so the caller
   // can hand the result straight back into the WebView.
-  function beakerCall (payload: BeakerCall): Promise<BeakerResult> {
-    return new Promise<BeakerResult>((resolve) => {
+  function nomadCall (payload: NomadCall): Promise<NomadResult> {
+    return new Promise<NomadResult>((resolve) => {
       const rpc = rpcRef.current
       if (!rpc) return resolve({ ok: false, error: 'backend not ready' })
       const reqId = `bk_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
       const timer = setTimeout(() => {
         if (pending.current[reqId]) { delete pending.current[reqId]; resolve({ ok: false, error: 'backend did not respond' }) }
       }, 15000)
-      pending.current[reqId] = (msg: BeakerResult) => { clearTimeout(timer); resolve(msg) }
-      const req = rpc.request(RPC_BEAKER)
+      pending.current[reqId] = (msg: NomadResult) => { clearTimeout(timer); resolve(msg) }
+      const req = rpc.request(RPC_NOMAD)
       req.send(b4a.from(JSON.stringify({ reqId, ...payload })))
     })
   }
 
   return {
-    beaker: (payload) => beakerCall(payload),
+    nomad: (payload) => nomadCall(payload),
     fsList: (driveType, key, ns, path) => fsCall(RPC_FS_LIST, { driveType, key, ns, path }),
     fsRead: (driveType, key, ns, path) => fsCall(RPC_FS_READ, { driveType, key, ns, path }),
     fsWrite: (driveType, key, ns, path, base64) => fsCall(RPC_FS_WRITE, { driveType, key, ns, path, base64 }),

@@ -207,8 +207,8 @@ export default class DriveManager {
     // as the drive's entry frontend. We honor it at the drive ROOT, mirroring the
     // desktop protocol handler (where it shadows index.html). Deeper paths still
     // resolve to their own files below, so content drives degrade to static
-    // rendering on mobile. NOTE: this WebView has no `beaker` global yet, so
-    // beaker.* app frontends render blank here; static .ui frontends work.
+    // rendering on mobile. NOTE: this WebView has no `nomad` global yet, so
+    // nomad.* app frontends render blank here; static .ui frontends work.
     // See nomad.dev "Frontends (.ui folder)".
     if (path === '/' || path === '') {
       const ui = await reader.read('/.ui/ui.html')
@@ -293,8 +293,8 @@ export default class DriveManager {
     return { kind: 'file', mime: mime.getType(path) || 'application/octet-stream', buffer }
   }
 
-  // --- in-page beaker.* bridge (read-only) ---------------------------------
-  // Backs the window.beaker shim injected into drive WebViews. Read-only: opens
+  // --- in-page nomad.* bridge (read-only) ---------------------------------
+  // Backs the window.nomad shim injected into drive WebViews. Read-only: opens
   // the drive without a namespace, so writes / writer-management aren't available
   // here (those need the Vault's writable-drive plumbing). isWritable() is false
   // for these opens, so app frontends render read-only on mobile.
@@ -305,7 +305,7 @@ export default class DriveManager {
   }
 
   // Flat, recursive list of every file path under `folder` — mirrors desktop's
-  // beaker.autobase list() (a Hyperbee key-range scan), which the blog relies on
+  // nomad.autobase list() (a Hyperbee key-range scan), which the blog relies on
   // to find /posts/<slug>/post.json. (reader.list() is only one level deep.)
   async bridgeListKeys (driveType, key, folder) {
     const { reader } = await this.open(driveType, key, () => {}, null)
@@ -408,7 +408,7 @@ export default class DriveManager {
   }
 
   // Bookmarks live in the space Root Drive at /bookmarks/<slug>.json as JSON bodies
-  // ({ type:'beaker/bookmark', href, title, createdAt }) — Autobase has no file metadata, so the
+  // ({ type:'nomad/bookmark', href, title, createdAt }) — Autobase has no file metadata, so the
   // data is in the body. Lookups/dedup are by href, so the slug only needs to be unique+stable.
   async listBookmarks (rootDriveKey, ns = null) {
     const entry = await this.open(DRIVE_AUTOBASE, rootDriveKey, () => {}, ns)
@@ -426,7 +426,7 @@ export default class DriveManager {
     const entry = await this.open(DRIVE_AUTOBASE, rootDriveKey, () => {}, ns)
     if (!isWritable(entry.drive)) throw new Error('This space is read-only on this device')
     const slug = b4a.toString(crypto.hash(b4a.from(href)), 'hex')
-    const rec = { type: 'beaker/bookmark', href, title: title || href, createdAt: new Date().toISOString() }
+    const rec = { type: 'nomad/bookmark', href, title: title || href, createdAt: new Date().toISOString() }
     await this._put(DRIVE_AUTOBASE, entry.drive, `/bookmarks/${slug}.json`, b4a.from(JSON.stringify(rec)), { inline: true })
   }
 

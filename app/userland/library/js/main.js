@@ -1,10 +1,10 @@
 import {
   LitElement,
   html,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import * as toast from 'beaker://app-stdlib/js/com/toast.js';
-import { findParent } from 'beaker://app-stdlib/js/dom.js';
-import { EditBookmarkPopup } from 'beaker://app-stdlib/js/com/popups/edit-bookmark.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import * as toast from 'nomad://app-stdlib/js/com/toast.js';
+import { findParent } from 'nomad://app-stdlib/js/dom.js';
+import { EditBookmarkPopup } from 'nomad://app-stdlib/js/com/popups/edit-bookmark.js';
 import { AddContactPopup } from './com/add-contact-popup.js';
 import mainCSS from '../css/main.css.js';
 import './views/drives.js';
@@ -28,8 +28,8 @@ export class LibraryApp extends LitElement {
 
   constructor() {
     super();
-    beaker.panes.setAttachable();
-    beaker.panes.attachToLastActivePane();
+    nomad.panes.setAttachable();
+    nomad.panes.attachToLastActivePane();
 
     this.view = '';
     this.viewMode = localStorage.getItem('lib-view-mode') || 'list';
@@ -44,14 +44,14 @@ export class LibraryApp extends LitElement {
 
     this.addEventListener('click', (e) => {
       // route navigations to the attached pane if present
-      var attachedPane = beaker.panes.getAttachedPane();
+      var attachedPane = nomad.panes.getAttachedPane();
       if (!attachedPane) return;
       let anchor = findParent(e.path[0], (el) => el.tagName === 'A');
       if (anchor) {
         if (!e.metaKey && anchor.getAttribute('target') !== '_blank') {
           e.stopPropagation();
           e.preventDefault();
-          beaker.panes.navigate(attachedPane.id, anchor.getAttribute('href'));
+          nomad.panes.navigate(attachedPane.id, anchor.getAttribute('href'));
         }
       }
     });
@@ -88,10 +88,10 @@ export class LibraryApp extends LitElement {
       </a>
     `;
     return html`
-      <link rel="stylesheet" href="beaker://app-stdlib/css/fontawesome.css" />
+      <link rel="stylesheet" href="nomad://app-stdlib/css/fontawesome.css" />
       <header>
         <div class="brand">
-          <img src="asset:favicon:beaker://library/" />
+          <img src="asset:favicon:nomad://library/" />
           My Library
         </div>
         <div class="search-ctrl">
@@ -231,11 +231,11 @@ export class LibraryApp extends LitElement {
   // =
 
   async onCreateDrive() {
-    var drive = await beaker.fs.createDrive();
+    var drive = await nomad.fs.createDrive();
     toast.create('Drive created');
-    beaker.browser.openUrl(drive.url, {
+    nomad.browser.openUrl(drive.url, {
       setActive: true,
-      addedPaneUrls: ['beaker://editor/'],
+      addedPaneUrls: ['nomad://editor/'],
     });
     if (this.view === 'drives') {
       this.shadowRoot.querySelector('drives-view').load();

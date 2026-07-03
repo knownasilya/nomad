@@ -50,7 +50,7 @@ class ProgressPrompt extends LitElement {
   render() {
     let pct = (this.progress * 100) | 0;
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
         <span>${this.label}</span>
         <progress max="100" value=${pct}>${pct}%</progress>

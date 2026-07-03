@@ -7,10 +7,10 @@ import { normalizeUrl } from '../../lib/urls';
 // =
 
 export async function setup() {
-  // The private drive is an Autobase (ADR-0010); pins live in the file body of /beaker/pins.json.
+  // The private drive is an Autobase (ADR-0010); pins live in the file body of /nomad/pins.json.
   // Fresh drives have no legacy metadata-encoded pins to migrate, so just ensure the file exists.
   const sess = filesystem.get();
-  const existing = await autobases.readContent(sess, '/beaker/pins.json');
+  const existing = await autobases.readContent(sess, '/nomad/pins.json');
   if (existing) return;
   await write([]);
 }
@@ -45,7 +45,7 @@ export async function remove(url) {
 async function read() {
   var data;
   try {
-    const buf = await autobases.readContent(filesystem.get(), '/beaker/pins.json');
+    const buf = await autobases.readContent(filesystem.get(), '/nomad/pins.json');
     data = buf ? JSON.parse(b4a.toString(buf)) : [];
   } catch (e) {
     data = [];
@@ -58,7 +58,7 @@ async function write(data) {
   data = data.filter((b) => b && typeof b === 'string');
   await autobases.putInline(
     filesystem.get(),
-    '/beaker/pins.json',
+    '/nomad/pins.json',
     b4a.from(JSON.stringify(data, null, 2))
   );
 }

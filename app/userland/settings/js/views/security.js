@@ -22,7 +22,7 @@ class SecuritySettingsView extends LitElement {
   }
 
   async load() {
-    this.exceptions = (await beaker.browser.getCertExceptions()) || [];
+    this.exceptions = (await nomad.browser.getCertExceptions()) || [];
     this.requestUpdate();
   }
 
@@ -31,7 +31,7 @@ class SecuritySettingsView extends LitElement {
 
   render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="form-group">
         <h2>Trusted Domains (Certificate Bypass)</h2>
         ${this.renderExceptionsList()}
@@ -71,8 +71,8 @@ class SecuritySettingsView extends LitElement {
   // =
 
   async onClickRemove(hostname) {
-    await beaker.browser.removeCertException(hostname);
-    this.exceptions = await beaker.browser.getCertExceptions();
+    await nomad.browser.removeCertException(hostname);
+    this.exceptions = await nomad.browser.getCertExceptions();
     toast.create(`Removed ${hostname} from trusted domains`);
     this.requestUpdate();
   }

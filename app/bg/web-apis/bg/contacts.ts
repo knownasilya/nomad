@@ -5,7 +5,7 @@ import * as shellAPI from './shell';
 // =
 
 /**
- * @typedef {Object} BeakerContactPublicAPIContactRecord
+ * @typedef {Object} NomadContactPublicAPIContactRecord
  * @prop {string} url
  * @prop {string} title
  * @prop {string} description
@@ -16,7 +16,7 @@ import * as shellAPI from './shell';
 
 export default {
   /**
-   * @returns {Promise<BeakerContactPublicAPIContactRecord>}
+   * @returns {Promise<NomadContactPublicAPIContactRecord>}
    */
   async requestProfile() {
     var url = await shellAPI.selectDriveDialog.call(this, {
@@ -34,7 +34,7 @@ export default {
   },
 
   /**
-   * @returns {Promise<BeakerContactPublicAPIContactRecord>}
+   * @returns {Promise<NomadContactPublicAPIContactRecord>}
    */
   async requestContact() {
     var url = await shellAPI.selectDriveDialog.call(this, {
@@ -52,7 +52,7 @@ export default {
   },
 
   /**
-   * @returns {Promise<Array<BeakerContactPublicAPIContactRecord>>}
+   * @returns {Promise<Array<NomadContactPublicAPIContactRecord>>}
    */
   async requestContacts() {
     var urls = await shellAPI.selectDriveDialog.call(this, {
@@ -81,7 +81,7 @@ export default {
   },
 
   /**
-   * @returns {Promise<Array<BeakerContactPublicAPIContactRecord>>}
+   * @returns {Promise<Array<NomadContactPublicAPIContactRecord>>}
    */
   async list() {
     return shellAPI.listDrives.call(this, { tag: 'contact', writable: false });

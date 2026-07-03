@@ -1,4 +1,4 @@
-// Spike for ADR-0010 (unify the filesystem on Autobase behind beaker.fs).
+// Spike for ADR-0010 (unify the filesystem on Autobase behind nomad.fs).
 // THROWAWAY — not wired into the app. Validates the load-bearing unknowns:
 //
 //   1. Blob design (option b): a writer puts file bytes into its OWN Hyperblobs core
@@ -62,7 +62,7 @@ async function waitFor(fn, ms = 15000, every = 150) {
   return false;
 }
 
-// --- The PROPOSED beaker.fs view + reducer ------------------------------------
+// --- The PROPOSED nomad.fs view + reducer ------------------------------------
 // View = a Hyperbee of path -> { metadata, blob }. apply is a PURE, REPLAY-SAFE reducer:
 // keyed puts only, NO blob writes, NO core opening (per the Autobase "mutate only the
 // view / side effects belong outside the linearization path" rule).

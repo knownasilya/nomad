@@ -3,11 +3,11 @@ import { LitElement, html, css } from 'lit';
 /*
 Usage:
 
-<beaker-img-fallbacks>
+<nomad-img-fallbacks>
   <img src="/foo.png" slot="img1">
   <img src="/bar.png" slot="img2">
   <img src="/baz.png" slot="img3">
-</beaker-img-fallbacks>
+</nomad-img-fallbacks>
 */
 
 export class ImgFallbacks extends LitElement {
@@ -36,4 +36,4 @@ export class ImgFallbacks extends LitElement {
   }
 }
 
-customElements.define('beaker-img-fallbacks', ImgFallbacks);
+customElements.define('nomad-img-fallbacks', ImgFallbacks);

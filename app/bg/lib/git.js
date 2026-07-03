@@ -5,7 +5,7 @@ import fs from 'fs';
 import { tmpdir } from 'os';
 
 export async function gitCloneToTmp(url) {
-  var dir = await fs.promises.mkdtemp(path.join(tmpdir(), `beaker-git-`));
+  var dir = await fs.promises.mkdtemp(path.join(tmpdir(), `nomad-git-`));
   try {
     await git.clone({ fs, http, dir, url });
   } catch (e) {

@@ -2,7 +2,7 @@ import {
   LitElement,
   html,
 } from 'lit';
-import * as beakerPermissions from '../../../../lib/permissions';
+import * as nomadPermissions from '../../../../lib/permissions';
 import sitePermsCSS from '../../css/com/site-perms.css.js';
 
 class RequestedPerms extends LitElement {
@@ -33,7 +33,7 @@ class RequestedPerms extends LitElement {
       return html`<div class="field-group">No permissions assigned</div>`;
     }
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       ${requestedPerms.length
         ? html`
             <div class="field-group">
@@ -46,9 +46,9 @@ class RequestedPerms extends LitElement {
   }
 
   renderRequestedPerm({ perm, value, opts }) {
-    const permId = beakerPermissions.getPermId(perm);
-    const permParam = beakerPermissions.getPermParam(perm);
-    const desc = beakerPermissions.renderPermDesc({
+    const permId = nomadPermissions.getPermId(perm);
+    const permParam = nomadPermissions.getPermParam(perm);
+    const desc = nomadPermissions.renderPermDesc({
       bg: null,
       html,
       url: this.origin,
@@ -59,7 +59,7 @@ class RequestedPerms extends LitElement {
     if (!desc) return;
     return html`
       <div>
-        <span class="fa-fw ${beakerPermissions.PERM_ICONS[permId]}"></span>
+        <span class="fa-fw ${nomadPermissions.PERM_ICONS[permId]}"></span>
         ${desc}:
         <select @change=${(e) => this.onChangePerm(e, perm)}>
           <option value="1" ?selected=${value}>Allow</option>
@@ -79,7 +79,7 @@ class RequestedPerms extends LitElement {
     var permObj = this.requestedPerms.find((o) => o.perm === perm);
     if (!permObj) return;
     var newValue = +e.currentTarget.value;
-    await beaker.sitedata.setPermission(this.origin, perm, newValue);
+    await nomad.sitedata.setPermission(this.origin, perm, newValue);
     permObj.value = newValue;
     this.requestUpdate();
   }
@@ -88,7 +88,7 @@ class RequestedPerms extends LitElement {
     e.preventDefault();
     var permObj = this.requestedPerms.find((o) => o.perm === perm);
     if (!permObj) return;
-    await beaker.sitedata.clearPermission(this.origin, perm);
+    await nomad.sitedata.clearPermission(this.origin, perm);
     this.requestedPerms = this.requestedPerms.filter((p) => p !== permObj);
     this.requestUpdate();
   }

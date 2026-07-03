@@ -2,7 +2,7 @@
 
 Nomad is a peer-to-peer Web browser. It adds new APIs for building hostless applications while remaining compatible with the rest of the Web.
 
-Nomad is a fork of the [Beaker Browser](https://github.com/beakerbrowser/beaker).
+Nomad is a fork of the [Beaker Browser](https://github.com/beakerbrowser/nomad).
 
 > 🏗️ Under construction
 
@@ -31,7 +31,7 @@ Nomad is a fork of the [Beaker Browser](https://github.com/beakerbrowser/beaker)
 
 > **macOS:** the builds are signed but **not notarized**, so after dragging Nomad to
 > `/Applications` you must clear the download quarantine flag once, or the app will fail to
-> start correctly (blank window / `beaker://` errors). See
+> start correctly (blank window / `nomad://` errors). See
 > [macOS unsigned builds](#macos-unsigned-builds) below.
 
 ### Building from source
@@ -90,7 +90,7 @@ If you're doing development, `npm run watch` to have assets build automatically.
 
 ### Env Vars
 
-- `DEBUG`: which log systems to output? A comma-separated string. Can be `beaker`, `dat`, `bittorrent-dht`, `dns-discovery`, `hypercore-protocol`. Specify `*` for all.
+- `DEBUG`: which log systems to output? A comma-separated string. Can be `nomad`, `dat`, `bittorrent-dht`, `dns-discovery`, `hypercore-protocol`. Specify `*` for all.
 - `NOMAD_OPEN_URL`: open the given URL on load, rather than the previous session or default tab.
 - `NOMAD_USER_DATA_PATH`: override the user-data path, therefore changing where data is read/written. Useful for testing. For default value see `userData` in the [electron docs](https://electron.atom.io/docs/api/app/#appgetpathname).
 - `NOMAD_DAT_QUOTA_DEFAULT_BYTES_ALLOWED`: override the default max-quota for bytes allowed to be written by a dat site. Useful for testing. Default value is `'500mb'`. This can be a Number or a String. Check [bytes.parse](https://github.com/visionmedia/bytes.js/tree/a4b9af2bf289175f12b3538eb172f2489844b1ec#bytesparsestringnumber-value-numbernull) for supported units and abbreviations.
@@ -107,7 +107,7 @@ Nomad's macOS builds are ad-hoc signed but **not notarized** (notarization needs
 Developer ID). Any app you *download* — including the official Releases — is flagged with
 `com.apple.quarantine`, and on Apple Silicon Gatekeeper then runs quarantined, non-notarized
 apps from a randomized read-only path (**App Translocation**). In that state Nomad fails to
-start correctly: the window is blank or `beaker://desktop/` errors with `ERR_UNKNOWN_URL_SCHEME`.
+start correctly: the window is blank or `nomad://desktop/` errors with `ERR_UNKNOWN_URL_SCHEME`.
 
 Fix: after copying Nomad to `/Applications`, clear the quarantine flag once (do this **before**
 first launch; quit Nomad first if it's already open):
@@ -122,7 +122,7 @@ that aren't signed with a real certificate.
 
 ### tmux
 
-Launching from tmux is known to cause issues with GUI apps in macOS. On Beaker, it may cause the application to hang during startup.
+Launching from tmux is known to cause issues with GUI apps in macOS. On Nomad, it may cause the application to hang during startup.
 
 ## Contributors
 

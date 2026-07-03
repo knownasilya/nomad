@@ -20,7 +20,7 @@ export class BaseSlideView extends HTMLElement {
 
   outerRender() {
     this.shadow.innerHTML = `
-<link rel="stylesheet" href="beaker://assets/font-awesome.css">
+<link rel="stylesheet" href="nomad://assets/font-awesome.css">
 <style>
   :host {
     -webkit-app-region: drag;

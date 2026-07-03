@@ -33,7 +33,7 @@ import * as trayIcon from './bg/ui/tray-icon';
 import * as downloads from './bg/ui/downloads';
 import * as permissions from './bg/ui/permissions';
 
-import * as beakerProtocol from './bg/protocols/beaker';
+import * as nomadProtocol from './bg/protocols/nomad';
 import * as assetProtocol from './bg/protocols/asset';
 import * as hyperProtocol from './bg/protocols/hyper';
 import { registerForPartition } from './bg/protocols/index';
@@ -81,7 +81,7 @@ protocol.registerSchemesAsPrivileged([
     },
   },
   {
-    scheme: 'beaker',
+    scheme: 'nomad',
     privileges: {
       standard: true,
       secure: true,
@@ -121,9 +121,9 @@ app.on('ready', async function () {
     homePath: app.getPath('home'),
   };
 
-  await logger.setup(join(commonOpts.userDataPath, 'beaker.log'));
+  await logger.setup(join(commonOpts.userDataPath, 'nomad.log'));
   log.info('Welcome to Nomad');
-  beakerProtocol.register(protocol);
+  nomadProtocol.register(protocol);
   webapis.setup();
   initWindow.open();
   portForwarder.setup();

@@ -1,16 +1,16 @@
 import {
   LitElement,
   html,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import { repeat } from 'beaker://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
-import { classMap } from 'beaker://app-stdlib/vendor/lit-element/lit-html/directives/class-map.js';
-import { pluralize } from 'beaker://app-stdlib/js/strings.js';
-import { writeToClipboard } from 'beaker://app-stdlib/js/clipboard.js';
-import * as toast from 'beaker://app-stdlib/js/com/toast.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
+import { classMap } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/class-map.js';
+import { pluralize } from 'nomad://app-stdlib/js/strings.js';
+import { writeToClipboard } from 'nomad://app-stdlib/js/clipboard.js';
+import * as toast from 'nomad://app-stdlib/js/com/toast.js';
 import drivesCSS from '../../css/views/drives.css.js';
 
 const EXPLORER_URL = (drive) =>
-  `beaker://explorer/${drive.url.slice('hyper://'.length)}`;
+  `nomad://explorer/${drive.url.slice('hyper://'.length)}`;
 
 export class DrivesView extends LitElement {
   static get properties() {
@@ -40,7 +40,7 @@ export class DrivesView extends LitElement {
   }
 
   async load() {
-    var drives = await beaker.drives.list({ includeSystem: false });
+    var drives = await nomad.drives.list({ includeSystem: false });
 
     drives.forEach((drive) => {
       drive.isPear = drive.info?.type === 'pear-app';
@@ -121,30 +121,30 @@ export class DrivesView extends LitElement {
       delete items[i].click;
     }
 
-    var choice = await beaker.browser.showContextMenu(items);
+    var choice = await nomad.browser.showContextMenu(items);
     if (fns[choice]) fns[choice]();
   }
 
   async forkDrive(drive) {
-    var drive = await beaker.fs.forkDrive(drive.url);
+    var drive = await nomad.fs.forkDrive(drive.url);
     toast.create('Drive created');
     window.open(drive.url);
     this.load();
   }
 
   async diffDrive(drive) {
-    window.open(`beaker://diff/?base=${drive.url}`);
+    window.open(`nomad://diff/?base=${drive.url}`);
   }
 
   async driveProps(drive) {
-    await beaker.shell.drivePropertiesDialog(drive.url);
+    await nomad.shell.drivePropertiesDialog(drive.url);
     this.load();
   }
 
   async removeDrive(drive) {
-    await beaker.drives.remove(drive.url);
+    await nomad.drives.remove(drive.url);
     const undo = async () => {
-      await beaker.drives.configure(drive.url);
+      await nomad.drives.configure(drive.url);
       this.drives.push(drive);
       this.requestUpdate();
     };
@@ -165,7 +165,7 @@ export class DrivesView extends LitElement {
     const isSimple = this.hasAttribute('simple');
     const isCard = !isSimple && this.viewMode === 'card';
     return html`
-      <link rel="stylesheet" href="beaker://app-stdlib/css/fontawesome.css" />
+      <link rel="stylesheet" href="nomad://app-stdlib/css/fontawesome.css" />
       ${drives
         ? html`
             ${!isSimple && !isCard

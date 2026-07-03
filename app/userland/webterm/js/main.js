@@ -2,13 +2,13 @@ import {
   LitElement,
   html,
   TemplateResult,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import { repeat } from 'beaker://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
 import { parser } from './lib/parser.js';
 import { Cliclopts } from './lib/cliclopts.1.1.1.js';
 import { createDrive } from './lib/term-drive-wrapper.js';
-import { joinPath, shortenAllKeys } from 'beaker://app-stdlib/js/strings.js';
-import { findParent } from 'beaker://app-stdlib/js/dom.js';
+import { joinPath, shortenAllKeys } from 'nomad://app-stdlib/js/strings.js';
+import { findParent } from 'nomad://app-stdlib/js/dom.js';
 import { LSArray } from './lib/ls-array.js';
 import * as builtinsFns from './builtins/index.js';
 import builtinsManifest from './builtins/manifest.js';
@@ -53,7 +53,7 @@ class WebTerm extends LitElement {
 
   constructor() {
     super();
-    beaker.panes.setAttachable();
+    nomad.panes.setAttachable();
     this.isLoaded = false;
     this.startUrl = '';
     this._url = '';
@@ -98,9 +98,9 @@ class WebTerm extends LitElement {
         if (e.metaKey || anchor.getAttribute('target') === '_blank') {
           window.open(anchor.getAttribute('href'));
         } else {
-          var attachedPane = beaker.panes.getAttachedPane();
+          var attachedPane = nomad.panes.getAttachedPane();
           if (attachedPane) {
-            beaker.panes.navigate(attachedPane.id, anchor.getAttribute('href'));
+            nomad.panes.navigate(attachedPane.id, anchor.getAttribute('href'));
           } else {
             window.location = anchor.getAttribute('href');
           }
@@ -117,8 +117,8 @@ class WebTerm extends LitElement {
     });
     (async () => {
       let ctx = new URLSearchParams(location.search).get('url');
-      if (ctx && ctx.startsWith('beaker://webterm')) ctx = undefined;
-      var attachedPane = await beaker.panes.attachToLastActivePane();
+      if (ctx && ctx.startsWith('nomad://webterm')) ctx = undefined;
+      var attachedPane = await nomad.panes.attachToLastActivePane();
       if (attachedPane) {
         ctx = attachedPane.url;
       }
@@ -233,7 +233,7 @@ class WebTerm extends LitElement {
   }
 
   async loadInstalledCommands() {
-    var installed = await beaker.fs
+    var installed = await nomad.fs
       .readFile('hyper://private/webterm/installed.json')
       .then(JSON.parse)
       .catch((e) => []);
@@ -261,13 +261,13 @@ class WebTerm extends LitElement {
     }
     await Promise.all(
       installedValidated.map(async (app) => {
-        let subcommands = await beaker.browser.spawnAndExecuteJs(
+        let subcommands = await nomad.browser.spawnAndExecuteJs(
           app.url,
           `
         ;(() => {
           let commands = []
-          if (beaker.terminal.getCommands().length) {
-            for (let command of beaker.terminal.getCommands()) {
+          if (nomad.terminal.getCommands().length) {
+            for (let command of nomad.terminal.getCommands()) {
               commands.push({
                 package: undefined,
                 name: command.name,
@@ -296,11 +296,11 @@ class WebTerm extends LitElement {
             app.name,
             (name) =>
               (...args) =>
-                beaker.browser.spawnAndExecuteJs(
+                nomad.browser.spawnAndExecuteJs(
                   app.url,
                   `
             ;(() => {
-              let command = beaker.terminal.getCommands().find(c => c.name === ${JSON.stringify(
+              let command = nomad.terminal.getCommands().find(c => c.name === ${JSON.stringify(
                 name
               )});
               if (command) {
@@ -319,18 +319,18 @@ class WebTerm extends LitElement {
   }
 
   async loadPageCommands() {
-    var attachedPane = beaker.panes.getAttachedPane();
+    var attachedPane = nomad.panes.getAttachedPane();
     if (!attachedPane) {
       this.pageCommands = {};
       return;
     }
-    this.pageCommands = await beaker.panes.executeJavaScript(
+    this.pageCommands = await nomad.panes.executeJavaScript(
       attachedPane.id,
       `
       ;(() => {
         let commands = {}
-        if (beaker.terminal.getCommands().length) {
-          for (let command of beaker.terminal.getCommands()) {
+        if (nomad.terminal.getCommands().length) {
+          for (let command of nomad.terminal.getCommands()) {
             commands[command.name] = {
               package: 'page commands',
               name: '@' + command.name,
@@ -352,7 +352,7 @@ class WebTerm extends LitElement {
 
   async loadEnvVars() {
     try {
-      this.envVars = await beaker.fs.readFile(
+      this.envVars = await nomad.fs.readFile(
         'hyper://private/webterm/env.json',
         'json'
       );
@@ -367,7 +367,7 @@ class WebTerm extends LitElement {
     var envVars = JSON.parse(JSON.stringify(this.envVars));
     delete envVars['@'];
     delete envVars.cwd;
-    await beaker.fs.writeFile(
+    await nomad.fs.writeFile(
       'hyper://private/webterm/env.json',
       envVars,
       'json'
@@ -556,7 +556,7 @@ class WebTerm extends LitElement {
     }
     this.commandHist.add(prompt.value);
 
-    var attachedPane = beaker.panes.getAttachedPane();
+    var attachedPane = nomad.panes.getAttachedPane();
     this.envVars['@'] = attachedPane ? attachedPane.url : this.cwd.toString();
 
     var inputValue = prompt.value;
@@ -583,11 +583,11 @@ class WebTerm extends LitElement {
       command = this.pageCommands[commandName.slice(1)];
       if (command) {
         command.fn = (...args) =>
-          beaker.panes.executeJavaScript(
+          nomad.panes.executeJavaScript(
             attachedPane.id,
             `
           ;(() => {
-            let command = beaker.terminal.getCommands().find(c => c.name === ${JSON.stringify(
+            let command = nomad.terminal.getCommands().find(c => c.name === ${JSON.stringify(
               commandName.slice(1)
             )});
             if (command) {
@@ -651,35 +651,35 @@ class WebTerm extends LitElement {
           goto(url, opts = {}) {
             if (opts.newTab) window.open(url);
             else {
-              var pane = beaker.panes.getAttachedPane();
+              var pane = nomad.panes.getAttachedPane();
               if (!pane) throw new Error('No attached pane');
-              beaker.panes.navigate(pane.id, url);
+              nomad.panes.navigate(pane.id, url);
             }
           },
           refresh() {
-            var pane = beaker.panes.getAttachedPane();
+            var pane = nomad.panes.getAttachedPane();
             if (!pane) throw new Error('No attached pane');
-            beaker.panes.navigate(pane.id, pane.url);
+            nomad.panes.navigate(pane.id, pane.url);
           },
           focus() {
-            var pane = beaker.panes.getAttachedPane();
+            var pane = nomad.panes.getAttachedPane();
             if (!pane) throw new Error('No attached pane');
-            beaker.panes.focus(pane.id);
+            nomad.panes.focus(pane.id);
           },
           exec(js) {
-            var pane = beaker.panes.getAttachedPane();
+            var pane = nomad.panes.getAttachedPane();
             if (!pane) throw new Error('No attached pane');
-            return beaker.panes.executeJavaScript(pane.id, js);
+            return nomad.panes.executeJavaScript(pane.id, js);
           },
           inject(css) {
-            var pane = beaker.panes.getAttachedPane();
+            var pane = nomad.panes.getAttachedPane();
             if (!pane) throw new Error('No attached pane');
-            return beaker.panes.injectCss(pane.id, css);
+            return nomad.panes.injectCss(pane.id, css);
           },
           uninject(id) {
-            var pane = beaker.panes.getAttachedPane();
+            var pane = nomad.panes.getAttachedPane();
             if (!pane) throw new Error('No attached pane');
-            return beaker.panes.uninjectCss(pane.id, id);
+            return nomad.panes.uninjectCss(pane.id, id);
           },
         },
         out: (...args) => {
@@ -982,7 +982,7 @@ class WebTerm extends LitElement {
       : 0;
     let endOfInput = this.promptInput.split(' ').pop().split('/').pop();
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper" @keydown=${this.onKeyDown}>
         <div class="output">${this.outputHist}</div>
         <div class="prompt">

@@ -70,7 +70,7 @@ class ShellWindowNavbar extends LitElement {
 
   render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="buttons" style="padding: 0 6px">
         ${this.tabLayout === 'sidebar' && this.sidebarCollapsed ? this.sidebarToggleBtn : ''}
         ${this.backBtn} ${this.forwardBtn} ${this.reloadBtn} ${this.updogBtn} ${this.homeBtn}
@@ -333,11 +333,11 @@ class ShellWindowNavbar extends LitElement {
 
   onClickWatchlistBtn(e) {
     this.numWatchlistNotifications = 0;
-    bg.views.createTab('beaker://watchlist', { setActive: true });
+    bg.views.createTab('nomad://watchlist', { setActive: true });
   }
 
   onClickDaemonInactiveBtn(e) {
-    bg.views.createTab('beaker://settings', { setActive: true });
+    bg.views.createTab('nomad://settings', { setActive: true });
   }
 
   async onClickBrowserMenu(e) {

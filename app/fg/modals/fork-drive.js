@@ -235,7 +235,7 @@ class ForkDriveModal extends LitElement {
       `;
     };
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
         <form @submit=${this.onSubmit}>
           ${this.isTemplate

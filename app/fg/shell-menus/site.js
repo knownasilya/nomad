@@ -35,7 +35,7 @@ class SiteMenu extends LitElement {
 
   render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
         <div class="section">
           <div class="menu-item" @click=${this.onCopyURL}>

@@ -292,7 +292,7 @@ function renderShell(body) {
       <head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8" /></head>
       <body>
         <style>${errorPageCSS}</style>
-        <link rel="stylesheet" href="beaker://assets/font-awesome.css">
+        <link rel="stylesheet" href="nomad://assets/font-awesome.css">
         <div class="error-card">${body}</div>
       </body>
     </html>`.replace(/\n/g, '');

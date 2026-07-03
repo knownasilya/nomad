@@ -243,7 +243,7 @@ class SelectDriveModal extends LitElement {
 
   render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
         <form @submit=${this.onSubmit}>
           <h1 class="title">${this.customTitle || 'Select a drive'}</h1>

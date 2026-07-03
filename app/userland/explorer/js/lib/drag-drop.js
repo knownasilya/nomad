@@ -13,7 +13,7 @@ export async function handleDragDrop(targetEl, x, y, targetPath, dataTransfer) {
       var paths = Array.from(dataTransfer.files, (f) =>
         window.electronWebUtils ? window.electronWebUtils.getPathForFile(f) : f.path
       ).filter(Boolean);
-      var res = await beaker.shell.importFilesAndFolders(targetUrl, paths);
+      var res = await nomad.shell.importFilesAndFolders(targetUrl, paths);
       toast.create(
         `Imported ${res.numImported} ${pluralize(res.numImported, 'item')}`
       );
@@ -123,7 +123,7 @@ export async function handleDragDropUrls(x, y, targetPath, urls) {
     y,
     roomy: false,
     noBorders: true,
-    fontAwesomeCSSUrl: 'beaker://explorer/css/font-awesome.css',
+    fontAwesomeCSSUrl: 'nomad://explorer/css/font-awesome.css',
     style: `padding: 4px 0`,
     items,
   });

@@ -1,13 +1,13 @@
 /*
 This wrapper provides a Hyperdrive-compatible interface for any URL.
-For hyper:// URLs it delegates to beaker.fs, which auto-detects whether the drive
+For hyper:// URLs it delegates to nomad.fs, which auto-detects whether the drive
 is an autobase (collaborative) or a plain hyperdrive and dispatches accordingly.
 For non-hyper:// sites it returns a proxy that generates helpful errors.
 */
 
 export function createDrive(url) {
   if (url.startsWith('hyper:')) {
-    return beaker.fs.drive(url);
+    return nomad.fs.drive(url);
   }
   return new Proxy(
     {},

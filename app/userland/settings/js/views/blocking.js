@@ -24,8 +24,8 @@ class BlockingSettingsView extends LitElement {
 
   async load() {
     // fetch data
-    this.browserInfo = await beaker.browser.getInfo();
-    this.settings = await beaker.browser.getSettings();
+    this.browserInfo = await nomad.browser.getInfo();
+    this.settings = await nomad.browser.getSettings();
     console.log('loaded', {
       browserInfo: this.browserInfo,
       settings: this.settings,
@@ -39,7 +39,7 @@ class BlockingSettingsView extends LitElement {
   render() {
     if (!this.browserInfo) return html``;
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="form-group">
         <h2>Adblock Filter Lists</h2>
         ${this.renderAdblockFilterLists()}
@@ -107,8 +107,8 @@ class BlockingSettingsView extends LitElement {
     } else {
       delete this.settings.adblock_lists[index].selected;
     }
-    beaker.browser.setSetting('adblock_lists', this.settings.adblock_lists);
-    beaker.browser.updateAdblocker();
+    nomad.browser.setSetting('adblock_lists', this.settings.adblock_lists);
+    nomad.browser.updateAdblocker();
     toast.create('Setting updated');
     this.requestUpdate();
   }
@@ -116,8 +116,8 @@ class BlockingSettingsView extends LitElement {
   removeAdblockList(i) {
     // decrement selected search engine so it points to the same one if the removed index is less than current one
     this.settings.adblock_lists.splice(i, 1);
-    beaker.browser.setSetting('adblock_lists', this.settings.adblock_lists);
-    beaker.browser.updateAdblocker();
+    nomad.browser.setSetting('adblock_lists', this.settings.adblock_lists);
+    nomad.browser.updateAdblocker();
     this.requestUpdate();
   }
 
@@ -130,8 +130,8 @@ class BlockingSettingsView extends LitElement {
       url: url.value,
       selected: true,
     });
-    beaker.browser.setSetting('adblock_lists', this.settings.adblock_lists);
-    beaker.browser.updateAdblocker();
+    nomad.browser.setSetting('adblock_lists', this.settings.adblock_lists);
+    nomad.browser.updateAdblocker();
     name.value = '';
     url.value = '';
     this.requestUpdate();

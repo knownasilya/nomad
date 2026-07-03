@@ -1,15 +1,15 @@
 import {
   LitElement,
   html,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import { repeat } from 'beaker://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
-import { emit } from 'beaker://app-stdlib/js/dom.js';
-import { pluralize, toNiceDomain } from 'beaker://app-stdlib/js/strings.js';
-import { isFilenameBinary } from 'beaker://app-stdlib/js/is-ext-binary.js';
-import * as toast from 'beaker://app-stdlib/js/com/toast.js';
-import * as contextMenu from 'beaker://app-stdlib/js/com/context-menu.js';
-import * as QP from 'beaker://app-stdlib/js/query-params.js';
-import { writeToClipboard } from 'beaker://app-stdlib/js/clipboard.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
+import { emit } from 'nomad://app-stdlib/js/dom.js';
+import { pluralize, toNiceDomain } from 'nomad://app-stdlib/js/strings.js';
+import { isFilenameBinary } from 'nomad://app-stdlib/js/is-ext-binary.js';
+import * as toast from 'nomad://app-stdlib/js/com/toast.js';
+import * as contextMenu from 'nomad://app-stdlib/js/com/context-menu.js';
+import * as QP from 'nomad://app-stdlib/js/query-params.js';
+import { writeToClipboard } from 'nomad://app-stdlib/js/clipboard.js';
 import * as compare from './lib/compare.js';
 
 var isMonacoLoaded = false;
@@ -68,7 +68,7 @@ export class CompareApp extends LitElement {
   async load() {
     if (!this.otherDrives) {
       (async () => {
-        this.otherDrives = await beaker.drives.list({ includeSystem: false });
+        this.otherDrives = await nomad.drives.list({ includeSystem: false });
 
         // move forks onto their parents
         this.otherDrives = this.otherDrives.filter((drive) => {
@@ -87,9 +87,9 @@ export class CompareApp extends LitElement {
       })();
     }
 
-    this.baseDrive = this.base ? beaker.fs.drive(this.base) : undefined;
+    this.baseDrive = this.base ? nomad.fs.drive(this.base) : undefined;
     this.targetDrive = this.target
-      ? beaker.fs.drive(this.target)
+      ? nomad.fs.drive(this.target)
       : undefined;
     await this.attempt('Reading information about the drives', async () => {
       let [baseInfo, targetInfo] = await Promise.allSettled([
@@ -118,12 +118,12 @@ export class CompareApp extends LitElement {
 
     this.baseForks = this.baseInfo
       ? await this.attempt('Fetching known forks of the base drive', () =>
-          beaker.drives.getForks(this.baseInfo.url)
+          nomad.drives.getForks(this.baseInfo.url)
         )
       : undefined;
     this.targetForks = this.targetInfo
       ? await this.attempt('Fetching known forks of the target drive', () =>
-          beaker.drives.getForks(this.targetInfo.url)
+          nomad.drives.getForks(this.targetInfo.url)
         )
       : undefined;
 
@@ -147,7 +147,7 @@ export class CompareApp extends LitElement {
 
     if (!isMonacoLoaded) {
       await new Promise((resolve, reject) => {
-        window.require.config({ baseUrl: 'beaker://assets/' });
+        window.require.config({ baseUrl: 'nomad://assets/' });
         window.require(['vs/editor/editor.main'], () => {
           isMonacoLoaded = true;
           resolve();
@@ -196,7 +196,7 @@ export class CompareApp extends LitElement {
       deletions: this.checkedItems?.filter?.((d) => d.change === 'del')?.length,
     };
     return html`
-      <link rel="stylesheet" href="beaker://app-stdlib/css/fontawesome.css" />
+      <link rel="stylesheet" href="nomad://app-stdlib/css/fontawesome.css" />
       <header>
         <div class="toolbar">
           <div class="title">
@@ -452,7 +452,7 @@ export class CompareApp extends LitElement {
       x: rect.left,
       y: rect.bottom,
       left: true,
-      fontAwesomeCSSUrl: 'beaker://assets/font-awesome.css',
+      fontAwesomeCSSUrl: 'nomad://assets/font-awesome.css',
       noBorders: true,
       style: `padding: 4px 0`,
       items: this.otherDrives
@@ -471,7 +471,7 @@ export class CompareApp extends LitElement {
             icon: 'far fa-fw fa-hdd',
             label: 'Browse...',
             click: async () => {
-              this.base = await beaker.shell.selectDriveDialog();
+              this.base = await nomad.shell.selectDriveDialog();
               this.load();
             },
           },
@@ -487,7 +487,7 @@ export class CompareApp extends LitElement {
       x: rect.left,
       y: rect.bottom,
       left: true,
-      fontAwesomeCSSUrl: 'beaker://assets/font-awesome.css',
+      fontAwesomeCSSUrl: 'nomad://assets/font-awesome.css',
       noBorders: true,
       style: `padding: 4px 0`,
       items: this.baseForks.map((fork) => ({
@@ -509,7 +509,7 @@ export class CompareApp extends LitElement {
       x: rect.left,
       y: rect.bottom,
       left: true,
-      fontAwesomeCSSUrl: 'beaker://assets/font-awesome.css',
+      fontAwesomeCSSUrl: 'nomad://assets/font-awesome.css',
       noBorders: true,
       style: `padding: 4px 0`,
       items: this.otherDrives
@@ -528,7 +528,7 @@ export class CompareApp extends LitElement {
             icon: 'far fa-fw fa-hdd',
             label: 'Browse...',
             click: async () => {
-              this.target = await beaker.shell.selectDriveDialog();
+              this.target = await nomad.shell.selectDriveDialog();
               this.load();
             },
           },
@@ -544,7 +544,7 @@ export class CompareApp extends LitElement {
       x: rect.left,
       y: rect.bottom,
       left: true,
-      fontAwesomeCSSUrl: 'beaker://assets/font-awesome.css',
+      fontAwesomeCSSUrl: 'nomad://assets/font-awesome.css',
       noBorders: true,
       style: `padding: 4px 0`,
       items: this.targetForks.map((fork) => ({
@@ -753,7 +753,7 @@ class CompareDiffItemContent extends LitElement {
   renderLeftColumn() {
     if (this.diff.change === 'del' || this.diff.change === 'mod') {
       return this.renderFileContent(
-        beaker.fs.drive(this.targetOrigin),
+        nomad.fs.drive(this.targetOrigin),
         this.diff.targetPath,
         this.diff.targetMountKey
       );
@@ -764,7 +764,7 @@ class CompareDiffItemContent extends LitElement {
   renderRightColumn() {
     if (this.diff.change === 'add' || this.diff.change === 'mod') {
       return this.renderFileContent(
-        beaker.fs.drive(this.baseOrigin),
+        nomad.fs.drive(this.baseOrigin),
         this.diff.basePath,
         this.diff.baseMountKey
       );
@@ -801,13 +801,13 @@ class CompareDiffItemContent extends LitElement {
     if (!editorEl) return;
     var [baseContent, targetContent] = await Promise.all([
       this.diff.change === 'del' || this.diff.change === 'mod'
-        ? beaker.fs
+        ? nomad.fs
             .drive(this.targetOrigin)
             .readFile(this.diff.targetPath)
             .catch((e) => '')
         : '',
       this.diff.change === 'add' || this.diff.change === 'mod'
-        ? beaker.fs
+        ? nomad.fs
             .drive(this.baseOrigin)
             .readFile(this.diff.basePath)
             .catch((e) => '')

@@ -147,7 +147,7 @@ export async function setup() {
 
   // request blocking for security purposes
   session.defaultSession.webRequest.onBeforeRequest((details, cb) => {
-    if (details.url.startsWith('asset:') || details.url.startsWith('beaker:')) {
+    if (details.url.startsWith('asset:') || details.url.startsWith('nomad:')) {
       if (details.resourceType === 'mainFrame') {
         // allow toplevel navigation
         return cb({ cancel: false });
@@ -157,7 +157,7 @@ export async function setup() {
       } else if (details.webContentsId) {
         // fall back to URL check for WCs created before wcTrust.setup() (e.g. init window)
         const wc = webContents.fromId(details.webContentsId);
-        return cb({ cancel: !(wc && /^(beaker:\/\/|asset:)/.test(wc.getURL())) });
+        return cb({ cancel: !(wc && /^(nomad:\/\/|asset:)/.test(wc.getURL())) });
       } else {
         // disallow all other requesters
         return cb({ cancel: true });
@@ -172,8 +172,8 @@ export async function setup() {
         return cb({ cancel: true });
       }
       let wc = webContents.fromId(details.webContentsId);
-      if (/^(beaker:\/\/|hyper:\/\/private\/)/.test(wc.getURL())) {
-        // allow sub-resource requests from beaker pages and hyper://private/ itself
+      if (/^(nomad:\/\/|hyper:\/\/private\/)/.test(wc.getURL())) {
+        // allow sub-resource requests from nomad pages and hyper://private/ itself
         cb({ cancel: false });
       } else {
         cb({ cancel: true });
@@ -393,8 +393,8 @@ export async function getCertificate(url) {
   var cert = originCerts.get(url);
   if (cert) {
     return Object.assign({ type: 'tls' }, cert);
-  } else if (url.startsWith('beaker:')) {
-    return { type: 'beaker' };
+  } else if (url.startsWith('nomad:')) {
+    return { type: 'nomad' };
   } else if (url.startsWith('hyper://')) {
     let ident = await getDriveIdentFull(url);
     return { type: 'hyperdrive', ident };
@@ -590,7 +590,7 @@ export async function getDefaultProtocolSettings() {
     // HACK
     // xdb-settings doesnt currently handle apps that you can't `which`
     // we can just use xdg-mime directly instead
-    // see https://github.com/beakerbrowser/beaker/issues/915
+    // see https://github.com/beakerbrowser/nomad/issues/915
     // -prf
     let [httpHandler, hyperHandler] = await Promise.all([
       // If there is no default specified, be sure to catch any error
@@ -619,7 +619,7 @@ export async function setAsDefaultProtocolClient(protocol) {
     // HACK
     // xdb-settings doesnt currently handle apps that you can't `which`
     // we can just use xdg-mime directly instead
-    // see https://github.com/beakerbrowser/beaker/issues/915
+    // see https://github.com/beakerbrowser/nomad/issues/915
     // -prf
     await exec(`xdg-mime default ${DOT_DESKTOP_FILENAME} "x-scheme-handler/${protocol}"`);
     return true;

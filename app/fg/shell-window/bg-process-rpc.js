@@ -10,7 +10,7 @@ import viewsManifest from '../../bg/rpc-manifests/views';
 import watchlistManifest from '../../bg/web-apis/manifests/internal/watchlist';
 
 export const bookmarks = rpc.importAPI('bookmarks', bookmarksManifest);
-export const beakerBrowser = rpc.importAPI('beaker-browser', browserManifest);
+export const beakerBrowser = rpc.importAPI('nomad-browser', browserManifest);
 export const folderSync = rpc.importAPI('folder-sync', folderSyncManifest);
 export const history = rpc.importAPI('history', historyManifest);
 export const fs = rpc.importAPI('fs', fsManifest);

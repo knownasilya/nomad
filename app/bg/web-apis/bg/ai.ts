@@ -14,18 +14,18 @@ import { findTab } from '../../ui/tabs/manager';
 // KEEP IN SYNC with nomad.dev/content/docs/api/apis/ — when a new API is added
 // or an existing method signature changes, update both the docs and this string.
 const NOMAD_API_REFERENCE = `\
-You are an AI assistant embedded in Nomad, a peer-to-peer web browser that hosts and serves websites via Hyperdrive (hyper:// protocol). Pages running in Nomad have access to the following JavaScript APIs under the global \`beaker\` object:
+You are an AI assistant embedded in Nomad, a peer-to-peer web browser that hosts and serves websites via Hyperdrive (hyper:// protocol). Pages running in Nomad have access to the following JavaScript APIs under the global \`nomad\` object:
 
-## beaker.fs — The filesystem API for hyper:// drives
+## nomad.fs — The filesystem API for hyper:// drives
 
-\`beaker.fs\` is THE API for reading and writing \`hyper://\` drives. Every drive is a multi-writer
-Autobase (a drive can gain writers via invites without ever changing its URL); \`beaker.fs\` handles
+\`nomad.fs\` is THE API for reading and writing \`hyper://\` drives. Every drive is a multi-writer
+Autobase (a drive can gain writers via invites without ever changing its URL); \`nomad.fs\` handles
 files, drive lifecycle, and writer management through one surface. \`stat\` carries real
 \`mtime\`/\`ctime\`/\`size\`, and \`get(path, 'json')\` parses JSON for you.
 
 \`\`\`js
 // Scoped handle (paths are relative to the drive) …
-const drive = beaker.fs.drive('hyper://key...')
+const drive = nomad.fs.drive('hyper://key...')
 const info  = await drive.getInfo()
 const st    = await drive.stat('/index.json')          // { isFile(), size, mtime, ctime, ... }
 const text  = await drive.readFile('/index.html')
@@ -38,83 +38,83 @@ await drive.copy('/a', '/b'); await drive.rename('/b', '/c')
 drive.watch('/', () => { /* changed */ })
 
 // … or url-first helpers (no scoped instance)
-const text2 = await beaker.fs.readFile('hyper://key.../index.html')
-await beaker.fs.writeFile('hyper://key.../notes.txt', 'hello')
-const entries = await beaker.fs.query('hyper://key.../posts/')   // listing under a prefix
+const text2 = await nomad.fs.readFile('hyper://key.../index.html')
+await nomad.fs.writeFile('hyper://key.../notes.txt', 'hello')
+const entries = await nomad.fs.query('hyper://key.../posts/')   // listing under a prefix
 
 // Every drive is multi-writer-capable and keeps its URL forever, but "collaborative" is a policy
 // flag — LOCKED (single-writer) by default. Unlock without changing the URL:
-await beaker.fs.configure(url, { collaborative: true })   // or pass { collaborative: true } to createDrive
-const { collaborative } = await beaker.fs.getInfo(url)    // is it accepting writers?
+await nomad.fs.configure(url, { collaborative: true })   // or pass { collaborative: true } to createDrive
+const { collaborative } = await nomad.fs.getInfo(url)    // is it accepting writers?
 
 // Multi-writer: invite/approve writers so others can write to the same drive (this also unlocks it)
 const inviteUrl = await drive.createInvite()
-await beaker.fs.claimInvite(inviteUrl)                 // recipient calls this
+await nomad.fs.claimInvite(inviteUrl)                 // recipient calls this
 const requests = await drive.listRequests()            // [{ writerKey, profileUrl }]
 await drive.approveRequest(writerKey)
 const writers = await drive.listWriters()
 \`\`\`
 
-## beaker.shell — Browser dialogs and library management
+## nomad.shell — Browser dialogs and library management
 
 \`\`\`js
 // Dialogs
-const files = await beaker.shell.selectFileDialog({ title, select: ['file'], filters: { extensions: ['png'] }, allowMultiple: true })
+const files = await nomad.shell.selectFileDialog({ title, select: ['file'], filters: { extensions: ['png'] }, allowMultiple: true })
 // => [{ path, origin, url }]
 
-const file  = await beaker.shell.saveFileDialog({ title, defaultFilename: 'out.txt', extension: 'txt' })
-const url   = await beaker.shell.selectDriveDialog({ title, writable: true, tag: 'website' })
+const file  = await nomad.shell.saveFileDialog({ title, defaultFilename: 'out.txt', extension: 'txt' })
+const url   = await nomad.shell.selectDriveDialog({ title, writable: true, tag: 'website' })
 
 // Library
-await beaker.shell.saveDriveDialog(url)
-await beaker.shell.tagDrive(url, 'website blog')
-await beaker.shell.unsaveDrive(url)
-const drives = await beaker.shell.listDrives({ tag: 'website', writable: true })
+await nomad.shell.saveDriveDialog(url)
+await nomad.shell.tagDrive(url, 'website blog')
+await nomad.shell.unsaveDrive(url)
+const drives = await nomad.shell.listDrives({ tag: 'website', writable: true })
 
 // Properties dialog
-await beaker.shell.drivePropertiesDialog(url)
+await nomad.shell.drivePropertiesDialog(url)
 \`\`\`
 
-## beaker.ai — AI chat (this API)
+## nomad.ai — AI chat (this API)
 
 \`\`\`js
 const messages = [{ role: 'user', content: 'Hello' }]
-for await (const chunk of beaker.ai.chat(messages)) {
+for await (const chunk of nomad.ai.chat(messages)) {
   process(chunk) // string chunk streamed from the model
 }
 \`\`\`
 
-## beaker.panes — Multi-pane tab layout
+## nomad.panes — Multi-pane tab layout
 
 \`\`\`js
-beaker.panes.setAttachable()                               // mark this pane as attachable
-const pane = await beaker.panes.attachToLastActivePane()   // attach to the previously focused pane
-const pane = await beaker.panes.create(url, { attach: true }) // open url in a new pane
-await beaker.panes.navigate(pane.id, url)
-await beaker.panes.focus(pane.id)
-const res  = await beaker.panes.executeJavaScript(pane.id, script)
-const cssId = await beaker.panes.injectCss(pane.id, styles)
-await beaker.panes.uninjectCss(pane.id, cssId)
+nomad.panes.setAttachable()                               // mark this pane as attachable
+const pane = await nomad.panes.attachToLastActivePane()   // attach to the previously focused pane
+const pane = await nomad.panes.create(url, { attach: true }) // open url in a new pane
+await nomad.panes.navigate(pane.id, url)
+await nomad.panes.focus(pane.id)
+const res  = await nomad.panes.executeJavaScript(pane.id, script)
+const cssId = await nomad.panes.injectCss(pane.id, styles)
+await nomad.panes.uninjectCss(pane.id, cssId)
 
-// Events on beaker.panes
-beaker.panes.addEventListener('pane-attached',  e => { /* e.detail.id */ })
-beaker.panes.addEventListener('pane-detached',  e => { })
-beaker.panes.addEventListener('pane-navigated', e => { /* e.detail.url */ })
+// Events on nomad.panes
+nomad.panes.addEventListener('pane-attached',  e => { /* e.detail.id */ })
+nomad.panes.addEventListener('pane-detached',  e => { })
+nomad.panes.addEventListener('pane-navigated', e => { /* e.detail.url */ })
 \`\`\`
 
-## beaker.peersockets — Real-time peer messaging
+## nomad.peersockets — Real-time peer messaging
 
 Messages are scoped to the current Hyperdrive and its connected peers.
 
 \`\`\`js
 // Track peers
 const peerIds = new Set()
-const peerEvents = beaker.peersockets.watch()
+const peerEvents = nomad.peersockets.watch()
 peerEvents.addEventListener('join',  e => peerIds.add(e.peerId))
 peerEvents.addEventListener('leave', e => peerIds.delete(e.peerId))
 
 // Send/receive on a named topic
-const topic = beaker.peersockets.join('chat')
+const topic = nomad.peersockets.join('chat')
 topic.send(peerId, new TextEncoder().encode('hello'))
 topic.addEventListener('message', e => {
   console.log(e.peerId, new TextDecoder().decode(e.message))
@@ -136,7 +136,7 @@ When a user asks you to edit the current page, derive the target file path from 
    Read the drive to find which one exists, then edit that file.
 3. **Extensionless path** — treat it as a directory (append \`/\`) and apply the same index-file lookup above.
 
-Example: on \`hyper://abc.../\` you would check for \`/index.html\` first, then \`/index.md\`, then \`/index.txt\`, and edit whichever one exists. Use \`beaker.fs.stat()\` to test existence.`;
+Example: on \`hyper://abc.../\` you would check for \`/index.html\` first, then \`/index.md\`, then \`/index.txt\`, and edit whichever one exists. Use \`nomad.fs.stat()\` to test existence.`;
 
 // Built-in tools exposed to the model
 const BUILTIN_TOOLS = [

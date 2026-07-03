@@ -18,7 +18,7 @@ export const setup = function (rpc) {
   const schemas = rpc.importAPI('schemas', schemasManifest, RPC_OPTS);
   const shell = rpc.importAPI('shell', shellManifest, RPC_OPTS);
 
-  if (window.location.protocol !== 'beaker:') {
+  if (window.location.protocol !== 'nomad:') {
     delete shell.importFilesAndFolders;
     delete shell.importFilesDialog;
     delete shell.importFoldersDialog;

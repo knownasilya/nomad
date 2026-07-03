@@ -5,7 +5,7 @@ import { findTab } from '../ui/tabs/manager';
 import loggerManifest from './manifests/internal/logger';
 import drivesManifest from './manifests/internal/drives';
 import beakerBrowserManifest from './manifests/internal/browser';
-import beakerFilesystemManifest from './manifests/internal/beaker-filesystem';
+import nomadFilesystemManifest from './manifests/internal/nomad-filesystem';
 import bookmarksManifest from './manifests/internal/bookmarks';
 import downloadsManifest from './manifests/internal/downloads';
 import folderSyncManifest from './manifests/internal/folder-sync';
@@ -20,7 +20,7 @@ import { WEBAPI as loggerAPI } from '../logger';
 import { WEBAPI as auditLogAPI } from '../dbs/audit-log';
 import drivesAPI from './bg/drives';
 import * as bookmarksAPI from '../filesystem/bookmarks';
-import beakerFilesystemAPI from './bg/beaker-filesystem';
+import nomadFilesystemAPI from './bg/nomad-filesystem';
 import folderSyncAPI from './bg/folder-sync';
 import historyAPI from './bg/history';
 import hyperdebugAPI from './bg/hyperdebug';
@@ -47,7 +47,7 @@ import capabilitiesAPI from './bg/capabilities';
 import contactsAPI from './bg/contacts';
 import fsAPI from './bg/fs';
 // NOTE: bg/hyperdrive.js + bg/autobase.js are no longer exposed as public APIs (ADR-0010).
-// They remain as INTERNAL implementations that bg/fs.js delegates to behind beaker.fs.
+// They remain as INTERNAL implementations that bg/fs.js delegates to behind nomad.fs.
 import markdownAPI from './bg/markdown';
 import panesAPI from './bg/panes';
 import peersocketsAPI from './bg/peersockets';
@@ -62,8 +62,8 @@ import experimentalGlobalFetchManifest from './manifests/external/experimental/g
 import experimentalCapturePageAPI from './bg/experimental/capture-page';
 import experimentalGlobalFetchAPI from './bg/experimental/global-fetch';
 
-const INTERNAL_ORIGIN_REGEX = /^(beaker:)/i;
-const SITE_ORIGIN_REGEX = /^(beaker:|hyper:|https?:|data:)/i;
+const INTERNAL_ORIGIN_REGEX = /^(nomad:)/i;
+const SITE_ORIGIN_REGEX = /^(nomad:|hyper:|https?:|data:)/i;
 const IFRAME_WHITELIST = [
   'fs.loadDrive',
   'fs.getInfo',
@@ -81,8 +81,8 @@ const IFRAME_WHITELIST = [
 export const setup = function () {
   // internal apis
   rpc.exportAPI('logger', loggerManifest, Object.assign({}, auditLogAPI, loggerAPI), internalOnly);
-  rpc.exportAPI('beaker-browser', beakerBrowserManifest, beakerBrowserAPI, internalOnly);
-  rpc.exportAPI('beaker-filesystem', beakerFilesystemManifest, beakerFilesystemAPI, internalOnly);
+  rpc.exportAPI('nomad-browser', beakerBrowserManifest, beakerBrowserAPI, internalOnly);
+  rpc.exportAPI('nomad-filesystem', nomadFilesystemManifest, nomadFilesystemAPI, internalOnly);
   rpc.exportAPI('bookmarks', bookmarksManifest, bookmarksAPI, internalOnly);
   rpc.exportAPI('downloads', downloadsManifest, downloadsAPI, internalOnly);
   rpc.exportAPI('drives', drivesManifest, drivesAPI, internalOnly);

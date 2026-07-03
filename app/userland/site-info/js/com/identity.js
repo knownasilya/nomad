@@ -28,10 +28,10 @@ class Identity extends LitElement {
 
   render() {
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       ${this.cert
         ? html`
-            ${this.cert.type === 'beaker'
+            ${this.cert.type === 'nomad'
               ? html`
                   <div class="field-group">
                     This is a builtin interface of Nomad
@@ -117,7 +117,7 @@ class Identity extends LitElement {
 
   onSubscribe() {
     if (!this.url) return;
-    window.open('beaker://reader/?subscribe=' + encodeURIComponent(this.url));
+    window.open('nomad://reader/?subscribe=' + encodeURIComponent(this.url));
   }
 }
 

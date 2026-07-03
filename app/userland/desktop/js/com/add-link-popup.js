@@ -1,15 +1,15 @@
-/* globals beaker */
+/* globals nomad */
 import {
   html,
   css,
-} from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
-import { repeat } from 'beaker://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
-import { BasePopup } from 'beaker://app-stdlib/js/com/popups/base.js';
-import buttonsCSS from 'beaker://app-stdlib/css/buttons2.css.js';
-import popupsCSS from 'beaker://app-stdlib/css/com/popups.css.js';
-import { writeToClipboard } from 'beaker://app-stdlib/js/clipboard.js';
-import * as contextMenu from 'beaker://app-stdlib/js/com/context-menu.js';
-import { toNiceUrl, normalizeUrl } from 'beaker://app-stdlib/js/strings.js';
+} from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
+import { BasePopup } from 'nomad://app-stdlib/js/com/popups/base.js';
+import buttonsCSS from 'nomad://app-stdlib/css/buttons2.css.js';
+import popupsCSS from 'nomad://app-stdlib/css/com/popups.css.js';
+import { writeToClipboard } from 'nomad://app-stdlib/js/clipboard.js';
+import * as contextMenu from 'nomad://app-stdlib/js/com/context-menu.js';
+import { toNiceUrl, normalizeUrl } from 'nomad://app-stdlib/js/strings.js';
 
 // exported api
 // =
@@ -179,8 +179,8 @@ export class AddLinkPopup extends BasePopup {
   async runQuery() {
     this.reset();
     this.history = await (this.query
-      ? beaker.history.search(this.query)
-      : beaker.history.getVisitHistory(0));
+      ? nomad.history.search(this.query)
+      : nomad.history.getVisitHistory(0));
     if (this.query) {
       let queryEntry = normalizeUrl(this.query);
       if (!this.history.find((item) => normalizeUrl(item.url) === queryEntry)) {
@@ -204,7 +204,7 @@ export class AddLinkPopup extends BasePopup {
   renderBody() {
     var hasResults = this.history.length > 0;
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="filter-control">
         <input
           type="text"
@@ -283,7 +283,7 @@ export class AddLinkPopup extends BasePopup {
       x: e.clientX,
       y: e.clientY,
       items,
-      fontAwesomeCSSUrl: 'beaker://assets/font-awesome.css',
+      fontAwesomeCSSUrl: 'nomad://assets/font-awesome.css',
     });
   }
 }

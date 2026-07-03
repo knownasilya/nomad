@@ -165,7 +165,7 @@ const MANIFEST_PROPERTIES = {
   },
   ai: {
     description:
-      'Manifest: opts the drive into beaker.ai — inline config or a pointer hyper:// URL',
+      'Manifest: opts the drive into nomad.ai — inline config or a pointer hyper:// URL',
     oneOf: [
       { type: 'string', description: "Pointer: delegate to another drive's AI config" },
       {

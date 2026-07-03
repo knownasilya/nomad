@@ -324,12 +324,12 @@ export default function Browser () {
   }, [active, backend, patch, persist])
 
   // Keep a ref to the latest backend so the stable WebView message handler can
-  // forward in-page beaker.* calls without changing identity every render.
+  // forward in-page nomad.* calls without changing identity every render.
   const backendRef = useRef(backend)
   backendRef.current = backend
 
   // Messages posted by a page WebView: in-page link navigation, captured console
-  // output, in-page beaker.* calls (the BEAKER_SHIM bridge), and view-source.
+  // output, in-page nomad.* calls (the NOMAD_SHIM bridge), and view-source.
   const handleWebMessage = useCallback(
     (data: string) => {
       let msg: any
@@ -337,10 +337,10 @@ export default function Browser () {
       if (msg.type === 'navigate' && typeof msg.url === 'string') navigate(activeIdRef.current, msg.url)
       else if (msg.type === 'console') setLogs((prev) => [...prev.slice(-199), { level: msg.level, text: msg.text, ts: Date.now() }])
       else if (msg.type === 'source') setSource(String(msg.html || ''))
-      else if (msg.type === 'beaker-rpc' && msg.payload && msg.payload.id) {
+      else if (msg.type === 'nomad-rpc' && msg.payload && msg.payload.id) {
         const wv = webviews.current[activeIdRef.current]
-        backendRef.current.beaker(msg.payload).then((result) => {
-          wv?.injectJavaScript(`window.__beakerResolve(${JSON.stringify(msg.payload.id)}, ${JSON.stringify(result)}); true;`)
+        backendRef.current.nomad(msg.payload).then((result) => {
+          wv?.injectJavaScript(`window.__nomadResolve(${JSON.stringify(msg.payload.id)}, ${JSON.stringify(result)}); true;`)
         })
       }
     },

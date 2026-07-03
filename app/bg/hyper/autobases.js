@@ -174,7 +174,7 @@ export function unloadCollaborativeDrive(key) {
 
 // File content read/write (FS_FORMAT_VERSION 1 — hybrid {metadata, blob, value} records)
 // =
-// These centralise the wire format so every consumer (beaker.autobase, beaker.fs, the vault,
+// These centralise the wire format so every consumer (nomad.autobase, nomad.fs, the vault,
 // the protocol serve path) reads/writes it identically. File BYTES go into this device's own
 // Hyperblobs core OUTSIDE apply (only a pointer travels through the oplog); small control
 // records go inline. See shared/fs-core.mjs.

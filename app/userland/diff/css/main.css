@@ -1,9 +1,9 @@
-@import 'beaker://app-stdlib/css/common.css';
-@import 'beaker://app-stdlib/css/fontawesome.css';
-@import 'beaker://app-stdlib/css/buttons2.css';
-@import 'beaker://app-stdlib/css/inputs.css';
-@import 'beaker://app-stdlib/css/tooltip.css';
-@import 'beaker://app-stdlib/css/com/spinner.css';
+@import 'nomad://app-stdlib/css/common.css';
+@import 'nomad://app-stdlib/css/fontawesome.css';
+@import 'nomad://app-stdlib/css/buttons2.css';
+@import 'nomad://app-stdlib/css/inputs.css';
+@import 'nomad://app-stdlib/css/tooltip.css';
+@import 'nomad://app-stdlib/css/com/spinner.css';
 
 body {
   --color-summary: #445;

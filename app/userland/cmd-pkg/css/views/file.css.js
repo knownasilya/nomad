@@ -1,4 +1,4 @@
-import { css } from 'beaker://app-stdlib/vendor/lit-element/lit-element.js';
+import { css } from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
 
 const cssStr = css`
   :host {

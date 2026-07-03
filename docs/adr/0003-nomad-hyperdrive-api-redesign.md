@@ -1,6 +1,6 @@
-# beaker.hyperdrive redesigned to match Hyperdrive v11 — no compatibility shim
+# nomad.hyperdrive redesigned to match Hyperdrive v11 — no compatibility shim
 
-The `beaker.hyperdrive` API exposed to drive apps is redesigned to match Hyperdrive v11's native API (`get`, `put`, `del`, `list`, `entry`) rather than wrapping v11 behind the old `stat`/`readFile`/`writeFile`/`readdir` surface.
+The `nomad.hyperdrive` API exposed to drive apps is redesigned to match Hyperdrive v11's native API (`get`, `put`, `del`, `list`, `entry`) rather than wrapping v11 behind the old `stat`/`readFile`/`writeFile`/`readdir` surface.
 
 ## Why
 

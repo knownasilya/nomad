@@ -124,15 +124,15 @@ export const protocolHandler = async function (request, respond) {
         'Access-Control-Allow-Origin': corsHeader,
         'Allow-CSP-From': '*',
         'Cache-Control': 'no-cache',
-        'Content-Security-Policy': `default-src beaker:; img-src * data: asset: blob:; media-src * data: asset: blob:; style-src beaker: 'unsafe-inline';`,
-        'Beaker-Trusted-Interface': '1', // see wc-trust.js
+        'Content-Security-Policy': `default-src nomad:; img-src * data: asset: blob:; media-src * data: asset: blob:; style-src nomad: 'unsafe-inline';`,
+        'Nomad-Trusted-Interface': '1', // see wc-trust.js
       },
       data: intoStream(`<!doctype html>
 <html>
   <head>
     <meta charset="utf-8">
-    <link rel="stylesheet" href="beaker://app-stdlib/css/fontawesome.css">
-    <script type="module" src="beaker://drive-view/index.js"></script>
+    <link rel="stylesheet" href="nomad://app-stdlib/css/fontawesome.css">
+    <script type="module" src="nomad://drive-view/index.js"></script>
   </head>
 </html>`),
     });
@@ -167,7 +167,7 @@ export const protocolHandler = async function (request, respond) {
         statusCode: code,
         headers: {
           'Content-Type': 'text/html',
-          'Content-Security-Policy': "default-src 'unsafe-inline' beaker:;",
+          'Content-Security-Policy': "default-src 'unsafe-inline' nomad:;",
           'Access-Control-Allow-Origin': corsHeader,
           'Allow-CSP-From': '*',
         },

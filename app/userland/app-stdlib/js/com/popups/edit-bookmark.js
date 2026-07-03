@@ -1,4 +1,4 @@
-/* globals beaker */
+/* globals nomad */
 import { html, css } from '../../../vendor/lit-element/lit-element.js';
 import { BasePopup } from './base.js';
 import popupsCSS from '../../../css/com/popups.css.js';
@@ -12,9 +12,9 @@ export class EditBookmarkPopup extends BasePopup {
   constructor(bookmark) {
     super();
     this.bookmark = bookmark;
-    if (bookmark && typeof beaker.bookmarks === 'undefined') {
+    if (bookmark && typeof nomad.bookmarks === 'undefined') {
       // NOTE
-      // we're still migrating beaker-app-stdlib from being a purely internal library
+      // we're still migrating nomad-app-stdlib from being a purely internal library
       // and the 'edit bookmark' logic needs to be updated. sorry!
       // -prf
       throw new Error(
@@ -97,7 +97,7 @@ export class EditBookmarkPopup extends BasePopup {
             placeholder="E.g. Example Site"
           />
 
-          ${typeof beaker.bookmarks === 'undefined'
+          ${typeof nomad.bookmarks === 'undefined'
             ? ''
             : html`
                 <label class="checkbox" for="pinned-input">
@@ -154,10 +154,10 @@ export class EditBookmarkPopup extends BasePopup {
       title: e.target.title.value,
       pinned: e.target.pinned?.checked,
     };
-    if (typeof beaker.bookmarks === 'undefined') {
+    if (typeof nomad.bookmarks === 'undefined') {
       // userland
       b.href = normalizeUrl(b.href);
-      let drive = beaker.fs.drive('hyper://private/');
+      let drive = nomad.fs.drive('hyper://private/');
       let slug = createResourceSlug(b.href, b.title);
       let filename = await getAvailableName('/bookmarks', slug, drive, 'goto'); // avoid collisions
       let path = joinPath('/bookmarks', filename);
@@ -167,9 +167,9 @@ export class EditBookmarkPopup extends BasePopup {
     } else {
       // builtin
       if (this.bookmark && b.href !== this.bookmark.href) {
-        await beaker.bookmarks.remove(this.bookmark.href);
+        await nomad.bookmarks.remove(this.bookmark.href);
       }
-      await beaker.bookmarks.add(b);
+      await nomad.bookmarks.add(b);
     }
 
     this.dispatchEvent(new CustomEvent('resolve'));
@@ -178,7 +178,7 @@ export class EditBookmarkPopup extends BasePopup {
   async onDelete(e) {
     e.preventDefault();
     e.stopPropagation();
-    await beaker.bookmarks.remove(this.bookmark.href);
+    await nomad.bookmarks.remove(this.bookmark.href);
     this.dispatchEvent(new CustomEvent('resolve'));
   }
 }

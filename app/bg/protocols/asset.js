@@ -102,8 +102,8 @@ export function setup() {
     }
 
     // hardcoded assets
-    if (asset !== 'screenshot' && url.startsWith('beaker://')) {
-      let name = /beaker:\/\/([^\/]+)/.exec(url)[1];
+    if (asset !== 'screenshot' && url.startsWith('nomad://')) {
+      let name = /nomad:\/\/([^\/]+)/.exec(url)[1];
       return servePng(
         path.join(__dirname, `./assets/img/favicons/${name}.png`),
         DEFAULTS[asset],
@@ -121,7 +121,7 @@ export function setup() {
         });
 
         // DISABLED- seems to generate some pretty bad error behaviors on win7
-        // see https://github.com/beakerbrowser/beaker/issues/1872#issuecomment-739463243
+        // see https://github.com/beakerbrowser/nomad/issues/1872#issuecomment-739463243
         // -prf
         // if (!data && !url.startsWith('dat:')) {
         //   // try to fetch the screenshot

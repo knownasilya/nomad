@@ -98,7 +98,7 @@ export async function create(webContents, modalName, params = {}) {
   view.webContents.on('console-message', (e) => {
     console.log('Modals window says:', e.message);
   });
-  view.webContents.loadURL('beaker://modals/');
+  view.webContents.loadURL('nomad://modals/');
   view.webContents.focus();
 
   // Propagate the calling tab's space to the modal so space-aware APIs work

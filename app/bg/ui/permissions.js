@@ -70,7 +70,7 @@ export function denyAllRequests(win) {
 
 export async function checkLabsPerm({ perm, labApi, apiDocsUrl, sender }) {
   var urlp = parseDriveUrl(sender.getURL());
-  if (urlp.protocol === 'beaker:') return true;
+  if (urlp.protocol === 'nomad:') return true;
   if (urlp.protocol === 'hyper:') {
     // resolve name
     let key = await hyper.dns.resolveName(urlp.hostname);

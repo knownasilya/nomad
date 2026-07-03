@@ -37,7 +37,7 @@ export default {
     // if not, stick with the candidate
     var candidatePane = tab.getLastActivePane();
     const isUndesirable = (pane) =>
-      /^beaker:\/\/(webterm|editor|explorer)/.test(pane.url) ||
+      /^nomad:\/\/(webterm|editor|explorer)/.test(pane.url) ||
       pane.attachedPane ||
       pane === senderPane;
     if (!candidatePane || isUndesirable(candidatePane)) {

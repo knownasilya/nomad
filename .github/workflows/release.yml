@@ -56,7 +56,7 @@ jobs:
       - name: Verify build output
         run: |
           echo "=== Checking main bundle ==="
-          if grep -q 'protocol.handle("beaker"' app/main.build.js; then
+          if grep -q 'protocol.handle("nomad"' app/main.build.js; then
             echo "✓ protocol.handle found in main.build.js"
           else
             echo "✗ protocol.handle MISSING — build may be stale or failed"

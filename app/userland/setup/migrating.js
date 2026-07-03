@@ -9,8 +9,8 @@ customElements.define(
     }
 
     async doMigration() {
-      await beaker.browser.migrate08to09();
-      await beaker.browser.updateSetupState({ migrated08to09: 1 });
+      await nomad.browser.migrate08to09();
+      await nomad.browser.updateSetupState({ migrated08to09: 1 });
       this.dispatchEvent(
         new CustomEvent('next', { bubbles: true, composed: true })
       );

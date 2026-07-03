@@ -29,7 +29,7 @@ class GeneralSettingsView extends LitElement {
 
   async load() {
     // wire up events
-    this.browserEvents = beaker.browser.createEventsStream();
+    this.browserEvents = nomad.browser.createEventsStream();
     this.browserEvents.addEventListener(
       'updater-state-changed',
       this.onUpdaterStateChanged.bind(this)
@@ -40,10 +40,10 @@ class GeneralSettingsView extends LitElement {
     );
 
     // fetch data
-    this.browserInfo = await beaker.browser.getInfo();
-    this.settings = await beaker.browser.getSettings();
+    this.browserInfo = await nomad.browser.getInfo();
+    this.settings = await nomad.browser.getSettings();
     this.defaultProtocolSettings =
-      await beaker.browser.getDefaultProtocolSettings();
+      await nomad.browser.getDefaultProtocolSettings();
     console.log('loaded', {
       browserInfo: this.browserInfo,
       settings: this.settings,
@@ -64,7 +64,7 @@ class GeneralSettingsView extends LitElement {
   render() {
     if (!this.browserInfo) return html``;
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       ${this.renderDaemonStatus()}
       <div class="form-group">
         <h2>Auto Updater</h2>
@@ -420,7 +420,7 @@ class GeneralSettingsView extends LitElement {
             name="new-tab"
             id="newTab"
             type="text"
-            value=${this.settings.new_tab || 'beaker://desktop/'}
+            value=${this.settings.new_tab || 'nomad://desktop/'}
             @input=${this.onNewTabChange}
             style="width: 300px"
           />
@@ -509,9 +509,9 @@ class GeneralSettingsView extends LitElement {
         !this.defaultProtocolSettings[protocol];
 
       if (this.defaultProtocolSettings[protocol]) {
-        beaker.browser.setAsDefaultProtocolClient(protocol);
+        nomad.browser.setAsDefaultProtocolClient(protocol);
       } else {
-        beaker.browser.removeAsDefaultProtocolClient(protocol);
+        nomad.browser.removeAsDefaultProtocolClient(protocol);
       }
       toast.create('Setting updated');
       this.requestUpdate();
@@ -585,7 +585,7 @@ class GeneralSettingsView extends LitElement {
       // update and optimistically render
       this.settings.analytics_enabled =
         this.settings.analytics_enabled == 1 ? 0 : 1;
-      beaker.browser.setSetting(
+      nomad.browser.setSetting(
         'analytics_enabled',
         this.settings.analytics_enabled
       );
@@ -639,28 +639,28 @@ class GeneralSettingsView extends LitElement {
     if (!this.browserInfo) {
       return;
     }
-    this.browserInfo = await beaker.browser.getInfo();
+    this.browserInfo = await nomad.browser.getInfo();
     this.requestUpdate();
   }
 
   onClickCheckUpdates() {
     // trigger check
-    beaker.browser.checkForUpdates();
+    nomad.browser.checkForUpdates();
   }
 
   onClickCheckPrereleases(e) {
     e.preventDefault();
-    beaker.browser.checkForUpdates({ prerelease: true });
+    nomad.browser.checkForUpdates({ prerelease: true });
   }
 
   onClickRestart() {
-    beaker.browser.restartBrowser();
+    nomad.browser.restartBrowser();
   }
 
   onToggleAutoUpdate() {
     this.settings.auto_update_enabled = this.isAutoUpdateEnabled ? 0 : 1;
     this.requestUpdate();
-    beaker.browser.setSetting(
+    nomad.browser.setSetting(
       'auto_update_enabled',
       this.settings.auto_update_enabled
     );
@@ -669,7 +669,7 @@ class GeneralSettingsView extends LitElement {
 
   onCustomStartPageChange(e) {
     this.settings.custom_start_page = e.target.value;
-    beaker.browser.setSetting(
+    nomad.browser.setSetting(
       'custom_start_page',
       this.settings.custom_start_page
     );
@@ -678,14 +678,14 @@ class GeneralSettingsView extends LitElement {
 
   onBrowserThemeChange(e) {
     this.settings.browser_theme = e.target.value;
-    beaker.browser.setSetting('browser_theme', this.settings.browser_theme);
+    nomad.browser.setSetting('browser_theme', this.settings.browser_theme);
     toast.create('Setting updated');
   }
 
   onNewTabsInForegroundToggle(e) {
     this.settings.new_tabs_in_foreground =
       this.settings.new_tabs_in_foreground == 1 ? 0 : 1;
-    beaker.browser.setSetting(
+    nomad.browser.setSetting(
       'new_tabs_in_foreground',
       this.settings.new_tabs_in_foreground
     );
@@ -694,14 +694,14 @@ class GeneralSettingsView extends LitElement {
 
   onNavLayoutChange(e) {
     this.settings.tab_layout = e.target.value;
-    beaker.browser.setSetting('tab_layout', this.settings.tab_layout);
+    nomad.browser.setSetting('tab_layout', this.settings.tab_layout);
     toast.create('Setting updated');
     this.requestUpdate();
   }
 
   onSidebarSideChange(e) {
     this.settings.sidebar_side = e.target.value;
-    beaker.browser.setSetting('sidebar_side', this.settings.sidebar_side);
+    nomad.browser.setSetting('sidebar_side', this.settings.sidebar_side);
     toast.create('Setting updated');
     this.requestUpdate();
   }
@@ -713,45 +713,45 @@ class GeneralSettingsView extends LitElement {
 
   onSidebarWidthCommit(e) {
     this.settings.sidebar_width = Number(e.target.value);
-    beaker.browser.setSetting('sidebar_width', this.settings.sidebar_width);
+    nomad.browser.setSetting('sidebar_width', this.settings.sidebar_width);
     toast.create('Setting updated');
     this.requestUpdate();
   }
 
   onRunBackgroundToggle(e) {
     this.settings.run_background = this.settings.run_background == 1 ? 0 : 1;
-    beaker.browser.setSetting('run_background', this.settings.run_background);
+    nomad.browser.setSetting('run_background', this.settings.run_background);
     toast.create('Setting updated');
   }
 
   async onLaunchOnStartupToggle(e) {
     const desiredState = e.target.checked;
-    beaker.browser.setSetting('launch_on_startup', desiredState ? 1 : 0);
-    await beaker.browser.setRunOnStartup(desiredState);
+    nomad.browser.setSetting('launch_on_startup', desiredState ? 1 : 0);
+    await nomad.browser.setRunOnStartup(desiredState);
     toast.create('Setting updated');
   }
 
   onNewTabChange(e) {
     this.settings.new_tab = e.target.value;
-    beaker.browser.setSetting('new_tab', this.settings.new_tab);
+    nomad.browser.setSetting('new_tab', this.settings.new_tab);
     toast.create('Setting updated');
   }
 
   async onClickBrowseNewTab(e) {
-    var sel = await beaker.shell.selectFileDialog({
+    var sel = await nomad.shell.selectFileDialog({
       allowMultiple: false,
     });
     if (sel) {
       this.settings.new_tab = sel[0].url;
-      beaker.browser.setSetting('new_tab', this.settings.new_tab);
+      nomad.browser.setSetting('new_tab', this.settings.new_tab);
       toast.create('Setting updated');
       this.requestUpdate();
     }
   }
 
   onClickDefaultNewTab(e) {
-    this.settings.new_tab = 'beaker://desktop/';
-    beaker.browser.setSetting('new_tab', this.settings.new_tab);
+    this.settings.new_tab = 'nomad://desktop/';
+    nomad.browser.setSetting('new_tab', this.settings.new_tab);
     toast.create('Setting updated');
     this.requestUpdate();
   }
@@ -762,7 +762,7 @@ class GeneralSettingsView extends LitElement {
       delete se.selected;
     }
     this.settings.search_engines[index].selected = true;
-    beaker.browser.setSetting('search_engines', this.settings.search_engines);
+    nomad.browser.setSetting('search_engines', this.settings.search_engines);
     toast.create('Setting updated');
     this.requestUpdate();
   }
@@ -774,7 +774,7 @@ class GeneralSettingsView extends LitElement {
     if (wasSelected) {
       this.settings.search_engines[0].selected = true;
     }
-    beaker.browser.setSetting('search_engines', this.settings.search_engines);
+    nomad.browser.setSetting('search_engines', this.settings.search_engines);
     this.requestUpdate();
   }
 
@@ -783,7 +783,7 @@ class GeneralSettingsView extends LitElement {
     const name = this.shadowRoot.getElementById('custom-engine-name');
     const url = this.shadowRoot.getElementById('custom-engine-url');
     this.settings.search_engines.push({ name: name.value, url: url.value });
-    beaker.browser.setSetting('search_engines', this.settings.search_engines);
+    nomad.browser.setSetting('search_engines', this.settings.search_engines);
     name.value = '';
     url.value = '';
     this.requestUpdate();
@@ -791,24 +791,24 @@ class GeneralSettingsView extends LitElement {
 
   onChangeDefaultZoom(e) {
     this.settings.default_zoom = +e.currentTarget.value;
-    beaker.browser.setSetting('default_zoom', this.settings.default_zoom);
+    nomad.browser.setSetting('default_zoom', this.settings.default_zoom);
     toast.create('Setting updated');
   }
 
   async onClickRestartDaemon(e) {
     let el = e.currentTarget;
     el.innerHTML = '<span class="spinner"></span>';
-    await beaker.browser.reconnectHyperdriveDaemon();
-    this.browserInfo = await beaker.browser.getInfo();
+    await nomad.browser.reconnectHyperdriveDaemon();
+    this.browserInfo = await nomad.browser.getInfo();
     this.requestUpdate();
   }
 
-  async onClickAddSiteToBeakerNetwork(e) {
+  async onClickAddSiteToNomadNetwork(e) {
     this.listingSelfState = 'attempting';
     this.requestUpdate();
 
-    await beaker.browser.addProfileToBeakerNetwork();
-    this.isProfileListedInBeakerNetwork = true;
+    await nomad.browser.addProfileToNomadNetwork();
+    this.isProfileListedInNomadNetwork = true;
     this.listingSelfState = 'done';
     this.requestUpdate();
   }

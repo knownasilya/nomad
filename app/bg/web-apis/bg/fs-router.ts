@@ -1,4 +1,4 @@
-// Pure, dependency-injected backend router for the beaker.fs facade (used by fs.js).
+// Pure, dependency-injected backend router for the nomad.fs facade (used by fs.js).
 //
 // WHY THIS IS A SEPARATE, DI MODULE: the routing *decisions* are the regression-prone part (the
 // autobase-port breakage where `hyper://private/` — a root drive the Vault migration converted to an

@@ -40,7 +40,7 @@ create({
   parent: document.body,
 
   // url to fontawesome css
-  fontAwesomeCSSUrl: 'beaker://assets/font-awesome.css',
+  fontAwesomeCSSUrl: 'nomad://assets/font-awesome.css',
 
   // menu items
   items: [
@@ -64,7 +64,7 @@ export function create(opts) {
   var parent = opts.parent || document.body;
 
   // render interface
-  parent.appendChild(new BeakerContextMenu(opts));
+  parent.appendChild(new NomadContextMenu(opts));
   document.addEventListener('keyup', onKeyUp);
   document.addEventListener('click', onClickAnywhere);
 
@@ -75,7 +75,7 @@ export function create(opts) {
 }
 
 export function destroy(value) {
-  const el = document.querySelector('beaker-context-menu');
+  const el = document.querySelector('nomad-context-menu');
   if (el) {
     el.parentNode.removeChild(el);
     document.removeEventListener('keyup', onKeyUp);
@@ -97,7 +97,7 @@ function onKeyUp(e) {
 }
 
 function onClickAnywhere(e) {
-  if (!findParent(e.target, (el) => el.tagName === 'BEAKER-CONTEXT-MENU')) {
+  if (!findParent(e.target, (el) => el.tagName === 'NOMAD-CONTEXT-MENU')) {
     // click is outside the context-menu, destroy
     destroy();
   }
@@ -106,7 +106,7 @@ function onClickAnywhere(e) {
 // internal
 // =
 
-export class BeakerContextMenu extends LitElement {
+export class NomadContextMenu extends LitElement {
   constructor({
     x,
     y,
@@ -215,7 +215,7 @@ export class BeakerContextMenu extends LitElement {
   }
 }
 
-BeakerContextMenu.styles = css`
+NomadContextMenu.styles = css`
   ${dropdownCSS}
 
   .context-menu {
@@ -251,4 +251,4 @@ BeakerContextMenu.styles = css`
   }
 `;
 
-customElements.define('beaker-context-menu', BeakerContextMenu);
+customElements.define('nomad-context-menu', NomadContextMenu);

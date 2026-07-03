@@ -38,7 +38,7 @@ export function setup(parentWindow) {
   view.webContents.on('console-message', (e) => {
     console.log('Location-Bar window says:', e.message);
   });
-  view.webContents.loadURL('beaker://location-bar/');
+  view.webContents.loadURL('nomad://location-bar/');
 
   settingsDb.on('set:search_engines', (newValue) => {
     if (id in views) {

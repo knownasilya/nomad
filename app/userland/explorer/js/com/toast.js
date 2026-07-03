@@ -9,12 +9,12 @@ export function create(message, type = '', time = 5000, button = null) {
   destroy();
 
   // render toast
-  document.body.appendChild(new BeakerToast({ message, type, button }));
+  document.body.appendChild(new NomadToast({ message, type, button }));
   setTimeout(destroy, time);
 }
 
 export function destroy() {
-  var toast = document.querySelector('beaker-toast');
+  var toast = document.querySelector('nomad-toast');
 
   if (toast) {
     // fadeout before removing element
@@ -26,7 +26,7 @@ export function destroy() {
 // internal
 // =
 
-class BeakerToast extends LitElement {
+class NomadToast extends LitElement {
   constructor({ message, type, button }) {
     super();
     this.message = message;
@@ -58,6 +58,6 @@ class BeakerToast extends LitElement {
     `;
   }
 }
-BeakerToast.styles = toastCSS;
+NomadToast.styles = toastCSS;
 
-customElements.define('beaker-toast', BeakerToast);
+customElements.define('nomad-toast', NomadToast);

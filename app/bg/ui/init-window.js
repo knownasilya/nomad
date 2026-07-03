@@ -35,7 +35,7 @@ export function open({ isShutdown } = { isShutdown: false }) {
     icon: ICON_PATH,
     show: true,
   });
-  initWindow.loadURL(`beaker://init/${isShutdown ? 'shutdown.html' : ''}`);
+  initWindow.loadURL(`nomad://init/${isShutdown ? 'shutdown.html' : ''}`);
 }
 
 export function close() {

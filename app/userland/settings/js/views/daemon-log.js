@@ -27,7 +27,7 @@ class DaemonLogView extends LitElement {
     this.isLoading = true;
     this.requestUpdate();
 
-    this.rows = await beaker.logger.listDaemonLog();
+    this.rows = await nomad.logger.listDaemonLog();
 
     this.isLoading = false;
     this.requestUpdate();
@@ -41,13 +41,13 @@ class DaemonLogView extends LitElement {
   render() {
     if (!this.rows) {
       return html`
-        <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+        <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
         <div class="logger loading">Loading...</div>
       `;
     }
 
     return html`
-      <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="logger">
         <table class="rows">
           <thead>

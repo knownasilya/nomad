@@ -52,7 +52,7 @@ var closedItems = {}; // map of {[win.id]: Array<Object>}
 var windowEvents = {}; // mapof {[win.id]: EventEmitter}
 var tabGroups = {}; // map of {[win.id]: Array<{id, name, color}>}
 var windowActiveSpaceId = {}; // map of {[win.id]: spaceId} — per-window active space
-var defaultUrl = 'beaker://desktop/';
+var defaultUrl = 'nomad://desktop/';
 
 const GROUP_COLORS = ['#e04850', '#f5a623', '#f8de4c', '#3ecf8e', '#5b5ef4', '#b570f5'];
 
@@ -644,11 +644,11 @@ class Tab extends EventEmitter {
 // =
 
 export async function setup() {
-  // defaultUrl stays as the hardcoded 'beaker://desktop/'.
+  // defaultUrl stays as the hardcoded 'nomad://desktop/'.
   // Per-space new tab URLs are resolved at the RPC call site (createTab).
 
   // listen for webContents messages
-  ipcMain.on('BEAKER_SCRIPTCLOSE_SELF', (e) => {
+  ipcMain.on('NOMAD_SCRIPTCLOSE_SELF', (e) => {
     var tab = findTab(e.sender);
     if (tab) {
       var pane = tab.findPane(e.sender);
@@ -656,7 +656,7 @@ export async function setup() {
     }
     e.returnValue = false;
   });
-  ipcMain.on('BEAKER_WC_FOCUSED', (e) => {
+  ipcMain.on('NOMAD_WC_FOCUSED', (e) => {
     // when a pane is focused, we want to set it as the
     // active pane of its tab
     for (let winId in activeTabs) {
@@ -1287,9 +1287,9 @@ export function getPreviousTabIndex(win) {
 export function openOrFocusDownloadsPage(win) {
   win = getTopWindow(win);
   var tabs = getAll(win);
-  var downloadsTab = tabs.find((v) => v.url.startsWith('beaker://library/downloads'));
+  var downloadsTab = tabs.find((v) => v.url.startsWith('nomad://library/downloads'));
   if (!downloadsTab) {
-    downloadsTab = create(win, 'beaker://library/downloads');
+    downloadsTab = create(win, 'nomad://library/downloads');
   }
   setActive(win, downloadsTab);
 }

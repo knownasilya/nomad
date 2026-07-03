@@ -419,7 +419,7 @@ class NomadChatBubble extends LitElement {
   // If a change arrives mid-stream, defer the reload until streaming ends.
   _watchDriveChanges() {
     try {
-      const drive = window.beaker?.hyperdrive?.drive(location.href);
+      const drive = window.nomad?.hyperdrive?.drive(location.href);
       if (!drive) return;
       const watcher = drive.watch('/');
       watcher.addEventListener('changed', () => {
@@ -576,7 +576,7 @@ class NomadChatBubble extends LitElement {
         .slice(0, assistantIdx)
         .map((m) => ({ role: m.role, content: m.content }));
 
-      for await (const chunk of window.beaker.ai.chat(history)) {
+      for await (const chunk of window.nomad.ai.chat(history)) {
         const updated = [...this.messages];
         updated[assistantIdx] = {
           role: 'assistant',
