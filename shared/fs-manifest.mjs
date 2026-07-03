@@ -6,6 +6,10 @@
 // Value is the RPC call type: 'promise' (async → value) or 'readable' (returns an event stream).
 // Keep in sync with app/bg/web-apis/bg/fs.js (impl), fg/fs.js (desktop shim), and the mobile shim
 // (mobile/lib/types.ts BEAKER_SHIM + mobile/backend/backend.mjs dispatchBeaker).
+
+/** The RPC call type for a `beaker.fs` method. @typedef {'promise' | 'readable'} RpcCallType */
+
+/** @satisfies {Record<string, RpcCallType>} */
 export default {
   getInfo: 'promise',
 

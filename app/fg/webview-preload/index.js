@@ -1,5 +1,5 @@
 import { ipcRenderer } from 'electron';
-import { setup as setupWebAPIs } from '../../bg/web-apis/fg.js';
+import { setup as setupWebAPIs } from '../../bg/web-apis/fg';
 import { setup as setupPrompt } from './prompt';
 import { setup as setupExecuteJavascript } from './execute-javascript';
 import { setupChatBubble } from './chat-bubble';

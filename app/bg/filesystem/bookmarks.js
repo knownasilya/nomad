@@ -1,6 +1,6 @@
 // @ts-nocheck
 import b4a from 'b4a';
-import { joinPath } from '../../lib/strings.js';
+import { joinPath } from '../../lib/strings';
 import { normalizeUrl, createResourceSlug } from '../../lib/urls';
 import * as autobases from '../hyper/autobases';
 import * as filesystem from './index';

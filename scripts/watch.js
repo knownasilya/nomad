@@ -39,7 +39,8 @@ bundleApplication()
     fs.watch(appDir, { recursive: true }, function (event, filename) {
       if (!filename) return;
       if (filename.endsWith('.build.js')) return;
-      if (!filename.endsWith('.js') && !filename.endsWith('.css.js')) return;
+      // Source lives in .js/.mjs and (post TS-migration) .ts/.mts; .css.js assets end in .js.
+      if (!/[.](m?js|m?ts)$/.test(filename)) return;
       rebuild();
     });
   })

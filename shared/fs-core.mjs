@@ -57,6 +57,46 @@
 // This SUPERSEDES FS_FORMAT_VERSION 0 (raw-bytes binary view). Clean break — no migration
 // (no production users). Bump the version and regenerate the golden vector on any change here.
 
+// ─── Wire-format types (see the format block above) ─────────────────────────
+// These describe the DATA shapes that travel through the oplog / linearized view.
+// The injected P2P constructors (Hyperbee, Hyperblobs, b4a) stay loosely typed on
+// purpose — the type value here is the record/op shape, not the vendored libs.
+
+/**
+ * Canonical file metadata. FIXED KEY ORDER — part of the wire format.
+ * @typedef {object} FsMetadata
+ * @property {number} mtime
+ * @property {number} ctime
+ * @property {boolean} [executable]  Only present when true (matches Hyperdrive).
+ */
+
+/**
+ * A Hyperblobs id plus the hex key of the OWNING WRITER's blobs core.
+ * @typedef {object} BlobPointer
+ * @property {string} core  Hex key of the owning writer's blobs core.
+ * @property {number} blockOffset
+ * @property {number} blockLength
+ * @property {number} byteOffset
+ * @property {number} byteLength
+ */
+
+/**
+ * A linearized-view record. Exactly one of blob/value is non-null for a file with
+ * content; both null = empty file.
+ * @typedef {object} FsRecord
+ * @property {FsMetadata} metadata
+ * @property {BlobPointer | null} blob
+ * @property {string | null} value  base64 of inline bytes, or null.
+ */
+
+/** @typedef {{ start?: number, length?: number }} ContentRange */
+
+/** @typedef {{ op: 'put', path: string, metadata: FsMetadata, blob?: BlobPointer | null, value?: string | null }} PutOp */
+/** @typedef {{ op: 'del', path: string }} DelOp */
+/** @typedef {{ addWriter: string, profileUrl?: string | null }} AddWriterOp */
+/** @typedef {{ removeWriter: string }} RemoveWriterOp */
+/** @typedef {PutOp | DelOp | AddWriterOp | RemoveWriterOp} FsOp */
+
 // Options passed to `new Autobase(store, key, { open, apply, ...AUTOBASE_OPTS })`.
 export const AUTOBASE_OPTS = { valueEncoding: 'json', ackInterval: 1000 }
 
@@ -72,6 +112,10 @@ export const FS_FORMAT_VERSION = 1
 
 // Canonical file metadata. FIXED KEY ORDER — part of the wire format (see determinism note).
 // `executable` is only included when true, matching Hyperdrive's optional metadata.
+/**
+ * @param {{ mtime?: number, ctime?: number, executable?: boolean }} [opts]
+ * @returns {FsMetadata}
+ */
 export function makeMetadata ({ mtime = 0, ctime = 0, executable = false } = {}) {
   const m = { mtime, ctime }
   if (executable) m.executable = true
@@ -79,6 +123,10 @@ export function makeMetadata ({ mtime = 0, ctime = 0, executable = false } = {})
 }
 
 // Canonical view RECORD wrapper. FIXED KEY ORDER (metadata, blob, value).
+/**
+ * @param {{ metadata?: FsMetadata, blob?: BlobPointer | null, value?: string | null }} opts
+ * @returns {FsRecord}
+ */
 export function makeRecord ({ metadata, blob = null, value = null }) {
   return { metadata: metadata || makeMetadata(), blob, value }
 }
@@ -185,6 +233,11 @@ export function createBlobStore ({ Hyperblobs, b4a }) {
 export function createContentReader ({ b4a, Hyperblobs }) {
   const blobStore = Hyperblobs ? createBlobStore({ Hyperblobs, b4a }) : null
 
+  /**
+   * @param {FsRecord | null} record
+   * @param {{ store?: any, range?: ContentRange }} [opts]
+   * @returns {Promise<any>}  Buffer-like content (b4a/Hyperblobs return type).
+   */
   async function readContent (record, opts = {}) {
     if (!record) return null
     const { store, range } = opts
@@ -204,6 +257,11 @@ export function createContentReader ({ b4a, Hyperblobs }) {
   }
 
   // The on-disk byte length of a record's content without fetching blob bytes.
+  /**
+   * @param {FsRecord | null} record
+   * @param {any} [b]  Optional b4a override.
+   * @returns {number}
+   */
   function contentLength (record, b) {
     const bb = b || b4a
     if (!record) return 0
@@ -217,6 +275,11 @@ export function createContentReader ({ b4a, Hyperblobs }) {
 
 // Decode an inline writer-record (value = base64 JSON) back to its object. Convenience for
 // listWriters()-style readers.
+/**
+ * @param {FsRecord | null} record
+ * @param {any} b4a
+ * @returns {any | null}
+ */
 export function decodeInlineJson (record, b4a) {
   if (!record || record.value == null) return null
   try { return JSON.parse(b4a.toString(b4a.from(record.value, 'base64'))) } catch { return null }
@@ -227,6 +290,11 @@ export function decodeInlineJson (record, b4a) {
 // "has any child key". The serve path uses this to decide whether a path with no file/index should
 // render the builtin file view (directory) or 404 (genuinely missing). `bee` is any Hyperbee-like
 // view exposing createReadStream({ gte, lt, limit }).
+/**
+ * @param {any} bee  Any Hyperbee-like view exposing createReadStream({ gte, lt, limit }).
+ * @param {string} dirPath
+ * @returns {Promise<boolean>}
+ */
 export async function viewDirHasChildren (bee, dirPath) {
   const prefix = dirPath.endsWith('/') ? dirPath : dirPath + '/'
   try {
