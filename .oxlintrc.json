@@ -1,0 +1,39 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "node"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "no-unused-vars": "off",
+    "no-useless-escape": "off",
+    "no-unused-expressions": [
+      "error",
+      { "allowShortCircuit": true, "allowTernary": true, "allowTaggedTemplates": true }
+    ],
+    "promise/no-callback-in-promise": "off",
+    "typescript/no-this-alias": "off",
+    "unicorn/prefer-string-starts-ends-with": "off"
+  },
+  "env": {
+    "builtin": true,
+    "browser": true,
+    "node": true,
+    "es2024": true
+  },
+  "globals": {
+    "beaker": "readonly",
+    "DatArchive": "readonly",
+    "uwg": "readonly"
+  },
+  "ignorePatterns": [
+    "app/node_modules",
+    "app/userland",
+    "**/vendor/**",
+    "**/*.build.js",
+    "**/color-thief.js",
+    "app/fg/syntax-highlighter/index.js",
+    "assets",
+    "dist"
+  ]
+}
