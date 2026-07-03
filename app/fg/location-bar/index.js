@@ -10,10 +10,7 @@ import locationBarManifest from '../../bg/rpc-manifests/location-bar';
 const bg = {
   beakerBrowser: rpc.importAPI('beaker-browser', browserManifest),
   history: rpc.importAPI('history', historyManifest),
-  locationBar: rpc.importAPI(
-    'background-process-location-bar',
-    locationBarManifest
-  ),
+  locationBar: rpc.importAPI('background-process-location-bar', locationBarManifest),
 };
 
 class LocationBar extends LitElement {
@@ -82,9 +79,7 @@ class LocationBar extends LitElement {
           @mouseleave=${this.onMouseleaveSearch}
           @click=${this.onClickSearch}
         >
-          <img
-            src="beaker://assets/search-engines/${label.toLowerCase()}.png"
-          />
+          <img src="beaker://assets/search-engines/${label.toLowerCase()}.png" />
         </a>
       `;
     };
@@ -102,15 +97,10 @@ class LocationBar extends LitElement {
               : html`Search for <strong>${this.query}</strong> with:`}
           </div>
           <div class="list">
-            ${searchLink(
-              'Nomad',
-              `beaker://desktop/?q=${encodeURIComponent(this.query)}`
-            )}
+            ${searchLink('Nomad', `beaker://desktop/?q=${encodeURIComponent(this.query)}`)}
             ${searchLink(
               'Startpage',
-              `https://startpage.com/do/dsearch?query=${encodeURIComponent(
-                this.query
-              )}`
+              `https://startpage.com/do/dsearch?query=${encodeURIComponent(this.query)}`
             )}
             ${searchLink(
               'DuckDuckGo',
@@ -120,30 +110,17 @@ class LocationBar extends LitElement {
               'Twitter',
               `https://twitter.com/search?q=${encodeURIComponent(this.query)}`
             )}
-            ${searchLink(
-              'GitHub',
-              `https://github.com/search?q=${encodeURIComponent(this.query)}`
-            )}
-            ${searchLink(
-              'Google',
-              `https://google.com/search?q=${encodeURIComponent(this.query)}`
-            )}
+            ${searchLink('GitHub', `https://github.com/search?q=${encodeURIComponent(this.query)}`)}
+            ${searchLink('Google', `https://google.com/search?q=${encodeURIComponent(this.query)}`)}
             ${searchLink(
               'YouTube',
-              `https://www.youtube.com/results?search_query=${encodeURIComponent(
-                this.query
-              )}`
+              `https://www.youtube.com/results?search_query=${encodeURIComponent(this.query)}`
             )}
             ${searchLink(
               'Wikipedia',
-              `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(
-                this.query
-              )}`
+              `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(this.query)}`
             )}
-            ${searchLink(
-              'Reddit',
-              `https://reddit.com/search?q=${encodeURIComponent(this.query)}`
-            )}
+            ${searchLink('Reddit', `https://reddit.com/search?q=${encodeURIComponent(this.query)}`)}
             ${
               '' /* TODO restore at some point searchLink('Nomad', `beaker://search/?q=${encodeURIComponent(this.query)}`) */
             }
@@ -185,36 +162,26 @@ class LocationBar extends LitElement {
       return html`
         <div class="icon"><i class="fas fa-star"></i></div>
         <div class="title">
-          ${r.titleDecorated
-            ? unsafeHTML(joinSegments(r.titleDecorated))
-            : r.title}
+          ${r.titleDecorated ? unsafeHTML(joinSegments(r.titleDecorated)) : r.title}
         </div>
         <div class="spacer">&mdash;</div>
         <div class="provenance">
-          ${toNiceUrl(
-            r.urlDecorated ? unsafeHTML(joinSegments(r.urlDecorated)) : r.url
-          )}
+          ${toNiceUrl(r.urlDecorated ? unsafeHTML(joinSegments(r.urlDecorated)) : r.url)}
         </div>
       `;
     }
     return html`
       <div class="icon"><img src=${'asset:favicon-32:' + r.url} /></div>
       <div class="title">
-        ${r.titleDecorated
-          ? unsafeHTML(joinSegments(r.titleDecorated))
-          : r.title}
+        ${r.titleDecorated ? unsafeHTML(joinSegments(r.titleDecorated)) : r.title}
       </div>
       <div class="spacer">&mdash;</div>
       <div class="provenance">
-        ${toNiceUrl(
-          r.urlDecorated ? unsafeHTML(joinSegments(r.urlDecorated)) : r.url
-        )}
+        ${toNiceUrl(r.urlDecorated ? unsafeHTML(joinSegments(r.urlDecorated)) : r.url)}
       </div>
       ${r.origin
         ? html`
-            <div class="origin">
-              <span class="fa-fw ${r.origin.icon}"></span> ${r.origin.label}
-            </div>
+            <div class="origin"><span class="fa-fw ${r.origin.icon}"></span> ${r.origin.label}</div>
           `
         : ''}
     `;
@@ -413,10 +380,7 @@ customElements.define('location-bar', LocationBar);
 const DRIVE_KEY_REGEX = /([0-9a-f]{64})/gi;
 function toNiceUrl(str) {
   if (typeof str !== 'string') return str;
-  return str.replace(
-    DRIVE_KEY_REGEX,
-    (_, m) => `${m.slice(0, 6)}..${m.slice(-2)}`
-  );
+  return str.replace(DRIVE_KEY_REGEX, (_, m) => `${m.slice(0, 6)}..${m.slice(-2)}`);
 }
 
 // helper for highlightHistoryResult()

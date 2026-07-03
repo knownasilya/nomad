@@ -26,8 +26,7 @@ if (obj) {
   );
   json = json.replace(
     /^(\s+)(".+")(,?)$/gim,
-    (v, ws, str, comma) =>
-      `${ws}<span style="color: #555">${str}</span>${comma}`
+    (v, ws, str, comma) => `${ws}<span style="color: #555">${str}</span>${comma}`
   );
   json = json.replace(
     /<\/span> ([0-9]+)/gim,
@@ -35,8 +34,7 @@ if (obj) {
   );
   json = json.replace(
     /^(\s+)([0-9]+)(,?)$/gim,
-    (v, ws, num, comma) =>
-      `${ws}<span style="color: blue">${num}</span>${comma}`
+    (v, ws, num, comma) => `${ws}<span style="color: blue">${num}</span>${comma}`
   );
   json = json.replace(
     /<\/span> (true|false)/gim,
@@ -44,8 +42,7 @@ if (obj) {
   );
   json = json.replace(
     /^(\s+)(true|false)(,?)$/gim,
-    (v, ws, bool, comma) =>
-      `${ws}<span style="color: red">${bool}</span>${comma}`
+    (v, ws, bool, comma) => `${ws}<span style="color: red">${bool}</span>${comma}`
   );
   el.innerHTML = json;
 }

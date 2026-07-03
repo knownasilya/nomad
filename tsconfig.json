@@ -5,6 +5,11 @@
     "allowJs": true,
     "noEmit": true,
 
+    // The walled.garden schema index imports its siblings with explicit `.ts`
+    // specifiers (so scripts/gen-schema-dts.mjs can load them under Node's
+    // --experimental-strip-types, which does not rewrite `.js`→`.ts`).
+    "allowImportingTsExtensions": true,
+
     // Language and module settings that match the Vite/Rollup build pipeline
     "target": "ES2020",
     "module": "ESNext",
@@ -30,7 +35,8 @@
     "app/lib/**/*",
     "app/bg/dbs/**/*",
     "app/bg/web-apis/**/*",
-    "app/types/**/*"
+    "app/types/**/*",
+    "shared/**/*"
   ],
   "exclude": [
     "app/node_modules",

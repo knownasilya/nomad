@@ -74,9 +74,7 @@ export async function create(parentWindow, tab, params) {
   // run the prompt flow
   var decision = false;
   try {
-    decision = await view.webContents.executeJavaScript(
-      `runPrompt(${JSON.stringify(params)})`
-    );
+    decision = await view.webContents.executeJavaScript(`runPrompt(${JSON.stringify(params)})`);
   } catch (e) {
     console.error('Failed to run permission prompt', e);
   }
@@ -125,9 +123,7 @@ rpc.exportAPI('background-process-perm-prompt', permPromptRPCManifest, {
   },
 
   async resizeSelf(dimensions) {
-    var view = Object.values(views).find(
-      (view) => view.webContents === this.sender
-    );
+    var view = Object.values(views).find((view) => view.webContents === this.sender);
     if (!view) return;
     var parentWindow = findWebContentsParentWindow(this.sender);
     setBounds(view, parentWindow, dimensions);

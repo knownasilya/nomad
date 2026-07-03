@@ -59,54 +59,36 @@ class BrowserMenu extends LitElement {
             <span class="label">New Hyperdrive...</span>
           </div>
 
-          <div
-            class="menu-item"
-            @click=${(e) => this.onNewHyperdriveFromFolder(e)}
-          >
+          <div class="menu-item" @click=${(e) => this.onNewHyperdriveFromFolder(e)}>
             <i class="fas fa-file-upload"></i>
             <span class="label">New Hyperdrive From Folder...</span>
           </div>
         </div>
 
         <div class="section">
-          <div
-            class="menu-item"
-            @click=${(e) => this.onOpenPage(e, 'hyper://private')}
-          >
+          <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'hyper://private')}>
             <i class="fas fa-lock"></i>
             <span class="label">My Private Drive</span>
           </div>
         </div>
 
         <div class="section">
-          <div
-            class="menu-item"
-            @click=${(e) => this.onOpenPage(e, 'beaker://library')}
-          >
+          <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'beaker://library')}>
             <img class="favicon" src="asset:favicon:beaker://library/" />
             <span class="label">My Library</span>
           </div>
 
-          <div
-            class="menu-item"
-            @click=${(e) => this.onOpenPage(e, 'beaker://history')}
-          >
+          <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'beaker://history')}>
             <img class="favicon" src="asset:favicon:beaker://history/" />
             <span class="label">History</span>
           </div>
 
-          <div
-            class="menu-item"
-            @click=${(e) => this.onOpenPage(e, 'beaker://reader')}
-          >
+          <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'beaker://reader')}>
             <img class="favicon" src="asset:favicon:beaker://reader/" />
             <span class="label">Reader</span>
           </div>
 
-          <div
-            class="menu-item"
-            @click=${(e) => this.onOpenPage(e, 'beaker://settings')}
-          >
+          <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'beaker://settings')}>
             <img class="favicon" src="asset:favicon:beaker://settings/" />
             <span class="label">Settings</span>
           </div>
@@ -120,8 +102,7 @@ class BrowserMenu extends LitElement {
 
           <div
             class="menu-item"
-            @click=${(e) =>
-              this.onOpenPage(e, 'https://nomad.pages.dev/docs/api/')}
+            @click=${(e) => this.onOpenPage(e, 'https://nomad.pages.dev/docs/api/')}
           >
             <i class="far fa-life-ring"></i>
             <span class="label">Help</span>

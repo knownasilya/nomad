@@ -24,9 +24,7 @@ export function setup(parentWindow) {
       defaultEncoding: 'utf-8',
     },
   }));
-  view.webContents.loadFile(
-    path.join(__dirname, 'fg', 'overlay', 'index.html')
-  );
+  view.webContents.loadFile(path.join(__dirname, 'fg', 'overlay', 'index.html'));
 }
 
 export function destroy(parentWindow) {
@@ -64,9 +62,7 @@ export function set(parentWindow, opts) {
     if (opts) {
       show(parentWindow);
       view.setBounds(opts.bounds);
-      view.webContents.executeJavaScript(
-        `set(${JSON.stringify(opts)}); undefined`
-      );
+      view.webContents.executeJavaScript(`set(${JSON.stringify(opts)}); undefined`);
     } else {
       hide(parentWindow);
       view.webContents.executeJavaScript(`set({}); undefined`);

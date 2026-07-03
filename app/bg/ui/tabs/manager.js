@@ -1,13 +1,5 @@
 // @ts-nocheck
-import {
-  app,
-  dialog,
-  BrowserWindow,
-  Menu,
-  clipboard,
-  ipcMain,
-  screen,
-} from 'electron';
+import { app, dialog, BrowserWindow, Menu, clipboard, ipcMain, screen } from 'electron';
 import { EventEmitter } from 'events';
 import fs from 'fs';
 import path from 'path';
@@ -108,8 +100,9 @@ class Tab extends EventEmitter {
     this.isPinned = Boolean(opts.isPinned); // is this tab pinned?
     this.groupId = opts.groupId || null;
     this.spaceId = opts.spaceId || getWindowActiveSpaceId(win);
-    const activeSpace = spacesDb.getCachedAll().find((s) => s.id === this.spaceId) || spacesDb.getCachedActive();
-    this.partition = opts.partition !== undefined ? opts.partition : (activeSpace?.partition || '');
+    const activeSpace =
+      spacesDb.getCachedAll().find((s) => s.id === this.spaceId) || spacesDb.getCachedActive();
+    this.partition = opts.partition !== undefined ? opts.partition : activeSpace?.partition || '';
 
     // helper state
     this.lastActivePane = undefined;
@@ -383,10 +376,7 @@ class Tab extends EventEmitter {
     pane.loadURL(origPane.url);
   }
 
-  attachPane(
-    pane,
-    { after, splitDir } = { after: undefined, splitDir: 'vert' }
-  ) {
+  attachPane(pane, { after, splitDir } = { after: undefined, splitDir: 'vert' }) {
     this.panes.push(pane);
     pane.setTab(this);
     if (!this.activePane) this.setActivePane(pane);
@@ -578,21 +568,13 @@ class Tab extends EventEmitter {
     var tab = this;
 
     var menuItems = [];
-    menuItems.push(
-      contextMenu.createMenuItem('split-pane-vert', { webContents, tab })
-    );
-    menuItems.push(
-      contextMenu.createMenuItem('split-pane-horz', { webContents, tab })
-    );
+    menuItems.push(contextMenu.createMenuItem('split-pane-vert', { webContents, tab }));
+    menuItems.push(contextMenu.createMenuItem('split-pane-horz', { webContents, tab }));
     if (contextMenu.shouldShowMenuItem('move-pane', { tab })) {
-      menuItems.push(
-        contextMenu.createMenuItem('move-pane', { webContents, tab })
-      );
+      menuItems.push(contextMenu.createMenuItem('move-pane', { webContents, tab }));
     }
     menuItems.push({ type: 'separator' });
-    menuItems.push(
-      contextMenu.createMenuItem('close-pane', { webContents, tab })
-    );
+    menuItems.push(contextMenu.createMenuItem('close-pane', { webContents, tab }));
     var menu = Menu.buildFromTemplate(menuItems);
     let bounds = this.layout.getBoundsForPane(pane);
     menu.popup({
@@ -834,11 +816,12 @@ export function create(
   }
 
   // resolve space for this tab
-  const spaceId = opts.spaceId || (opts.fromSnapshot?.spaceId) || getWindowActiveSpaceId(win);
+  const spaceId = opts.spaceId || opts.fromSnapshot?.spaceId || getWindowActiveSpaceId(win);
   const space = spacesDb.getCachedAll().find((s) => s.id === spaceId);
-  const partition = opts.fromSnapshot?.partition !== undefined
-    ? opts.fromSnapshot.partition
-    : (space?.partition ?? '');
+  const partition =
+    opts.fromSnapshot?.partition !== undefined
+      ? opts.fromSnapshot.partition
+      : (space?.partition ?? '');
 
   var tab;
   var preloadedNewTab = preloadedNewTabs[win.id];
@@ -872,9 +855,7 @@ export function create(
     tabs.splice(indexOfLastPinnedTabInSpace(win, tab.spaceId), 0, tab);
   } else {
     let tabIndex =
-      typeof opts.tabIndex !== 'undefined' && opts.tabIndex !== -1
-        ? opts.tabIndex
-        : undefined;
+      typeof opts.tabIndex !== 'undefined' && opts.tabIndex !== -1 ? opts.tabIndex : undefined;
     if (opts.adjacentActive) {
       let active = getActive(win);
       let lastPinIndex = indexOfLastPinnedTabInSpace(win, spaceId);
@@ -901,9 +882,7 @@ export function create(
   // make active if requested, or if none others are
   let shouldSetActive = opts.setActive;
   if (opts.setActiveBySettings) {
-    shouldSetActive = Boolean(
-      Number(settingsDb.getCached('new_tabs_in_foreground'))
-    );
+    shouldSetActive = Boolean(Number(settingsDb.getCached('new_tabs_in_foreground')));
   }
   if (shouldSetActive || !getActive(win)) {
     setActive(win, tab);
@@ -1028,7 +1007,8 @@ export async function remove(win, tab) {
     var visibleAfterRemoval = getVisibleTabs(win);
     if (visibleAfterRemoval.length > 0) {
       // pick the tab at the same position, or the last one
-      var next = visibleAfterRemoval[visibleIndex] || visibleAfterRemoval[visibleAfterRemoval.length - 1];
+      var next =
+        visibleAfterRemoval[visibleIndex] || visibleAfterRemoval[visibleAfterRemoval.length - 1];
       setActive(win, next);
     } else {
       // no tabs left in this space — open a new one
@@ -1112,8 +1092,8 @@ export function initializeWindowFromSnapshot(win, snapshot) {
     windowActiveSpaceId[win.id] = spacesDb.getCachedActiveId();
   }
   // snapshot may be the old array format or new {pages, groups} object
-  const pages = Array.isArray(snapshot) ? snapshot : (snapshot.pages || []);
-  const groups = Array.isArray(snapshot) ? [] : (snapshot.groups || []);
+  const pages = Array.isArray(snapshot) ? snapshot : snapshot.pages || [];
+  const groups = Array.isArray(snapshot) ? [] : snapshot.groups || [];
   tabGroups[win.id] = groups;
   for (let page of pages) {
     if (typeof page === 'string') {
@@ -1167,10 +1147,7 @@ export function transferTabToWindow(tab, targetWindow) {
   var sourceTabs = getAll(sourceWindow);
   var i = sourceTabs.indexOf(tab);
   if (i == -1) {
-    return console.warn(
-      'tabs/manager transferTabToWindow() called for missing tab',
-      tab
-    );
+    return console.warn('tabs/manager transferTabToWindow() called for missing tab', tab);
   }
 
   // remove
@@ -1275,9 +1252,7 @@ export function changeActiveBy(win, offset) {
   if (tabs.length > 1) {
     var i = tabs.indexOf(active);
     if (i === -1) {
-      return console.warn(
-        'Active page is not in the pages list! THIS SHOULD NOT HAPPEN!'
-      );
+      return console.warn('Active page is not in the pages list! THIS SHOULD NOT HAPPEN!');
     }
 
     i += offset;
@@ -1312,9 +1287,7 @@ export function getPreviousTabIndex(win) {
 export function openOrFocusDownloadsPage(win) {
   win = getTopWindow(win);
   var tabs = getAll(win);
-  var downloadsTab = tabs.find((v) =>
-    v.url.startsWith('beaker://library/downloads')
-  );
+  var downloadsTab = tabs.find((v) => v.url.startsWith('beaker://library/downloads'));
   if (!downloadsTab) {
     downloadsTab = create(win, 'beaker://library/downloads');
   }
@@ -1419,8 +1392,7 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
       var state = Object.assign({}, tab.state);
       if (opts) {
         if (opts.driveInfo) state.driveInfo = tab.primaryPane.driveInfo;
-        if (opts.sitePerms)
-          state.sitePerms = await sitedataDb.getPermissions(tab.url);
+        if (opts.sitePerms) state.sitePerms = await sitedataDb.getPermissions(tab.url);
       }
       return state;
     }
@@ -1630,7 +1602,9 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
       {
         label: 'Close All',
         click: async () => {
-          var groupTabs = getAll(win).filter((t) => t.groupId === groupId).slice();
+          var groupTabs = getAll(win)
+            .filter((t) => t.groupId === groupId)
+            .slice();
           for (var tab of groupTabs) {
             await remove(win, tab);
           }
@@ -1654,9 +1628,8 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     }
     if (groupTabs.length === 0) return;
     // Find insertion point: before first tab of beforeGroupId, or at end if null
-    var insertIndex = beforeGroupId !== null
-      ? tabs.findIndex((t) => t.groupId === beforeGroupId)
-      : -1;
+    var insertIndex =
+      beforeGroupId !== null ? tabs.findIndex((t) => t.groupId === beforeGroupId) : -1;
     if (insertIndex === -1) insertIndex = tabs.length;
     tabs.splice(insertIndex, 0, ...groupTabs);
     emitReplaceState(win);
@@ -1690,18 +1663,13 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
       win.webContents.send('command', 'unfocus-location');
 
       // load the URL
-      var url = clipInfo.isProbablyUrl
-        ? clipInfo.vWithProtocol
-        : clipInfo.vSearch;
+      var url = clipInfo.isProbablyUrl ? clipInfo.vWithProtocol : clipInfo.vSearch;
       tab.loadURL(url);
     }
   },
 
   async goBack(index) {
-    getByIndex(
-      getWindow(this.sender),
-      index
-    )?.primaryPane?.webContents.navigationHistory.goBack();
+    getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents.navigationHistory.goBack();
   },
 
   async goForward(index) {
@@ -1716,10 +1684,7 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
   },
 
   async reload(index) {
-    getByIndex(
-      getWindow(this.sender),
-      index
-    )?.primaryPane?.webContents.reload();
+    getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents.reload();
   },
 
   async resetZoom(index) {
@@ -1810,11 +1775,7 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
   },
 
   async setPaneResizeModeEnabled(enabled, paneId, edge) {
-    getActive(getWindow(this.sender)).setPaneResizeModeEnabled(
-      enabled,
-      paneId,
-      edge
-    );
+    getActive(getWindow(this.sender)).setPaneResizeModeEnabled(enabled, paneId, edge);
   },
 
   async openPaneMenu(paneId) {
@@ -1920,9 +1881,7 @@ function getWindowTabState(win) {
 
 function addTabToClosedItems(tab) {
   closedItems[tab.browserWindow.id] = closedItems[tab.browserWindow.id] || [];
-  closedItems[tab.browserWindow.id].push(
-    Object.assign({ isTab: true }, tab.getSessionSnapshot())
-  );
+  closedItems[tab.browserWindow.id].push(Object.assign({ isTab: true }, tab.getSessionSnapshot()));
 }
 
 function addPaneToClosedItems(tab, url) {
@@ -1953,7 +1912,11 @@ function createTabGroup(win, name, color) {
   const autoColor = GROUP_COLORS.find((c) => !usedColors.includes(c)) || GROUP_COLORS[0];
   const existing = tabGroups[win.id];
   const autoName = name || `Group ${existing.length + 1}`;
-  const group = { id: `grp-${Date.now()}-${Math.random().toString(36).slice(2)}`, name: autoName, color: color || autoColor };
+  const group = {
+    id: `grp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    name: autoName,
+    color: color || autoColor,
+  };
   existing.push(group);
   return group;
 }

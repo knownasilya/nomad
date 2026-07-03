@@ -40,12 +40,7 @@ export async function runSetupFlow() {
       height: 500,
       backgroundColor: '#334',
       webPreferences: {
-        preload: path.join(
-          __dirname,
-          'fg',
-          'webview-preload',
-          'index.build.js'
-        ),
+        preload: path.join(__dirname, 'fg', 'webview-preload', 'index.build.js'),
         defaultEncoding: 'utf-8',
         nodeIntegration: false,
         contextIsolation: true,
@@ -58,9 +53,7 @@ export async function runSetupFlow() {
       icon: ICON_PATH,
       show: true,
     });
-    setupWindow.loadURL(
-      `beaker://setup/?${new URLSearchParams(setupState).toString()}`
-    );
+    setupWindow.loadURL(`beaker://setup/?${new URLSearchParams(setupState).toString()}`);
     await new Promise((r) => setupWindow.once('close', r));
     setupWindow = undefined;
   }
@@ -74,6 +67,5 @@ export async function updateSetupState(obj) {
   // so use this as a cue to close the window
   // -prf
   var setupState = await profileDb.get('SELECT * FROM setup_state');
-  if (setupWindow && setupState.profileSetup && setupState.migrated08to09)
-    setupWindow.close();
+  if (setupWindow && setupState.profileSetup && setupState.migrated08to09) setupWindow.close();
 }

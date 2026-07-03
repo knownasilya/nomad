@@ -187,11 +187,7 @@ class SelectDriveModal extends LitElement {
     this.drives = await bg.drives.list({ includeSystem: false });
     this.drives.sort((a, b) => a.info.title.localeCompare(b.info.title));
 
-    if (
-      this.writable !== false &&
-      !!params.template &&
-      this.filteredDrives.length === 0
-    ) {
+    if (this.writable !== false && !!params.template && this.filteredDrives.length === 0) {
       // autobounce to create
       return this.cbs.resolve({ gotoCreate: true });
     }
@@ -226,18 +222,13 @@ class SelectDriveModal extends LitElement {
 
   get filteredDrives() {
     var filtered = this.drives;
-    if (this.tag)
-      filtered = filtered.filter((drive) => drive.tags.includes(this.tag));
+    if (this.tag) filtered = filtered.filter((drive) => drive.tags.includes(this.tag));
     if (typeof this.writable === 'boolean') {
-      filtered = filtered.filter(
-        (drive) => drive.info.writable === this.writable
-      );
+      filtered = filtered.filter((drive) => drive.info.writable === this.writable);
     }
     if (this.currentTitleFilter) {
       filtered = filtered.filter(
-        (a) =>
-          a.info.title &&
-          a.info.title.toLowerCase().includes(this.currentTitleFilter)
+        (a) => a.info.title && a.info.title.toLowerCase().includes(this.currentTitleFilter)
       );
     }
     return filtered;
@@ -269,9 +260,7 @@ class SelectDriveModal extends LitElement {
                 placeholder="Search or enter the URL of a hyperdrive"
               />
             </div>
-            ${isDriveUrl(this.currentTitleFilter)
-              ? html``
-              : html` ${this.renderDrivesList()} `}
+            ${isDriveUrl(this.currentTitleFilter) ? html`` : html` ${this.renderDrivesList()} `}
           </div>
 
           <div class="form-actions">
@@ -290,12 +279,7 @@ class SelectDriveModal extends LitElement {
                 : ''}
             </div>
             <div class="right">
-              <button
-                type="button"
-                @click=${this.onClickCancel}
-                class="btn cancel"
-                tabindex="4"
-              >
+              <button type="button" @click=${this.onClickCancel} class="btn cancel" tabindex="4">
                 Cancel
               </button>
               <button
@@ -342,9 +326,7 @@ class SelectDriveModal extends LitElement {
       </div>`;
     }
 
-    return html`<div class="drives-list">
-      ${filtered.map((a) => this.renderDrive(a))}
-    </div>`;
+    return html`<div class="drives-list">${filtered.map((a) => this.renderDrive(a))}</div>`;
   }
 
   renderDrive(drive) {

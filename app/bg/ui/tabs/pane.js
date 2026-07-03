@@ -11,7 +11,13 @@ import * as zoom from './zoom';
 import * as modals from '../subwindows/modals';
 import * as overlay from '../subwindows/overlay';
 import * as windowMenu from '../window-menu';
-import { getResourceContentType, addCertOnceException, removeCertOnceException, isCertPersistentException, addCertPersistentException } from '../../browser';
+import {
+  getResourceContentType,
+  addCertOnceException,
+  removeCertOnceException,
+  isCertPersistentException,
+  addCertPersistentException,
+} from '../../browser';
 import * as settingsDb from '../../dbs/settings';
 import { DRIVE_KEY_REGEX } from '../../../lib/strings';
 import * as sitedataDb from '../../dbs/sitedata';
@@ -172,27 +178,15 @@ export class Pane extends EventEmitter {
     this.webContents.on('will-navigate', this.onWillNavigate.bind(this));
     this.webContents.on('console-message', this.onConsoleMessage.bind(this));
     this.webContents.on('did-start-loading', this.onDidStartLoading.bind(this));
-    this.webContents.on(
-      'did-start-navigation',
-      this.onDidStartNavigation.bind(this)
-    );
+    this.webContents.on('did-start-navigation', this.onDidStartNavigation.bind(this));
     this.webContents.on('did-navigate', this.onDidNavigate.bind(this));
-    this.webContents.on(
-      'did-navigate-in-page',
-      this.onDidNavigateInPage.bind(this)
-    );
+    this.webContents.on('did-navigate-in-page', this.onDidNavigateInPage.bind(this));
     this.webContents.on('did-stop-loading', this.onDidStopLoading.bind(this));
     this.webContents.on('dom-ready', this.onDomReady.bind(this));
     this.webContents.on('did-fail-load', this.onDidFailLoad.bind(this));
     this.webContents.on('update-target-url', this.onUpdateTargetUrl.bind(this));
-    this.webContents.on(
-      'page-title-updated',
-      this.onPageTitleUpdated.bind(this)
-    ); // NOTE page-title-updated isn't documented on webContents but it is supported
-    this.webContents.on(
-      'page-favicon-updated',
-      this.onPageFaviconUpdated.bind(this)
-    );
+    this.webContents.on('page-title-updated', this.onPageTitleUpdated.bind(this)); // NOTE page-title-updated isn't documented on webContents but it is supported
+    this.webContents.on('page-favicon-updated', this.onPageFaviconUpdated.bind(this));
     this.webContents.setWindowOpenHandler(this.onWindowOpen.bind(this));
     this.webContents.on('media-started-playing', this.onMediaChange.bind(this));
     this.webContents.on('media-paused', this.onMediaChange.bind(this));
@@ -243,10 +237,7 @@ export class Pane extends EventEmitter {
       var urlp = new URL(this.loadingURL || this.url);
       var hostname = urlp.hostname;
       if (DRIVE_KEY_REGEX.test(hostname)) {
-        hostname = hostname.replace(
-          DRIVE_KEY_REGEX,
-          (v) => `${v.slice(0, 6)}..${v.slice(-2)}`
-        );
+        hostname = hostname.replace(DRIVE_KEY_REGEX, (v) => `${v.slice(0, 6)}..${v.slice(-2)}`);
       }
       if (hostname.includes('+')) {
         hostname = hostname.replace(/\+[\d]+/, '');
@@ -274,12 +265,9 @@ export class Pane extends EventEmitter {
   get siteSubtitle() {
     if (this.driveInfo) {
       var origin = this.origin;
-      var version = /\+([\d]+)/.exec(origin)
-        ? `v${/\+([\d]+)/.exec(origin)[1]}`
-        : '';
+      var version = /\+([\d]+)/.exec(origin) ? `v${/\+([\d]+)/.exec(origin)[1]}` : '';
       var forkLabel =
-        filesystem.listDrives().find((d) => d.key === this.driveInfo.key)
-          ?.forkOf?.label ?? '';
+        filesystem.listDrives().find((d) => d.key === this.driveInfo.key)?.forkOf?.label ?? '';
       return [forkLabel, version].filter(Boolean).join(' ');
     }
     return '';
@@ -295,16 +283,13 @@ export class Pane extends EventEmitter {
       }
     }
     var url = this.loadingURL || this.url;
-    if (
-      url.startsWith('https:') &&
-      !(this.loadError && this.loadError.isInsecureResponse)
-    ) {
+    if (url.startsWith('https:') && !(this.loadError && this.loadError.isInsecureResponse)) {
       return 'fas fa-check-circle';
     }
     if (url.startsWith('beaker:')) {
       return 'beaker-logo';
     }
-    // return 'fas fa-info-circle'
+    return undefined; // no icon
   }
 
   get siteTrust() {
@@ -450,9 +435,7 @@ export class Pane extends EventEmitter {
 
   async fadeout() {
     if (this.fadeoutCssId) return;
-    this.fadeoutCssId = await this.webContents.insertCSS(
-      `body { opacity: 0.5 }`
-    );
+    this.fadeoutCssId = await this.webContents.insertCSS(`body { opacity: 0.5 }`);
   }
 
   async fadein() {
@@ -556,14 +539,16 @@ export class Pane extends EventEmitter {
       let { version } = parseDriveUrl(this.url);
       let { checkoutFS } = await hyper.drives.getDriveCheckout(drive, version);
       const reload = throttle(
-        () => { this.browserView.webContents.reload(); },
+        () => {
+          this.browserView.webContents.reload();
+        },
         TRIGGER_LIVE_RELOAD_DEBOUNCE,
         { leading: false }
       );
       // Drive watch in v11 returns an AsyncIterator
       const watcher = checkoutFS.drive.watch('/');
       this.liveReloadEvents = watcher;
-      ;(async () => {
+      (async () => {
         for await (const diff of watcher) {
           reload();
         }
@@ -590,14 +575,9 @@ export class Pane extends EventEmitter {
     let contentType = getResourceContentType(this.url) || '';
     let isPlainText = contentType.startsWith('text/plain');
     let isJSON =
-      contentType.startsWith('application/json') ||
-      (isPlainText && this.url.endsWith('.json'));
-    let isJS =
-      contentType.includes('/javascript') ||
-      (isPlainText && this.url.endsWith('.js'));
-    let isCSS =
-      contentType.startsWith('text/css') ||
-      (isPlainText && this.url.endsWith('.css'));
+      contentType.startsWith('application/json') || (isPlainText && this.url.endsWith('.json'));
+    let isJS = contentType.includes('/javascript') || (isPlainText && this.url.endsWith('.js'));
+    let isCSS = contentType.startsWith('text/css') || (isPlainText && this.url.endsWith('.css'));
 
     // json rendering
     // inject the json render script
@@ -628,17 +608,10 @@ export class Pane extends EventEmitter {
           background: #ddd;
         }
       `);
-      let jsonpath = path.join(
-        app.getAppPath(),
-        'fg',
-        'json-renderer',
-        'index.build.js'
-      );
+      let jsonpath = path.join(app.getAppPath(), 'fg', 'json-renderer', 'index.build.js');
       jsonpath = jsonpath.replace('app.asar', 'app.asar.unpacked'); // fetch from unpacked dir
       try {
-        await this.webContents.executeJavaScript(
-          await fs.readFile(jsonpath, 'utf8')
-        );
+        await this.webContents.executeJavaScript(await fs.readFile(jsonpath, 'utf8'));
       } catch (e) {
         // ignore
       }
@@ -663,17 +636,10 @@ export class Pane extends EventEmitter {
       .hljs-emphasis { font-style: italic; }
       .hljs-strong { font-weight: bold; }
       `);
-      let scriptpath = path.join(
-        app.getAppPath(),
-        'fg',
-        'syntax-highlighter',
-        'index.js'
-      );
+      let scriptpath = path.join(app.getAppPath(), 'fg', 'syntax-highlighter', 'index.js');
       scriptpath = scriptpath.replace('app.asar', 'app.asar.unpacked'); // fetch from unpacked dir
       try {
-        await this.webContents.executeJavaScript(
-          await fs.readFile(scriptpath, 'utf8')
-        );
+        await this.webContents.executeJavaScript(await fs.readFile(scriptpath, 'utf8'));
       } catch (e) {
         // ignore
       }
@@ -686,10 +652,7 @@ export class Pane extends EventEmitter {
   // helper called by UIs to pull latest state if a change event has occurred
   // eg called by the bookmark systems after the bookmark state has changed
   async refreshState() {
-    await Promise.all([
-      this.fetchIsBookmarked(true),
-      this.fetchDriveInfo(true),
-    ]);
+    await Promise.all([this.fetchIsBookmarked(true), this.fetchDriveInfo(true)]);
     this.emitUpdateState();
   }
 
@@ -736,10 +699,7 @@ export class Pane extends EventEmitter {
   setAttachedPane(pane) {
     if (this.attachedPane) {
       if (!this.attachedPane.webContents.isDestroyed()) {
-        this.attachedPane.webContents.removeListener(
-          'did-navigate',
-          this.onAttachedPaneNavigated
-        );
+        this.attachedPane.webContents.removeListener('did-navigate', this.onAttachedPaneNavigated);
       }
       this.attachedPaneEvents.emit('pane-detached');
     }
@@ -748,10 +708,7 @@ export class Pane extends EventEmitter {
       this.attachedPaneEvents.emit('pane-attached', {
         detail: { id: pane.id },
       });
-      this.attachedPane.webContents.on(
-        'did-navigate',
-        this.onAttachedPaneNavigated
-      );
+      this.attachedPane.webContents.on('did-navigate', this.onAttachedPaneNavigated);
     }
     this.tab.emitPaneUpdateState();
   }
@@ -776,7 +733,10 @@ export class Pane extends EventEmitter {
   async onWillNavigate(e, url) {
     if (!url.startsWith('beaker://cert-bypass-')) return;
     e.preventDefault();
-    await this._handleCertBypass(url.startsWith('beaker://cert-bypass-always') ? 'always' : 'once', url.replace(/^beaker:\/\/cert-bypass-(?:once|always)\?url=/, ''));
+    await this._handleCertBypass(
+      url.startsWith('beaker://cert-bypass-always') ? 'always' : 'once',
+      url.replace(/^beaker:\/\/cert-bypass-(?:once|always)\?url=/, '')
+    );
   }
 
   async onConsoleMessage(e, level, message) {
@@ -808,14 +768,7 @@ export class Pane extends EventEmitter {
     }
   }
 
-  onDidStartNavigation(
-    e,
-    url,
-    isInPlace,
-    isMainFrame,
-    frameProcessId,
-    frameRoutingId
-  ) {
+  onDidStartNavigation(e, url, isInPlace, isMainFrame, frameProcessId, frameRoutingId) {
     this.frameUrls[frameRoutingId] = url;
     if (!isMainFrame) return;
     this.mainFrameId = frameRoutingId;
@@ -897,13 +850,7 @@ export class Pane extends EventEmitter {
     }
   }
 
-  async onDidFailLoad(
-    e,
-    errorCode,
-    errorDescription,
-    validatedURL,
-    isMainFrame
-  ) {
+  async onDidFailLoad(e, errorCode, errorDescription, validatedURL, isMainFrame) {
     // ignore if this is a subresource
     if (!isMainFrame) return;
 

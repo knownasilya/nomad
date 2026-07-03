@@ -48,10 +48,7 @@ export function get() {
 }
 
 export function isRootUrl(url) {
-  return (
-    isSameOrigin(url, browsingProfile.url) ||
-    isSameOrigin(url, 'hyper://private/')
-  );
+  return isSameOrigin(url, browsingProfile.url) || isSameOrigin(url, 'hyper://private/');
 }
 
 export async function setup() {
@@ -80,11 +77,15 @@ export async function setup() {
   //    Autobase re-home stored a Hyperdrive URL; opening that key as an Autobase yields a
   //    writable-but-empty base, and writing to it hangs. An owned Autobase root always has local
   //    content, so writable+empty means stale/incompatible — mint a fresh one instead of hanging.
-  const rootUnusable = !rootDrive.writable || (!isInitialCreation && autobases.viewEmpty(rootDrive));
+  const rootUnusable =
+    !rootDrive.writable || (!isInitialCreation && autobases.viewEmpty(rootDrive));
   if (rootUnusable) {
-    logger.info('Root drive not a usable Autobase (missing keypair or empty view) — creating a fresh one', {
-      writable: rootDrive.writable,
-    });
+    logger.info(
+      'Root drive not a usable Autobase (missing keypair or empty view) — creating a fresh one',
+      {
+        writable: rootDrive.writable,
+      }
+    );
     const newDrive = await _createRootDrive();
     await db.run(`UPDATE profiles SET url = ? WHERE id = 0`, [newDrive.url]);
     browsingProfile.url = newDrive.url;
@@ -100,15 +101,32 @@ export async function setup() {
       href: 'https://nomad.pages.dev/docs/templates/',
       title: 'Drive Templates',
     });
-    await _driveWriteFile(rootDrive, `/bookmarks/twitter.goto`, '', { href: 'https://twitter.com/', title: 'Twitter' });
-    await _driveWriteFile(rootDrive, `/bookmarks/reddit.goto`, '', { href: 'https://reddit.com/', title: 'Reddit' });
-    await _driveWriteFile(rootDrive, `/bookmarks/youtube.goto`, '', { href: 'https://youtube.com/', title: 'YouTube' });
-    await _driveWriteFile(rootDrive, `/beaker/pins.json`, JSON.stringify([
-      'https://nomad.pages.dev/docs/templates/',
-      'https://twitter.com/',
-      'https://reddit.com/',
-      'https://youtube.com/',
-    ], null, 2));
+    await _driveWriteFile(rootDrive, `/bookmarks/twitter.goto`, '', {
+      href: 'https://twitter.com/',
+      title: 'Twitter',
+    });
+    await _driveWriteFile(rootDrive, `/bookmarks/reddit.goto`, '', {
+      href: 'https://reddit.com/',
+      title: 'Reddit',
+    });
+    await _driveWriteFile(rootDrive, `/bookmarks/youtube.goto`, '', {
+      href: 'https://youtube.com/',
+      title: 'YouTube',
+    });
+    await _driveWriteFile(
+      rootDrive,
+      `/beaker/pins.json`,
+      JSON.stringify(
+        [
+          'https://nomad.pages.dev/docs/templates/',
+          'https://twitter.com/',
+          'https://reddit.com/',
+          'https://youtube.com/',
+        ],
+        null,
+        2
+      )
+    );
   }
 
   let hostKeys = [];
@@ -116,7 +134,7 @@ export async function setup() {
     const drivesBuf = await _get(rootDrive, '/drives.json');
     if (drivesBuf) {
       drives = JSON.parse(b4a.toString(drivesBuf)).drives;
-      hostKeys = hostKeys.concat(drives.filter(d => d.type !== 'autobase').map((d) => d.key));
+      hostKeys = hostKeys.concat(drives.filter((d) => d.type !== 'autobase').map((d) => d.key));
     }
   } catch (e) {
     if (!(e instanceof SyntaxError)) {
@@ -157,7 +175,10 @@ export async function getDriveIdentFull(url) {
     // getOrLoadDrive hangs for autobase keys — detect and skip them first
     const hostname = new URL(url).hostname;
     if (HYPERDRIVE_HASH_REGEX.test(hostname)) {
-      if (getDriveConfig(hostname)?.type === 'autobase' || autobases.getCollaborativeDrive(hostname)) {
+      if (
+        getDriveConfig(hostname)?.type === 'autobase' ||
+        autobases.getCollaborativeDrive(hostname)
+      ) {
         // Autobase drive: getOrLoadDrive would hang, so read the manifest from the
         // already-loaded collaborative session (if present) to recognize feeds.
         try {
@@ -264,7 +285,11 @@ export async function configDriveForSpace(url, opts = {}, spaceId = 1) {
       if (opts.forkOf) driveCfg.forkOf = opts.forkOf;
       spaceDrives.push(driveCfg);
     }
-    await _put(spaceDrive, '/drives.json', b4a.from(JSON.stringify({ drives: spaceDrives }, null, 2)));
+    await _put(
+      spaceDrive,
+      '/drives.json',
+      b4a.from(JSON.stringify({ drives: spaceDrives }, null, 2))
+    );
   } finally {
     release();
   }
@@ -439,10 +464,16 @@ export async function removeDriveForSpace(url, spaceId = 1) {
   }
 }
 
-export async function getAvailableName(containingPath, basename, ext = undefined, joiningChar = '-', drive = rootDrive) {
+export async function getAvailableName(
+  containingPath,
+  basename,
+  ext = undefined,
+  joiningChar = '-',
+  drive = rootDrive
+) {
   for (let i = 1; i < 1e9; i++) {
     const name = (i === 1 ? basename : `${basename}${joiningChar}${i}`) + (ext ? `.${ext}` : '');
-    const entry = await _entry(drive,joinPath(containingPath, name));
+    const entry = await _entry(drive, joinPath(containingPath, name));
     if (!entry) return name;
   }
   throw new Error('Unable to find an available name for ' + basename);
@@ -452,7 +483,7 @@ export async function ensureDir(path, drive = rootDrive) {
   // In Hyperdrive v11, directories are implicit — no mkdir needed.
   // Warn only if a file already exists at this exact path (unexpected).
   try {
-    const entry = await _entry(drive,path);
+    const entry = await _entry(drive, path);
     if (entry) {
       logger.error('Filesystem expects a folder but an unexpected file exists.', { path });
     }
@@ -532,6 +563,10 @@ async function _entry(sess, path) {
 // not entry metadata (which is now filesystem stat). The serve path's .goto handler reads href from
 // the body; see bg/protocols/hyper.js.
 async function _driveWriteFile(drive, path, content, metadata = undefined) {
-  const body = metadata ? JSON.stringify(metadata) : (typeof content === 'string' ? content : content);
+  const body = metadata
+    ? JSON.stringify(metadata)
+    : typeof content === 'string'
+      ? content
+      : content;
   await _put(drive, path, body);
 }

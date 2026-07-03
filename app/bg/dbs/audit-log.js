@@ -116,10 +116,7 @@ export async function stream(
 }
 
 export async function stats() {
-  var query = knex('hyperdrive_ops')
-    .select()
-    .orderBy('runtime', 'desc')
-    .toSQL();
+  var query = knex('hyperdrive_ops').select().orderBy('runtime', 'desc').toSQL();
   var rows = await cbPromise((cb) => db.all(query.sql, query.bindings, cb));
   var stats = {
     runtime: {
@@ -128,8 +125,7 @@ export async function stats() {
       longest10: rows.slice(0, 10),
     },
   };
-  stats.runtime.avg =
-    rows.reduce((acc, row) => acc + row.runtime, 0) / rows.length;
+  stats.runtime.avg = rows.reduce((acc, row) => acc + row.runtime, 0) / rows.length;
   stats.runtime.stdDev = Math.sqrt(
     rows
       .map((row) => Math.pow(row.runtime - stats.runtime.avg, 2)) // (v-mean)^2

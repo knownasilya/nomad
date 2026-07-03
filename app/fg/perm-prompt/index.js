@@ -1,10 +1,4 @@
-import {
-  PERMS,
-  PERM_ICONS,
-  renderPermDesc,
-  getPermId,
-  getPermParam,
-} from '../../lib/permissions';
+import { PERMS, PERM_ICONS, renderPermDesc, getPermId, getPermParam } from '../../lib/permissions';
 import { LitElement, html, css } from 'lit';
 import prettyHash from 'pretty-hash';
 import * as bg from './bg-process-rpc';
@@ -25,10 +19,8 @@ class PermPrompt extends LitElement {
     // export interface
     window.isPromptActive = false;
     window.runPrompt = this.runPrompt.bind(this);
-    window.clickAccept = () =>
-      this.shadowRoot.querySelector('.prompt-accept').click();
-    window.clickReject = () =>
-      this.shadowRoot.querySelector('.prompt-reject').click();
+    window.clickAccept = () => this.shadowRoot.querySelector('.prompt-accept').click();
+    window.clickReject = () => this.shadowRoot.querySelector('.prompt-reject').click();
 
     this.fetchBrowserInfo();
   }
@@ -68,9 +60,7 @@ class PermPrompt extends LitElement {
         /* ignore */
       }
       this.permOpts.title =
-        driveInfo && driveInfo.title
-          ? driveInfo.title
-          : prettyHash(this.permParam);
+        driveInfo && driveInfo.title ? driveInfo.title : prettyHash(this.permParam);
     }
 
     // create the prompt
@@ -107,16 +97,8 @@ class PermPrompt extends LitElement {
         </p>
 
         <div class="prompt-btns">
-          <button
-            class="btn prompt-reject"
-            @click=${this.onClickDecision(false)}
-          >
-            Block
-          </button>
-          <button
-            class="btn primary prompt-accept"
-            @click=${this.onClickDecision(true)}
-          >
+          <button class="btn prompt-reject" @click=${this.onClickDecision(false)}>Block</button>
+          <button class="btn primary prompt-accept" @click=${this.onClickDecision(true)}>
             Allow
           </button>
         </div>
@@ -125,8 +107,8 @@ class PermPrompt extends LitElement {
           ? html` <div class="perm-experimental">
               <i class="fa fa-info-circle"></i>
               <span
-                >This page is requesting an experimental feature. Only click
-                'Allow' if you trust this page.</span
+                >This page is requesting an experimental feature. Only click 'Allow' if you trust
+                this page.</span
               >
             </div>`
           : ''}

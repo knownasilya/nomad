@@ -145,18 +145,18 @@ class WindowWatcher extends EventEmitter {
 
   handleClosed() {
     var win = BrowserWindow.fromId(this.winId);
-    if (win)
-      win.removeListener('custom-pages-updated', this.handlePagesUpdated);
+    if (win) win.removeListener('custom-pages-updated', this.handlePagesUpdated);
     this.emit('remove');
   }
 
   handlePagesUpdated(payload) {
-    const pages = Array.isArray(payload) ? payload : (payload?.pages || []);
-    const groups = Array.isArray(payload) ? [] : (payload?.groups || []);
+    const pages = Array.isArray(payload) ? payload : payload?.pages || [];
+    const groups = Array.isArray(payload) ? [] : payload?.groups || [];
     if (
       JSON.stringify(pages) === JSON.stringify(this.snapshot.pages) &&
       JSON.stringify(groups) === JSON.stringify(this.snapshot.groups)
-    ) return;
+    )
+      return;
     this.snapshot.pages = pages && pages.length ? pages : defaultPageState();
     this.snapshot.groups = groups;
     this.emit('change', this.snapshot);

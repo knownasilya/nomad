@@ -116,9 +116,7 @@ class AddDriveModal extends LitElement {
         this.error = 'Unable to find this site on the network';
       } else {
         this.info = info;
-        this.tags = Array.from(
-          new Set(info.tags.concat(this.tags.split(' ')))
-        ).join(' ');
+        this.tags = Array.from(new Set(info.tags.concat(this.tags.split(' ')))).join(' ');
       }
     } catch (e) {
       this.cbs.reject(e.message);
@@ -137,30 +135,27 @@ class AddDriveModal extends LitElement {
           ${this.error
             ? html`
                 <div class="error">
-                  <span class="fas fa-fw fa-exclamation-circle"></span> ${this
-                    .error}
+                  <span class="fas fa-fw fa-exclamation-circle"></span> ${this.error}
                 </div>
               `
             : this.info
-            ? html`
-                <div class="drive">
-                  <beaker-img-fallbacks>
-                    <img src="${this.info.url}/thumb" slot="img1" />
-                    <img src="beaker://assets/default-thumb" slot="img2" />
-                  </beaker-img-fallbacks>
-                  <div class="info">
-                    <div class="title"><span>${this.info.title}</span></div>
-                    <div class="description">
-                      <span>${this.info.description}</span>
+              ? html`
+                  <div class="drive">
+                    <beaker-img-fallbacks>
+                      <img src="${this.info.url}/thumb" slot="img1" />
+                      <img src="beaker://assets/default-thumb" slot="img2" />
+                    </beaker-img-fallbacks>
+                    <div class="info">
+                      <div class="title"><span>${this.info.title}</span></div>
+                      <div class="description">
+                        <span>${this.info.description}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              `
-            : html`
-                <div class="loading">
-                  <span class="spinner"></span> Loading drive info...
-                </div>
-              `}
+                `
+              : html`
+                  <div class="loading"><span class="spinner"></span> Loading drive info...</div>
+                `}
           ${this.info
             ? html`
                 <div class="tags">
@@ -175,27 +170,13 @@ class AddDriveModal extends LitElement {
               `
             : ''}
           <div class="form-actions">
-            <button
-              type="button"
-              @click=${this.onClickCancel}
-              class="btn cancel"
-              tabindex="4"
-            >
+            <button type="button" @click=${this.onClickCancel} class="btn cancel" tabindex="4">
               Cancel
             </button>
             ${this.error
-              ? html`
-                  <button type="submit" class="btn primary" tabindex="5">
-                    Try Again
-                  </button>
-                `
+              ? html` <button type="submit" class="btn primary" tabindex="5">Try Again</button> `
               : html`
-                  <button
-                    type="submit"
-                    class="btn primary"
-                    tabindex="5"
-                    ?disabled=${!this.info}
-                  >
+                  <button type="submit" class="btn primary" tabindex="5" ?disabled=${!this.info}>
                     OK
                   </button>
                 `}

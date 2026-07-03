@@ -1,16 +1,6 @@
 // @ts-nocheck
-import {
-  app,
-  BrowserWindow,
-  ipcMain,
-  webContents,
-  dialog,
-  nativeTheme,
-} from 'electron';
-import {
-  defaultBrowsingSessionState,
-  defaultWindowState,
-} from './default-state';
+import { app, BrowserWindow, ipcMain, webContents, dialog, nativeTheme } from 'electron';
+import { defaultBrowsingSessionState, defaultWindowState } from './default-state';
 import SessionWatcher, { getLastRecordedPositioning } from './session-watcher';
 import jetpack from 'fs-jetpack';
 import * as tabManager from './tabs/manager';
@@ -65,16 +55,9 @@ var windowAddedSettings = {}; // map of {[window.id] => Object}
 const BROWSING_SESSION_PATH = './shell-window-state.json';
 export const ICON_PATH = path.join(
   __dirname,
-  process.platform === 'win32'
-    ? './assets/img/logo.ico'
-    : './assets/img/logo.png'
+  process.platform === 'win32' ? './assets/img/logo.ico' : './assets/img/logo.png'
 );
-export const PRELOAD_PATH = path.join(
-  __dirname,
-  'fg',
-  'shell-window',
-  'index.build.js'
-);
+export const PRELOAD_PATH = path.join(__dirname, 'fg', 'shell-window', 'index.build.js');
 
 // exported methods
 // =
@@ -168,10 +151,7 @@ export async function setup() {
     // attach global keybindings
     wc.on('before-input-event', globalTabSwitcherKeyHandler);
     wc.on('before-input-event', createGlobalKeybindingsHandler(parentWindow));
-    wc.on(
-      'before-input-event',
-      createKeybindingProtectionsHandler(parentWindow)
-    );
+    wc.on('before-input-event', createKeybindingProtectionsHandler(parentWindow));
 
     // HACK
     // add link-click handling to page devtools
@@ -232,10 +212,7 @@ export async function setup() {
   }
 }
 
-export function createShellWindow(
-  windowState,
-  createOpts = { dontInitPages: false }
-) {
+export function createShellWindow(windowState, createOpts = { dontInitPages: false }) {
   if (!sessionWatcher) {
     logger.error('Attempted to create a shell window prior to setup', {
       stack: new Error().stack,
@@ -244,12 +221,7 @@ export function createShellWindow(
   }
   // create window
   let state = ensureVisibleOnSomeDisplay(
-    Object.assign(
-      {},
-      defaultWindowState(),
-      lastWindowPositioning(),
-      windowState
-    )
+    Object.assign({}, defaultWindowState(), lastWindowPositioning(), windowState)
   );
   var { x, y, width, height, minWidth, minHeight } = state;
   var frameSettings = {
@@ -445,9 +417,7 @@ export function getActiveWindow() {
 
 export function getFocusedDevToolsHost() {
   // check first if it's the shell window's devtools
-  let win = BrowserWindow.getAllWindows().find((w) =>
-    w.webContents.isDevToolsFocused()
-  );
+  let win = BrowserWindow.getAllWindows().find((w) => w.webContents.isDevToolsFocused());
   if (win) return win.webContents;
   // fallback to our manually tracked devtools host
   return focusedDevtoolsHost;
@@ -472,10 +442,7 @@ export function getAddedWindowSettings(win) {
 }
 
 export function updateAddedWindowSettings(win, settings) {
-  windowAddedSettings[win.id] = Object.assign(
-    getAddedWindowSettings(win),
-    settings
-  );
+  windowAddedSettings[win.id] = Object.assign(getAddedWindowSettings(win), settings);
 }
 
 export function ensureOneWindowExists() {
@@ -485,10 +452,7 @@ export function ensureOneWindowExists() {
 }
 
 export function toggleShellInterface(win) {
-  setShellInterfaceHidden(
-    win,
-    !getAddedWindowSettings(win).isShellInterfaceHidden
-  );
+  setShellInterfaceHidden(win, !getAddedWindowSettings(win).isShellInterfaceHidden);
 }
 
 export function setShellInterfaceHidden(win, isShellInterfaceHidden) {
@@ -605,23 +569,14 @@ function ensureVisibleOnSomeDisplay(windowState) {
   const screen = getScreenAPI();
   var visible =
     screen &&
-    screen
-      .getAllDisplays()
-      .some((display) => windowWithinBounds(windowState, display.bounds));
+    screen.getAllDisplays().some((display) => windowWithinBounds(windowState, display.bounds));
   if (!visible) {
     // Window is partially or fully not visible now.
     // Reset it to safe defaults.
     return Object.assign(
       {},
       windowState,
-      pick(defaultWindowState(), [
-        'x',
-        'y',
-        'width',
-        'height',
-        'minWidth',
-        'minHeight',
-      ])
+      pick(defaultWindowState(), ['x', 'y', 'width', 'height', 'minWidth', 'minHeight'])
     );
   }
   return windowState;
@@ -700,11 +655,7 @@ function globalTabSwitcherKeyHandler(e, input) {
         tabSwitcherSubwindow.moveSelection(win, 1);
       }
     }
-  } else if (
-    isTabSwitcherActive[win.id] &&
-    input.type === 'keyUp' &&
-    input.key === 'Control'
-  ) {
+  } else if (isTabSwitcherActive[win.id] && input.type === 'keyUp' && input.key === 'Control') {
     isTabSwitcherActive[win.id] = false;
     tabSwitcherSubwindow.hide(win);
   }

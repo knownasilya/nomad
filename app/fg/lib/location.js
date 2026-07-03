@@ -14,15 +14,14 @@ export async function queryAutocomplete(bg, ctx, onResults) {
   var finalResults;
 
   var searchEngines = await ctx.searchEnginesPromise;
-  var searchEngine =
-    searchEngines.find((se) => se.selected) || searchEngines[0];
-  var { vWithProtocol, vSearch, isProbablyUrl, isGuessingTheScheme } =
-    examineLocationInput(ctx.inputValue || '/');
+  var searchEngine = searchEngines.find((se) => se.selected) || searchEngines[0];
+  var { vWithProtocol, vSearch, isProbablyUrl, isGuessingTheScheme } = examineLocationInput(
+    ctx.inputValue || '/'
+  );
 
   // optimistically set the input-based results to ensure responsiveness
   {
-    if (ctx.results)
-      ctx.results = ctx.results.filter((r) => !r.search && !r.isGoto);
+    if (ctx.results) ctx.results = ctx.results.filter((r) => !r.search && !r.isGoto);
     ctx.results = ctx.results || [];
     let gotoResult = {
       url: vWithProtocol,
@@ -36,8 +35,7 @@ export async function queryAutocomplete(bg, ctx, onResults) {
       url: searchEngine.url + vSearch,
     };
     if (ctx.inputValue.includes(' ')) ctx.results.unshift(searchResult);
-    else if (isProbablyUrl)
-      ctx.results = [gotoResult, searchResult].concat(ctx.results);
+    else if (isProbablyUrl) ctx.results = [gotoResult, searchResult].concat(ctx.results);
     else ctx.results = [searchResult, gotoResult].concat(ctx.results);
     onResults(true);
   }
@@ -60,7 +58,7 @@ export async function queryAutocomplete(bg, ctx, onResults) {
 
   if (ctx.inputValue) {
     finalResults = historyResults.filter(
-      (r, i) => historyResults.findIndex(x => normalizeURL(x.url) === normalizeURL(r.url)) === i
+      (r, i) => historyResults.findIndex((x) => normalizeURL(x.url) === normalizeURL(r.url)) === i
     ); // remove duplicates
     finalResults = finalResults.slice(0, 10); // apply limit
   } else {
@@ -76,26 +74,16 @@ export async function queryAutocomplete(bg, ctx, onResults) {
       if (!ctx.inputValue.includes('://')) {
         start = res.url.indexOf('://') + 3; // skip the scheme
       }
-      if (
-        !ctx.inputValue.includes('www.') &&
-        res.url.slice(start).startsWith('www.')
-      ) {
+      if (!ctx.inputValue.includes('www.') && res.url.slice(start).startsWith('www.')) {
         start += 4; // skip the www.
       }
       let index = res.url.indexOf(ctx.inputValue, start);
       if (index === start) {
         // match, guess up to the next path segment
-        let nextSlashIndex = res.url.indexOf(
-          '/',
-          start + ctx.inputValue.length
-        );
+        let nextSlashIndex = res.url.indexOf('/', start + ctx.inputValue.length);
         ctx.urlGuess = {
-          input: res.url.slice(
-            start,
-            nextSlashIndex === -1 ? undefined : nextSlashIndex
-          ),
-          url:
-            nextSlashIndex === -1 ? res.url : res.url.slice(0, nextSlashIndex),
+          input: res.url.slice(start, nextSlashIndex === -1 ? undefined : nextSlashIndex),
+          url: nextSlashIndex === -1 ? res.url : res.url.slice(0, nextSlashIndex),
         };
         break;
       }
@@ -125,10 +113,8 @@ export async function queryAutocomplete(bg, ctx, onResults) {
       isGoto: true,
     };
   }
-  if (ctx.inputValue.includes(' '))
-    finalResults = [searchResult].concat(finalResults);
-  else if (isProbablyUrl)
-    finalResults = [gotoResult, searchResult].concat(finalResults);
+  if (ctx.inputValue.includes(' ')) finalResults = [searchResult].concat(finalResults);
+  else if (isProbablyUrl) finalResults = [gotoResult, searchResult].concat(finalResults);
   else finalResults = [searchResult, gotoResult].concat(finalResults);
 
   // render
@@ -159,8 +145,7 @@ function highlightHistoryResult(searchTerms, result) {
 
     // sometimes multiple terms can hit at the same point
     // that breaks the algorithm, so skip that condition
-    if (lastTuple && lastTuple[0] === columnIndex && lastTuple[2] === offset)
-      continue;
+    if (lastTuple && lastTuple[0] === columnIndex && lastTuple[2] === offset) continue;
     lastTuple = tuple;
 
     // use the length of the search term
@@ -170,9 +155,7 @@ function highlightHistoryResult(searchTerms, result) {
     let len = searchTerm.length;
 
     // extract segments
-    segments[columnName].push(
-      result[columnName].slice(lastOffset[columnName], offset)
-    );
+    segments[columnName].push(result[columnName].slice(lastOffset[columnName], offset));
     segments[columnName].push(result[columnName].slice(offset, offset + len));
     lastOffset[columnName] = offset + len;
   }

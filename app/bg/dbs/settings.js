@@ -7,7 +7,12 @@ import { getEnvVar } from '../lib/env';
 import * as profileDb from './profile-data-db';
 
 const CACHED_VALUES = ['new_tabs_in_foreground'];
-const JSON_ENCODED_SETTINGS = ['search_engines', 'adblock_lists', 'sidebar_collapsed_groups', 'cert_exceptions'];
+const JSON_ENCODED_SETTINGS = [
+  'search_engines',
+  'adblock_lists',
+  'sidebar_collapsed_groups',
+  'cert_exceptions',
+];
 
 // Settings that are always global (never per-space)
 const GLOBAL_SETTINGS = new Set([
@@ -240,7 +245,11 @@ export async function getForSpace(spaceId, key) {
   if (row && row.value !== undefined) {
     let val = row.value;
     if (JSON_ENCODED_SETTINGS.includes(key)) {
-      try { val = JSON.parse(val); } catch (e) { val = defaultSettings[key]; }
+      try {
+        val = JSON.parse(val);
+      } catch (e) {
+        val = defaultSettings[key];
+      }
     }
     return val;
   }
@@ -267,14 +276,17 @@ export async function getAllForSpace(spaceId) {
   }
 
   // Overlay space-specific settings
-  const rows = await profileDb.all(
-    'SELECT key, value FROM space_settings WHERE spaceId = ?',
-    [spaceId]
-  );
+  const rows = await profileDb.all('SELECT key, value FROM space_settings WHERE spaceId = ?', [
+    spaceId,
+  ]);
   for (const row of rows) {
     let val = row.value;
     if (JSON_ENCODED_SETTINGS.includes(row.key)) {
-      try { val = JSON.parse(val); } catch (e) { continue; }
+      try {
+        val = JSON.parse(val);
+      } catch (e) {
+        continue;
+      }
     }
     obj[row.key] = val;
   }

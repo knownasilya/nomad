@@ -117,14 +117,11 @@ export async function touch(key, timeVar = 'lastAccessTime', value = -1) {
     }
     if (value === -1) value = Date.now();
     var keyStr = datEncoding.toStr(key);
-    await db.run(`UPDATE archives_meta SET ${timeVar}=? WHERE key=?`, [
-      value,
+    await db.run(`UPDATE archives_meta SET ${timeVar}=? WHERE key=?`, [value, keyStr]);
+    await db.run(`INSERT OR IGNORE INTO archives_meta (key, ${timeVar}) VALUES (?, ?)`, [
       keyStr,
+      value,
     ]);
-    await db.run(
-      `INSERT OR IGNORE INTO archives_meta (key, ${timeVar}) VALUES (?, ?)`,
-      [keyStr, value]
-    );
   } finally {
     release();
   }
@@ -234,17 +231,7 @@ export async function setMeta(key, value) {
   }
 
   // extract the desired values
-  var {
-    title,
-    description,
-    type,
-    memberOf,
-    size,
-    author,
-    forkOf,
-    mtime,
-    writable,
-  } = value;
+  var { title, description, type, memberOf, size, author, forkOf, mtime, writable } = value;
   title = typeof title === 'string' ? title : '';
   description = typeof description === 'string' ? description : '';
   type = typeof type === 'string' ? type : '';

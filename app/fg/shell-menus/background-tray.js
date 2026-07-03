@@ -48,8 +48,7 @@ class BackgroundTrayMenu extends LitElement {
         <div class="wrapper">
           <div class="header"><h1>Minimized Tabs</h1></div>
           <div class="empty">
-            You can minimize tabs to this tray and they will run in the
-            background.
+            You can minimize tabs to this tray and they will run in the background.
           </div>
         </div>
       `;
@@ -63,9 +62,7 @@ class BackgroundTrayMenu extends LitElement {
             this.tabs,
             (tab, i) => html`
               <div
-                class="tab ${this.keyboardFocused === i
-                  ? 'keyboard-focus'
-                  : ''}"
+                class="tab ${this.keyboardFocused === i ? 'keyboard-focus' : ''}"
                 @click=${(e) => this.onClickRestore(e, i)}
                 @contextmenu=${(e) => this.onContextMenuTab(e, i)}
               >
@@ -92,10 +89,7 @@ class BackgroundTrayMenu extends LitElement {
 
   onGlobalKeyup(e) {
     if (!this.tabs) return;
-    if (
-      (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
-      this.keyboardFocused === -1
-    ) {
+    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && this.keyboardFocused === -1) {
       this.keyboardFocused = 0;
       return;
     }

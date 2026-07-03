@@ -12,10 +12,7 @@
 export function findImageBounds(buf, { width, height }) {
   function pixelHasValue(x, y) {
     let i = (x + y * width) << 2;
-    return (
-      buf[i + 3] > 0 &&
-      (buf[i + 0] < 240 || buf[i + 1] < 240 || buf[i + 2] < 240)
-    );
+    return buf[i + 3] > 0 && (buf[i + 0] < 240 || buf[i + 1] < 240 || buf[i + 2] < 240);
   }
   var bounds = { left: width, top: height, right: 0, bottom: 0 };
 

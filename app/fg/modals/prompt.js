@@ -39,9 +39,7 @@ class PromptModal extends LitElement {
           <div class="message">${this.message}</div>
           <input name="input" />
           <div class="actions">
-            <button class="btn" @click=${this.onClickCancel} type="button">
-              Cancel
-            </button>
+            <button class="btn" @click=${this.onClickCancel} type="button">Cancel</button>
             <button class="btn primary" type="submit">OK</button>
           </div>
         </form>

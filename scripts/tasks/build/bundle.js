@@ -49,11 +49,7 @@ var npmModulesUsedInApp = function () {
 // Main process: externalize everything (Node + Electron + npm deps).
 // Node resolves them at runtime from app/node_modules.
 var generateMainExternalsList = function () {
-  return [].concat(
-    nodeBuiltInModules,
-    electronBuiltInModules,
-    npmModulesUsedInApp()
-  );
+  return [].concat(nodeBuiltInModules, electronBuiltInModules, npmModulesUsedInApp());
 };
 
 // Frontend preloads: only externalize electron.
@@ -202,13 +198,12 @@ module.exports = function (src, dest, opts) {
               dir: destDir,
               // Patch process.nextTick in sandboxed Electron contexts where the
               // minimal process object doesn't include it.
-              banner: '(function(){if(typeof process!=="undefined"&&typeof process.nextTick!=="function"){process.nextTick=function(fn){var a=[].slice.call(arguments,1);setTimeout(function(){fn.apply(null,a);},0);};}})();',
+              banner:
+                '(function(){if(typeof process!=="undefined"&&typeof process.nextTick!=="function"){process.nextTick=function(fn){var a=[].slice.call(arguments,1);setTimeout(function(){fn.apply(null,a);},0);};}})();',
             },
           },
           define: {
-            'process.env.NODE_ENV': JSON.stringify(
-              process.env.NODE_ENV || 'production'
-            ),
+            'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
           },
         },
       });

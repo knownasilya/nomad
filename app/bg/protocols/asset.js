@@ -46,52 +46,43 @@ export function setup() {
   };
 
   // load defaults
-  fs.readFile(
-    path.join(__dirname, './assets/img/favicons/default.png'),
-    (err, buf) => {
-      if (err) {
-        console.error(
-          'Failed to load default favicon',
-          path.join(__dirname, './assets/img/default-favicon.png'),
-          err
-        );
-      }
-      if (buf) {
-        DEFAULTS.favicon.data = buf;
-      }
+  fs.readFile(path.join(__dirname, './assets/img/favicons/default.png'), (err, buf) => {
+    if (err) {
+      console.error(
+        'Failed to load default favicon',
+        path.join(__dirname, './assets/img/default-favicon.png'),
+        err
+      );
     }
-  );
-  fs.readFile(
-    path.join(__dirname, './assets/img/default-thumb.jpg'),
-    (err, buf) => {
-      if (err) {
-        console.error(
-          'Failed to load default thumb',
-          path.join(__dirname, './assets/img/default-thumb.jpg'),
-          err
-        );
-      }
-      if (buf) {
-        DEFAULTS.thumb.data = buf;
-        DEFAULTS.screenshot.data = buf;
-      }
+    if (buf) {
+      DEFAULTS.favicon.data = buf;
     }
-  );
-  fs.readFile(
-    path.join(__dirname, './assets/img/default-cover.jpg'),
-    (err, buf) => {
-      if (err) {
-        console.error(
-          'Failed to load default cover',
-          path.join(__dirname, './assets/img/default-cover.jpg'),
-          err
-        );
-      }
-      if (buf) {
-        DEFAULTS.cover.data = buf;
-      }
+  });
+  fs.readFile(path.join(__dirname, './assets/img/default-thumb.jpg'), (err, buf) => {
+    if (err) {
+      console.error(
+        'Failed to load default thumb',
+        path.join(__dirname, './assets/img/default-thumb.jpg'),
+        err
+      );
     }
-  );
+    if (buf) {
+      DEFAULTS.thumb.data = buf;
+      DEFAULTS.screenshot.data = buf;
+    }
+  });
+  fs.readFile(path.join(__dirname, './assets/img/default-cover.jpg'), (err, buf) => {
+    if (err) {
+      console.error(
+        'Failed to load default cover',
+        path.join(__dirname, './assets/img/default-cover.jpg'),
+        err
+      );
+    }
+    if (buf) {
+      DEFAULTS.cover.data = buf;
+    }
+  });
 
   // detect if is retina
   let display = screen.getPrimaryDisplay();
@@ -106,12 +97,7 @@ export function setup() {
     }
 
     // validate
-    if (
-      asset !== 'favicon' &&
-      asset !== 'thumb' &&
-      asset !== 'cover' &&
-      asset !== 'screenshot'
-    ) {
+    if (asset !== 'favicon' && asset !== 'thumb' && asset !== 'cover' && asset !== 'screenshot') {
       return cb({ data: NOT_FOUND });
     }
 
@@ -164,10 +150,7 @@ export function setup() {
         if (!data && asset === 'thumb') {
           if (url.startsWith('hyper://private')) {
             return serveJpg(
-              path.join(
-                __dirname,
-                `./assets/img/default-private-screenshot.jpg`
-              ),
+              path.join(__dirname, `./assets/img/default-private-screenshot.jpg`),
               DEFAULTS[asset],
               cb
             );

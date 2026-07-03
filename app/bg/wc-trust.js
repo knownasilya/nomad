@@ -63,10 +63,7 @@ export function onWebRequestCompleted(details) {
     // find the wc going to this URL with no trust currently assigned
     var wcInfo;
     for (let id in wcInfos) {
-      if (
-        wcInfos[id].trust === TRUST.UNKNOWN &&
-        wcInfos[id].url === details.url
-      ) {
+      if (wcInfos[id].trust === TRUST.UNKNOWN && wcInfos[id].url === details.url) {
         wcInfo = wcInfos[id];
         break;
       }

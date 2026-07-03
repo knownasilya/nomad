@@ -58,11 +58,7 @@ class SetupModal extends LitElement {
         </div>
 
         <div class="nav-controls">
-          <button
-            class="btn transparent thick"
-            tabindex="1"
-            @click=${this.onClickNext}
-          >
+          <button class="btn transparent thick" tabindex="1" @click=${this.onClickNext}>
             Next <span class="fas fa-chevron-circle-right"></span>
           </button>
         </div>
@@ -102,11 +98,7 @@ class SetupModal extends LitElement {
         </div>
 
         <div class="nav-controls">
-          <button
-            class="btn transparent thick"
-            tabindex="1"
-            @click=${this.onClickNext}
-          >
+          <button class="btn transparent thick" tabindex="1" @click=${this.onClickNext}>
             Get Started <span class="fas fa-chevron-circle-right"></span>
           </button>
         </div>

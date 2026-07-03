@@ -20,17 +20,14 @@ class DonateMenu extends LitElement {
 
   async init(params) {
     this.url = params.url;
-    this.driveInfo = (
-      await bg.views.getTabState('active', { driveInfo: true })
-    ).driveInfo;
+    this.driveInfo = (await bg.views.getTabState('active', { driveInfo: true })).driveInfo;
     await this.requestUpdate();
   }
 
   resolvePaymentLink(paymentLink) {
     if (!this.url) return paymentLink;
     if (paymentLink.indexOf('://') === -1) {
-      const shouldAddSlash =
-        !this.url.endsWith('/') && !paymentLink.startsWith('/');
+      const shouldAddSlash = !this.url.endsWith('/') && !paymentLink.startsWith('/');
       return `${this.url}${shouldAddSlash ? '/' : ''}${paymentLink}`;
     }
     return paymentLink;
@@ -41,9 +38,7 @@ class DonateMenu extends LitElement {
 
   renderDonationLink(paymentLink) {
     const url = this.resolvePaymentLink(paymentLink);
-    return html`<a href="#" class="link" @click=${(e) => this.onOpenPage(url)}
-      >${url}</a
-    >`;
+    return html`<a href="#" class="link" @click=${(e) => this.onOpenPage(url)}>${url}</a>`;
   }
 
   render() {

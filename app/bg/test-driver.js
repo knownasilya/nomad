@@ -20,10 +20,7 @@ export function setup() {
   sock.bind(0, '127.0.0.1');
   sock.on('message', onMessage);
   sock.on('listening', () => {
-    console.log(
-      'Test driver enabled, listening for messages on port',
-      sock.address().port
-    );
+    console.log('Test driver enabled, listening for messages on port', sock.address().port);
   });
 
   // emit ready when ready
@@ -81,9 +78,7 @@ const METHODS = {
 
   navigateTo(page, url) {
     var tab = tabManager.getByIndex(getActiveWindow(), page);
-    var loadPromise = new Promise((resolve) =>
-      tab.webContents.once('dom-ready', () => resolve())
-    );
+    var loadPromise = new Promise((resolve) => tab.webContents.once('dom-ready', () => resolve()));
     tab.loadURL(url);
     return loadPromise;
   },

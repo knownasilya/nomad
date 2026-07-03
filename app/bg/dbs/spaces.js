@@ -86,10 +86,22 @@ export async function create({ name, icon = 'circle', color = '#6c6cff' }) {
 export async function update(id, { name, icon, color, rootDriveUrl }) {
   const fields = [];
   const values = [];
-  if (name !== undefined) { fields.push('name = ?'); values.push(name); }
-  if (icon !== undefined) { fields.push('icon = ?'); values.push(icon); }
-  if (color !== undefined) { fields.push('color = ?'); values.push(color); }
-  if (rootDriveUrl !== undefined) { fields.push('root_drive_url = ?'); values.push(rootDriveUrl); }
+  if (name !== undefined) {
+    fields.push('name = ?');
+    values.push(name);
+  }
+  if (icon !== undefined) {
+    fields.push('icon = ?');
+    values.push(icon);
+  }
+  if (color !== undefined) {
+    fields.push('color = ?');
+    values.push(color);
+  }
+  if (rootDriveUrl !== undefined) {
+    fields.push('root_drive_url = ?');
+    values.push(rootDriveUrl);
+  }
   if (!fields.length) return get(id);
   values.push(id);
   await db.run(`UPDATE spaces SET ${fields.join(', ')} WHERE id = ?`, values);

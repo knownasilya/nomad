@@ -6,8 +6,5 @@ module.exports = function (cmd, opts, cb) {
   cmd = cmd.split(' ');
   opts.stdio = 'inherit';
   opts.env = Object.assign({}, process.env, opts.env || {});
-  childProcess
-    .spawn(cmd[0], cmd.slice(1), opts)
-    .on('error', console.log)
-    .on('close', cb);
+  childProcess.spawn(cmd[0], cmd.slice(1), opts).on('error', console.log).on('close', cb);
 };

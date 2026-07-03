@@ -285,8 +285,7 @@ class SelectFileModal extends LitElement {
     this.path = params.defaultPath || '/';
     this.defaultFilename = params.defaultFilename || '';
     this.title = params.title || '';
-    this.buttonLabel =
-      params.buttonLabel || (this.saveMode ? 'Save' : 'Select');
+    this.buttonLabel = params.buttonLabel || (this.saveMode ? 'Save' : 'Select');
     if (params.select) this.select = params.select;
     if (params.filters) {
       if ('extensions' in params.filters) {
@@ -305,11 +304,7 @@ class SelectFileModal extends LitElement {
         this.title = 'Save file...';
       } else {
         let canSelect = (v) => this.select.includes(v);
-        let [file, folder, mount] = [
-          canSelect('file'),
-          canSelect('folder'),
-          canSelect('mount'),
-        ];
+        let [file, folder, mount] = [canSelect('file'), canSelect('folder'), canSelect('mount')];
         if (file && (folder || mount)) {
           this.title = 'Select files or folders';
         } else if (file && !(folder || mount)) {
@@ -322,9 +317,7 @@ class SelectFileModal extends LitElement {
       }
     }
 
-    this.driveInfo = !this.isVirtualListing
-      ? await bg.fs.getInfo(this.drive)
-      : undefined;
+    this.driveInfo = !this.isVirtualListing ? await bg.fs.getInfo(this.drive) : undefined;
     await this.readdir();
     this.updateComplete.then((_) => {
       this.adjustHeight();
@@ -459,16 +452,10 @@ class SelectFileModal extends LitElement {
     if (!this.driveInfo) {
       return false; // probably still loading
     }
-    if (
-      defined(this.filters.networked) &&
-      this.filters.networked !== this.driveInfo.networked
-    ) {
+    if (defined(this.filters.networked) && this.filters.networked !== this.driveInfo.networked) {
       return false;
     }
-    if (
-      defined(this.filters.writable) &&
-      this.filters.writable !== this.driveInfo.writable
-    ) {
+    if (defined(this.filters.writable) && this.filters.writable !== this.driveInfo.writable) {
       return false;
     }
     if (this.saveMode && !this.driveInfo.writable) {
@@ -479,9 +466,7 @@ class SelectFileModal extends LitElement {
         return false;
       }
       if (this.filters.extensions) {
-        let hasExt = this.filters.extensions.some((ext) =>
-          file.name.endsWith(ext)
-        );
+        let hasExt = this.filters.extensions.some((ext) => file.name.endsWith(ext));
         if (!hasExt) {
           return false;
         }
@@ -534,11 +519,7 @@ class SelectFileModal extends LitElement {
               ? html`
                   <div class="filename">
                     <label>Save as:</label>
-                    <input
-                      type="text"
-                      name="filename"
-                      @keyup=${(e) => this.requestUpdate()}
-                    />
+                    <input type="text" name="filename" @keyup=${(e) => this.requestUpdate()} />
                   </div>
                 `
               : ''}
@@ -557,21 +538,12 @@ class SelectFileModal extends LitElement {
 
             <div class="form-actions">
               <div class="left">
-                <button
-                  type="button"
-                  @click=${this.onClickNewDrive}
-                  class="btn"
-                >
+                <button type="button" @click=${this.onClickNewDrive} class="btn">
                   Create new drive
                 </button>
               </div>
               <div class="right">
-                <button
-                  type="button"
-                  @click=${this.onClickCancel}
-                  class="btn cancel"
-                  tabindex="4"
-                >
+                <button type="button" @click=${this.onClickCancel} class="btn cancel" tabindex="4">
                   Cancel
                 </button>
                 <button
@@ -596,11 +568,7 @@ class SelectFileModal extends LitElement {
       selected: this.drive === shortcut.url,
     });
     return html`
-      <div
-        class="${cls}"
-        @click=${this.onSelectShortcut}
-        data-url=${shortcut.url}
-      >
+      <div class="${cls}" @click=${this.onSelectShortcut} data-url=${shortcut.url}>
         <div class="info">
           <span class="fa-fw ${shortcut.icon}"></span>
           <span class="name" title="${shortcut.title}">${shortcut.title}</span>
@@ -612,9 +580,7 @@ class SelectFileModal extends LitElement {
   renderPath() {
     var pathParts = this.path.split('/').filter(Boolean);
     var pathAcc = [];
-    var topTitle = this.driveInfo
-      ? this.driveInfo.title || 'Untitled'
-      : this.virtualTitle;
+    var topTitle = this.driveInfo ? this.driveInfo.title || 'Untitled' : this.virtualTitle;
     return [
       html`
         <div @click=${(e) => this.onClickPath(e, '/')}>${topTitle}</div>
@@ -655,19 +621,13 @@ class SelectFileModal extends LitElement {
       <div
         class="${cls}"
         @click=${disabled ? undefined : this.onSelectFile}
-        @dblclick=${disabled && !file.stat.isDirectory()
-          ? undefined
-          : this.onDblClickFile}
+        @dblclick=${disabled && !file.stat.isDirectory() ? undefined : this.onDblClickFile}
         data-path=${file.path}
       >
         ${file.icon
           ? file.icon
           : html`
-              <span
-                class="fa-fw ${file.stat.isFile()
-                  ? 'fas fa-file'
-                  : 'fas fa-folder'}"
-              ></span>
+              <span class="fa-fw ${file.stat.isFile() ? 'fas fa-file' : 'fas fa-folder'}"></span>
             `}
         <span class="name" title="${file.name}">${file.name}</span>
       </div>
@@ -692,11 +652,7 @@ class SelectFileModal extends LitElement {
 
   onSelectFile(e) {
     var path = e.currentTarget.dataset.path;
-    if (
-      this.allowMultiple &&
-      (e.ctrlKey || e.metaKey) &&
-      !this.isVirtualListing
-    ) {
+    if (this.allowMultiple && (e.ctrlKey || e.metaKey) && !this.isVirtualListing) {
       this.selectedPaths = this.selectedPaths.concat([path]);
     } else {
       this.selectedPaths = [path];

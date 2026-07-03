@@ -8,7 +8,7 @@ import yazl from 'yazl';
 export const toZipStream = function (drive, dirpath = '/') {
   var zipfile = new yazl.ZipFile();
 
-  ;(async () => {
+  (async () => {
     for await (const entry of drive.drive.list(dirpath, { recursive: true })) {
       const relPath = entry.key.slice(dirpath.endsWith('/') ? dirpath.length : dirpath.length + 1);
       const buf = await drive.drive.get(entry.key);

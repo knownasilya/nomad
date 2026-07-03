@@ -76,9 +76,7 @@ class NavbarSiteInfo extends LitElement {
             `
           : html` <span class="${this.siteIcon} ${this.siteTrust}"></span> `}
         <span class="label">${this.siteTitle}</span>
-        ${this.siteSubtitle
-          ? html`<span class="label sublabel">${this.siteSubtitle}</span>`
-          : ''}
+        ${this.siteSubtitle ? html`<span class="label sublabel">${this.siteSubtitle}</span>` : ''}
       `;
     }
 

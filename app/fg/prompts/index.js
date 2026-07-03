@@ -39,9 +39,7 @@ class PromptsWrapper extends LitElement {
   }
 
   render() {
-    return html`<div @contextmenu=${this.onContextMenu}>
-      ${this.renderPrompt()}
-    </div>`;
+    return html`<div @contextmenu=${this.onContextMenu}>${this.renderPrompt()}</div>`;
   }
 
   renderPrompt() {

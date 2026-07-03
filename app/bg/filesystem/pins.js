@@ -56,5 +56,9 @@ async function read() {
 async function write(data) {
   data = data && Array.isArray(data) ? data : [];
   data = data.filter((b) => b && typeof b === 'string');
-  await autobases.putInline(filesystem.get(), '/beaker/pins.json', b4a.from(JSON.stringify(data, null, 2)));
+  await autobases.putInline(
+    filesystem.get(),
+    '/beaker/pins.json',
+    b4a.from(JSON.stringify(data, null, 2))
+  );
 }

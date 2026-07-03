@@ -6,7 +6,7 @@ export async function setupChatBubble() {
 
   // Wait for DOM to be ready
   if (document.readyState === 'loading') {
-    await new Promise(r => document.addEventListener('DOMContentLoaded', r));
+    await new Promise((r) => document.addEventListener('DOMContentLoaded', r));
   }
 
   // Read /index.json from the current drive

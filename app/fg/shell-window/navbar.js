@@ -62,9 +62,7 @@ class ShellWindowNavbar extends LitElement {
   }
 
   focusLocation() {
-    this.shadowRoot
-      .querySelector('shell-window-navbar-location')
-      .focusLocation();
+    this.shadowRoot.querySelector('shell-window-navbar-location').focusLocation();
   }
 
   // rendering
@@ -75,8 +73,7 @@ class ShellWindowNavbar extends LitElement {
       <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
       <div class="buttons" style="padding: 0 6px">
         ${this.tabLayout === 'sidebar' && this.sidebarCollapsed ? this.sidebarToggleBtn : ''}
-        ${this.backBtn} ${this.forwardBtn} ${this.reloadBtn} ${this.updogBtn}
-        ${this.homeBtn}
+        ${this.backBtn} ${this.forwardBtn} ${this.reloadBtn} ${this.updogBtn} ${this.homeBtn}
       </div>
       <shell-window-navbar-location
         class=${classMap({
@@ -186,11 +183,7 @@ class ShellWindowNavbar extends LitElement {
   get reloadBtn() {
     if (this.isLoading) {
       return html`
-        <button
-          @click=${this.onClickStop}
-          style="margin: 0px 2px"
-          title="Refresh"
-        >
+        <button @click=${this.onClickStop} style="margin: 0px 2px" title="Refresh">
           <svg
             class="icon close"
             width="12"
@@ -264,11 +257,7 @@ class ShellWindowNavbar extends LitElement {
       return html``;
     }
     return html`
-      <button
-        class="watchlist-btn"
-        @click=${this.onClickWatchlistBtn}
-        style="margin: 0px 2px"
-      >
+      <button class="watchlist-btn" @click=${this.onClickWatchlistBtn} style="margin: 0px 2px">
         <span class="fas fa-eye"></span>
         <span class="badge">${this.numWatchlistNotifications}</span>
       </button>
@@ -294,11 +283,7 @@ class ShellWindowNavbar extends LitElement {
       pressed: this.isBrowserMenuOpen,
     });
     return html`
-      <button
-        class=${cls}
-        @click=${this.onClickBrowserMenu}
-        style="margin: 0px 2px"
-      >
+      <button class=${cls} @click=${this.onClickBrowserMenu} style="margin: 0px 2px">
         ${this.isUpdateAvailable
           ? html`<span class="fas fa-arrow-alt-circle-up"></span>`
           : html`<span class="fa fa-bars"></span>`}
@@ -338,11 +323,7 @@ class ShellWindowNavbar extends LitElement {
     if (!url) return;
     try {
       let urlp = new URL(url);
-      let pathname = `/${urlp.pathname
-        .split('/')
-        .filter(Boolean)
-        .slice(0, -1)
-        .join('/')}`;
+      let pathname = `/${urlp.pathname.split('/').filter(Boolean).slice(0, -1).join('/')}`;
       url = urlp.origin + pathname;
       bg.views.loadURL('active', url);
     } catch (e) {

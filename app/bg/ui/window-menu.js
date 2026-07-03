@@ -67,11 +67,7 @@ export function setApplicationMenu(opts = {}) {
 }
 
 export function buildWindowMenu(opts = {}) {
-  var win = opts.noWindows
-    ? undefined
-    : opts.win
-    ? opts.win
-    : getActiveWindow();
+  var win = opts.noWindows ? undefined : opts.win ? opts.win : getActiveWindow();
   if (win && win.isDestroyed()) win = undefined;
   const noWindows = !win;
   const tab = !noWindows && win ? tabManager.getActive(win) : undefined;
@@ -87,8 +83,7 @@ export function buildWindowMenu(opts = {}) {
         label: 'Preferences',
         accelerator: 'Cmd+,',
         click(item) {
-          if (win)
-            tabManager.create(win, 'beaker://settings', { setActive: true });
+          if (win) tabManager.create(win, 'beaker://settings', { setActive: true });
           else createShellWindow({ pages: ['beaker://settings'] });
         },
       },
@@ -423,9 +418,7 @@ export function buildWindowMenu(opts = {}) {
         id: 'selectPaneUp',
         label: 'Select Pane Up',
         enabled: !noWindows,
-        accelerator: `${
-          process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'
-        }+Up`,
+        accelerator: `${process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'}+Up`,
         click() {
           if (tab && tab.activePane) {
             tab.activateAdjacentPane('up');
@@ -436,9 +429,7 @@ export function buildWindowMenu(opts = {}) {
         id: 'selectPaneDown',
         label: 'Select Pane Down',
         enabled: !noWindows,
-        accelerator: `${
-          process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'
-        }+Down`,
+        accelerator: `${process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'}+Down`,
         click() {
           if (tab && tab.activePane) {
             tab.activateAdjacentPane('down');
@@ -449,9 +440,7 @@ export function buildWindowMenu(opts = {}) {
         id: 'selectPaneLeft',
         label: 'Select Pane Left',
         enabled: !noWindows,
-        accelerator: `${
-          process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'
-        }+Left`,
+        accelerator: `${process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'}+Left`,
         click() {
           if (tab && tab.activePane) {
             tab.activateAdjacentPane('left');
@@ -462,9 +451,7 @@ export function buildWindowMenu(opts = {}) {
         id: 'selectPaneRight',
         label: 'Select Pane Right',
         enabled: !noWindows,
-        accelerator: `${
-          process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'
-        }+Right`,
+        accelerator: `${process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'}+Right`,
         click() {
           if (tab && tab.activePane) {
             tab.activateAdjacentPane('right');
@@ -476,9 +463,7 @@ export function buildWindowMenu(opts = {}) {
         id: 'movePaneUp',
         label: 'Move Pane Up',
         enabled: !noWindows,
-        accelerator: `Shift+${
-          process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'
-        }+Up`,
+        accelerator: `Shift+${process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'}+Up`,
         click() {
           if (tab && tab.activePane) {
             tab.movePane(tab.activePane, 'up');
@@ -489,9 +474,7 @@ export function buildWindowMenu(opts = {}) {
         id: 'movePaneDown',
         label: 'Move Pane Down',
         enabled: !noWindows,
-        accelerator: `Shift+${
-          process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'
-        }+Down`,
+        accelerator: `Shift+${process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'}+Down`,
         click() {
           if (tab && tab.activePane) {
             tab.movePane(tab.activePane, 'down');
@@ -502,9 +485,7 @@ export function buildWindowMenu(opts = {}) {
         id: 'movePaneLeft',
         label: 'Move Pane Left',
         enabled: !noWindows,
-        accelerator: `Shift+${
-          process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'
-        }+Left`,
+        accelerator: `Shift+${process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'}+Left`,
         click() {
           if (tab && tab.activePane) {
             tab.movePane(tab.activePane, 'left');
@@ -515,9 +496,7 @@ export function buildWindowMenu(opts = {}) {
         id: 'movePaneRight',
         label: 'Move Pane Right',
         enabled: !noWindows,
-        accelerator: `Shift+${
-          process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'
-        }+Right`,
+        accelerator: `Shift+${process.platform !== 'darwin' ? 'Ctrl+Alt' : 'Ctrl+Cmd'}+Right`,
         click() {
           if (tab && tab.activePane) {
             tab.movePane(tab.activePane, 'right');
@@ -617,9 +596,7 @@ export function buildWindowMenu(opts = {}) {
           let confirmation = await dialog.showMessageBox({
             type: 'question',
             message: `Import ${
-              filePaths.length > 1
-                ? `${filePaths.length} folders`
-                : filePaths[0]
+              filePaths.length > 1 ? `${filePaths.length} folders` : filePaths[0]
             } to ${targetUrl}? Any conflicting files will be overwritten.`,
             buttons: ['OK', 'Cancel'],
           });
@@ -701,8 +678,7 @@ export function buildWindowMenu(opts = {}) {
         label: 'Show Full History',
         accelerator: showHistoryAccelerator,
         click: function (item) {
-          if (win)
-            tabManager.create(win, 'beaker://history', { setActive: true });
+          if (win) tabManager.create(win, 'beaker://history', { setActive: true });
           else createShellWindow({ pages: ['beaker://history'] });
         },
       },
@@ -726,10 +702,7 @@ export function buildWindowMenu(opts = {}) {
         id: 'toggleDevTools',
         label: 'Toggle DevTools',
         enabled: !noWindows,
-        accelerator:
-          process.platform === 'darwin'
-            ? 'Alt+CmdOrCtrl+I'
-            : 'Shift+CmdOrCtrl+I',
+        accelerator: process.platform === 'darwin' ? 'Alt+CmdOrCtrl+I' : 'Shift+CmdOrCtrl+I',
         click: function (item) {
           if (tab) tab.webContents.toggleDevTools();
         },
@@ -861,10 +834,7 @@ export function buildWindowMenu(opts = {}) {
         id: 'nextTab',
         label: 'Next Tab',
         enabled: !noWindows,
-        accelerator:
-          process.platform === 'darwin'
-            ? 'Alt+CmdOrCtrl+Right'
-            : 'CmdOrCtrl+PageDown',
+        accelerator: process.platform === 'darwin' ? 'Alt+CmdOrCtrl+Right' : 'CmdOrCtrl+PageDown',
         click: function (item) {
           if (win) tabManager.changeActiveBy(win, 1);
         },
@@ -873,10 +843,7 @@ export function buildWindowMenu(opts = {}) {
         id: 'previousTab',
         label: 'Previous Tab',
         enabled: !noWindows,
-        accelerator:
-          process.platform === 'darwin'
-            ? 'Alt+CmdOrCtrl+Left'
-            : 'CmdOrCtrl+PageUp',
+        accelerator: process.platform === 'darwin' ? 'Alt+CmdOrCtrl+Left' : 'CmdOrCtrl+PageUp',
         click: function (item) {
           if (win) tabManager.changeActiveBy(win, -1);
         },
@@ -898,8 +865,7 @@ export function buildWindowMenu(opts = {}) {
             enabled: !noWindows,
             accelerator: `CmdOrCtrl+9`,
             click: function (item) {
-              if (win)
-                tabManager.setActive(win, tabManager.getAll(win).slice(-1)[0]);
+              if (win) tabManager.setActive(win, tabManager.getAll(win).slice(-1)[0]);
             },
           },
         ],
@@ -946,11 +912,9 @@ export function buildWindowMenu(opts = {}) {
         label: 'Report Issue',
         click: function (item) {
           if (win)
-            tabManager.create(
-              win,
-              'https://github.com/knownasilya/nomad/issues',
-              { setActive: true }
-            );
+            tabManager.create(win, 'https://github.com/knownasilya/nomad/issues', {
+              setActive: true,
+            });
         },
       },
       {
@@ -958,11 +922,9 @@ export function buildWindowMenu(opts = {}) {
         label: 'Discussion Forum',
         click: function (item) {
           if (win)
-            tabManager.create(
-              win,
-              'https://github.com/knownasilya/nomad/discussions',
-              { setActive: true }
-            );
+            tabManager.create(win, 'https://github.com/knownasilya/nomad/discussions', {
+              setActive: true,
+            });
         },
       },
     ],
@@ -973,8 +935,7 @@ export function buildWindowMenu(opts = {}) {
       label: 'About',
       role: 'about',
       click: function (item) {
-        if (win)
-          tabManager.create(win, 'beaker://settings', { setActive: true });
+        if (win) tabManager.create(win, 'beaker://settings', { setActive: true });
       },
     });
   }
@@ -996,9 +957,7 @@ export function buildWindowMenu(opts = {}) {
 
 export function triggerMenuItemById(menuLabel, id) {
   if (!currentMenuTemplate) return;
-  var items = currentMenuTemplate.find(
-    (menu) => menu.label === menuLabel
-  ).submenu;
+  var items = currentMenuTemplate.find((menu) => menu.label === menuLabel).submenu;
   if (!items) return;
   var item = items.find((item) => item.id === id);
   return item.click();

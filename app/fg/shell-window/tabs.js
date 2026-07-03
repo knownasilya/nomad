@@ -84,9 +84,7 @@ class ShellWindowTabs extends LitElement {
         const group = (this.groups || []).find((g) => g.id === tab.groupId);
         if (group) items.push({ type: 'group-header', group });
       }
-      const group = tab.groupId
-        ? (this.groups || []).find((g) => g.id === tab.groupId)
-        : null;
+      const group = tab.groupId ? (this.groups || []).find((g) => g.id === tab.groupId) : null;
       if (!group?.hidden) {
         items.push({ type: 'tab', tab, index });
       }
@@ -113,10 +111,7 @@ class ShellWindowTabs extends LitElement {
           ${this.backgroundTrayBtn}
           ${repeat(
             items,
-            (item) =>
-              item.type === 'group-header'
-                ? `grp:${item.group.id}`
-                : `tab:${item.index}`,
+            (item) => (item.type === 'group-header' ? `grp:${item.group.id}` : `tab:${item.index}`),
             (item) =>
               item.type === 'group-header'
                 ? this.renderGroupHeader(item.group)
@@ -128,11 +123,7 @@ class ShellWindowTabs extends LitElement {
             @dragleave=${(e) => this.onDragleaveTab(e, this.tabsState.length)}
             @drop=${(e) => this.onDropTab(e, this.tabsState.length)}
           >
-            <div
-              class="tab tab-add-btn"
-              @click=${this.onClickNew}
-              title="Open new tab"
-            >
+            <div class="tab tab-add-btn" @click=${this.onClickNew} title="Open new tab">
               <span class="plus">+</span>
             </div>
           </div>
@@ -176,7 +167,9 @@ class ShellWindowTabs extends LitElement {
           class="tab-group-close"
           title="Delete group"
           @click=${(e) => this.onClickGroupClose(e, group.id)}
-        >×</button>
+        >
+          ×
+        </button>
       </div>
     `;
   }
@@ -184,14 +177,9 @@ class ShellWindowTabs extends LitElement {
   renderTab(tab, index) {
     const faviconUrl = this.getFavicon(index);
     const showFavicon = Boolean(
-      tab.isLoading ||
-        tab.isPinned ||
-        faviconUrl ||
-        tab.url.startsWith('beaker:')
+      tab.isLoading || tab.isPinned || faviconUrl || tab.url.startsWith('beaker:')
     );
-    const group = tab.groupId
-      ? (this.groups || []).find((g) => g.id === tab.groupId)
-      : null;
+    const group = tab.groupId ? (this.groups || []).find((g) => g.id === tab.groupId) : null;
     const cls = classMap({
       tab: true,
       current: tab.isActive,
@@ -225,16 +213,14 @@ class ShellWindowTabs extends LitElement {
                     ? html`<div class="spinner"></div>`
                     : html`<div class="spinner reverse"></div>`
                   : faviconUrl
-                  ? html`
-                      <img
-                        src="${faviconUrl}"
-                        @load=${(e) => this.onFaviconLoad(e, index)}
-                        @error=${(e) => this.onFaviconError(e, index)}
-                      />
-                    `
-                  : html`<img
-                      src="asset:favicon:${tab.url}?cache=${Date.now()}"
-                    />`}
+                    ? html`
+                        <img
+                          src="${faviconUrl}"
+                          @load=${(e) => this.onFaviconLoad(e, index)}
+                          @error=${(e) => this.onFaviconError(e, index)}
+                        />
+                      `
+                    : html`<img src="asset:favicon:${tab.url}?cache=${Date.now()}" />`}
               </div>
             `
           : ''}
@@ -245,8 +231,8 @@ class ShellWindowTabs extends LitElement {
               ${tab.isAudioMuted
                 ? html`<span class="fas fa-volume-mute"></span>`
                 : tab.isCurrentlyAudible
-                ? html`<span class="fas fa-volume-up"></span>`
-                : ''}
+                  ? html`<span class="fas fa-volume-up"></span>`
+                  : ''}
               ${this.tabs.length < 12 || tab.isActive
                 ? html`
                     <div
@@ -281,13 +267,9 @@ class ShellWindowTabs extends LitElement {
       let [oldLen, newLen] = [oldVal.length, this.tabs.length];
       if (newLen > oldLen) {
         // new tab
-        let newTabIndex = this.tabs.findIndex(
-          (t1) => !oldVal.find((t2) => t2.id === t1.id)
-        );
+        let newTabIndex = this.tabs.findIndex((t1) => !oldVal.find((t2) => t2.id === t1.id));
         if (newTabIndex === -1) return;
-        Array.from(this.shadowRoot.querySelectorAll('.tabs > .tab'))[
-          newTabIndex
-        ].animate(
+        Array.from(this.shadowRoot.querySelectorAll('.tabs > .tab'))[newTabIndex].animate(
           [
             { transform: 'scaleX(0)', transformOrigin: 'center left' },
             { transform: 'scaleX(1)', transformOrigin: 'center left' },
@@ -322,9 +304,7 @@ class ShellWindowTabs extends LitElement {
           (t1) => !this.tabs.find((t2) => t2.id === t1.id)
         );
         if (closingTabIndex === -1) return true;
-        let el = Array.from(this.shadowRoot.querySelectorAll('.tabs > .tab'))[
-          closingTabIndex
-        ];
+        let el = Array.from(this.shadowRoot.querySelectorAll('.tabs > .tab'))[closingTabIndex];
         let rect = el.getClientRects()[0];
         el.animate([{ width: `${rect.width}px` }, { width: '0px' }], {
           duration: 100,
@@ -388,9 +368,7 @@ class ShellWindowTabs extends LitElement {
   onFaviconError(e, index) {
     var origin = new URL(this.tabsState[index].url).origin;
     this.faviconCache[origin] = {
-      lastTried: this.tabsState[index].favicons
-        ? this.tabsState[index].favicons[0]
-        : null,
+      lastTried: this.tabsState[index].favicons ? this.tabsState[index].favicons[0] : null,
       url: null, // serve null from cache always
     };
     this.tabsState[index].favicons = null;
@@ -449,12 +427,7 @@ class ShellWindowTabs extends LitElement {
     }
 
     const url = e.dataTransfer.getData('text');
-    if (
-      url &&
-      (url.startsWith('https://') ||
-        url.startsWith('dat://') ||
-        isHyperOrPearUrl(url))
-    ) {
+    if (url && (url.startsWith('https://') || url.startsWith('dat://') || isHyperOrPearUrl(url))) {
       e.preventDefault();
       bg.views.createTab(url, { focusLocationBar: true, setActive: true });
       bg.views.reorderTab(this.tabsState.length, index);
@@ -938,7 +911,9 @@ ShellWindowTabs.styles = css`
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    transition: opacity 0.12s, background 0.12s;
+    transition:
+      opacity 0.12s,
+      background 0.12s;
   }
 
   .tab-group-close:hover {

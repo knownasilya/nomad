@@ -42,7 +42,9 @@ function lookupMime(name, fallback = 'text/plain') {
   } catch (e) {
     /* fall through to the table */
   }
-  const ext = String(name).slice(String(name).lastIndexOf('.') + 1).toLowerCase();
+  const ext = String(name)
+    .slice(String(name).lastIndexOf('.') + 1)
+    .toLowerCase();
   return FALLBACK_TYPES[ext] || fallback;
 }
 
@@ -147,8 +149,7 @@ export async function isFileContentBinary(fsInstance, filepath) {
 export function acceptHeaderExtensions(accept) {
   var exts = [];
   var parts = (accept || '').split(',');
-  if (parts.includes('text/html') || (parts.length === 1 && parts[0] === '*/*'))
-    exts.push('.html');
+  if (parts.includes('text/html') || (parts.length === 1 && parts[0] === '*/*')) exts.push('.html');
   if (parts.includes('text/css')) exts.push('.css');
   if (parts.includes('image/*') || parts.includes('image/apng'))
     exts = exts.concat(['.png', '.jpg', '.jpeg', '.gif']);
@@ -185,35 +186,17 @@ function isBinaryCheck(bytes) {
   }
 
   // UTF-32 BOM
-  if (
-    size >= 4 &&
-    bytes[0] === 0x00 &&
-    bytes[1] === 0x00 &&
-    bytes[2] == 0xfe &&
-    bytes[3] == 0xff
-  ) {
+  if (size >= 4 && bytes[0] === 0x00 && bytes[1] === 0x00 && bytes[2] == 0xfe && bytes[3] == 0xff) {
     return false;
   }
 
   // UTF-32 LE BOM
-  if (
-    size >= 4 &&
-    bytes[0] == 0xff &&
-    bytes[1] == 0xfe &&
-    bytes[2] === 0x00 &&
-    bytes[3] === 0x00
-  ) {
+  if (size >= 4 && bytes[0] == 0xff && bytes[1] == 0xfe && bytes[2] === 0x00 && bytes[3] === 0x00) {
     return false;
   }
 
   // GB BOM
-  if (
-    size >= 4 &&
-    bytes[0] == 0x84 &&
-    bytes[1] == 0x31 &&
-    bytes[2] == 0x95 &&
-    bytes[3] == 0x33
-  ) {
+  if (size >= 4 && bytes[0] == 0x84 && bytes[1] == 0x31 && bytes[2] == 0x95 && bytes[3] == 0x33) {
     return false;
   }
 
@@ -236,10 +219,7 @@ function isBinaryCheck(bytes) {
     if (bytes[i] === 0) {
       // NULL byte--it's binary!
       return true;
-    } else if (
-      (bytes[i] < 7 || bytes[i] > 14) &&
-      (bytes[i] < 32 || bytes[i] > 127)
-    ) {
+    } else if ((bytes[i] < 7 || bytes[i] > 14) && (bytes[i] < 32 || bytes[i] > 127)) {
       // UTF-8 detection
       if (bytes[i] > 193 && bytes[i] < 224 && i + 1 < size) {
         i++;
@@ -248,12 +228,7 @@ function isBinaryCheck(bytes) {
         }
       } else if (bytes[i] > 223 && bytes[i] < 240 && i + 2 < size) {
         i++;
-        if (
-          bytes[i] > 127 &&
-          bytes[i] < 192 &&
-          bytes[i + 1] > 127 &&
-          bytes[i + 1] < 192
-        ) {
+        if (bytes[i] > 127 && bytes[i] < 192 && bytes[i + 1] > 127 && bytes[i + 1] < 192) {
           i++;
           continue;
         }

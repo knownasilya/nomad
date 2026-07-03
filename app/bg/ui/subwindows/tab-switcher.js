@@ -33,9 +33,7 @@ export function setup(parentWindow) {
       defaultEncoding: 'utf-8',
     },
   }));
-  view.webContents.loadFile(
-    path.join(__dirname, 'fg', 'tab-switcher', 'index.html')
-  );
+  view.webContents.loadFile(path.join(__dirname, 'fg', 'tab-switcher', 'index.html'));
   wcTrust.setWcTrust(view.webContents, wcTrust.TRUST.TRUSTED);
 }
 
@@ -97,9 +95,7 @@ export function show(parentWindow) {
     // render
     parentWindow.addBrowserView(view);
     view.webContents.executeJavaScript(`
-      window.setTabs(${JSON.stringify(
-        tabInfos
-      )}, ${defaultCurrentSelection}); undefined
+      window.setTabs(${JSON.stringify(tabInfos)}, ${defaultCurrentSelection}); undefined
     `);
     reposition(parentWindow);
   }

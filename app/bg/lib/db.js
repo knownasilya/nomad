@@ -75,8 +75,7 @@ export const setupSqliteDB = function (db, { setup, migrations }, logTag) {
       if (err) return reject(err);
 
       var version = res && res.user_version ? +res.user_version : 0;
-      var neededMigrations =
-        version === 0 && setup ? [setup] : migrations.slice(version);
+      var neededMigrations = version === 0 && setup ? [setup] : migrations.slice(version);
       if (neededMigrations.length == 0) {
         return resolve();
       }
@@ -99,9 +98,7 @@ export const setupSqliteDB = function (db, { setup, migrations }, logTag) {
           // done
           db.run('PRAGMA SYNCHRONOUS = FULL;'); // turn fsync back on
           resolve();
-          return logger.info(
-            `${logTag} Database migrations completed without error`
-          );
+          return logger.info(`${logTag} Database migrations completed without error`);
         }
 
         migration(runNeededMigrations);
@@ -124,15 +121,11 @@ export function attachOnConflictDoUpdate(knex) {
     'onConflictDoUpdate',
     function onConflictDoUpdate(uniqueColumn, columns) {
       if (this._method !== 'insert') {
-        throw new Error(
-          'onConflictDoUpdate error: should be used only with insert query.'
-        );
+        throw new Error('onConflictDoUpdate error: should be used only with insert query.');
       }
 
       if (columns.length === 0) {
-        throw new Error(
-          'onConflictDoUpdate error: please specify at least one column name.'
-        );
+        throw new Error('onConflictDoUpdate error: please specify at least one column name.');
       }
 
       const { placeholders, bindings } = Object.entries(columns).reduce(
@@ -149,9 +142,7 @@ export function attachOnConflictDoUpdate(knex) {
       const newBindings = [...originalBindings, ...bindings];
 
       return this.client.raw(
-        `${originalSQL} on conflict(${uniqueColumn}) do update set ${placeholders.join(
-          ', '
-        )}`,
+        `${originalSQL} on conflict(${uniqueColumn}) do update set ${placeholders.join(', ')}`,
         newBindings
       );
     }

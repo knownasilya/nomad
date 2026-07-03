@@ -13,9 +13,7 @@ class CreateMenu extends LitElement {
   }
 
   async init(params) {
-    this.driveInfo = (
-      await bg.views.getTabState('active', { driveInfo: true })
-    ).driveInfo;
+    this.driveInfo = (await bg.views.getTabState('active', { driveInfo: true })).driveInfo;
     await this.requestUpdate();
   }
 
@@ -27,12 +25,8 @@ class CreateMenu extends LitElement {
       <link rel="stylesheet" href="beaker://assets/font-awesome.css" />
       <div class="header"><h2>Create new</h2></div>
       <div class="wrapper">
-        <div class="menu-item" @click=${(e) => this.onClickNew('wiki')}>
-          Wiki site
-        </div>
-        <div class="menu-item" @click=${(e) => this.onClickNew()}>
-          Empty website
-        </div>
+        <div class="menu-item" @click=${(e) => this.onClickNew('wiki')}>Wiki site</div>
+        <div class="menu-item" @click=${(e) => this.onClickNew()}>Empty website</div>
       </div>
     `;
   }
@@ -42,9 +36,7 @@ class CreateMenu extends LitElement {
 
   onClickNew(template) {
     bg.shellMenus.createTab(
-      `beaker://library/?view=new-website&template=${encodeURIComponent(
-        template || ''
-      )}`
+      `beaker://library/?view=new-website&template=${encodeURIComponent(template || '')}`
     );
     bg.shellMenus.close();
   }

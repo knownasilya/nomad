@@ -148,12 +148,7 @@ class DrivePropertiesModal extends LitElement {
           </div>
 
           <div class="form-actions">
-            <button
-              type="button"
-              @click=${this.onClickCancel}
-              class="cancel"
-              tabindex="5"
-            >
+            <button type="button" @click=${this.onClickCancel} class="cancel" tabindex="5">
               Cancel
             </button>
             <button type="submit" class="primary" tabindex="4">OK</button>
@@ -210,21 +205,12 @@ class DrivePropertiesModal extends LitElement {
       reader.readAsArrayBuffer(file);
 
       await Promise.all([
-        bg.fs
-          .unlink(joinPath(this.url, '/thumb.png'))
-          .catch((e) => null),
-        bg.fs
-          .unlink(joinPath(this.url, '/thumb.jpg'))
-          .catch((e) => null),
-        bg.fs
-          .unlink(joinPath(this.url, '/thumb.jpeg'))
-          .catch((e) => null),
+        bg.fs.unlink(joinPath(this.url, '/thumb.png')).catch((e) => null),
+        bg.fs.unlink(joinPath(this.url, '/thumb.jpg')).catch((e) => null),
+        bg.fs.unlink(joinPath(this.url, '/thumb.jpeg')).catch((e) => null),
       ]);
       let newThumbPath = `thumb.${ext}`;
-      await bg.fs.writeFile(
-        joinPath(this.url, `/${newThumbPath}`),
-        await bufPromise
-      );
+      await bg.fs.writeFile(joinPath(this.url, `/${newThumbPath}`), await bufPromise);
       newProps.thumb = newThumbPath;
     }
 

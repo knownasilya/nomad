@@ -1,6 +1,6 @@
 // @ts-nocheck
 import b4a from 'b4a';
-import { joinPath } from '../../lib/strings.js';
+import { joinPath } from '../../lib/strings';
 import { normalizeUrl, createResourceSlug } from '../../lib/urls';
 import * as autobases from '../hyper/autobases';
 import * as filesystem from './index';
@@ -26,9 +26,13 @@ export async function list() {
     try {
       const buf = await autobases.resolveRecordContent(record);
       data = buf ? JSON.parse(b4a.toString(buf)) : null;
-    } catch { data = null; }
+    } catch {
+      data = null;
+    }
     if (!data || !data.href) continue;
-    out.push(massageBookmark({ url: joinPath(sess.url, path), href: data.href, title: data.title }, pins));
+    out.push(
+      massageBookmark({ url: joinPath(sess.url, path), href: data.href, title: data.title }, pins)
+    );
   }
   return out;
 }

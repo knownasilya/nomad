@@ -57,26 +57,23 @@ export const addVisit = async function (profileId, { url, title, spaceId = 1 }) 
     if (!url.startsWith('beaker://')) {
       // dont log stats on internal sites, keep them out of the search
       // get current stats
-      var stats = await db.get('SELECT * FROM visit_stats WHERE url = ?;', [
-        url,
-      ]);
+      var stats = await db.get('SELECT * FROM visit_stats WHERE url = ?;', [url]);
 
       // create or update stats
       if (!stats) {
-        await db.run(
-          'INSERT INTO visit_stats (url, num_visits, last_visit_ts) VALUES (?, ?, ?);',
-          [url, 1, ts]
-        );
-        await db.run('INSERT INTO visit_fts (url, title) VALUES (?, ?);', [
+        await db.run('INSERT INTO visit_stats (url, num_visits, last_visit_ts) VALUES (?, ?, ?);', [
           url,
-          title,
+          1,
+          ts,
         ]);
+        await db.run('INSERT INTO visit_fts (url, title) VALUES (?, ?);', [url, title]);
       } else {
         let num_visits = (+stats.num_visits || 1) + 1;
-        await db.run(
-          'UPDATE visit_stats SET num_visits = ?, last_visit_ts = ? WHERE url = ?;',
-          [num_visits, ts, url]
-        );
+        await db.run('UPDATE visit_stats SET num_visits = ?, last_visit_ts = ? WHERE url = ?;', [
+          num_visits,
+          ts,
+          url,
+        ]);
       }
     }
 
@@ -87,11 +84,7 @@ export const addVisit = async function (profileId, { url, title, spaceId = 1 }) 
     );
     if (visit) {
       // update visit ts and title
-      await db.run('UPDATE visits SET ts = ?, title = ? WHERE rowid = ?', [
-        ts,
-        title,
-        visit.rowid,
-      ]);
+      await db.run('UPDATE visits SET ts = ?, title = ? WHERE rowid = ?', [ts, title, visit.rowid]);
     } else {
       // log visit
       await db.run(
@@ -137,10 +130,12 @@ export const addTabClose = async function (profileId, { url, title }) {
     );
     if (visit) {
       // update visit ts and title
-      await db.run(
-        'UPDATE visits SET ts = ?, title = ?, tabClose = ? WHERE rowid = ?',
-        [ts, title, 1, visit.rowid]
-      );
+      await db.run('UPDATE visits SET ts = ?, title = ?, tabClose = ? WHERE rowid = ?', [
+        ts,
+        title,
+        1,
+        visit.rowid,
+      ]);
     } else {
       // log visit
       await db.run(
@@ -178,11 +173,7 @@ export const getVisitHistory = async function (
   var release = await lock('history-db');
   try {
     const spaceFilter = spaceId != null ? `AND visits.spaceId = ${Number(spaceId)}` : '';
-    const params = /** @type Array<string | number> */ ([
-      profileId,
-      limit || 50,
-      offset || 0,
-    ]);
+    const params = /** @type Array<string | number> */ ([profileId, limit || 50, offset || 0]);
     if (search) {
       // prep search terms
       params.push(

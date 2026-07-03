@@ -25,15 +25,7 @@ import { findWebContentsParentWindow } from '../../lib/electron';
 
 const IS_OSX = process.platform === 'darwin';
 const MARGIN_SIZE = 10;
-const IS_RIGHT_ALIGNED = [
-  'browser',
-  'bookmark',
-  'peers',
-  'share',
-  'site',
-  'donate',
-  'spaces',
-];
+const IS_RIGHT_ALIGNED = ['browser', 'bookmark', 'peers', 'share', 'site', 'donate', 'spaces'];
 var events = new Events();
 var views = {}; // map of {[parentWindow.id] => BrowserView}
 
@@ -162,9 +154,7 @@ export async function update(parentWindow, opts) {
     view.boundsOpt = opts && opts.bounds ? opts.bounds : view.boundsOpt;
     reposition(parentWindow);
     var params = opts && opts.params ? opts.params : {};
-    await view.webContents.executeJavaScript(
-      `updateMenu(${JSON.stringify(params)}); undefined`
-    );
+    await view.webContents.executeJavaScript(`updateMenu(${JSON.stringify(params)}); undefined`);
   }
 }
 
@@ -266,6 +256,6 @@ function adjustPosition(bounds, view, parentWindow) {
 }
 
 function adjustDimensions(bounds) {
-  (bounds.width = bounds.width + MARGIN_SIZE * 2),
-    (bounds.height = bounds.height + MARGIN_SIZE);
+  bounds.width = bounds.width + MARGIN_SIZE * 2;
+  bounds.height = bounds.height + MARGIN_SIZE;
 }

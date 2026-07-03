@@ -6,7 +6,7 @@ import {
 } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { isFilenameBinary } from '../../app-stdlib/js/is-ext-binary.js';
-import lock from '../../../lib/lock.js';
+import lock from '../../../lib/lock';
 import datServeResolvePath from '@beaker/dat-serve-resolve-path';
 import { joinPath } from '../../app-stdlib/js/strings.js';
 import * as contextMenu from '../../app-stdlib/js/com/context-menu.js';

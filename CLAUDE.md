@@ -22,15 +22,19 @@ walled.garden schemas. Two type sources feed it via `addExtraLib` (see
   `scripts/gen-schema-dts.mjs` (run automatically in `scripts/build.js`). The first gives JS/TS the
   `WalledGarden.*` types; the second is a combined JSON Schema (discriminated on the `type` field)
   registered with Monaco's JSON service so `.json` files get schema autocomplete/validation. Do not edit
-  by hand; rerun the build after changing any `app/lib/schemas/walled.garden/*.js`.
+  by hand; rerun the build after changing any `app/lib/schemas/walled.garden/*.ts`.
 
 ## Adding a walled.garden schema
 
 walled.garden schemas are **content conventions** (Zod records identified by their `type` string), not
 `beaker.*` APIs — the AI-prompt/dts sync above does not apply to them. To add one:
-1. Create `app/lib/schemas/walled.garden/<name>.js` (export a Zod schema; copy an existing one for style).
-2. Register it in `app/lib/schemas/walled.garden/index.js` — both the named export and the `SCHEMAS` map.
-3. Rerun `node scripts/build.js` (or `scripts/gen-schema-dts.mjs`) to regenerate the editor types.
+1. Create `app/lib/schemas/walled.garden/<name>.ts` (export a Zod schema **and** its inferred type,
+   `export type <Name> = z.infer<typeof <Name>Schema>`; copy an existing one for style).
+2. Register it in `app/lib/schemas/walled.garden/index.ts` — the schema export, the `type` re-export, the
+   `SCHEMAS` map, and the `WalledGardenRecord` union. Import siblings with explicit `.ts` specifiers (the
+   gen script loads this module under Node `--experimental-strip-types`, which won't rewrite `.js`→`.ts`).
+3. Rerun `node scripts/build.js` (or `scripts/gen-schema-dts.mjs`) to regenerate the editor types. The gen
+   script re-execs itself with the type-stripping flag, so no extra flags are needed.
 4. Document it in `nomad.dev/content/docs/api/developers/walled-garden-schemas.md`.
 
 ## `beaker.fs` is the ONE drive API (ADR-0010)

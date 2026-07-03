@@ -22,9 +22,7 @@ import * as autobases from './autobases';
 import * as filesystem from '../filesystem/index';
 
 // constants
-import {
-  HYPERDRIVE_HASH_REGEX,
-} from '../../lib/const';
+import { HYPERDRIVE_HASH_REGEX } from '../../lib/const';
 import { InvalidURLError, TimeoutError } from 'beaker-error-constants';
 
 // globals
@@ -215,9 +213,9 @@ async function _loadDriveInner(key, opts) {
 
     if (opts?.persistSession) drive.persistSession = true;
 
-    archivesDb.touch(drive.key).catch((err) =>
-      console.error('Failed to update lastAccessTime', drive.key, err)
-    );
+    archivesDb
+      .touch(drive.key)
+      .catch((err) => console.error('Failed to update lastAccessTime', drive.key, err));
 
     if (!drive.writable) {
       // Trigger a get of index.json to warm up sparse replication — 5s timeout so we don't hang on unreachable drives

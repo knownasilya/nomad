@@ -23,9 +23,6 @@ export const downloads = rpc.importAPI('downloads', downloadsManifest);
 export const fs = rpc.importAPI('fs', fsManifest);
 export const shell = rpc.importAPI('shell', shellManifest);
 export const beakerFs = rpc.importAPI('beaker-filesystem', beakerFsManifest);
-export const shellMenus = rpc.importAPI(
-  'background-process-shell-menus',
-  shellMenusManifest
-);
+export const shellMenus = rpc.importAPI('background-process-shell-menus', shellMenusManifest);
 export const spaces = rpc.importAPI('background-process-spaces', spacesManifest);
 export const views = rpc.importAPI('background-process-views', viewsManifest);

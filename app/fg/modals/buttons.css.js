@@ -30,7 +30,9 @@ export default css`
     cursor: pointer;
     white-space: nowrap;
     letter-spacing: 0;
-    transition: background 0.08s, border-color 0.08s;
+    transition:
+      background 0.08s,
+      border-color 0.08s;
   }
 
   .btn:hover {

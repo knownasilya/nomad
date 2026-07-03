@@ -71,9 +71,14 @@ export async function setup() {
 }
 
 export async function shutdown() {
-  if (swarm) { await swarm.destroy(); swarm = null; }
+  if (swarm) {
+    await swarm.destroy();
+    swarm = null;
+  }
   if (store) {
-    try { await store.close(); } catch (e) {
+    try {
+      await store.close();
+    } catch (e) {
       if (e.code !== 'REQUEST_CANCELLED') throw e;
     }
     store = null;
@@ -106,7 +111,9 @@ export async function createHyperdriveSession(opts) {
   }
 
   const keyBuf = opts.key
-    ? (Buffer.isBuffer(opts.key) ? opts.key : b4a.from(opts.key, 'hex'))
+    ? Buffer.isBuffer(opts.key)
+      ? opts.key
+      : b4a.from(opts.key, 'hex')
     : undefined;
 
   if (opts.version) {
@@ -144,7 +151,14 @@ export async function createHyperdriveSession(opts) {
     logger.debug(`Joined swarm for drive ${keyStr}`);
   }
 
-  const sess = _makeSession(keyStr, drive.key, drive.discoveryKey, drive, opts.domain, drive.writable);
+  const sess = _makeSession(
+    keyStr,
+    drive.key,
+    drive.discoveryKey,
+    drive,
+    opts.domain,
+    drive.writable
+  );
   sessions[keyStr] = sess;
   logger.debug(`Opened drive session ${keyStr}`);
   return sess;
@@ -231,9 +245,7 @@ function _makeSession(sessKey, key, discoveryKey, drive, domain, writable) {
 
 function _sessionKey(opts) {
   if (typeof opts === 'string') return opts;
-  const key = Buffer.isBuffer(opts.key)
-    ? b4a.toString(opts.key, 'hex')
-    : (opts.key || '');
+  const key = Buffer.isBuffer(opts.key) ? b4a.toString(opts.key, 'hex') : opts.key || '';
   let k = key;
   if (opts.version) k += `+${opts.version}`;
   return k;
