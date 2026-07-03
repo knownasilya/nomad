@@ -19,6 +19,12 @@ export function configureLanguageService(monaco) {
 
   // Built-in JS/DOM globals plus our ambient libs. Applied to both the
   // JavaScript and TypeScript defaults so .js and .ts models both benefit.
+  //
+  // `lib` gives the newest ECMAScript + browser-platform globals. Monaco's TS
+  // worker (bundled TS 5.x since Monaco moved off the two-file lib blob of the
+  // 0.20 era) serves the full lib map, so these names resolve and we get modern
+  // globals — customElements, structuredClone, Array.prototype.flat,
+  // Object.fromEntries, globalThis, AbortController, etc.
   const compilerOptions = {
     target: ts.ScriptTarget.ESNext,
     module: ts.ModuleKind.ESNext,

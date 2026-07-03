@@ -38,12 +38,15 @@ child-src 'self' nomad:;
 // The editor hosts the Monaco TypeScript language service, which spawns web
 // workers from nomad://assets/vs/* (a different host than the nomad://editor
 // page). Allow those cross-host + blob: workers via worker-src/child-src.
+// Monaco (>=0.44) inlines the codicon icon font as a data:font/ttf URI in
+// editor.main.css, so font-src must allow data:.
 const EDITOR_CSP = `
 default-src 'self' nomad:;
 img-src nomad: asset: data: blob: hyper: http: https;
 script-src 'self' nomad: blob: 'unsafe-eval';
 media-src 'self' nomad: hyper:;
 style-src 'self' 'unsafe-inline' nomad:;
+font-src 'self' nomad: data:;
 child-src 'self' nomad: blob:;
 worker-src 'self' nomad: blob:;
 `.replace(/\n/g, '');

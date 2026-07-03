@@ -255,7 +255,7 @@ class EditorApp extends LitElement {
           };
           this.editor = monaco.editor.create(this.editorEl, opts);
           this.editor.addCommand(
-            monaco.KeyMod.CtrlCmd | monaco.KeyCode.KEY_S,
+            monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
             function () {
               document.querySelector('editor-app').onClickSave();
             }
@@ -356,7 +356,7 @@ class EditorApp extends LitElement {
         );
 
         // override the model syntax highlighting when the URL doesnt give enough info (no extension)
-        if (body && model.getModeId() === 'plaintext') {
+        if (body && model.getLanguageId() === 'plaintext') {
           let type = await nomad.browser.getResourceContentType(url);
           if (type) {
             if (type.includes('text/html')) {
@@ -382,7 +382,7 @@ class EditorApp extends LitElement {
             'javascript',
             'typescript',
             'json',
-          ].includes(model.getModeId()),
+          ].includes(model.getLanguageId()),
           wordBasedSuggestions: false,
           wordWrap: 'on',
           readOnly: this.readOnly,
