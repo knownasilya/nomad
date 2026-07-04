@@ -290,8 +290,20 @@ async function runChat(messages, sender, emitter, opts = {}) {
     // Execute each tool and append results
     for (const tc of toolCalls) {
       let result;
+      let args: any = {};
       try {
-        const args = JSON.parse(tc.function.arguments || '{}');
+        args = JSON.parse(tc.function.arguments || '{}');
+      } catch {
+        /* keep {} */
+      }
+      // Live activity for the sidebar — shows what the agent is doing while the
+      // user waits (before/instead of streamed prose).
+      emitter.emit('tool', {
+        phase: 'start',
+        name: tc.function.name,
+        summary: toolSummary(tc.function.name, args),
+      });
+      try {
         result = await executeTool(tc.function.name, args, sender, driveUrl, emitter);
       } catch (err) {
         console.error(`[ai] tool "${tc.function.name}" failed:`, err);
@@ -415,12 +427,28 @@ async function executeTool(name, args, sender, driveUrl = null, emitter = null) 
       const priorContent = await readTextOrNull(ctx, target);
       await fsAPI.writeFile.call(ctx, target, args.content);
       if (emitter) {
-        emitter.emit('tool', { name: 'writeDriveFile', path: cleanPath, priorContent });
+        emitter.emit('tool', { phase: 'write', name: 'writeDriveFile', path: cleanPath, priorContent });
       }
       return `File written successfully to ${cleanPath}`;
     }
     default:
       throw new Error(`Unknown tool: ${name}`);
+  }
+}
+
+// Human-readable one-liner describing a tool call, shown live in the sidebar.
+function toolSummary(name, args) {
+  switch (name) {
+    case 'readDriveFile':
+      return `Reading ${args.path || ''}`.trim();
+    case 'listDriveFiles':
+      return `Listing ${args.path || '/'}`.trim();
+    case 'writeDriveFile':
+      return `Writing ${args.path || ''}`.trim();
+    case 'fetchUrl':
+      return `Fetching ${args.url || ''}`.trim();
+    default:
+      return name;
   }
 }
 

@@ -154,14 +154,55 @@ class AiSidebar extends LitElement {
       display: flex;
       flex-direction: column;
       gap: 8px;
+      /* Firefox */
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+    }
+    /* WebKit — match the dark sidebar instead of the default light bar */
+    .ai-messages::-webkit-scrollbar {
+      width: 8px;
+    }
+    .ai-messages::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .ai-messages::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.16);
+      border-radius: 4px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+    .ai-messages::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.28);
+      background-clip: padding-box;
+    }
+    .ai-activity {
+      align-self: flex-start;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 2px 2px 4px;
+      font-size: 12px;
+    }
+    .ai-activity-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #9aa;
+    }
+    .ai-activity-item.active {
+      color: #dde;
+    }
+    .ai-activity-item .fa-check {
+      color: #7bb07b;
     }
     .ai-msg {
       max-width: 88%;
       font-size: 13px;
       line-height: 1.45;
-      padding: 9px 12px;
+      padding: 8px 12px;
       border-radius: 12px;
       word-break: break-word;
+      white-space: normal;
     }
     .ai-msg.user {
       background: #2f6ae0;
@@ -263,11 +304,12 @@ class AiSidebar extends LitElement {
       background: #2a2a2a;
       color: #eee;
       border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 6px;
-      padding: 6px 8px;
+      border-radius: 8px;
+      padding: 7px 9px;
       font-family: inherit;
       font-size: 13px;
       outline: none;
+      transition: border-color 0.15s ease;
     }
     .ai-input:focus {
       border-color: #2f6ae0;
@@ -278,15 +320,38 @@ class AiSidebar extends LitElement {
       background: #2f6ae0;
       color: #fff;
       border: 0;
-      border-radius: 6px;
+      border-radius: 8px;
       padding: 0 14px;
       cursor: pointer;
       font-size: 13px;
+      font-weight: 500;
+      transition:
+        background 0.15s ease,
+        transform 0.06s ease;
+    }
+    .ai-send:hover:not(:disabled) {
+      background: #3d78ef;
+    }
+    .ai-send:active:not(:disabled) {
+      transform: translateY(1px);
     }
     .ai-send:disabled {
       background: #3a4a6a;
       color: #aab;
       cursor: default;
+    }
+    /* Respect reduced-motion: no spinner, no button push, no transitions. */
+    @media (prefers-reduced-motion: reduce) {
+      .ai-activity-item .fa-spin {
+        animation: none;
+      }
+      .ai-send,
+      .ai-input {
+        transition: none;
+      }
+      .ai-send:active:not(:disabled) {
+        transform: none;
+      }
     }
   `;
 
@@ -299,6 +364,8 @@ class AiSidebar extends LitElement {
     this.draft = '';
     this.streaming = false;
     this._loadedOrigin = undefined;
+    // transient live tool activity for the in-flight turn (not persisted)
+    this._activity = [];
   }
 
   // — persistence (keyed per Drive) —
@@ -369,15 +436,18 @@ class AiSidebar extends LitElement {
       </div>
       ${this.readOnly
         ? html`<div class="ai-note">
-            This drive is read-only — chat is available, but the agent can't edit files.
+            This drive is read-only. Chat is available, but the agent can't edit files.
           </div>`
         : ''}
       ${this.messages.length === 0
         ? html`<div class="ai-empty">
-            Ask the agent to explain or edit this drive.${this.readOnly ? '' : ' Edits apply directly to the drive — use Revert to undo a turn.'}
+            Ask the agent to explain or edit this drive.${this.readOnly ? '' : ' Edits apply directly to the drive; use Revert to undo a turn.'}
           </div>`
         : html`<div class="ai-messages">
             ${this.messages.map((m, i) => this._renderMessage(m, i))}
+            ${this.streaming && !(this.messages[this.messages.length - 1]?.content || '').trim()
+              ? this._renderActivity()
+              : ''}
           </div>`}
       <div class="ai-input-row">
         <textarea
@@ -401,13 +471,42 @@ class AiSidebar extends LitElement {
 
   _renderMessage(m, i) {
     const streamingLast = i === this.messages.length - 1 && this.streaming;
+    // IMPORTANT: keep the body expression flush against the tags (`>${body}</div>`).
+    // The user bubble is `white-space: pre-wrap`, so any newline/indentation the
+    // template puts between the tag and the expression renders as blank lines
+    // inside the bubble.
+    const body =
+      m.role === 'assistant'
+        ? unsafeHTML(mdToHtml((m.content || '').trim()))
+        : (m.content || '').trim();
     return html`
-      <div class="ai-msg ${m.role}${streamingLast ? ' streaming' : ''}">
-        ${m.role === 'assistant'
-          ? unsafeHTML(mdToHtml((m.content || '').trimStart()))
-          : (m.content || '').trimStart()}
-      </div>
+      <div class="ai-msg ${m.role}${streamingLast ? ' streaming' : ''}">${body}</div>
       ${m.files && m.files.length ? this._renderCheckpoint(m, i) : ''}
+    `;
+  }
+
+  // live "what the agent is doing" indicator, shown while a turn is streaming
+  _renderActivity() {
+    const items = this._activity;
+    return html`
+      <div class="ai-activity">
+        ${items.length === 0
+          ? html`<div class="ai-activity-item active">
+              <span class="fas fa-fw fa-spinner fa-spin"></span> Thinking…
+            </div>`
+          : items.map(
+              (a, i) => html`<div
+                class="ai-activity-item ${i === items.length - 1 ? 'active' : ''}"
+              >
+                <span
+                  class="fas fa-fw ${i === items.length - 1
+                    ? 'fa-spinner fa-spin'
+                    : 'fa-check'}"
+                ></span>
+                ${a.summary}
+              </div>`
+            )}
+      </div>
     `;
   }
 
@@ -464,6 +563,7 @@ class AiSidebar extends LitElement {
 
     this.draft = '';
     this.streaming = true;
+    this._activity = [];
 
     this.messages = [...this.messages, { role: 'user', content: text }];
     const assistantIdx = this.messages.length;
@@ -472,17 +572,22 @@ class AiSidebar extends LitElement {
     await this.updateComplete;
     this._scrollToBottom();
 
-    // record each write into this turn's checkpoint (first prior wins per path)
-    // and reload the affected file in the editor
     const onToolEvent = (e) => {
-      if (e.name !== 'writeDriveFile' || !e.path) return;
-      const msg = this.messages[assistantIdx];
-      if (!msg.files.some((f) => f.path === e.path)) {
-        msg.files = [...msg.files, { path: e.path, priorContent: e.priorContent ?? null }];
-        this.messages = [...this.messages];
-        this.requestUpdate();
+      if (e.phase === 'start') {
+        // live activity — what the agent is doing right now
+        this._activity = [...this._activity, { name: e.name, summary: e.summary }];
+      } else if (e.phase === 'write' && e.path) {
+        // record each write into this turn's checkpoint (first prior wins per path)
+        // and reload the affected file in the host app
+        const msg = this.messages[assistantIdx];
+        if (!msg.files.some((f) => f.path === e.path)) {
+          msg.files = [...msg.files, { path: e.path, priorContent: e.priorContent ?? null }];
+          this.messages = [...this.messages];
+        }
+        this.host?.onAgentWroteFile(e.path);
       }
-      this.host?.onAgentWroteFile(e.path);
+      this.requestUpdate();
+      this._scrollToBottom();
     };
 
     try {
@@ -536,6 +641,7 @@ class AiSidebar extends LitElement {
       this.messages = updated;
     } finally {
       this.streaming = false;
+      this._activity = [];
       this._saveSession();
       this.requestUpdate();
     }
