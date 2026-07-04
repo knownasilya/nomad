@@ -70,6 +70,14 @@ _Avoid_: mini sidebar, icon bar
 The external OpenAI-compatible inference server (Ollama, LM Studio, or any `/v1/chat/completions`-compatible server) that executes model calls. Configured globally in Nomad settings via `ai_base_url` and `ai_default_model`. Not bundled; user-managed separately.
 _Avoid_: local model, AI server, LLM backend
 
+**AI Provider**:
+A Device that runs the full `nomad.ai.chat()` agentic loop — model calls *and* the Drive tools — on behalf of another of the same user's Devices, and streams the result back. It is the Device that actually reaches an AI Runtime. Distinct from the AI Runtime itself: the Provider is a Nomad Device; the Runtime is the external inference server the Provider talks to.
+_Avoid_: host, server, AI host, master
+
+**AI Client**:
+A Device that cannot (or chooses not to) reach an AI Runtime of its own, so it forwards a `nomad.ai.chat()` call to an AI Provider and renders the streamed result. Typically the mobile Device. The Client contributes the request context (which Drive, which messages); the Provider contributes the loop and the Runtime.
+_Avoid_: thin client, slave, requester
+
 **AI Config**:
 The `/ai/` folder inside a Drive, containing `system.md` (the system prompt) and optionally a `tools/` directory. A Drive has an AI Config when it includes this folder. Any Drive can opt into AI behaviour by adding an `ai` key to its `/index.json` — either an inline object `{ "model": "..." }` or a pointer string `"hyper://..."` delegating to another Drive's AI Config.
 _Avoid_: agent config, AI settings, model config
@@ -114,6 +122,10 @@ _Avoid_: article, entry, page
 **Reader**:
 The in-browser feature that subscribes to Feeds and presents their Posts as an aggregated, RSS-like stream.
 _Avoid_: feed reader, aggregator, rss client
+
+**Follow**:
+Subscribing to a Feed by adding its URL to the user's own `walled.garden/follows` record (outbound-only) in their private Root Drive. Because a Follow is stored on the *follower's* side and no aggregate follower list is ever published, who follows a user is not exposed at the data layer (ADR-0013). There is deliberately no "Followers" list or count.
+_Avoid_: followers list, subscriber list, friend
 
 ### User model
 
