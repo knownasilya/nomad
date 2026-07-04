@@ -345,7 +345,12 @@ class ShellWindowNavbar extends LitElement {
   async onClickBrowserMenu(e) {
     if (Date.now() - (this.lastMenuClick || 0) < 100) return;
     this.isBrowserMenuOpen = true;
-    await bg.views.toggleMenu('browser');
+    // pass the button's bottom Y so the menu sits under it regardless of tab layout (sidebar mode
+    // has no top tab strip, so the fixed y:72 fallback is too low)
+    var rect = e.currentTarget.getClientRects()[0];
+    await bg.views.toggleMenu('browser', {
+      bounds: { top: (rect.bottom | 0) + 2 },
+    });
     this.isBrowserMenuOpen = false;
     this.lastMenuClick = Date.now();
   }
