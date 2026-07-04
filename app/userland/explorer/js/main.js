@@ -45,6 +45,10 @@ export class ExplorerApp extends LitElement {
       drives: { type: Array },
       profiles: { type: Array },
       isAiOpen: { type: Boolean },
+      // Draft Mode (ADR-0012)
+      draftMode: { type: Boolean },
+      draftCount: { type: Number },
+      draftConflicts: { type: Number },
     };
   }
 
@@ -76,6 +80,11 @@ export class ExplorerApp extends LitElement {
     this.sortMode = undefined;
     // AI Sidebar — collapsed by default; open/closed persisted
     this.isAiOpen = localStorage.getItem('nomad-ai-sidebar:open') === '1';
+    // Draft Mode (ADR-0012)
+    this.draftMode = false;
+    this.draftCount = 0;
+    this.draftConflicts = 0;
+    this.draftChanges = []; // [{ path, op, conflict }] — used to badge edited items
 
     window.addEventListener('explorer-files-changed', () => this.load());
 
@@ -274,6 +283,9 @@ export class ExplorerApp extends LitElement {
       this.renderMode = getGlobalSavedConfig('render-mode', 'default');
     }
 
+    // Learn this drive's Draft Mode before reading content, so listings/files below reflect staged edits.
+    await this.refreshDraftStatus();
+
     // update loading state
     this.loadingState = LOADING_STATES.CONTENT;
     this.requestUpdate();
@@ -336,13 +348,26 @@ export class ExplorerApp extends LitElement {
   }
 
   async readDirectory(drive) {
+    // In Draft Mode, merge staged additions/tombstones over the published listing; otherwise force
+    // the published listing (draft:false) so a Drive's preview flag can't leak in here.
+    var readOpts = { includeStats: true, draft: !!this.draftMode };
     var items = await this.attempt(`Reading directory (${loc.getPath()})`, () =>
-      drive.readdir(loc.getPath(), { includeStats: true })
+      drive.readdir(loc.getPath(), readOpts)
     );
+
+    // Staged (draft) puts for badging: a file that IS this staged path, or a folder that CONTAINS
+    // one. Shown whenever the drive has staged edits (even with Draft Mode off) so it's a persistent
+    // "unpublished changes" indicator. (New staged files only appear in the listing in Draft Mode.)
+    const stagedPuts = this.draftChanges ? this.draftChanges.filter((c) => c.op === 'put') : [];
 
     for (let item of items) {
       item.drive = this.currentDriveInfo;
       item.path = joinPath(loc.getPath(), item.name);
+      const staged = stagedPuts.find((c) => c.path === item.path);
+      const inFolder =
+        item.stat.isDirectory() && stagedPuts.some((c) => c.path.startsWith(item.path + '/'));
+      item.draftStaged = !!staged || inFolder;
+      item.draftCreated = staged ? !!staged.created : false; // brand-new file → plus, else pen
       item.url = joinPath(loc.getOrigin(), item.path);
       item.realPath = this.getRealPathname(item.path);
       item.realUrl = joinPath(item.drive.url, item.realPath);
@@ -361,7 +386,10 @@ export class ExplorerApp extends LitElement {
   }
 
   async readViewfile(drive) {
-    var viewFile = await drive.readFile(loc.getPath(), 'utf8');
+    var viewFile = await drive.readFile(loc.getPath(), {
+      encoding: 'utf8',
+      draft: !!this.draftMode,
+    });
     this.viewfileObj = JSON.parse(viewFile);
     validateViewfile(this.viewfileObj);
 
@@ -557,6 +585,52 @@ export class ExplorerApp extends LitElement {
             `
           : ''}
         <span class="spacer"></span>
+        ${this.currentDriveInfo?.writable
+          ? html`
+              <button
+                class="transparent ${this.draftMode ? 'pressed' : ''}"
+                title="Draft Mode — stage edits privately (synced across your devices) until you Publish"
+                @click=${this.onToggleDraftMode}
+              >
+                <span class="fas fa-pen-nib"></span> Draft${this.draftMode &&
+                this.draftCount
+                  ? ` (${this.draftCount})`
+                  : ''}
+              </button>
+              ${this._deletedCount
+                ? html`
+                    <button
+                      class="transparent"
+                      title="Restore files deleted in your draft"
+                      @click=${this.onClickDeletedFiles}
+                    >
+                      <span class="fas fa-trash-restore"></span> ${this._deletedCount}
+                    </button>
+                  `
+                : ''}
+              ${this.draftMode
+                ? html`
+                    <button
+                      class="primary labeled-btn"
+                      style="background: #1f9d4d; border-color: #1f9d4d"
+                      title="Publish staged changes to the drive"
+                      ?disabled=${!this.draftCount}
+                      @click=${this.onClickPublishDraft}
+                    >
+                      <span class="fas fa-cloud-upload-alt"></span> Publish
+                    </button>
+                    <button
+                      class="transparent"
+                      title="Discard staged changes"
+                      ?disabled=${!this.draftCount}
+                      @click=${this.onClickDiscardDraft}
+                    >
+                      <span class="far fa-trash-alt"></span> Discard
+                    </button>
+                  `
+                : ''}
+            `
+          : ''}
         <button
           class="transparent ${this.isAiOpen ? 'pressed' : ''}"
           title="Toggle AI sidebar"
@@ -826,6 +900,122 @@ export class ExplorerApp extends LitElement {
       true
     );
     el.classList.remove('active');
+  }
+
+  // — Draft Mode (ADR-0012) —
+
+  get _draftDrive() {
+    return nomad.fs.drive(this.currentDriveInfo.url);
+  }
+
+  // Also serves as the AI Sidebar host hook to refresh the badge after the agent stages files.
+  async refreshDraftStatus() {
+    try {
+      const { mode, changes } = await this._draftDrive.draftStatus();
+      this.draftMode = !!mode;
+      this.draftCount = changes.length;
+      this.draftConflicts = changes.filter((c) => c.conflict).length;
+      this.draftChanges = changes;
+    } catch {
+      this.draftMode = false;
+      this.draftCount = 0;
+      this.draftConflicts = 0;
+      this.draftChanges = [];
+    }
+    this.requestUpdate();
+  }
+
+  async onToggleDraftMode() {
+    try {
+      if (this.draftMode) await this._draftDrive.endDraft();
+      else await this._draftDrive.beginDraft();
+    } catch (e) {
+      alert('Draft Mode needs a Vault on this device.\n\n' + (e.message || e));
+      return;
+    }
+    await this.refreshDraftStatus();
+    await this.load();
+  }
+
+  async onClickPublishDraft() {
+    await this.refreshDraftStatus();
+    if (!this.draftCount) return;
+    let res = await this._draftDrive.publishDraft();
+    if (res.conflicts && res.conflicts.length) {
+      const msg =
+        `${res.conflicts.length} file(s) changed on the drive since you staged them:\n\n` +
+        res.conflicts.join('\n') +
+        `\n\nPublish your version anyway (overwrite)? Cancel to keep them staged.`;
+      if (confirm(msg)) res = await this._draftDrive.publishDraft({ force: true });
+    }
+    await this.refreshDraftStatus();
+    await this.load();
+  }
+
+  async onClickDiscardDraft() {
+    await this.refreshDraftStatus();
+    if (!this.draftCount) return;
+    if (!confirm(`Discard ${this.draftCount} staged change(s)? This cannot be undone.`)) return;
+    await this._draftDrive.discardDraft();
+    await this.refreshDraftStatus();
+    await this.load();
+  }
+
+  // Files deleted in the draft are tombstoned out of the listing; surface them here so single ones
+  // can be restored (restore = discard that path's staged change, reverting to the published file).
+  get _deletedCount() {
+    return (this.draftChanges || []).filter((c) => c.op === 'del').length;
+  }
+
+  onClickDeletedFiles(e) {
+    const dels = (this.draftChanges || []).filter((c) => c.op === 'del');
+    if (!dels.length) return;
+    const rect = e.currentTarget.getClientRects()[0];
+    const items = [
+      html`<div class="section-header small light">Deleted in your draft — restore:</div>`,
+      ...dels.map((c) => ({
+        icon: 'fas fa-fw fa-trash-restore',
+        label: c.path,
+        click: () => this.onRestoreDeleted(c.path),
+      })),
+    ];
+    contextMenu.create({
+      x: rect.left,
+      y: rect.bottom,
+      roomy: false,
+      noBorders: true,
+      fontAwesomeCSSUrl: 'nomad://explorer/css/font-awesome.css',
+      style: `padding: 4px 0`,
+      items,
+    });
+  }
+
+  async onRestoreDeleted(path) {
+    await this._draftDrive.discardDraft({ paths: [path] });
+    toast.create(`Restored ${path.split('/').pop()}`);
+    await this.refreshDraftStatus();
+    await this.load();
+  }
+
+  // Per-file publish / revert (from the file context menu).
+  async onPublishItem(item) {
+    let res = await this._draftDrive.publishDraft({ paths: [item.path] });
+    if (res.conflicts && res.conflicts.length) {
+      if (!confirm(`${item.name} changed on the drive since you staged it. Publish anyway (overwrite)?`))
+        return;
+      res = await this._draftDrive.publishDraft({ paths: [item.path], force: true });
+    }
+    toast.create(`Published ${item.name}`);
+    await this.refreshDraftStatus();
+    await this.load();
+  }
+
+  async onRevertItem(item) {
+    if (!confirm(`Revert unpublished changes to ${item.name}?`)) return;
+    await this._draftDrive.discardDraft({ paths: [item.path] });
+    toast.create(`Reverted ${item.name}`);
+    await this.refreshDraftStatus();
+    await this.load();
   }
 
   // — AI Sidebar host interface (see app-stdlib/js/com/ai-sidebar.js) —

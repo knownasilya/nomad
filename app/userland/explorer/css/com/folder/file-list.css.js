@@ -38,6 +38,22 @@ const cssStr = css`
     width: 24px;
   }
 
+  /* Draft Mode (ADR-0012): "edited" badge over the top-left of the file icon. */
+  .item .icon .draft-badge {
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    width: 12px;
+    height: 12px;
+    line-height: 12px;
+    font-size: 7px;
+    text-align: center;
+    color: #fff;
+    background: #1f9d4d;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1.5px var(--primary-bg, #fff);
+  }
+
   .item .fa-fw.fa-folder {
     color: var(--file-list--color-folder);
   }

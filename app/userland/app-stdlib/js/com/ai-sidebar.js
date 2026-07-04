@@ -561,6 +561,19 @@ class AiSidebar extends LitElement {
       if (!ok) return;
     }
 
+    // Draft Mode (ADR-0012): auto-enable on the FIRST turn of a session (writable drives only), so the
+    // agent's writes stage privately — the user reviews the whole Draft and Publishes or Discards.
+    if (this.messages.length === 0 && this.readOnly !== true) {
+      try {
+        await window.nomad?.fs?.drive(this.url)?.beginDraft();
+        if (typeof this.host?.refreshDraftStatus === 'function') {
+          await this.host.refreshDraftStatus();
+        }
+      } catch (e) {
+        console.warn('[ai-sidebar] beginDraft failed', e);
+      }
+    }
+
     this.draft = '';
     this.streaming = true;
     this._activity = [];

@@ -36,6 +36,8 @@ class NavbarLocation extends LitElement {
       isSiteMenuOpen: { type: Boolean },
       isDonateMenuOpen: { type: Boolean },
       isBookmarked: { type: Boolean, attribute: 'is-bookmarked' },
+      hasDraft: { type: Boolean, attribute: 'has-draft' },
+      draftPreviewing: { type: Boolean, attribute: 'draft-previewing' },
       isLocationFocused: { type: Boolean },
       hasExpanded: { type: Boolean },
     };
@@ -63,6 +65,8 @@ class NavbarLocation extends LitElement {
     this.isSiteMenuOpen = false;
     this.isDonateMenuOpen = false;
     this.isBookmarked = false;
+    this.hasDraft = false;
+    this.draftPreviewing = false;
     this.isLocationFocused = false;
     this.hasExpanded = false;
     this.shouldSelectAllOnFocus = false;
@@ -165,7 +169,7 @@ class NavbarLocation extends LitElement {
       >
       </shell-window-navbar-site-info>
       ${this.renderLocation()} ${this.renderZoom()} ${this.renderLiveReloadingBtn()}
-      ${this.renderFolderSyncBtn()} ${this.renderPeers()} ${this.renderDonateBtn()}
+      ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderPeers()} ${this.renderDonateBtn()}
       ${'' /* DISABLED this.renderShareBtn()*/} ${this.renderBookmarkBtn()} ${this.renderSiteBtn()}
     `;
   }
@@ -319,6 +323,27 @@ class NavbarLocation extends LitElement {
     return html`
       <button class="bookmark" @click=${this.onClickBookmark} title="Bookmark this page">
         <span class="${this.isBookmarked ? 'fas' : 'far'} fa-star"></span>
+      </button>
+    `;
+  }
+
+  // Draft Mode (ADR-0012): shown only when the current Drive has a Draft on this Device. Toggles
+  // rendering the merged (unpublished) view in this tab — local-only, never sent to peers.
+  renderDraftBtn() {
+    if (!this.hasDraft) return '';
+    var cls = classMap({ draft: true, pressed: this.draftPreviewing });
+    return html`
+      <button
+        class=${cls}
+        @click=${this.onClickDraftPreview}
+        title=${this.draftPreviewing
+          ? 'Previewing Draft — showing your unpublished changes. Click to view the published version.'
+          : 'This Drive has a Draft (unpublished changes). Click to preview it — visible only to you.'}
+      >
+        <span
+          class="fas fa-pen-nib"
+          style=${this.draftPreviewing ? 'color: #2864dc' : ''}
+        ></span>
       </button>
     `;
   }
@@ -506,7 +531,7 @@ class NavbarLocation extends LitElement {
     this.isShareMenuOpen = true;
     var rect = this.shadowRoot.querySelector('.share').getClientRects()[0];
     await bg.views.toggleMenu('share', {
-      bounds: { rightOffset: (window.innerWidth - rect.right) | 0 },
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0, top: (rect.bottom | 0) + 2 },
       params: { url: this.url },
     });
     this.isShareMenuOpen = false;
@@ -516,7 +541,7 @@ class NavbarLocation extends LitElement {
     this.isDonateMenuOpen = true;
     var rect = e.currentTarget.getClientRects()[0];
     await bg.views.toggleMenu('donate', {
-      bounds: { rightOffset: (window.innerWidth - rect.right) | 0 },
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0, top: (rect.bottom | 0) + 2 },
       params: { url: this.url },
     });
     this.isDonateMenuOpen = false;
@@ -526,11 +551,21 @@ class NavbarLocation extends LitElement {
     var rect = this.shadowRoot.querySelector('.bookmark').getClientRects()[0];
     // show menu
     bg.views.toggleMenu('bookmark', {
-      bounds: { rightOffset: (window.innerWidth - rect.right) | 0 },
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0, top: (rect.bottom | 0) + 2 },
       params: {
         url: this.url,
         metadata: { title: this.title },
       },
+    });
+  }
+
+  async onClickDraftPreview() {
+    var rect = this.shadowRoot.querySelector('.draft').getClientRects()[0];
+    await bg.views.toggleMenu('draft', {
+      // pass the button's actual bottom Y so the menu sits under it regardless of tab layout
+      // (in sidebar mode the navbar is higher, so the fixed y:72 other menus use is too low)
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0, top: (rect.bottom | 0) + 2 },
+      params: { url: this.url },
     });
   }
 
@@ -542,7 +577,7 @@ class NavbarLocation extends LitElement {
     var rect = this.shadowRoot.querySelector('.peers').getClientRects()[0];
     // show menu
     await bg.views.toggleMenu('peers', {
-      bounds: { rightOffset: (window.innerWidth - rect.right) | 0 },
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0, top: (rect.bottom | 0) + 2 },
       params: {
         url: this.url,
       },
@@ -559,7 +594,7 @@ class NavbarLocation extends LitElement {
     var rect = this.shadowRoot.querySelector('.site').getClientRects()[0];
     // show menu
     await bg.views.toggleMenu('site', {
-      bounds: { rightOffset: (window.innerWidth - rect.right) | 0 },
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0, top: (rect.bottom | 0) + 2 },
       params: {
         url: this.url,
       },
@@ -597,6 +632,14 @@ NavbarLocation.styles = [
       border-bottom-right-radius: 0;
       border: 1px solid var(--border-color--input--focused);
       border-bottom: 0;
+    }
+
+    /* Draft Mode (ADR-0012): tint the location bar while previewing a Drive's unpublished Draft, so
+       it's obvious the rendered page is not the published version. Placed after the trust rules so it
+       wins the (equal-specificity) border override. */
+    :host([draft-previewing]) {
+      border: 1px solid #2864dc;
+      box-shadow: 0 0 0 1px #2864dc;
     }
 
     button {

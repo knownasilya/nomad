@@ -34,6 +34,7 @@ import * as filesystem from '../../filesystem/index';
 import spacesRPCManifest from '../../rpc-manifests/spaces';
 import { registerForPartition } from '../../protocols/index';
 import hyper from '../../hyper/index';
+import * as drafts from '../../hyper/drafts';
 
 const X_POSITION = 0;
 const Y_POSITION = 75;
@@ -1685,6 +1686,51 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
 
   async reload(index) {
     getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents.reload();
+  },
+
+  // Draft Mode (ADR-0012): toggle rendering the merged Draft for the Drive shown in this tab, then
+  // reload so the serve path (bg/protocols/hyper.js) picks it up. Local-only — never replicates.
+  async toggleDraftPreview(index) {
+    const pane = getByIndex(getWindow(this.sender), index)?.primaryPane;
+    const driveKey = pane?.driveInfo?.key;
+    if (!driveKey) return;
+    drafts.setPreview(driveKey, !drafts.isPreview(driveKey));
+    pane.emitUpdateState();
+    pane.webContents.reload();
+  },
+
+  // { hasDraft, previewing, changes:[{path,op,conflict}] } for the Drive shown in this tab.
+  async getDraftStatus(index) {
+    const pane = getByIndex(getWindow(this.sender), index)?.primaryPane;
+    const driveKey = pane?.driveInfo?.key;
+    if (!driveKey) return { hasDraft: false, previewing: false, changes: [] };
+    const [mode, changes] = await Promise.all([
+      drafts.getMode(driveKey),
+      drafts.listDraft(driveKey),
+    ]);
+    return { hasDraft: mode || changes.length > 0, previewing: drafts.isPreview(driveKey), changes };
+  },
+
+  // Fold the Drive's Draft (all, or opts.paths) onto it; refresh + reload the tab. { published, conflicts }.
+  async publishDraft(index, opts = {}) {
+    const pane = getByIndex(getWindow(this.sender), index)?.primaryPane;
+    const driveKey = pane?.driveInfo?.key;
+    if (!driveKey) return { published: [], conflicts: [] };
+    const res = await drafts.publish(driveKey, opts);
+    await pane.refreshState();
+    pane.webContents.reload();
+    return res;
+  },
+
+  // Drop the Drive's Draft (all, or opts.paths); refresh + reload the tab. { discarded }.
+  async discardDraft(index, opts = {}) {
+    const pane = getByIndex(getWindow(this.sender), index)?.primaryPane;
+    const driveKey = pane?.driveInfo?.key;
+    if (!driveKey) return { discarded: [] };
+    const res = await drafts.discard(driveKey, opts);
+    await pane.refreshState();
+    pane.webContents.reload();
+    return res;
   },
 
   async resetZoom(index) {

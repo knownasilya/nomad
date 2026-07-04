@@ -58,6 +58,28 @@ mobile, reads work; writes + writer-management currently reject until the mobile
 When you add/rename an fs method, edit `shared/fs-manifest.mjs` AND update `bg/fs.js`, `fg/fs.js`, the
 mobile shim + dispatcher, plus `nomad-dts.js` / `NOMAD_API_REFERENCE` / nomad.dev docs.
 
+### Draft Mode (ADR-0012)
+
+`nomad.fs` has a **Draft**: device-private staged edits held out of a Drive's replicated log until
+**Publish**. It's hosted in the **Vault** (`/.drafts/<baseKey>/…`) — the one base every Device already
+writes — so it syncs across your Devices with **no wire-format change and no §3 dependency**. Logic
+lives in `app/bg/hyper/drafts.js` (desktop) and `mobile/backend/lib/drafts.mjs` (mobile); the facade
+(`bg/fs.js`) routes writes→stage / content-reads→merge when Draft Mode is on (or `{ draft:true }` is
+passed), and adds `beginDraft`/`endDraft`/`draftStatus`/`publishDraft`/`discardDraft`/`watchDraft`/
+`setDraftPreview`. Reads stay on the published view unless `{ draft:true }`; the serve path
+(`bg/protocols/hyper.js`) previews the merge **only** for the author's own tab (never for peers — the
+Draft never replicates). The rendered-preview toggle is a **pen-nib icon in the location bar** (`fg/shell-window/navbar/location.js`,
+left of the peers/share button → `bg.views.toggleDraftPreview` → `bg/ui/tabs/manager.js`), shown when
+the tab's Drive has a Draft (`pane.hasDraft`). It flips a **per-Drive** preview flag
+(`drafts.setPreview`/`isPreview`, keyed by hex Drive key — NOT webContentsId, which the stream-protocol
+request doesn't reliably carry) and reloads. Two things then merge while a Drive is previewed: the serve
+path (`bg/protocols/hyper.js`, `drafts.isPreview(driveKey)`) for directly-served files, AND **`nomad.fs`
+reads at runtime** (`bg/fs.js` treats `drafts.isPreview(baseKey)` like `{draft:true}`) so a drive app
+rendered in the tab reads its own merged content. Because it's per-Drive, the editor/explorer pass an
+explicit `{ draft:false }` when their own Draft Mode is off so a preview flag can't leak into their
+published reads. Publish re-homes staged blobs into the base Drive's writer and is gated to
+Devices that can write the Drive. Overlay semantics are locked by `tests/unit/drafts-overlay.test.js`.
+
 ### The Autobase wire format (`FS_FORMAT_VERSION 1`)
 
 The Autobase view is a Hyperbee (`valueEncoding: 'json'`) of path → `{ metadata:{mtime,ctime,executable?},

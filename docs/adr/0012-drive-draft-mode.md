@@ -99,3 +99,29 @@ draft-aware read/write routing + new methods in `shared/fs-manifest.mjs`, `app/b
 `app/bg/protocols/hyper.js`; Draft Mode toggle + "N unpublished changes" + Publish/Discard UI in
 `app/userland/editor/` and `app/userland/explorer/`; the three-way doc sync (`nomad-dts.js`,
 `NOMAD_API_REFERENCE`, nomad.dev docs) per CLAUDE.md. No `FS_FORMAT_VERSION` change.
+
+## Rollout
+
+Dependency spine: **P0 → P1 → {P2, P3, P4} in parallel → P5**. No wire-format change in any phase.
+
+- **Phase 0 — Draft core + spike.** `app/bg/hyper/drafts.js` (stage/merged-read/list/publish/discard
+  over the Vault session; publish re-homes blobs via `buildPutBlobOp(baseSess,…)` + one
+  `base.update()`; conflict = observed-base-record vs current). Throwaway `app/scripts/spike-draft-overlay.mjs`
+  proves overlay/merge/publish/conflict against the real `shared/fs-core.mjs` reducer, in-process. Unit
+  tests: merge precedence, tombstone, subset-publish atomicity, conflict detection.
+- **Phase 1 — Routing + API.** Add `beginDraft`/`endDraft`/`draftStatus`/`publishDraft`/`discardDraft`
+  (+ `watchDraft`) to `shared/fs-manifest.mjs`; reads/writes gain a `{ draft:true }` opt (no manifest
+  change). `bg/web-apis/bg/fs.ts` + `fs-router.ts` consult `drafts.getMode()`/the opt and route
+  writes→stage, reads→merged. Three-way doc sync.
+- **Phase 2 — Preview serve.** `bg/protocols/hyper.js` renders the merged view for the author's own
+  tab when "Preview Draft" is on (per-pane flag); never affects replication.
+- **Phase 3 — Desktop UI.** Draft Mode toggle, unpublished-count badge, Publish (whole + subtree) with
+  the proceed/skip/cancel conflict dialog, Discard, Preview toggle, in `userland/editor` + `userland/explorer`.
+  AI Sidebar auto-enables Draft Mode on agentic session start (both hosts).
+- **Phase 4 — Mobile parity.** Mobile shim + dispatcher implement the lifecycle against the mobile
+  Vault; stage/preview/discard work; Publish gated to Devices that own the Drive (§3).
+- **Phase 5 — Docs, tests, retention.** Desktop/mobile parity tests; purge the `draft-blobs` core on
+  publish/discard; nomad.dev Draft Mode page.
+
+Live-runtime gates (unverifiable offline): cross-Device draft sync over a real swarm; blob re-home
+resolved by a follower; concurrent Publish from two Devices.

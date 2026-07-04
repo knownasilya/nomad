@@ -163,6 +163,31 @@ export function setup(rpc) {
       async listWriters() {
         return fsRPC.listWriters(url);
       },
+
+      // Draft Mode (ADR-0012) — scoped to this drive.
+      async beginDraft() {
+        return fsRPC.beginDraft(url);
+      },
+      async endDraft() {
+        return fsRPC.endDraft(url);
+      },
+      async draftStatus() {
+        return fsRPC.draftStatus(url);
+      },
+      async publishDraft(opts = {}) {
+        return fsRPC.publishDraft(url, opts);
+      },
+      async discardDraft(opts = {}) {
+        return fsRPC.discardDraft(url, opts);
+      },
+      async setDraftPreview(on) {
+        return fsRPC.setDraftPreview(url, on);
+      },
+      watchDraft(onChanged = null) {
+        const evts = fromEventStream(fsRPC.watchDraft(url));
+        if (onChanged) evts.addEventListener('changed', onChanged);
+        return evts;
+      },
     };
   }
 
@@ -236,6 +261,19 @@ export function setup(rpc) {
   api.denyRequest = async (url, writerKey) => fsRPC.denyRequest(massageUrl(url), writerKey);
   api.removeWriter = async (url, writerKey) => fsRPC.removeWriter(massageUrl(url), writerKey);
   api.listWriters = async (url) => fsRPC.listWriters(massageUrl(url));
+
+  // Draft Mode (ADR-0012, url-first)
+  api.beginDraft = async (url) => fsRPC.beginDraft(massageUrl(url));
+  api.endDraft = async (url) => fsRPC.endDraft(massageUrl(url));
+  api.draftStatus = async (url) => fsRPC.draftStatus(massageUrl(url));
+  api.publishDraft = async (url, opts = {}) => fsRPC.publishDraft(massageUrl(url), opts);
+  api.discardDraft = async (url, opts = {}) => fsRPC.discardDraft(massageUrl(url), opts);
+  api.setDraftPreview = async (url, on) => fsRPC.setDraftPreview(massageUrl(url), on);
+  api.watchDraft = (url, onChanged = null) => {
+    const evts = fromEventStream(fsRPC.watchDraft(massageUrl(url)));
+    if (onChanged) evts.addEventListener('changed', onChanged);
+    return evts;
+  };
 
   // Bulk filesystem import/export
   api.importFromFilesystem = async (opts = {}) => fsRPC.importFromFilesystem(opts);

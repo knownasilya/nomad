@@ -218,6 +218,8 @@ class ShellWindowSidebar extends LitElement {
       current: tab.isActive,
       pinned: tab.isPinned,
       'in-group': inGroup,
+      // Draft Mode (ADR-0012): this tab is previewing a Drive's unpublished Draft
+      'draft-previewing': tab.draftPreviewing,
     });
     return html`
       <div
@@ -626,6 +628,14 @@ ShellWindowSidebar.styles = css`
   .sidebar-tab.current {
     background: var(--bg-color--tab--current);
     box-shadow: inset 2px 0 0 var(--highlight-color--tab--current, #5b5ef4);
+  }
+
+  /* Draft Mode (ADR-0012): highlight a tab previewing a Drive's unpublished Draft. After .current so
+     the tint wins even on the active tab; outline (offset inward) rings it all around. */
+  .sidebar-tab.draft-previewing {
+    background: rgba(40, 100, 220, 0.13);
+    outline: 1.5px solid #2864dc;
+    outline-offset: -1.5px;
   }
 
   .sidebar-tab.in-group {

@@ -9,6 +9,7 @@ import goodbye from 'graceful-goodbye'
 import DriveManager from './lib/drive-manager.mjs'
 import { parseHyperUrl } from './lib/hyper-url.mjs'
 import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault } from './lib/vault.mjs'
+import * as drafts from './lib/drafts.mjs'
 import {
   RPC_OPEN,
   RPC_CLOSE,
@@ -210,7 +211,7 @@ async function dispatchNomad (api, method, url, args) {
   // Autobase bridge; writes go through the owned-drive path (ns resolved from drivesNs), so a page
   // can edit a drive this device created. Per-drive writer management is still deferred (see list).
   if (api === 'fs') {
-    if (method === 'watch' || method === 'watchRequests') return null // no live events on mobile yet
+    if (method === 'watch' || method === 'watchRequests' || method === 'watchDraft') return null // no live events on mobile yet
     if (method === 'isCollaborativeDrive') return true // every Nomad drive is an Autobase
 
     if (method === 'createDrive' || method === 'createCollaborativeDrive') {
@@ -222,15 +223,30 @@ async function dispatchNomad (api, method, url, args) {
 
     const { key, path } = parseHyperUrl(url)
 
-    // Writes — only for drives owned on this device. writeFile/deletePath/mkdir throw a clear
-    // "read-only: only drives you created can be edited" when drivesNs[key] is undefined.
+    // Draft Mode (ADR-0012). Drafts live in the Vault (writable on any device), so stage/preview/
+    // discard work here; Publish is gated to drives owned on this device (drivesNs).
+    if (method === 'beginDraft') return drafts.setMode(vault, key, true)
+    if (method === 'endDraft') return drafts.setMode(vault, key, false)
+    if (method === 'draftStatus') return drafts.draftStatus(vault, key)
+    if (method === 'publishDraft') return drafts.publish(vault, manager, drivesNs, key, args[0] || {})
+    if (method === 'discardDraft') return drafts.discard(vault, key, args[0] || {})
+    if (method === 'setDraftPreview') return { on: false } // no local serve path on mobile
+
+    const draftOn = async (opts) =>
+      opts && opts.draft === true ? true : opts && opts.draft === false ? false : drafts.getMode(vault, key)
+
+    // Writes — stage into the Vault-hosted Draft while Draft Mode is on; otherwise write live (owned
+    // drives only: manager.writeFile throws a clear read-only error when drivesNs[key] is undefined).
     if (method === 'put' || method === 'writeFile') {
       const data = args[0]; const opts = args[1] || {}
       const buf = opts && opts.encoding === 'base64' ? b4a.from(String(data), 'base64') : b4a.from(String(data == null ? '' : data))
+      if (await draftOn(opts)) { await drafts.stagePut(vault, key, path, buf, opts); return true }
       await manager.writeFile(DRIVE_AUTOBASE, keyBuf(key), drivesNs[key], path, buf)
       return true
     }
     if (method === 'del' || method === 'unlink') {
+      const opts = args[0] || {}
+      if (await draftOn(opts)) { await drafts.stageDel(vault, key, path); return true }
       await manager.deletePath(DRIVE_AUTOBASE, keyBuf(key), drivesNs[key], path, false)
       return true
     }
@@ -245,9 +261,20 @@ async function dispatchNomad (api, method, url, args) {
 
     // Reads
     if (method === 'getInfo') return manager.bridgeInfo(DRIVE_AUTOBASE, key)
-    if (method === 'get' || method === 'readFile') return manager.bridgeRead(DRIVE_AUTOBASE, key, path)
+    if (method === 'get' || method === 'readFile') {
+      const opts = args[0] || {}
+      if (opts.draft === true) return drafts.readMerged(vault, manager, key, path)
+      return manager.bridgeRead(DRIVE_AUTOBASE, key, path)
+    }
     if (method === 'list' || method === 'query' || method === 'readdir') {
-      return (await manager.bridgeListKeys(DRIVE_AUTOBASE, key, path)).map((k) => ({ key: k }))
+      const opts = args[0] || {}
+      let keys = await manager.bridgeListKeys(DRIVE_AUTOBASE, key, path)
+      if (opts.draft === true) {
+        const { removed, put } = await drafts.dirOverlay(vault, key, path)
+        keys = keys.filter((k) => !removed.has(k))
+        for (const p of put) if (!keys.includes(p)) keys.push(p)
+      }
+      return keys.map((k) => ({ key: k }))
     }
     // stat/entry not wired yet (bridge has no per-file stat) — reject clearly rather than fake it.
     throw new Error(`nomad.fs.${method} isn’t supported on mobile yet`)

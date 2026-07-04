@@ -9,6 +9,7 @@ import * as logLib from '../logger';
 import markdown from '../../lib/markdown';
 import * as drives from '../hyper/drives';
 import * as autobases from '../hyper/autobases';
+import * as drafts from '../hyper/drafts';
 import * as filesystem from '../filesystem/index';
 import * as capabilities from '../hyper/capabilities';
 import errorPage from '../lib/error-page';
@@ -557,6 +558,12 @@ async function serveAutobase(
 
   const bee = sess.drive;
 
+  // Draft Mode preview (ADR-0012): when this Drive's preview is toggled on, resolve lookups through
+  // the merged (Draft-over-base) view instead of the published Hyperbee. Local-only — a peer never
+  // hits this serve path, and the Draft never replicates, so the published view is unaffected.
+  const previewDraft = drafts.isPreview(driveKey);
+  const view = previewDraft ? { get: (p) => drafts.previewNode(driveKey, p) } : bee;
+
   // Pull any newly-replicated state before reading. A drive that was empty on its first
   // load (no peer had delivered the bootstrap yet) keeps replicating in the background.
   // Wait a bounded while for the linearised view to gain content so the FIRST hit to a
@@ -579,7 +586,7 @@ async function serveAutobase(
 
   // Check for custom frontend at /.ui/ui.html. Records are v1 { metadata, blob, value };
   // resolve the content (inline or blob) rather than reading raw bytes off the view.
-  const uiNode = await bee.get('/.ui/ui.html').catch(() => null);
+  const uiNode = await view.get('/.ui/ui.html').catch(() => null);
   if (uiNode) {
     // Any HTML-wanting request to a "directory-like" path → serve the UI
     const wantsHTML = mime.acceptHeaderWantsHTML(request.headers.Accept);
@@ -602,13 +609,13 @@ async function serveAutobase(
   const lookupPath = filepath.replace(/\/$/, '') || '/';
 
   // Try exact path first
-  let node = await bee.get(lookupPath).catch(() => null);
+  let node = await view.get(lookupPath).catch(() => null);
 
   // Try directory index files
   if (!node) {
     const prefix = lookupPath.endsWith('/') ? lookupPath : lookupPath + '/';
     for (const name of ['index.html', 'index.md']) {
-      node = await bee.get(prefix + name).catch(() => null);
+      node = await view.get(prefix + name).catch(() => null);
       if (node) {
         filepath = prefix + name;
         break;

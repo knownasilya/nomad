@@ -30,6 +30,14 @@ export class FileGrid extends BaseFilesView {
         data-url=${item.url}
       >
         <span class="fas fa-fw fa-${item.icon}"></span>
+        ${item.draftStaged
+          ? html`<span
+              class="draft-badge fas ${item.draftCreated ? 'fa-plus' : 'fa-pen'}"
+              title=${item.draftCreated
+                ? 'New in your draft (unpublished)'
+                : 'Unpublished draft changes'}
+            ></span>`
+          : ''}
         ${item.subicon
           ? html`<span class="subicon ${item.subicon}"></span>`
           : ''}

@@ -8,15 +8,22 @@ import * as loc from './location.js';
 export async function handleDragDrop(targetEl, x, y, targetPath, dataTransfer) {
   if (targetPath === loc.getPath()) {
     if (dataTransfer.files && dataTransfer.files.length) {
-      // files dragged into the window
+      // Files dragged in from the OS. Read the bytes in-renderer and write via nomad.fs — NOT the
+      // native-path import, because Electron removed File.path (drops silently no-op'd). Writing
+      // through nomad.fs also means a drop while the drive is in Draft Mode stages the file.
       let targetUrl = joinPath(loc.getOrigin(), targetPath);
-      var paths = Array.from(dataTransfer.files, (f) =>
-        window.electronWebUtils ? window.electronWebUtils.getPathForFile(f) : f.path
-      ).filter(Boolean);
-      var res = await nomad.shell.importFilesAndFolders(targetUrl, paths);
-      toast.create(
-        `Imported ${res.numImported} ${pluralize(res.numImported, 'item')}`
-      );
+      let n = 0;
+      for (const file of Array.from(dataTransfer.files)) {
+        try {
+          const b64 = await fileToBase64(file);
+          await nomad.fs.writeFile(joinPath(targetUrl, file.name), b64, { encoding: 'base64' });
+          n++;
+        } catch (e) {
+          console.error('drop upload failed', file.name, e);
+          toast.create(`Failed to add ${file.name}: ${e.toString()}`, 'error');
+        }
+      }
+      if (n) toast.create(`Added ${n} ${pluralize(n, 'item')}`);
       window.dispatchEvent(new CustomEvent('explorer-files-changed'));
       return;
     }
@@ -40,6 +47,16 @@ export async function handleDragDrop(targetEl, x, y, targetPath, dataTransfer) {
   if (targetEl) {
     targetEl.classList.remove('drop-target');
   }
+}
+
+// Read a dropped File into a base64 string (works regardless of the removed File.path API).
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = () => reject(r.error || new Error('read failed'));
+    r.readAsDataURL(file);
+  });
 }
 
 export async function handleDragDropUrls(x, y, targetPath, urls) {

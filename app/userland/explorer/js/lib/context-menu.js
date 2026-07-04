@@ -88,6 +88,19 @@ export function constructItems(app) {
         disabled: !writable,
         click: () => app.onDelete(),
       });
+      if (sel && sel.draftStaged) {
+        items.push('-');
+        items.push({
+          icon: 'fas fa-fw fa-cloud-upload-alt',
+          label: 'Publish this file',
+          click: () => app.onPublishItem(sel),
+        });
+        items.push({
+          icon: 'fas fa-fw fa-undo',
+          label: 'Revert change',
+          click: () => app.onRevertItem(sel),
+        });
+      }
       items.push('-');
       if (!sel.stat.isFile()) {
         items.push({

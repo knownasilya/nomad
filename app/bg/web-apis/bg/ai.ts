@@ -53,6 +53,15 @@ await nomad.fs.claimInvite(inviteUrl)                 // recipient calls this
 const requests = await drive.listRequests()            // [{ writerKey, profileUrl }]
 await drive.approveRequest(writerKey)
 const writers = await drive.listWriters()
+
+// Draft Mode (ADR-0012): stage edits privately (synced across YOUR devices, invisible to other
+// peers) until you Publish. While Draft Mode is on, put/del stage instead of going live.
+await drive.beginDraft()                               // subsequent writes stage
+await drive.writeFile('/index.html', '<h1>wip</h1>')   // staged, NOT replicated
+const html = await drive.readFile('/index.html', { draft: true })   // preview the merged view
+const { mode, changes } = await drive.draftStatus()    // changes: [{ path, op, conflict }]
+await drive.publishDraft({ paths: ['/posts/x/'] })     // fold a subtree onto the drive (goes live)
+await drive.discardDraft()                             // throw the whole Draft away
 \`\`\`
 
 ## nomad.shell — Browser dialogs and library management

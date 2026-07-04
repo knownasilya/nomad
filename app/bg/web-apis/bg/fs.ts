@@ -16,6 +16,7 @@ import hyperdriveAPI from './hyperdrive';
 import autobaseAPI from './autobase';
 import * as filesystem from '../../filesystem/index';
 import * as drives from '../../hyper/drives';
+import * as drafts from '../../hyper/drafts';
 import { parseDriveUrl } from '../../../lib/urls';
 import { createFsRouter } from './fs-router';
 
@@ -41,6 +42,85 @@ const router = createFsRouter({
 const _dispatch = (ctx, url) => router.dispatch(ctx, url);
 const _read = (ctx, method, url, rest) => router.read(ctx, method, url, rest);
 
+// --- Draft Mode routing (ADR-0012) ------------------------------------------
+// Writes to an Autobase Drive stage into the Vault-hosted Draft while that Drive's Draft Mode is on
+// (or `{ draft:true }` is passed). Content reads merge the Draft over the base ONLY when `{ draft:true }`
+// (preview) — default reads stay published, so the serve path and peers never see staged content.
+
+const _opts = (opts) => (typeof opts === 'string' ? { encoding: opts } : opts || {});
+
+// Encode merged bytes to match the backend's get() contract (autobase.get).
+function _encode(buf, opts: any) {
+  if (buf == null) return null;
+  if (opts.encoding === 'binary') return buf;
+  if (opts.encoding === 'base64') return buf.toString('base64');
+  if (opts.encoding === 'hex') return buf.toString('hex');
+  if (opts.encoding === 'json') {
+    try {
+      return JSON.parse(buf.toString());
+    } catch {
+      return null;
+    }
+  }
+  return buf.toString();
+}
+
+// Mirror autobase's _toBuffer so staged bytes match what put() would have written.
+function _toBuffer(data, opts: any) {
+  if (Buffer.isBuffer(data)) return data;
+  if (typeof data === 'string') {
+    if (opts.encoding === 'base64') return Buffer.from(data, 'base64');
+    if (opts.encoding === 'hex') return Buffer.from(data, 'hex');
+    if (opts.encoding === 'binary') return Buffer.from(data, 'binary');
+    return Buffer.from(data, 'utf8');
+  }
+  if (data && typeof data === 'object') return Buffer.from(JSON.stringify(data), 'utf8');
+  return Buffer.from(String(data), 'utf8');
+}
+
+// Canonicalise the url and split it into { baseKey, path } for the drafts module.
+async function _baseInfo(ctx, url) {
+  const { api, url: u, isAutobase } = await _dispatch(ctx, url);
+  let baseKey = u;
+  let path = '/';
+  try {
+    const p = parseDriveUrl(u);
+    baseKey = p.hostname;
+    path = p.pathname || '/';
+  } catch {
+    /* keep fallbacks */
+  }
+  return { api, url: u, isAutobase, baseKey, path };
+}
+
+// Stage a write instead of dispatching, when the Drive is in Draft Mode. Returns { staged } and, when
+// not staged, the resolved { api, u } so the caller can dispatch without re-canonicalising.
+async function _stageWrite(ctx, url, kind, data, opts) {
+  const o = _opts(opts);
+  const { api, url: u, isAutobase, baseKey, path } = await _baseInfo(ctx, url);
+  const wantDraft =
+    isAutobase && o.draft !== false && (o.draft === true || (await drafts.getMode(baseKey)));
+  if (!wantDraft) return { staged: false, api, u };
+  if (kind === 'del') await drafts.stageDel(baseKey, path);
+  else await drafts.stagePut(baseKey, path, _toBuffer(data, o), { executable: o.executable });
+  return { staged: true, api, u };
+}
+
+// Merge a content read over the base when `{ draft:true }` is passed OR the target Drive is being
+// previewed (so a drive app rendered in a previewing tab reads its OWN merged content at runtime, not
+// just the files the serve path hands it). `{ draft:false }` opts out explicitly — the editor/explorer
+// pass it when their Draft Mode is off so a Drive's preview flag can't leak into their published view.
+async function _readMerged(ctx, url, opts) {
+  const o = _opts(opts);
+  if (o.draft === false) return { handled: false, value: null };
+  if (o.draft !== true && !drafts.anyPreview()) return { handled: false, value: null };
+  const { isAutobase, baseKey, path } = await _baseInfo(ctx, url);
+  if (!isAutobase) return { handled: false, value: null };
+  if (o.draft !== true && !drafts.isPreview(baseKey)) return { handled: false, value: null };
+  const buf = await drafts.readMerged(baseKey, path);
+  return { handled: true, value: _encode(buf, o) };
+}
+
 const fsAPI = {
   async getInfo(url, opts = {}) {
     const { api, url: u } = await _dispatch(this, url);
@@ -55,16 +135,45 @@ const fsAPI = {
     return _read(this, 'stat', url, [opts]);
   },
   async get(url, opts = {}) {
+    const m = await _readMerged(this, url, opts);
+    if (m.handled) return m.value;
     return _read(this, 'get', url, [opts]);
   },
   async readFile(url, opts = {}) {
+    const m = await _readMerged(this, url, opts);
+    if (m.handled) return m.value;
     return _read(this, 'readFile', url, [opts]);
   },
   async list(url, opts = {}) {
-    return _read(this, 'list', url, [opts]);
+    const base = await _read(this, 'list', url, [opts]);
+    const o = _opts(opts);
+    if (o.draft === false || (o.draft !== true && !drafts.anyPreview())) return base;
+    const { isAutobase, baseKey, path } = await _baseInfo(this, url);
+    if (!isAutobase || (o.draft !== true && !drafts.isPreview(baseKey))) return base;
+    return drafts.mergeList(baseKey, path, base);
   },
   async readdir(url, opts = {}) {
-    return _read(this, 'readdir', url, [opts]);
+    const base = await _read(this, 'readdir', url, [opts]);
+    const o = _opts(opts);
+    if (o.draft === false || (o.draft !== true && !drafts.anyPreview())) return base;
+    const { isAutobase, baseKey, path } = await _baseInfo(this, url);
+    if (!isAutobase || (o.draft !== true && !drafts.isPreview(baseKey))) return base;
+    const { removed, put } = await drafts.dirOverlay(baseKey, path);
+    if (!removed.size && !put.size) return base;
+    const includeStats = !!o.includeStats;
+    const seen = new Set();
+    const out: any[] = [];
+    for (const item of base) {
+      const name = includeStats ? item.name : item;
+      if (removed.has(name)) continue;
+      seen.add(name);
+      out.push(item);
+    }
+    for (const [name, meta] of put) {
+      if (seen.has(name)) continue;
+      out.push(includeStats ? { name, stat: (meta as any).stat } : name);
+    }
+    return out;
   },
   async diff(url, other, opts = {}) {
     const { api, url: u } = await _dispatch(this, url);
@@ -72,21 +181,26 @@ const fsAPI = {
   },
 
   // --- Write (require a writable drive; no fallback — the backend is known) ---
+  // In Draft Mode these stage into the Vault-hosted Draft instead of appending to the base Drive.
   async put(url, data, opts = {}) {
-    const { api, url: u } = await _dispatch(this, url);
-    return api.put.call(this, u, data, opts);
+    const s = await _stageWrite(this, url, 'put', data, opts);
+    if (s.staged) return undefined;
+    return s.api.put.call(this, s.u, data, opts);
   },
   async writeFile(url, data, opts = {}) {
-    const { api, url: u } = await _dispatch(this, url);
-    return api.writeFile.call(this, u, data, opts);
+    const s = await _stageWrite(this, url, 'put', data, opts);
+    if (s.staged) return undefined;
+    return s.api.writeFile.call(this, s.u, data, opts);
   },
   async del(url, opts = {}) {
-    const { api, url: u } = await _dispatch(this, url);
-    return api.del.call(this, u, opts);
+    const s = await _stageWrite(this, url, 'del', null, opts);
+    if (s.staged) return undefined;
+    return s.api.del.call(this, s.u, opts);
   },
   async unlink(url, opts = {}) {
-    const { api, url: u } = await _dispatch(this, url);
-    return api.unlink.call(this, u, opts);
+    const s = await _stageWrite(this, url, 'del', null, opts);
+    if (s.staged) return undefined;
+    return s.api.unlink.call(this, s.u, opts);
   },
   async mkdir(url, opts = {}) {
     const { api, url: u } = await _dispatch(this, url);
@@ -205,6 +319,56 @@ const fsAPI = {
   },
   async listWriters(url) {
     return autobaseAPI.listWriters.call(this, url);
+  },
+
+  // --- Draft Mode (ADR-0012) — device-private staging hosted in the Vault ---
+  async beginDraft(url) {
+    const { baseKey } = await _baseInfo(this, url);
+    return drafts.beginDraft(baseKey);
+  },
+  async endDraft(url) {
+    const { baseKey } = await _baseInfo(this, url);
+    return drafts.endDraft(baseKey);
+  },
+  // { mode, changes: [{ path, op, conflict }] } — drives the toggle state + "N unpublished" badge.
+  async draftStatus(url) {
+    const { baseKey, isAutobase } = await _baseInfo(this, url);
+    if (!isAutobase) return { mode: false, changes: [] };
+    const [mode, changes] = await Promise.all([
+      drafts.getMode(baseKey),
+      drafts.listDraft(baseKey),
+    ]);
+    return { mode, changes };
+  },
+  // opts: { paths?: string[], force?: boolean } → { published, conflicts }.
+  async publishDraft(url, opts = {}) {
+    const { baseKey } = await _baseInfo(this, url);
+    return drafts.publish(baseKey, opts);
+  },
+  // opts: { paths?: string[] } → { discarded }.
+  async discardDraft(url, opts = {}) {
+    const { baseKey } = await _baseInfo(this, url);
+    return drafts.discard(baseKey, opts);
+  },
+  // Toggle rendering the merged Draft for a Drive (local preview only — never replicated). Keyed by
+  // Drive key; the browser-chrome toggle goes through bg/ui/tabs, this is the url-first entry point.
+  async setDraftPreview(url, on) {
+    const { baseKey } = await _baseInfo(this, url);
+    drafts.setPreview(baseKey, !!on);
+    return { on: !!on };
+  },
+  // 'readable' — emits 'changed' when this Drive's Draft mutates (stage/publish/discard/mode).
+  async watchDraft(url) {
+    const { EventEmitter } = await import('events');
+    const emitter: any = new EventEmitter();
+    const { baseKey } = await _baseInfo(this, url);
+    const onChanged = (e) => {
+      if (e && e.baseKey === baseKey) emitter.emit('changed', {});
+    };
+    drafts.events.on('changed', onChanged);
+    // pauls-electron-rpc calls close() when the renderer tears down the stream
+    emitter.close = () => drafts.events.removeListener('changed', onChanged);
+    return emitter;
   },
 };
 

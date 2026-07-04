@@ -54,6 +54,16 @@ export default {
   configure: 'promise',
   isCollaborativeDrive: 'promise',
 
+  // Draft Mode (ADR-0012) — device-private staging hosted in the Vault. Writes stage while a
+  // Drive's Draft Mode is on; reads merge only when passed `{ draft: true }` (preview).
+  beginDraft: 'promise',
+  endDraft: 'promise',
+  draftStatus: 'promise',
+  publishDraft: 'promise',
+  discardDraft: 'promise',
+  watchDraft: 'readable',
+  setDraftPreview: 'promise', // per-tab: render the merged Draft in the author's own view (local only)
+
   // Collaborative-drive writer management
   createInvite: 'promise',
   claimInvite: 'promise',

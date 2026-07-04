@@ -6,6 +6,7 @@ import './background-tray';
 import './browser';
 import './bookmark';
 import './donate';
+import './draft';
 import './peers';
 import './share';
 import './site';
@@ -114,6 +115,8 @@ class MenusWrapper extends LitElement {
         return html`<bookmark-edit-menu active-menu></bookmark-edit-menu>`;
       case 'donate':
         return html`<donate-menu active-menu></donate-menu>`;
+      case 'draft':
+        return html`<draft-menu active-menu></draft-menu>`;
       case 'peers':
         return html`<peers-menu active-menu></peers-menu>`;
       case 'share':

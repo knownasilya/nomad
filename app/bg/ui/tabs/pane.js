@@ -27,6 +27,8 @@ import * as filesystem from '../../filesystem/index';
 import { registerForPartition } from '../../protocols/index';
 import * as bookmarks from '../../filesystem/bookmarks';
 import hyper from '../../hyper/index';
+import * as drafts from '../../hyper/drafts';
+import fsAPI from '../../web-apis/bg/fs';
 
 const ERR_ABORTED = -3;
 const ERR_CONNECTION_REFUSED = -102;
@@ -98,6 +100,9 @@ const STATE_VARS = [
   'currentInpageFindResults',
   'donateLinkHref',
   'isLiveReloading',
+  // Draft Mode (ADR-0012): whether the shown Drive has a Draft, and whether this tab is previewing it
+  'hasDraft',
+  'draftPreviewing',
 ];
 
 // globals
@@ -169,6 +174,7 @@ export class Pane extends EventEmitter {
     this.folderSyncPath = undefined; // current folder sync path
     this.peers = 0; // how many peers does the site have?
     this.isBookmarked = false; // is the active page bookmarked?
+    this.hasDraft = false; // does the shown Drive have a Draft on this Device? (ADR-0012)
     this.driveInfo = null; // metadata about the site if viewing a hyperdrive
     this.donateLinkHref = null; // the URL of the donate site, if set by the index.json
     this.wasDriveTimeout = false; // did the last navigation result in a timed-out hyperdrive?
@@ -209,6 +215,16 @@ export class Pane extends EventEmitter {
 
   get webContents() {
     return this.browserView.webContents;
+  }
+
+  // Is the Drive shown in this tab currently being previewed as a Draft (ADR-0012)? Keyed by Drive
+  // key — the same flag the hyper:// serve path checks.
+  get draftPreviewing() {
+    try {
+      return drafts.isPreview(this.driveInfo?.key);
+    } catch {
+      return false;
+    }
   }
 
   get browserWindow() {
@@ -672,6 +688,7 @@ export class Pane extends EventEmitter {
     this.folderSyncPath = undefined;
     this.peers = 0;
     this.donateLinkHref = null;
+    this.hasDraft = false;
 
     if (!isHyperOrPearUrl(this.url)) {
       this.driveInfo = null;
@@ -689,6 +706,19 @@ export class Pane extends EventEmitter {
       this.donateLinkHref = this.driveInfo?.links?.payment?.[0]?.href;
     } catch (e) {
       this.driveInfo = null;
+    }
+    // Draft indicator: only writable Drives can have a Draft you'd publish (ADR-0012). Uses the
+    // pane's own webContents as ctx so `hyper://private/` resolves to this space's root, exactly as
+    // staging/serving do.
+    if (this.driveInfo && this.driveInfo.writable) {
+      try {
+        const ds = await fsAPI.draftStatus.call({ sender: this.webContents }, this.url);
+        // Only when there are actual staged changes — Draft Mode being toggled on with nothing
+        // staged is not "a draft", so the location-bar icon stays hidden.
+        this.hasDraft = !!(ds && ds.changes && ds.changes.length);
+      } catch {
+        this.hasDraft = false;
+      }
     }
     if (!noEmit) this.emitUpdateState();
   }

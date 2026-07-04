@@ -188,6 +188,8 @@ class ShellWindowTabs extends LitElement {
       'has-icon': tab.isAudioMuted || tab.isCurrentlyAudible,
       'no-hover': this.tabs.length >= 12,
       'no-favicon': !showFavicon,
+      // Draft Mode (ADR-0012): this tab is previewing a Drive's unpublished Draft
+      'draft-previewing': tab.draftPreviewing,
     });
     const tabStyle = styleMap(group ? { '--group-color': group.color } : {});
     return html`
@@ -622,6 +624,14 @@ ShellWindowTabs.styles = css`
     transition: background 0.3s;
     border-left: 1px solid var(--border-color--tab);
     border-radius: 6px 6px 0 0;
+  }
+
+  /* Draft Mode (ADR-0012): ring a tab that's previewing a Drive's unpublished Draft. Uses outline
+     (not border/box-shadow) so it goes all the way around, follows the radius, and doesn't fight the
+     current-tab highlight box-shadow or shift layout. */
+  .tab.draft-previewing {
+    outline: 1.5px solid #2864dc;
+    outline-offset: -1.5px;
   }
 
   .tab.pinned {

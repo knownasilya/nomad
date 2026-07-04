@@ -161,6 +161,14 @@ const cssStr = css`
     min-width: 0;
   }
 
+  /* Draft Mode (ADR-0012): pen indicator on drives with unpublished changes. */
+  .drive .title .draft-indicator {
+    flex: 0 0 auto;
+    margin-left: 7px;
+    font-size: 11px;
+    color: #1f9d4d;
+  }
+
   .drive .title a {
     color: var(--text-color--default);
     letter-spacing: 0;

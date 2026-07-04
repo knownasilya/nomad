@@ -715,15 +715,22 @@ ${spinnerCSS}
     background: var(--nav-bg);
     border-left: 1px solid rgba(0, 0, 0, 0.15);
   }
+  /* Wide windows: the AI Sidebar sits beside the right nav; main is pushed clear of both so the
+     sidebar never overlays the explorer UI. */
   .layout.ai-open nav.right {
     right: 360px;
   }
   .layout.ai-open main {
     margin-right: 730px;
   }
-  @media (max-width: 1000px) {
+  /* Narrower windows can't fit both panels, so the AI Sidebar takes the right panel's place: hide
+     the right nav and push main by just the sidebar width (still pushed, never overlaid). */
+  @media (max-width: 1200px) {
+    .layout.ai-open nav.right {
+      display: none;
+    }
     .layout.ai-open main {
-      margin-right: 16px;
+      margin-right: 360px;
     }
   }
 `;

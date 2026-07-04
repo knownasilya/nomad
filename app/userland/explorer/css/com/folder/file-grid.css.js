@@ -77,6 +77,22 @@ const cssStr = css`
     color: rgba(0, 0, 0, 0.4);
   }
 
+  /* Draft Mode (ADR-0012): "edited" badge over the top-left of the file icon. */
+  .item .draft-badge {
+    position: absolute;
+    top: 0px;
+    left: 30px;
+    width: 16px;
+    height: 16px;
+    line-height: 16px;
+    font-size: 8px;
+    text-align: center;
+    color: #fff;
+    background: #1f9d4d;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px var(--primary-bg, #fff);
+  }
+
   .item .mounticon {
     position: absolute;
     color: #5a5a5a;

@@ -30,6 +30,10 @@ class EditorApp extends LitElement {
       readOnly: { type: Boolean },
       dne: { type: Boolean },
       isBinary: { type: Boolean },
+      // Draft Mode (ADR-0012)
+      draftMode: { type: Boolean },
+      draftCount: { type: Number },
+      draftConflicts: { type: Number },
     };
   }
 
@@ -118,6 +122,10 @@ class EditorApp extends LitElement {
     this.resolvedPath = '';
     this.setFocusOnLoad = false;
     this.isCollaborative = false;
+    // Draft Mode (ADR-0012): staged, device-private edits held back from replication until Publish.
+    this.draftMode = false;
+    this.draftCount = 0;
+    this.draftConflicts = 0;
 
     nomad.panes.addEventListener('pane-attached', (e) => {
       this.attachedPane = nomad.panes.getAttachedPane();
@@ -494,6 +502,8 @@ class EditorApp extends LitElement {
     // Fetch the file FIRST — it's the only essential read. Doing it before stat
     // matters: a slow/hung stat keeps running on the backend and can wedge the
     // drive's daemon, blocking the content read behind it.
+    // Learn this drive's Draft Mode first, so the content read below reflects staged edits.
+    await this.refreshDraftStatus();
     if (!this.isBinary) {
       try {
         if (!this.resolvedPath) throw new Error('dne');
@@ -503,7 +513,9 @@ class EditorApp extends LitElement {
         // other drive operations (e.g. the file tree) behind it.
         body = await step(
           'readFile(' + this.resolvedPath + ')',
-          drive.readFile(this.resolvedPath, 'utf8'),
+          // In Draft Mode, read the merged (staged-over-published) content; otherwise force the
+          // published view (draft:false) so a Drive's preview flag can't leak in here.
+          drive.readFile(this.resolvedPath, { encoding: 'utf8', draft: !!this.draftMode }),
           10000
         );
       } catch (e) {
@@ -902,6 +914,40 @@ class EditorApp extends LitElement {
         >
           <span class="far fa-fw fa-window-maximize"></span> View file
         </button>
+        ${!this.readOnly && !this.isUnloaded
+          ? html`
+              <span class="divider"></span>
+              <button
+                class="${this.draftMode ? 'active' : ''}"
+                title="Draft Mode — stage edits privately (synced across your devices) until you Publish"
+                @click=${this.onToggleDraftMode}
+              >
+                <span class="fas fa-fw fa-pen-nib"></span> Draft${this.draftMode &&
+                this.draftCount
+                  ? ` (${this.draftCount})`
+                  : ''}
+              </button>
+              ${this.draftMode
+                ? html`
+                    <button
+                      class="primary"
+                      title="Publish staged changes to the drive"
+                      ?disabled=${!this.draftCount}
+                      @click=${this.onClickPublishDraft}
+                    >
+                      <span class="fas fa-fw fa-cloud-upload-alt"></span> Publish
+                    </button>
+                    <button
+                      title="Discard staged changes"
+                      ?disabled=${!this.draftCount}
+                      @click=${this.onClickDiscardDraft}
+                    >
+                      <span class="far fa-fw fa-trash-alt"></span> Discard
+                    </button>
+                  `
+                : ''}
+            `
+          : ''}
         <span class="spacer"></span>
         <button
           class="${this.isAiOpen ? 'active' : ''}"
@@ -939,6 +985,57 @@ class EditorApp extends LitElement {
     localStorage.setItem('nomad-ai-sidebar:open', '0');
   }
 
+  // --- Draft Mode (ADR-0012) ---
+
+  async refreshDraftStatus() {
+    try {
+      const { mode, changes } = await this.drive.draftStatus();
+      this.draftMode = !!mode;
+      this.draftCount = changes.length;
+      this.draftConflicts = changes.filter((c) => c.conflict).length;
+    } catch {
+      this.draftMode = false;
+      this.draftCount = 0;
+      this.draftConflicts = 0;
+    }
+  }
+
+  async onToggleDraftMode() {
+    try {
+      if (this.draftMode) await this.drive.endDraft();
+      else await this.drive.beginDraft();
+    } catch (e) {
+      alert('Draft Mode needs a Vault on this device.\n\n' + (e.message || e));
+      return;
+    }
+    await this.refreshDraftStatus();
+    await this.load(this.url, true); // re-read the buffer through the new (merged/published) view
+  }
+
+  async onClickPublishDraft() {
+    await this.refreshDraftStatus();
+    if (!this.draftCount) return;
+    let res = await this.drive.publishDraft();
+    if (res.conflicts && res.conflicts.length) {
+      const msg =
+        `${res.conflicts.length} file(s) changed on the drive since you staged them:\n\n` +
+        res.conflicts.join('\n') +
+        `\n\nPublish your version anyway (overwrite)? Cancel to keep them staged.`;
+      if (confirm(msg)) res = await this.drive.publishDraft({ force: true });
+    }
+    await this.refreshDraftStatus();
+    await this.load(this.url, true);
+  }
+
+  async onClickDiscardDraft() {
+    await this.refreshDraftStatus();
+    if (!this.draftCount) return;
+    if (!confirm(`Discard ${this.draftCount} staged change(s)? This cannot be undone.`)) return;
+    await this.drive.discardDraft();
+    await this.refreshDraftStatus();
+    await this.load(this.url, true);
+  }
+
   // Called by the AI Sidebar before it runs a prompt. The agent writes directly
   // to the drive, so the open buffer must be clean first (save-clean gate) — else
   // an agent write to the open file would collide with unsaved manual edits.
@@ -973,6 +1070,9 @@ class EditorApp extends LitElement {
   // reload it so the buffer reflects the new drive content.
   async onAgentWroteFile(path) {
     this.loadExplorer();
+    // The agent runs in Draft Mode (auto-enabled by the AI Sidebar), so its writes stage — refresh
+    // the unpublished-count badge and toggle state.
+    await this.refreshDraftStatus();
     if (path === this.resolvedPath) {
       await this.load(this.url, true);
     }

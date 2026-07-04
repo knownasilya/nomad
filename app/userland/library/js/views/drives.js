@@ -70,8 +70,30 @@ export class DrivesView extends LitElement {
         }
       });
     }
+    // Flag drives that have an unpublished Draft on this device (only writable drives can).
+    await Promise.all(
+      drives.map(async (drive) => {
+        if (!drive.info?.writable) return;
+        try {
+          const ds = await nomad.fs.draftStatus(drive.url);
+          drive.hasDraft = !!(ds && ds.changes && ds.changes.length);
+        } catch {
+          drive.hasDraft = false;
+        }
+      })
+    );
+
     drives.sort((a, b) => a.info.title.localeCompare(b.info.title));
     this.drives = drives;
+  }
+
+  // A pen indicator shown on drives with unpublished Draft changes (matches the Draft Mode icon).
+  renderDraftBadge(drive) {
+    if (!drive.hasDraft) return '';
+    return html`<span
+      class="draft-indicator fas fa-pen-nib"
+      title="Has unpublished draft changes"
+    ></span>`;
   }
 
   async driveMenu(drive) {
@@ -212,6 +234,7 @@ export class DrivesView extends LitElement {
           <img class="favicon" src="asset:favicon:${drive.url}" />
           <div class="title">
             <span class="drive-name">${drive.info.title || html`<em>Untitled</em>`}</span>
+            ${this.renderDraftBadge(drive)}
             ${drive.tags.map((tag) => html`<span class="tag">${tag}</span>`)}
           </div>
           <div class="card-meta">
@@ -237,6 +260,7 @@ export class DrivesView extends LitElement {
           <img class="favicon" src="asset:favicon:${drive.url}" />
           <div class="title">
             <span class="drive-name">${drive.info.title || html`<em>Untitled</em>`}</span>
+            ${this.renderDraftBadge(drive)}
           </div>
         </a>
       `;
@@ -251,6 +275,7 @@ export class DrivesView extends LitElement {
         <img class="favicon" src="asset:favicon:${drive.url}" />
         <div class="title">
           <span class="drive-name">${drive.info.title || html`<em>Untitled</em>`}</span>
+          ${this.renderDraftBadge(drive)}
           ${drive.forkOf?.label ? html`<span class="fork-label">${drive.forkOf.label}</span>` : ''}
           ${drive.tags.map((tag) => html`<span class="tag">${tag}</span>`)}
         </div>

@@ -25,7 +25,7 @@ import { findWebContentsParentWindow } from '../../lib/electron';
 
 const IS_OSX = process.platform === 'darwin';
 const MARGIN_SIZE = 10;
-const IS_RIGHT_ALIGNED = ['browser', 'bookmark', 'peers', 'share', 'site', 'donate', 'spaces'];
+const IS_RIGHT_ALIGNED = ['browser', 'bookmark', 'peers', 'share', 'site', 'donate', 'spaces', 'draft'];
 var events = new Events();
 var views = {}; // map of {[parentWindow.id] => BrowserView}
 
@@ -79,14 +79,14 @@ export function reposition(parentWindow) {
     } else if (view.menuId === 'browser') {
       setBounds({
         x: 10,
-        y: 72,
+        y: view.boundsOpt?.top ?? 72,
         width: 270,
         height: 350,
       });
     } else if (view.menuId === 'bookmark') {
       setBounds({
         x: view.boundsOpt.rightOffset,
-        y: 72,
+        y: view.boundsOpt?.top ?? 72,
         width: 250,
         height: 195,
       });
@@ -100,30 +100,37 @@ export function reposition(parentWindow) {
     } else if (view.menuId === 'donate') {
       setBounds({
         x: view.boundsOpt.rightOffset,
-        y: 72,
+        y: view.boundsOpt?.top ?? 72,
         width: 350,
         height: 90,
       });
     } else if (view.menuId === 'share') {
       setBounds({
         x: view.boundsOpt.rightOffset,
-        y: 72,
+        y: view.boundsOpt?.top ?? 72,
         width: 310,
         height: 120,
       });
     } else if (view.menuId === 'peers') {
       setBounds({
         x: view.boundsOpt.rightOffset,
-        y: 72,
+        y: view.boundsOpt?.top ?? 72,
         width: 200,
         height: 350,
       });
     } else if (view.menuId === 'site') {
       setBounds({
         x: view.boundsOpt.rightOffset,
-        y: 72,
+        y: view.boundsOpt?.top ?? 72,
         width: 250,
         height: 350,
+      });
+    } else if (view.menuId === 'draft') {
+      setBounds({
+        x: view.boundsOpt.rightOffset,
+        y: view.boundsOpt.top ?? 72,
+        width: 280,
+        height: 260,
       });
     } else if (view.menuId === 'spaces') {
       const bo = view.boundsOpt;

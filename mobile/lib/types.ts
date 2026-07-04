@@ -115,8 +115,16 @@ export const NOMAD_SHIM = `(function(){
       denyRequest: function(k){ return rpc('denyRequest', url, [k]); },
       removeWriter: function(k){ return rpc('removeWriter', url, [k]); },
       listWriters: function(){ return rpc('listWriters', url, []); },
+      // Draft Mode (ADR-0012) — stage/preview/discard work on mobile; Publish only for owned drives.
+      beginDraft: function(){ return rpc('beginDraft', url, []); },
+      endDraft: function(){ return rpc('endDraft', url, []); },
+      draftStatus: function(){ return rpc('draftStatus', url, []); },
+      publishDraft: function(o){ return rpc('publishDraft', url, [o || {}]); },
+      discardDraft: function(o){ return rpc('discardDraft', url, [o || {}]); },
+      setDraftPreview: function(on){ return rpc('setDraftPreview', url, [on]); },
       watch: noopStream,
-      watchRequests: noopStream
+      watchRequests: noopStream,
+      watchDraft: noopStream
     };
   }
   var fs = function(url){ return driveApi(url); };
@@ -137,7 +145,14 @@ export const NOMAD_SHIM = `(function(){
   fs.mkdir = function(url, o){ return rpc('mkdir', url, [o || {}]); };
   fs.createDrive = function(o){ return rpc('createDrive', null, [o || {}]).then(function(u){ return driveApi(u); }); };
   fs.createCollaborativeDrive = function(o){ return rpc('createCollaborativeDrive', null, [o || {}]).then(function(u){ return driveApi(u); }); };
+  fs.beginDraft = function(url){ return rpc('beginDraft', url, []); };
+  fs.endDraft = function(url){ return rpc('endDraft', url, []); };
+  fs.draftStatus = function(url){ return rpc('draftStatus', url, []); };
+  fs.publishDraft = function(url, o){ return rpc('publishDraft', url, [o || {}]); };
+  fs.discardDraft = function(url, o){ return rpc('discardDraft', url, [o || {}]); };
+  fs.setDraftPreview = function(url, on){ return rpc('setDraftPreview', url, [on]); };
   fs.watch = noopStream;
+  fs.watchDraft = noopStream;
   window.nomad = {
     fs: fs,
     schemas: {

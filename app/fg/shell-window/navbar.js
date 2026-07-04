@@ -96,6 +96,8 @@ class ShellWindowNavbar extends LitElement {
         donate-link-href="${this.activeTab?.donateLinkHref || ''}"
         ?is-live-reloading=${this.activeTab?.isLiveReloading}
         ?is-bookmarked=${this.activeTab?.isBookmarked ?? false}
+        ?has-draft=${this.activeTab?.hasDraft ?? false}
+        ?draft-previewing=${this.activeTab?.draftPreviewing ?? false}
       ></shell-window-navbar-location>
       <shell-window-navbar-inpage-find
         .activeTabIndex="${this.activeTabIndex}"

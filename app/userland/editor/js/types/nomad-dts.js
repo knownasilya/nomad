@@ -321,6 +321,15 @@ declare namespace Nomad {
     denyRequest(writerKey: string): Promise<void>;
     removeWriter(writerKey: string): Promise<void>;
     listWriters(): Promise<any[]>;
+    // Draft Mode (ADR-0012) — device-private staging in the Vault. While Draft Mode is on, put/del
+    // stage instead of going live; pass { draft:true } to a read to preview the merged view.
+    beginDraft(): Promise<{ on: boolean }>;
+    endDraft(): Promise<{ on: boolean }>;
+    draftStatus(): Promise<{ mode: boolean; changes: Array<{ path: string; op: 'put' | 'del'; conflict: boolean }> }>;
+    publishDraft(opts?: { paths?: string[]; force?: boolean }): Promise<{ published: string[]; conflicts: string[] }>;
+    discardDraft(opts?: { paths?: string[] }): Promise<{ discarded: string[] }>;
+    setDraftPreview(on: boolean): Promise<{ on: boolean }>;
+    watchDraft(onChanged?: (e: any) => void): EventTarget;
   }
 
   /**
@@ -374,6 +383,15 @@ declare namespace Nomad {
     denyRequest(url: string, writerKey: string): Promise<void>;
     removeWriter(url: string, writerKey: string): Promise<void>;
     listWriters(url: string): Promise<any[]>;
+    // Draft Mode (ADR-0012, url-first). While a Drive's Draft Mode is on, put/del stage into the
+    // Vault-hosted Draft instead of going live; pass { draft:true } to a read to preview the merge.
+    beginDraft(url: string): Promise<{ on: boolean }>;
+    endDraft(url: string): Promise<{ on: boolean }>;
+    draftStatus(url: string): Promise<{ mode: boolean; changes: Array<{ path: string; op: 'put' | 'del'; conflict: boolean }> }>;
+    publishDraft(url: string, opts?: { paths?: string[]; force?: boolean }): Promise<{ published: string[]; conflicts: string[] }>;
+    discardDraft(url: string, opts?: { paths?: string[] }): Promise<{ discarded: string[] }>;
+    setDraftPreview(url: string, on: boolean): Promise<{ on: boolean }>;
+    watchDraft(url: string, onChanged?: (e: any) => void): EventTarget;
   }
 
   /** The global nomad object. Some namespaces are gated by page protocol. */
