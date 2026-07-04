@@ -9,8 +9,22 @@ export function setup(rpc) {
 
   return {
     ai: {
-      chat(messages) {
-        return streamToAsyncIterator(fromEventStream(aiRPC.chat(messages)));
+      // opts (optional): { driveUrl, allowWrite, context, onToolEvent }
+      //   driveUrl / allowWrite / context are forwarded to bg (see bg/ai.ts).
+      //   onToolEvent(e) fires for each tool the agent runs that reports state —
+      //     currently writeDriveFile, with e.path / e.priorContent for undo.
+      chat(messages, opts = {}) {
+        const eventTarget = fromEventStream(
+          aiRPC.chat(messages, {
+            driveUrl: opts.driveUrl,
+            allowWrite: opts.allowWrite,
+            context: opts.context,
+          })
+        );
+        if (typeof opts.onToolEvent === 'function') {
+          eventTarget.addEventListener('tool', (e) => opts.onToolEvent(e));
+        }
+        return streamToAsyncIterator(eventTarget);
       },
       testConnection(baseUrl) {
         return aiRPC.testConnection(baseUrl);
@@ -22,6 +36,7 @@ export function setup(rpc) {
 function streamToAsyncIterator(eventTarget) {
   const queue = [];
   let done = false;
+  let error = null;
   let pendingResolve = null;
   let pendingReject = null;
 
@@ -54,6 +69,10 @@ function streamToAsyncIterator(eventTarget) {
       pendingResolve = null;
       pendingReject = null;
       r(err);
+    } else {
+      // No consumer is currently awaiting — remember the error so the next
+      // next() call surfaces it instead of hanging forever.
+      error = err;
     }
   });
 
@@ -63,6 +82,11 @@ function streamToAsyncIterator(eventTarget) {
     },
     next() {
       if (queue.length > 0) return Promise.resolve(queue.shift());
+      if (error) {
+        const e = error;
+        error = null;
+        return Promise.reject(e);
+      }
       if (done) return Promise.resolve({ value: undefined, done: true });
       return new Promise((resolve, reject) => {
         pendingResolve = resolve;

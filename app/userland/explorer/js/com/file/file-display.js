@@ -1,6 +1,6 @@
-import { LitElement, html } from '../../../vendor/lit-element/lit-element.js';
-import { until } from '../../../vendor/lit-element/lit-html/directives/until.js';
-import { unsafeHTML } from '../../../vendor/lit-element/lit-html/directives/unsafe-html.js';
+import { LitElement, html } from 'lit';
+import { until } from 'lit/directives/until.js';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { joinPath } from '../../lib/strings.js';
 import MarkdownIt from '../../../vendor/markdown-it.js';
 import css from '../../../css/com/file/file-display.css.js';

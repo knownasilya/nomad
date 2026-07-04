@@ -1,4 +1,4 @@
-import { LitElement, html } from '../../vendor/lit-element/lit-element.js';
+import { LitElement, html } from 'lit';
 import { handleDragDrop } from '../lib/drag-drop.js';
 import { emit } from '../lib/dom.js';
 import { joinPath } from '../lib/strings.js';

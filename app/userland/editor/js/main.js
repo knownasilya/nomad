@@ -13,6 +13,7 @@ import * as contextMenu from '../../app-stdlib/js/com/context-menu.js';
 import { writeToClipboard } from '../../app-stdlib/js/clipboard.js';
 import * as toast from '../../app-stdlib/js/com/toast.js';
 import './com/files-explorer.js';
+import '../../app-stdlib/js/com/ai-sidebar.js';
 import { ResizeImagePopup } from './com/resize-image-popup.js';
 import { configureLanguageService } from './language-service.js';
 import { registerHtmlEmbeddedProviders } from './html-embedded-ts.js';
@@ -25,6 +26,7 @@ class EditorApp extends LitElement {
       isLoading: { type: Boolean },
       showLoadingNotice: { type: Boolean },
       isFilesOpen: { type: Boolean },
+      isAiOpen: { type: Boolean },
       readOnly: { type: Boolean },
       dne: { type: Boolean },
       isBinary: { type: Boolean },
@@ -107,6 +109,8 @@ class EditorApp extends LitElement {
     this.isLoading = false;
     this.showLoadingNotice = false;
     this.isFilesOpen = true;
+    // AI Sidebar — collapsed by default; open/closed persisted globally
+    this.isAiOpen = localStorage.getItem('nomad-ai-sidebar:open') === '1';
     this.readOnly = true;
     this.lastSavedVersionId = undefined;
     this.dne = false;
@@ -704,6 +708,11 @@ class EditorApp extends LitElement {
     } else {
       this.classList.remove('files-open');
     }
+    if (this.isAiOpen && !this.isUnloaded) {
+      this.classList.add('ai-open');
+    } else {
+      this.classList.remove('ai-open');
+    }
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       ${this.renderToolbar()}
@@ -788,6 +797,15 @@ class EditorApp extends LitElement {
             </div>
           `
         : ''}
+      ${!this.isUnloaded && this.isAiOpen
+        ? html`
+            <ai-sidebar
+              .host=${this}
+              .url=${this.url}
+              .readOnly=${this.readOnly}
+            ></ai-sidebar>
+          `
+        : ''}
       ${this.showLoadingNotice
         ? html`<div id="loading-notice">Loading...</div>`
         : ''}
@@ -796,7 +814,7 @@ class EditorApp extends LitElement {
 
   updated(changedProperties) {
     this.ensureEditorEl();
-    if (changedProperties.has('isFilesOpen')) {
+    if (changedProperties.has('isFilesOpen') || changedProperties.has('isAiOpen')) {
       if (this.editor) {
         this.editor.layout();
       }
@@ -885,6 +903,14 @@ class EditorApp extends LitElement {
           <span class="far fa-fw fa-window-maximize"></span> View file
         </button>
         <span class="spacer"></span>
+        <button
+          class="${this.isAiOpen ? 'active' : ''}"
+          title="Toggle AI sidebar"
+          @click=${this.onToggleAiOpen}
+          ?disabled=${this.isUnloaded}
+        >
+          <span class="fas fa-fw fa-robot"></span> AI
+        </button>
         ${this.attachedPane
           ? html`
               <button @click=${window.close}>
@@ -901,6 +927,55 @@ class EditorApp extends LitElement {
 
   onToggleFilesOpen(e) {
     this.isFilesOpen = !this.isFilesOpen;
+  }
+
+  onToggleAiOpen(e) {
+    this.isAiOpen = !this.isAiOpen;
+    localStorage.setItem('nomad-ai-sidebar:open', this.isAiOpen ? '1' : '0');
+  }
+
+  closeAiSidebar() {
+    this.isAiOpen = false;
+    localStorage.setItem('nomad-ai-sidebar:open', '0');
+  }
+
+  // Called by the AI Sidebar before it runs a prompt. The agent writes directly
+  // to the drive, so the open buffer must be clean first (save-clean gate) — else
+  // an agent write to the open file would collide with unsaved manual edits.
+  // Returns false to abort the run.
+  async prepareForAgentRun() {
+    if (!this.hasChanges) return true;
+    if (!confirm('Save your unsaved changes before running the agent?')) return false;
+    await this.onClickSave();
+    return true;
+  }
+
+  // Tells the agent which Drive + file it is operating on (the sidebar runs at
+  // nomad://editor, so the model can't infer this from location.href).
+  getAgentContext() {
+    // only treat it as "the open file" if it's a concrete file path (not the
+    // drive root or a directory) — otherwise the model may try to write to "/".
+    const openFile =
+      this.resolvedPath && !this.resolvedPath.endsWith('/') ? this.resolvedPath : null;
+    const lines = [
+      `You are editing the Nomad drive at ${this.origin}`,
+      openFile
+        ? `The file currently open in the editor is ${openFile} — when the user says "this file" or "the current file", they mean ${openFile}.`
+        : `No single file is open; use listDriveFiles to see what exists before writing. Never write to a directory or "/" — always target a full file path (e.g. /index.html).`,
+      `Use the drive tools (readDriveFile / listDriveFiles / writeDriveFile) with absolute file paths (e.g. ${openFile || '/index.html'}) to read and modify files in THIS drive. Ignore any instruction about location.href.`,
+      this.readOnly ? `This drive is READ-ONLY — you cannot write to it.` : '',
+    ];
+    return lines.filter(Boolean).join('\n');
+  }
+
+  // Called by the AI Sidebar after the agent writes (or a revert restores) a file.
+  // Refresh the file tree and, if the affected file is the one open in the editor,
+  // reload it so the buffer reflects the new drive content.
+  async onAgentWroteFile(path) {
+    this.loadExplorer();
+    if (path === this.resolvedPath) {
+      await this.load(this.url, true);
+    }
   }
 
   onOpenFile(e) {

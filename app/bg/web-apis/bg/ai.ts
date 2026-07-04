@@ -5,10 +5,10 @@ import https from 'https';
 import b4a from 'b4a';
 import { URL } from 'url';
 import * as settingsDb from '../../dbs/settings';
-import * as drives from '../../hyper/drives';
 import * as permissions from '../../ui/permissions';
 import { parseDriveUrl } from '../../../lib/urls';
 import { findTab } from '../../ui/tabs/manager';
+import fsAPI from './fs';
 
 // Built-in system context always appended to every conversation's system prompt.
 // KEEP IN SYNC with nomad.dev/content/docs/api/apis/ — when a new API is added
@@ -210,13 +210,18 @@ export default {
     }
   },
 
-  chat(messages) {
+  // opts (optional):
+  //   driveUrl   — resolve tools + AI Config against this Drive instead of the
+  //                sender's URL. The editor's AI Sidebar passes the edited Drive
+  //                here (its own sender is nomad://editor, not the Drive).
+  //   allowWrite — when false, the writeDriveFile tool is withheld (read-only Drives).
+  chat(messages, opts) {
     const emitter = new EventEmitter();
     emitter.on('error', () => {}); // prevent unhandled-error throw
     const stream = emitStream(emitter);
     const sender = this.sender;
 
-    runChat(messages, sender, emitter)
+    runChat(messages, sender, emitter, opts || {})
       .then(() => {
         stream.end();
       })
@@ -234,9 +239,17 @@ export default {
 // Internal helpers
 // =
 
-async function runChat(messages, sender, emitter) {
-  const { model, systemPrompt } = await resolveAiConfig(sender);
+async function runChat(messages, sender, emitter, opts = {}) {
+  const driveUrl = opts.driveUrl || null;
+  const allowWrite = opts.allowWrite !== false; // default true
+  const { model, systemPrompt } = await resolveAiConfig(sender, driveUrl);
   const baseUrl = (await settingsDb.get('ai_base_url')) || 'http://localhost:11434/v1';
+
+  // Withhold the write tool on read-only Drives so the model won't attempt edits
+  // it can't make.
+  const tools = allowWrite
+    ? BUILTIN_TOOLS
+    : BUILTIN_TOOLS.filter((t) => t.function.name !== 'writeDriveFile');
 
   if (!model) {
     throw new Error(
@@ -244,9 +257,13 @@ async function runChat(messages, sender, emitter) {
     );
   }
 
-  const systemContent = systemPrompt
-    ? `${systemPrompt}\n\n---\n\n${NOMAD_API_REFERENCE}`
-    : NOMAD_API_REFERENCE;
+  // opts.context (from the AI Sidebar) pins the agent to the Drive + open file it
+  // is editing — the built-in reference talks about `location.href`, which for the
+  // editor/explorer is the app URL, not the Drive. Put it last so it's the most
+  // immediate instruction.
+  const systemContent = [systemPrompt, NOMAD_API_REFERENCE, opts.context]
+    .filter(Boolean)
+    .join('\n\n---\n\n');
   const fullMessages = [{ role: 'system', content: systemContent }, ...messages];
 
   let msgHistory = fullMessages;
@@ -257,7 +274,7 @@ async function runChat(messages, sender, emitter) {
       baseUrl,
       model,
       msgHistory,
-      BUILTIN_TOOLS,
+      tools,
       emitter
     );
 
@@ -275,7 +292,7 @@ async function runChat(messages, sender, emitter) {
       let result;
       try {
         const args = JSON.parse(tc.function.arguments || '{}');
-        result = await executeTool(tc.function.name, args, sender);
+        result = await executeTool(tc.function.name, args, sender, driveUrl, emitter);
       } catch (err) {
         console.error(`[ai] tool "${tc.function.name}" failed:`, err);
         result = `Error: ${err.message}`;
@@ -291,38 +308,32 @@ async function runChat(messages, sender, emitter) {
   emitter.emit('done', {});
 }
 
-async function resolveAiConfig(sender) {
-  const senderUrl = sender.getURL();
+async function resolveAiConfig(sender, driveUrl = null) {
+  // The AI Sidebar edits an arbitrary Drive from nomad://editor, so it passes the
+  // edited Drive's URL explicitly; fall back to the sender's own URL (chat-bubble,
+  // where the page IS the Drive).
+  const senderUrl = driveUrl || sender.getURL();
+  const ctx = { sender };
 
   // 1. Drive's /index.json
   if (senderUrl.startsWith('hyper://')) {
     try {
-      const urlp = parseDriveUrl(senderUrl);
-      const driveKey = await drives.fromURLToKey(urlp.hostname, true);
-      const session = drives.getDrive(driveKey) || (await drives.loadDrive(driveKey));
-      const hd = session.drive;
-      const indexBuf = await hd.get('/index.json');
-      if (indexBuf) {
-        const index = JSON.parse(b4a.toString(indexBuf));
+      const base = driveBaseUrl(senderUrl);
+      const indexStr = await readTextOrNull(ctx, fullDriveUrl(base, '/index.json'));
+      if (indexStr) {
+        const index = JSON.parse(indexStr);
         if (index.ai) {
-          let aiHd = hd;
+          let aiBase = base;
           let model = null;
           if (typeof index.ai === 'string') {
             // Pointer to another drive's AI Config
-            const targetUrlp = parseDriveUrl(index.ai);
-            const targetKey = await drives.fromURLToKey(targetUrlp.hostname, true);
-            const targetSession = drives.getDrive(targetKey) || (await drives.loadDrive(targetKey));
-            aiHd = targetSession.drive;
-            const targetIndexBuf = await aiHd.get('/index.json');
-            if (targetIndexBuf) {
-              const targetIndex = JSON.parse(b4a.toString(targetIndexBuf));
-              model = targetIndex.ai?.model || null;
-            }
+            aiBase = driveBaseUrl(index.ai);
+            const targetIndexStr = await readTextOrNull(ctx, fullDriveUrl(aiBase, '/index.json'));
+            if (targetIndexStr) model = JSON.parse(targetIndexStr).ai?.model || null;
           } else if (typeof index.ai === 'object') {
             model = index.ai.model || null;
           }
-          const sysBuf = await aiHd.get('/ai/system.md');
-          const systemPrompt = sysBuf ? b4a.toString(sysBuf) : null;
+          const systemPrompt = await readTextOrNull(ctx, fullDriveUrl(aiBase, '/ai/system.md'));
           return { model, systemPrompt };
         }
       }
@@ -338,18 +349,10 @@ async function resolveAiConfig(sender) {
     const spaceDefault = await settingsDb.getForSpace(spaceId, 'ai_space_default');
     if (spaceDefault) {
       try {
-        const targetUrlp = parseDriveUrl(spaceDefault);
-        const targetKey = await drives.fromURLToKey(targetUrlp.hostname, true);
-        const targetSession = drives.getDrive(targetKey) || (await drives.loadDrive(targetKey));
-        const aiHd = targetSession.drive;
-        const sysBuf = await aiHd.get('/ai/system.md');
-        const systemPrompt = sysBuf ? b4a.toString(sysBuf) : null;
-        const indexBuf = await aiHd.get('/index.json');
-        let model = null;
-        if (indexBuf) {
-          const index = JSON.parse(b4a.toString(indexBuf));
-          model = index.ai?.model || null;
-        }
+        const aiBase = driveBaseUrl(spaceDefault);
+        const systemPrompt = await readTextOrNull(ctx, fullDriveUrl(aiBase, '/ai/system.md'));
+        const indexStr = await readTextOrNull(ctx, fullDriveUrl(aiBase, '/index.json'));
+        const model = indexStr ? JSON.parse(indexStr).ai?.model || null : null;
         return { model, systemPrompt };
       } catch {
         // fall through
@@ -362,23 +365,27 @@ async function resolveAiConfig(sender) {
   return { model: model || null, systemPrompt: null };
 }
 
-async function executeTool(name, args, sender) {
+async function executeTool(name, args, sender, driveUrl = null, emitter = null) {
+  const senderUrl = driveUrl || sender.getURL();
+  const ctx = { sender };
+  const requireDrive = () => {
+    if (!senderUrl.startsWith('hyper://')) throw new Error('Not browsing a Drive');
+    return driveBaseUrl(senderUrl);
+  };
+
   switch (name) {
     case 'readDriveFile': {
-      const drive = await getCurrentDrive(sender);
-      if (!drive) throw new Error('Not browsing a Drive');
-      const buf = await drive.get(args.path);
-      if (!buf) throw new Error(`File not found: ${args.path}`);
-      return b4a.toString(buf);
+      const base = requireDrive();
+      // Route through nomad.fs (fsAPI) so BOTH drive backends work — the raw
+      // per-writer Hyperdrive read hangs on an Autobase collaborative drive.
+      const text = await readTextOrNull(ctx, fullDriveUrl(base, args.path));
+      if (text === null) throw new Error(`File not found: ${args.path}`);
+      return text;
     }
     case 'listDriveFiles': {
-      const drive = await getCurrentDrive(sender);
-      if (!drive) throw new Error('Not browsing a Drive');
-      const entries = [];
-      for await (const entry of drive.list(args.path || '/')) {
-        entries.push(entry.key);
-      }
-      return JSON.stringify(entries);
+      const base = requireDrive();
+      const entries = await fsAPI.list.call(ctx, fullDriveUrl(base, args.path || '/'), {});
+      return JSON.stringify((entries || []).map((e) => e.key ?? e.name ?? e));
     }
     case 'fetchUrl': {
       const urlp = new URL(args.url);
@@ -388,31 +395,54 @@ async function executeTool(name, args, sender) {
       return fetchText(args.url);
     }
     case 'writeDriveFile': {
-      const drive = await getCurrentDrive(sender);
-      if (!drive) throw new Error('Not browsing a Drive');
-      const driveKey = b4a.toString(drive.key, 'hex');
-      const perm = 'modifyDrive:' + driveKey;
-      const allowed = await permissions.requestPermission(perm, sender);
+      const base = requireDrive();
+      // LLMs frequently append a trailing slash to a file path; strip it. Reject
+      // only when nothing but slashes is left (i.e. the Drive root / a directory),
+      // returning a corrective message so the model retries with a real filename.
+      const cleanPath = String(args.path || '').replace(/\/+$/, '');
+      if (!cleanPath || cleanPath === '') {
+        throw new Error(
+          `Invalid path "${args.path}": provide a full file path including a filename (e.g. /index.html), not a directory.`
+        );
+      }
+      const target = fullDriveUrl(base, cleanPath);
+      const driveKey = parseDriveUrl(senderUrl).hostname;
+      const allowed = await permissions.requestPermission('modifyDrive:' + driveKey, sender);
       if (!allowed) throw new Error('Write permission denied');
-      const now = Date.now();
-      const existing = await drive.entry(args.path).catch(() => null);
-      const ctime = existing?.value?.metadata?.ctime || now;
-      await drive.put(args.path, b4a.from(args.content), { metadata: { ctime, mtime: now } });
-      return 'File written successfully';
+      // Capture the file's pre-write content (or null if it didn't exist) BEFORE
+      // overwriting, so the editor can build a per-turn undo Checkpoint. This is
+      // the only place that still knows the prior state.
+      const priorContent = await readTextOrNull(ctx, target);
+      await fsAPI.writeFile.call(ctx, target, args.content);
+      if (emitter) {
+        emitter.emit('tool', { name: 'writeDriveFile', path: cleanPath, priorContent });
+      }
+      return `File written successfully to ${cleanPath}`;
     }
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
 }
 
-async function getCurrentDrive(sender) {
-  const senderUrl = sender.getURL();
-  if (!senderUrl.startsWith('hyper://')) return null;
+// A drive's origin (scheme + key), without any path. `nomad.fs` is URL-first, so
+// tool/config reads build a full `hyper://<key>/<path>` and let fsAPI dispatch to
+// the right backend (single-writer Hyperdrive vs multi-writer Autobase).
+function driveBaseUrl(url) {
+  return `hyper://${parseDriveUrl(url).hostname}`;
+}
+
+function fullDriveUrl(base, path) {
+  if (!path) path = '/';
+  return base + (path.startsWith('/') ? path : '/' + path);
+}
+
+// Read a Drive file as text via fsAPI (backend-agnostic, with a built-in read
+// timeout). Returns null on a missing file or any read failure.
+async function readTextOrNull(ctx, url) {
   try {
-    const urlp = parseDriveUrl(senderUrl);
-    const driveKey = await drives.fromURLToKey(urlp.hostname, true);
-    const session = drives.getDrive(driveKey) || (await drives.loadDrive(driveKey));
-    return session?.drive || null;
+    const v = await fsAPI.readFile.call(ctx, url, 'utf8');
+    if (v === null || v === undefined) return null;
+    return typeof v === 'string' ? v : b4a.toString(v);
   } catch {
     return null;
   }

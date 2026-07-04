@@ -1,6 +1,6 @@
-import { LitElement, html } from '../vendor/lit-element/lit-element.js';
-import { classMap } from '../vendor/lit-element/lit-html/directives/class-map.js';
-import { repeat } from '../vendor/lit-element/lit-html/directives/repeat.js';
+import { LitElement, html } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
+import { repeat } from 'lit/directives/repeat.js';
 import { joinPath, pluralize } from './lib/strings.js';
 import { timeDifference } from './lib/time.js';
 import * as toast from './com/toast.js';
@@ -27,6 +27,7 @@ import './com/sidebar/drive-info.js';
 import './com/sidebar/viewfile-info.js';
 import './com/sidebar/selection-info.js';
 import './com/sidebar/contextual-help.js';
+import '../../app-stdlib/js/com/ai-sidebar.js';
 
 const LOADING_STATES = {
   INITIAL: 0,
@@ -43,6 +44,7 @@ export class ExplorerApp extends LitElement {
       sortMode: { type: String },
       drives: { type: Array },
       profiles: { type: Array },
+      isAiOpen: { type: Boolean },
     };
   }
 
@@ -72,6 +74,8 @@ export class ExplorerApp extends LitElement {
     this.renderMode = undefined;
     this.inlineMode = false;
     this.sortMode = undefined;
+    // AI Sidebar — collapsed by default; open/closed persisted
+    this.isAiOpen = localStorage.getItem('nomad-ai-sidebar:open') === '1';
 
     window.addEventListener('explorer-files-changed', () => this.load());
 
@@ -476,6 +480,7 @@ export class ExplorerApp extends LitElement {
         class=${classMap({
           layout: true,
           ['render-mode-' + this.renderMode]: true,
+          ['ai-open']: this.isAiOpen,
         })}
         @goto=${this.onGoto}
         @change-selection=${this.onChangeSelection}
@@ -501,6 +506,15 @@ export class ExplorerApp extends LitElement {
                 ${this.renderErrorState()} ${this.renderView()}
               </main>
               ${this.renderRightNav()}
+              ${this.isAiOpen && this.currentDriveInfo
+                ? html`
+                    <ai-sidebar
+                      .host=${this}
+                      .url=${this.currentDriveInfo.url}
+                      .readOnly=${!this.currentDriveInfo.writable}
+                    ></ai-sidebar>
+                  `
+                : ''}
             `}
       </div>
     `;
@@ -543,6 +557,13 @@ export class ExplorerApp extends LitElement {
             `
           : ''}
         <span class="spacer"></span>
+        <button
+          class="transparent ${this.isAiOpen ? 'pressed' : ''}"
+          title="Toggle AI sidebar"
+          @click=${this.onToggleAiOpen}
+        >
+          <span class="fas fa-robot"></span> AI
+        </button>
         <button class="transparent" @click=${this.onClickSettings}>
           <span class="fas fa-cog"></span> Settings
         </button>
@@ -805,6 +826,46 @@ export class ExplorerApp extends LitElement {
       true
     );
     el.classList.remove('active');
+  }
+
+  // — AI Sidebar host interface (see app-stdlib/js/com/ai-sidebar.js) —
+
+  onToggleAiOpen(e) {
+    this.isAiOpen = !this.isAiOpen;
+    localStorage.setItem('nomad-ai-sidebar:open', this.isAiOpen ? '1' : '0');
+  }
+
+  closeAiSidebar() {
+    this.isAiOpen = false;
+    localStorage.setItem('nomad-ai-sidebar:open', '0');
+    this.requestUpdate();
+  }
+
+  // Tells the agent which Drive + location it is operating on (the sidebar runs at
+  // nomad://explorer, so the model can't infer this from location.href).
+  getAgentContext() {
+    const info = this.currentDriveInfo;
+    if (!info) return undefined;
+    const here = this.realPathname || '/';
+    const lines = [
+      `You are working in the Nomad drive at hyper://${new URL(info.url).hostname}`,
+      `The user is currently viewing ${here} in the file explorer (this is usually a directory).`,
+      `Use the drive tools (readDriveFile / listDriveFiles / writeDriveFile) with absolute file paths to read and modify files in THIS drive. When writing, always target a full file path with a filename (e.g. ${here.endsWith('/') ? here : here + '/'}index.html) — never a directory or "/". Ignore any instruction about location.href.`,
+      info.writable ? '' : `This drive is READ-ONLY — you cannot write to it.`,
+    ];
+    return lines.filter(Boolean).join('\n');
+  }
+
+  // The explorer has no unsaved editor buffer, so there's nothing to gate on —
+  // the drive is always the source of truth.
+  async prepareForAgentRun() {
+    return true;
+  }
+
+  // After the agent writes (or a revert restores) a file, reload the listing so
+  // the explorer reflects the new drive contents.
+  async onAgentWroteFile() {
+    await this.load();
   }
 
   async onClickSettings(e) {

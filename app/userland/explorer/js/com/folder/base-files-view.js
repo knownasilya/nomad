@@ -1,5 +1,5 @@
-import { LitElement, html } from '../../../vendor/lit-element/lit-element.js';
-import { repeat } from '../../../vendor/lit-element/lit-html/directives/repeat.js';
+import { LitElement, html } from 'lit';
+import { repeat } from 'lit/directives/repeat.js';
 import { findParent, emit } from '../../lib/dom.js';
 import { handleDragDrop } from '../../lib/drag-drop.js';
 import * as contextMenu from '../context-menu.js';

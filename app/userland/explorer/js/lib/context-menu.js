@@ -1,4 +1,4 @@
-import { html } from '../../vendor/lit-element/lit-element.js';
+import { html } from 'lit';
 import { writeToClipboard } from '../lib/clipboard.js';
 import * as toast from '../com/toast.js';
 import { joinPath } from './strings.js';

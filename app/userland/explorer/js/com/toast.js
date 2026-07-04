@@ -1,4 +1,4 @@
-import { LitElement, html } from '../../vendor/lit-element/lit-element.js';
+import { LitElement, html } from 'lit';
 import toastCSS from '../../css/com/toast.css.js';
 
 // exported api

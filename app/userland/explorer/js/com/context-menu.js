@@ -1,6 +1,6 @@
-import { LitElement, html, css } from '../../vendor/lit-element/lit-element.js';
-import { classMap } from '../../vendor/lit-element/lit-html/directives/class-map.js';
-import { ifDefined } from '../../vendor/lit-element/lit-html/directives/if-defined.js';
+import { LitElement, html, css } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
+import { ifDefined } from 'lit/directives/if-defined.js';
 import { findParent } from '../lib/dom.js';
 import dropdownCSS from '../../css/com/dropdown.css.js';
 

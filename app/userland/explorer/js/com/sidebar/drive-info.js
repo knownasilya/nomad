@@ -1,4 +1,4 @@
-import { LitElement, html } from '../../../vendor/lit-element/lit-element.js';
+import { LitElement, html } from 'lit';
 import bytes from '../../../vendor/bytes/index.js';
 
 export class DriveInfo extends LitElement {

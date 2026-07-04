@@ -1,4 +1,4 @@
-import { css } from '../vendor/lit-element/lit-element.js';
+import { css } from 'lit';
 import buttonsCSS from './buttons2.css.js';
 import inputsCSS from './inputs.css.js';
 import tooltipCSS from './tooltip.css.js';
@@ -701,6 +701,30 @@ ${spinnerCSS}
 
   .header path-ancestry .fa-angle-right {
     margin: 0 2px;
+  }
+
+  /* AI Sidebar (collapsible far-right panel) */
+  ai-sidebar {
+    position: fixed;
+    z-index: 3;
+    top: 0;
+    right: 0;
+    width: 360px;
+    height: 100vh;
+    box-sizing: border-box;
+    background: var(--nav-bg);
+    border-left: 1px solid rgba(0, 0, 0, 0.15);
+  }
+  .layout.ai-open nav.right {
+    right: 360px;
+  }
+  .layout.ai-open main {
+    margin-right: 730px;
+  }
+  @media (max-width: 1000px) {
+    .layout.ai-open main {
+      margin-right: 16px;
+    }
   }
 `;
 export default cssStr;

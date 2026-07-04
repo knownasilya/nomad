@@ -1,6 +1,6 @@
 import { BaseFilesView } from './base-files-view.js';
-import { html } from '../../../vendor/lit-element/lit-element.js';
-import { classMap } from '../../../vendor/lit-element/lit-html/directives/class-map.js';
+import { html } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import baseCSS from '../../../css/com/folder/base-files-view.css.js';
 import gridCSS from '../../../css/com/folder/file-grid.css.js';
 

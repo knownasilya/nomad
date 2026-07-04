@@ -1,4 +1,4 @@
-import { LitElement, html } from '../../../vendor/lit-element/lit-element.js';
+import { LitElement, html } from 'lit';
 import * as loc from '../../lib/location.js';
 import '../file/file-display.js';
 

@@ -169,9 +169,17 @@ declare namespace Nomad {
   }
 
   type AiMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+  interface AiChatOpts {
+    /** Resolve tools + AI Config against this Drive instead of the caller's URL. */
+    driveUrl?: string;
+    /** Withhold the file-write tool when false (e.g. read-only Drives). */
+    allowWrite?: boolean;
+    /** Fires per state-reporting tool call — currently writeDriveFile: { path, priorContent }. */
+    onToolEvent?: (e: any) => void;
+  }
   interface Ai {
     /** Stream a chat completion. Yields string chunks as they arrive. */
-    chat(messages: AiMessage[]): AsyncIterableIterator<string>;
+    chat(messages: AiMessage[], opts?: AiChatOpts): AsyncIterableIterator<string>;
     /** Test connectivity to an AI provider base URL. */
     testConnection(baseUrl: string): Promise<any>;
   }

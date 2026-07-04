@@ -51,6 +51,9 @@ function bundleApplication() {
     bundle(p(userlandDir, 'editor/js/main.js'), p(userlandDir, 'editor/js/main.build.js'), {
       browserify: true,
     }),
+    bundle(p(userlandDir, 'explorer/js/main.js'), p(userlandDir, 'explorer/js/main.build.js'), {
+      browserify: true,
+    }),
     bundle(p(userlandDir, 'settings/js/main.js'), p(userlandDir, 'settings/js/main.build.js'), {
       browserify: true,
     }),

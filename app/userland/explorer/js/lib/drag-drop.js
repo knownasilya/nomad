@@ -1,4 +1,4 @@
-import { html } from '../../vendor/lit-element/lit-element.js';
+import { html } from 'lit';
 import * as toast from '../com/toast.js';
 import { joinPath, pluralize } from './strings.js';
 import * as contextMenu from '../com/context-menu.js';

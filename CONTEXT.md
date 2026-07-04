@@ -28,6 +28,28 @@ pairing/invites); they are not inferred from replication. A Drive's writer set (
 the security boundary.
 _Avoid_: author, contributor, collaborator
 
+### Drafts
+
+**Draft**:
+A user's unpublished changes to a Drive — staged file writes and deletes that stay private to that
+user's own Devices and are not replicated to any other peer until Published. Reading a Drive in Draft
+Mode shows these changes merged over the Drive's published state. A Draft is a Drive-wide concept
+(any file), distinct from a Post's `draft` field, which marks an already-replicated Post that Readers
+hide — the two are different axes (unreplicated vs. replicated-but-unlisted) and can co-occur.
+_Avoid_: working copy, staging, branch, unpublished changes
+
+**Draft Mode**:
+The per-Drive editing state in which writes are captured into that Drive's Draft instead of being
+appended to the Drive directly. Toggled in the editor/explorer. Edits left in Draft Mode stay off the
+wire.
+_Avoid_: preview mode, edit mode, staging mode
+
+**Publish**:
+The action that folds a Drive's Draft into the Drive — replaying the staged writes and deletes as real
+appends so they linearise into the Drive's replicated state and become visible to all peers — then
+clears the Draft. Can be all-or-subset.
+_Avoid_: commit, push, go live, release, sync
+
 ### Shell chrome
 
 **Tab Layout**:
@@ -55,6 +77,18 @@ _Avoid_: agent config, AI settings, model config
 **Chat Bubble**:
 A floating chat overlay Nomad injects into a Drive page when `"chatBubble": true` is set in the Drive's `/index.json`. The overlay is provided entirely by Nomad (a Lit custom element injected via the main process); the Drive author does not need to write any chat UI code. The bubble uses `nomad.ai.chat()` resolved against the same Drive's AI Config.
 _Avoid_: chat widget, chat overlay, embedded chat
+
+**AI Sidebar**:
+The collapsible right-hand panel — in both the editor and the explorer — that hosts an agentic chat over the Drive currently open in that app. Unlike the Chat Bubble (injected into a Drive page, resolved against that page's own Drive), the AI Sidebar runs inside a `nomad://` app (`nomad://editor` / `nomad://explorer`) and directs `nomad.ai.chat()` at the *open* Drive via an explicit Drive URL. The agent reads, lists, and writes files across that Drive directly. One shared component (`app-stdlib`) serves both apps; each host supplies unsaved-changes gating and post-write reload.
+_Avoid_: agent sidebar, chat sidebar, prompt panel, sidebar (unqualified — see Tab Sidebar)
+
+**Prompt Session**:
+One conversation in the AI Sidebar — the ordered transcript of user turns and assistant turns, plus the Checkpoints produced by those turns. Reverting the whole session undoes every Checkpoint it produced.
+_Avoid_: chat session, thread, conversation
+
+**Checkpoint**:
+The revertible unit of AI edits: the bundle of file writes produced by a single assistant turn, each capturing the file's prior content (or its prior absence). Reverting a Checkpoint restores those files to their pre-turn state — rewriting prior content and deleting files the turn created. Distinct from Monaco's built-in per-keystroke undo, which does not cover writes the agent makes directly to the Drive.
+_Avoid_: snapshot, restore point, undo step
 
 ### Social data
 
@@ -88,7 +122,7 @@ A named user context with its own Root Drive and browser session isolation (sepa
 _Avoid_: profile, account, identity, workspace
 
 **Vault**:
-The private, identity-level Collaborative Drive that indexes a single user's Spaces (by Root Drive key) and trusted Devices. It is the root of trust for multi-device: every Device the user owns is a Writer of the Vault, and a new Device joins by pairing into it. Distinct from a Space — the Vault is the parent that ties one user's Spaces and Devices together.
+The private, identity-level Collaborative Drive that indexes a single user's Spaces (by Root Drive key) and trusted Devices, and holds that user's in-flight Drafts. It is the root of trust for multi-device: every Device the user owns is a Writer of the Vault, and a new Device joins by pairing into it. Because every Device already writes the Vault, it is also where Drafts live so they sync privately across a user's Devices. Distinct from a Space — the Vault is the parent that ties one user's Spaces and Devices together.
 _Avoid_: account, identity, profile, keyring, sync base
 
 **Device**:

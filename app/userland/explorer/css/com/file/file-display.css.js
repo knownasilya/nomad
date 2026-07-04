@@ -1,4 +1,4 @@
-import { css } from '../../../vendor/lit-element/lit-element.js';
+import { css } from 'lit';
 import typographyCSS from '../../typography.css.js';
 
 const cssStr = css`

@@ -1,4 +1,4 @@
-import { LitElement, html } from '../../vendor/lit-element/lit-element.js';
+import { LitElement, html } from 'lit';
 import css from '../../css/view/folder.css.js';
 import '../com/folder/file-grid.js';
 import '../com/folder/file-list.js';

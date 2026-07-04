@@ -1,4 +1,4 @@
-import { html } from '../../vendor/lit-element/lit-element.js';
+import { html } from 'lit';
 import * as contextMenu from './context-menu.js';
 import * as loc from '../lib/location.js';
 

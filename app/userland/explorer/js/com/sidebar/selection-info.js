@@ -1,5 +1,5 @@
-import { LitElement, html } from '../../../vendor/lit-element/lit-element.js';
-import { repeat } from '../../../vendor/lit-element/lit-html/directives/repeat.js';
+import { LitElement, html } from 'lit';
+import { repeat } from 'lit/directives/repeat.js';
 import bytes from '../../../vendor/bytes/index.js';
 import { emit } from '../../lib/dom.js';
 import '../file/file-display.js';
