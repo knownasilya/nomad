@@ -115,6 +115,14 @@ export const setup = async function (opts) {
         name: 'Adblock Warning Removal List',
         url: 'https://easylist-downloads.adblockplus.org/antiadblockfilters.txt',
       },
+      {
+        name: 'HaGeZi NSFW (Adult Content)',
+        url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nsfw.txt',
+      },
+      {
+        name: 'oisd NSFW (Adult Content)',
+        url: 'https://nsfw.oisd.nl/',
+      },
     ],
   };
 
