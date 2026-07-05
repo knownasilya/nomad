@@ -42,6 +42,8 @@ interface Tab {
   loading: boolean // shows a spinner on the tab
   render?: HyperRender // hyper-only view state
   driveKey?: string // for backend cleanup on close
+  hasDraft?: boolean // drive has unpublished draft changes (ADR-0012)
+  draftPreviewing?: boolean // this tab is rendering the merged draft
   stack: NavEntry[] // back/forward history
   sp: number // stack pointer
 }
@@ -323,6 +325,32 @@ export default function Browser () {
     }
   }, [active, backend, patch, persist])
 
+  // Draft Mode (ADR-0012): reflect whether the shown Drive has unpublished changes (synced from
+  // another device via the Vault), so the address bar can offer a preview toggle. Refreshes on
+  // navigate/reload.
+  useEffect(() => {
+    if (active.kind !== 'hyper' || active.driveType !== 'autobase' || !active.url) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await backend.nomad({ api: 'fs', method: 'draftStatus', url: active.url, args: [] })
+        const v: any = (res && res.value) || {}
+        if (!cancelled) patch(active.id, { hasDraft: !!(v.changes && v.changes.length) })
+      } catch {}
+    })()
+    return () => { cancelled = true }
+  }, [active.id, active.url, active.driveType, active.render?.type, backend, patch])
+
+  const onToggleDraftPreview = useCallback(async () => {
+    if (active.kind !== 'hyper' || !active.url) return
+    const next = !active.draftPreviewing
+    try {
+      await backend.nomad({ api: 'fs', method: 'setDraftPreview', url: active.url, args: [next] })
+      patch(active.id, { draftPreviewing: next })
+      reload()
+    } catch {}
+  }, [active, backend, patch, reload])
+
   // Keep a ref to the latest backend so the stable WebView message handler can
   // forward in-page nomad.* calls without changing identity every render.
   const backendRef = useRef(backend)
@@ -518,6 +546,9 @@ export default function Browser () {
         onForward={() => step(active.id, 1)}
         onFocus={onUrlFocus}
         onBlur={onUrlBlur}
+        hasDraft={!!active.hasDraft}
+        draftPreviewing={!!active.draftPreviewing}
+        onToggleDraft={onToggleDraftPreview}
       />
 
       {/* Only the active tab is mounted: keeping inactive panes in an absolute

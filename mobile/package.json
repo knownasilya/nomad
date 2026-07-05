@@ -4,8 +4,13 @@
   "description": "Nomad mobile — a P2P companion browser for Pear: tabs, the web, and hyper:// drives",
   "main": "expo-router/entry",
   "scripts": {
+    "predev": "npm run bundle",
+    "dev": "expo start",
+    "prestart": "npm run bundle",
     "start": "expo start",
+    "preandroid": "npm run bundle",
     "android": "expo run:android",
+    "preios": "npm run bundle",
     "ios": "expo run:ios",
     "bundle": "bare-pack --linked --host ios-arm64 --host ios-arm64-simulator --host android-arm64 --host android-arm --host android-x64 --out app/app.bundle.mjs backend/backend.mjs",
     "logs": "adb logcat -v time | grep --line-buffered -F '[nomad]'",

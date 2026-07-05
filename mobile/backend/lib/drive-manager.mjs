@@ -42,8 +42,12 @@ const HYPERDRIVE_LOAD_TIMEOUT = 15000
 // (driveType, key); we open the right read-only structure, replicate it over
 // Hyperswarm, and read files/dirs out of it through a unified reader.
 export default class DriveManager {
-  constructor (store) {
+  constructor (store, draftOverlay = null) {
     this.store = store
+    // Draft Mode (ADR-0012): when a Drive is being previewed, the serve path resolves reads through
+    // this overlay first so a navigated page shows the merged (unpublished) Draft, not just the
+    // in-page nomad.fs bridge. `read(keyHex, path)` → { override, buf } (buf=null = tombstone).
+    this.draftOverlay = draftOverlay
     this.swarm = new Hyperswarm()
     // Replicate every connection into the shared corestore. All drives —
     // Hyperdrives and Autobase views alike — live in this store, so a single
@@ -199,26 +203,34 @@ export default class DriveManager {
 
     onStatus('reading', `Reading ${path}`, this.peers)
 
+    // Draft-preview overlay: while this Drive is previewed, a staged file shadows the published one,
+    // and a tombstone (buf=null) reads as absent. Otherwise fall through to the base reader.
+    const readMaybe = async (p) => {
+      if (this.draftOverlay) {
+        const ov = await this.draftOverlay.read(keyHex, p)
+        if (ov && ov.override) return ov.buf
+      }
+      return reader.read(p)
+    }
+
     // Exact file hit?
-    const buf = await reader.read(path)
+    const buf = await readMaybe(path)
     if (buf) return this.serveFile(reader, path, buf, keyHex)
 
     // Custom frontend (the ".ui" convention): a drive with /.ui/ui.html serves it
     // as the drive's entry frontend. We honor it at the drive ROOT, mirroring the
     // desktop protocol handler (where it shadows index.html). Deeper paths still
     // resolve to their own files below, so content drives degrade to static
-    // rendering on mobile. NOTE: this WebView has no `nomad` global yet, so
-    // nomad.* app frontends render blank here; static .ui frontends work.
-    // See nomad.dev "Frontends (.ui folder)".
+    // rendering on mobile. See nomad.dev "Frontends (.ui folder)".
     if (path === '/' || path === '') {
-      const ui = await reader.read('/.ui/ui.html')
+      const ui = await readMaybe('/.ui/ui.html')
       if (ui) return this.serveFile(reader, '/.ui/ui.html', ui, keyHex)
     }
 
     // Directory: try index files, otherwise list it.
     const folder = path.endsWith('/') ? path : path + '/'
     for (const idx of INDEX_FILES) {
-      const idxBuf = await reader.read(folder + idx)
+      const idxBuf = await readMaybe(folder + idx)
       if (idxBuf) return this.serveFile(reader, folder + idx, idxBuf, keyHex)
     }
 

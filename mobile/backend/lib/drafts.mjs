@@ -12,6 +12,19 @@ import { DRIVE_AUTOBASE } from '../../rpc-commands.mjs'
 // can't flag conflicts locally — desktop recomputes conflicts against its own base at Publish, and
 // treats a missing baseline as "no conflict".
 
+// Rendering the merged Draft is toggled per Drive (hex key). While a Drive is previewed, its reads
+// through the in-page nomad.fs bridge merge Draft-over-base, so a drive app rendered in the WebView
+// shows the unpublished Draft. Local to this device; the Draft is already synced via the Vault.
+const _preview = new Set()
+export function setPreview (driveKey, on) {
+  if (!driveKey) return
+  if (on) _preview.add(driveKey)
+  else _preview.delete(driveKey)
+}
+export function isPreview (driveKey) {
+  return !!driveKey && _preview.has(driveKey)
+}
+
 const filesPrefix = (baseKey) => `/.drafts/${baseKey}/files`
 const filePath = (baseKey, path) =>
   `${filesPrefix(baseKey)}${path.startsWith('/') ? path : `/${path}`}`
@@ -71,14 +84,24 @@ export async function stageDel (vault, baseKey, path) {
   await vault.update()
 }
 
+// For the serve overlay (drive-manager): { override:true, buf } when a staged entry exists
+// (buf=null = tombstone), else { override:false } to fall through to the published read.
+export async function stagedContent (vault, baseKey, path) {
+  const entry = await readEntry(vault, baseKey, path)
+  if (!entry) return { override: false }
+  if (entry.op === 'del') return { override: true, buf: null }
+  return { override: true, buf: b4a.from(entry.contentB64, 'base64') }
+}
+
 // Content string for the merged view, or null (missing/tombstoned). Matches bridgeRead's utf8 return.
+// `baseKey` is hex; the manager's bridge wants a Buffer key, so convert for the fall-through read.
 export async function readMerged (vault, manager, baseKey, path) {
   const entry = await readEntry(vault, baseKey, path)
   if (entry) {
     if (entry.op === 'del') return null
     return b4a.toString(b4a.from(entry.contentB64, 'base64'))
   }
-  return manager.bridgeRead(DRIVE_AUTOBASE, baseKey, path)
+  return manager.bridgeRead(DRIVE_AUTOBASE, b4a.from(baseKey, 'hex'), path)
 }
 
 // [{ path, op, conflict:false }] — mobile can't compute conflicts (no baseline); desktop does at Publish.

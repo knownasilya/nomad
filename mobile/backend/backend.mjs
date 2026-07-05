@@ -57,7 +57,13 @@ const storagePath = join(URL.fileURLToPath(Bare.argv[0]), 'hyper-browser')
 if (!fs.existsSync(storagePath)) fs.mkdirSync(storagePath, { recursive: true })
 
 const store = new Corestore(storagePath)
-const manager = new DriveManager(store)
+// Draft Mode (ADR-0012): the serve path resolves reads through this overlay when a Drive is being
+// previewed, so a navigated page shows the merged Draft (not just the in-page bridge). `vault` is
+// assigned later on pairing; the closure reads it at request time.
+const manager = new DriveManager(store, {
+  read: async (keyHex, path) =>
+    drafts.isPreview(keyHex) ? drafts.stagedContent(vault, keyHex, path) : { override: false }
+})
 goodbye(() => manager.close())
 
 // The Vault key (this device's link to its identity) is persisted next to the corestore.
@@ -221,37 +227,43 @@ async function dispatchNomad (api, method, url, args) {
       return `hyper://${res.key}/` // the shim wraps this into a scoped drive handle
     }
 
-    const { key, path } = parseHyperUrl(url)
+    // `key` is a Buffer (what the manager's bridge/write methods want); `keyHex` is the hex string
+    // that the Vault-hosted Draft is keyed by (matching what desktop wrote), so drafts.* take keyHex.
+    const { key, keyHex, path } = parseHyperUrl(url)
 
     // Draft Mode (ADR-0012). Drafts live in the Vault (writable on any device), so stage/preview/
     // discard work here; Publish is gated to drives owned on this device (drivesNs).
-    if (method === 'beginDraft') return drafts.setMode(vault, key, true)
-    if (method === 'endDraft') return drafts.setMode(vault, key, false)
-    if (method === 'draftStatus') return drafts.draftStatus(vault, key)
-    if (method === 'publishDraft') return drafts.publish(vault, manager, drivesNs, key, args[0] || {})
-    if (method === 'discardDraft') return drafts.discard(vault, key, args[0] || {})
-    if (method === 'setDraftPreview') return { on: false } // no local serve path on mobile
+    if (method === 'beginDraft') return drafts.setMode(vault, keyHex, true)
+    if (method === 'endDraft') return drafts.setMode(vault, keyHex, false)
+    if (method === 'draftStatus') return drafts.draftStatus(vault, keyHex)
+    if (method === 'publishDraft') return drafts.publish(vault, manager, drivesNs, keyHex, args[0] || {})
+    if (method === 'discardDraft') return drafts.discard(vault, keyHex, args[0] || {})
+    if (method === 'setDraftPreview') {
+      const on = !!args[0]
+      drafts.setPreview(keyHex, on)
+      return { on }
+    }
 
     const draftOn = async (opts) =>
-      opts && opts.draft === true ? true : opts && opts.draft === false ? false : drafts.getMode(vault, key)
+      opts && opts.draft === true ? true : opts && opts.draft === false ? false : drafts.getMode(vault, keyHex)
 
     // Writes — stage into the Vault-hosted Draft while Draft Mode is on; otherwise write live (owned
     // drives only: manager.writeFile throws a clear read-only error when drivesNs[key] is undefined).
     if (method === 'put' || method === 'writeFile') {
       const data = args[0]; const opts = args[1] || {}
       const buf = opts && opts.encoding === 'base64' ? b4a.from(String(data), 'base64') : b4a.from(String(data == null ? '' : data))
-      if (await draftOn(opts)) { await drafts.stagePut(vault, key, path, buf, opts); return true }
-      await manager.writeFile(DRIVE_AUTOBASE, keyBuf(key), drivesNs[key], path, buf)
+      if (await draftOn(opts)) { await drafts.stagePut(vault, keyHex, path, buf, opts); return true }
+      await manager.writeFile(DRIVE_AUTOBASE, keyBuf(key), drivesNs[keyHex], path, buf)
       return true
     }
     if (method === 'del' || method === 'unlink') {
       const opts = args[0] || {}
-      if (await draftOn(opts)) { await drafts.stageDel(vault, key, path); return true }
-      await manager.deletePath(DRIVE_AUTOBASE, keyBuf(key), drivesNs[key], path, false)
+      if (await draftOn(opts)) { await drafts.stageDel(vault, keyHex, path); return true }
+      await manager.deletePath(DRIVE_AUTOBASE, keyBuf(key), drivesNs[keyHex], path, false)
       return true
     }
     if (method === 'mkdir') {
-      await manager.mkdir(DRIVE_AUTOBASE, keyBuf(key), drivesNs[key], path)
+      await manager.mkdir(DRIVE_AUTOBASE, keyBuf(key), drivesNs[keyHex], path)
       return true
     }
 
@@ -259,18 +271,22 @@ async function dispatchNomad (api, method, url, args) {
       throw new Error(`nomad.fs.${method} isn’t supported on mobile yet`)
     }
 
-    // Reads
+    // Reads. Merge the Draft over the base when { draft:true } is passed OR this Drive is being
+    // previewed (drafts.isPreview) — so a drive app rendered in a previewing tab reads its own
+    // merged content, mirroring desktop. { draft:false } opts out.
+    const wantMerge = (opts) =>
+      opts.draft === true ? true : opts.draft === false ? false : drafts.isPreview(keyHex)
     if (method === 'getInfo') return manager.bridgeInfo(DRIVE_AUTOBASE, key)
     if (method === 'get' || method === 'readFile') {
       const opts = args[0] || {}
-      if (opts.draft === true) return drafts.readMerged(vault, manager, key, path)
+      if (wantMerge(opts)) return drafts.readMerged(vault, manager, keyHex, path)
       return manager.bridgeRead(DRIVE_AUTOBASE, key, path)
     }
     if (method === 'list' || method === 'query' || method === 'readdir') {
       const opts = args[0] || {}
       let keys = await manager.bridgeListKeys(DRIVE_AUTOBASE, key, path)
-      if (opts.draft === true) {
-        const { removed, put } = await drafts.dirOverlay(vault, key, path)
+      if (wantMerge(opts)) {
+        const { removed, put } = await drafts.dirOverlay(vault, keyHex, path)
         keys = keys.filter((k) => !removed.has(k))
         for (const p of put) if (!keys.includes(p)) keys.push(p)
       }

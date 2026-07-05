@@ -17,12 +17,15 @@ interface Props {
   onForward: () => void
   onFocus?: () => void
   onBlur?: () => void
+  hasDraft?: boolean // drive has unpublished draft changes (ADR-0012)
+  draftPreviewing?: boolean // this tab is rendering the merged draft
+  onToggleDraft?: () => void
 }
 
 // nomad-style location bar: back/forward nav, a rounded input with a leading
 // trust indicator and drive-type chip, and a reload/go button on the right.
 export default function AddressBar (props: Props) {
-  const { value, onChangeText, onSubmit, onReload, loading, isHyper, driveType, canBack, canForward, onBack, onForward, onFocus, onBlur } = props
+  const { value, onChangeText, onSubmit, onReload, loading, isHyper, canBack, canForward, onBack, onForward, onFocus, onBlur, hasDraft, draftPreviewing, onToggleDraft } = props
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
 
@@ -51,10 +54,15 @@ export default function AddressBar (props: Props) {
           returnKeyType='go'
           selectTextOnFocus
         />
-        {isHyper && (
-          <View style={s.drivePill}>
-            <Text style={s.drivePillText}>{driveType === 'autobase' ? 'AB' : 'HD'}</Text>
-          </View>
+        {hasDraft && (
+          <TouchableOpacity
+            style={[s.draftBtn, draftPreviewing && s.draftBtnActive]}
+            onPress={onToggleDraft}
+            hitSlop={6}
+            activeOpacity={0.7}
+          >
+            <Text style={s.draftText}>✎</Text>
+          </TouchableOpacity>
         )}
       </View>
       <TouchableOpacity style={s.go} onPress={loading ? onReload : onSubmit} activeOpacity={0.85}>
@@ -91,14 +99,9 @@ function makeStyles (t: Theme) {
     },
     trust: { fontSize: 13, marginRight: 8 },
     input: { flex: 1, color: t.text, fontSize: 15, padding: 0 },
-    drivePill: {
-      backgroundColor: t.trustBg,
-      borderRadius: radius.sm,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      marginLeft: 6
-    },
-    drivePillText: { color: t.trustText, fontSize: 12, fontWeight: '700' },
+    draftBtn: { paddingHorizontal: 7, paddingVertical: 4, marginLeft: 4, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+    draftBtnActive: { backgroundColor: 'rgba(31,157,77,0.18)' },
+    draftText: { color: '#1f9d4d', fontSize: 15, fontWeight: '700' },
     go: {
       width: 44,
       height: 44,
