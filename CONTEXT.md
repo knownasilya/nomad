@@ -78,6 +78,10 @@ _Avoid_: host, server, AI host, master
 A Device that cannot (or chooses not to) reach an AI Runtime of its own, so it forwards a `nomad.ai.chat()` call to an AI Provider and renders the streamed result. Typically the mobile Device. The Client contributes the request context (which Drive, which messages); the Provider contributes the loop and the Runtime.
 _Avoid_: thin client, slave, requester
 
+**AI Bridge**:
+The live, authenticated channel between two of a user's Devices that carries a forwarded `nomad.ai.chat()` call from an AI Client to an AI Provider and streams the result (and reverse-direction permission prompts) back. It is a Protomux channel over the shared Hyperswarm connection, keyed on the Vault and gated by a signature challenge against the Vault's Writer set. Distinct from the Vault itself: the Vault replicates data (eventual-consistency oplog); the AI Bridge is request/response and carries no persisted state — the chat never enters the Vault. See ADR-0013.
+_Avoid_: AI channel, AI relay, AI proxy, RPC channel
+
 **AI Config**:
 The `/ai/` folder inside a Drive, containing `system.md` (the system prompt) and optionally a `tools/` directory. A Drive has an AI Config when it includes this folder. Any Drive can opt into AI behaviour by adding an `ai` key to its `/index.json` — either an inline object `{ "model": "..." }` or a pointer string `"hyper://..."` delegating to another Drive's AI Config.
 _Avoid_: agent config, AI settings, model config
