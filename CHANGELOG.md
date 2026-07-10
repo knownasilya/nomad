@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.3.0](https://github.com/knownasilya/nomad/compare/v1.2.32...v1.3.0) (2026-07-10)
+
+
+### Features
+
+* **api:** nomad.page + nomad.parseUrl — host-provided page identity ([5723012](https://github.com/knownasilya/nomad/commit/5723012ba316892d4d47ac867e13ad9d471104db))
+* **mobile:** loopback HTTP gateway — serve drives from a real origin ([2ae7e65](https://github.com/knownasilya/nomad/commit/2ae7e65bcd6b46782aefe278af10df4c10d5ad23))
+
+
+### Bug Fixes
+
+* **reader:** align unread dot and feed counts ([414bb5b](https://github.com/knownasilya/nomad/commit/414bb5b4004708b24991abf753cab7555c52097f))
+* **vault:** publish local Spaces to the Vault so paired devices see them ([43190fd](https://github.com/knownasilya/nomad/commit/43190fd083f017a059e509bde3c0f8fda293d1d6))
+
 ### [1.2.32](https://github.com/knownasilya/nomad/compare/v1.2.31...v1.2.32) (2026-07-10)
 
 
