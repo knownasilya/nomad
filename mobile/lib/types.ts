@@ -26,6 +26,8 @@ export interface ContentMsg {
   path?: string
   entries?: DirEntry[]
   bodyBase64?: string
+  http?: string // loopback gateway URL to load in the WebView (files are served, not inlined)
+  port?: number // the drive's gateway port, for mapping loopback URLs back to hyper:// ones
   updated?: boolean // a background instant-cache refresh replacing an earlier cached render
 }
 
@@ -198,7 +200,35 @@ export const NOMAD_SHIM = `(function(){
   fs.setDraftPreview = function(url, on){ return rpc('setDraftPreview', url, [on]); };
   fs.watch = noopStream;
   fs.watchDraft = noopStream;
+  // nomad.parseUrl — pure hyper:// URL parser (no RPC). Keep in sync with desktop's copy in
+  // app/bg/web-apis/fg.ts. Returns null for non-hyper URLs. key is as-written (hex or z32).
+  function parseUrl(url){
+    var m = /^hyper:\\/\\/([^/+?#]+)(?:\\+([^/?#]+))?([^?#]*)(\\?[^#]*)?/.exec(String(url || ''));
+    if (!m) return null;
+    return { url: String(url), origin: 'hyper://' + m[1] + '/', key: m[1], version: m[2] || null, path: m[3] || '/', search: m[4] || '' };
+  }
+  // nomad.page — this page's own identity. The drive key/origin are HOST-provided (window.__nomadPage
+  // is injected by the app for the drive it serves on this WebView); path/url are LIVE getters over
+  // location, which is truthful here — pages load from the loopback http gateway (a real origin), so
+  // native in-page navigations keep nomad.page.path current without re-injection.
+  var page = null;
+  if (window.__nomadPage && window.__nomadPage.key) {
+    page = {
+      key: window.__nomadPage.key,
+      origin: 'hyper://' + window.__nomadPage.key + '/',
+      version: null,
+      get path () { return location.pathname || '/'; },
+      get search () { return location.search || ''; },
+      get url () { return this.origin + (location.pathname || '/').slice(1) + (location.search || ''); }
+    };
+  } else if (window.__nomadPage && window.__nomadPage.url) {
+    page = parseUrl(window.__nomadPage.url);
+  } else {
+    page = parseUrl(location.href);
+  }
   window.nomad = {
+    page: page,
+    parseUrl: parseUrl,
     fs: fs,
     ai: {
       chat: aiChat,

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { useTheme, radius, type Theme } from '../lib/theme'
@@ -8,7 +8,8 @@ import { shortKey } from '../lib/hyperUrl'
 export type HyperRender =
   | { type: 'loading'; status: string; peers: number }
   | { type: 'error'; message: string; url: string }
-  | { type: 'html'; html: string; keyHex?: string }
+  | { type: 'http'; uri: string; keyHex: string; url: string; port: number }
+  | { type: 'html'; html: string; keyHex?: string; url?: string }
   | { type: 'image'; uri: string }
   | { type: 'text'; text: string; mime: string }
   | { type: 'dir'; path: string; entries: DirEntry[]; keyHex: string }
@@ -18,19 +19,34 @@ interface Props {
   onNavigate: (url: string) => void
   onMessage: (data: string) => void
   registerWebView: (ref: WebView | null) => void
+  // Native in-page navigation on the loopback origin (link clicks, back/forward): reports the
+  // mapped hyper:// URL + history state so the address bar and back button stay truthful.
+  onHyperNav?: (hyperUrl: string, canGoBack: boolean) => void
 }
 
 // Renders content the backend pulled out of a hyper:// drive, themed to match
 // nomad's chrome. HTML/text/images go through a WebView; directories render as
 // a tappable file listing.
-export default function HyperView ({ render, onNavigate, onMessage, registerWebView }: Props) {
+export default function HyperView ({ render, onNavigate, onMessage, registerWebView, onHyperNav }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
+  // Android kills WebView renderer processes under memory pressure; the view then goes permanently
+  // WHITE until the native WebView is recreated. Our pages are heavy (all assets inlined as data:
+  // URIs), so this genuinely happens after a few navigations. Bump the epoch on crash to remount a
+  // fresh WebView with a fresh renderer — the html source is already in hand, so it reloads
+  // instantly. (onContentProcessDidTerminate is the iOS equivalent.)
+  const [epoch, setEpoch] = useState(0)
+  const onRendererGone = (which: string) => (e: any) => {
+    console.warn(`[nomad] WebView ${which} terminated`, e?.nativeEvent || '')
+    setEpoch((n) => n + 1)
+  }
   const webProps = {
     originWhitelist: ['*'],
     injectedJavaScriptBeforeContentLoaded: CONSOLE_SHIM + NOMAD_SHIM,
     webviewDebuggingEnabled: true,
-    onMessage: (e: any) => onMessage(e.nativeEvent.data)
+    onMessage: (e: any) => onMessage(e.nativeEvent.data),
+    onRenderProcessGone: onRendererGone('renderer'),
+    onContentProcessDidTerminate: onRendererGone('content process')
   }
 
   if (render.type === 'loading') {
@@ -54,20 +70,57 @@ export default function HyperView ({ render, onNavigate, onMessage, registerWebV
     )
   }
 
-  if (render.type === 'html') {
-    // The WebView loads this HTML with no hyper:// base URL, so a drive frontend
-    // can't learn its own URL from `location`. Set window.__hyperBase before any
-    // page script runs (the blog template reads it). Must precede the page's
-    // module script, so it goes in injectedJavaScriptBeforeContentLoaded.
-    const baseJs = render.keyHex
-      ? `window.__hyperBase=${JSON.stringify('hyper://' + render.keyHex + '/')};`
-      : ''
+  if (render.type === 'http') {
+    // The page loads from the loopback gateway — a REAL http origin. location.pathname is the
+    // drive route, links and history are native, and sub-resources stream per-request (no data-URI
+    // inlining). __nomadPage carries just the drive key: the port is drive-scoped, so the key is a
+    // constant for this WebView, and nomad.page derives path/url live from location.
+    const pageJs = `window.__nomadPage=${JSON.stringify({ key: render.keyHex })};`
+    const loopbackOrigin = `http://127.0.0.1:${render.port}`
     return (
       <WebView
+        key={`${render.keyHex}:${epoch}`}
         ref={registerWebView}
         {...webProps}
-        injectedJavaScriptBeforeContentLoaded={baseJs + CONSOLE_SHIM + NOMAD_SHIM}
-        source={{ html: render.html }}
+        injectedJavaScriptBeforeContentLoaded={pageJs + CONSOLE_SHIM + NOMAD_SHIM}
+        source={{ uri: render.uri }}
+        style={s.web}
+        setSupportMultipleWindows={false}
+        // Same-drive navigation stays native (that's the point). Anything else — a hyper:// link to
+        // another drive, or an external web link — routes through the app's navigation.
+        onShouldStartLoadWithRequest={(req) => {
+          if (req.url.startsWith(loopbackOrigin)) return true
+          if (/^(hyper|https?):/.test(req.url)) { onNavigate(req.url); return false }
+          return false
+        }}
+        onNavigationStateChange={(nav) => {
+          if (!onHyperNav || nav.loading || !nav.url.startsWith(loopbackOrigin)) return
+          onHyperNav(`hyper://${render.keyHex}${nav.url.slice(loopbackOrigin.length) || '/'}`, nav.canGoBack)
+        }}
+      />
+    )
+  }
+
+  if (render.type === 'html') {
+    // window.__nomadPage: the page's own URL + drive key, host-provided from the serve we just did.
+    // NOMAD_SHIM turns it into nomad.page — the authoritative way for a drive frontend to learn its
+    // route. Never derived from `location` in the page: a WebView loading an html string under a
+    // custom-scheme baseUrl reports location.host/pathname unreliably. Must precede NOMAD_SHIM, so
+    // it goes first in injectedJavaScriptBeforeContentLoaded.
+    const pageJs = render.url
+      ? `window.__nomadPage=${JSON.stringify({ url: render.url, key: render.keyHex || null })};`
+      : ''
+    // baseUrl gives the document a real-ish URL (nice for debugging, and it differs per route so RN
+    // reloads on every navigation — no React `key` remount, which recycles a native WebView and can
+    // render blank). Frontends must NOT rely on location parsing it — that's what nomad.page is for.
+    // Sub-resources are pre-inlined as data: URIs (the WebView can't fetch hyper://).
+    return (
+      <WebView
+        key={`wv${epoch}`}
+        ref={registerWebView}
+        {...webProps}
+        injectedJavaScriptBeforeContentLoaded={pageJs + CONSOLE_SHIM + NOMAD_SHIM}
+        source={{ html: render.html, baseUrl: render.url }}
         style={s.web}
         setSupportMultipleWindows={false}
       />
@@ -78,7 +131,7 @@ export default function HyperView ({ render, onNavigate, onMessage, registerWebV
     const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
       <body style="margin:0;background:${t.bg};display:flex;align-items:center;justify-content:center;height:100vh">
       <img src="${render.uri}" style="max-width:100%;max-height:100%"/></body>`
-    return <WebView ref={registerWebView} {...webProps} source={{ html }} style={s.web} />
+    return <WebView key={`wv${epoch}`} ref={registerWebView} {...webProps} source={{ html }} style={s.web} />
   }
 
   if (render.type === 'text') {
@@ -86,7 +139,7 @@ export default function HyperView ({ render, onNavigate, onMessage, registerWebV
     const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
       <body style="margin:0;background:${t.bg};color:${t.textDim};font:13px ui-monospace,Menlo,monospace">
       <pre style="padding:16px;white-space:pre-wrap;word-break:break-word">${escaped}</pre></body>`
-    return <WebView ref={registerWebView} {...webProps} source={{ html }} style={s.web} />
+    return <WebView key={`wv${epoch}`} ref={registerWebView} {...webProps} source={{ html }} style={s.web} />
   }
 
   // Directory listing

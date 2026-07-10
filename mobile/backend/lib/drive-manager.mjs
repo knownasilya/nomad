@@ -7,7 +7,6 @@ import crypto from 'hypercore-crypto'
 import b4a from 'b4a'
 import mime from 'mime'
 import { marked } from 'marked'
-import { inlineAssets } from './inline-assets.mjs'
 import { renderMarkdownDoc } from './markdown.mjs'
 import { DRIVE_HYPERDRIVE, DRIVE_AUTOBASE } from '../../rpc-commands.mjs'
 import {
@@ -76,7 +75,7 @@ export default class DriveManager {
     const cached = this.drives.get(ck)
     if (cached) return cached
 
-    onStatus('opening', `Opening ${driveType} drive…`)
+    onStatus('opening', `Opening ${driveType}…`)
     const entry = driveType === DRIVE_AUTOBASE
       ? await this._openAutobase(key, ck, onStatus, ns)
       : await this._openHyperdrive(key, ck, onStatus, ns)
@@ -215,7 +214,10 @@ export default class DriveManager {
 
   // Resolve a parsed hyper URL to renderable content.
   // Returns { kind: 'file', mime, buffer } or { kind: 'dir', entries }.
-  async resolve (driveType, key, path, onStatus = () => {}, ns = null) {
+  // opts.wantsHTML mirrors desktop's Accept-header check: only an HTML navigation is served the
+  // /.ui SPA — a fetch()/sub-resource request resolves actual files (the http gateway passes the
+  // real Accept header; RPC opens default to true, being navigations by definition).
+  async resolve (driveType, key, path, onStatus = () => {}, ns = null, { wantsHTML = true } = {}) {
     const { reader } = await this.open(driveType, key, onStatus, ns)
     const keyHex = b4a.toString(key, 'hex')
 
@@ -231,19 +233,25 @@ export default class DriveManager {
       return reader.read(p)
     }
 
-    // Exact file hit?
-    const buf = await readMaybe(path)
-    if (buf) return this.serveFile(reader, path, buf, keyHex)
-
-    // Custom frontend (the ".ui" convention): a drive with /.ui/ui.html serves it
-    // as the drive's entry frontend. We honor it at the drive ROOT, mirroring the
-    // desktop protocol handler (where it shadows index.html). Deeper paths still
-    // resolve to their own files below, so content drives degrade to static
-    // rendering on mobile. See nomad.dev "Frontends (.ui folder)".
-    if (path === '/' || path === '') {
+    // Custom frontend (the ".ui" convention): a drive with /.ui/ui.html is an SPA — serve it for any
+    // HTML navigation (the drive root, a directory-like trailing-slash path, or an extensionless
+    // path) so client-side routes like /posts/<slug>/ render through the app instead of dead-ending
+    // on the directory's raw index.md. This mirrors the desktop protocol handler's condition
+    // (bg/protocols/hyper.js: filepath === '/' || hasTrailingSlash || !filepath.includes('.')).
+    // Sub-resources (/.ui/app.js, *.json, images) carry an extension and fall through to the exact-
+    // file read below, so the SPA still loads its own assets. The SPA reads its route from
+    // location.pathname — HyperView gives the WebView the served URL as its baseUrl, so location
+    // reflects the real drive URL just like desktop's native hyper:// origin.
+    const lastSeg = path.slice(path.lastIndexOf('/') + 1)
+    const isNavigation = wantsHTML && (path === '/' || path === '' || path.endsWith('/') || !lastSeg.includes('.'))
+    if (isNavigation) {
       const ui = await readMaybe('/.ui/ui.html')
       if (ui) return this.serveFile(reader, '/.ui/ui.html', ui, keyHex)
     }
+
+    // Exact file hit?
+    const buf = await readMaybe(path)
+    if (buf) return this.serveFile(reader, path, buf, keyHex)
 
     // Directory: try index files, otherwise list it.
     const folder = path.endsWith('/') ? path : path + '/'
@@ -313,18 +321,16 @@ export default class DriveManager {
     if (entry && entry._sync) { try { await entry._sync } catch {} }
   }
 
-  // Turn a file into renderable content. HTML and Markdown become a standalone
-  // HTML page (Markdown is rendered; both get their relative sub-resources
-  // inlined and an in-page nav bridge). Everything else is served as-is.
+  // Turn a file into renderable content. Markdown becomes a standalone HTML page; everything else
+  // is served as-is. Pages load through the loopback http gateway, so relative sub-resources are
+  // fetched live per-request like a normal website — no data-URI inlining (which produced giant
+  // documents that OOM-killed Android WebView renderers) and no click-interception nav bridge.
   async serveFile (reader, path, buffer, keyHex) {
     const lower = path.toLowerCase()
     const isMarkdown = lower.endsWith('.md') || lower.endsWith('.markdown')
-    const isHtml = (mime.getType(path) || '') === 'text/html'
-
-    if (buffer && (isHtml || isMarkdown)) {
+    if (buffer && isMarkdown) {
       try {
-        let html = isMarkdown ? renderMarkdownDoc(marked.parse(b4a.toString(buffer)), path) : b4a.toString(buffer)
-        html = await inlineAssets(reader, path, html, keyHex)
+        const html = renderMarkdownDoc(marked.parse(b4a.toString(buffer)), path)
         return { kind: 'file', mime: 'text/html', buffer: b4a.from(html) }
       } catch {}
     }
@@ -599,7 +605,12 @@ async function * hyperdriveKeys (drive, folder) {
   try {
     for await (const node of drive.list(folder, { recursive: true })) yield node.key
   } catch {
-    for await (const name of drive.readdir(folder)) yield folder + name
+    // list() failed (e.g. this key is really an Autobase and its blocks won't decode as a
+    // Hyperdrive). Fall back to a shallow readdir, and if that throws too, yield nothing rather
+    // than propagating — an undecodable wrong-type probe must not fail the whole drive load.
+    try {
+      for await (const name of drive.readdir(folder)) yield folder + name
+    } catch {}
   }
 }
 
@@ -624,8 +635,14 @@ function beeReader (bee, store) {
 
 async function * beeKeys (bee, folder) {
   const opts = folder === '/' ? {} : { gte: folder, lt: folder + '￿' }
-  for await (const node of bee.createReadStream(opts)) {
-    yield typeof node.key === 'string' ? node.key : b4a.toString(node.key)
+  try {
+    for await (const node of bee.createReadStream(opts)) {
+      yield typeof node.key === 'string' ? node.key : b4a.toString(node.key)
+    }
+  } catch (err) {
+    // A still-replicating or format-mismatched Autobase view can throw mid-stream (DECODING_ERROR).
+    // Yield whatever decoded rather than failing the drive load with a raw decoding error.
+    console.log('[beeKeys] read stream ended early:', (err && err.code) || err)
   }
 }
 
