@@ -272,6 +272,27 @@ export async function syncSpacesFromVault() {
   return { created };
 }
 
+// Owner side: publish this Device's local Spaces into the Vault index so they replicate to the
+// user's other Devices — the symmetric counterpart of syncSpacesFromVault. registerSpace is never
+// called at space-creation time, so without this backfill a paired Device sees the Devices index
+// but zero Spaces. Idempotent: skips Spaces already indexed in the Vault (matched by Root Drive
+// key) so repeated opens of the Devices page don't append redundant ops to the Autobase.
+export async function syncSpacesToVault() {
+  const sess = await getVault();
+  if (!sess) return { registered: 0 };
+  const indexed = new Set((await listSpaces()).map((s) => s.rootDriveKey).filter(Boolean));
+  const local = await spacesDb.list();
+  let registered = 0;
+  for (const space of local) {
+    const rootDriveKey = space.root_drive_url ? drives.fromURLToKey(space.root_drive_url) : null;
+    if (!rootDriveKey || indexed.has(rootDriveKey)) continue;
+    await registerSpace(space, rootDriveKey);
+    registered++;
+  }
+  if (registered) logger.info('Synced spaces to vault', { registered });
+  return { registered };
+}
+
 // internal record helpers (Hyperbee view <-> JSON)
 // =
 

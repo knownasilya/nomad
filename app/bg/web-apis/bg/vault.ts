@@ -40,6 +40,11 @@ export default {
       try {
         await vault.registerOwnDevice({ name: defaultDeviceName(), platform: thisPlatform() });
       } catch {}
+      // Backfill local Spaces into the Vault so they replicate to paired Devices. registerSpace is
+      // never called on space creation, so without this a paired Device sees Devices but no Spaces.
+      try {
+        await vault.syncSpacesToVault();
+      } catch {}
     }
     const devices = sess ? await vault.listDevices() : [];
     return {
@@ -65,9 +70,13 @@ export default {
   async createInvite() {
     const code = await pairing.createInvite();
     // createInvite ensures the Vault exists; record the owner now so the device you're about to
-    // pair sees this Device in its list (not just itself).
+    // pair sees this Device in its list (not just itself), and publish this Device's Spaces so the
+    // joining Device sees them once it syncs the Vault.
     try {
       await vault.registerOwnDevice({ name: defaultDeviceName(), platform: thisPlatform() });
+    } catch {}
+    try {
+      await vault.syncSpacesToVault();
     } catch {}
     return { code };
   },
