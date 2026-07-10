@@ -1,6 +1,7 @@
 export function defaultBrowsingSessionState() {
   return {
     windows: [defaultWindowState()],
+    closedWindows: [],
     cleanExit: true,
   };
 }

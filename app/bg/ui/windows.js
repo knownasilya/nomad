@@ -67,7 +67,6 @@ export async function setup() {
   userDataDir = jetpack.cwd(app.getPath('userData'));
   sessionWatcher = new SessionWatcher(userDataDir);
   var previousSessionState = getPreviousBrowsingSession();
-  var customStartPage = await settingsDb.get('custom_start_page');
   var isTestDriverActive = !!getEnvVar('NOMAD_TEST_DRIVER');
   var isOpenUrlEnvVar = !!getEnvVar('NOMAD_OPEN_URL');
 
@@ -185,19 +184,26 @@ export async function setup() {
     }
   });
 
+  // Always restore the previous session's tabs so they're preserved across both a hard quit and
+  // closing every window before quitting (falls back to the last soft-closed window's tabs). On an
+  // UNCLEAN exit (crash) we still ask first, in case a bad page caused the crash.
+  const prevWindows = (previousSessionState.windows || []).filter(Boolean);
+  const prevClosed = (previousSessionState.closedWindows || []).filter(Boolean);
+  const hasSession = prevWindows.length > 0 || prevClosed.length > 0;
   if (
     !isTestDriverActive &&
     !isOpenUrlEnvVar &&
-    (customStartPage === 'previous' ||
-      (!previousSessionState.cleanExit && userWantsToRestoreSession()))
+    hasSession &&
+    (previousSessionState.cleanExit || userWantsToRestoreSession())
   ) {
-    // restore old window
+    // restore old window(s)
     restoreBrowsingSession(previousSessionState);
   } else {
     let opts = {};
-    if (previousSessionState.windows[0]) {
+    const pos = prevWindows[0] || prevClosed[0];
+    if (pos) {
       // use the last session's window position
-      let { x, y, width, height } = previousSessionState.windows[0];
+      let { x, y, width, height } = pos;
       opts.x = x;
       opts.y = y;
       opts.width = width;
@@ -447,7 +453,9 @@ export function updateAddedWindowSettings(win, settings) {
 
 export function ensureOneWindowExists() {
   if (numActiveWindows === 0) {
-    createShellWindow();
+    // Reopening after every window was closed (e.g. clicking the macOS dock icon): bring back the
+    // last closed window's tabs rather than a blank window, so a soft close never loses them.
+    createShellWindow(sessionWatcher?.popLastClosedWindow());
   }
 }
 
@@ -528,7 +536,11 @@ function userWantsToRestoreSession() {
 }
 
 function restoreBrowsingSession(previousSessionState) {
-  let { windows } = previousSessionState;
+  let windows = (previousSessionState.windows || []).filter(Boolean);
+  if (!windows.length) {
+    // Every window was soft-closed before the app quit — restore the most recent one's tabs.
+    windows = (previousSessionState.closedWindows || []).slice(0, 1);
+  }
   if (windows.length) {
     for (let windowState of windows) {
       if (windowState) {
