@@ -1,5 +1,36 @@
 # Releasing
 
+## Cutting a release
+
+**Don't hand-edit version numbers or hand-create the tag.** Use `standard-version`, which keeps the
+two desktop manifests, the changelog, the commit, and the tag consistent in one step:
+
+```bash
+npm run release-version                        # patch bump (X.Y.Z → X.Y.(Z+1))
+npm run release-version -- --release-as minor  # or major, or an explicit 1.2.30
+git push --follow-tags origin main             # pushes the chore(release) commit AND the tag
+```
+
+`standard-version` (configured by [`.versionrc`](../.versionrc)):
+
+- bumps **`package.json`** and **`app/package.json`** — both must match, because `app/package.json`
+  is the manifest the Electron app actually reports (auto-updater / About box); a bump that misses
+  it ships a mis-versioned desktop build,
+- regenerates **`CHANGELOG.md`** from the conventional-commit history (so write `feat:` / `fix:` /
+  etc. commit messages),
+- makes the **`chore(release): X.Y.Z`** commit and the annotated **`vX.Y.Z`** tag.
+
+The `--follow-tags` push of the tag is what triggers the workflow below. Because `standard-version`
+sets `package.json` to the same version as the tag it creates, the desktop and Android artifacts
+always land on one release — no manual sync needed.
+
+> **Mobile note:** the Android `versionName`/`versionCode` come from the **tag** in CI (see
+> [Versioning (Android)](#versioning-android)), so `mobile/app.json`'s `version` is only a local-dev
+> fallback and is *not* bumped by `standard-version` — nudge it by hand if you care about the
+> local-build version.
+
+## What a tag triggers
+
 Pushing a tag matching `v*` (e.g. `v1.2.3`) triggers
 [`.github/workflows/release.yml`](../.github/workflows/release.yml), which runs three build jobs:
 
@@ -14,9 +45,10 @@ electron-builder creates it (its default `releaseType` is draft), and the Androi
 creates it first if it wins the race. **Publish the draft manually** once you've sanity-checked the
 artifacts.
 
-The desktop release is named after `package.json`'s `version`, so **keep that version in sync with
-the tag you push** (`v1.2.30` ⇒ `package.json` `1.2.30`) or the desktop and Android artifacts land
-on two separate draft releases.
+The desktop release is named after `package.json`'s `version`; the Android job keys off the tag. The
+`standard-version` flow above keeps them identical, so both land on the same release. If you ever
+tag by hand and `package.json` doesn't match, the two sets of artifacts split across separate draft
+releases — another reason to use `npm run release-version`.
 
 The AAB is what the Play Store accepts; the APK is what users can sideload directly from the
 GitHub release (AABs are not installable).
