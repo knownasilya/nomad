@@ -14,6 +14,10 @@ export default class SessionWatcher {
   static get emptySnapshot() {
     return {
       windows: [],
+      // Tabs of recently-closed windows (most-recent first, capped), kept so a soft close never
+      // loses its tabs: restored on dock-reopen, or on next launch if every window was closed
+      // before quitting. Persisted, unlike an in-memory-only stack.
+      closedWindows: [],
       backgroundTabs: [],
       // We set this to false by default and clean this up when the session
       // exits. If we ever open up a snapshot and this isn't cleaned up assume
@@ -25,7 +29,6 @@ export default class SessionWatcher {
   constructor(userDataDir) {
     this.userDataDir = userDataDir;
     this.snapshot = SessionWatcher.emptySnapshot;
-    this.closedWindowStates = [];
     this.recording = true;
     this.watchers = {};
   }
@@ -63,8 +66,9 @@ export default class SessionWatcher {
       if (this.recording) {
         let i = this.snapshot.windows.indexOf(state);
         this.snapshot.windows.splice(i, 1);
+        // Remember the closed window's tabs (persisted + capped) so they can be restored.
+        this.snapshot.closedWindows = [state, ...(this.snapshot.closedWindows || [])].slice(0, 10);
         this.writeSnapshot();
-        this.closedWindowStates.push(state);
       }
       delete this.watchers[winId];
       watcher.removeAllListeners();
@@ -101,7 +105,9 @@ export default class SessionWatcher {
   }
 
   popLastClosedWindow() {
-    return this.closedWindowStates.pop();
+    const state = (this.snapshot.closedWindows || []).shift();
+    if (state) this.writeSnapshot();
+    return state;
   }
 }
 
