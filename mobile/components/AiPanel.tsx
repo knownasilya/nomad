@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
-import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, KeyboardAvoidingView, Keyboard, Platform, StyleSheet } from 'react-native'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { AiChatHandlers, AiChatHandle } from '../lib/useBackend'
 import Markdown from './Markdown'
@@ -37,6 +37,19 @@ interface Props {
 export default function AiPanel ({ visible, onClose, url, title, aiChat, onPrompt, onPreviewDraft }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
+  const insets = useSafeAreaInsets()
+  // Android keyboard tracking: this panel is a full-screen Modal, and on Android a Modal opens its
+  // own window that does NOT inherit the activity's windowSoftInputMode — so adjustResize never
+  // fires and (with edge-to-edge) the system won't inset it either, leaving the keyboard on top of
+  // the input row. Track the keyboard height and lift the panel by it ourselves (iOS uses
+  // KeyboardAvoidingView below). Height is 0 whenever the keyboard is hidden or on iOS.
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
+  useEffect(() => {
+    if (Platform.OS !== 'android') return
+    const show = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates?.height ?? 0))
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0))
+    return () => { show.remove(); hide.remove() }
+  }, [])
   // Per-context transcripts (keyed by Drive URL, or 'general' for a non-Drive tab). Opening the panel
   // on tab A vs tab B — or with no page — shows that context's own history. In-memory for the session.
   const [conversations, setConversations] = useState<Record<string, ChatMsg[]>>({})
@@ -135,10 +148,12 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
 
   // Keyboard handling: use KeyboardAvoidingView ONLY on iOS. On Android a KeyboardAvoidingView
   // inside a full-screen Modal can enter an infinite onLayout loop (the view never paints and the
-  // app pins the CPU); Android's default windowSoftInputMode=adjustResize already keeps the input
-  // visible, so a plain View is both safe and sufficient.
+  // app pins the CPU), and adjustResize doesn't reach the Modal's window anyway — so instead we lift
+  // the plain View by the tracked keyboard height. Subtract the bottom safe-area inset the
+  // SafeAreaView already pads, so the input lands exactly above the keyboard (not one inset too high).
   const Wrapper: any = Platform.OS === 'ios' ? KeyboardAvoidingView : View
   const wrapperProps = Platform.OS === 'ios' ? { behavior: 'padding' as const, keyboardVerticalOffset: 8 } : {}
+  const androidLift = Platform.OS === 'android' ? Math.max(keyboardHeight - insets.bottom, 0) : 0
 
   return (
     <Modal visible={visible} animationType='slide' onRequestClose={onClose} presentationStyle='fullScreen'>
@@ -166,7 +181,7 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
           <Text numberOfLines={1} style={s.url}>General chat (no page context)</Text>
         )}
 
-        <Wrapper style={s.flex} {...wrapperProps}>
+        <Wrapper style={[s.flex, androidLift > 0 ? { paddingBottom: androidLift } : null]} {...wrapperProps}>
           <ScrollView ref={scrollRef} style={s.body} contentContainerStyle={s.bodyPad}>
             {messages.length === 0 ? (
               <Text style={s.empty}>
