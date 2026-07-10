@@ -1,6 +1,7 @@
 import http from 'bare-http1'
 import b4a from 'b4a'
 import mime from 'mime'
+import { isDocumentNavigation } from '../../../shared/frontend-routing.mjs'
 
 // Loopback HTTP gateway — the mobile stand-in for desktop's native hyper:// protocol handler.
 //
@@ -73,11 +74,14 @@ export class HttpGateway {
 
     // Mirror desktop's protocol handler: only an HTML *navigation* gets the /.ui SPA (or a
     // directory listing); a fetch()/sub-resource request (Accept: */*) resolves actual files.
+    // `navigation` is the stricter page-load signal for `fallback` routing (Sec-Fetch-Dest
+    // when the WebView sends it, Accept sniffing otherwise).
     const wantsHTML = /text\/html/i.test(String(req.headers?.accept || ''))
+    const navigation = isDocumentNavigation(req.headers)
 
     let result
     try {
-      result = await this.manager.resolve(driveType, key, path, () => {}, null, { wantsHTML })
+      result = await this.manager.resolve(driveType, key, path, () => {}, null, { wantsHTML, navigation })
     } catch (err) {
       res.statusCode = /not found/i.test(String(err?.message)) ? 404 : 500
       res.setHeader('Content-Type', 'text/plain')

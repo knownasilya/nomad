@@ -9,6 +9,7 @@ import mime from 'mime'
 import { marked } from 'marked'
 import { renderMarkdownDoc } from './markdown.mjs'
 import { DRIVE_HYPERDRIVE, DRIVE_AUTOBASE } from '../../rpc-commands.mjs'
+import { manifestFallback } from '../../../shared/frontend-routing.mjs'
 import {
   createFsCore, createBlobStore, createContentReader,
   makeMetadata, AUTOBASE_OPTS, BLOBS_CORE_NAME
@@ -217,7 +218,9 @@ export default class DriveManager {
   // opts.wantsHTML mirrors desktop's Accept-header check: only an HTML navigation is served the
   // /.ui SPA — a fetch()/sub-resource request resolves actual files (the http gateway passes the
   // real Accept header; RPC opens default to true, being navigations by definition).
-  async resolve (driveType, key, path, onStatus = () => {}, ns = null, { wantsHTML = true } = {}) {
+  // opts.navigation is the stricter page-navigation signal used by `fallback` routing (the http
+  // gateway derives it from Sec-Fetch-Dest when present); it defaults to wantsHTML.
+  async resolve (driveType, key, path, onStatus = () => {}, ns = null, { wantsHTML = true, navigation = wantsHTML } = {}) {
     const { reader } = await this.open(driveType, key, onStatus, ns)
     const keyHex = b4a.toString(key, 'hex')
 
@@ -233,10 +236,22 @@ export default class DriveManager {
       return reader.read(p)
     }
 
-    // Custom frontend (the ".ui" convention): a drive with /.ui/ui.html is an SPA — serve it for any
-    // HTML navigation (the drive root, a directory-like trailing-slash path, or an extensionless
-    // path) so client-side routes like /posts/<slug>/ render through the app instead of dead-ending
-    // on the directory's raw index.md. This mirrors the desktop protocol handler's condition
+    // Manifest `fallback` (ADR-0015): a declared miss-only SPA shell. Real files always win —
+    // the shell is only served further down, when a page navigation resolves to nothing. Takes
+    // precedence over the legacy /.ui takeover; a malformed index.json reads as "not declared".
+    let fallbackPath = null
+    const manifestBuf = await readMaybe('/index.json')
+    if (manifestBuf) {
+      try {
+        fallbackPath = manifestFallback(JSON.parse(b4a.toString(manifestBuf)))
+      } catch {}
+    }
+
+    // Legacy custom frontend (the ".ui" convention), consulted only without a manifest
+    // `fallback`: a drive with /.ui/ui.html is an SPA — serve it for any HTML navigation (the
+    // drive root, a directory-like trailing-slash path, or an extensionless path) so client-side
+    // routes like /posts/<slug>/ render through the app instead of dead-ending on the
+    // directory's raw index.md. This mirrors the desktop protocol handler's condition
     // (bg/protocols/hyper.js: filepath === '/' || hasTrailingSlash || !filepath.includes('.')).
     // Sub-resources (/.ui/app.js, *.json, images) carry an extension and fall through to the exact-
     // file read below, so the SPA still loads its own assets. The SPA reads its route from
@@ -244,7 +259,7 @@ export default class DriveManager {
     // reflects the real drive URL just like desktop's native hyper:// origin.
     const lastSeg = path.slice(path.lastIndexOf('/') + 1)
     const isNavigation = wantsHTML && (path === '/' || path === '' || path.endsWith('/') || !lastSeg.includes('.'))
-    if (isNavigation) {
+    if (isNavigation && !fallbackPath) {
       const ui = await readMaybe('/.ui/ui.html')
       if (ui) return this.serveFile(reader, '/.ui/ui.html', ui, keyHex)
     }
@@ -258,6 +273,13 @@ export default class DriveManager {
     for (const idx of INDEX_FILES) {
       const idxBuf = await readMaybe(folder + idx)
       if (idxBuf) return this.serveFile(reader, folder + idx, idxBuf, keyHex)
+    }
+
+    // Nothing resolved — a page navigation on a `fallback` drive gets the shell (200 rewrite,
+    // URL unchanged). Sub-resource misses fall through to the listing/404 below.
+    if (fallbackPath && navigation) {
+      const fallbackBuf = await readMaybe(fallbackPath)
+      if (fallbackBuf) return this.serveFile(reader, fallbackPath, fallbackBuf, keyHex)
     }
 
     const entries = await reader.list(folder)

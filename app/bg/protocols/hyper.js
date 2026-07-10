@@ -16,6 +16,7 @@ import errorPage from '../lib/error-page';
 import * as mime from '../lib/mime';
 import * as auditLog from '../dbs/audit-log';
 import * as wcTrust from '../wc-trust';
+import { manifestFallback, isDocumentNavigation } from '../../../shared/frontend-routing.mjs';
 
 const logger = logLib.child({ category: 'hyper', subcategory: 'hyper-scheme' });
 const md = markdown({
@@ -149,6 +150,25 @@ export const protocolHandler = async function (request, respond) {
       },
       data: intoStream(b4a.toString((await checkoutFS.drive.get('/.ui/ui.html')) || b4a.alloc(0))),
     });
+  };
+  // Serve the manifest-declared `fallback` file (ADR-0015): a miss-only 200 rewrite — the URL
+  // stays what was requested. Returns false when the target doesn't exist so the caller falls
+  // through to a normal 404; the target is read directly (not re-routed), so it can't recurse.
+  const respondFallback = async (checkoutFS, fallbackPath) => {
+    const buf = await checkoutFS.drive.get(fallbackPath).catch(() => null);
+    if (!buf) return false;
+    respond({
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'text/html',
+        'Access-Control-Allow-Origin': corsHeader,
+        'Allow-CSP-From': '*',
+        'Cache-Control': 'no-cache',
+        'Content-Security-Policy': cspHeader,
+      },
+      data: intoStream(buf),
+    });
+    return true;
   };
   const respondRedirect = (url) => {
     respond({
@@ -340,9 +360,13 @@ export const protocolHandler = async function (request, respond) {
         cspHeader = manifest.csp;
       }
 
-      // check for the presence of a frontend
-      const uiEntry = await checkoutFS.drive.entry('/.ui/ui.html').catch(() => null);
-      if (uiEntry) customFrontend = true;
+      // Frontend routing: a manifest-declared `fallback` (miss-only shell, ADR-0015) takes
+      // precedence over the legacy /.ui/ui.html takeover, which is only consulted without one.
+      const fallbackPath = manifestFallback(manifest);
+      if (!fallbackPath) {
+        const uiEntry = await checkoutFS.drive.entry('/.ui/ui.html').catch(() => null);
+        if (uiEntry) customFrontend = true;
+      }
 
       // resolve request path to a drive entry
       let statusCode = 200;
@@ -371,6 +395,17 @@ export const protocolHandler = async function (request, respond) {
           return respondCustomFrontend(checkoutFS);
         }
 
+        // A directory with no index file is a miss under `fallback` routing: a page
+        // navigation gets the shell; anything else keeps today's builtin drive-view.
+        if (
+          fallbackPath &&
+          isDocumentNavigation(request.headers) &&
+          (await respondFallback(checkoutFS, fallbackPath))
+        ) {
+          logger.silly(`Serving fallback ${logUrl}`, { url: request.url });
+          return;
+        }
+
         logger.silly(`Serving builtin frontend ${logUrl}`, {
           url: request.url,
         });
@@ -383,8 +418,17 @@ export const protocolHandler = async function (request, respond) {
         return respondCustomFrontend(checkoutFS);
       }
 
-      // 404
+      // 404 — or, for a page navigation on a `fallback` drive, the declared shell (miss-only
+      // 200 rewrite; real files above always win, unlike the legacy .ui takeover)
       if (!entry) {
+        if (
+          fallbackPath &&
+          isDocumentNavigation(request.headers) &&
+          (await respondFallback(checkoutFS, fallbackPath))
+        ) {
+          logger.silly(`Serving fallback ${logUrl}`, { url: request.url });
+          return;
+        }
         logger.silly('Not found', { url: request.url });
         return respondError(404, 'File Not Found', {
           errorDescription: 'File Not Found',
@@ -584,24 +628,39 @@ async function serveAutobase(
   if (filepath.indexOf('?') !== -1) filepath = filepath.slice(0, filepath.indexOf('?'));
   const hasTrailingSlash = filepath.endsWith('/');
 
-  // Check for custom frontend at /.ui/ui.html. Records are v1 { metadata, blob, value };
-  // resolve the content (inline or blob) rather than reading raw bytes off the view.
-  const uiNode = await view.get('/.ui/ui.html').catch(() => null);
-  if (uiNode) {
-    // Any HTML-wanting request to a "directory-like" path → serve the UI
-    const wantsHTML = mime.acceptHeaderWantsHTML(request.headers.Accept);
-    if (wantsHTML && (filepath === '/' || hasTrailingSlash || !filepath.includes('.'))) {
-      const buf = await autobases.resolveRecordContent(uiNode.value);
-      return respond({
-        statusCode: 200,
-        headers: {
-          'Content-Type': 'text/html',
-          'Access-Control-Allow-Origin': '*',
-          'Allow-CSP-From': '*',
-          'Cache-Control': 'no-cache',
-        },
-        data: intoStream(buf),
-      });
+  // Manifest routing config (ADR-0015). A malformed or absent index.json reads as
+  // "no fallback declared", never as an error.
+  let manifest = null;
+  try {
+    const manifestNode = await view.get('/index.json');
+    if (manifestNode) {
+      const manifestBuf = await autobases.resolveRecordContent(manifestNode.value);
+      if (manifestBuf) manifest = JSON.parse(b4a.toString(manifestBuf));
+    }
+  } catch {}
+  const fallbackPath = manifestFallback(manifest);
+
+  // Legacy custom frontend at /.ui/ui.html — only consulted when the manifest doesn't declare
+  // a `fallback`. Records are v1 { metadata, blob, value }; resolve the content (inline or
+  // blob) rather than reading raw bytes off the view.
+  if (!fallbackPath) {
+    const uiNode = await view.get('/.ui/ui.html').catch(() => null);
+    if (uiNode) {
+      // Any HTML-wanting request to a "directory-like" path → serve the UI
+      const wantsHTML = mime.acceptHeaderWantsHTML(request.headers.Accept);
+      if (wantsHTML && (filepath === '/' || hasTrailingSlash || !filepath.includes('.'))) {
+        const buf = await autobases.resolveRecordContent(uiNode.value);
+        return respond({
+          statusCode: 200,
+          headers: {
+            'Content-Type': 'text/html',
+            'Access-Control-Allow-Origin': '*',
+            'Allow-CSP-From': '*',
+            'Cache-Control': 'no-cache',
+          },
+          data: intoStream(buf),
+        });
+      }
     }
   }
 
@@ -624,17 +683,40 @@ async function serveAutobase(
   }
 
   if (!node) {
-    // No file/index at this path. If it's a DIRECTORY (has children in the view), serve the builtin
-    // file view — matching the Hyperdrive serve path — instead of 404ing. Redirect a bare directory
-    // path to a trailing slash first so relative links resolve.
+    // No file/index at this path. Redirect a bare DIRECTORY path (has children in the view) to a
+    // trailing slash first so relative links resolve — a fallback shell is then served under the
+    // canonical URL too.
     const isDir =
       filepath === '/' || hasTrailingSlash || (await autobases.dirHasChildren(sess, lookupPath));
-    if (isDir) {
-      if (filepath !== '/' && !hasTrailingSlash) {
-        return respondRedirect(
-          `hyper://${urlp.host}${urlp.version ? '+' + urlp.version : ''}${urlp.pathname || ''}/${urlp.search || ''}`
-        );
+    if (isDir && filepath !== '/' && !hasTrailingSlash) {
+      return respondRedirect(
+        `hyper://${urlp.host}${urlp.version ? '+' + urlp.version : ''}${urlp.pathname || ''}/${urlp.search || ''}`
+      );
+    }
+
+    // Manifest `fallback` (ADR-0015): a page-navigation miss serves the declared shell — 200
+    // rewrite, URL unchanged. Sub-resource requests fall through and 404 honestly, and a
+    // missing fallback target falls through to today's behavior (builtin view / 404).
+    if (fallbackPath && isDocumentNavigation(request.headers)) {
+      const fallbackNode = await view.get(fallbackPath).catch(() => null);
+      const fallbackBuf = fallbackNode
+        ? await autobases.resolveRecordContent(fallbackNode.value)
+        : null;
+      if (fallbackBuf != null) {
+        return respond({
+          statusCode: 200,
+          headers: {
+            'Content-Type': 'text/html',
+            'Access-Control-Allow-Origin': '*',
+            'Allow-CSP-From': '*',
+            'Cache-Control': 'no-cache',
+          },
+          data: intoStream(fallbackBuf),
+        });
       }
+    }
+
+    if (isDir) {
       const wantsHTML = mime.acceptHeaderWantsHTML(request.headers.Accept);
       if (wantsHTML && typeof respondBuiltinFrontend === 'function') {
         return respondBuiltinFrontend();

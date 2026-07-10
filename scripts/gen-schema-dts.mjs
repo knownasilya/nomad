@@ -182,8 +182,17 @@ const MANIFEST_PROPERTIES = {
     description:
       'Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)',
   },
-  web_root: { type: 'string', description: 'Manifest: directory to serve as the web root' },
-  fallback_page: { type: 'string', description: 'Manifest: SPA fallback page path' },
+  fallback: {
+    type: 'string',
+    pattern: '^/.*[^/]$',
+    description:
+      'Manifest: absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses (ADR-0015). Real files always win. Supersedes the legacy /.ui/ui.html convention.',
+  },
+  collaborative: {
+    type: 'boolean',
+    description:
+      'Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default.',
+  },
 };
 
 const allTypes = jsonSchemas.map((s) => s.type);

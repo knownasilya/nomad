@@ -100,13 +100,14 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "type": "boolean",
             "description": "Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)"
           },
-          "web_root": {
+          "fallback": {
             "type": "string",
-            "description": "Manifest: directory to serve as the web root"
+            "pattern": "^/.*[^/]$",
+            "description": "Manifest: absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses (ADR-0015). Real files always win. Supersedes the legacy /.ui/ui.html convention."
           },
-          "fallback_page": {
-            "type": "string",
-            "description": "Manifest: SPA fallback page path"
+          "collaborative": {
+            "type": "boolean",
+            "description": "Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default."
           }
         },
         "required": [
@@ -213,13 +214,14 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "type": "boolean",
             "description": "Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)"
           },
-          "web_root": {
+          "fallback": {
             "type": "string",
-            "description": "Manifest: directory to serve as the web root"
+            "pattern": "^/.*[^/]$",
+            "description": "Manifest: absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses (ADR-0015). Real files always win. Supersedes the legacy /.ui/ui.html convention."
           },
-          "fallback_page": {
-            "type": "string",
-            "description": "Manifest: SPA fallback page path"
+          "collaborative": {
+            "type": "boolean",
+            "description": "Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default."
           },
           "summary": {
             "type": "string",
@@ -352,13 +354,14 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "type": "boolean",
             "description": "Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)"
           },
-          "web_root": {
+          "fallback": {
             "type": "string",
-            "description": "Manifest: directory to serve as the web root"
+            "pattern": "^/.*[^/]$",
+            "description": "Manifest: absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses (ADR-0015). Real files always win. Supersedes the legacy /.ui/ui.html convention."
           },
-          "fallback_page": {
-            "type": "string",
-            "description": "Manifest: SPA fallback page path"
+          "collaborative": {
+            "type": "boolean",
+            "description": "Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default."
           },
           "itemsPath": {
             "type": "string",
@@ -470,13 +473,14 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "type": "boolean",
             "description": "Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)"
           },
-          "web_root": {
+          "fallback": {
             "type": "string",
-            "description": "Manifest: directory to serve as the web root"
+            "pattern": "^/.*[^/]$",
+            "description": "Manifest: absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses (ADR-0015). Real files always win. Supersedes the legacy /.ui/ui.html convention."
           },
-          "fallback_page": {
-            "type": "string",
-            "description": "Manifest: SPA fallback page path"
+          "collaborative": {
+            "type": "boolean",
+            "description": "Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default."
           },
           "href": {
             "type": "string",
@@ -598,13 +602,14 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "type": "boolean",
             "description": "Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)"
           },
-          "web_root": {
+          "fallback": {
             "type": "string",
-            "description": "Manifest: directory to serve as the web root"
+            "pattern": "^/.*[^/]$",
+            "description": "Manifest: absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses (ADR-0015). Real files always win. Supersedes the legacy /.ui/ui.html convention."
           },
-          "fallback_page": {
-            "type": "string",
-            "description": "Manifest: SPA fallback page path"
+          "collaborative": {
+            "type": "boolean",
+            "description": "Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default."
           },
           "topic": {
             "type": "string",
@@ -724,13 +729,14 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "type": "boolean",
             "description": "Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)"
           },
-          "web_root": {
+          "fallback": {
             "type": "string",
-            "description": "Manifest: directory to serve as the web root"
+            "pattern": "^/.*[^/]$",
+            "description": "Manifest: absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses (ADR-0015). Real files always win. Supersedes the legacy /.ui/ui.html convention."
           },
-          "fallback_page": {
-            "type": "string",
-            "description": "Manifest: SPA fallback page path"
+          "collaborative": {
+            "type": "boolean",
+            "description": "Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default."
           },
           "urls": {
             "type": "array",
@@ -834,13 +840,14 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "type": "boolean",
             "description": "Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)"
           },
-          "web_root": {
+          "fallback": {
             "type": "string",
-            "description": "Manifest: directory to serve as the web root"
+            "pattern": "^/.*[^/]$",
+            "description": "Manifest: absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses (ADR-0015). Real files always win. Supersedes the legacy /.ui/ui.html convention."
           },
-          "fallback_page": {
-            "type": "string",
-            "description": "Manifest: SPA fallback page path"
+          "collaborative": {
+            "type": "boolean",
+            "description": "Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default."
           },
           "topic": {
             "type": "string",
@@ -950,13 +957,14 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "type": "boolean",
             "description": "Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)"
           },
-          "web_root": {
+          "fallback": {
             "type": "string",
-            "description": "Manifest: directory to serve as the web root"
+            "pattern": "^/.*[^/]$",
+            "description": "Manifest: absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses (ADR-0015). Real files always win. Supersedes the legacy /.ui/ui.html convention."
           },
-          "fallback_page": {
-            "type": "string",
-            "description": "Manifest: SPA fallback page path"
+          "collaborative": {
+            "type": "boolean",
+            "description": "Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default."
           },
           "body": {
             "type": "string",
@@ -1068,13 +1076,14 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "type": "boolean",
             "description": "Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)"
           },
-          "web_root": {
+          "fallback": {
             "type": "string",
-            "description": "Manifest: directory to serve as the web root"
+            "pattern": "^/.*[^/]$",
+            "description": "Manifest: absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses (ADR-0015). Real files always win. Supersedes the legacy /.ui/ui.html convention."
           },
-          "fallback_page": {
-            "type": "string",
-            "description": "Manifest: SPA fallback page path"
+          "collaborative": {
+            "type": "boolean",
+            "description": "Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default."
           },
           "topic": {
             "type": "string",
@@ -1210,13 +1219,14 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "type": "boolean",
             "description": "Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)"
           },
-          "web_root": {
+          "fallback": {
             "type": "string",
-            "description": "Manifest: directory to serve as the web root"
+            "pattern": "^/.*[^/]$",
+            "description": "Manifest: absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses (ADR-0015). Real files always win. Supersedes the legacy /.ui/ui.html convention."
           },
-          "fallback_page": {
-            "type": "string",
-            "description": "Manifest: SPA fallback page path"
+          "collaborative": {
+            "type": "boolean",
+            "description": "Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default."
           }
         }
       }

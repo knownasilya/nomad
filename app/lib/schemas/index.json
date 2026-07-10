@@ -18,6 +18,15 @@
       "type": "string",
       "format": "url"
     },
+    "fallback": {
+      "type": "string",
+      "pattern": "^/.*[^/]$",
+      "description": "Absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses. Real files always win. Supersedes the legacy /.ui/ui.html convention."
+    },
+    "collaborative": {
+      "type": "boolean",
+      "description": "Whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure."
+    },
     "links": {
       "type": "object",
       "additionalProperties": {

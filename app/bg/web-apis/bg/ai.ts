@@ -161,7 +161,23 @@ When a user asks you to edit the current page, derive the target file path from 
    Read the drive to find which one exists, then edit that file.
 3. **Extensionless path** — treat it as a directory (append \`/\`) and apply the same index-file lookup above.
 
-Example: on \`hyper://abc.../\` you would check for \`/index.html\` first, then \`/index.md\`, then \`/index.txt\`, and edit whichever one exists. Use \`nomad.fs.stat()\` to test existence.`;
+Example: on \`hyper://abc.../\` you would check for \`/index.html\` first, then \`/index.md\`, then \`/index.txt\`, and edit whichever one exists. Use \`nomad.fs.stat()\` to test existence.
+
+## Building an SPA frontend (the \`fallback\` convention)
+
+To make a drive a single-page app that owns its whole URL space, put the app shell at \`/index.html\`
+and declare in \`/index.json\`:
+
+\`\`\`json
+{ "title": "My App", "fallback": "/index.html" }
+\`\`\`
+
+Real files always win; when a page navigation hits a path with no file, the browser serves
+\`/index.html\` instead (HTTP 200, URL unchanged) so the app routes via \`nomad.page.path\`.
+Sub-resource \`fetch()\`es to missing paths still 404. Reference assets by absolute path
+(\`/app.js\`, not \`./app.js\`) — the shell is served under arbitrary routes. Prefer this over the
+legacy \`/.ui/ui.html\` convention (which shadows real HTML files and needs a stub \`/index.html\`);
+if a drive declares \`fallback\`, any \`/.ui/ui.html\` is ignored.`;
 
 // Built-in tools exposed to the model
 const BUILTIN_TOOLS = [
