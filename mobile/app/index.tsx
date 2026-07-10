@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { View, Text, TouchableOpacity, ScrollView, Image, Modal, StyleSheet, StatusBar, Alert, Keyboard } from 'react-native'
+import { View, Text, TouchableOpacity, ScrollView, Image, Modal, StyleSheet, StatusBar, Alert, Keyboard, BackHandler, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { WebView } from 'react-native-webview'
 import type { WebViewNavigation } from 'react-native-webview'
@@ -45,6 +45,7 @@ interface Tab {
   driveKey?: string // for backend cleanup on close
   hasDraft?: boolean // drive has unpublished draft changes (ADR-0012)
   draftPreviewing?: boolean // this tab is rendering the merged draft
+  webCanGoBack?: boolean // web tab's WebView has in-page history to step back through
   stack: NavEntry[] // back/forward history
   sp: number // stack pointer
 }
@@ -533,6 +534,7 @@ export default function Browser () {
       setTabs((prev) => {
         const closing = prev.find((tb) => tb.id === id)
         if (closing?.driveKey) backend.close(closing.driveType, closing.driveKey)
+        delete webviews.current[id]
         const next = prev.filter((tb) => tb.id !== id)
         if (next.length === 0) {
           const fresh = blankTab()
@@ -548,14 +550,41 @@ export default function Browser () {
 
   const onWebNav = useCallback(
     (id: string, nav: WebViewNavigation) => {
-      patch(id, { url: nav.url, input: nav.url, title: nav.title || nav.url, loading: nav.loading })
+      patch(id, { url: nav.url, input: nav.url, title: nav.title || nav.url, loading: nav.loading, webCanGoBack: nav.canGoBack })
       if (!nav.loading) persist.recordVisit(nav.url, nav.title || nav.url)
     },
     [patch, persist]
   )
 
+  // Go back in the active tab: inside a web page's own history first (in-page link navigation lives
+  // in the WebView, not the app stack), then across the tab's app-level nav stack (hyper pages,
+  // typed URLs, home). Returns true if it navigated. Shared by the on-screen ‹ button and Android's
+  // hardware back so the two always agree.
+  const goBackActive = useCallback((): boolean => {
+    const tab = tabsRef.current.find((tb) => tb.id === activeIdRef.current)
+    if (!tab) return false
+    if (tab.kind === 'web' && tab.webCanGoBack) {
+      webviews.current[tab.id]?.goBack()
+      return true
+    }
+    if (tab.sp > 0) {
+      step(tab.id, -1)
+      return true
+    }
+    return false
+  }, [step])
+
+  // Android hardware back navigates back instead of exiting the app. Returning false when there's
+  // nowhere to go lets Android background the app as usual. A visible full-screen Modal (AI/Library/…)
+  // handles its own back via onRequestClose, so this handler won't fire while one is open.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return
+    const sub = BackHandler.addEventListener('hardwareBackPress', goBackActive)
+    return () => sub.remove()
+  }, [goBackActive])
+
   // --- render ------------------------------------------------------------
-  const canBack = active.sp > 0
+  const canBack = active.sp > 0 || (active.kind === 'web' && !!active.webCanGoBack)
   const canForward = active.sp < active.stack.length - 1
   const bookmarked = persist.isBookmarked(active.url)
   // Load the active space's drive registry (its drives, incl. ones added on other devices). A
@@ -621,7 +650,7 @@ export default function Browser () {
         driveType={active.driveType}
         canBack={canBack}
         canForward={canForward}
-        onBack={() => step(active.id, -1)}
+        onBack={goBackActive}
         onForward={() => step(active.id, 1)}
         onFocus={onUrlFocus}
         onBlur={onUrlBlur}
