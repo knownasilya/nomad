@@ -7,6 +7,7 @@ import Corestore from 'corestore'
 import goodbye from 'graceful-goodbye'
 
 import DriveManager from './lib/drive-manager.mjs'
+import { HttpGateway } from './lib/http-gateway.mjs'
 import { parseHyperUrl } from './lib/hyper-url.mjs'
 import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault } from './lib/vault.mjs'
 import * as drafts from './lib/drafts.mjs'
@@ -83,6 +84,11 @@ const manager = new DriveManager(store, {
     drafts.isPreview(keyHex) ? drafts.stagedContent(vault, keyHex, path) : { override: false }
 })
 goodbye(() => manager.close())
+
+// Loopback HTTP gateway — serves drive content to the WebView from http://127.0.0.1:<port>
+// (one port per drive), the mobile stand-in for desktop's native hyper:// protocol handler.
+const gateway = new HttpGateway(manager)
+goodbye(() => gateway.close())
 
 // The Vault key (this device's link to its identity) is persisted next to the corestore.
 const vaultKeyPath = join(storagePath, 'vault-key')
@@ -551,17 +557,18 @@ async function handleOpen ({ tabId, url, driveType = DRIVE_HYPERDRIVE, ns = null
     const { key, keyHex, path } = parseHyperUrl(url)
     // Try both drive types (hinted first) only when the type is unknown.
     const { result, driveType: detected, title, cached } = await manager.resolveAuto(key, path, driveType, onStatus, ns, detect)
-    sendContent(tabId, url, keyHex, detected, path, title, result)
+    await sendContent(tabId, url, keyHex, detected, path, title, result)
 
     // Instant-cache: we just served a locally-cached view. Replicate the latest in the background and,
-    // if the Drive brought newer content, re-serve so the tab updates without a manual reload.
+    // if the Drive brought newer content, tell the tab to reload (the WebView re-fetches from the
+    // gateway, which reads the now-fresher drive).
     if (cached) {
       ;(async () => {
         try {
           await manager.sync(detected, key)
           const fresh = await manager.resolveAuto(key, path, detected, () => {}, ns, false)
           if (fresh && contentChanged(result, fresh.result)) {
-            sendContent(tabId, url, keyHex, fresh.driveType, path, fresh.title, fresh.result, true)
+            await sendContent(tabId, url, keyHex, fresh.driveType, path, fresh.title, fresh.result, true)
           }
         } catch {}
       })()
@@ -571,11 +578,15 @@ async function handleOpen ({ tabId, url, driveType = DRIVE_HYPERDRIVE, ns = null
   }
 }
 
-function sendContent (tabId, url, keyHex, detected, path, title, result, updated = false) {
+async function sendContent (tabId, url, keyHex, detected, path, title, result, updated = false) {
   if (result.kind === 'file') {
+    // Files are served to the WebView over the loopback gateway (per-drive port), not as inline
+    // bytes: the page then loads at a REAL http origin — location.pathname is the drive route, and
+    // links / sub-resources / history are native browser behavior, matching desktop.
+    const http = await gateway.urlFor(detected, keyHex, path)
     send(RPC_CONTENT, {
       tabId, url, ok: true, key: keyHex, driveType: detected, title, isDir: false,
-      mime: result.mime, bodyBase64: b4a.toString(result.buffer, 'base64'), updated
+      mime: result.mime, http, port: gateway.portFor(keyHex), path, updated
     })
   } else {
     send(RPC_CONTENT, {
@@ -593,7 +604,14 @@ function contentChanged (a, b) {
 }
 
 function handleClose ({ driveType = DRIVE_HYPERDRIVE, key }) {
-  if (key) manager.release(driveType, key)
+  if (!key) return
+  manager.release(driveType, key)
+  // The gateway server is per-drive and release is ref-counted — only stop serving once no tab
+  // holds the drive under either backend type.
+  const stillOpen =
+    manager.drives.has(manager.cacheKey(DRIVE_AUTOBASE, key)) ||
+    manager.drives.has(manager.cacheKey(DRIVE_HYPERDRIVE, key))
+  if (!stillOpen) gateway.closeFor(key)
 }
 
 async function handleCreate ({ reqId, type = DRIVE_HYPERDRIVE, title, description }) {

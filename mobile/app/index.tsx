@@ -97,11 +97,16 @@ function decodeContent (msg: ContentMsg): HyperRender {
   if (msg.isDir) {
     return { type: 'dir', path: msg.path || '/', entries: msg.entries || [], keyHex: msg.key }
   }
+  // Gateway-served file: the WebView loads it from the drive's loopback port (real origin, native
+  // navigation/history/sub-resources) — the normal path for all file content.
+  if (msg.http && msg.port) {
+    return { type: 'http', uri: msg.http, keyHex: msg.key, url: msg.url, port: msg.port }
+  }
   const mime = msg.mime || 'application/octet-stream'
   const b64 = msg.bodyBase64 || ''
   if (mime.startsWith('image/')) return { type: 'image', uri: `data:${mime};base64,${b64}` }
   if (mime === 'text/html' || mime === 'application/xhtml+xml') {
-    return { type: 'html', html: b4a.toString(b4a.from(b64, 'base64')), keyHex: msg.key }
+    return { type: 'html', html: b4a.toString(b4a.from(b64, 'base64')), keyHex: msg.key, url: msg.url }
   }
   if (mime.startsWith('text/') || /(json|javascript|xml|svg)/.test(mime)) {
     return { type: 'text', text: b4a.toString(b4a.from(b64, 'base64')), mime }
@@ -207,6 +212,12 @@ export default function Browser () {
       if (msg.updated) {
         const tab = tabsRef.current.find((t) => t.id === msg.tabId)
         if (!tab || tab.url !== msg.url) return
+        // Gateway-served page at the same uri: the drive is fresher but the uri hasn't changed, so
+        // patching the render is a no-op — reload the WebView to re-fetch through the gateway.
+        if (msg.http && tab.render?.type === 'http' && tab.render.uri === msg.http) {
+          webviews.current[msg.tabId]?.reload()
+          return
+        }
       }
       const render = decodeContent(msg)
       // Prefer the drive's own title (index.json / index.md / index.html), then
@@ -299,6 +310,9 @@ export default function Browser () {
       if (tab.driveKey && !sameDrive) backend.close(tab.driveType, tab.driveKey)
       setLogs([]) // page-scoped console resets on navigation
       setSource('')
+      // Any navigation (typed URL, suggestion, back/forward, home button) dismisses the autocomplete.
+      if (blurTimer.current) { clearTimeout(blurTimer.current); blurTimer.current = null }
+      setUrlFocused(false)
       const fields = fieldsFor(tab, entry, sameDrive)
       setTabs((prev) =>
         prev.map((tb) => {
@@ -350,6 +364,13 @@ export default function Browser () {
     Keyboard.dismiss()
     navigate(activeIdRef.current, url)
   }, [navigate])
+  // Dismiss the autocomplete whenever the active tab changes (close / switch / new tab). urlFocused is
+  // plain state, decoupled from the TextInput's real focus — without this it can stay true after a tab
+  // close and, since no blur event follows, the dropdown gets stuck open over the new (home) tab.
+  useEffect(() => {
+    if (blurTimer.current) { clearTimeout(blurTimer.current); blurTimer.current = null }
+    setUrlFocused(false)
+  }, [activeId])
 
   const step = useCallback(
     (id: string, delta: number) => {
@@ -365,7 +386,7 @@ export default function Browser () {
   const goHome = useCallback((id: string) => navTo(id, { kind: 'home' }, true), [navTo])
 
   const reload = useCallback(() => {
-    if (active.kind === 'web') {
+    if (active.kind === 'web' || (active.kind === 'hyper' && active.render?.type === 'http')) {
       webviews.current[active.id]?.reload()
     } else if (active.kind === 'hyper' && active.url) {
       patch(active.id, { loading: true })
@@ -556,6 +577,16 @@ export default function Browser () {
     [patch, persist]
   )
 
+  // Native in-page navigation within a drive (loopback origin): reflect the mapped hyper:// URL in
+  // the address bar and track WebView history so back/forward drive the WebView, like web tabs.
+  const onHyperNav = useCallback(
+    (id: string, hyperUrl: string, canGoBack: boolean) => {
+      patch(id, { url: hyperUrl, input: hyperUrl, webCanGoBack: canGoBack })
+      persist.recordVisit(hyperUrl, hyperUrl)
+    },
+    [patch, persist]
+  )
+
   // Go back in the active tab: inside a web page's own history first (in-page link navigation lives
   // in the WebView, not the app stack), then across the tab's app-level nav stack (hyper pages,
   // typed URLs, home). Returns true if it navigated. Shared by the on-screen ‹ button and Android's
@@ -563,7 +594,7 @@ export default function Browser () {
   const goBackActive = useCallback((): boolean => {
     const tab = tabsRef.current.find((tb) => tb.id === activeIdRef.current)
     if (!tab) return false
-    if (tab.kind === 'web' && tab.webCanGoBack) {
+    if ((tab.kind === 'web' || (tab.kind === 'hyper' && tab.render?.type === 'http')) && tab.webCanGoBack) {
       webviews.current[tab.id]?.goBack()
       return true
     }
@@ -670,6 +701,7 @@ export default function Browser () {
           history={persist.history}
           onNavigate={(url) => navigate(active.id, url)}
           onWebNav={(nav) => onWebNav(active.id, nav)}
+          onHyperNav={(hyperUrl, canGoBack) => onHyperNav(active.id, hyperUrl, canGoBack)}
           onMessage={handleWebMessage}
           onRemoveBookmark={(url) => persist.toggleBookmark(url, '')}
           onClearHistory={persist.clearHistory}
@@ -677,7 +709,17 @@ export default function Browser () {
           registerWebView={(ref) => { webviews.current[active.id] = ref }}
         />
         {/* Floating autocomplete: overlays the top of the page (anchored just below the address
-            bar), so it never shifts the page down. */}
+            bar), so it never shifts the page down. A full-bleed backdrop underneath it catches taps
+            outside the list to dismiss — RN's TextInput blur doesn't fire when you tap non-input
+            content, so without this the dropdown wouldn't close on an outside tap. elevation keeps
+            the backdrop above page content (incl. Android WebViews) but below the list itself. */}
+        {showSuggestions ? (
+          <TouchableOpacity
+            style={[StyleSheet.absoluteFill, { zIndex: 999, elevation: 11 }]}
+            activeOpacity={1}
+            onPress={() => { if (blurTimer.current) { clearTimeout(blurTimer.current); blurTimer.current = null } setUrlFocused(false); Keyboard.dismiss() }}
+          />
+        ) : null}
         {showSuggestions ? <Suggestions items={suggestions} onSelect={onSelectSuggestion} /> : null}
       </View>
 
@@ -784,7 +826,8 @@ function TabPane ({
   onRemoveBookmark,
   onClearHistory,
   onOpenLibrary,
-  registerWebView
+  registerWebView,
+  onHyperNav
 }: {
   tab: Tab
   bookmarks: SavedSite[]
@@ -796,6 +839,7 @@ function TabPane ({
   onClearHistory: () => void
   onOpenLibrary: () => void
   registerWebView: (ref: WebView | null) => void
+  onHyperNav: (hyperUrl: string, canGoBack: boolean) => void
 }) {
   const t = useTheme()
   if (tab.kind === 'home') {
@@ -812,7 +856,7 @@ function TabPane ({
   }
   if (tab.kind === 'hyper') {
     const render = tab.render ?? { type: 'loading', status: 'Connecting…', peers: 0 }
-    return <HyperView render={render} onNavigate={onNavigate} onMessage={onMessage} registerWebView={registerWebView} />
+    return <HyperView render={render} onNavigate={onNavigate} onMessage={onMessage} registerWebView={registerWebView} onHyperNav={onHyperNav} />
   }
   return (
     <WebView

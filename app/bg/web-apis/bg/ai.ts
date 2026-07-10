@@ -18,6 +18,20 @@ import * as aiBridge from '../../hyper/ai-bridge';
 const NOMAD_API_REFERENCE = `\
 You are an AI assistant embedded in Nomad, a peer-to-peer web browser that hosts and serves websites via Hyperdrive (hyper:// protocol). Pages running in Nomad have access to the following JavaScript APIs under the global \`nomad\` object:
 
+## nomad.page + nomad.parseUrl — This page's URL identity
+
+\`nomad.page\` is the authoritative way for a drive frontend to learn its own drive and current route.
+ALWAYS prefer it over parsing \`location\` — on mobile the page renders in a WebView where
+\`location.host\`/\`pathname\` are unreliable; \`nomad.page\` is provided by the host on both platforms.
+
+\`\`\`js
+nomad.page                       // { url, origin, key, version, path, search } — null on non-hyper pages
+const drive = nomad.fs.drive(nomad.page.origin)   // this page's own drive
+const route = nomad.page.path                     // e.g. '/posts/2026-07-10-hello/'
+
+nomad.parseUrl('hyper://key.../a/b?x=1')  // pure parser for any hyper URL → same shape, null if not hyper
+\`\`\`
+
 ## nomad.fs — The filesystem API for hyper:// drives
 
 \`nomad.fs\` is THE API for reading and writing \`hyper://\` drives. Every drive is a multi-writer

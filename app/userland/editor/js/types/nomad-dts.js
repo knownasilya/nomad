@@ -394,8 +394,26 @@ declare namespace Nomad {
     watchDraft(url: string, onChanged?: (e: any) => void): EventTarget;
   }
 
+  /** A parsed hyper:// URL. \`key\` is as written in the URL (64-char hex or 52-char z-base-32). */
+  interface ParsedUrl {
+    url: string;
+    origin: string;
+    key: string;
+    version: string | null;
+    path: string;
+    search: string;
+  }
+
   /** The global nomad object. Some namespaces are gated by page protocol. */
   interface Root {
+    /**
+     * This page's own identity — the authoritative way for a drive frontend to learn its drive and
+     * current route (use nomad.page.path instead of location.pathname, which is unreliable in the
+     * mobile WebView). null on non-hyper pages.
+     */
+    page: ParsedUrl | null;
+    /** Parse a hyper:// URL into { url, origin, key, version, path, search }. null if not hyper. */
+    parseUrl(url: string): ParsedUrl | null;
     fs: Fs;
     ai: Ai;
     shell: Shell;

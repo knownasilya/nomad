@@ -219,11 +219,11 @@ function renderSidebar() {
     const cls = 'feed-item' + (state.filter === f.url ? ' active' : '') + (f.ok ? '' : ' err')
     const item = h('div', { class: cls, title: f.error || f.url, click: () => { state.filter = f.url; render() } })
     item.append(h('span', { class: 'name' }, f.title || f.url))
+    item.append(h('button', { class: 'x', title: 'Unsubscribe', click: (e) => { e.stopPropagation(); removeFeed(f.url) } }, '✕'))
     if (f.ok) {
       const n = f.posts.filter((p) => !state.readSet.has(p.url)).length
       item.append(h('span', { class: 'count' }, String(n)))
     }
-    item.append(h('button', { class: 'x', title: 'Unsubscribe', click: (e) => { e.stopPropagation(); removeFeed(f.url) } }, '✕'))
     aside.append(item)
   }
   // feeds that are still loading (no result yet)
