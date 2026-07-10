@@ -233,10 +233,13 @@ class WebTerm extends LitElement {
   }
 
   async loadInstalledCommands() {
+    // readFile resolves null (not a rejection) when the file is missing, and
+    // JSON.parse(null) is null — so default before parsing, not just in catch.
     var installed = await nomad.fs
       .readFile('hyper://private/webterm/installed.json')
-      .then(JSON.parse)
+      .then((str) => JSON.parse(str || '[]'))
       .catch((e) => []);
+    if (!Array.isArray(installed)) installed = [];
     var installedValidated = [];
     for (let app of installed) {
       if (!app || typeof app !== 'object') {
@@ -352,10 +355,9 @@ class WebTerm extends LitElement {
 
   async loadEnvVars() {
     try {
-      this.envVars = await nomad.fs.readFile(
-        'hyper://private/webterm/env.json',
-        'json'
-      );
+      this.envVars =
+        (await nomad.fs.readFile('hyper://private/webterm/env.json', 'json')) ||
+        {};
     } catch (err) {
       if (!err.toString().includes('NotFoundError')) {
         this.outputError(`Failed to load environment variables`, err);

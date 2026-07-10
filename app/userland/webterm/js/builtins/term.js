@@ -49,11 +49,14 @@ export async function uninstall(opts = {}, name) {
 }
 
 async function readInstalled() {
-  return nomad.fs
+  // readFile resolves null (not a rejection) when the file is missing, and
+  // JSON.parse(null) is null — so default before parsing, not just in catch.
+  var installed = await nomad.fs
     .drive('hyper://private/')
     .readFile('/webterm/installed.json')
-    .then(JSON.parse)
+    .then((str) => JSON.parse(str || '[]'))
     .catch((e) => []);
+  return Array.isArray(installed) ? installed : [];
 }
 
 async function saveInstalled(urls) {
