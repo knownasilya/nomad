@@ -1,5 +1,7 @@
 node_modules
 *.log
+# Android release signing key — never commit; see docs/releasing.md
+*.keystore
 .DS_Store
 .vscode
 Thumbs.db

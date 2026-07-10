@@ -2,7 +2,7 @@
   "expo": {
     "name": "Nomad",
     "slug": "nomad",
-    "version": "1.0.0",
+    "version": "1.2.30",
     "newArchEnabled": true,
     "orientation": "portrait",
     "scheme": "to.holepunch.bare.expo",
@@ -34,7 +34,8 @@
           }
         }
       ],
-      "./plugins/withGradleVersion"
+      "./plugins/withGradleVersion",
+      "./plugins/withReleaseSigning"
     ]
   }
 }

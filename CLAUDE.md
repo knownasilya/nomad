@@ -1,5 +1,38 @@
 # Nomad — Claude guidelines
 
+## Releasing & versioning
+
+**Never hand-edit version numbers.** Releases are driven by `standard-version`:
+
+```
+npm run release-version                        # patch bump
+npm run release-version -- --release-as minor  # or major / 1.2.30
+```
+
+In one step this bumps **both** `package.json` **and** `app/package.json` (per `.versionrc`
+`bumpFiles`), regenerates `CHANGELOG.md` from the conventional-commit history, makes a
+`chore(release): X.Y.Z` commit, and creates the annotated `vX.Y.Z` tag. Then:
+
+```
+git push --follow-tags origin main
+```
+
+Pushing the tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml), which
+builds desktop (macOS + Linux via electron-builder) **and** the mobile Android AAB/APK, attaching
+all of them to one **draft** GitHub release — sanity-check and **publish it manually**.
+
+Why both package.json files matter: `app/package.json` is the manifest the **Electron app actually
+reports** (auto-updater + About box). A bump that touches only the root `package.json` ships a
+desktop build that mis-identifies its own version — which is exactly the `standard-version` step
+that hand-bumping skips. So don't bump by hand; let `standard-version` write both.
+
+The mobile Android `versionName`/`versionCode` are derived from the **tag** in CI, so
+`mobile/app.json`'s `version` is only a local-dev fallback and is not part of the
+`standard-version` bump. Keep it roughly in step by hand when it matters, but the tag is the source
+of truth for the shipped Android version.
+
+See [docs/releasing.md](docs/releasing.md) for the CI jobs, Android signing/keystore, and secrets.
+
 ## Keeping the built-in AI prompt in sync with docs
 
 `app/bg/web-apis/bg/ai.js` contains a `NOMAD_API_REFERENCE` constant that is injected as a system prompt into every `nomad.ai.chat()` call. It is a hand-maintained summary of the public JavaScript APIs.

@@ -148,6 +148,12 @@ It prints a `hyper://…` URL. For a Hyperdrive, paste it into the address bar a
 Autobase drive, add it in My Library with the Collaborative type, then open it.
 Keep the publisher running so the app has a peer to pull from.
 
+## Release builds
+
+Pushing a `v*` tag builds a release AAB + APK in CI (alongside the desktop builds) and attaches
+them to a draft GitHub release. Versioning, the release-keystore signing setup, and the required
+repo secrets are documented in [docs/releasing.md](../docs/releasing.md).
+
 ## Verifying the P2P core
 
 The drive resolver (`backend/lib/drive-manager.mjs`) is plain JS — only `backend.mjs` itself needs
