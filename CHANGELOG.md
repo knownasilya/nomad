@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.2.31](https://github.com/knownasilya/nomad/compare/v1.2.30...v1.2.31) (2026-07-10)
+
+
+### Bug Fixes
+
+* **mobile:** Android back button navigates back instead of exiting ([8a6e5fc](https://github.com/knownasilya/nomad/commit/8a6e5fc0a2f4382a985e81af7f141b958cc9e978))
+* **mobile:** lift AI panel input above the Android keyboard ([72c3397](https://github.com/knownasilya/nomad/commit/72c33975a4bfbee778bf41430ddf0c9032b5620a))
+* **mobile:** show drive name + URL in the AI Bridge edit-consent prompt ([d02856a](https://github.com/knownasilya/nomad/commit/d02856a3a5cb9dec6739ad2a24a8564440822753))
+
 ### [1.2.29](https://github.com/knownasilya/nomad/compare/v1.2.28...v1.2.29) (2026-07-10)
 
 ### [1.2.4](https://github.com/knownasilya/nomad/compare/v1.2.3...v1.2.4) (2022-03-25)
