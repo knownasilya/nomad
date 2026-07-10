@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.2.32](https://github.com/knownasilya/nomad/compare/v1.2.31...v1.2.32) (2026-07-10)
+
+
+### Bug Fixes
+
+* **drafts:** clear preview flag when a Draft is emptied by discard/publish ([8aa778e](https://github.com/knownasilya/nomad/commit/8aa778e75b7431f0b6b1bea39b4f0f0632b32884))
+* **session:** always preserve tabs across soft and hard close ([faa0da1](https://github.com/knownasilya/nomad/commit/faa0da1b217c604863edd6fcd1fe3a805d2f883e))
+
 ### [1.2.31](https://github.com/knownasilya/nomad/compare/v1.2.30...v1.2.31) (2026-07-10)
 
 
