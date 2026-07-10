@@ -85,3 +85,88 @@ jobs:
             export CSC_IDENTITY_AUTO_DISCOVERY=false
           fi
           npx electron-builder --publish always
+
+  build-android:
+    runs-on: ubuntu-latest
+    name: Build Android
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: volta-cli/action@v5
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Bundle Bare backend
+        run: npm run bundle
+
+      # android/ is not committed (continuous native generation) — generate it,
+      # letting the config plugins inject the Gradle pin + release signing.
+      - name: Generate android project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build release AAB and APK
+        env:
+          # Pass secrets as neutral names and wire them conditionally (same
+          # pattern as the macOS certs above) so an unset secret falls back to
+          # the debug keystore instead of breaking the Gradle signing config.
+          _ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          _ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          _ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          _ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$_ANDROID_KEYSTORE" ]; then
+            echo "$_ANDROID_KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/release.keystore"
+            export ANDROID_KEYSTORE_PASSWORD="$_ANDROID_KEYSTORE_PASSWORD"
+            export ANDROID_KEY_ALIAS="$_ANDROID_KEY_ALIAS"
+            export ANDROID_KEY_PASSWORD="$_ANDROID_KEY_PASSWORD"
+            echo "Signing with release keystore"
+          else
+            echo "::warning::No ANDROID_KEYSTORE secret configured — signing with the debug keystore"
+          fi
+
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+            VERSION_CODE=$(( BASH_REMATCH[1] * 1000000 + BASH_REMATCH[2] * 1000 + BASH_REMATCH[3] ))
+          else
+            VERSION_CODE=1
+          fi
+          export NOMAD_VERSION_NAME="$VERSION"
+          export NOMAD_VERSION_CODE="$VERSION_CODE"
+          echo "versionName=$VERSION versionCode=$VERSION_CODE"
+
+          cd android
+          ./gradlew bundleRelease assembleRelease --no-daemon
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cp android/app/build/outputs/bundle/release/app-release.aab "nomad-$VERSION-android.aab"
+          cp android/app/build/outputs/apk/release/app-release.apk "nomad-$VERSION-android.apk"
+          # electron-builder publishes the desktop artifacts to a draft release
+          # for this tag; reuse it if it already exists, otherwise create it.
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" \
+            || true
+          gh release upload "$GITHUB_REF_NAME" \
+            "nomad-$VERSION-android.aab" \
+            "nomad-$VERSION-android.apk" \
+            --clobber

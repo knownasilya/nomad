@@ -60,3 +60,7 @@ npm run release
 It will start the packaging process for operating system you are running this command on. Ready for distribution file will be outputted to `dist` directory.
 
 You can create Windows installer only when running on Windows, the same is true for Linux and OSX. So to generate all three installers you need all three operating systems.
+
+For the real release process — pushing a `v*` tag to build macOS + Linux + Android in CI and
+attach everything to a draft GitHub release, including the required secrets — see
+[docs/releasing.md](docs/releasing.md).
