@@ -213,6 +213,9 @@ export async function publish(baseKey, { paths = null, force = false } = {}) {
   for (const p of publishedPaths) await autobases.deletePath(v, filePath(baseKey, p));
   // TODO(blobs): purge the corresponding bytes from the dedicated draft-blobs core here.
 
+  // Nothing left staged (all published, no conflicts held back) → clear the preview flag so the
+  // urlbar/tab don't stay stuck previewing a Draft that's now empty (same reasoning as discard).
+  if (!(await listDraft(baseKey)).length) setPreview(baseKey, false);
   emitChanged(baseKey);
   return { published: publishedPaths, conflicts: force ? [] : conflicts };
 }
@@ -224,6 +227,10 @@ export async function discard(baseKey, { paths = null } = {}) {
   const rows = (await listDraft(baseKey)).filter((r) => selected(r.path, paths));
   for (const row of rows) await autobases.deletePath(v, filePath(baseKey, row.path));
   // TODO(blobs): purge draft-blobs for these paths.
+  // Once nothing remains staged, drop the preview flag — it's keyed by Drive and survives the discard
+  // on its own, which would otherwise strand the urlbar/tab in "previewing" state for a Draft that no
+  // longer exists (pane.draftPreviewing reads isPreview).
+  if (!(await listDraft(baseKey)).length) setPreview(baseKey, false);
   emitChanged(baseKey);
   return { discarded: rows.map((r) => r.path) };
 }
