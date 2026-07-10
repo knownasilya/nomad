@@ -109,20 +109,22 @@ function decodeContent (msg: ContentMsg): HyperRender {
 }
 
 // Native consent for a relayed AI write (ADR-0013 §6): the agentic turn runs on the desktop
-// Provider, but the human is here on the phone, so the modifyDrive prompt is shown natively.
-// `permission` is 'modifyDrive:<hexDriveKey>'. NOT cancelable: the user must explicitly tap Allow or
-// Deny. (An `onDismiss`/cancelable dialog on Android can fire onDismiss alongside a button press and
-// race it to resolve false — which denied writes even after the user tapped Allow.) The `settled`
-// guard keeps the first choice authoritative regardless of any duplicate callback.
-function confirmModifyDrive (permission: string): Promise<boolean> {
-  const key = String(permission).split(':')[1] || ''
-  const where = key ? `${key.slice(0, 8)}…` : 'this drive'
+// Provider, but the human is here on the phone, so the modifyDrive prompt is shown natively. The
+// prompt names the target drive (title + URL) so the user knows exactly what's being edited; the
+// caller resolves that from the `modifyDrive:<hexDriveKey>` permission (see describeDrive).
+// NOT cancelable: the user must explicitly tap Allow or Deny. (An `onDismiss`/cancelable dialog on
+// Android can fire onDismiss alongside a button press and race it to resolve false — which denied
+// writes even after the user tapped Allow.) The `settled` guard keeps the first choice
+// authoritative regardless of any duplicate callback.
+function confirmModifyDrive (permission: string, drive?: { name: string; url: string }): Promise<boolean> {
+  const name = drive?.name || 'this drive'
+  const url = drive?.url || ''
   return new Promise((resolve) => {
     let settled = false
     const settle = (v: boolean) => { if (!settled) { settled = true; resolve(v) } }
     Alert.alert(
       'Allow AI to edit?',
-      `The AI running on your other device wants to make changes to ${where}.`,
+      `The AI running on your other device wants to make changes to this drive:\n\n${name}${url ? `\n${url}` : ''}`,
       [
         { text: 'Deny', style: 'cancel', onPress: () => settle(false) },
         { text: 'Allow', onPress: () => settle(true) }
@@ -149,6 +151,17 @@ export default function Browser () {
   const activeSpaceIdRef = useRef('')
 
   const active = useMemo(() => tabs.find((tb) => tb.id === activeId) ?? tabs[0], [tabs, activeId])
+
+  // Resolve a 'modifyDrive:<hexKey>' permission to a name + drive-root URL for the consent prompt.
+  // The relayed write is always scoped to an open tab's drive (its hex driveKey matches the key), so
+  // the tab supplies the title and the URL the user recognizes; fall back to the raw key if unmatched.
+  const describeDrive = useCallback((permission: string): { name: string; url: string } => {
+    const key = (String(permission).split(':')[1] || '').toLowerCase()
+    const tab = tabsRef.current.find((tb) => (tb.driveKey || '').toLowerCase() === key)
+    const name = tab && tab.title && tab.title !== 'Loading…' ? tab.title : 'Untitled drive'
+    const url = tab?.url ? `hyper://${hyperKeyOf(tab.url)}` : (key ? `hyper://${key}` : '')
+    return { name, url }
+  }, [])
   // persist is space-scoped, but it depends on the active space id (from useSpaces, which needs
   // backend, which uses persist in its callbacks) — so we late-bind persist via a ref to break the
   // cycle. The actual `persist` is created below, after backend + useSpaces.
@@ -430,7 +443,7 @@ export default function Browser () {
           onTool: (event) => inject({ kind: 'tool', event }),
           onDone: () => { delete aiHandles.current[id]; inject({ kind: 'done' }) },
           onError: (message) => { delete aiHandles.current[id]; inject({ kind: 'error', message }) },
-          onPrompt: (permission) => confirmModifyDrive(permission)
+          onPrompt: (permission) => confirmModifyDrive(permission, describeDrive(permission))
         })
       }
       else if (msg.type === 'nomad-ai-cancel' && msg.payload && msg.payload.id) {
@@ -438,7 +451,7 @@ export default function Browser () {
         delete aiHandles.current[msg.payload.id]
       }
     },
-    [navigate]
+    [navigate, describeDrive]
   )
 
   const viewSource = useCallback(() => {
@@ -684,7 +697,7 @@ export default function Browser () {
         url={active.url}
         title={active.title}
         aiChat={backend.aiChat}
-        onPrompt={confirmModifyDrive}
+        onPrompt={(permission) => confirmModifyDrive(permission, describeDrive(permission))}
         onPreviewDraft={onPreviewDraft}
       />
 
