@@ -132,7 +132,37 @@ for app data.)
 - **History** — device-local SQLite in nomad (`visits` table, `spaceId`-scoped); **not synced**. Mobile
   keeps per-Device local history too. Syncing it would be a deliberate divergence.
 
-## 6. Version parity
+## 6. AI Bridge (remote inference) — ADR-0013
+
+A Device with no reachable **AI Runtime** (typically mobile) runs `nomad.ai.chat()` by forwarding
+the call to another of the user's Devices — the **AI Provider** — over the **AI Bridge**. The chat
+does **not** travel through the Vault (that would bloat the signed oplog and replicate private
+chats); it rides a live **Protomux channel** (`nomad/ai-bridge`) on the shared Hyperswarm
+connection, the same pattern as the writer-request control channel (§ `nomad/autobase-control`).
+The wire format is defined once in the shared module `nomad/shared/ai-bridge.mjs` (deps injected,
+like `fs-core.mjs`) and imported by both `nomad/app/bg/hyper/ai-bridge.js` and (mobile) the Bare
+backend. Cross-engine parity is guarded by `tests/unit/ai-bridge.test.js`.
+
+- **Channel id = the Vault key.** Only the user's own Devices know it and open the matching
+  `{protocol, id}`, so a random public-Drive peer's mux never pairs the channel.
+- **Trust = signature challenge against the Vault Writer set.** A swarm connection's
+  `remotePublicKey` is unrelated to a Device's Vault Writer key, so it proves nothing. The Client
+  proves membership: Provider sends `challenge{nonce}`; Client replies `auth{deviceKey, signature}`
+  where the signature is over the nonce by its Vault writer keypair (the live `base.local.keyPair`
+  — the key it registered during pairing); the Provider verifies the signature **and** that
+  `deviceKey` is a current Vault Device. A `removeWriter`-revoked Device fails on its next handshake.
+- **Frames** (JSON over one `c.buffer` message slot): `hello` → `challenge` → `auth` →
+  `ready{model}` | `denied` | `unavailable`, then `request{id, messages, opts}` →
+  `chunk` / `tool` / (reverse) `prompt` ↔ `promptResult` → `done` | `error`, plus `cancel`.
+  Request-id multiplexed; the Bridge is **stateless** — the Client owns the transcript and ships
+  full history per `request`.
+- **Provider is opt-in** (`ai_share_provider` setting, default off) and only answers when its own
+  AI Runtime is currently reachable, so "channel ready" always means online-and-working.
+- **Writes.** The `modifyDrive` consent prompt is relayed to the Client (where the human is) via
+  `prompt`/`promptResult`. Writes to **Provider-owned** Drives work; writes to **Client-owned /
+  paired-into** Drives are stubbed pending the §3 per-Drive-device-writer-key fix.
+
+## 7. Version parity
 
 `autobase`, `hyperbee`, `corestore`, `hyperswarm`, and now `blind-pairing` must match across both
 apps. They live in one repo now but keep separate `node_modules` (`nomad/app` and `nomad/mobile`),

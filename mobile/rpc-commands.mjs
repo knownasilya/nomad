@@ -18,6 +18,14 @@ export const RPC_SPACE_ADD_DRIVE = 17 // { reqId, rootDriveKey, ns?, key, type? 
 export const RPC_BOOKMARKS = 26 // { reqId, action:'list'|'add'|'remove', rootDriveKey, ns?, href?, title? }
 export const RPC_NOMAD = 40 // { reqId, api, method, url?, args } an in-page nomad.* call from a drive WebView
 
+// UI -> backend: AI chat is STREAMING (nomad.ai.chat is a readable), so unlike RPC_NOMAD it can't
+// use the single-reply RPC_*_RESULT pattern. One RPC_AI_CHAT fans out many RPC_AI_EVENT frames
+// (chunk/tool/prompt/done/error) keyed by reqId until a terminal done|error. The turn runs on a
+// remote AI Provider over the AI Bridge (ADR-0013); this device is the AI Client.
+export const RPC_AI_CHAT = 42 // { reqId, messages, opts } start a remote chat turn
+export const RPC_AI_CANCEL = 43 // { reqId } abort an in-flight turn (-> CANCEL frame on the Bridge)
+export const RPC_AI_PROMPT_RESULT = 44 // { reqId, allow } answer a relayed modifyDrive consent prompt
+
 // UI -> backend: file-system ops on a writable drive you own (identified by ns).
 // `key` is the drive key hex; `path` is a drive-absolute path ('/a/b.txt').
 export const RPC_FS_LIST = 20 // { reqId, driveType, key, ns, path } list a folder's children
@@ -38,6 +46,7 @@ export const RPC_FS_RESULT = 30 // { reqId, ok, entries?, writable?, base64?, mi
 export const RPC_SPACE_DRIVES_RESULT = 31 // { reqId, ok, drives?, message? } reply to RPC_SPACE_DRIVES
 export const RPC_BOOKMARKS_RESULT = 32 // { reqId, ok, bookmarks?, message? } reply to RPC_BOOKMARKS
 export const RPC_NOMAD_RESULT = 41 // { reqId, ok, value?, error? } reply to RPC_NOMAD
+export const RPC_AI_EVENT = 45 // { reqId, kind:'chunk'|'tool'|'prompt'|'done'|'error', text?, event?, permission?, message? } one streamed AI frame
 
 // Drive types understood by the backend resolver.
 export const DRIVE_HYPERDRIVE = 'hyperdrive'

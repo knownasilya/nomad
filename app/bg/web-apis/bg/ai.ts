@@ -9,6 +9,8 @@ import * as permissions from '../../ui/permissions';
 import { parseDriveUrl } from '../../../lib/urls';
 import { findTab } from '../../ui/tabs/manager';
 import fsAPI from './fs';
+import * as daemon from '../../hyper/daemon';
+import * as aiBridge from '../../hyper/ai-bridge';
 
 // Built-in system context always appended to every conversation's system prompt.
 // KEEP IN SYNC with nomad.dev/content/docs/api/apis/ — when a new API is added
@@ -230,7 +232,13 @@ export default {
     const stream = emitStream(emitter);
     const sender = this.sender;
 
-    runChat(messages, sender, emitter, opts || {})
+    // Local cancellation: if the consumer closes the stream (navigates away, aborts the
+    // request), abort the in-flight turn so we stop burning inference. The remote (Bridge)
+    // path forwards this same signal as a CANCEL frame.
+    const controller = new AbortController();
+    stream.on('close', () => controller.abort());
+
+    routeChat(messages, sender, emitter, { ...(opts || {}), signal: controller.signal })
       .then(() => {
         stream.end();
       })
@@ -243,6 +251,64 @@ export default {
     return stream;
   },
 };
+
+// Route one turn: local-first, remote-fallback (ADR-0013 §4). If THIS Device can reach its own
+// AI Runtime, run the loop locally. Otherwise forward to an online AI Provider over the Bridge —
+// a Client (mobile) always lands here; a desktop whose Runtime is down transparently borrows
+// another's. If neither is available, the Bridge throws NoAiProviderError, which surfaces as a
+// distinct "No AI Device is online" error rather than a hang.
+async function routeChat(messages, sender, emitter, opts) {
+  if (await aiBridge.localRuntimeReachable()) {
+    return runChat(messages, sender, emitter, opts);
+  }
+  await aiBridge.requestRemoteChat({
+    messages,
+    opts: { driveUrl: opts.driveUrl, allowWrite: opts.allowWrite, context: opts.context },
+    signal: opts.signal,
+    onChunk: (text) => emitter.emit('chunk', { text }),
+    onTool: (event) => emitter.emit('tool', event),
+    // The human is on THIS (Client) Device, so the relayed modifyDrive prompt is shown here.
+    onPrompt: (permission) => permissions.requestPermission(permission, sender),
+  });
+  emitter.emit('done', {});
+}
+
+// Serve side of the Bridge: run a full turn on behalf of a remote Client. Registered once, at
+// module load. The loop + tools are the SAME runChat used locally; only the plumbing differs —
+// a synthetic sender carries the Client's driveUrl, events are forwarded as frames, and the
+// modifyDrive prompt is relayed to the Client via requestPermission (ADR-0013 §1, §6).
+aiBridge.setServeChat(async ({ messages, opts, signal, requestPermission, sendChunk, sendTool }) => {
+  const emitter = new EventEmitter();
+  emitter.on('error', () => {});
+  emitter.on('chunk', (e) => sendChunk(e.text));
+  emitter.on('tool', (e) => sendTool(e));
+  const sender = makeRemoteSender(opts?.driveUrl);
+  await runChat(messages, sender, emitter, { ...opts, signal, requestPermission });
+});
+
+// Bring the Bridge's swarm listener up so a Provider receives HELLO even if it never runs a chat
+// itself. Install as soon as the swarm EXISTS (not a connection — openOnConn fires per connection):
+// if the hyper stack is already up when this module loads, install now; otherwise wait for 'ready'.
+// This avoids a premature no-op attempt at module load (which happens before daemon.setup()).
+if (daemon.getSwarm()) aiBridge.install();
+else daemon.on('ready', () => aiBridge.install());
+
+// A stand-in `sender` for a remote turn. runChat/executeTool only need getURL() (drive scoping +
+// AI Config resolution); findTab() returns undefined for it, so config resolves Drive-level then
+// the Provider's global default — the Client has no model of its own (ADR-0013 §4). Write consent
+// does NOT depend on this object: it is relayed to the Client via the requestPermission override.
+function makeRemoteSender(driveUrl) {
+  const url = driveUrl || 'hyper://unknown/';
+  return { getURL: () => url, getURLOrigin: () => url };
+}
+
+// The AI Bridge (app/bg/hyper/ai-bridge.js) drives a remote turn by calling this directly with
+// a synthetic `sender` (whose getURL() returns the Client's driveUrl) and an `opts` carrying a
+// `signal` (fired by a CANCEL frame / channel close) and a `requestPermission` override (which
+// relays the modifyDrive consent prompt back to the Client). Events land on `emitter`
+// (chunk/tool/done/error) which the Bridge serializes into frames. Kept as a named export so
+// the loop + tool machinery lives in exactly one place.
+export { runChat };
 
 // =
 // Internal helpers
@@ -276,57 +342,80 @@ async function runChat(messages, sender, emitter, opts = {}) {
   const fullMessages = [{ role: 'system', content: systemContent }, ...messages];
 
   let msgHistory = fullMessages;
+  const signal = opts.signal || null;
 
-  // Tool loop — repeats when model calls tools
-  while (true) {
-    const { finishReason, toolCalls, textContent }: any = await streamCompletion(
-      baseUrl,
-      model,
-      msgHistory,
-      tools,
-      emitter
-    );
+  // Tool loop — repeats when model calls tools. A cancel (signal.abort, from a local stream
+  // close or a remote CANCEL frame) stops future work but never undoes a Checkpoint the turn
+  // already wrote — the revert UI covers that (ADR-0013 §5c).
+  try {
+    while (true) {
+      if (signal?.aborted) break;
+      const { finishReason, toolCalls, textContent }: any = await streamCompletion(
+        baseUrl,
+        model,
+        msgHistory,
+        tools,
+        emitter,
+        signal
+      );
 
-    if (finishReason !== 'tool_calls' || toolCalls.length === 0) break;
+      if (finishReason !== 'tool_calls' || toolCalls.length === 0) break;
 
-    // Append assistant turn (with tool calls) to history
-    msgHistory.push({
-      role: 'assistant',
-      content: textContent || null,
-      tool_calls: toolCalls,
-    });
-
-    // Execute each tool and append results
-    for (const tc of toolCalls) {
-      let result;
-      let args: any = {};
-      try {
-        args = JSON.parse(tc.function.arguments || '{}');
-      } catch {
-        /* keep {} */
-      }
-      // Live activity for the sidebar — shows what the agent is doing while the
-      // user waits (before/instead of streamed prose).
-      emitter.emit('tool', {
-        phase: 'start',
-        name: tc.function.name,
-        summary: toolSummary(tc.function.name, args),
-      });
-      try {
-        result = await executeTool(tc.function.name, args, sender, driveUrl, emitter);
-      } catch (err) {
-        console.error(`[ai] tool "${tc.function.name}" failed:`, err);
-        result = `Error: ${err.message}`;
-      }
+      // Append assistant turn (with tool calls) to history. Use '' rather than null for content:
+      // some local runtimes' chat templates do `content | trim`, which throws on null (None).
       msgHistory.push({
-        role: 'tool',
-        tool_call_id: tc.id,
-        content: result,
+        role: 'assistant',
+        content: textContent || '',
+        tool_calls: toolCalls,
       });
+
+      // Execute each tool and append results
+      for (const tc of toolCalls) {
+        if (signal?.aborted) break;
+        let result;
+        let args: any = {};
+        try {
+          args = JSON.parse(tc.function.arguments || '{}');
+        } catch {
+          /* keep {} */
+        }
+        // Live activity for the sidebar — shows what the agent is doing while the
+        // user waits (before/instead of streamed prose).
+        emitter.emit('tool', {
+          phase: 'start',
+          name: tc.function.name,
+          summary: toolSummary(tc.function.name, args),
+        });
+        try {
+          result = await executeTool(
+            tc.function.name,
+            args,
+            sender,
+            driveUrl,
+            emitter,
+            opts.requestPermission
+          );
+        } catch (err) {
+          console.error(`[ai] tool "${tc.function.name}" failed:`, err);
+          result = `Error: ${err.message}`;
+        }
+        // Include the function `name` on the tool result: it's part of the original OpenAI
+        // function-calling spec and some runtimes' templates reference it when rendering the result.
+        msgHistory.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          name: tc.function.name,
+          content: result,
+        });
+      }
     }
+  } catch (err) {
+    // A cancel surfaces as an AbortError from the in-flight streamCompletion; swallow it and
+    // fall through to a clean 'done'. Any other error propagates to chat()'s catch → 'error'.
+    if (!isAbort(err) && !signal?.aborted) throw err;
   }
 
-  emitter.emit('done', {});
+  emitter.emit('done', { aborted: !!signal?.aborted });
 }
 
 async function resolveAiConfig(sender, driveUrl = null) {
@@ -386,7 +475,10 @@ async function resolveAiConfig(sender, driveUrl = null) {
   return { model: model || null, systemPrompt: null };
 }
 
-async function executeTool(name, args, sender, driveUrl = null, emitter = null) {
+async function executeTool(name, args, sender, driveUrl = null, emitter = null, requestPermission = null) {
+  // Consent gate for writes. Locally this is the app's permission prompt; on the Bridge the
+  // Provider passes an override that relays the prompt back to the Client (ADR-0013 §6).
+  const permit = requestPermission || permissions.requestPermission;
   const senderUrl = driveUrl || sender.getURL();
   const ctx = { sender };
   const requireDrive = () => {
@@ -428,7 +520,7 @@ async function executeTool(name, args, sender, driveUrl = null, emitter = null) 
       }
       const target = fullDriveUrl(base, cleanPath);
       const driveKey = parseDriveUrl(senderUrl).hostname;
-      const allowed = await permissions.requestPermission('modifyDrive:' + driveKey, sender);
+      const allowed = await permit('modifyDrive:' + driveKey, sender);
       if (!allowed) throw new Error('Write permission denied');
       // Capture the file's pre-write content (or null if it didn't exist) BEFORE
       // overwriting, so the editor can build a per-turn undo Checkpoint. This is
@@ -529,8 +621,9 @@ function fetchJson(url) {
   });
 }
 
-function streamCompletion(baseUrl, model, messages, tools, emitter) {
+function streamCompletion(baseUrl, model, messages, tools, emitter, signal?) {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(abortError());
     const endpoint = baseUrl.replace(/\/$/, '') + '/chat/completions';
     const urlp = new URL(endpoint);
 
@@ -555,8 +648,15 @@ function streamCompletion(baseUrl, model, messages, tools, emitter) {
       },
       (res) => {
         if (res.statusCode !== 200) {
-          res.resume();
-          return reject(new Error(`AI Runtime returned ${res.statusCode}`));
+          // Capture the runtime's error body — LM Studio/Ollama return a JSON/text reason (bad
+          // model name, template/tool error, etc.) that is far more useful than a bare status code.
+          let errBody = '';
+          res.on('data', (chunk) => {
+            errBody += chunk.toString();
+          });
+          res.on('end', () => settle(reject, runtimeError(res.statusCode, errBody, tools)));
+          res.on('error', () => settle(reject, runtimeError(res.statusCode, errBody, tools)));
+          return;
         }
 
         let buffer = '';
@@ -613,18 +713,73 @@ function streamCompletion(baseUrl, model, messages, tools, emitter) {
         });
 
         res.on('end', () =>
-          resolve({
+          settle(resolve, {
             finishReason,
             toolCalls: Object.values(toolCallAccum),
             textContent,
           })
         );
-        res.on('error', reject);
+        res.on('error', (err) => settle(reject, err));
       }
     );
 
-    req.on('error', reject);
+    // Cancellation: destroy the in-flight request so we stop burning inference the moment the
+    // consumer (local stream close, or a remote CANCEL frame) aborts. Idempotent via `settled`.
+    let settled = false;
+    const onAbort = () => {
+      try {
+        req.destroy();
+      } catch {}
+      settle(reject, abortError());
+    };
+    function settle(fn, arg) {
+      if (settled) return;
+      settled = true;
+      if (signal) signal.removeEventListener('abort', onAbort);
+      fn(arg);
+    }
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+
+    req.on('error', (err) => settle(reject, err));
     req.write(body);
     req.end();
   });
+}
+
+// A cancel is a normal, expected stop — not a failure. runChat swallows it and ends the stream
+// cleanly rather than emitting an 'error', so the Client sees a graceful halt.
+function abortError() {
+  const err: any = new Error('aborted');
+  err.name = 'AbortError';
+  return err;
+}
+
+function isAbort(err) {
+  return err && (err.name === 'AbortError' || err.message === 'aborted');
+}
+
+// Build a human, actionable error from a non-200 AI Runtime response. Pulls the runtime's own
+// message out of its JSON/text body, and — when a tool-enabled request fails on a template/role
+// error (the classic "this model can't do function-calling" symptom) — adds a concrete next step.
+function runtimeError(status, body, tools) {
+  let detail = '';
+  try {
+    const j = JSON.parse(body);
+    detail =
+      (j && j.error && (j.error.message || (typeof j.error === 'string' ? j.error : ''))) ||
+      (j && j.message) ||
+      '';
+  } catch {
+    /* not JSON */
+  }
+  if (!detail) detail = String(body || '').trim().slice(0, 300);
+
+  let msg = `AI Runtime error ${status}` + (detail ? `: ${detail}` : '');
+  const toolRelated = /tool|function[-_ ]?call|template|jinja|\brole\b/i.test(detail);
+  if (tools && tools.length && (toolRelated || status >= 500)) {
+    msg +=
+      ' — the selected model likely does not support tool-calling. Load a tool-capable model ' +
+      '(e.g. Qwen2.5-Instruct, Llama 3.1-Instruct) for reads/writes that use the Drive tools.';
+  }
+  return new Error(msg);
 }

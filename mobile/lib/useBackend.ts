@@ -33,7 +33,11 @@ import {
   RPC_BOOKMARKS,
   RPC_BOOKMARKS_RESULT,
   RPC_NOMAD,
-  RPC_NOMAD_RESULT
+  RPC_NOMAD_RESULT,
+  RPC_AI_CHAT,
+  RPC_AI_CANCEL,
+  RPC_AI_PROMPT_RESULT,
+  RPC_AI_EVENT
 } from '../rpc-commands.mjs'
 
 export interface Bookmark { href: string; title: string; createdAt?: string }
@@ -103,11 +107,23 @@ export interface Backend {
   fsRename: (driveType: DriveType, key: string, ns: string, from: string, to: string, isDir: boolean) => Promise<FsResult>
   fsMkdir: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
   nomad: (payload: NomadCall) => Promise<NomadResult>
+  aiChat: (messages: unknown[], opts: Record<string, unknown>, handlers: AiChatHandlers) => AiChatHandle
 }
 
 // An in-page nomad.* call forwarded from a drive WebView (see NOMAD_SHIM).
 export interface NomadCall { id?: string; api: string; method: string; url?: string | null; args?: unknown[] }
 export interface NomadResult { ok: boolean; value?: unknown; error?: string }
+
+// Streaming nomad.ai.chat() — runs on a remote AI Provider over the Bridge (ADR-0013). Unlike the
+// single-reply calls above it delivers many events until onDone/onError; cancel() aborts the turn.
+export interface AiChatHandlers {
+  onChunk?: (text: string) => void
+  onTool?: (event: unknown) => void
+  onPrompt?: (permission: string) => boolean | Promise<boolean> // relayed modifyDrive consent
+  onDone?: () => void
+  onError?: (message: string) => void
+}
+export interface AiChatHandle { cancel: () => void }
 
 // Boots the Bare worklet (the P2P backend) once and wires up RPC. The returned
 // `open`/`close` functions post commands to the backend; responses are routed
@@ -118,6 +134,8 @@ export function useBackend (handlers: BackendHandlers): Backend {
   handlersRef.current = handlers
   // reqId -> resolver for in-flight create()/pair()/vaultStatus() calls
   const pending = useRef<Record<string, (msg: any) => void>>({})
+  // reqId -> streaming AI event sink (many RPC_AI_EVENT frames per turn; see aiChat)
+  const aiStreams = useRef<Record<string, (msg: any) => void>>({})
 
   useEffect(() => {
     const worklet = new Worklet()
@@ -136,6 +154,10 @@ export function useBackend (handlers: BackendHandlers): Backend {
       if (req.command === RPC_STATUS) h.onStatus(msg)
       else if (req.command === RPC_CONTENT) h.onContent(msg)
       else if (req.command === RPC_ERROR) h.onError(msg)
+      else if (req.command === RPC_AI_EVENT) {
+        // Streaming: many frames per reqId, so the sink stays registered until it sees done|error.
+        aiStreams.current[msg.reqId]?.(msg)
+      }
       else if (req.command === RPC_CREATED || req.command === RPC_PAIRED || req.command === RPC_VAULT || req.command === RPC_FS_RESULT || req.command === RPC_SPACE_DRIVES_RESULT || req.command === RPC_BOOKMARKS_RESULT || req.command === RPC_NOMAD_RESULT) {
         pending.current[msg.reqId]?.(msg)
         delete pending.current[msg.reqId]
@@ -184,8 +206,51 @@ export function useBackend (handlers: BackendHandlers): Backend {
     })
   }
 
+  // Streaming nomad.ai.chat(). Registers a sink by reqId, forwards each frame to the handlers, and
+  // clears on done|error. Uses an IDLE (heartbeat) timeout — reset on every frame — not the fixed
+  // 15s the request/response calls use, since a turn legitimately runs much longer than any single
+  // gap between tokens (ADR-0013 §5d).
+  function aiChat (messages: unknown[], opts: Record<string, unknown>, h: AiChatHandlers): AiChatHandle {
+    const rpc = rpcRef.current
+    const reqId = `ai_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
+    if (!rpc) { h.onError?.('backend not ready'); return { cancel () {} } }
+
+    let idle: ReturnType<typeof setTimeout>
+    const cleanup = () => { clearTimeout(idle); delete aiStreams.current[reqId] }
+    const armIdle = () => {
+      clearTimeout(idle)
+      idle = setTimeout(() => { cleanup(); h.onError?.('AI stream timed out') }, 60000)
+    }
+
+    aiStreams.current[reqId] = (msg: any) => {
+      armIdle()
+      if (msg.kind === 'chunk') h.onChunk?.(msg.text)
+      else if (msg.kind === 'tool') h.onTool?.(msg.event)
+      else if (msg.kind === 'prompt') {
+        Promise.resolve(h.onPrompt ? h.onPrompt(msg.permission) : false).then((allow) => {
+          const r = rpc.request(RPC_AI_PROMPT_RESULT)
+          r.send(b4a.from(JSON.stringify({ reqId, allow: !!allow })))
+        })
+      }
+      else if (msg.kind === 'done') { cleanup(); h.onDone?.() }
+      else if (msg.kind === 'error') { cleanup(); h.onError?.(msg.message || 'AI error') }
+    }
+    armIdle()
+    const req = rpc.request(RPC_AI_CHAT)
+    req.send(b4a.from(JSON.stringify({ reqId, messages, opts: opts || {} })))
+
+    return {
+      cancel () {
+        const r = rpc.request(RPC_AI_CANCEL)
+        r.send(b4a.from(JSON.stringify({ reqId })))
+        cleanup()
+      }
+    }
+  }
+
   return {
     nomad: (payload) => nomadCall(payload),
+    aiChat: (messages, opts, handlers) => aiChat(messages, opts, handlers),
     fsList: (driveType, key, ns, path) => fsCall(RPC_FS_LIST, { driveType, key, ns, path }),
     fsRead: (driveType, key, ns, path) => fsCall(RPC_FS_READ, { driveType, key, ns, path }),
     fsWrite: (driveType, key, ns, path, base64) => fsCall(RPC_FS_WRITE, { driveType, key, ns, path, base64 }),

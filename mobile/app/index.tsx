@@ -14,6 +14,7 @@ import Library from '../components/Library'
 import Devices from '../components/Devices'
 import SpaceSwitcher from '../components/SpaceSwitcher'
 import DevTools from '../components/DevTools'
+import AiPanel from '../components/AiPanel'
 import FileExplorer, { type ExplorerDrive } from '../components/FileExplorer'
 import type { HyperRender } from '../components/HyperView'
 import { useBackend } from '../lib/useBackend'
@@ -107,6 +108,30 @@ function decodeContent (msg: ContentMsg): HyperRender {
   return { type: 'text', text: `Binary file (${mime})`, mime }
 }
 
+// Native consent for a relayed AI write (ADR-0013 §6): the agentic turn runs on the desktop
+// Provider, but the human is here on the phone, so the modifyDrive prompt is shown natively.
+// `permission` is 'modifyDrive:<hexDriveKey>'. NOT cancelable: the user must explicitly tap Allow or
+// Deny. (An `onDismiss`/cancelable dialog on Android can fire onDismiss alongside a button press and
+// race it to resolve false — which denied writes even after the user tapped Allow.) The `settled`
+// guard keeps the first choice authoritative regardless of any duplicate callback.
+function confirmModifyDrive (permission: string): Promise<boolean> {
+  const key = String(permission).split(':')[1] || ''
+  const where = key ? `${key.slice(0, 8)}…` : 'this drive'
+  return new Promise((resolve) => {
+    let settled = false
+    const settle = (v: boolean) => { if (!settled) { settled = true; resolve(v) } }
+    Alert.alert(
+      'Allow AI to edit?',
+      `The AI running on your other device wants to make changes to ${where}.`,
+      [
+        { text: 'Deny', style: 'cancel', onPress: () => settle(false) },
+        { text: 'Allow', onPress: () => settle(true) }
+      ],
+      { cancelable: false }
+    )
+  })
+}
+
 export default function Browser () {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
@@ -117,6 +142,8 @@ export default function Browser () {
   const activeIdRef = useRef(activeId)
   activeIdRef.current = activeId
   const webviews = useRef<Record<string, WebView | null>>({})
+  // In-flight nomad.ai.chat() turns from drive pages, by stream id, so a page's cancel can abort them.
+  const aiHandles = useRef<Record<string, { cancel: () => void }>>({})
   // Per-space tab sets: snapshot the current space's tabs on switch, restore the target's.
   const tabsBySpace = useRef<Record<string, { tabs: Tab[]; activeId: string }>>({})
   const activeSpaceIdRef = useRef('')
@@ -133,6 +160,7 @@ export default function Browser () {
   const [spacesOpen, setSpacesOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [devtoolsOpen, setDevtoolsOpen] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
   const [explorerDrive, setExplorerDrive] = useState<ExplorerDrive | null>(null)
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [source, setSource] = useState('')
@@ -371,6 +399,26 @@ export default function Browser () {
           wv?.injectJavaScript(`window.__nomadResolve(${JSON.stringify(msg.payload.id)}, ${JSON.stringify(result)}); true;`)
         })
       }
+      // Streaming nomad.ai.chat() from a page (ADR-0013). Each event is pushed back into the SAME
+      // WebView (captured now, so a later tab switch can't misroute it). The relayed modifyDrive
+      // consent is shown as a NATIVE dialog here — the page never sees it.
+      else if (msg.type === 'nomad-ai-chat' && msg.payload && msg.payload.id) {
+        const id = msg.payload.id
+        const wv = webviews.current[activeIdRef.current]
+        const inject = (ev: unknown) =>
+          wv?.injectJavaScript(`window.__nomadAiEvent(${JSON.stringify(id)}, ${JSON.stringify(ev)}); true;`)
+        aiHandles.current[id] = backendRef.current.aiChat(msg.payload.messages || [], msg.payload.opts || {}, {
+          onChunk: (text) => inject({ kind: 'chunk', text }),
+          onTool: (event) => inject({ kind: 'tool', event }),
+          onDone: () => { delete aiHandles.current[id]; inject({ kind: 'done' }) },
+          onError: (message) => { delete aiHandles.current[id]; inject({ kind: 'error', message }) },
+          onPrompt: (permission) => confirmModifyDrive(permission)
+        })
+      }
+      else if (msg.type === 'nomad-ai-cancel' && msg.payload && msg.payload.id) {
+        aiHandles.current[msg.payload.id]?.cancel()
+        delete aiHandles.current[msg.payload.id]
+      }
     },
     [navigate]
   )
@@ -585,6 +633,7 @@ export default function Browser () {
           disabled={!active.url}
           onPress={() => persist.toggleBookmark(active.url, active.title)}
         />
+        <ToolButton label='✦' active={aiOpen} onPress={() => setAiOpen(true)} />
         <ToolButton label='☰' onPress={() => setMenuOpen(true)} />
       </View>
 
@@ -609,6 +658,15 @@ export default function Browser () {
         source={source}
         onClearLogs={() => setLogs([])}
         onViewSource={viewSource}
+      />
+
+      <AiPanel
+        visible={aiOpen}
+        onClose={() => setAiOpen(false)}
+        url={active.url}
+        title={active.title}
+        aiChat={backend.aiChat}
+        onPrompt={confirmModifyDrive}
       />
 
       <Library

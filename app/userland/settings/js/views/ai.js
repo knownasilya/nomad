@@ -94,6 +94,22 @@ class AiSettingsView extends LitElement {
             @change=${this.onAiDefaultModelChange}
           />
         </div>
+        <div class="section">
+          <label>
+            <input
+              type="checkbox"
+              ?checked=${!!this.settings.ai_share_provider}
+              @change=${this.onShareProviderChange}
+            />
+            Share this device's AI with my other devices
+          </label>
+          <p class="description">
+            When on, your other paired devices (e.g. your phone) can run
+            <code>nomad.ai.chat()</code> through this device's runtime when they
+            have none of their own. Requests are limited to devices in your Vault.
+            Off by default, since your runtime may be metered or run on battery.
+          </p>
+        </div>
       </div>
     `;
   }
@@ -128,6 +144,13 @@ class AiSettingsView extends LitElement {
     this.settings.ai_default_model = e.currentTarget.value;
     nomad.browser.setSetting('ai_default_model', this.settings.ai_default_model);
     toast.create('Setting updated');
+  }
+
+  onShareProviderChange(e) {
+    const on = e.currentTarget.checked ? 1 : 0;
+    this.settings.ai_share_provider = on;
+    nomad.browser.setSetting('ai_share_provider', on);
+    toast.create(on ? 'Sharing AI with your other devices' : 'Stopped sharing AI');
   }
 }
 

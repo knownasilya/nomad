@@ -127,6 +127,50 @@ export const NOMAD_SHIM = `(function(){
       watchDraft: noopStream
     };
   }
+  // nomad.ai.chat — STREAMING (ADR-0013). The turn runs on a remote AI Provider (desktop) over the
+  // Bridge; RN forwards each event back via window.__nomadAiEvent(id, ev). Returns an async iterator
+  // of text chunks, mirroring desktop fg/ai.ts. The modifyDrive consent prompt is handled NATIVELY
+  // by the RN app (that's where the human is), so the page never sees a 'prompt' event.
+  var aiStreams = {};
+  window.__nomadAiEvent = function(id, ev){
+    var s = aiStreams[id]; if (!s) return;
+    if (ev.kind === 'chunk') s.push({ value: ev.text, done: false });
+    else if (ev.kind === 'tool') { if (s.onTool) { try { s.onTool(ev.event); } catch(e){} } }
+    else if (ev.kind === 'done') { delete aiStreams[id]; s.end(); }
+    else if (ev.kind === 'error') { delete aiStreams[id]; s.error(new Error((ev && ev.message) || 'AI error')); }
+  };
+  function aiChat(messages, opts){
+    opts = opts || {};
+    var id = 'a' + (++seq);
+    var queue = [], done = false, err = null, waitResolve = null, waitReject = null;
+    function push(item){ if (waitResolve){ var r = waitResolve; waitResolve = waitReject = null; r(item); } else queue.push(item); }
+    function end(){ done = true; if (waitResolve){ var r = waitResolve; waitResolve = waitReject = null; r({ value: undefined, done: true }); } }
+    function error(e){ if (waitReject){ var r = waitReject; waitResolve = waitReject = null; r(e); } else { err = e; } }
+    aiStreams[id] = { push: push, end: end, error: error, onTool: opts.onToolEvent };
+    try {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'nomad-ai-chat',
+        payload: { id: id, messages: messages, opts: { driveUrl: opts.driveUrl || null, allowWrite: opts.allowWrite, context: opts.context || null } }
+      }));
+    } catch (e) { delete aiStreams[id]; error(e); }
+    var it = {
+      next: function(){
+        if (queue.length) return Promise.resolve(queue.shift());
+        if (err){ var e = err; err = null; return Promise.reject(e); }
+        if (done) return Promise.resolve({ value: undefined, done: true });
+        return new Promise(function(resolve, reject){ waitResolve = resolve; waitReject = reject; });
+      },
+      // Consumer stopped early (break out of for-await) → cancel the remote turn.
+      'return': function(){
+        try { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'nomad-ai-cancel', payload: { id: id } })); } catch (e){}
+        delete aiStreams[id]; done = true;
+        return Promise.resolve({ value: undefined, done: true });
+      }
+    };
+    it[Symbol.asyncIterator] = function(){ return this; };
+    return it;
+  }
+
   var fs = function(url){ return driveApi(url); };
   fs.drive = function(url){ return driveApi(url); };
   fs.getInfo = function(url, o){ return rpc('getInfo', url, [o || {}]); };
@@ -155,6 +199,11 @@ export const NOMAD_SHIM = `(function(){
   fs.watchDraft = noopStream;
   window.nomad = {
     fs: fs,
+    ai: {
+      chat: aiChat,
+      // Mobile has no local runtime; connection testing is a Provider concern.
+      testConnection: function(){ return Promise.resolve({ ok: false, error: 'AI runs on your desktop device' }); }
+    },
     schemas: {
       validate: function(type, data){ return rpcApi('schemas', 'validate', null, [type, data]); }
     },

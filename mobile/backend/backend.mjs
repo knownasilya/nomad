@@ -10,6 +10,7 @@ import DriveManager from './lib/drive-manager.mjs'
 import { parseHyperUrl } from './lib/hyper-url.mjs'
 import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault } from './lib/vault.mjs'
 import * as drafts from './lib/drafts.mjs'
+import { createAiBridge } from './lib/ai-bridge.mjs'
 import {
   RPC_OPEN,
   RPC_CLOSE,
@@ -39,6 +40,10 @@ import {
   RPC_BOOKMARKS_RESULT,
   RPC_NOMAD,
   RPC_NOMAD_RESULT,
+  RPC_AI_CHAT,
+  RPC_AI_CANCEL,
+  RPC_AI_PROMPT_RESULT,
+  RPC_AI_EVENT,
   DRIVE_HYPERDRIVE,
   DRIVE_AUTOBASE
 } from '../rpc-commands.mjs'
@@ -51,6 +56,19 @@ for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
   const orig = typeof console[level] === 'function' ? console[level].bind(console) : null
   if (orig) console[level] = (...args) => orig('[nomad]', ...args)
 }
+
+// Resilience: a rejected BACKGROUND promise deep in the P2P stack (e.g. autobase catching up a Vault
+// whose writer core hasn't replicated yet — the "reading 'download' of null" TypeError) must NOT tear
+// down the whole backend worklet. Log it and keep running; the drive/vault layer recovers on the next
+// update. We deliberately do NOT swallow uncaughtException — a genuinely fatal error should let the
+// worklet restart clean rather than limp on with a half-closed corestore ("closing core" cascades).
+// Guarded because Bare's error-event surface can vary by version.
+try {
+  if (typeof Bare?.on === 'function') {
+    Bare.on('unhandledRejection', (err) =>
+      console.error('[nomad] unhandledRejection (ignored):', (err && (err.stack || err.message)) || err))
+  }
+} catch {}
 
 // Bare.argv[0] is the app's document directory, passed in from the RN side.
 const storagePath = join(URL.fileURLToPath(Bare.argv[0]), 'hyper-browser')
@@ -69,6 +87,11 @@ goodbye(() => manager.close())
 // The Vault key (this device's link to its identity) is persisted next to the corestore.
 const vaultKeyPath = join(storagePath, 'vault-key')
 let vault = null // the opened Vault Autobase, once paired
+
+// AI Bridge (ADR-0013): this phone is the AI Client. `getVault` is late-bound — it returns the
+// Vault only once paired, which is exactly when the Bridge can key its channel and sign the auth
+// challenge. install() is re-run after the Vault opens (below) to catch already-open connections.
+const aiBridge = createAiBridge({ swarm: manager.swarm, getVault: () => vault })
 // Set once we've seen THIS device's own record in the Vault index. If it later disappears while the
 // index still holds other records, this device was removed on another device — see handleVaultStatus.
 let ownDeviceSeen = false
@@ -105,6 +128,10 @@ drivesNs = loadDrivesNs()
   if (key) {
     try {
       vault = await openVault(store, manager.swarm, key)
+      // Open the Bridge channel proactively now the Vault is up — matches the desktop + the
+      // peersockets/autobase-control pattern (both sides open on connection). Safe: openOnConn is
+      // fully guarded so it can never throw into the swarm emitter.
+      aiBridge.install()
     } catch (err) {
       // leave vault null; the UI will show an unpaired state and can retry
     }
@@ -131,6 +158,9 @@ const rpc = new RPC(IPC, (req) => {
   else if (req.command === RPC_FS_RENAME) handleFsRename(msg)
   else if (req.command === RPC_FS_MKDIR) handleFsMkdir(msg)
   else if (req.command === RPC_NOMAD) handleNomad(msg)
+  else if (req.command === RPC_AI_CHAT) handleAiChat(msg)
+  else if (req.command === RPC_AI_CANCEL) handleAiCancel(msg)
+  else if (req.command === RPC_AI_PROMPT_RESULT) handleAiPromptResult(msg)
 })
 
 // --- file-system ops on writable drives you own --------------------------
@@ -193,6 +223,73 @@ async function handleNomad ({ reqId, api, method, url, args = [] }) {
     send(RPC_NOMAD_RESULT, { reqId, ok: true, value })
   } catch (err) {
     send(RPC_NOMAD_RESULT, { reqId, ok: false, error: err.message || String(err) })
+  }
+}
+
+// --- AI chat (streaming, over the AI Bridge) -----------------------------
+// nomad.ai.chat() is a readable, so unlike handleNomad each RPC_AI_CHAT fans out many RPC_AI_EVENT
+// frames keyed by reqId. The turn runs on a remote AI Provider (desktop); this phone is the Client.
+const aiTurns = new Map() // reqId -> { signal, abort, promptResolve }
+
+// Minimal AbortController-shaped primitive — Bare has no guaranteed global AbortController, and the
+// Bridge only needs { aborted, addEventListener('abort'), abort() }.
+function makeAbort () {
+  const listeners = []
+  const signal = {
+    aborted: false,
+    addEventListener: (type, cb) => { if (type === 'abort') listeners.push(cb) },
+    removeEventListener: () => {}
+  }
+  return {
+    signal,
+    abort: () => {
+      if (signal.aborted) return
+      signal.aborted = true
+      for (const cb of listeners) { try { cb() } catch {} }
+    }
+  }
+}
+
+async function handleAiChat ({ reqId, messages, opts = {} }) {
+  console.log('[ai-bridge] handleAiChat', reqId)
+  const { signal, abort } = makeAbort()
+  const entry = { signal, abort, promptResolve: null }
+  aiTurns.set(reqId, entry)
+  try {
+    await aiBridge.requestRemoteChat({
+      messages,
+      opts,
+      signal,
+      onChunk: (text) => send(RPC_AI_EVENT, { reqId, kind: 'chunk', text }),
+      onTool: (event) => send(RPC_AI_EVENT, { reqId, kind: 'tool', event }),
+      // Provider keepalive during model load / slow first token — resets the UI idle timeout.
+      onHeartbeat: () => send(RPC_AI_EVENT, { reqId, kind: 'heartbeat' }),
+      // Relayed modifyDrive consent — the human is on THIS phone. Surface it to the RN UI and wait.
+      onPrompt: (permission) => new Promise((resolve) => {
+        entry.promptResolve = resolve
+        send(RPC_AI_EVENT, { reqId, kind: 'prompt', permission })
+      })
+    })
+    send(RPC_AI_EVENT, { reqId, kind: 'done' })
+  } catch (err) {
+    send(RPC_AI_EVENT, { reqId, kind: 'error', message: err && err.message ? err.message : String(err) })
+  } finally {
+    aiTurns.delete(reqId)
+  }
+}
+
+function handleAiCancel ({ reqId }) {
+  console.log('[ai-bridge] handleAiCancel', reqId, '(if this fires right after handleAiChat, the UI is cancelling spuriously)')
+  const entry = aiTurns.get(reqId)
+  if (entry) entry.abort()
+}
+
+function handleAiPromptResult ({ reqId, allow }) {
+  const entry = aiTurns.get(reqId)
+  if (entry && entry.promptResolve) {
+    const resolve = entry.promptResolve
+    entry.promptResolve = null
+    resolve(!!allow)
   }
 }
 
@@ -396,7 +493,7 @@ async function handlePairSubmit ({ reqId, code, name = 'Mobile device' }) {
     // the UI — it only needs to know pairing succeeded. The Vault opens in the background;
     // vaultStatus() reflects it once ready.
     send(RPC_PAIRED, { reqId, ok: true, vaultKey, deviceKey })
-    openVault(store, manager.swarm, vaultKey).then((b) => { vault = b }).catch(() => {})
+    openVault(store, manager.swarm, vaultKey).then((b) => { vault = b; aiBridge.install() }).catch(() => {})
   } catch (err) {
     send(RPC_PAIRED, { reqId, ok: false, message: err.message || String(err) })
   }

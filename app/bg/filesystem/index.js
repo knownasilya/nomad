@@ -12,6 +12,7 @@ import lock from '../../lib/lock';
 import { isSameOrigin } from '../../lib/urls';
 import { HYPERDRIVE_HASH_REGEX } from '../../lib/const';
 import * as autobases from '../hyper/autobases';
+import * as vault from '../hyper/vault';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'filesystem' });
 
@@ -161,6 +162,22 @@ export async function setup() {
         )
       )
   );
+
+  // Load this Device's Vault at startup so it JOINS the Vault's swarm topic. The Vault is the parent
+  // that ties Spaces + Devices together, and being on its topic is what keeps multi-device features
+  // live: Space Root Drive replication, Draft sync (ADR-0012), device management, and the AI Bridge
+  // reaching this Device's other Devices. Without this the Vault loaded only lazily (when Settings →
+  // Devices opened), so the Device sat off the topic and unreachable by its own phone until then.
+  // Background + guarded: getVault() is a no-op (null) when this Device has no Vault yet.
+  vault
+    .getVault()
+    .then((sess) => {
+      if (sess) {
+        logger.info('Loaded Vault at startup (joined swarm topic)');
+        vault.registerOwnDevice({ platform: 'desktop' }).catch(() => {});
+      }
+    })
+    .catch((e) => logger.warn('Vault startup load failed', { error: e.toString() }));
 }
 
 export function getDriveIdent(url) {
