@@ -2,12 +2,7 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
-## Unreleased
-
-### Features
-
-* **Devices / multi-device:** link multiple devices to one identity so they all read and edit your Spaces and Drives. Adds the **Vault** (an identity-level Collaborative Drive indexing your Spaces and Devices), device pairing via `blind-pairing` (invite code + explicit approval), and a **Settings → Devices** subpage. Profile Drives stay multi-writer by `writer-keys` aggregation (URL preserved). See `docs/multi-device-protocol.md`, ADR-0006, ADR-0007. Mirrored in Nomad mobile.
-* **Blog + Reader:** a multi-device, URL-addressable blog format and an in-browser RSS-like reader. Adds the `walled.garden/feed` channel schema (and `summary`/`tags`/`draft` plus optional `body` on `walled.garden/post`), a **Blog** drive template (an Autobase Collaborative Drive so every Device is a writer of one stable URL; posts are directory-per-post at `/posts/<YYYY-MM-DD-slug>/`), and **`nomad://reader`** (subscribe to feeds via `walled.garden/follows`, aggregate posts across Hyperdrive *and* Autobase feeds, synced read-state). Visiting a feed shows a **Subscribe in Reader** action. See ADR-0008, ADR-0009.
+### [1.2.29](https://github.com/knownasilya/nomad/compare/v1.2.28...v1.2.29) (2026-07-10)
 
 ### [1.2.4](https://github.com/knownasilya/nomad/compare/v1.2.3...v1.2.4) (2022-03-25)
 
