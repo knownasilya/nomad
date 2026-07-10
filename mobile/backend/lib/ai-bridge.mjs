@@ -138,7 +138,13 @@ export function createAiBridge ({ swarm, getVault }) {
         t: FRAME.REQUEST,
         id,
         messages,
-        opts: { driveUrl: opts.driveUrl || null, allowWrite: opts.allowWrite, context: opts.context || null }
+        opts: {
+          driveUrl: opts.driveUrl || null,
+          allowWrite: opts.allowWrite,
+          context: opts.context || null,
+          publishDraft: opts.publishDraft || false, // delegate publish to the Provider (writes the Drive)
+          discardDraft: opts.discardDraft || false
+        }
       })
     }).finally(() => peer.clientReqs.delete(id))
   }

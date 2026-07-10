@@ -379,6 +379,18 @@ export default function Browser () {
     } catch {}
   }, [active, backend, patch, reload])
 
+  // Preview an AI-staged Draft from the AI panel: turn preview ON, reload the tab so it renders the
+  // merged Draft, and close the panel so the user sees the result.
+  const onPreviewDraft = useCallback(async () => {
+    if (active.kind !== 'hyper' || !active.url) return
+    try {
+      await backend.nomad({ api: 'fs', method: 'setDraftPreview', url: active.url, args: [true] })
+      patch(active.id, { draftPreviewing: true, hasDraft: true })
+      setAiOpen(false)
+      reload()
+    } catch {}
+  }, [active, backend, patch, reload])
+
   // Keep a ref to the latest backend so the stable WebView message handler can
   // forward in-page nomad.* calls without changing identity every render.
   const backendRef = useRef(backend)
@@ -667,6 +679,7 @@ export default function Browser () {
         title={active.title}
         aiChat={backend.aiChat}
         onPrompt={confirmModifyDrive}
+        onPreviewDraft={onPreviewDraft}
       />
 
       <Library

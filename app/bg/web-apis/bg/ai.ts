@@ -278,12 +278,28 @@ async function routeChat(messages, sender, emitter, opts) {
 // a synthetic sender carries the Client's driveUrl, events are forwarded as frames, and the
 // modifyDrive prompt is relayed to the Client via requestPermission (ADR-0013 §1, §6).
 aiBridge.setServeChat(async ({ messages, opts, signal, requestPermission, sendChunk, sendTool }) => {
+  const driveUrl = opts?.driveUrl;
+  const sender = makeRemoteSender(driveUrl);
+
+  // Draft actions delegated from the Client (the phone often can't write a Provider-owned Drive, so
+  // publish runs HERE where the Drive is writable — ADR-0010/0012). These reuse the request path with
+  // no chat: run the fs op and finish (the Bridge sends DONE/ERROR).
+  if (opts?.publishDraft && driveUrl) {
+    await fsAPI.publishDraft.call({ sender }, driveUrl, {});
+    return;
+  }
+  if (opts?.discardDraft && driveUrl) {
+    await fsAPI.discardDraft.call({ sender }, driveUrl, {});
+    return;
+  }
+
   const emitter = new EventEmitter();
   emitter.on('error', () => {});
   emitter.on('chunk', (e) => sendChunk(e.text));
   emitter.on('tool', (e) => sendTool(e));
-  const sender = makeRemoteSender(opts?.driveUrl);
-  await runChat(messages, sender, emitter, { ...opts, signal, requestPermission });
+  // Remote AI edits stage into the Drive's Vault-hosted Draft (ADR-0012) so the phone user can
+  // review + publish, rather than writing the live Drive directly.
+  await runChat(messages, sender, emitter, { ...opts, signal, requestPermission, draft: true });
 });
 
 // Bring the Bridge's swarm listener up so a Provider receives HELLO even if it never runs a chat
@@ -393,7 +409,8 @@ async function runChat(messages, sender, emitter, opts = {}) {
             sender,
             driveUrl,
             emitter,
-            opts.requestPermission
+            opts.requestPermission,
+            opts.draft
           );
         } catch (err) {
           console.error(`[ai] tool "${tc.function.name}" failed:`, err);
@@ -475,7 +492,7 @@ async function resolveAiConfig(sender, driveUrl = null) {
   return { model: model || null, systemPrompt: null };
 }
 
-async function executeTool(name, args, sender, driveUrl = null, emitter = null, requestPermission = null) {
+async function executeTool(name, args, sender, driveUrl = null, emitter = null, requestPermission = null, draft = false) {
   // Consent gate for writes. Locally this is the app's permission prompt; on the Bridge the
   // Provider passes an override that relays the prompt back to the Client (ADR-0013 §6).
   const permit = requestPermission || permissions.requestPermission;
@@ -526,9 +543,11 @@ async function executeTool(name, args, sender, driveUrl = null, emitter = null, 
       // overwriting, so the editor can build a per-turn undo Checkpoint. This is
       // the only place that still knows the prior state.
       const priorContent = await readTextOrNull(ctx, target);
-      await fsAPI.writeFile.call(ctx, target, args.content);
+      // `draft:true` (remote AI edits) stages into the Drive's Vault-hosted Draft instead of writing
+      // the live Drive, so the change is reviewable/publishable (ADR-0012).
+      await fsAPI.writeFile.call(ctx, target, args.content, draft ? { draft: true } : {});
       if (emitter) {
-        emitter.emit('tool', { phase: 'write', name: 'writeDriveFile', path: cleanPath, priorContent });
+        emitter.emit('tool', { phase: 'write', name: 'writeDriveFile', path: cleanPath, priorContent, draft: !!draft });
       }
       return `File written successfully to ${cleanPath}`;
     }

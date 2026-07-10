@@ -25,13 +25,15 @@ interface Props {
   aiChat: (messages: unknown[], opts: Record<string, unknown>, handlers: AiChatHandlers) => AiChatHandle
   // Native consent for a relayed modifyDrive write (the human is here on the phone).
   onPrompt?: (permission: string) => boolean | Promise<boolean>
+  // Render the current Drive's Draft in the tab (set preview + reload + close the panel).
+  onPreviewDraft?: (url: string) => void
 }
 
 // A toggleable AI chat for the CURRENTLY OPEN tab. The turn runs on the user's desktop (the AI
 // Provider) — this phone has no local runtime — and is scoped to the tab's Drive so the Provider
 // resolves that Drive's AI Config. The Client owns the transcript (ADR-0013 §5): each send ships
 // the full history, so the panel keeps `messages` and forwards them.
-export default function AiPanel ({ visible, onClose, url, title, aiChat, onPrompt }: Props) {
+export default function AiPanel ({ visible, onClose, url, title, aiChat, onPrompt, onPreviewDraft }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   // Per-context transcripts (keyed by Drive URL, or 'general' for a non-Drive tab). Opening the panel
@@ -45,6 +47,10 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
   // Which context's transcript the in-flight turn belongs to, so a turn started for tab A keeps
   // running (and shows its thinking state) even if the panel is closed and reopened.
   const [activeTurnKey, setActiveTurnKey] = useState<string | null>(null)
+  // Paths the AI has staged into each context's Drive Draft (per contextKey) — drives the review
+  // banner. Publishing/discarding runs on the desktop Provider (it can write the Drive); preview is local.
+  const [drafts, setDrafts] = useState<Record<string, string[]>>({})
+  const [draftBusy, setDraftBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const handleRef = useRef<AiChatHandle | null>(null)
   const scrollRef = useRef<ScrollView | null>(null)
@@ -63,6 +69,7 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
   // thinking/streamed state is still here when the panel reopens (the component stays mounted). Only
   // the explicit Stop button cancels.
   const turnActiveHere = busy && activeTurnKey === contextKey
+  const draftPaths = drafts[contextKey] || []
 
   useEffect(() => { scrollRef.current?.scrollToEnd({ animated: true }) }, [messages])
 
@@ -90,9 +97,19 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
     setBusy(true)
     setActivity('Thinking…')
     setActiveTurnKey(contextKey)
+    const sendKey = contextKey
     handleRef.current = aiChat(history, { driveUrl: driveUrl || undefined }, {
       onChunk: (chunk) => { setActivity('Responding…'); appendToLast(chunk) },
-      onTool: (event) => setActivity(toolLabel(event)),
+      onTool: (event: any) => {
+        setActivity(toolLabel(event))
+        // A staged write → track it for the draft review banner (keyed to the turn's context).
+        if (event && event.phase === 'write' && event.path) {
+          setDrafts((prev) => {
+            const cur = (prev[sendKey] || []).filter((p) => p !== event.path)
+            return { ...prev, [sendKey]: [...cur, event.path] }
+          })
+        }
+      },
       onDone: () => { setBusy(false); setActivity(null); setActiveTurnKey(null); handleRef.current = null },
       onError: (message) => { setBusy(false); setActivity(null); setActiveTurnKey(null); handleRef.current = null; setError(message) },
       onPrompt: onPrompt
@@ -100,6 +117,20 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
   }
 
   const stop = () => { handleRef.current?.cancel(); handleRef.current = null; setBusy(false); setActivity(null); setActiveTurnKey(null) }
+
+  const clearDraft = () => setDrafts((prev) => { const c = { ...prev }; delete c[contextKey]; return c })
+
+  // Publish/Discard run on the desktop Provider (which can write the Drive) via a no-chat Bridge
+  // request; the staged Draft lives in the Vault and syncs both ways.
+  const draftAction = (action: 'publishDraft' | 'discardDraft') => {
+    if (!driveUrl || draftBusy) return
+    setDraftBusy(true)
+    setError(null)
+    aiChat([], { driveUrl, [action]: true }, {
+      onDone: () => { setDraftBusy(false); clearDraft() },
+      onError: (message) => { setDraftBusy(false); setError(message) }
+    })
+  }
 
   // Keyboard handling: use KeyboardAvoidingView ONLY on iOS. On Android a KeyboardAvoidingView
   // inside a full-screen Modal can enter an infinite onLayout loop (the view never paints and the
@@ -163,6 +194,29 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
             )}
             {error && <Text style={s.error}>⚠️ {error}</Text>}
           </ScrollView>
+
+          {driveUrl && draftPaths.length > 0 && !turnActiveHere && (
+            <View style={s.draftBanner}>
+              <Text style={s.draftText}>
+                ✎ Draft ready — {draftPaths.length} change{draftPaths.length > 1 ? 's' : ''} to this page
+              </Text>
+              {draftBusy ? (
+                <ActivityIndicator size='small' color={t.accent} />
+              ) : (
+                <View style={s.draftBtns}>
+                  <TouchableOpacity onPress={() => onPreviewDraft?.(url)} hitSlop={6}>
+                    <Text style={s.draftLink}>Preview</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => draftAction('discardDraft')} hitSlop={6}>
+                    <Text style={s.draftDanger}>Discard</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => draftAction('publishDraft')} hitSlop={6}>
+                    <Text style={s.draftPrimary}>Publish</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
 
           <View style={s.inputRow}>
             <TextInput
@@ -234,6 +288,12 @@ function makeStyles (t: Theme) {
     error: { color: t.danger, fontSize: 13, paddingVertical: 6 },
     thinkingBubble: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     thinkingText: { color: t.textDim, fontSize: 14, flexShrink: 1 },
+    draftBanner: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border, backgroundColor: t.surface, paddingHorizontal: 16, paddingVertical: 10, gap: 10 },
+    draftText: { color: t.text, fontSize: 13, fontWeight: '600' },
+    draftBtns: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+    draftLink: { color: t.accent, fontSize: 15, fontWeight: '600' },
+    draftDanger: { color: t.danger, fontSize: 15, fontWeight: '600' },
+    draftPrimary: { color: t.secure, fontSize: 15, fontWeight: '700' },
     inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
     input: { flex: 1, maxHeight: 120, color: t.text, fontSize: 15, backgroundColor: t.inputBg, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 9 },
     sendBtn: { paddingHorizontal: 16, paddingVertical: 11, borderRadius: radius.md, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center' },
