@@ -550,37 +550,46 @@ async function handleOpen ({ tabId, url, driveType = DRIVE_HYPERDRIVE, ns = null
   try {
     const { key, keyHex, path } = parseHyperUrl(url)
     // Try both drive types (hinted first) only when the type is unknown.
-    const { result, driveType: detected, title } = await manager.resolveAuto(key, path, driveType, onStatus, ns, detect)
+    const { result, driveType: detected, title, cached } = await manager.resolveAuto(key, path, driveType, onStatus, ns, detect)
+    sendContent(tabId, url, keyHex, detected, path, title, result)
 
-    if (result.kind === 'file') {
-      send(RPC_CONTENT, {
-        tabId,
-        url,
-        ok: true,
-        key: keyHex,
-        driveType: detected,
-        title,
-        isDir: false,
-        mime: result.mime,
-        bodyBase64: b4a.toString(result.buffer, 'base64')
-      })
-    } else {
-      send(RPC_CONTENT, {
-        tabId,
-        url,
-        ok: true,
-        key: keyHex,
-        driveType: detected,
-        title,
-        isDir: true,
-        mime: 'application/x-directory',
-        path,
-        entries: result.entries
-      })
+    // Instant-cache: we just served a locally-cached view. Replicate the latest in the background and,
+    // if the Drive brought newer content, re-serve so the tab updates without a manual reload.
+    if (cached) {
+      ;(async () => {
+        try {
+          await manager.sync(detected, key)
+          const fresh = await manager.resolveAuto(key, path, detected, () => {}, ns, false)
+          if (fresh && contentChanged(result, fresh.result)) {
+            sendContent(tabId, url, keyHex, fresh.driveType, path, fresh.title, fresh.result, true)
+          }
+        } catch {}
+      })()
     }
   } catch (err) {
     send(RPC_ERROR, { tabId, url, message: err.message || String(err) })
   }
+}
+
+function sendContent (tabId, url, keyHex, detected, path, title, result, updated = false) {
+  if (result.kind === 'file') {
+    send(RPC_CONTENT, {
+      tabId, url, ok: true, key: keyHex, driveType: detected, title, isDir: false,
+      mime: result.mime, bodyBase64: b4a.toString(result.buffer, 'base64'), updated
+    })
+  } else {
+    send(RPC_CONTENT, {
+      tabId, url, ok: true, key: keyHex, driveType: detected, title, isDir: true,
+      mime: 'application/x-directory', path, entries: result.entries, updated
+    })
+  }
+}
+
+// True when a background refresh produced different content than what we served from cache.
+function contentChanged (a, b) {
+  if (!a || !b || a.kind !== b.kind) return true
+  if (a.kind === 'file') return !b4a.equals(a.buffer || b4a.alloc(0), b.buffer || b4a.alloc(0))
+  return JSON.stringify(a.entries) !== JSON.stringify(b.entries)
 }
 
 function handleClose ({ driveType = DRIVE_HYPERDRIVE, key }) {

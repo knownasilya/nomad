@@ -3,6 +3,7 @@ import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityInd
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { AiChatHandlers, AiChatHandle } from '../lib/useBackend'
+import Markdown from './Markdown'
 
 interface ChatMsg { role: 'user' | 'assistant'; content: string }
 
@@ -187,7 +188,9 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
                 }
                 return (
                   <View key={i} style={[s.bubble, m.role === 'user' ? s.userBubble : s.aiBubble]}>
-                    <Text style={m.role === 'user' ? s.userText : s.aiText}>{m.content}</Text>
+                    {m.role === 'user'
+                      ? <Text style={s.userText}>{m.content}</Text>
+                      : <Markdown text={m.content} />}
                   </View>
                 )
               })
@@ -280,7 +283,7 @@ function makeStyles (t: Theme) {
     body: { flex: 1 },
     bodyPad: { padding: 14, gap: 10 },
     empty: { color: t.textMuted, fontSize: 13, lineHeight: 19 },
-    bubble: { maxWidth: '88%', paddingHorizontal: 12, paddingVertical: 9, borderRadius: radius.md },
+    bubble: { maxWidth: '88%', paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.md },
     userBubble: { alignSelf: 'flex-end', backgroundColor: t.trustBg },
     aiBubble: { alignSelf: 'flex-start', backgroundColor: t.surface },
     userText: { color: t.trustText, fontSize: 15, lineHeight: 21 },

@@ -133,19 +133,28 @@ export default class DriveManager {
     const drive = ns ? new Hyperdrive(this.store.namespace(ns)) : new Hyperdrive(this.store.namespace(ck), key)
     await drive.ready()
 
+    const mk = (cached, discovery, sync) => ({
+      drive, discovery, reader: hyperdriveReader(drive), close: () => drive.close(), cached, _sync: sync
+    })
+
+    // Cache hit: previously replicated content is on disk (drive.version > 1). Serve INSTANTLY and
+    // replicate the latest in the BACKGROUND.
+    if (!hyperdriveEmpty(drive)) {
+      onStatus('cached', 'Loaded from cache', this.peers)
+      const discovery = this.swarm.join(drive.discoveryKey, { server: false, client: true })
+      const sync = (async () => {
+        try { await discovery.flushed(); await this.swarm.flush(); await drive.update({ wait: true }) } catch {}
+      })()
+      return mk(true, discovery, sync)
+    }
+
+    // Cold: a freshly-created/never-fetched remote drive hasn't replicated yet. Join, then poll for
+    // content bounded by a timeout so a genuinely unreachable drive still resolves instead of hanging.
     onStatus('joining', 'Joining swarm…')
     const discovery = this.swarm.join(drive.discoveryKey, { server: false, client: true })
     await discovery.flushed()
-
     onStatus('connecting', 'Finding peers…', this.peers)
     await this.swarm.flush()
-
-    // A freshly-created remote drive often hasn't replicated its content on the
-    // first open — peer discovery + connection lags a beat behind the swarm join,
-    // which otherwise surfaces as an empty listing until a manual reload. Poll for
-    // content (drive.version > 1) the same way _openAutobase does, bounded by a
-    // timeout so a genuinely unreachable drive still resolves instead of hanging.
-    // A drive we own is already non-empty, so this loop is a no-op for it.
     onStatus('updating', 'Syncing latest…', this.peers)
     const deadline = Date.now() + HYPERDRIVE_LOAD_TIMEOUT
     try { await drive.update({ wait: true }) } catch {}
@@ -153,28 +162,38 @@ export default class DriveManager {
       await sleep(250)
       try { await drive.update({ wait: true }) } catch {}
     }
-
-    return { drive, discovery, reader: hyperdriveReader(drive), close: () => drive.close() }
+    return mk(false, discovery, null)
   }
 
   async _openAutobase (key, ck, onStatus, ns) {
     // ns => reopen a drive we own (writable); otherwise read-only by key.
     const base = ns ? openAutobaseDrive(this.store.namespace(ns), null) : openAutobaseDrive(this.store.namespace(ck), key)
     await base.ready()
+    // Linearise whatever is already in the LOCAL corestore — fast, no network.
+    try { await base.update() } catch {}
 
-    // Join the swarm BEFORE updating: a remote drive must replicate its
-    // bootstrap from a peer, so a connection has to be in place first (this is
-    // exactly how nomad loads collaborative drives).
+    const mk = (cached, discovery, sync) => ({
+      drive: base, discovery, reader: beeReader(base.view, this.store), close: () => base.close(), cached, _sync: sync
+    })
+
+    // Cache hit: a previously-accessed Drive already has content on disk. Serve it INSTANTLY and
+    // replicate the latest in the BACKGROUND (handleOpen re-serves if the sync brings newer content).
+    if (!viewEmpty(base)) {
+      onStatus('cached', 'Loaded from cache', this.peers)
+      const discovery = this.swarm.join(base.discoveryKey, { server: false, client: true })
+      const sync = (async () => {
+        try { await discovery.flushed(); await this.swarm.flush(); await base.update() } catch {}
+      })()
+      return mk(true, discovery, sync)
+    }
+
+    // Cold: nothing local — join the swarm BEFORE updating (a remote Drive must replicate its
+    // bootstrap from a peer first) and poll until the linearised view has content or we time out.
     onStatus('joining', 'Joining swarm…')
     const discovery = this.swarm.join(base.discoveryKey, { server: false, client: true })
     await discovery.flushed()
-
     onStatus('connecting', 'Finding peers…', this.peers)
     await this.swarm.flush()
-
-    // base.update() returns immediately with an EMPTY view if no peer has
-    // delivered the bootstrap yet — and a peer typically connects a beat after
-    // we join. Poll until the linearised view has content or we time out.
     onStatus('updating', 'Syncing latest…', this.peers)
     const deadline = Date.now() + AUTOBASE_LOAD_TIMEOUT
     await base.update()
@@ -182,8 +201,7 @@ export default class DriveManager {
       await sleep(250)
       await base.update()
     }
-
-    return { drive: base, discovery, reader: beeReader(base.view, this.store), close: () => base.close() }
+    return mk(false, discovery, null)
   }
 
   // This device's writable blobs core for an autobase drive, namespaced by its local writer
@@ -280,11 +298,19 @@ export default class DriveManager {
     throw lastErr || new Error(`Not found: ${path}`)
   }
 
-  // Attach a human title read from the drive's index files, for the tab label.
+  // Attach a human title read from the drive's index files, for the tab label. `cached` reports
+  // whether the Drive was served from the local corestore (so the caller can background-refresh).
   async _withTitle (result, driveType, keyHex) {
     const entry = this.drives.get(this.cacheKey(driveType, keyHex))
     const title = entry ? await readDriveTitle(entry.reader).catch(() => null) : null
-    return { result, driveType, title }
+    return { result, driveType, title, cached: !!(entry && entry.cached) }
+  }
+
+  // Await the background replication kicked off when a cached Drive was served instantly. Resolves
+  // once the latest has synced (or a no-op if the Drive wasn't a cache hit).
+  async sync (driveType, key) {
+    const entry = this.drives.get(this.cacheKey(driveType, b4a.toString(key, 'hex')))
+    if (entry && entry._sync) { try { await entry._sync } catch {} }
   }
 
   // Turn a file into renderable content. HTML and Markdown become a standalone

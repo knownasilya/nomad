@@ -188,6 +188,12 @@ export default function Browser () {
       )
     },
     onContent: (msg: ContentMsg) => {
+      // A background refresh (instant-cache phase 2) must not clobber the page if the user has since
+      // navigated the tab elsewhere — only apply it while the tab is still on that url.
+      if (msg.updated) {
+        const tab = tabsRef.current.find((t) => t.id === msg.tabId)
+        if (!tab || tab.url !== msg.url) return
+      }
       const render = decodeContent(msg)
       // Prefer the drive's own title (index.json / index.md / index.html), then
       // fall back to a short key (with the sub-path for directories).

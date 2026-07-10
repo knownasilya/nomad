@@ -26,6 +26,7 @@ export interface ContentMsg {
   path?: string
   entries?: DirEntry[]
   bodyBase64?: string
+  updated?: boolean // a background instant-cache refresh replacing an earlier cached render
 }
 
 export interface ErrorMsg {
