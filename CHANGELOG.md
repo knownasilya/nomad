@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.5.1](https://github.com/knownasilya/nomad/compare/v1.5.0...v1.5.1) (2026-07-11)
+
+
+### Bug Fixes
+
+* **fs:** recover from wrong-backend DECODING_ERROR and register autobase drives with their type ([a2984b5](https://github.com/knownasilya/nomad/commit/a2984b583c36a1ef5e3e18f0018cfd5518e721e9))
+* **shell-window:** window controls on Linux and Windows ([1dd9899](https://github.com/knownasilya/nomad/commit/1dd98995d648360e0708b4338d3c87408fc5d601))
+
 ## [1.5.0](https://github.com/knownasilya/nomad/compare/v1.4.0...v1.5.0) (2026-07-11)
 
 
