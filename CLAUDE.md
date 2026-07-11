@@ -141,7 +141,9 @@ replication fails with `DECODING_ERROR`.
 
 `walled.garden/feed` (a drive's `index.json`) marks a drive as a feed; a **blog** is a feed whose items are
 `walled.garden/post` records stored directory-per-post under `/posts/<YYYY-MM-DD-slug>/` (`post.json` +
-`index.{md,html,txt}` body). The built-in **`nomad://reader`** (`app/userland/reader/`) subscribes via
+`post.{md,html,txt}` body; legacy posts used `index.*` and consumers still read those — the rename keeps
+`/posts/<slug>/` a navigation MISS so the manifest-`fallback` shell serves the themed post there, ADR-0009
+amendment). The built-in **`nomad://reader`** (`app/userland/reader/`) subscribes via
 `walled.garden/follows` and aggregates posts across both drive backends. Feed recognition sets `ident.feed`
 (see above), surfaced as a "Subscribe in Reader" button in `userland/site-info/js/com/identity.js`. New
 internal apps register in `bg/protocols/nomad.js` (pass `{ fallbackToIndexHTML: true }` for SPA routing) and
