@@ -32,6 +32,8 @@ import {
   RPC_SPACE_DRIVES_RESULT,
   RPC_BOOKMARKS,
   RPC_BOOKMARKS_RESULT,
+  RPC_HOSTING,
+  RPC_HOSTING_RESULT,
   RPC_NOMAD,
   RPC_NOMAD_RESULT,
   RPC_AI_CHAT,
@@ -100,6 +102,7 @@ export interface Backend {
   bookmarksList: (rootDriveKey: string, ns?: string) => Promise<BookmarksMsg>
   bookmarkAdd: (rootDriveKey: string, ns: string | undefined, href: string, title: string) => Promise<BookmarksMsg>
   bookmarkRemove: (rootDriveKey: string, ns: string | undefined, href: string) => Promise<BookmarksMsg>
+  hosting: (action: 'get' | 'set', driveType: DriveType, key: string, on?: boolean) => Promise<{ ok: boolean; hosted?: boolean; message?: string }>
   fsList: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
   fsRead: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
   fsWrite: (driveType: DriveType, key: string, ns: string, path: string, base64: string) => Promise<FsResult>
@@ -158,7 +161,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
         // Streaming: many frames per reqId, so the sink stays registered until it sees done|error.
         aiStreams.current[msg.reqId]?.(msg)
       }
-      else if (req.command === RPC_CREATED || req.command === RPC_PAIRED || req.command === RPC_VAULT || req.command === RPC_FS_RESULT || req.command === RPC_SPACE_DRIVES_RESULT || req.command === RPC_BOOKMARKS_RESULT || req.command === RPC_NOMAD_RESULT) {
+      else if (req.command === RPC_CREATED || req.command === RPC_PAIRED || req.command === RPC_VAULT || req.command === RPC_FS_RESULT || req.command === RPC_SPACE_DRIVES_RESULT || req.command === RPC_BOOKMARKS_RESULT || req.command === RPC_HOSTING_RESULT || req.command === RPC_NOMAD_RESULT) {
         pending.current[msg.reqId]?.(msg)
         delete pending.current[msg.reqId]
       }
@@ -386,7 +389,21 @@ export function useBackend (handlers: BackendHandlers): Backend {
     },
     bookmarksList: (rootDriveKey, ns) => bmCall({ action: 'list', rootDriveKey, ns }),
     bookmarkAdd: (rootDriveKey, ns, href, title) => bmCall({ action: 'add', rootDriveKey, ns, href, title }),
-    bookmarkRemove: (rootDriveKey, ns, href) => bmCall({ action: 'remove', rootDriveKey, ns, href })
+    bookmarkRemove: (rootDriveKey, ns, href) => bmCall({ action: 'remove', rootDriveKey, ns, href }),
+    // Query/toggle hosting (seeding) a drive — desktop's "Host This Hyperdrive".
+    hosting (action, driveType, key, on = false) {
+      return new Promise((resolve) => {
+        const rpc = rpcRef.current
+        if (!rpc) return resolve({ ok: false, message: 'backend not ready' })
+        const reqId = `h_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
+        const timer = setTimeout(() => {
+          if (pending.current[reqId]) { delete pending.current[reqId]; resolve({ ok: false, message: 'backend did not respond' }) }
+        }, 12000)
+        pending.current[reqId] = (msg: any) => { clearTimeout(timer); resolve(msg) }
+        const req = rpc.request(RPC_HOSTING)
+        req.send(b4a.from(JSON.stringify({ reqId, action, driveType, key, on })))
+      })
+    }
   }
 
   function bmCall (payload: { action: string; rootDriveKey: string; ns?: string; href?: string; title?: string }) {

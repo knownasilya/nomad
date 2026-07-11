@@ -23,6 +23,7 @@ import {
   RPC_VAULT_ADD_SPACE,
   RPC_SPACE_DRIVES,
   RPC_SPACE_ADD_DRIVE,
+  RPC_HOSTING,
   RPC_BOOKMARKS,
   RPC_FS_LIST,
   RPC_FS_READ,
@@ -39,6 +40,7 @@ import {
   RPC_FS_RESULT,
   RPC_SPACE_DRIVES_RESULT,
   RPC_BOOKMARKS_RESULT,
+  RPC_HOSTING_RESULT,
   RPC_NOMAD,
   RPC_NOMAD_RESULT,
   RPC_AI_CHAT,
@@ -128,6 +130,28 @@ function saveDrivesNs () {
 }
 drivesNs = loadDrivesNs()
 
+// Drives this device HOSTS (seeds) — desktop's "Host This Hyperdrive". Keyed
+// `<driveType>:<keyHex>` → { key, type }. Persisted so hosting survives restarts:
+// each entry is reopened and swarm-announced on boot (below), and pinned open by
+// the manager so closing its tab doesn't stop seeding.
+const hostedPath = join(storagePath, 'hosted-drives.json')
+let hostedDrives = {}
+function loadHostedDrives () {
+  try { return fs.existsSync(hostedPath) ? JSON.parse(b4a.toString(fs.readFileSync(hostedPath))) : {} } catch { return {} }
+}
+function saveHostedDrives () {
+  try { fs.writeFileSync(hostedPath, b4a.from(JSON.stringify(hostedDrives))) } catch {}
+}
+hostedDrives = loadHostedDrives()
+
+// Rejoin the swarm (announcing) for every hosted drive on boot — best-effort and
+// sequential in the background, so a stale/unreachable drive can't block startup.
+;(async () => {
+  for (const { key, type } of Object.values(hostedDrives)) {
+    try { await manager.setHosting(type, b4a.from(key, 'hex'), true) } catch {}
+  }
+})()
+
 // Reopen the Vault on startup if this device has already been paired.
 ;(async () => {
   const key = loadVaultKey()
@@ -156,6 +180,7 @@ const rpc = new RPC(IPC, (req) => {
   else if (req.command === RPC_VAULT_ADD_SPACE) handleAddVaultSpace(msg)
   else if (req.command === RPC_SPACE_DRIVES) handleSpaceDrives(msg)
   else if (req.command === RPC_SPACE_ADD_DRIVE) handleSpaceAddDrive(msg)
+  else if (req.command === RPC_HOSTING) handleHosting(msg)
   else if (req.command === RPC_BOOKMARKS) handleBookmarks(msg)
   else if (req.command === RPC_FS_LIST) handleFsList(msg)
   else if (req.command === RPC_FS_READ) handleFsRead(msg)
@@ -490,6 +515,24 @@ async function handleSpaceAddDrive ({ reqId, rootDriveKey, ns = null, key, type 
     send(RPC_SPACE_DRIVES_RESULT, { reqId, ok: true, drives })
   } catch (err) {
     send(RPC_SPACE_DRIVES_RESULT, { reqId, ok: false, drives: [], message: err.message || String(err) })
+  }
+}
+
+// Query/toggle hosting (seeding) for a drive — desktop's "Host This Hyperdrive" toggle in the
+// peers menu. 'set' flips the swarm join to announcing (or back) via manager.setHosting and
+// persists the choice so boot re-announces it; 'get' just reports the persisted state.
+async function handleHosting ({ reqId, action, driveType, key, on = false }) {
+  const ck = `${driveType}:${key}`
+  try {
+    if (action === 'set') {
+      await manager.setHosting(driveType, b4a.from(key, 'hex'), on)
+      if (on) hostedDrives[ck] = { key, type: driveType }
+      else delete hostedDrives[ck]
+      saveHostedDrives()
+    }
+    send(RPC_HOSTING_RESULT, { reqId, ok: true, hosted: !!hostedDrives[ck] })
+  } catch (err) {
+    send(RPC_HOSTING_RESULT, { reqId, ok: false, hosted: !!hostedDrives[ck], message: err.message || String(err) })
   }
 }
 

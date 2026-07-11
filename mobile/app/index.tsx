@@ -662,6 +662,24 @@ export default function Browser () {
     [active, persist.drives]
   )
 
+  // Hosting (seeding) for the active drive — desktop's "Host This Hyperdrive" toggle.
+  // Only offered for drives this device doesn't own (owned drives announce already);
+  // the persisted state is fetched lazily when the menu opens.
+  const canHostActive = active.kind === 'hyper' && !!active.driveKey && !ownedActive
+  const [activeHosted, setActiveHosted] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!menuOpen || !canHostActive || !active.driveKey) { setActiveHosted(null); return }
+    backend.hosting('get', active.driveType, active.driveKey).then((r) => setActiveHosted(r.ok ? !!r.hosted : null))
+  }, [menuOpen, canHostActive, active.driveKey, active.driveType, backend])
+
+  const toggleHosting = useCallback(async () => {
+    if (!canHostActive || !active.driveKey) return
+    const next = !activeHosted
+    setActiveHosted(next)
+    const r = await backend.hosting('set', active.driveType, active.driveKey, next)
+    if (!r.ok) setActiveHosted(!next)
+  }, [canHostActive, active.driveKey, active.driveType, activeHosted, backend])
+
   return (
     <SafeAreaView style={s.root} edges={['top', 'bottom']}>
       <StatusBar barStyle={t.scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={t.bg} />
@@ -749,6 +767,7 @@ export default function Browser () {
           { label: 'Devices', onPress: () => setDevicesOpen(true) },
           { label: 'Developer tools', onPress: () => { viewSource(); setDevtoolsOpen(true) } },
           { label: 'Copy link', disabled: !active.url, onPress: copyLink },
+          { label: activeHosted ? 'Stop hosting this drive' : 'Host this drive', disabled: !canHostActive, onPress: toggleHosting },
           { label: 'Reload', disabled: active.kind === 'home', onPress: reload }
         ]}
       />

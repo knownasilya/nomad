@@ -600,10 +600,29 @@ export default class DriveManager {
     if (driveType === DRIVE_AUTOBASE) await drive.update()
   }
 
+  // Host (seed) a drive — desktop's "Host This Hyperdrive" (bg/hyper/drives.js ensureHosting).
+  // Normal read-only opens join the swarm topic lookup-only (server:false), so this device never
+  // serves the drive to peers. Hosting re-joins ANNOUNCING and pins the entry (release() skips
+  // hosted drives), so seeding continues after the tab leaves — for as long as the app runs.
+  // Turning it off reverts the join to lookup-only; the entry then follows normal tab lifecycle.
+  async setHosting (driveType, key, on) {
+    const keyHex = b4a.toString(key, 'hex')
+    const entry = await this.open(driveType, key, () => {}, null)
+    safe(() => entry.discovery && entry.discovery.destroy())
+    entry.hosted = !!on
+    entry.discovery = this.swarm.join(
+      entry.drive.discoveryKey,
+      on ? { server: true, client: true } : { server: false, client: true }
+    )
+    try { await entry.discovery.flushed() } catch {}
+    return { hosted: !!on, keyHex }
+  }
+
   release (driveType, keyHex) {
     const ck = this.cacheKey(driveType, keyHex)
     const entry = this.drives.get(ck)
     if (!entry) return
+    if (entry.hosted) return // pinned: keep seeding after the tab leaves
     if (--entry.refs > 0) return
     this.drives.delete(ck)
     safe(() => entry.discovery && entry.discovery.destroy())

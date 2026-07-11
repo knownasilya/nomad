@@ -131,6 +131,31 @@ _Avoid_: feed reader, aggregator, rss client
 Subscribing to a Feed by adding its URL to the user's own `walled.garden/follows` record (outbound-only) in their private Root Drive. Because a Follow is stored on the *follower's* side and no aggregate follower list is ever published, who follows a user is not exposed at the data layer (ADR-0013). There is deliberately no "Followers" list or count.
 _Avoid_: followers list, subscriber list, friend
 
+### Discovery
+
+**Listed**:
+The opt-in state in which a public Drive announces itself for discovery and can appear in search
+results. Toggled explicitly by the author (the `indexable` field in `/index.json`), never implied by
+other metadata: declaring Topics without being Listed does nothing, and a Listed Drive with no
+Topics is still searchable by title, description, and Keywords. Never applies to `hyper://private/`,
+the Vault, or a Root Drive.
+_Avoid_: published (see Publish), indexed, public (unqualified), discoverable
+
+**Topic**:
+A browsable category a Drive declares in its `/index.json` to be listed under for public discovery.
+The unit search is scoped by: a user browses or searches *within* a Topic. Treated as an exact-match
+facet by an indexer, so a Drive declares at most five, written as lowercase hyphenated slugs (any
+script) so independent indexers agree on the same shelves without a registry. Distinct from a
+Keyword (a search aid, not a category) and from a Hyperswarm announce topic (a transport
+rendezvous, ADR-0014).
+_Avoid_: tag, category, channel, hashtag
+
+**Keyword**:
+A free-text term an author adds to a Drive's `/index.json` to improve search matching; matched
+alongside title and description when searching, capped at 12 per Drive. Declaring a Keyword does not
+list the Drive under any Topic.
+_Avoid_: tag, search term, meta keyword
+
 ### User model
 
 **Space**:
