@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.3.1](https://github.com/knownasilya/nomad/compare/v1.3.0...v1.3.1) (2026-07-11)
+
+
+### Bug Fixes
+
+* **mobile:** normalize loopback-gateway URLs to hyper:// in the nomad bridge ([004eeb5](https://github.com/knownasilya/nomad/commit/004eeb51ba50b0341aa02cb377470ed2a12dec8d))
+
 ## [1.3.0](https://github.com/knownasilya/nomad/compare/v1.2.32...v1.3.0) (2026-07-10)
 
 
