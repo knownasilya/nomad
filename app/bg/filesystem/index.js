@@ -394,6 +394,12 @@ export async function configDrive(url, { forkOf, tags } = {}) {
       }
 
       drives.push(driveCfg);
+
+      // Hosting a drive we can't write = seeding someone else's content: mirror it in
+      // full so peers can sync the whole drive from this node (see hyper/drives.js).
+      if (!drive.writable) {
+        hyper.drives.mirrorDrive(key).catch(() => {});
+      }
     } else {
       if (typeof tags !== 'undefined') {
         if (tags && Array.isArray(tags) && tags.every((t) => typeof t === 'string')) {
@@ -445,6 +451,7 @@ export async function removeDrive(url) {
     // would try to open the autobase core as a Hyperdrive and hang.
     const driveCfg = drives[driveIndex];
     if (driveCfg.type !== 'autobase') {
+      hyper.drives.unmirrorDrive(key);
       const drive = await hyper.drives.getOrLoadDrive(url);
       if (!drive.writable) {
         await hyper.daemon.configureNetwork(drive.discoveryKey, { announce: false, lookup: true });

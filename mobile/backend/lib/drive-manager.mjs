@@ -628,12 +628,45 @@ export default class DriveManager {
         entry._mirrorHook = () => { this._mirror(entry).catch(() => {}) }
         if (core) { core.on('append', entry._mirrorHook); entry._mirrorCore = core }
       }
+      this._meterAttach(entry)
       this._mirror(entry).catch(() => {})
-    } else if (entry._mirrorHook) {
-      safe(() => entry._mirrorCore && entry._mirrorCore.off('append', entry._mirrorHook))
-      entry._mirrorHook = entry._mirrorCore = null
+    } else {
+      if (entry._mirrorHook) {
+        safe(() => entry._mirrorCore && entry._mirrorCore.off('append', entry._mirrorHook))
+        entry._mirrorHook = entry._mirrorCore = null
+      }
+      if (entry._meterOff) entry._meterOff()
     }
     return { hosted: !!on, keyHex }
+  }
+
+  // Meter hosting traffic: hypercore 'download'/'upload' events carry per-block byte
+  // lengths, reported to `onHostingBytes` (set by the backend, which enforces the user's
+  // daily hosting budget). Hooked on the cores we can reach — db/view core plus the
+  // Hyperdrive blobs core, which carries the bulk of the bytes. Approximate by design:
+  // autobase per-writer blob cores are opened lazily inside readContent and aren't
+  // centrally hookable, so autobase blob traffic under-counts.
+  _meterAttach (entry) {
+    if (entry._meterOff || typeof this.onHostingBytes !== 'function') return
+    const offs = []
+    const hook = (core) => {
+      if (!core || typeof core.on !== 'function') return
+      const onBytes = (_index, byteLength) => {
+        if (typeof byteLength === 'number') this.onHostingBytes(byteLength)
+      }
+      core.on('download', onBytes)
+      core.on('upload', onBytes)
+      offs.push(() => { safe(() => core.off('download', onBytes)); safe(() => core.off('upload', onBytes)) })
+    }
+    if (entry._driveType === DRIVE_AUTOBASE) {
+      hook(entry.drive.view?.core)
+    } else {
+      hook(entry.drive.core)
+      Promise.resolve(entry.drive.getBlobs?.()).then((blobs) => {
+        if (entry.hosted && blobs?.core) hook(blobs.core)
+      }).catch(() => {})
+    }
+    entry._meterOff = () => { for (const off of offs) off(); entry._meterOff = null }
   }
 
   // One mirror pass: pull the latest (autobase linearizes from writer oplogs on update()),

@@ -15,7 +15,7 @@ export const RPC_VAULT_ADD_SPACE = 8 // { reqId, rootDriveKey, name, icon, color
 export const RPC_SPACE_DRIVES = 9 // { reqId, rootDriveKey, ns? } read a space's drive registry (/drives.json)
 export const RPC_REMOVE_DEVICE = 16 // { reqId, deviceKey, self } removeWriter + drop record; self => also forget the Vault on this device
 export const RPC_SPACE_ADD_DRIVE = 17 // { reqId, rootDriveKey, ns?, key, type? } add a drive to a space's /drives.json registry
-export const RPC_HOSTING = 18 // { reqId, action:'get'|'set'|'count', driveType?, key?, on? } query/toggle hosting (seeding) a drive
+export const RPC_HOSTING = 18 // { reqId, action:'get'|'set'|'count'|'settings', driveType?, key?, on?, dailyLimitMB? } query/toggle hosting (seeding) a drive, or read/write the daily budget
 export const RPC_BOOKMARKS = 26 // { reqId, action:'list'|'add'|'remove', rootDriveKey, ns?, href?, title? }
 export const RPC_NOMAD = 40 // { reqId, api, method, url?, args } an in-page nomad.* call from a drive WebView
 
@@ -46,7 +46,7 @@ export const RPC_VAULT = 15 // { reqId, hasVault, vaultKey?, devices?, spaces?, 
 export const RPC_FS_RESULT = 30 // { reqId, ok, entries?, writable?, base64?, mime?, exists?, message? } reply to any RPC_FS_*
 export const RPC_SPACE_DRIVES_RESULT = 31 // { reqId, ok, drives?, message? } reply to RPC_SPACE_DRIVES
 export const RPC_BOOKMARKS_RESULT = 32 // { reqId, ok, bookmarks?, message? } reply to RPC_BOOKMARKS
-export const RPC_HOSTING_RESULT = 33 // { reqId, ok, hosted?, count?, message? } reply to RPC_HOSTING
+export const RPC_HOSTING_RESULT = 33 // { reqId, ok, hosted?, count?, paused?, usageBytes?, dailyLimitMB?, message? } reply to RPC_HOSTING
 export const RPC_NOMAD_RESULT = 41 // { reqId, ok, value?, error? } reply to RPC_NOMAD
 export const RPC_AI_EVENT = 45 // { reqId, kind:'chunk'|'tool'|'prompt'|'done'|'error', text?, event?, permission?, message? } one streamed AI frame
 

@@ -44,6 +44,7 @@ import {
 
 export interface Bookmark { href: string; title: string; createdAt?: string }
 export interface BookmarksMsg { reqId?: string; ok: boolean; bookmarks: Bookmark[]; message?: string }
+export interface HostingMsg { reqId?: string; ok: boolean; hosted?: boolean; count?: number; paused?: boolean; usageBytes?: number; dailyLimitMB?: number; message?: string }
 import type { DriveType } from './hyperUrl'
 import type { StatusMsg, ContentMsg, ErrorMsg, CreatedMsg, DirEntry } from './types'
 
@@ -102,7 +103,7 @@ export interface Backend {
   bookmarksList: (rootDriveKey: string, ns?: string) => Promise<BookmarksMsg>
   bookmarkAdd: (rootDriveKey: string, ns: string | undefined, href: string, title: string) => Promise<BookmarksMsg>
   bookmarkRemove: (rootDriveKey: string, ns: string | undefined, href: string) => Promise<BookmarksMsg>
-  hosting: (action: 'get' | 'set' | 'count', driveType?: DriveType, key?: string, on?: boolean) => Promise<{ ok: boolean; hosted?: boolean; count?: number; message?: string }>
+  hosting: (action: 'get' | 'set' | 'count' | 'settings', opts?: { driveType?: DriveType; key?: string; on?: boolean; dailyLimitMB?: number }) => Promise<HostingMsg>
   fsList: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
   fsRead: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
   fsWrite: (driveType: DriveType, key: string, ns: string, path: string, base64: string) => Promise<FsResult>
@@ -390,9 +391,10 @@ export function useBackend (handlers: BackendHandlers): Backend {
     bookmarksList: (rootDriveKey, ns) => bmCall({ action: 'list', rootDriveKey, ns }),
     bookmarkAdd: (rootDriveKey, ns, href, title) => bmCall({ action: 'add', rootDriveKey, ns, href, title }),
     bookmarkRemove: (rootDriveKey, ns, href) => bmCall({ action: 'remove', rootDriveKey, ns, href }),
-    // Query/toggle hosting (seeding) a drive — desktop's "Host This Hyperdrive".
-    hosting (action, driveType = 'hyperdrive', key = '', on = false) {
-      return new Promise((resolve) => {
+    // Query/toggle hosting (seeding) a drive — desktop's "Host This Hyperdrive" — and
+    // read/write the daily hosting budget ('settings' with dailyLimitMB, 0 = unlimited).
+    hosting (action, opts = {}) {
+      return new Promise<HostingMsg>((resolve) => {
         const rpc = rpcRef.current
         if (!rpc) return resolve({ ok: false, message: 'backend not ready' })
         const reqId = `h_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
@@ -401,7 +403,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
         }, 12000)
         pending.current[reqId] = (msg: any) => { clearTimeout(timer); resolve(msg) }
         const req = rpc.request(RPC_HOSTING)
-        req.send(b4a.from(JSON.stringify({ reqId, action, driveType, key, on })))
+        req.send(b4a.from(JSON.stringify({ reqId, action, ...opts })))
       })
     }
   }

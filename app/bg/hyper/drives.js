@@ -40,21 +40,62 @@ export async function setup() {
 }
 
 /**
- * Ensure the given drive keys are being announced on the swarm.
+ * Ensure the given drive keys are being announced on the swarm AND fully mirrored.
+ * Announce-only hosting is superficial: replication is sparse, so this node would
+ * serve peers only the blocks it happened to browse — a fresh peer syncing from an
+ * announce-only "host" sees an effectively empty drive. Hosting = announce + mirror.
+ * (Mobile counterpart: mobile/backend/lib/drive-manager.mjs setHosting/_mirror.)
  * @param {string[]} keys
  */
 export async function ensureHosting(keys) {
   for (const key of keys) {
-    const sess = daemon.getHyperdriveSession({ key });
-    if (!sess) {
-      try {
-        await getOrLoadDrive(key);
-        logger.silly(`Joined swarm for drive ${key}`);
-      } catch (e) {
-        logger.debug(`Failed to join swarm for drive ${key}`, { error: e });
-      }
+    try {
+      await mirrorDrive(key);
+    } catch (e) {
+      logger.debug(`Failed to host drive ${key}`, { error: e });
     }
   }
+}
+
+// keyHex -> { core, onAppend } for hosted drives being actively mirrored.
+const activeMirrors = new Map();
+
+/**
+ * Download a hosted drive's full content and keep downloading as it updates:
+ * one full-drive download pass now, re-run whenever the metadata core appends
+ * (a peer pushed a new version). Passes are idempotent — local blocks no-op.
+ * @param {string} key
+ */
+export async function mirrorDrive(key) {
+  const keyStr = fromURLToKey(key);
+  if (activeMirrors.has(keyStr)) return;
+  const drive = await getOrLoadDrive(keyStr, { persistSession: true });
+  if (!drive) return;
+  await daemon
+    .configureNetwork(drive.discoveryKey, { announce: true, lookup: true })
+    .catch(() => {});
+  const pass = () => drive.drive.download('/').catch(() => {});
+  const core = drive.drive.core;
+  const onAppend = () => pass();
+  core.on('append', onAppend);
+  activeMirrors.set(keyStr, { core, onAppend });
+  logger.silly(`Mirroring hosted drive ${keyStr}`);
+  pass();
+}
+
+/**
+ * Stop mirroring a drive (hosting toggled off). The drive itself stays loaded;
+ * the caller handles un-announcing (see filesystem removeDrive).
+ * @param {string} key
+ */
+export function unmirrorDrive(key) {
+  const keyStr = fromURLToKey(key);
+  const m = activeMirrors.get(keyStr);
+  if (!m) return;
+  activeMirrors.delete(keyStr);
+  try {
+    m.core.off('append', m.onAppend);
+  } catch {}
 }
 
 export function createEventStream() {

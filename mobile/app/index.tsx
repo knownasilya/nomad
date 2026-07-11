@@ -19,6 +19,7 @@ import FileExplorer, { type ExplorerDrive } from '../components/FileExplorer'
 import type { HyperRender } from '../components/HyperView'
 import { useBackend } from '../lib/useBackend'
 import { syncHostingService } from '../lib/hostingService'
+import HostingSettings from '../components/HostingSettings'
 import { usePersistence, type SavedSite, type SavedDrive } from '../lib/usePersistence'
 import { useSpaces, PERSONAL_ID } from '../lib/useSpaces'
 import { resolveAddress, isHyperUrl, shortKey, hyperKeyOf, type DriveType } from '../lib/hyperUrl'
@@ -668,26 +669,31 @@ export default function Browser () {
   // the persisted state is fetched lazily when the menu opens.
   const canHostActive = active.kind === 'hyper' && !!active.driveKey && !ownedActive
   const [activeHosted, setActiveHosted] = useState<boolean | null>(null)
+  const [hostingSettingsOpen, setHostingSettingsOpen] = useState(false)
   useEffect(() => {
     if (!menuOpen || !canHostActive || !active.driveKey) { setActiveHosted(null); return }
-    backend.hosting('get', active.driveType, active.driveKey).then((r) => setActiveHosted(r.ok ? !!r.hosted : null))
+    backend.hosting('get', { driveType: active.driveType, key: active.driveKey }).then((r) => setActiveHosted(r.ok ? !!r.hosted : null))
   }, [menuOpen, canHostActive, active.driveKey, active.driveType, backend])
+
+  // Keep the Android foreground service (which keeps seeding alive in the background) in
+  // step with the backend: no drives hosted, or hosting paused by the daily budget → stop.
+  const syncFromHosting = useCallback((r: { ok: boolean; count?: number; paused?: boolean }) => {
+    if (r.ok) syncHostingService(r.paused ? 0 : (r.count ?? 0))
+  }, [])
 
   const toggleHosting = useCallback(async () => {
     if (!canHostActive || !active.driveKey) return
     const next = !activeHosted
     setActiveHosted(next)
-    const r = await backend.hosting('set', active.driveType, active.driveKey, next)
+    const r = await backend.hosting('set', { driveType: active.driveType, key: active.driveKey, on: next })
     if (!r.ok) setActiveHosted(!next)
-    // Keep the Android foreground service (which keeps seeding alive in the background)
-    // in step with the hosted-drive count.
-    if (r.ok) syncHostingService(r.count ?? 0)
-  }, [canHostActive, active.driveKey, active.driveType, activeHosted, backend])
+    syncFromHosting(r)
+  }, [canHostActive, active.driveKey, active.driveType, activeHosted, backend, syncFromHosting])
 
   // On launch, restore the foreground service if this device was hosting drives —
   // the backend re-announces them on boot; this keeps that alive past backgrounding.
   useEffect(() => {
-    backend.hosting('count').then((r) => { if (r.ok) syncHostingService(r.count ?? 0) })
+    backend.hosting('count').then(syncFromHosting)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -779,8 +785,16 @@ export default function Browser () {
           { label: 'Developer tools', onPress: () => { viewSource(); setDevtoolsOpen(true) } },
           { label: 'Copy link', disabled: !active.url, onPress: copyLink },
           { label: activeHosted ? 'Stop hosting this drive' : 'Host this drive', disabled: !canHostActive, onPress: toggleHosting },
+          { label: 'Hosting settings', onPress: () => setHostingSettingsOpen(true) },
           { label: 'Reload', disabled: active.kind === 'home', onPress: reload }
         ]}
+      />
+
+      <HostingSettings
+        visible={hostingSettingsOpen}
+        onClose={() => setHostingSettingsOpen(false)}
+        hosting={backend.hosting}
+        onStatus={syncFromHosting}
       />
 
       <DevTools

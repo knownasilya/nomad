@@ -144,9 +144,70 @@ function saveHostedDrives () {
 }
 hostedDrives = loadHostedDrives()
 
+// Daily hosting budget: hosting costs the phone real bandwidth (the mirror download plus
+// serving peers), so the user can cap it. Metered bytes (manager.onHostingBytes) accrue
+// against today's usage; crossing the cap PAUSES hosting — every hosted drive drops back
+// to lookup-only and mirroring stops — until the day rolls over (or the limit is raised).
+// The hosted list itself is untouched by a pause: hosting resumes automatically.
+const hostingSettingsPath = join(storagePath, 'hosting-settings.json')
+const hostingUsagePath = join(storagePath, 'hosting-usage.json')
+const hostingToday = () => new Date().toISOString().slice(0, 10)
+let hostingSettings = { dailyLimitMB: 0 } // 0 = unlimited
+let hostingUsage = { day: hostingToday(), bytes: 0 }
+let hostingPaused = false
+try { if (fs.existsSync(hostingSettingsPath)) hostingSettings = { dailyLimitMB: 0, ...JSON.parse(b4a.toString(fs.readFileSync(hostingSettingsPath))) } } catch {}
+try { if (fs.existsSync(hostingUsagePath)) hostingUsage = { day: hostingToday(), bytes: 0, ...JSON.parse(b4a.toString(fs.readFileSync(hostingUsagePath))) } } catch {}
+function saveHostingSettings () {
+  try { fs.writeFileSync(hostingSettingsPath, b4a.from(JSON.stringify(hostingSettings))) } catch {}
+}
+function saveHostingUsage () {
+  try { fs.writeFileSync(hostingUsagePath, b4a.from(JSON.stringify(hostingUsage))) } catch {}
+}
+const hostingOverBudget = () =>
+  hostingSettings.dailyLimitMB > 0 &&
+  hostingUsage.day === hostingToday() &&
+  hostingUsage.bytes >= hostingSettings.dailyLimitMB * 1024 * 1024
+
+function setAllHosting (on) {
+  for (const { key, type } of Object.values(hostedDrives)) {
+    manager.setHosting(type, b4a.from(key, 'hex'), on).catch(() => {})
+  }
+}
+
+// Rolls usage to a new day and reconciles the paused state with the budget. Called on
+// boot, on every metered chunk, and on every hosting RPC — cheap, idempotent.
+function reconcileHostingBudget () {
+  if (hostingUsage.day !== hostingToday()) {
+    hostingUsage = { day: hostingToday(), bytes: 0 }
+    saveHostingUsage()
+  }
+  if (!hostingPaused && hostingOverBudget()) {
+    hostingPaused = true
+    saveHostingUsage()
+    setAllHosting(false)
+  } else if (hostingPaused && !hostingOverBudget()) {
+    hostingPaused = false
+    setAllHosting(true)
+  }
+}
+
+let hostingUnsavedBytes = 0
+manager.onHostingBytes = (n) => {
+  if (hostingUsage.day !== hostingToday()) hostingUsage = { day: hostingToday(), bytes: 0 }
+  hostingUsage.bytes += n
+  hostingUnsavedBytes += n
+  if (hostingUnsavedBytes >= 262144) { // persist every 256 KiB, not every block
+    hostingUnsavedBytes = 0
+    saveHostingUsage()
+  }
+  if (!hostingPaused && hostingOverBudget()) reconcileHostingBudget()
+}
+
 // Rejoin the swarm (announcing) for every hosted drive on boot — best-effort and
 // sequential in the background, so a stale/unreachable drive can't block startup.
+// Skipped while today's budget is already spent; reconcile flips it back on tomorrow.
 ;(async () => {
+  if (hostingOverBudget()) { hostingPaused = true; return }
   for (const { key, type } of Object.values(hostedDrives)) {
     try { await manager.setHosting(type, b4a.from(key, 'hex'), true) } catch {}
   }
@@ -519,23 +580,39 @@ async function handleSpaceAddDrive ({ reqId, rootDriveKey, ns = null, key, type 
 }
 
 // Query/toggle hosting (seeding) for a drive — desktop's "Host This Hyperdrive" toggle in the
-// peers menu. 'set' flips the swarm join to announcing (or back) via manager.setHosting and
-// persists the choice so boot re-announces it; 'get' reports one drive's persisted state;
-// 'count' reports how many drives are hosted (drives the Android foreground service). Every
-// reply carries `count` so the UI can keep the service's notification in sync.
-async function handleHosting ({ reqId, action, driveType, key, on = false }) {
+// peers menu. Actions: 'set' flips one drive's hosting and persists it; 'get' reports one
+// drive's persisted state; 'count' reports the hosted total (drives the Android foreground
+// service); 'settings' reads — or, with a numeric dailyLimitMB, writes — the daily budget.
+// Every reply carries count/paused/usage so the UI can stay in sync from any call.
+async function handleHosting ({ reqId, action, driveType, key, on = false, dailyLimitMB }) {
   const ck = `${driveType}:${key}`
-  const count = () => Object.keys(hostedDrives).length
+  const status = (ok, message) => ({
+    reqId,
+    ok,
+    hosted: !!hostedDrives[ck],
+    count: Object.keys(hostedDrives).length,
+    paused: hostingPaused,
+    usageBytes: hostingUsage.day === hostingToday() ? hostingUsage.bytes : 0,
+    dailyLimitMB: hostingSettings.dailyLimitMB,
+    ...(message ? { message } : {})
+  })
   try {
-    if (action === 'set') {
-      await manager.setHosting(driveType, b4a.from(key, 'hex'), on)
+    reconcileHostingBudget()
+    if (action === 'settings' && typeof dailyLimitMB === 'number' && dailyLimitMB >= 0) {
+      hostingSettings.dailyLimitMB = Math.floor(dailyLimitMB)
+      saveHostingSettings()
+      reconcileHostingBudget() // a lower cap may pause immediately; a higher one may resume
+    } else if (action === 'set') {
+      // While paused, only the persisted list changes — the swarm join stays lookup-only
+      // and reconcile announces everything once the budget allows again.
+      if (!hostingPaused) await manager.setHosting(driveType, b4a.from(key, 'hex'), on)
       if (on) hostedDrives[ck] = { key, type: driveType }
       else delete hostedDrives[ck]
       saveHostedDrives()
     }
-    send(RPC_HOSTING_RESULT, { reqId, ok: true, hosted: !!hostedDrives[ck], count: count() })
+    send(RPC_HOSTING_RESULT, status(true))
   } catch (err) {
-    send(RPC_HOSTING_RESULT, { reqId, ok: false, hosted: !!hostedDrives[ck], count: count(), message: err.message || String(err) })
+    send(RPC_HOSTING_RESULT, status(false, err.message || String(err)))
   }
 }
 
