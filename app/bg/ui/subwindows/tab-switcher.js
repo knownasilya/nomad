@@ -31,6 +31,8 @@ export function setup(parentWindow) {
   var view = (views[parentWindow.id] = new BrowserView({
     webPreferences: {
       defaultEncoding: 'utf-8',
+      contextIsolation: false,
+      preload: path.join(__dirname, 'fg', 'tab-switcher', 'preload.js'),
     },
   }));
   view.webContents.loadFile(path.join(__dirname, 'fg', 'tab-switcher', 'index.html'));
@@ -46,6 +48,14 @@ export function destroy(parentWindow) {
 
 export function get(parentWindow) {
   return views[parentWindow.id];
+}
+
+// reverse lookup for ipc events sent by the switcher page itself
+export function findParentWindow(wc) {
+  for (let id in views) {
+    if (views[id].webContents === wc) return BrowserWindow.fromId(+id);
+  }
+  return null;
 }
 
 export function reposition(parentWindow) {
@@ -101,18 +111,20 @@ export function show(parentWindow) {
   }
 }
 
-export async function hide(parentWindow) {
+export async function hide(parentWindow, { commit = true } = {}) {
   var view = get(parentWindow);
   if (view) {
-    var selectedTab = await view.webContents.executeJavaScript(`
-      window.getSelection()
-    `);
-    if (selectedTab && typeof selectedTab === 'object') {
-      let win = BrowserWindow.fromId(selectedTab.winId);
-      if (!win.isFocused()) {
-        win.focus();
+    if (commit) {
+      var selectedTab = await view.webContents.executeJavaScript(`
+        window.getSelection()
+      `);
+      if (selectedTab && typeof selectedTab === 'object') {
+        let win = BrowserWindow.fromId(selectedTab.winId);
+        if (!win.isFocused()) {
+          win.focus();
+        }
+        tabManager.setActive(win, selectedTab.tabIndex);
       }
-      tabManager.setActive(win, selectedTab.tabIndex);
     }
     parentWindow.removeBrowserView(view);
   }

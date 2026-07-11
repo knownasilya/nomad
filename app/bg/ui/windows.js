@@ -99,6 +99,14 @@ export async function setup() {
     else app.on('ready', ensureOneWindowExists);
   });
   ipcMain.on('new-window', () => createShellWindow());
+  ipcMain.on('tab-switcher:commit', (e) => {
+    // click-to-switch from the tab-switcher page: commit the selection immediately
+    var win = tabSwitcherSubwindow.findParentWindow(e.sender);
+    if (win && isTabSwitcherActive[win.id]) {
+      isTabSwitcherActive[win.id] = false;
+      tabSwitcherSubwindow.hide(win);
+    }
+  });
   app.on('custom-window-all-closed', async () => {
     if (process.platform !== 'darwin') {
       var runBackground = await settingsDb.get('run_background');
@@ -281,6 +289,10 @@ export function createShellWindow(windowState, createOpts = { dontInitPages: fal
   for (let k in subwindows) {
     subwindows[k].setup(win);
   }
+  // the tab-switcher steals keyboard focus when clicked, and before-input-event only fires
+  // on the focused webContents — without this, the Ctrl keyup that dismisses the switcher
+  // is never seen and the overlay gets stuck on top of the window
+  tabSwitcherSubwindow.get(win).webContents.on('before-input-event', globalTabSwitcherKeyHandler);
   downloads.registerListener(win);
   win.loadURL('nomad://shell-window');
   sessionWatcher.watchWindow(win, state);
@@ -362,6 +374,14 @@ export function createShellWindow(windowState, createOpts = { dontInitPages: fal
     // sendToWebContents('focus')(e) TODO readd?
     var active = tabManager.getActive(win);
     if (active) active.focus();
+  });
+  win.on('blur', () => {
+    // if focus leaves the window while the tab-switcher is open, the Ctrl keyup that
+    // dismisses it will never arrive — cancel it (without committing a tab switch)
+    if (isTabSwitcherActive[win.id]) {
+      isTabSwitcherActive[win.id] = false;
+      tabSwitcherSubwindow.hide(win, { commit: false });
+    }
   });
   win.on('app-command', (e, cmd) => {
     onAppCommand(win, e, cmd);

@@ -79,6 +79,10 @@
         tabEl.dataset.index = i++;
         tabEl.append(imgEl);
         tabEl.append(titleEl);
+        // mousedown, not click: on macOS a click while Ctrl is held (the normal
+        // state while the switcher is open) is synthesized as a right-click,
+        // which never fires a 'click' event
+        tabEl.addEventListener('mousedown', onMouseDownTab);
         mainEl.append(tabEl);
       }
 
@@ -116,6 +120,11 @@
     function onMouseOverTab(e) {
       currentSelection = Number(e.currentTarget.dataset.index);
       highlightCurrentSelection();
+    }
+
+    function onMouseDownTab(e) {
+      currentSelection = Number(e.currentTarget.dataset.index);
+      if (window.commitSelection) window.commitSelection();
     }
 
     function highlightCurrentSelection() {
