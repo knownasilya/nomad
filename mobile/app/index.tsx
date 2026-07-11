@@ -18,6 +18,7 @@ import AiPanel from '../components/AiPanel'
 import FileExplorer, { type ExplorerDrive } from '../components/FileExplorer'
 import type { HyperRender } from '../components/HyperView'
 import { useBackend } from '../lib/useBackend'
+import { syncHostingService } from '../lib/hostingService'
 import { usePersistence, type SavedSite, type SavedDrive } from '../lib/usePersistence'
 import { useSpaces, PERSONAL_ID } from '../lib/useSpaces'
 import { resolveAddress, isHyperUrl, shortKey, hyperKeyOf, type DriveType } from '../lib/hyperUrl'
@@ -678,7 +679,17 @@ export default function Browser () {
     setActiveHosted(next)
     const r = await backend.hosting('set', active.driveType, active.driveKey, next)
     if (!r.ok) setActiveHosted(!next)
+    // Keep the Android foreground service (which keeps seeding alive in the background)
+    // in step with the hosted-drive count.
+    if (r.ok) syncHostingService(r.count ?? 0)
   }, [canHostActive, active.driveKey, active.driveType, activeHosted, backend])
+
+  // On launch, restore the foreground service if this device was hosting drives —
+  // the backend re-announces them on boot; this keeps that alive past backgrounding.
+  useEffect(() => {
+    backend.hosting('count').then((r) => { if (r.ok) syncHostingService(r.count ?? 0) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <SafeAreaView style={s.root} edges={['top', 'bottom']}>

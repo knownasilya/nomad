@@ -102,7 +102,7 @@ export interface Backend {
   bookmarksList: (rootDriveKey: string, ns?: string) => Promise<BookmarksMsg>
   bookmarkAdd: (rootDriveKey: string, ns: string | undefined, href: string, title: string) => Promise<BookmarksMsg>
   bookmarkRemove: (rootDriveKey: string, ns: string | undefined, href: string) => Promise<BookmarksMsg>
-  hosting: (action: 'get' | 'set', driveType: DriveType, key: string, on?: boolean) => Promise<{ ok: boolean; hosted?: boolean; message?: string }>
+  hosting: (action: 'get' | 'set' | 'count', driveType?: DriveType, key?: string, on?: boolean) => Promise<{ ok: boolean; hosted?: boolean; count?: number; message?: string }>
   fsList: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
   fsRead: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
   fsWrite: (driveType: DriveType, key: string, ns: string, path: string, base64: string) => Promise<FsResult>
@@ -391,7 +391,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
     bookmarkAdd: (rootDriveKey, ns, href, title) => bmCall({ action: 'add', rootDriveKey, ns, href, title }),
     bookmarkRemove: (rootDriveKey, ns, href) => bmCall({ action: 'remove', rootDriveKey, ns, href }),
     // Query/toggle hosting (seeding) a drive — desktop's "Host This Hyperdrive".
-    hosting (action, driveType, key, on = false) {
+    hosting (action, driveType = 'hyperdrive', key = '', on = false) {
       return new Promise((resolve) => {
         const rpc = rpcRef.current
         if (!rpc) return resolve({ ok: false, message: 'backend not ready' })

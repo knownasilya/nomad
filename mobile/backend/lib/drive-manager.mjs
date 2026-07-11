@@ -602,20 +602,60 @@ export default class DriveManager {
 
   // Host (seed) a drive — desktop's "Host This Hyperdrive" (bg/hyper/drives.js ensureHosting).
   // Normal read-only opens join the swarm topic lookup-only (server:false), so this device never
-  // serves the drive to peers. Hosting re-joins ANNOUNCING and pins the entry (release() skips
-  // hosted drives), so seeding continues after the tab leaves — for as long as the app runs.
-  // Turning it off reverts the join to lookup-only; the entry then follows normal tab lifecycle.
+  // serves the drive to peers. Hosting re-joins ANNOUNCING, pins the entry (release() skips
+  // hosted drives), and MIRRORS the drive — announcing alone is superficial: hypercore
+  // replication is sparse-by-default, so this device only holds the blocks it happened to
+  // browse, and a fresh peer syncing from an announce-only "host" gets an effectively empty
+  // drive. Turning hosting off reverts the join to lookup-only, stops mirroring, and returns
+  // the entry to normal tab lifecycle.
   async setHosting (driveType, key, on) {
     const keyHex = b4a.toString(key, 'hex')
     const entry = await this.open(driveType, key, () => {}, null)
     safe(() => entry.discovery && entry.discovery.destroy())
     entry.hosted = !!on
+    entry._driveType = driveType
     entry.discovery = this.swarm.join(
       entry.drive.discoveryKey,
       on ? { server: true, client: true } : { server: false, client: true }
     )
     try { await entry.discovery.flushed() } catch {}
+    if (on) {
+      // Initial full mirror in the background (a big drive can take a while), then keep
+      // mirroring as new content replicates in: the db/view core 'append' fires when a
+      // peer pushes a new version, and the pass re-runs (idempotent — local blocks no-op).
+      if (!entry._mirrorHook) {
+        const core = driveType === DRIVE_AUTOBASE ? entry.drive.view?.core : entry.drive.core
+        entry._mirrorHook = () => { this._mirror(entry).catch(() => {}) }
+        if (core) { core.on('append', entry._mirrorHook); entry._mirrorCore = core }
+      }
+      this._mirror(entry).catch(() => {})
+    } else if (entry._mirrorHook) {
+      safe(() => entry._mirrorCore && entry._mirrorCore.off('append', entry._mirrorHook))
+      entry._mirrorHook = entry._mirrorCore = null
+    }
     return { hosted: !!on, keyHex }
+  }
+
+  // One mirror pass: pull the latest (autobase linearizes from writer oplogs on update()),
+  // then read every path through the entry's reader — bee/metadata traversal plus blob
+  // resolution force every missing block to download, for both backends. Passes are
+  // serialized per entry; an append during a pass queues exactly one follow-up pass.
+  async _mirror (entry) {
+    if (!entry.hosted) return
+    if (entry._mirroring) { entry._mirrorAgain = true; return }
+    entry._mirroring = true
+    try {
+      do {
+        entry._mirrorAgain = false
+        if (entry._driveType === DRIVE_AUTOBASE) { try { await entry.drive.update() } catch {} }
+        for await (const path of entry.reader.keys('/')) {
+          if (!entry.hosted) return
+          try { await entry.reader.read(path) } catch {}
+        }
+      } while (entry._mirrorAgain && entry.hosted)
+    } finally {
+      entry._mirroring = false
+    }
   }
 
   release (driveType, keyHex) {

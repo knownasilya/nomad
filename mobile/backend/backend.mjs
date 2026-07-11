@@ -520,9 +520,12 @@ async function handleSpaceAddDrive ({ reqId, rootDriveKey, ns = null, key, type 
 
 // Query/toggle hosting (seeding) for a drive — desktop's "Host This Hyperdrive" toggle in the
 // peers menu. 'set' flips the swarm join to announcing (or back) via manager.setHosting and
-// persists the choice so boot re-announces it; 'get' just reports the persisted state.
+// persists the choice so boot re-announces it; 'get' reports one drive's persisted state;
+// 'count' reports how many drives are hosted (drives the Android foreground service). Every
+// reply carries `count` so the UI can keep the service's notification in sync.
 async function handleHosting ({ reqId, action, driveType, key, on = false }) {
   const ck = `${driveType}:${key}`
+  const count = () => Object.keys(hostedDrives).length
   try {
     if (action === 'set') {
       await manager.setHosting(driveType, b4a.from(key, 'hex'), on)
@@ -530,9 +533,9 @@ async function handleHosting ({ reqId, action, driveType, key, on = false }) {
       else delete hostedDrives[ck]
       saveHostedDrives()
     }
-    send(RPC_HOSTING_RESULT, { reqId, ok: true, hosted: !!hostedDrives[ck] })
+    send(RPC_HOSTING_RESULT, { reqId, ok: true, hosted: !!hostedDrives[ck], count: count() })
   } catch (err) {
-    send(RPC_HOSTING_RESULT, { reqId, ok: false, hosted: !!hostedDrives[ck], message: err.message || String(err) })
+    send(RPC_HOSTING_RESULT, { reqId, ok: false, hosted: !!hostedDrives[ck], count: count(), message: err.message || String(err) })
   }
 }
 
