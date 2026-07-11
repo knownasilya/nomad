@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.5.0](https://github.com/knownasilya/nomad/compare/v1.4.0...v1.5.0) (2026-07-11)
+
+
+### Features
+
+* **hosting:** mirror hosted drives on desktop + daily hosting data budget on mobile ([caa70e1](https://github.com/knownasilya/nomad/commit/caa70e12fb6698efc9057773d7f416457a141817))
+
 ## [1.4.0](https://github.com/knownasilya/nomad/compare/v1.3.1...v1.4.0) (2026-07-11)
 
 ### [1.3.1](https://github.com/knownasilya/nomad/compare/v1.3.0...v1.3.1) (2026-07-11)
