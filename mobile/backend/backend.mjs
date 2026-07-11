@@ -310,6 +310,11 @@ const NOMAD_UNSUPPORTED_METHODS = [
 ]
 
 async function dispatchNomad (api, method, url, args) {
+  // Normalize loopback-gateway URLs to hyper:// before any key parsing. Drive apps written
+  // against desktop semantics may derive URLs from `location` (there it IS the hyper origin);
+  // on mobile that yields http://127.0.0.1:<port>/…, which would otherwise fail with
+  // 'Invalid hyper key: "http:"' (e.g. blogs created from pre-nomad.page templates).
+  if (url) url = gateway.toHyperUrl(url) || url
   if (api === 'markdown' && method === 'toHTML') return manager.bridgeMarkdown(args[0])
   if (api === 'schemas' && method === 'validate') return validateRecord(args[0], args[1])
   if (api === 'hyperdrive' && method === 'readFile') {

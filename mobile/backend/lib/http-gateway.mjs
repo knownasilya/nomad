@@ -53,6 +53,21 @@ export class HttpGateway {
     return this.servers.get(keyHex)?.port ?? null
   }
 
+  // Reverse of urlFor: map one of this gateway's loopback URLs back to the drive's canonical
+  // hyper:// URL. Compat shim for drive apps that derive URLs from `location` — legitimate on
+  // desktop, where location IS the hyper:// origin, but here location is the gateway origin
+  // (e.g. pre-nomad.page blog templates: `location.protocol + '//' + location.host`). Returns
+  // null when the URL isn't one of this gateway's origins.
+  toHyperUrl (url) {
+    const m = /^http:\/\/127\.0\.0\.1:(\d+)(\/[^#]*)?/.exec(String(url || ''))
+    if (!m) return null
+    const port = Number(m[1])
+    for (const [keyHex, entry] of this.servers) {
+      if (entry.port === port) return `hyper://${keyHex}${m[2] || '/'}`
+    }
+    return null
+  }
+
   closeFor (keyHex) {
     const entry = this.servers.get(keyHex)
     if (!entry) return
