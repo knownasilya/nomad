@@ -579,10 +579,11 @@ export default function Browser () {
 
   // Native in-page navigation within a drive (loopback origin): reflect the mapped hyper:// URL in
   // the address bar and track WebView history so back/forward drive the WebView, like web tabs.
+  // The document title (e.g. a rendered Markdown page's h1) follows into the tab label when set.
   const onHyperNav = useCallback(
-    (id: string, hyperUrl: string, canGoBack: boolean) => {
-      patch(id, { url: hyperUrl, input: hyperUrl, webCanGoBack: canGoBack })
-      persist.recordVisit(hyperUrl, hyperUrl)
+    (id: string, hyperUrl: string, canGoBack: boolean, title?: string) => {
+      patch(id, { url: hyperUrl, input: hyperUrl, webCanGoBack: canGoBack, ...(title ? { title } : {}) })
+      persist.recordVisit(hyperUrl, title || hyperUrl)
     },
     [patch, persist]
   )
@@ -701,7 +702,7 @@ export default function Browser () {
           history={persist.history}
           onNavigate={(url) => navigate(active.id, url)}
           onWebNav={(nav) => onWebNav(active.id, nav)}
-          onHyperNav={(hyperUrl, canGoBack) => onHyperNav(active.id, hyperUrl, canGoBack)}
+          onHyperNav={(hyperUrl, canGoBack, title) => onHyperNav(active.id, hyperUrl, canGoBack, title)}
           onMessage={handleWebMessage}
           onRemoveBookmark={(url) => persist.toggleBookmark(url, '')}
           onClearHistory={persist.clearHistory}
@@ -839,7 +840,7 @@ function TabPane ({
   onClearHistory: () => void
   onOpenLibrary: () => void
   registerWebView: (ref: WebView | null) => void
-  onHyperNav: (hyperUrl: string, canGoBack: boolean) => void
+  onHyperNav: (hyperUrl: string, canGoBack: boolean, title?: string) => void
 }) {
   const t = useTheme()
   if (tab.kind === 'home') {

@@ -20,8 +20,9 @@ interface Props {
   onMessage: (data: string) => void
   registerWebView: (ref: WebView | null) => void
   // Native in-page navigation on the loopback origin (link clicks, back/forward): reports the
-  // mapped hyper:// URL + history state so the address bar and back button stay truthful.
-  onHyperNav?: (hyperUrl: string, canGoBack: boolean) => void
+  // mapped hyper:// URL + history state so the address bar and back button stay truthful, plus
+  // the document title (when the page has a real one) so the tab label follows the page.
+  onHyperNav?: (hyperUrl: string, canGoBack: boolean, title?: string) => void
 }
 
 // Renders content the backend pulled out of a hyper:// drive, themed to match
@@ -95,7 +96,9 @@ export default function HyperView ({ render, onNavigate, onMessage, registerWebV
         }}
         onNavigationStateChange={(nav) => {
           if (!onHyperNav || nav.loading || !nav.url.startsWith(loopbackOrigin)) return
-          onHyperNav(`hyper://${render.keyHex}${nav.url.slice(loopbackOrigin.length) || '/'}`, nav.canGoBack)
+          // nav.title is the URL when the document has no <title> — only a real title is useful.
+          const title = nav.title && !/^https?:\/\//.test(nav.title) ? nav.title : undefined
+          onHyperNav(`hyper://${render.keyHex}${nav.url.slice(loopbackOrigin.length) || '/'}`, nav.canGoBack, title)
         }}
       />
     )

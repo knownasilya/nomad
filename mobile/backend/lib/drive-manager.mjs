@@ -240,10 +240,13 @@ export default class DriveManager {
     // the shell is only served further down, when a page navigation resolves to nothing. Takes
     // precedence over the legacy /.ui takeover; a malformed index.json reads as "not declared".
     let fallbackPath = null
+    let manifestTitle = null
     const manifestBuf = await readMaybe('/index.json')
     if (manifestBuf) {
       try {
-        fallbackPath = manifestFallback(JSON.parse(b4a.toString(manifestBuf)))
+        const manifest = JSON.parse(b4a.toString(manifestBuf))
+        fallbackPath = manifestFallback(manifest)
+        if (typeof manifest.title === 'string' && manifest.title.trim()) manifestTitle = manifest.title.trim()
       } catch {}
     }
 
@@ -266,13 +269,13 @@ export default class DriveManager {
 
     // Exact file hit?
     const buf = await readMaybe(path)
-    if (buf) return this.serveFile(reader, path, buf, keyHex)
+    if (buf) return this.serveFile(reader, path, buf, keyHex, manifestTitle)
 
     // Directory: try index files, otherwise list it.
     const folder = path.endsWith('/') ? path : path + '/'
     for (const idx of INDEX_FILES) {
       const idxBuf = await readMaybe(folder + idx)
-      if (idxBuf) return this.serveFile(reader, folder + idx, idxBuf, keyHex)
+      if (idxBuf) return this.serveFile(reader, folder + idx, idxBuf, keyHex, manifestTitle)
     }
 
     // Nothing resolved — a page navigation on a `fallback` drive gets the shell (200 rewrite,
@@ -328,9 +331,15 @@ export default class DriveManager {
     throw lastErr || new Error(`Not found: ${path}`)
   }
 
-  // Attach a human title read from the drive's index files, for the tab label. `cached` reports
-  // whether the Drive was served from the local corestore (so the caller can background-refresh).
+  // Attach a human title for the tab label: the served page's own title when it has one (a
+  // rendered Markdown page's first `#` heading, falling back to the manifest title — see
+  // serveFile), else the drive-level title from its index files. `cached` reports whether the
+  // Drive was served from the local corestore (so the caller can background-refresh).
   async _withTitle (result, driveType, keyHex) {
+    if (result && result.pageTitle) {
+      const entry = this.drives.get(this.cacheKey(driveType, keyHex))
+      return { result, driveType, title: result.pageTitle, cached: !!(entry && entry.cached) }
+    }
     const entry = this.drives.get(this.cacheKey(driveType, keyHex))
     const title = entry ? await readDriveTitle(entry.reader).catch(() => null) : null
     return { result, driveType, title, cached: !!(entry && entry.cached) }
@@ -347,13 +356,20 @@ export default class DriveManager {
   // is served as-is. Pages load through the loopback http gateway, so relative sub-resources are
   // fetched live per-request like a normal website — no data-URI inlining (which produced giant
   // documents that OOM-killed Android WebView renderers) and no click-interception nav bridge.
-  async serveFile (reader, path, buffer, keyHex) {
+  //
+  // A rendered-Markdown page gets a tab title from ITS OWN first `#` heading, else the manifest
+  // title (index.json). It's carried both as the document's <title> (so in-page navigations report
+  // it via the WebView) and as `pageTitle` on the result (so the initial open uses it directly).
+  async serveFile (reader, path, buffer, keyHex, manifestTitle = null) {
     const lower = path.toLowerCase()
     const isMarkdown = lower.endsWith('.md') || lower.endsWith('.markdown')
     if (buffer && isMarkdown) {
       try {
-        const html = renderMarkdownDoc(marked.parse(b4a.toString(buffer)), path)
-        return { kind: 'file', mime: 'text/html', buffer: b4a.from(html) }
+        const raw = b4a.toString(buffer)
+        const h1 = raw.match(/^\s*#\s+(.+?)\s*$/m)
+        const pageTitle = (h1 && h1[1].trim()) || manifestTitle || null
+        const html = renderMarkdownDoc(marked.parse(raw), path, pageTitle)
+        return { kind: 'file', mime: 'text/html', buffer: b4a.from(html), pageTitle }
       } catch {}
     }
     return { kind: 'file', mime: mime.getType(path) || 'application/octet-stream', buffer }

@@ -2,10 +2,13 @@
 // The CSS follows the system colour scheme so it sits well next to the app's
 // light/dark chrome. The result then goes through inlineAssets(), so relative
 // images and links inside the Markdown resolve against the drive.
-export function renderMarkdownDoc (bodyHtml, path) {
+export function renderMarkdownDoc (bodyHtml, path, title = null) {
+  const titleTag = title
+    ? `<title>${String(title).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</title>\n`
+    : ''
   return `<!doctype html>
 <html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+${titleTag}<meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 :root { color-scheme: light dark; --fg:#1c1c22; --muted:#56565f; --bg:#ffffff; --border:#e2e2e8; --code:#f4f4f6; --accent:#1d59c7; }
 @media (prefers-color-scheme: dark) {
