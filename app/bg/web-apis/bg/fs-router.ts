@@ -92,10 +92,18 @@ export function createFsRouter(deps) {
     return false;
   }
 
+  // DECODING_ERROR means local blocks EXIST but don't decode under this backend's wire format —
+  // authoritative evidence the drive is the OTHER type (e.g. an Autobase that got registered in
+  // /drives.json without its `type: 'autobase'` marker), as opposed to a miss, which says nothing.
+  const isWrongBackendError = (e) =>
+    !!e && (e.code === 'DECODING_ERROR' || /DECODING_ERROR/.test(String(e?.message || e)));
+
   // Read with a single fallback to the other backend when the detected one returns nothing (covers
   // remote drives whose type isn't known locally yet). null / empty-array = "not here". The
   // fallback is SKIPPED for known-local drives — otherwise a missing file hangs opening the wrong
-  // backend. `empty` treats null and [] as absent.
+  // backend — EXCEPT on a wrong-backend decode error, which overrides "known": the registry's
+  // typing was wrong, and retrying under the other backend is the only correct move.
+  // `empty` treats null and [] as absent.
   async function read(ctx, method, url, rest) {
     const { api: primary, url: u, isAutobase } = await dispatch(ctx, url);
     const other = _other(primary);
@@ -112,7 +120,7 @@ export function createFsRouter(deps) {
       }
       return res;
     } catch (e) {
-      if (known) throw e;
+      if (known && !isWrongBackendError(e)) throw e;
       try {
         return await other[method].call(ctx, u, ...rest);
       } catch {

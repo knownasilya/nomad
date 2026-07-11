@@ -143,3 +143,36 @@ describe('fallback still works for genuinely-unknown remote drives', () => {
     expect(called('autobase', 'list')).toHaveLength(1)
   })
 })
+
+describe('wrong-backend decode errors override "known" typing', () => {
+  // Regression: an Autobase drive registered in /drives.json WITHOUT its `type: 'autobase'`
+  // marker (e.g. by an old "Host This Hyperdrive" toggle) is "known" as a Hyperdrive, so its
+  // reads hit the Hyperdrive backend and DECODING_ERROR — the explorer showed an empty '/'.
+  // A decode error is authoritative evidence of mis-typing (blocks exist but don't decode),
+  // so the router must cross-check the other backend even for a known drive.
+  const decodeErr = () => {
+    const e = new Error('DECODING_ERROR: Decoded message is not valid')
+    e.code = 'DECODING_ERROR'
+    throw e
+  }
+
+  it('retries a known-Hyperdrive readdir on the Autobase backend after DECODING_ERROR', async () => {
+    const router = build({
+      hyper: { readdir: decodeErr },
+      ab: { readdir: [{ name: 'posts' }, { name: 'index.html' }] },
+    })
+    const res = await router.read(null, 'readdir', `hyper://${HDKEY}/`, [{}])
+
+    expect(res).toEqual([{ name: 'posts' }, { name: 'index.html' }])
+    expect(called('autobase', 'readdir')).toHaveLength(1)
+  })
+
+  it('still does NOT retry a known drive on a plain (non-decode) error', async () => {
+    const router = build({
+      hyper: { readdir: () => { throw new Error('boom') } },
+      ab: { readdir: [{ name: 'nope' }] },
+    })
+    await expect(router.read(null, 'readdir', `hyper://${HDKEY}/`, [{}])).rejects.toThrow('boom')
+    expect(called('autobase', 'readdir')).toHaveLength(0)
+  })
+})

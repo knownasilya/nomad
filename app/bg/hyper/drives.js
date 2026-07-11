@@ -74,7 +74,15 @@ export async function mirrorDrive(key) {
   await daemon
     .configureNetwork(drive.discoveryKey, { announce: true, lookup: true })
     .catch(() => {});
-  const pass = () => drive.drive.download('/').catch(() => {});
+  const pass = () =>
+    drive.drive.download('/').catch((e) => {
+      // DECODING_ERROR = this key is really an Autobase mis-registered as a Hyperdrive
+      // (typeless /drives.json entry). Stop mirroring instead of erroring on every append.
+      if (/DECODING_ERROR/.test(String(e?.message || e))) {
+        logger.info(`Hosted drive ${keyStr} is not a Hyperdrive (decode error) — unmirroring`);
+        unmirrorDrive(keyStr);
+      }
+    });
   const core = drive.drive.core;
   const onAppend = () => pass();
   core.on('append', onAppend);

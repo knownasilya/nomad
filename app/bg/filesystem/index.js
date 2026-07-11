@@ -204,6 +204,18 @@ export async function getDriveIdentFull(url) {
             const manifest = await autobases.readJson(sess, '/index.json');
             if (manifest) {
               ident.feed = manifest.type === 'walled.garden/feed';
+              _applyListingIdent(ident, manifest);
+              // Reconcile the swarm announce with the manifest (ADR-0016): survives restarts, since
+              // configure()'s live setListed() doesn't re-fire on a fresh boot. Pass the full index
+              // fields so the intake handshake re-broadcasts title/description too.
+              hyper.discovery
+                .setListed(sess.key, {
+                  ...ident.listing,
+                  title: manifest.title,
+                  description: manifest.description,
+                  type: manifest.type,
+                })
+                .catch(() => {});
             }
           }
         } catch {}
@@ -216,9 +228,20 @@ export async function getDriveIdentFull(url) {
       const manifest = JSON.parse(buf.toString());
       ident.profile = manifest.type === 'walled.garden/person';
       ident.feed = manifest.type === 'walled.garden/feed';
+      _applyListingIdent(ident, manifest);
     }
   } catch {}
   return ident;
+}
+
+// Surface the discovery vocabulary (ADR-0016) on ident for the site-info UI: the current listing
+// switch state and the normalized Topics/Keywords the manifest declares.
+function _applyListingIdent(ident, manifest) {
+  ident.listing = {
+    indexable: !!manifest.indexable,
+    topics: Array.isArray(manifest.topics) ? manifest.topics : [],
+    keywords: Array.isArray(manifest.keywords) ? manifest.keywords : [],
+  };
 }
 
 export function setPrivateAlias(url) {
@@ -298,6 +321,9 @@ export async function configDriveForSpace(url, opts = {}, spaceId = 1) {
     const spaceDrives = spaceDrivesMap[spaceId];
     if (!spaceDrives.find((d) => d.key === key)) {
       const driveCfg = { key };
+      // Record the type for Autobase drives — a typeless entry is treated as a Hyperdrive
+      // by fs routing and hosting, which decode-errors on an Autobase core.
+      if (autobases.getCollaborativeDrive(key)) driveCfg.type = 'autobase';
       if (opts.tags) driveCfg.tags = opts.tags;
       if (opts.forkOf) driveCfg.forkOf = opts.forkOf;
       spaceDrives.push(driveCfg);
@@ -358,6 +384,16 @@ export function getDriveConfig(key) {
 }
 
 export async function configDrive(url, { forkOf, tags } = {}) {
+  // An Autobase drive must be registered with its type marker — opening it as a Hyperdrive
+  // hangs, and a typeless registry entry makes fs routing + hosting treat it as a Hyperdrive
+  // forever after (DECODING_ERROR spam, empty listings). The "Host This Hyperdrive" toggle
+  // can be hit on any drive, so route here rather than trusting the caller.
+  {
+    const k = await hyper.drives.fromURLToKey(url, true);
+    if (autobases.getCollaborativeDrive(k) || drives.find((d) => d.key === k)?.type === 'autobase') {
+      return configAutobaseDrive(url, { tags });
+    }
+  }
   var release = await lock('filesystem:drives');
   try {
     var key = await hyper.drives.fromURLToKey(url, true);
