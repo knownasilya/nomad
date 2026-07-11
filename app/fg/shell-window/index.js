@@ -8,6 +8,7 @@ import './navbar';
 import './panes';
 import './resize-hackfix';
 import './spaces-dropdown';
+import './window-controls';
 
 // setup
 document.addEventListener('DOMContentLoaded', () => {
@@ -18,7 +19,7 @@ class ShellWindowUI extends LitElement {
   static get properties() {
     return {
       tabs: { type: Array },
-      isWindows: { type: Boolean },
+      showWindowControls: { type: Boolean },
       isUpdateAvailable: { type: Boolean },
       numWatchlistNotifications: { type: Number },
       isDaemonActive: { type: Boolean },
@@ -64,9 +65,11 @@ class ShellWindowUI extends LitElement {
     if (browserInfo.platform === 'darwin') {
       document.body.classList.add('darwin');
     }
-    if (browserInfo.platform === 'win32') {
-      document.body.classList.add('win32');
-      this.isWindows = true;
+    // Windows AND Linux have no native window buttons (the window is created with
+    // titleBarStyle:'hidden'; macOS keeps its traffic lights) — render our own.
+    if (browserInfo.platform === 'win32' || browserInfo.platform === 'linux') {
+      document.body.classList.add(browserInfo.platform);
+      this.showWindowControls = true;
     }
 
     // handle drag/drop of files
@@ -183,7 +186,7 @@ class ShellWindowUI extends LitElement {
       .filter(Boolean)
       .join('; ');
     return html`
-      ${this.isWindows ? html`<shell-window-win32></shell-window-win32>` : ''}
+      ${this.showWindowControls ? html`<shell-window-controls></shell-window-controls>` : ''}
       ${this.isShellInterfaceHidden
         ? ''
         : html`

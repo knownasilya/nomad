@@ -569,6 +569,12 @@ ShellWindowTabs.styles = css`
     height: 33px;
   }
 
+  /* make room for the in-app window controls (shell-window-controls, 3 × 46px) */
+  .shell.win32 .tabs,
+  .shell.linux .tabs {
+    margin-right: 138px;
+  }
+
   .shell:not(.darwin) .tabs > :first-child {
     border-left: 0;
   }
