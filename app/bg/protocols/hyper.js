@@ -623,6 +623,12 @@ async function serveAutobase(
     } catch {}
   }
 
+  // This key demonstrably serves as an Autobase — self-heal a typeless /drives.json entry
+  // so future boots/serves route straight here (no wrong-backend Hyperdrive attempt first).
+  if (!_autobaseViewEmpty(sess.base)) {
+    filesystem.noteAutobaseDrive(driveKey).catch(() => {});
+  }
+
   let filepath = decodeURIComponent(urlp.path);
   if (!filepath) filepath = '/';
   if (filepath.indexOf('?') !== -1) filepath = filepath.slice(0, filepath.indexOf('?'));

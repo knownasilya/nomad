@@ -178,6 +178,10 @@ export async function setup() {
       }
     })
     .catch((e) => logger.warn('Vault startup load failed', { error: e.toString() }));
+
+  // Re-announce already-listed drives for public discovery (ADR-0016). Background so it never
+  // blocks boot; discovery.setListed queues correctly if the swarm isn't up yet.
+  reconcileListedDrives().catch(() => {});
 }
 
 export function getDriveIdent(url) {
@@ -242,6 +246,48 @@ function _applyListingIdent(ident, manifest) {
     topics: Array.isArray(manifest.topics) ? manifest.topics : [],
     keywords: Array.isArray(manifest.keywords) ? manifest.keywords : [],
   };
+}
+
+// Eager re-announce at boot (ADR-0016): walk the user's own writable drives across all Spaces and
+// (re-)list any whose manifest says `indexable`. Announce state is otherwise reconciled only lazily
+// (when a manifest is read via getDriveIdentFull), so without this a listed drive would sit
+// unannounced after a restart until it happened to be visited. Only Autobase drives are listable
+// (the Hyperdrive backend's configure doesn't carry listing fields), and only writable ones — a
+// device announces its own listing intent, not drives it merely hosts. Background + fully guarded:
+// a single drive that won't load must never hold up the others.
+export async function reconcileListedDrives() {
+  try {
+    const spaces = await spacesDb.list().catch(() => []);
+    const spaceIds = [1, ...spaces.map((s) => s.id).filter((id) => id !== 1)];
+    const seen = new Set();
+    for (const spaceId of spaceIds) {
+      const list =
+        spaceId === 1 ? listDrives() : await listDrivesForSpace(spaceId).catch(() => []);
+      for (const d of list) {
+        if (!d.key || d.key === 'private' || seen.has(d.key)) continue;
+        seen.add(d.key);
+        if (d.type && d.type !== 'autobase') continue; // only Autobase drives are listable
+        try {
+          const sess = await autobases.getOrLoadCollaborativeDrive(d.key);
+          if (!sess || !sess.writable) continue; // announce only our own drives
+          const manifest = await autobases.readJson(sess, '/index.json');
+          if (!manifest || !manifest.indexable) continue;
+          await hyper.discovery
+            .setListed(sess.key, {
+              indexable: true,
+              title: manifest.title,
+              description: manifest.description,
+              topics: Array.isArray(manifest.topics) ? manifest.topics : [],
+              keywords: Array.isArray(manifest.keywords) ? manifest.keywords : [],
+              type: manifest.type,
+            })
+            .catch(() => {});
+        } catch {}
+      }
+    }
+  } catch (e) {
+    logger.warn('reconcileListedDrives failed', { error: e.toString() });
+  }
 }
 
 export function setPrivateAlias(url) {
@@ -458,6 +504,24 @@ export async function configDrive(url, { forkOf, tags } = {}) {
 // Register a non-Hyperdrive (e.g. autobase) URL in the drives list without loading it.
 // configDrive() tries to open a Hyperdrive to read /index.json, which hangs for autobase URLs
 // because the underlying core isn't a Hyperdrive.
+// Self-heal a registry entry discovered to really be an Autobase. Typeless entries predate
+// the typed-registration fix and mis-route everything (serving tries Hyperdrive first, boot
+// hosting opens the wrong backend and decode-errors). Called from the serve path once a
+// drive has actually LOADED as an Autobase with content — authoritative evidence, unlike a
+// failed Hyperdrive open, which could be a network miss.
+export async function noteAutobaseDrive(key) {
+  const cfg = drives.find((d) => d.key === key);
+  if (!cfg || cfg.type === 'autobase') return;
+  var release = await lock('filesystem:drives');
+  try {
+    cfg.type = 'autobase';
+    await _put(rootDrive, '/drives.json', b4a.from(JSON.stringify({ drives }, null, 2)));
+    logger.info('Recorded autobase type for mis-registered drive', { key });
+  } finally {
+    release();
+  }
+}
+
 export async function configAutobaseDrive(url, { tags } = {}) {
   var release = await lock('filesystem:drives');
   try {
