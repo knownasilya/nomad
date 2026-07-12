@@ -8,18 +8,32 @@ import * as bg from './bg-process-rpc';
 // frame there. This element supplies the buttons, fixed over the top-right of the tab
 // strip. (It replaces <shell-window-win32>, a Beaker-era tag that had no implementation.)
 class ShellWindowControls extends LitElement {
+  connectedCallback() {
+    super.connectedCallback();
+    // Linux follows the macOS convention: controls on the LEFT, close first.
+    // Windows keeps the right-side caption-button order (min / max / close).
+    if (window.platform === 'linux') this.setAttribute('side', 'left');
+  }
+
   render() {
-    return html`
+    const minimize = html`
       <button title="Minimize" @click=${() => bg.beakerBrowser.minimizeWindow()}>
         <svg viewBox="0 0 10 10"><path d="M0 5 H10" /></svg>
       </button>
+    `;
+    const maximize = html`
       <button title="Maximize" @click=${() => bg.beakerBrowser.toggleWindowMaximized()}>
         <svg viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9" fill="none" /></svg>
       </button>
+    `;
+    const close = html`
       <button class="close" title="Close" @click=${() => bg.beakerBrowser.closeWindow()}>
         <svg viewBox="0 0 10 10"><path d="M0 0 L10 10 M10 0 L0 10" /></svg>
       </button>
     `;
+    return this.getAttribute('side') === 'left'
+      ? html`${close}${minimize}${maximize}`
+      : html`${minimize}${maximize}${close}`;
   }
 }
 ShellWindowControls.styles = css`
@@ -31,6 +45,10 @@ ShellWindowControls.styles = css`
     display: flex;
     height: 34px; /* match .shell height in tabs.js */
     -webkit-app-region: no-drag;
+  }
+  :host([side='left']) {
+    right: auto;
+    left: 0;
   }
   button {
     width: 46px;
