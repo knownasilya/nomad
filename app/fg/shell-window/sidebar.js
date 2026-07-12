@@ -111,6 +111,10 @@ class ShellWindowSidebar extends LitElement {
       sidebar: true,
       'side-right': !isLeft,
       darwin: isDarwin,
+      // in-app window controls overlay this corner (Linux left / Windows right) —
+      // the header reserves room for them below, like darwin's traffic lights
+      linux: document.body.classList.contains('linux'),
+      win32: document.body.classList.contains('win32'),
     });
     const pinnedTabs = this.tabs
       .map((tab, index) => ({ tab, index }))
@@ -560,6 +564,15 @@ ShellWindowSidebar.styles = css`
   /* On macOS left sidebar, reserve 80px for traffic lights */
   .sidebar.darwin:not(.side-right) .sidebar-header {
     padding-left: 80px;
+  }
+
+  /* In-app window controls (138px, see window-controls.js) overlay the sidebar header
+     when it sits on their side: Linux = left, Windows = right */
+  .sidebar.linux:not(.side-right) .sidebar-header {
+    padding-left: 138px;
+  }
+  .sidebar.win32.side-right .sidebar-header {
+    padding-right: 138px;
   }
 
   .traffic-light-spacer {

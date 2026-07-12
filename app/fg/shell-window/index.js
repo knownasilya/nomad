@@ -166,27 +166,47 @@ class ShellWindowUI extends LitElement {
     const isDarwin = document.body.classList.contains('darwin');
     const isLeft = this.sidebarSide !== 'right';
     const sidebarOpen = isSidebar && !this.sidebarCollapsed;
-    // Sidebar open on macOS left: need at least 80px for traffic lights.
-    // Sidebar closed on macOS left: navbar still needs 80px clearance for traffic lights.
-    let navbarMargin = 0;
-    let navbarPadding = 0;
+    // Window-chrome clearance in the sidebar layout (no top tab strip, so the navbar spans
+    // the top): macOS traffic lights need 80px on the left; our in-app window controls
+    // (Linux left / Windows right, see window-controls.js) need 138px on their corner.
+    // When the open sidebar is on the same side as the controls, the sidebar header
+    // reserves the room instead (see sidebar.js) and the navbar needs nothing there.
+    const CONTROLS_W = 138;
+    const controlsSide = !this.showWindowControls
+      ? null
+      : document.body.classList.contains('linux')
+        ? 'left'
+        : 'right';
+    let navMarginLeft = 0;
+    let navMarginRight = 0;
+    let navPadLeft = 0;
+    let navPadRight = 0;
     if (isSidebar) {
       if (sidebarOpen) {
-        navbarMargin = Math.max(this.sidebarWidth, isDarwin && isLeft ? 80 : 0);
-      } else if (isDarwin && isLeft) {
-        // Sidebar closed on macOS left: use padding so the border spans full width
-        // but content starts past the traffic lights.
-        navbarPadding = 80;
+        if (isLeft) navMarginLeft = Math.max(this.sidebarWidth, isDarwin ? 80 : 0);
+        else navMarginRight = this.sidebarWidth;
+        if (controlsSide === 'left' && !isLeft) navPadLeft = CONTROLS_W;
+        if (controlsSide === 'right' && isLeft) navPadRight = CONTROLS_W;
+      } else {
+        // Sidebar collapsed: use padding so the border spans full width but content
+        // starts past the window chrome.
+        if (isDarwin && isLeft) navPadLeft = 80;
+        if (controlsSide === 'left') navPadLeft = Math.max(navPadLeft, CONTROLS_W);
+        if (controlsSide === 'right') navPadRight = CONTROLS_W;
       }
     }
     const navbarStyle = [
-      navbarMargin ? `margin-${isLeft ? 'left' : 'right'}: ${navbarMargin}px` : '',
-      navbarPadding ? `padding-${isLeft ? 'left' : 'right'}: ${navbarPadding}px` : '',
+      navMarginLeft ? `margin-left: ${navMarginLeft}px` : '',
+      navMarginRight ? `margin-right: ${navMarginRight}px` : '',
+      navPadLeft ? `padding-left: ${navPadLeft}px` : '',
+      navPadRight ? `padding-right: ${navPadRight}px` : '',
     ]
       .filter(Boolean)
       .join('; ');
     return html`
-      ${this.showWindowControls ? html`<shell-window-controls></shell-window-controls>` : ''}
+      ${this.showWindowControls && !this.isFullscreen
+        ? html`<shell-window-controls></shell-window-controls>`
+        : ''}
       ${this.isShellInterfaceHidden
         ? ''
         : html`
