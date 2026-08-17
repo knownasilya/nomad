@@ -1,6 +1,7 @@
 # Public drive discovery via an opt-in well-known announce topic
 
-**Status: Proposed (future).** Designed 2026-07-04. Sketches how a **search/index layer over public
+**Status: Proposed (future); partially implemented by ADR-0016** (Topics/Keywords manifest
+vocabulary, `indexable` switch, manifest-only crawler, `nomad://search`). Designed 2026-07-04. Sketches how a **search/index layer over public
 Drives** would solve the one problem the protocol deliberately does not: *finding Drives you were
 never handed the key to.* Nothing here is built, and none of it changes the wire format or
 `nomad.fs`. It records a direction — an **opt-in `walled.garden/index` announce topic** plus a tiny

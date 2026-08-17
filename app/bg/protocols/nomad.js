@@ -27,6 +27,19 @@ const NOMAD_APP_CSP = `
   style-src 'self' 'unsafe-inline' nomad:;
   child-src 'self' hyper:;
 `.replace(/\n/g, '');
+// nomad://search reaches a configurable, external index endpoint (a crawler's HTTP/JSON API,
+// ADR-0014 §6) over fetch(), so it needs connect-src for http/https. The endpoint is the user's own
+// choice (default localhost), matching the "no privileged indexer" stance — the page talks only to
+// the index the user points it at.
+const SEARCH_CSP = `
+  default-src 'self' nomad:;
+  connect-src 'self' nomad: http: https:;
+  img-src nomad: asset: data: blob: hyper: http: https;
+  script-src 'self' nomad: hyper: 'unsafe-eval';
+  media-src 'self' nomad: hyper:;
+  style-src 'self' 'unsafe-inline' nomad:;
+  child-src 'self' hyper:;
+`.replace(/\n/g, '');
 const SIDEBAR_CSP = `
 default-src 'self' nomad:;
 img-src nomad: asset: data: blob: hyper: http: https;
@@ -491,6 +504,15 @@ async function nomadProtocol(request) {
         cb,
         // @ts-ignore
         { fallbackToIndexHTML: true }
+      );
+    }
+    if (requestUrl === 'nomad://search' || requestUrl.startsWith('nomad://search/')) {
+      return serveAppAsset(
+        requestUrl,
+        path.join(__dirname, 'userland', 'search'),
+        cb,
+        // @ts-ignore
+        { CSP: SEARCH_CSP, fallbackToIndexHTML: true }
       );
     }
     if (requestUrl === 'nomad://settings' || requestUrl.startsWith('nomad://settings/')) {
