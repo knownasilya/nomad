@@ -377,6 +377,25 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
           },
           "icon": {
             "type": "string"
+          },
+          "indexable": {
+            "type": "boolean"
+          },
+          "topics": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 40
+            }
+          },
+          "keywords": {
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 40
+            }
           }
         },
         "required": [

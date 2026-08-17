@@ -27,6 +27,29 @@
       "type": "boolean",
       "description": "Whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure."
     },
+    "indexable": {
+      "type": "boolean",
+      "description": "Opt in to public discovery: when true, the drive announces itself for search and may appear in results (ADR-0016). Absent/false means it is never listed. Never set on private, Vault, or Root drives."
+    },
+    "topics": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "string",
+        "maxLength": 40,
+        "pattern": "^[\\p{L}\\p{N}]+(-[\\p{L}\\p{N}]+)*$"
+      },
+      "description": "Up to 5 browsable categories the drive is listed under. Exact-match facets, written as lowercase hyphenated slugs (any script) so independent indexers agree on the same shelf. Scopes search; does not gate listing (see indexable)."
+    },
+    "keywords": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "string",
+        "maxLength": 40
+      },
+      "description": "Up to 12 free-text search aids, matched alongside title and description. Improves matching only; declaring a keyword lists the drive under no topic. Indexers honor at most the first 12."
+    },
     "links": {
       "type": "object",
       "additionalProperties": {
