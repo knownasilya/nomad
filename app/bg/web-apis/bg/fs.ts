@@ -19,6 +19,9 @@ import * as drives from '../../hyper/drives';
 import * as drafts from '../../hyper/drafts';
 import { parseDriveUrl } from '../../../lib/urls';
 import { createFsRouter } from './fs-router';
+import { createFsWriteGuard } from './fs-write-guard';
+import * as permissionsUI from '../../ui/permissions';
+import * as wcTrust from '../../wc-trust';
 
 // The backend-routing decisions (alias canonicalisation, autobase-vs-hyperdrive detection, the
 // no-wrong-backend-fallback gate) live in a pure, testable module. Here we just wire in the real
@@ -41,6 +44,39 @@ const router = createFsRouter({
 });
 const _dispatch = (ctx, url) => router.dispatch(ctx, url);
 const _read = (ctx, method, url, rest) => router.read(ctx, method, url, rest);
+
+// Cross-drive write / writer-management gate for Autobase drives (see fs-write-guard.ts). The
+// Hyperdrive backend already self-gates in hyperdrive.ts's assertWritePermission, so these are a
+// no-op whenever the target isn't an Autobase drive.
+const writeGuard = createFsWriteGuard({
+  isWcTrusted: (sender) => wcTrust.isWcTrusted(sender),
+  senderDriveKey: async (sender) => {
+    try {
+      return await drives.fromURLToKey(sender.getURL(), true);
+    } catch {
+      return null;
+    }
+  },
+  getTitle: async (baseKey) => {
+    try {
+      const info = await drives.getDriveInfo(baseKey);
+      return info?.title || '';
+    } catch {
+      return '';
+    }
+  },
+  requestPermission: (permId, sender, opts) => permissionsUI.requestPermission(permId, sender, opts),
+  queryPermission: (permId, sender) => permissionsUI.queryPermission(permId, sender),
+});
+
+async function _assertWrite(ctx, url) {
+  const { isAutobase, baseKey } = await _baseInfo(ctx, url);
+  if (isAutobase) await writeGuard.assertWrite(ctx, baseKey);
+}
+async function _assertManage(ctx, url) {
+  const { isAutobase, baseKey } = await _baseInfo(ctx, url);
+  if (isAutobase) await writeGuard.assertManage(ctx, baseKey);
+}
 
 // --- Draft Mode routing (ADR-0012) ------------------------------------------
 // Writes to an Autobase Drive stage into the Vault-hosted Draft while that Drive's Draft Mode is on
@@ -182,51 +218,64 @@ const fsAPI = {
 
   // --- Write (require a writable drive; no fallback — the backend is known) ---
   // In Draft Mode these stage into the Vault-hosted Draft instead of appending to the base Drive.
+  // Every method here starts by asserting cross-drive write permission (fs-write-guard.ts) — a
+  // no-op for same-origin writes and for the Hyperdrive backend, which self-gates in hyperdrive.ts.
   async put(url, data, opts = {}) {
+    await _assertWrite(this, url);
     const s = await _stageWrite(this, url, 'put', data, opts);
     if (s.staged) return undefined;
     return s.api.put.call(this, s.u, data, opts);
   },
   async writeFile(url, data, opts = {}) {
+    await _assertWrite(this, url);
     const s = await _stageWrite(this, url, 'put', data, opts);
     if (s.staged) return undefined;
     return s.api.writeFile.call(this, s.u, data, opts);
   },
   async del(url, opts = {}) {
+    await _assertWrite(this, url);
     const s = await _stageWrite(this, url, 'del', null, opts);
     if (s.staged) return undefined;
     return s.api.del.call(this, s.u, opts);
   },
   async unlink(url, opts = {}) {
+    await _assertWrite(this, url);
     const s = await _stageWrite(this, url, 'del', null, opts);
     if (s.staged) return undefined;
     return s.api.unlink.call(this, s.u, opts);
   },
   async mkdir(url, opts = {}) {
+    await _assertWrite(this, url);
     const { api, url: u } = await _dispatch(this, url);
     return api.mkdir.call(this, u, opts);
   },
   async rmdir(url, opts = {}) {
+    await _assertWrite(this, url);
     const { api, url: u } = await _dispatch(this, url);
     return api.rmdir.call(this, u, opts);
   },
   async updateMetadata(url, metadata, opts = {}) {
+    await _assertWrite(this, url);
     const { api, url: u } = await _dispatch(this, url);
     return api.updateMetadata.call(this, u, metadata, opts);
   },
   async deleteMetadata(url, keys, opts = {}) {
+    await _assertWrite(this, url);
     const { api, url: u } = await _dispatch(this, url);
     return api.deleteMetadata.call(this, u, keys, opts);
   },
   async mount(url, key, opts = {}) {
+    await _assertWrite(this, url);
     const { api, url: u } = await _dispatch(this, url);
     return api.mount.call(this, u, key, opts);
   },
   async unmount(url, opts = {}) {
+    await _assertWrite(this, url);
     const { api, url: u } = await _dispatch(this, url);
     return api.unmount.call(this, u, opts);
   },
   async symlink(url, target, opts = {}) {
+    await _assertWrite(this, url);
     const { api, url: u } = await _dispatch(this, url);
     return api.symlink.call(this, u, target, opts);
   },
@@ -277,6 +326,7 @@ const fsAPI = {
     return autobaseAPI.loadDrive.call(this, url);
   },
   async configure(url, settings, opts = {}) {
+    await _assertWrite(this, url);
     const { api, url: u } = await _dispatch(this, url);
     return api.configure.call(this, u, settings, opts);
   },
@@ -293,7 +343,11 @@ const fsAPI = {
   },
 
   // --- Collaborative-drive writer management (Autobase only) ---
+  // createInvite/approveRequest/denyRequest/removeWriter change who can write to the drive, so they
+  // require the same cross-drive permission as a content write (fs-write-guard.ts). claimInvite and
+  // requestAccess only enqueue a request the drive owner separately approves, so they stay ambient.
   async createInvite(url, opts = {}) {
+    await _assertManage(this, url);
     return autobaseAPI.createInvite.call(this, url, opts);
   },
   async claimInvite(inviteUrl, opts = {}) {
@@ -309,12 +363,15 @@ const fsAPI = {
     return autobaseAPI.watchRequests.call(this, url);
   },
   async approveRequest(url, writerKey, opts = {}) {
+    await _assertManage(this, url);
     return autobaseAPI.approveRequest.call(this, url, writerKey, opts);
   },
   async denyRequest(url, writerKey) {
+    await _assertManage(this, url);
     return autobaseAPI.denyRequest.call(this, url, writerKey);
   },
   async removeWriter(url, writerKey) {
+    await _assertManage(this, url);
     return autobaseAPI.removeWriter.call(this, url, writerKey);
   },
   async listWriters(url) {
@@ -340,8 +397,11 @@ const fsAPI = {
     ]);
     return { mode, changes };
   },
-  // opts: { paths?: string[], force?: boolean } → { published, conflicts }.
+  // opts: { paths?: string[], force?: boolean } → { published, conflicts }. This is the point where
+  // staged Draft content actually lands in the shared Autobase log, so it needs the same cross-drive
+  // write permission as put/del — the other Draft lifecycle methods stay ambient (device-private).
   async publishDraft(url, opts = {}) {
+    await _assertWrite(this, url);
     const { baseKey } = await _baseInfo(this, url);
     return drafts.publish(baseKey, opts);
   },
