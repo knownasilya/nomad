@@ -50,6 +50,14 @@ export const PERMS = {
     requiresRefresh: false,
     experimental: false,
   },
+  manageDriveWriters: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+    experimental: false,
+  },
   media: {
     persist: false,
     idempotent: true,
@@ -195,6 +203,7 @@ export const PERM_ICONS = {
   deleteDrive: 'fas fa-folder-open',
   tagDrive: 'fas fa-tag',
   listDrives: 'fas fa-folder-open',
+  manageDriveWriters: 'fas fa-user-shield',
   media: 'fas fa-video',
   geolocation: 'fas fa-map-marked',
   notifications: 'fas fa-bell',
@@ -296,6 +305,13 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
     case 'listDrives':
       if (permParam) return `Read the hyperdrives tagged "${permParam}" in your library`;
       return `Read all the hyperdrives in your library`;
+
+    case 'manageDriveWriters': {
+      let viewArchive = openUrl(permParam);
+      return html`<span
+        >Manage who can write to <a @click=${viewArchive}>${permOpts.title}</a></span
+      >`;
+    }
 
     case 'experimentalLibraryRequestAdd': {
       let viewArchive = openUrl(permParam);
