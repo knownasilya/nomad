@@ -92,6 +92,11 @@ class BrowserMenu extends LitElement {
             <img class="favicon" src="asset:favicon:nomad://settings/" />
             <span class="label">Settings</span>
           </div>
+
+          <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'nomad://webmcp')}>
+            <i class="fas fa-fw fa-plug"></i>
+            <span class="label">WebMCP Inspector</span>
+          </div>
         </div>
 
         <div class="section">

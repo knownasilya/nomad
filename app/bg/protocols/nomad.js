@@ -496,6 +496,15 @@ async function nomadProtocol(request) {
     if (requestUrl === 'nomad://settings' || requestUrl.startsWith('nomad://settings/')) {
       return serveAppAsset(requestUrl, path.join(__dirname, 'userland', 'settings'), cb);
     }
+    if (requestUrl === 'nomad://webmcp' || requestUrl.startsWith('nomad://webmcp/')) {
+      return serveAppAsset(
+        requestUrl,
+        path.join(__dirname, 'userland', 'webmcp'),
+        cb,
+        // @ts-ignore
+        { fallbackToIndexHTML: true }
+      );
+    }
     if (requestUrl.startsWith('nomad://assets/img/onboarding/')) {
       let imgPath = requestUrl.slice('nomad://assets/img/onboarding/'.length);
       return cb(200, 'OK', 'image/png', path.join(__dirname, `assets/img/onboarding/${imgPath}`));

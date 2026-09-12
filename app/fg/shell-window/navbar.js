@@ -20,6 +20,7 @@ class ShellWindowNavbar extends LitElement {
       isBrowserMenuOpen: { type: Boolean },
       tabLayout: { type: String, attribute: 'tab-layout' },
       sidebarCollapsed: { type: Boolean, attribute: 'sidebar-collapsed' },
+      aiOpen: { type: Boolean, attribute: 'ai-open' },
     };
   }
 
@@ -34,6 +35,7 @@ class ShellWindowNavbar extends LitElement {
     this.isBrowserMenuOpen = false;
     this.tabLayout = 'top-bar';
     this.sidebarCollapsed = false;
+    this.aiOpen = false;
   }
 
   get canGoBack() {
@@ -98,6 +100,7 @@ class ShellWindowNavbar extends LitElement {
         ?is-bookmarked=${this.activeTab?.isBookmarked ?? false}
         ?has-draft=${this.activeTab?.hasDraft ?? false}
         ?draft-previewing=${this.activeTab?.draftPreviewing ?? false}
+        ?ai-open=${this.aiOpen}
       ></shell-window-navbar-location>
       <shell-window-navbar-inpage-find
         .activeTabIndex="${this.activeTabIndex}"
@@ -345,11 +348,13 @@ class ShellWindowNavbar extends LitElement {
   async onClickBrowserMenu(e) {
     if (Date.now() - (this.lastMenuClick || 0) < 100) return;
     this.isBrowserMenuOpen = true;
-    // pass the button's bottom Y so the menu sits under it regardless of tab layout (sidebar mode
-    // has no top tab strip, so the fixed y:72 fallback is too low)
+    // Anchor off the button's actual rect (bottom Y so the menu sits under it regardless of tab
+    // layout; rightOffset so it tracks the button horizontally too) — same pattern every other
+    // navbar popup (peers/site/bookmark/donate/draft) already uses, so this keeps anchoring
+    // correctly no matter what future chrome (sidebars, window controls, …) shifts the button.
     var rect = e.currentTarget.getClientRects()[0];
     await bg.views.toggleMenu('browser', {
-      bounds: { top: (rect.bottom | 0) + 2 },
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0, top: (rect.bottom | 0) + 2 },
     });
     this.isBrowserMenuOpen = false;
     this.lastMenuClick = Date.now();

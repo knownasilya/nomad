@@ -27,7 +27,6 @@ import './com/sidebar/drive-info.js';
 import './com/sidebar/viewfile-info.js';
 import './com/sidebar/selection-info.js';
 import './com/sidebar/contextual-help.js';
-import '../../app-stdlib/js/com/ai-sidebar.js';
 
 const LOADING_STATES = {
   INITIAL: 0,
@@ -44,7 +43,6 @@ export class ExplorerApp extends LitElement {
       sortMode: { type: String },
       drives: { type: Array },
       profiles: { type: Array },
-      isAiOpen: { type: Boolean },
       // Draft Mode (ADR-0012)
       draftMode: { type: Boolean },
       draftCount: { type: Number },
@@ -78,13 +76,26 @@ export class ExplorerApp extends LitElement {
     this.renderMode = undefined;
     this.inlineMode = false;
     this.sortMode = undefined;
-    // AI Sidebar — collapsed by default; open/closed persisted
-    this.isAiOpen = localStorage.getItem('nomad-ai-sidebar:open') === '1';
     // Draft Mode (ADR-0012)
     this.draftMode = false;
     this.draftCount = 0;
     this.draftConflicts = 0;
     this.draftChanges = []; // [{ path, op, conflict }] — used to badge edited items
+
+    // The shell's unified AI sidebar (app/fg/shell-window/ai-sidebar.js) runs outside this app's
+    // own DOM, so it reaches these hooks via a window global instead of a host property/callback —
+    // see prepareForAgentRun/getAgentContext/onAgentWroteFile below for what each one does.
+    window.__nomadAiHost = {
+      getAgentContext: () => this.getAgentContext(),
+      // Tells the shell sidebar which Drive is actually open here (this tab's own URL is
+      // nomad://explorer, never the Drive) — without this, its Drive tools have nothing to target.
+      getAgentDrive: () =>
+        this.currentDriveInfo
+          ? { url: this.currentDriveInfo.url, writable: !!this.currentDriveInfo.writable }
+          : { url: null, writable: false },
+      prepareForAgentRun: () => this.prepareForAgentRun(),
+      onAgentWroteFile: (path) => this.onAgentWroteFile(path),
+    };
 
     window.addEventListener('explorer-files-changed', () => this.load());
 
@@ -508,7 +519,6 @@ export class ExplorerApp extends LitElement {
         class=${classMap({
           layout: true,
           ['render-mode-' + this.renderMode]: true,
-          ['ai-open']: this.isAiOpen,
         })}
         @goto=${this.onGoto}
         @change-selection=${this.onChangeSelection}
@@ -534,15 +544,6 @@ export class ExplorerApp extends LitElement {
                 ${this.renderErrorState()} ${this.renderView()}
               </main>
               ${this.renderRightNav()}
-              ${this.isAiOpen && this.currentDriveInfo
-                ? html`
-                    <ai-sidebar
-                      .host=${this}
-                      .url=${this.currentDriveInfo.url}
-                      .readOnly=${!this.currentDriveInfo.writable}
-                    ></ai-sidebar>
-                  `
-                : ''}
             `}
       </div>
     `;
@@ -631,13 +632,6 @@ export class ExplorerApp extends LitElement {
                 : ''}
             `
           : ''}
-        <button
-          class="transparent ${this.isAiOpen ? 'pressed' : ''}"
-          title="Toggle AI sidebar"
-          @click=${this.onToggleAiOpen}
-        >
-          <span class="fas fa-robot"></span> AI
-        </button>
         <button class="transparent" @click=${this.onClickSettings}>
           <span class="fas fa-cog"></span> Settings
         </button>
@@ -1018,21 +1012,10 @@ export class ExplorerApp extends LitElement {
     await this.load();
   }
 
-  // — AI Sidebar host interface (see app-stdlib/js/com/ai-sidebar.js) —
+  // — window.__nomadAiHost interface for the shell's unified AI sidebar —
 
-  onToggleAiOpen(e) {
-    this.isAiOpen = !this.isAiOpen;
-    localStorage.setItem('nomad-ai-sidebar:open', this.isAiOpen ? '1' : '0');
-  }
-
-  closeAiSidebar() {
-    this.isAiOpen = false;
-    localStorage.setItem('nomad-ai-sidebar:open', '0');
-    this.requestUpdate();
-  }
-
-  // Tells the agent which Drive + location it is operating on (the sidebar runs at
-  // nomad://explorer, so the model can't infer this from location.href).
+  // Tells the agent which Drive + location it is operating on (the shell's AI sidebar isn't
+  // rendering this page, so the model can't infer this from location.href).
   getAgentContext() {
     const info = this.currentDriveInfo;
     if (!info) return undefined;

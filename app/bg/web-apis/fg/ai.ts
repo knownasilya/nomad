@@ -1,6 +1,7 @@
 import errors from 'beaker-error-constants';
 import aiManifest from '../manifests/external/ai';
 import { fromEventStream } from './event-target';
+import { streamToAsyncIterator } from './ai-stream';
 
 const RPC_OPTS = { timeout: false, errors };
 
@@ -9,89 +10,49 @@ export function setup(rpc) {
 
   return {
     ai: {
-      // opts (optional): { driveUrl, allowWrite, context, onToolEvent }
+      // opts (optional): { driveUrl, allowWrite, context, usePageTools, pageToolsWcId, model,
+      //                    think, onToolEvent, onReasoning }
       //   driveUrl / allowWrite / context are forwarded to bg (see bg/ai.ts).
+      //   usePageTools / pageToolsWcId control WebMCP page tools (document.modelContext).
+      //   model overrides the resolved model; think:false asks the runtime to skip reasoning.
       //   onToolEvent(e) fires for each tool the agent runs that reports state —
-      //     currently writeDriveFile, with e.path / e.priorContent for undo.
-      chat(messages, opts = {}) {
+      //     writeDriveFile (e.path / e.priorContent for undo) and page_* tools.
+      //   onReasoning(text) fires for each reasoning-stream chunk (only when think !== false and
+      //     the model emits one); the visible answer still comes back as iterator chunks.
+      chat(messages, opts: any = {}) {
         const eventTarget = fromEventStream(
           aiRPC.chat(messages, {
             driveUrl: opts.driveUrl,
             allowWrite: opts.allowWrite,
             context: opts.context,
+            usePageTools: opts.usePageTools,
+            pageToolsWcId: opts.pageToolsWcId,
+            model: opts.model,
+            think: opts.think,
+            effort: opts.effort,
           })
         );
         if (typeof opts.onToolEvent === 'function') {
           eventTarget.addEventListener('tool', (e) => opts.onToolEvent(e));
+        }
+        if (typeof opts.onReasoning === 'function') {
+          eventTarget.addEventListener('reasoning', (e) => opts.onReasoning(e.text));
         }
         return streamToAsyncIterator(eventTarget);
       },
       testConnection(baseUrl) {
         return aiRPC.testConnection(baseUrl);
       },
+      listModels() {
+        return aiRPC.listModels();
+      },
+      listTools(opts: any = {}) {
+        return aiRPC.listTools({ driveUrl: opts.driveUrl, allowWrite: opts.allowWrite });
+      },
+      modelInfo(model) {
+        return aiRPC.modelInfo(model);
+      },
     },
   };
 }
 
-function streamToAsyncIterator(eventTarget) {
-  const queue = [];
-  let done = false;
-  let error = null;
-  let pendingResolve = null;
-  let pendingReject = null;
-
-  eventTarget.addEventListener('chunk', (e) => {
-    const item = { value: e.text, done: false };
-    if (pendingResolve) {
-      const r = pendingResolve;
-      pendingResolve = null;
-      pendingReject = null;
-      r(item);
-    } else {
-      queue.push(item);
-    }
-  });
-
-  eventTarget.addEventListener('done', () => {
-    done = true;
-    if (pendingResolve) {
-      const r = pendingResolve;
-      pendingResolve = null;
-      pendingReject = null;
-      r({ value: undefined, done: true });
-    }
-  });
-
-  eventTarget.addEventListener('error', (e) => {
-    const err = new Error(e.message || 'AI stream error');
-    if (pendingReject) {
-      const r = pendingReject;
-      pendingResolve = null;
-      pendingReject = null;
-      r(err);
-    } else {
-      // No consumer is currently awaiting — remember the error so the next
-      // next() call surfaces it instead of hanging forever.
-      error = err;
-    }
-  });
-
-  return {
-    [Symbol.asyncIterator]() {
-      return this;
-    },
-    next() {
-      if (queue.length > 0) return Promise.resolve(queue.shift());
-      if (error) {
-        const e = error;
-        error = null;
-        return Promise.reject(e);
-      }
-      if (done) return Promise.resolve({ value: undefined, done: true });
-      return new Promise((resolve, reject) => {
-        pendingResolve = resolve;
-        pendingReject = reject;
-      });
-    },
-  };
-}

@@ -193,6 +193,13 @@ export const PERMS = {
     requiresRefresh: false,
     dangerous: true,
   },
+  webmcpTools: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+  },
 };
 
 export const PERM_ICONS = {
@@ -223,6 +230,7 @@ export const PERM_ICONS = {
   panesCreate: 'fas fa-columns',
   panesAttach: 'fas fa-columns',
   panesInject: 'fas fa-columns',
+  webmcpTools: 'fas fa-plug',
 };
 
 export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
@@ -268,6 +276,8 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Attach to other open pages and navigate them';
     case 'panesInject':
       return 'Inject code into other open pages';
+    case 'webmcpTools':
+      return 'Let the AI assistant use tools this page provides';
 
     case 'network':
       if (permParam === '*') return 'Access the network freely';

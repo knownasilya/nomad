@@ -1,8 +1,6 @@
 // @ts-nocheck
 import { app, dialog, BrowserWindow, Menu, clipboard, ipcMain, screen } from 'electron';
 import { EventEmitter } from 'events';
-import fs from 'fs';
-import path from 'path';
 import emitStream from 'emit-stream';
 import * as rpc from 'pauls-electron-rpc';
 import { Pane } from './pane';
@@ -24,6 +22,7 @@ import {
   toggleSidebarHidden,
   setSidebarWidth,
   toggleSidebarCollapsed,
+  setAiSidebarWidth,
 } from '../windows';
 import { examineLocationInput } from '../../../lib/urls';
 import { findWebContentsParentWindow } from '../../lib/electron';
@@ -205,6 +204,11 @@ class Tab extends EventEmitter {
     if (s.isShellInterfaceHidden) {
       return { x: 0, y: 0, width, height };
     }
+    // The AI sidebar always docks right and is independent of the tab-list sidebar (either or
+    // both may be open at once), so its width comes off the right edge before the tab-sidebar
+    // math. Open/closed is per-TAB (Pane#aiSidebarOpen), unlike its width, which is shared.
+    const aiW = this.primaryPane?.aiSidebarOpen ? s.aiSidebarWidth || 380 : 0;
+    width -= aiW;
     const isSidebar = s.tabLayout === 'sidebar';
     const y = isSidebar ? Y_POSITION_SIDEBAR : Y_POSITION;
     if (!isSidebar) {
@@ -670,19 +674,6 @@ export async function setup() {
           return;
         }
       }
-    }
-  });
-
-  ipcMain.on('NOMAD_INJECT_CHAT_BUBBLE', async (e) => {
-    try {
-      const bundlePath = path.join(__dirname, 'fg', 'chat-bubble', 'index.build.js');
-      const code = fs.readFileSync(bundlePath, 'utf8');
-      await e.sender.executeJavaScript(code);
-      await e.sender.executeJavaScript(
-        'if (!document.querySelector("nomad-chat-bubble")) document.body.appendChild(document.createElement("nomad-chat-bubble"))'
-      );
-    } catch (err) {
-      console.error('[chat-bubble] inject failed:', err.message);
     }
   });
 
@@ -1313,6 +1304,7 @@ export function emitReplaceState(win) {
     sidebarSide: s.sidebarSide || 'left',
     sidebarWidth: s.sidebarWidth || 220,
     sidebarCollapsed: s.sidebarCollapsed || false,
+    aiSidebarWidth: s.aiSidebarWidth || 380,
     isDaemonActive: hyper.daemon.isActive(),
     hasBgTabs: backgroundTabs.length > 0,
     spaces: spacesDb.getCachedAll(),
@@ -1788,6 +1780,21 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
 
   async toggleSidebarCollapsed() {
     toggleSidebarCollapsed(getWindow(this.sender));
+  },
+
+  // AI sidebar (right-docked, toggled from the URL bar) — open/closed is per-TAB, unlike the
+  // tab-list sidebar above (window-level): opening it in one tab must not affect others, and a
+  // new tab always starts with it closed (Pane#aiSidebarOpen defaults false).
+  async toggleAiSidebarOpen(index) {
+    const pane = getByIndex(getWindow(this.sender), index)?.primaryPane;
+    if (!pane) return;
+    pane.aiSidebarOpen = !pane.aiSidebarOpen;
+    pane.emitUpdateState();
+    pane.tab.resize();
+  },
+
+  async setAiSidebarWidth(width) {
+    setAiSidebarWidth(getWindow(this.sender), Number(width));
   },
 
   async setSidebarCollapsedGroups(groupIds) {

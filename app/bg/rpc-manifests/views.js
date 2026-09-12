@@ -47,6 +47,8 @@ export default {
   toggleSidebarHidden: 'promise',
   setSidebarWidth: 'promise',
   toggleSidebarCollapsed: 'promise',
+  toggleAiSidebarOpen: 'promise',
+  setAiSidebarWidth: 'promise',
   setSidebarCollapsedGroups: 'promise',
   showMenu: 'promise',
   toggleMenu: 'promise',

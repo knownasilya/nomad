@@ -86,12 +86,22 @@ export async function requestRemoteChat({ messages, opts = {}, signal = null, on
       if (signal.aborted) sendFrame(peer, { t: FRAME.CANCEL, id });
       else signal.addEventListener('abort', () => sendFrame(peer, { t: FRAME.CANCEL, id }), { once: true });
     }
-    // Only forward the Drive-scoping opts; signal/requestPermission are reconstructed Provider-side.
+    // Only forward the Drive-scoping + model-picker opts; signal/requestPermission are
+    // reconstructed Provider-side. Keep in sync with the opts object ai.ts's routeChat() builds
+    // for this same call — a field added there but not here is silently dropped for every remote
+    // turn (e.g. the sidebar's model/thinking/effort picks used to be ignored this way).
     sendFrame(peer, {
       t: FRAME.REQUEST,
       id,
       messages,
-      opts: { driveUrl: opts.driveUrl || null, allowWrite: opts.allowWrite, context: opts.context || null },
+      opts: {
+        driveUrl: opts.driveUrl || null,
+        allowWrite: opts.allowWrite,
+        context: opts.context || null,
+        model: opts.model || null,
+        think: opts.think,
+        effort: opts.effort || null,
+      },
     });
   }).finally(() => peer.clientReqs.delete(id));
 }
@@ -511,7 +521,7 @@ async function isVaultMember(deviceKeyHex) {
   }
 }
 
-let _reachCache = { at: 0, ok: false, baseUrl: null };
+let _reachCache = { at: 0, ok: false, baseUrl: null, token: null };
 // Cheap, cached probe of the local AI Runtime so onHello doesn't hammer it (§4 cached check).
 // Exported so the routing layer (bg/ai.ts) makes the SAME local-first decision from one probe.
 // Uses Node http/https (NOT global fetch): in the Electron main process global fetch routes through
@@ -520,19 +530,37 @@ let _reachCache = { at: 0, ok: false, baseUrl: null };
 // UNAVAILABLE to every Client → "No AI Device is online".
 export async function localRuntimeReachable() {
   const baseUrl = (await settingsDb.get('ai_base_url')) || 'http://localhost:11434/v1';
+  const token = await settingsDb.get('ai_access_token');
   const now = Date.now();
-  if (_reachCache.baseUrl === baseUrl && now - _reachCache.at < 15000) return _reachCache.ok;
-  const ok = await _probeRuntime(baseUrl);
-  _reachCache = { at: now, ok, baseUrl };
+  if (
+    _reachCache.baseUrl === baseUrl &&
+    _reachCache.token === token &&
+    now - _reachCache.at < 15000
+  ) {
+    return _reachCache.ok;
+  }
+  const ok = await _probeRuntime(baseUrl, token);
+  _reachCache = { at: now, ok, baseUrl, token };
   return ok;
 }
 
-function _probeRuntime(baseUrl) {
+// The ai_access_token setting, as request headers — omitted entirely when unset. Exported (rather
+// than duplicated) so bg/web-apis/bg/ai.ts's real chat/model requests and this probe always agree
+// on what "authenticated" means; ai.ts already imports this module one-way (see header comment —
+// ai-bridge.js imports nothing from web-apis), so this module is the correct shared home for it.
+export function authHeaders(token) {
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+// `token` (optional): the ai_access_token setting — a runtime that requires it would otherwise
+// 401 this probe and get misread as "unreachable", silently routing every local turn through the
+// (probably empty) remote AI Bridge and surfacing as "No AI Device is online" instead.
+function _probeRuntime(baseUrl, token) {
   return new Promise((resolve) => {
     try {
       const endpoint = baseUrl.replace(/\/$/, '') + '/models';
       const proto = new URL(endpoint).protocol === 'https:' ? https : http;
-      const req = proto.get(endpoint, (res) => {
+      const req = proto.get(endpoint, { headers: authHeaders(token) }, (res) => {
         res.resume(); // drain
         resolve(res.statusCode === 200);
       });
@@ -548,7 +576,9 @@ function _probeRuntime(baseUrl) {
 }
 
 function noProviderError() {
-  const err = new Error('No AI Device is online');
+  const err = new Error(
+    'No AI Device is online — start a local AI runtime and check Settings → AI (base URL, access token), or pair with another Nomad device that has one running.'
+  );
   err.name = 'NoAiProviderError';
   return err;
 }

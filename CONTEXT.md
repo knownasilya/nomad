@@ -83,19 +83,15 @@ The live, authenticated channel between two of a user's Devices that carries a f
 _Avoid_: AI channel, AI relay, AI proxy, RPC channel
 
 **AI Config**:
-The `/ai/` folder inside a Drive, containing `system.md` (the system prompt) and optionally a `tools/` directory. A Drive has an AI Config when it includes this folder. Any Drive can opt into AI behaviour by adding an `ai` key to its `/index.json` — either an inline object `{ "model": "..." }` or a pointer string `"hyper://..."` delegating to another Drive's AI Config.
+The `/ai/` folder inside a Drive, containing `system.md` (the system prompt) and optionally a `tools/` directory. A Drive has an AI Config when it includes this folder. Any Drive can opt into AI behaviour by adding an `ai` key to its `/index.json` — either `true` or a pointer string `"hyper://..."` delegating to another Drive's AI Config. This supplies the system prompt (persona/instructions) only — a Drive cannot dictate which model runs it; the model is always a user preference (the global default model in Settings → AI, or a per-site override the AI Sidebar keeps in `hyper://private/`).
 _Avoid_: agent config, AI settings, model config
 
-**Chat Bubble**:
-A floating chat overlay Nomad injects into a Drive page when `"chatBubble": true` is set in the Drive's `/index.json`. The overlay is provided entirely by Nomad (a Lit custom element injected via the main process); the Drive author does not need to write any chat UI code. The bubble uses `nomad.ai.chat()` resolved against the same Drive's AI Config.
-_Avoid_: chat widget, chat overlay, embedded chat
-
 **AI Sidebar**:
-The collapsible right-hand panel — in both the editor and the explorer — that hosts an agentic chat over the Drive currently open in that app. Unlike the Chat Bubble (injected into a Drive page, resolved against that page's own Drive), the AI Sidebar runs inside a `nomad://` app (`nomad://editor` / `nomad://explorer`) and directs `nomad.ai.chat()` at the *open* Drive via an explicit Drive URL. The agent reads, lists, and writes files across that Drive directly. One shared component (`app-stdlib`) serves both apps; each host supplies unsaved-changes gating and post-write reload.
-_Avoid_: agent sidebar, chat sidebar, prompt panel, sidebar (unqualified — see Tab Sidebar)
+The collapsible right-hand panel, docked to the browser window itself (not any one tab), that hosts an agentic chat over whichever site the active tab is showing. Toggled by the robot icon in the URL bar (`app/fg/shell-window/navbar/location.js`) and rendered as shell chrome (`app/fg/shell-window/ai-sidebar.js`), so it survives tab switches and site navigation rather than being injected into or hosted by a page. Talks to the AI engine over an internal-only RPC surface (`bg/web-apis/bg/ai-shell.ts`) that resolves "the active tab" itself, rather than `nomad.ai.chat()`'s page-facing surface. On `nomad://editor` / `nomad://explorer` it gets extra integration (unsaved-buffer gating, post-write reload) via a `window.__nomadAiHost` hook those apps define. Replaced the separate Chat Bubble (a floating overlay a Drive opted into via `"chatBubble": true`) and the old in-page AI Sidebar (editor/explorer-only, `app-stdlib` component) that this unifies.
+_Avoid_: agent sidebar, chat sidebar, prompt panel, chat bubble, sidebar (unqualified — see Tab Sidebar)
 
 **Prompt Session**:
-One conversation in the AI Sidebar — the ordered transcript of user turns and assistant turns, plus the Checkpoints produced by those turns. Reverting the whole session undoes every Checkpoint it produced.
+One conversation in the AI Sidebar — the ordered transcript of user turns and assistant turns, plus the Checkpoints produced by those turns. Reverting the whole session undoes every Checkpoint it produced. Persisted per site in `hyper://private/.ai-chat/` (keyed by a hash of the site's origin, see `app/bg/ai/chat-store.js`), with a session list so past Prompt Sessions for a site can be reopened — not just the most recent one.
 _Avoid_: chat session, thread, conversation
 
 **Checkpoint**:

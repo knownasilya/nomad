@@ -517,16 +517,27 @@ export function toggleSidebarCollapsed(win) {
   win.emit('resize');
 }
 
+// The AI sidebar's width (right-docked, toggled from the URL bar) is a shared/window-level
+// preference, like the tab sidebar's own width above — but whether it's OPEN is per-tab (see
+// Pane#aiSidebarOpen in bg/ui/tabs/pane.js), not tracked here.
+export function setAiSidebarWidth(win, width) {
+  updateAddedWindowSettings(win, { aiSidebarWidth: width });
+  tabManager.emitReplaceState(win);
+  win.emit('resize');
+}
+
 export async function initSidebarSettings(win, settingsDb) {
-  const [tabLayout, sidebarSide, sidebarWidth] = await Promise.all([
+  const [tabLayout, sidebarSide, sidebarWidth, aiSidebarWidth] = await Promise.all([
     settingsDb.get('tab_layout'),
     settingsDb.get('sidebar_side'),
     settingsDb.get('sidebar_width'),
+    settingsDb.get('ai_sidebar_width'),
   ]);
   updateAddedWindowSettings(win, {
     tabLayout: tabLayout || 'top-bar',
     sidebarSide: sidebarSide || 'left',
     sidebarWidth: Number(sidebarWidth) || 220,
+    aiSidebarWidth: Number(aiSidebarWidth) || 380,
     sidebarCollapsed: false,
   });
 }

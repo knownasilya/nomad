@@ -78,7 +78,7 @@ export function reposition(parentWindow) {
       });
     } else if (view.menuId === 'browser') {
       setBounds({
-        x: 10,
+        x: view.boundsOpt?.rightOffset ?? 10,
         y: view.boundsOpt?.top ?? 72,
         width: 270,
         height: 350,

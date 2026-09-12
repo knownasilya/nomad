@@ -103,6 +103,9 @@ const STATE_VARS = [
   // Draft Mode (ADR-0012): whether the shown Drive has a Draft, and whether this tab is previewing it
   'hasDraft',
   'draftPreviewing',
+  // Is the shell's AI sidebar open for this tab? Per-tab (not per-window) — opening it in one tab
+  // must not open it in others, and a new tab always starts with it closed.
+  'aiSidebarOpen',
 ];
 
 // globals
@@ -175,6 +178,7 @@ export class Pane extends EventEmitter {
     this.peers = 0; // how many peers does the site have?
     this.isBookmarked = false; // is the active page bookmarked?
     this.hasDraft = false; // does the shown Drive have a Draft on this Device? (ADR-0012)
+    this.aiSidebarOpen = false; // is the shell's AI sidebar open for this tab?
     this.driveInfo = null; // metadata about the site if viewing a hyperdrive
     this.donateLinkHref = null; // the URL of the donate site, if set by the index.json
     this.wasDriveTimeout = false; // did the last navigation result in a timed-out hyperdrive?

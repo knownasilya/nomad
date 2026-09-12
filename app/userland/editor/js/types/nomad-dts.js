@@ -174,14 +174,28 @@ declare namespace Nomad {
     driveUrl?: string;
     /** Withhold the file-write tool when false (e.g. read-only Drives). */
     allowWrite?: boolean;
+    /** Override the resolved model for this turn (from a chat UI's model picker). */
+    model?: string;
+    /** When false, ask the runtime to skip its reasoning phase. Default true. */
+    think?: boolean;
+    /** Reasoning effort ('low' | 'medium' | 'high'); sent as reasoning_effort when think !== false. */
+    effort?: 'low' | 'medium' | 'high';
     /** Fires per state-reporting tool call — currently writeDriveFile: { path, priorContent }. */
     onToolEvent?: (e: any) => void;
+    /** Fires per reasoning-stream chunk (only when think !== false and the model emits one). */
+    onReasoning?: (text: string) => void;
   }
   interface Ai {
     /** Stream a chat completion. Yields string chunks as they arrive. */
     chat(messages: AiMessage[], opts?: AiChatOpts): AsyncIterableIterator<string>;
     /** Test connectivity to an AI provider base URL. */
     testConnection(baseUrl: string): Promise<any>;
+    /** The AI server's model catalogue: { models: string[], current: string | null }. */
+    listModels(): Promise<{ models: string[]; current: string | null }>;
+    /** Tools the agent would be offered for a turn: { builtin, page, pageOrigin, pageGranted }. */
+    listTools(opts?: { driveUrl?: string; allowWrite?: boolean }): Promise<any>;
+    /** Whether a model is a reasoning model: { reasoning: boolean, probed: boolean }. */
+    modelInfo(model: string): Promise<{ reasoning: boolean; probed: boolean }>;
   }
 
   interface SelectFileResult { path: string; origin: string; url: string; }
@@ -430,4 +444,39 @@ declare namespace Nomad {
 }
 
 declare const nomad: Nomad.Root;
+
+// --- WebMCP (document.modelContext) ---
+// A DOM polyfill Nomad injects into every eligible page (not a nomad.* API), so page
+// scripts can register tools that Nomad's AI assistant may call. See
+// nomad.dev/content/docs/api/developers/webmcp.md.
+declare namespace WebMCP {
+  interface ToolDefinition {
+    name: string;
+    description: string;
+    /** JSON Schema for the tool's arguments. */
+    inputSchema?: object;
+    /** Runs in the page; return { content: [{ type: 'text', text }] } (or a string). */
+    execute: (args: any) => any | Promise<any>;
+  }
+  interface RegisteredTool {
+    name: string;
+    description: string;
+    inputSchema?: object;
+  }
+  interface ModelContext {
+    /** Register a tool. Pass { signal } and abort it to unregister. */
+    registerTool(tool: ToolDefinition, opts?: { signal?: AbortSignal }): Promise<void>;
+    getTools(): Promise<RegisteredTool[]>;
+    executeTool(tool: RegisteredTool | string, argsJson: string): Promise<any>;
+    addEventListener(type: 'toolchange', listener: () => void): void;
+    removeEventListener(type: 'toolchange', listener: () => void): void;
+  }
+}
+interface Document {
+  readonly modelContext?: WebMCP.ModelContext;
+}
+interface Navigator {
+  /** @deprecated use document.modelContext */
+  readonly modelContext?: WebMCP.ModelContext;
+}
 `;

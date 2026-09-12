@@ -59,7 +59,8 @@ const cssStr = css`
     font-size: 13px;
   }
 
-  input[type='text'] {
+  input[type='text'],
+  input[type='password'] {
     height: 24px;
     padding: 0 7px;
     border-radius: 4px;
@@ -68,7 +69,24 @@ const cssStr = css`
     box-shadow: inset 0 1px 2px #0001;
   }
 
-  input[type='text']:focus {
+  input[type='text']:focus,
+  input[type='password']:focus {
+    outline: 0;
+    border: 1px solid rgba(41, 95, 203, 0.8);
+    box-shadow: 0 0 0 2px rgba(41, 95, 203, 0.2);
+  }
+
+  select {
+    height: 26px;
+    padding: 0 6px;
+    border-radius: 4px;
+    color: rgba(51, 51, 51, 0.95);
+    border: 1px solid #d9d9d9;
+    box-shadow: inset 0 1px 2px #0001;
+    background: #fff;
+  }
+
+  select:focus {
     outline: 0;
     border: 1px solid rgba(41, 95, 203, 0.8);
     box-shadow: 0 0 0 2px rgba(41, 95, 203, 0.2);

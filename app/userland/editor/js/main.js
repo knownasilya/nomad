@@ -13,7 +13,6 @@ import * as contextMenu from '../../app-stdlib/js/com/context-menu.js';
 import { writeToClipboard } from '../../app-stdlib/js/clipboard.js';
 import * as toast from '../../app-stdlib/js/com/toast.js';
 import './com/files-explorer.js';
-import '../../app-stdlib/js/com/ai-sidebar.js';
 import { ResizeImagePopup } from './com/resize-image-popup.js';
 import { configureLanguageService } from './language-service.js';
 import { registerHtmlEmbeddedProviders } from './html-embedded-ts.js';
@@ -26,7 +25,6 @@ class EditorApp extends LitElement {
       isLoading: { type: Boolean },
       showLoadingNotice: { type: Boolean },
       isFilesOpen: { type: Boolean },
-      isAiOpen: { type: Boolean },
       readOnly: { type: Boolean },
       dne: { type: Boolean },
       isBinary: { type: Boolean },
@@ -113,8 +111,6 @@ class EditorApp extends LitElement {
     this.isLoading = false;
     this.showLoadingNotice = false;
     this.isFilesOpen = true;
-    // AI Sidebar — collapsed by default; open/closed persisted globally
-    this.isAiOpen = localStorage.getItem('nomad-ai-sidebar:open') === '1';
     this.readOnly = true;
     this.lastSavedVersionId = undefined;
     this.dne = false;
@@ -126,6 +122,18 @@ class EditorApp extends LitElement {
     this.draftMode = false;
     this.draftCount = 0;
     this.draftConflicts = 0;
+
+    // The shell's unified AI sidebar (app/fg/shell-window/ai-sidebar.js) runs outside this app's
+    // own DOM, so it reaches these hooks via a window global instead of a host property/callback —
+    // see prepareForAgentRun/getAgentContext/onAgentWroteFile below for what each one does.
+    window.__nomadAiHost = {
+      getAgentContext: () => this.getAgentContext(),
+      // Tells the shell sidebar which Drive is actually open here (this tab's own URL is
+      // nomad://editor, never the Drive) — without this, its Drive tools have nothing to target.
+      getAgentDrive: () => (this.url ? { url: this.url, writable: !this.readOnly } : { url: null, writable: false }),
+      prepareForAgentRun: () => this.prepareForAgentRun(),
+      onAgentWroteFile: (path) => this.onAgentWroteFile(path),
+    };
 
     nomad.panes.addEventListener('pane-attached', (e) => {
       this.attachedPane = nomad.panes.getAttachedPane();
@@ -720,11 +728,6 @@ class EditorApp extends LitElement {
     } else {
       this.classList.remove('files-open');
     }
-    if (this.isAiOpen && !this.isUnloaded) {
-      this.classList.add('ai-open');
-    } else {
-      this.classList.remove('ai-open');
-    }
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       ${this.renderToolbar()}
@@ -809,15 +812,6 @@ class EditorApp extends LitElement {
             </div>
           `
         : ''}
-      ${!this.isUnloaded && this.isAiOpen
-        ? html`
-            <ai-sidebar
-              .host=${this}
-              .url=${this.url}
-              .readOnly=${this.readOnly}
-            ></ai-sidebar>
-          `
-        : ''}
       ${this.showLoadingNotice
         ? html`<div id="loading-notice">Loading...</div>`
         : ''}
@@ -826,7 +820,7 @@ class EditorApp extends LitElement {
 
   updated(changedProperties) {
     this.ensureEditorEl();
-    if (changedProperties.has('isFilesOpen') || changedProperties.has('isAiOpen')) {
+    if (changedProperties.has('isFilesOpen')) {
       if (this.editor) {
         this.editor.layout();
       }
@@ -949,14 +943,6 @@ class EditorApp extends LitElement {
             `
           : ''}
         <span class="spacer"></span>
-        <button
-          class="${this.isAiOpen ? 'active' : ''}"
-          title="Toggle AI sidebar"
-          @click=${this.onToggleAiOpen}
-          ?disabled=${this.isUnloaded}
-        >
-          <span class="fas fa-fw fa-robot"></span> AI
-        </button>
         ${this.attachedPane
           ? html`
               <button @click=${window.close}>
@@ -973,16 +959,6 @@ class EditorApp extends LitElement {
 
   onToggleFilesOpen(e) {
     this.isFilesOpen = !this.isFilesOpen;
-  }
-
-  onToggleAiOpen(e) {
-    this.isAiOpen = !this.isAiOpen;
-    localStorage.setItem('nomad-ai-sidebar:open', this.isAiOpen ? '1' : '0');
-  }
-
-  closeAiSidebar() {
-    this.isAiOpen = false;
-    localStorage.setItem('nomad-ai-sidebar:open', '0');
   }
 
   // --- Draft Mode (ADR-0012) ---
@@ -1036,9 +1012,9 @@ class EditorApp extends LitElement {
     await this.load(this.url, true);
   }
 
-  // Called by the AI Sidebar before it runs a prompt. The agent writes directly
-  // to the drive, so the open buffer must be clean first (save-clean gate) — else
-  // an agent write to the open file would collide with unsaved manual edits.
+  // Called by the shell's AI sidebar (via window.__nomadAiHost) before it runs a prompt. The
+  // agent writes directly to the drive, so the open buffer must be clean first (save-clean gate)
+  // — else an agent write to the open file would collide with unsaved manual edits.
   // Returns false to abort the run.
   async prepareForAgentRun() {
     if (!this.hasChanges) return true;
@@ -1047,8 +1023,8 @@ class EditorApp extends LitElement {
     return true;
   }
 
-  // Tells the agent which Drive + file it is operating on (the sidebar runs at
-  // nomad://editor, so the model can't infer this from location.href).
+  // Tells the agent which Drive + file it is operating on (the shell's AI sidebar isn't
+  // rendering this page, so the model can't infer this from location.href).
   getAgentContext() {
     // only treat it as "the open file" if it's a concrete file path (not the
     // drive root or a directory) — otherwise the model may try to write to "/".
@@ -1065,12 +1041,12 @@ class EditorApp extends LitElement {
     return lines.filter(Boolean).join('\n');
   }
 
-  // Called by the AI Sidebar after the agent writes (or a revert restores) a file.
-  // Refresh the file tree and, if the affected file is the one open in the editor,
-  // reload it so the buffer reflects the new drive content.
+  // Called by the shell's AI sidebar (via window.__nomadAiHost) after the agent writes (or a
+  // revert restores) a file. Refresh the file tree and, if the affected file is the one open in
+  // the editor, reload it so the buffer reflects the new drive content.
   async onAgentWroteFile(path) {
     this.loadExplorer();
-    // The agent runs in Draft Mode (auto-enabled by the AI Sidebar), so its writes stage — refresh
+    // The agent runs in Draft Mode (auto-enabled by the AI sidebar), so its writes stage — refresh
     // the unpublished-count badge and toggle state.
     await this.refreshDraftStatus();
     if (path === this.resolvedPath) {

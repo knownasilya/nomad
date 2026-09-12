@@ -28,7 +28,9 @@ const GLOBAL_SETTINGS = new Set([
   'sidebar_collapsed_groups',
   'ai_base_url',
   'ai_default_model',
+  'ai_access_token',
   'ai_share_provider',
+  'ai_sidebar_width',
   'cert_exceptions',
 ]);
 
@@ -86,8 +88,10 @@ export const setup = async function (opts) {
     sidebar_side: 'left',
     sidebar_width: 220,
     sidebar_collapsed_groups: [],
+    ai_sidebar_width: 380,
     ai_base_url: 'http://localhost:11434/v1',
     ai_default_model: '',
+    ai_access_token: '',
     ai_space_default: '',
     ai_share_provider: 0, // opt-in (ADR-0013 §7): off until the user shares this Device's AI
 

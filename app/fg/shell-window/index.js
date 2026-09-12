@@ -4,6 +4,7 @@ import * as bg from './bg-process-rpc';
 import { fromEventStream } from '../../bg/web-apis/fg/event-target';
 import './tabs';
 import './sidebar';
+import './ai-sidebar';
 import './navbar';
 import './panes';
 import './resize-hackfix';
@@ -34,6 +35,8 @@ class ShellWindowUI extends LitElement {
       sidebarSide: { type: String },
       sidebarWidth: { type: Number },
       sidebarCollapsed: { type: Boolean },
+      // aiSidebarWidth is shared/window-level; whether it's OPEN is per-tab — see this.activeTab.
+      aiSidebarWidth: { type: Number },
     };
   }
 
@@ -55,6 +58,7 @@ class ShellWindowUI extends LitElement {
     this.sidebarSide = 'left';
     this.sidebarWidth = 220;
     this.sidebarCollapsed = false;
+    this.aiSidebarWidth = 380;
     this.setup();
   }
 
@@ -99,6 +103,7 @@ class ShellWindowUI extends LitElement {
       if (state.sidebarSide) this.sidebarSide = state.sidebarSide;
       if (state.sidebarWidth) this.sidebarWidth = state.sidebarWidth;
       this.sidebarCollapsed = state.sidebarCollapsed || false;
+      if (state.aiSidebarWidth) this.aiSidebarWidth = state.aiSidebarWidth;
       this.stateHasChanged();
     });
     viewEvents.addEventListener('update-state', ({ index, state }) => {
@@ -151,6 +156,8 @@ class ShellWindowUI extends LitElement {
       if (tabsEl) tabsEl.requestUpdate();
       const sidebarEl = this.shadowRoot.querySelector('shell-window-sidebar');
       if (sidebarEl) sidebarEl.requestUpdate();
+      const aiSidebarEl = this.shadowRoot.querySelector('shell-window-ai-sidebar');
+      if (aiSidebarEl) aiSidebarEl.requestUpdate();
       if (this.activeTab) {
         this.shadowRoot.querySelector('shell-window-navbar').requestUpdate();
       }
@@ -195,6 +202,12 @@ class ShellWindowUI extends LitElement {
         if (controlsSide === 'right') navPadRight = CONTROLS_W;
       }
     }
+    // The AI sidebar always docks right, independent of tabLayout/sidebarSide — reserve its width
+    // on the right for both the navbar and (in top-bar layout) the tab strip above it, the same
+    // way the tab-list sidebar's own width is reserved above. Open/closed is per-tab.
+    const aiOpen = this.activeTab?.aiSidebarOpen ?? false;
+    const aiW = aiOpen ? this.aiSidebarWidth : 0;
+    navMarginRight += aiW;
     const navbarStyle = [
       navMarginLeft ? `margin-left: ${navMarginLeft}px` : '',
       navMarginRight ? `margin-right: ${navMarginRight}px` : '',
@@ -203,6 +216,7 @@ class ShellWindowUI extends LitElement {
     ]
       .filter(Boolean)
       .join('; ');
+    const tabsStyle = aiW && !isSidebar ? `margin-right: ${aiW}px` : '';
     return html`
       ${this.showWindowControls && !this.isFullscreen
         ? html`<shell-window-controls></shell-window-controls>`
@@ -230,6 +244,7 @@ class ShellWindowUI extends LitElement {
                       .groups=${this.groups}
                       ?is-fullscreen=${this.isFullscreen}
                       ?has-bg-tabs=${this.hasBgTabs}
+                      style=${tabsStyle}
                     ></shell-window-tabs>
                   `
                 : ''}
@@ -242,8 +257,17 @@ class ShellWindowUI extends LitElement {
               num-watchlist-notifications="${this.numWatchlistNotifications}"
               tab-layout=${this.tabLayout}
               ?sidebar-collapsed=${this.sidebarCollapsed}
+              ?ai-open=${aiOpen}
               style=${navbarStyle}
             ></shell-window-navbar>
+            ${aiOpen
+              ? html`
+                  <shell-window-ai-sidebar
+                    .activeTab=${this.activeTab}
+                    .width=${this.aiSidebarWidth}
+                  ></shell-window-ai-sidebar>
+                `
+              : ''}
           `}
       <shell-window-panes .activeTab=${this.activeTab}></shell-window-panes>
     `;
