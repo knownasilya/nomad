@@ -1,0 +1,8 @@
+@import 'nomad://app-stdlib/css/common.css';
+@import 'nomad://app-stdlib/css/fontawesome.css';
+
+body {
+  margin: 0;
+  font-size: 13px;
+  background: var(--bg-color--secondary);
+}

@@ -165,22 +165,14 @@ const MANIFEST_PROPERTIES = {
   },
   ai: {
     description:
-      'Manifest: opts the drive into nomad.ai — inline config or a pointer hyper:// URL',
+      "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — " +
+      'true, or a pointer hyper:// URL to delegate to another drive\'s AI Config. Which MODEL ' +
+      'runs is a user preference (Settings → AI, or a per-site pick in the AI sidebar), never ' +
+      'something a drive can set.',
     oneOf: [
-      { type: 'string', description: "Pointer: delegate to another drive's AI config" },
-      {
-        type: 'object',
-        description: 'Inline AI config',
-        properties: {
-          model: { type: 'string', description: 'Model identifier, e.g. llama3.2:3b' },
-        },
-      },
+      { type: 'boolean', description: "Opt this drive into nomad.ai using its own /ai/system.md" },
+      { type: 'string', description: "Pointer: delegate to another drive's AI Config" },
     ],
-  },
-  chatBubble: {
-    type: 'boolean',
-    description:
-      'Manifest: inject a floating AI chat bubble into every page on the drive (requires the ai field)',
   },
   fallback: {
     type: 'string',

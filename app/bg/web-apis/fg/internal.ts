@@ -11,6 +11,7 @@ import hyperdebugManifest from '../manifests/internal/hyperdebug';
 import sitedataManifest from '../manifests/internal/sitedata';
 import watchlistManifest from '../manifests/internal/watchlist';
 import vaultManifest from '../manifests/internal/vault';
+import webmcpDevtoolsManifest from '../manifests/internal/webmcp';
 
 export const setup = function (rpc) {
   const internal: any = {};
@@ -27,6 +28,7 @@ export const setup = function (rpc) {
   const sitedataRPC = rpc.importAPI('sitedata', sitedataManifest, opts);
   const watchlistRPC = rpc.importAPI('watchlist', watchlistManifest, opts);
   const vaultRPC = rpc.importAPI('vault', vaultManifest, opts);
+  const webmcpRPC = rpc.importAPI('webmcp-devtools', webmcpDevtoolsManifest, opts);
 
   // attach APIs
   internal.browser = Object.assign({}, beakerBrowserRPC);
@@ -48,6 +50,8 @@ export const setup = function (rpc) {
   internal.watchlist.createEventsStream = () => fromEventStream(watchlistRPC.createEventsStream());
   internal.vault = Object.assign({}, vaultRPC);
   internal.vault.watchPendingRequests = () => fromEventStream(vaultRPC.watchPendingRequests());
+  internal.webmcp = Object.assign({}, webmcpRPC);
+  internal.webmcp.watch = () => fromEventStream(webmcpRPC.watch());
 
   // internal.drives
   internal.drives = new EventTarget();

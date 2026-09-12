@@ -14,6 +14,8 @@ import hyperdebugManifest from './manifests/internal/hyperdebug';
 import sitedataManifest from './manifests/internal/sitedata';
 import watchlistManifest from './manifests/internal/watchlist';
 import vaultManifest from './manifests/internal/vault';
+import webmcpDevtoolsManifest from './manifests/internal/webmcp';
+import aiShellManifest from './manifests/internal/ai-shell';
 
 // internal apis
 import { WEBAPI as loggerAPI } from '../logger';
@@ -27,6 +29,8 @@ import hyperdebugAPI from './bg/hyperdebug';
 import { WEBAPI as sitedataAPI } from '../dbs/sitedata';
 import watchlistAPI from './bg/watchlist';
 import vaultAPI from './bg/vault';
+import webmcpDevtoolsAPI from './bg/webmcp-devtools';
+import aiShellAPI from './bg/ai-shell';
 import { WEBAPI as downloadsAPI } from '../ui/downloads';
 import { WEBAPI as beakerBrowserAPI } from '../browser';
 
@@ -36,6 +40,7 @@ import capabilitiesManifest from './manifests/external/capabilities';
 import contactsManifest from './manifests/external/contacts';
 import fsManifest from './manifests/external/fs';
 import markdownManifest from './manifests/external/markdown';
+import modelContextManifest from './manifests/external/model-context';
 import panesManifest from './manifests/external/panes';
 import peersocketsManifest from './manifests/external/peersockets';
 import schemasManifest from './manifests/external/schemas';
@@ -49,6 +54,7 @@ import fsAPI from './bg/fs';
 // NOTE: bg/hyperdrive.js + bg/autobase.js are no longer exposed as public APIs (ADR-0010).
 // They remain as INTERNAL implementations that bg/fs.js delegates to behind nomad.fs.
 import markdownAPI from './bg/markdown';
+import modelContextAPI from './bg/model-context';
 import panesAPI from './bg/panes';
 import peersocketsAPI from './bg/peersockets';
 import schemasAPI from './bg/schemas';
@@ -92,6 +98,8 @@ export const setup = function () {
   rpc.exportAPI('sitedata', sitedataManifest, sitedataAPI, internalOnly);
   rpc.exportAPI('watchlist', watchlistManifest, watchlistAPI, internalOnly);
   rpc.exportAPI('vault', vaultManifest, vaultAPI, internalOnly);
+  rpc.exportAPI('webmcp-devtools', webmcpDevtoolsManifest, webmcpDevtoolsAPI, internalOnly);
+  rpc.exportAPI('ai-shell', aiShellManifest, aiShellAPI, internalOnly);
 
   // external apis
   rpc.exportAPI('ai', aiManifest, aiAPI, secureOnly('ai'));
@@ -99,6 +107,7 @@ export const setup = function () {
   rpc.exportAPI('contacts', contactsManifest, contactsAPI, secureOnly('contacts'));
   rpc.exportAPI('fs', fsManifest, fsAPI, secureOnly('fs'));
   rpc.exportAPI('markdown', markdownManifest, markdownAPI);
+  rpc.exportAPI('model-context', modelContextManifest, modelContextAPI, secureOnly('model-context'));
   rpc.exportAPI('panes', panesManifest, panesAPI, secureOnly('panes'));
   rpc.exportAPI('schemas', schemasManifest, schemasAPI);
   rpc.exportAPI('peersockets', peersocketsManifest, peersocketsAPI, secureOnly('peersockets'));

@@ -42,9 +42,6 @@ function bundleApplication() {
     bundle(p(fgDir, 'json-renderer/index.js'), p(fgDir, 'json-renderer/index.build.js'), {
       browserify: true,
     }),
-    bundle(p(fgDir, 'chat-bubble/index.js'), p(fgDir, 'chat-bubble/index.build.js'), {
-      browserify: true,
-    }),
     bundle(p(userlandDir, 'site-info/js/main.js'), p(userlandDir, 'site-info/js/main.build.js'), {
       browserify: true,
     }),

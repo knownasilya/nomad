@@ -38,6 +38,7 @@ class NavbarLocation extends LitElement {
       isBookmarked: { type: Boolean, attribute: 'is-bookmarked' },
       hasDraft: { type: Boolean, attribute: 'has-draft' },
       draftPreviewing: { type: Boolean, attribute: 'draft-previewing' },
+      aiOpen: { type: Boolean, attribute: 'ai-open' },
       isLocationFocused: { type: Boolean },
       hasExpanded: { type: Boolean },
     };
@@ -67,6 +68,7 @@ class NavbarLocation extends LitElement {
     this.isBookmarked = false;
     this.hasDraft = false;
     this.draftPreviewing = false;
+    this.aiOpen = false;
     this.isLocationFocused = false;
     this.hasExpanded = false;
     this.shouldSelectAllOnFocus = false;
@@ -170,7 +172,8 @@ class NavbarLocation extends LitElement {
       </shell-window-navbar-site-info>
       ${this.renderLocation()} ${this.renderZoom()} ${this.renderLiveReloadingBtn()}
       ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderPeers()} ${this.renderDonateBtn()}
-      ${'' /* DISABLED this.renderShareBtn()*/} ${this.renderBookmarkBtn()} ${this.renderSiteBtn()}
+      ${'' /* DISABLED this.renderShareBtn()*/} ${this.renderBookmarkBtn()} ${this.renderAiBtn()}
+      ${this.renderSiteBtn()}
     `;
   }
 
@@ -362,6 +365,21 @@ class NavbarLocation extends LitElement {
     return html`
       <button class="${cls}" @click=${this.onClickSiteMenu}>
         <i class="fas fa-angle-down"></i>
+      </button>
+    `;
+  }
+
+  // Toggles the shell-level AI sidebar (app/fg/shell-window/ai-sidebar.js) — available on every
+  // page, unlike the Draft button above which only appears for a Drive with a Draft.
+  renderAiBtn() {
+    var cls = classMap({ ai: true, pressed: this.aiOpen });
+    return html`
+      <button
+        class=${cls}
+        @click=${this.onClickAiSidebar}
+        title=${this.aiOpen ? 'Hide AI sidebar' : 'Show AI sidebar'}
+      >
+        <span class="fas fa-robot" style=${this.aiOpen ? 'color: #2864dc' : ''}></span>
       </button>
     `;
   }
@@ -567,6 +585,10 @@ class NavbarLocation extends LitElement {
       bounds: { rightOffset: (window.innerWidth - rect.right) | 0, top: (rect.bottom | 0) + 2 },
       params: { url: this.url },
     });
+  }
+
+  onClickAiSidebar() {
+    bg.views.toggleAiSidebarOpen(this.activeTabIndex);
   }
 
   async onClickPeersMenu() {

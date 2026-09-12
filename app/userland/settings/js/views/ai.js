@@ -10,6 +10,7 @@ class AiSettingsView extends LitElement {
     return {
       settings: { type: Object },
       testStatus: { type: Object },
+      availableModels: { type: Array },
     };
   }
 
@@ -21,6 +22,7 @@ class AiSettingsView extends LitElement {
     super();
     this.settings = undefined;
     this.testStatus = null; // null | 'testing' | {ok, models} | {error}
+    this.availableModels = null; // null until a successful Test Connection fetches the catalogue
   }
 
   async load() {
@@ -36,6 +38,7 @@ class AiSettingsView extends LitElement {
   render() {
     if (!this.settings) return html``;
     const baseUrl = this.settings.ai_base_url || 'http://localhost:11434/v1';
+    const accessToken = this.settings.ai_access_token || '';
     const model = this.settings.ai_default_model || '';
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
@@ -76,23 +79,53 @@ class AiSettingsView extends LitElement {
               ${this.testStatus === 'testing' ? 'Testing…' : 'Test Connection'}
             </button>
           </div>
+          <label for="ai-access-token" style="display: block; margin-top: 10px">Access token</label>
+          <p class="description">
+            Optional. Sent as an <code>Authorization: Bearer</code> header on every request to
+            your runtime — only needed if it requires authentication (e.g. a remote or
+            gateway-fronted server).
+          </p>
+          <input
+            id="ai-access-token"
+            type="password"
+            style="width: 300px"
+            value="${accessToken}"
+            placeholder="Optional"
+            autocomplete="off"
+            @change=${this.onAiAccessTokenChange}
+          />
           ${this.renderTestStatus()}
         </div>
         <div class="section">
           <label for="ai-default-model">Default model</label>
           <p class="description">
-            Model name used when a Drive does not specify one in its
-            <code>index.json</code>. Must match a model available in your
-            runtime (e.g. <code>llama3.2:3b</code>).
+            Model used for AI chat unless you pick a different one for a site from the AI
+            sidebar's own controls.
+            ${this.availableModels && this.availableModels.length
+              ? ''
+              : html`Must match a model available in your runtime (e.g.
+                <code>llama3.2:3b</code>) — Test Connection above to pick from
+                the list instead.`}
           </p>
-          <input
-            id="ai-default-model"
-            type="text"
-            style="width: 260px"
-            value="${model}"
-            placeholder="e.g. llama3.2:3b"
-            @change=${this.onAiDefaultModelChange}
-          />
+          ${this.availableModels && this.availableModels.length
+            ? html`
+                <select id="ai-default-model" style="width: 260px" @change=${this.onAiDefaultModelChange}>
+                  <option value="" ?selected=${!model}>— none —</option>
+                  ${[...new Set([...this.availableModels, ...(model ? [model] : [])])].map(
+                    (m) => html`<option value="${m}" ?selected=${m === model}>${m}</option>`
+                  )}
+                </select>
+              `
+            : html`
+                <input
+                  id="ai-default-model"
+                  type="text"
+                  style="width: 260px"
+                  value="${model}"
+                  placeholder="e.g. llama3.2:3b"
+                  @change=${this.onAiDefaultModelChange}
+                />
+              `}
         </div>
         <div class="section">
           <label>
@@ -130,13 +163,28 @@ class AiSettingsView extends LitElement {
 
   async onTestConnection() {
     this.testStatus = 'testing';
+    this.availableModels = null;
     const baseUrl = this.settings.ai_base_url || 'http://localhost:11434/v1';
     this.testStatus = await nomad.ai.testConnection(baseUrl);
+    if (this.testStatus.ok) {
+      try {
+        const { models } = await nomad.ai.listModels();
+        this.availableModels = models || [];
+      } catch {
+        this.availableModels = null;
+      }
+    }
   }
 
   onAiBaseUrlChange(e) {
     this.settings.ai_base_url = e.currentTarget.value;
     nomad.browser.setSetting('ai_base_url', this.settings.ai_base_url);
+    toast.create('Setting updated');
+  }
+
+  onAiAccessTokenChange(e) {
+    this.settings.ai_access_token = e.currentTarget.value;
+    nomad.browser.setSetting('ai_access_token', this.settings.ai_access_token);
     toast.create('Setting updated');
   }
 

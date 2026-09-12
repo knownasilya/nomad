@@ -45,6 +45,28 @@ See [docs/releasing.md](docs/releasing.md) for the CI jobs, Android signing/keys
 
 The three should always reflect the same surface area.
 
+## WebMCP page tools (`document.modelContext`)
+
+Nomad polyfills the [WebMCP](https://webmachinelearning.github.io/webmcp/) standard so a page can
+register tools the built-in AI assistant can call. The polyfill (`@mcp-b/webmcp-polyfill`) is
+injected into every eligible page's **main world** by `app/fg/webview-preload/model-context.js`
+(same technique as `prompt.js`); tool descriptors + invocations are bridged to bg by
+`app/bg/web-apis/bg/model-context.ts` (pure helpers split into `webmcp-schema.ts` +
+`webmcp-invoke.ts`, both unit-tested). `bg/ai.ts` `runChat` merges them into the turn's tool list
+namespaced `page_*`, gated once per origin by the `webmcpTools:<origin>` permission. **Local path
+only** — page tools are never sent over the AI Bridge. This is a web-platform API, not a `nomad.*`
+API, so the sync triad above does not apply; the only touchpoints are a short note in
+`NOMAD_API_REFERENCE`, a `Document`/`Navigator` block in `nomad-dts.js`, and
+`nomad.dev/content/docs/api/developers/webmcp.md`.
+
+**Debugging:** `nomad://webmcp` (the WebMCP Inspector app — `app/userland/webmcp/`, backed by
+the internal `webmcp-devtools` API over `bg/model-context.ts`'s `listAll()` / `getInvokeLog()` /
+`events`) lists every tab's tools, runs them by hand, and streams a live call log. Lower level:
+in a page, `window.__nomadWebmcp.status` / `.tools()` / `.call(name, args)` and
+`localStorage['nomad-webmcp-debug']='1'` for verbose `[webmcp]` console traces; in bg, every
+event goes to the `webmcp` log category and `NOMAD_WEBMCP_DEBUG=1 npm start` mirrors it to the
+terminal. Failure table + symptoms in the doc above.
+
 ## Editor TypeScript types
 
 The Monaco editor (`app/userland/editor/`) gives autocomplete/hover for `nomad.*` and the
