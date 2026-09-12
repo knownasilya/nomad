@@ -293,11 +293,18 @@ const BUILTIN_TOOLS = [
 // include/exclude per turn without touching the read-only tool list content.
 const VISION_TOOL_NAME = 'screenshotCurrentPage';
 
+// Tools that need a real renderer behind `sender` (executeJavaScript / capturePage). A remote
+// Bridge turn runs on this Device for a page open on ANOTHER one, so its sender is the synthetic
+// stand-in from makeRemoteSender() and these can only fail — withhold them rather than let the
+// model burn a turn on "Reading page content is not available for this request" (ADR-0013 §1).
+const RENDERER_TOOL_NAMES = ['readCurrentPage', VISION_TOOL_NAME];
+
 // Shared by listTools() (what the Tools panel shows the user before a turn) and runChat() (what
 // the model is actually offered) — kept as one function so they can never disagree about which
-// gated tools are available for a given allowWrite/allowVision combination.
-function filterBuiltinTools({ allowWrite, allowVision }) {
+// gated tools are available for a given allowWrite/allowVision/remote combination.
+function filterBuiltinTools({ allowWrite, allowVision, remote = false }) {
   return BUILTIN_TOOLS.filter((t) => {
+    if (remote && RENDERER_TOOL_NAMES.includes(t.function.name)) return false;
     if (t.function.name === 'writeDriveFile') return allowWrite;
     if (t.function.name === VISION_TOOL_NAME) return !!allowVision;
     return true;
@@ -568,7 +575,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   // and withhold the screenshot tool unless the caller has confirmed (via modelInfo) that the
   // resolved model actually supports image input — offering it to a text-only model means
   // silently sending an image it can't use.
-  const builtinTools = filterBuiltinTools({ allowWrite, allowVision: opts.allowVision });
+  const builtinTools = filterBuiltinTools({ allowWrite, allowVision: opts.allowVision, remote: opts.remote });
 
   // WebMCP: tools the current page registered via document.modelContext. Local path only
   // (the renderer must be reachable), namespaced `page_` so they can't shadow builtins, and
@@ -815,8 +822,13 @@ async function executeTool(name, args, sender, opts: any = {}) {
       // `sender` is the relevant webContents in every caller (the tab itself for a content page's
       // own nomad.ai.chat(), or the active tab's pane.webContents for the shell AI sidebar — see
       // ai-shell.ts) — so this just reads whatever page that webContents currently has loaded.
+      // Defense in depth: filterBuiltinTools() already withholds this tool on a remote Bridge
+      // turn, where `sender` is the synthetic stand-in and has no renderer to script.
       if (typeof sender.executeJavaScript !== 'function') {
-        throw new Error('Reading page content is not available for this request');
+        throw new Error(
+          'Reading the rendered page is not available here — the page is open on another device. ' +
+            'Use readDriveFile/listDriveFiles for a Drive, or ask the user to paste what you need.'
+        );
       }
       let text;
       try {

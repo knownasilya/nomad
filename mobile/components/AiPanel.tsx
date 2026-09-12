@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
-import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, KeyboardAvoidingView, Keyboard, Platform, StyleSheet } from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Keyboard, Platform, StyleSheet } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { AiChatHandlers, AiChatHandle } from '../lib/useBackend'
 import Markdown from './Markdown'
@@ -38,18 +38,18 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const insets = useSafeAreaInsets()
-  // Android keyboard tracking: this panel is a full-screen Modal, and on Android a Modal opens its
-  // own window that does NOT inherit the activity's windowSoftInputMode — so adjustResize never
-  // fires and (with edge-to-edge) the system won't inset it either, leaving the keyboard on top of
-  // the input row. Track the keyboard height and lift the panel by it ourselves (iOS uses
-  // KeyboardAvoidingView below). Height is 0 whenever the keyboard is hidden or on iOS.
+  // Keyboard tracking. The panel lifts its own content by the keyboard height rather than relying
+  // on KeyboardAvoidingView (which can spin in an onLayout loop here) or on Android's adjustResize
+  // (a no-op under edge-to-edge). iOS gets the `will` events so the lift animates with the keyboard.
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   useEffect(() => {
-    if (Platform.OS !== 'android') return
-    const show = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates?.height ?? 0))
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0))
+    if (!visible) { setKeyboardHeight(0); return }
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
+    const show = Keyboard.addListener(showEvent, (e) => setKeyboardHeight(e.endCoordinates?.height ?? 0))
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0))
     return () => { show.remove(); hide.remove() }
-  }, [])
+  }, [visible])
   // Per-context transcripts (keyed by Drive URL, or 'general' for a non-Drive tab). Opening the panel
   // on tab A vs tab B — or with no page — shows that context's own history. In-memory for the session.
   const [conversations, setConversations] = useState<Record<string, ChatMsg[]>>({})
@@ -146,120 +146,125 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
     })
   }
 
-  // Keyboard handling: use KeyboardAvoidingView ONLY on iOS. On Android a KeyboardAvoidingView
-  // inside a full-screen Modal can enter an infinite onLayout loop (the view never paints and the
-  // app pins the CPU), and adjustResize doesn't reach the Modal's window anyway — so instead we lift
-  // the plain View by the tracked keyboard height. Subtract the bottom safe-area inset the
-  // SafeAreaView already pads, so the input lands exactly above the keyboard (not one inset too high).
-  const Wrapper: any = Platform.OS === 'ios' ? KeyboardAvoidingView : View
-  const wrapperProps = Platform.OS === 'ios' ? { behavior: 'padding' as const, keyboardVerticalOffset: 8 } : {}
-  const androidLift = Platform.OS === 'android' ? Math.max(keyboardHeight - insets.bottom, 0) : 0
+  // How far to lift the input row. The panel's bottom edge already sits above the bottom safe-area
+  // inset (the screen's SafeAreaView pads it), so the lift is the gap between that edge and the top
+  // of the keyboard — and the two platforms measure the keyboard differently:
+  //   Android — RN reports `imeInsets.bottom - systemBars.bottom`, i.e. the nav-bar inset is
+  //             already taken out, so the reported height IS the gap.
+  //   iOS     — `endCoordinates.height` runs to the bottom of the screen, home indicator included,
+  //             so the inset has to come off or the input floats one inset too high.
+  const lift = keyboardHeight > 0
+    ? Math.max(Platform.OS === 'ios' ? keyboardHeight - insets.bottom : keyboardHeight, 0)
+    : 0
 
+  // Rendered as an in-tree overlay, NOT a Modal. On Android a Modal is its own Dialog window, and
+  // RN only emits keyboardDidShow/Hide from the activity's root view — so a Modal never hears the
+  // keyboard and its input row stays buried under it. `elevation` keeps the overlay above the
+  // page WebView, which ignores zIndex.
+  if (!visible) return null
   return (
-    <Modal visible={visible} animationType='slide' onRequestClose={onClose} presentationStyle='fullScreen'>
-      <SafeAreaView style={s.root} edges={['top', 'bottom']}>
-        <View style={s.header}>
-          <Text style={s.title}>AI</Text>
-          <View style={s.headerRight}>
-            {messages.length > 0 && (
-              <TouchableOpacity onPress={() => { stop(); setMessages([]); setError(null) }} hitSlop={8} style={s.headerBtn}>
-                <Text style={s.headerBtnText}>Clear</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={onClose} hitSlop={10} style={s.close}><Text style={s.closeText}>✕</Text></TouchableOpacity>
+    <View style={s.overlay}>
+      <View style={s.header}>
+        <Text style={s.title}>AI</Text>
+        <View style={s.headerRight}>
+          {messages.length > 0 && (
+            <TouchableOpacity onPress={() => { stop(); setMessages([]); setError(null) }} hitSlop={8} style={s.headerBtn}>
+              <Text style={s.headerBtnText}>Clear</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={onClose} hitSlop={10} style={s.close}><Text style={s.closeText}>✕</Text></TouchableOpacity>
+        </View>
+      </View>
+      {driveUrl ? (
+        <View style={s.pageBadge}>
+          <View style={s.pageDot} />
+          <View style={s.pageBadgeText}>
+            <Text numberOfLines={1} style={s.pageTitle}>{title || 'Untitled page'}</Text>
+            <Text numberOfLines={1} style={s.pageUrl}>{url}</Text>
           </View>
         </View>
-        {driveUrl ? (
-          <View style={s.pageBadge}>
-            <View style={s.pageDot} />
-            <View style={s.pageBadgeText}>
-              <Text numberOfLines={1} style={s.pageTitle}>{title || 'Untitled page'}</Text>
-              <Text numberOfLines={1} style={s.pageUrl}>{url}</Text>
-            </View>
-          </View>
-        ) : (
-          <Text numberOfLines={1} style={s.url}>General chat (no page context)</Text>
-        )}
+      ) : (
+        <Text numberOfLines={1} style={s.url}>General chat (no page context)</Text>
+      )}
 
-        <Wrapper style={[s.flex, androidLift > 0 ? { paddingBottom: androidLift } : null]} {...wrapperProps}>
-          <ScrollView ref={scrollRef} style={s.body} contentContainerStyle={s.bodyPad}>
-            {messages.length === 0 ? (
-              <Text style={s.empty}>
-                Ask about {driveUrl ? 'this drive' : 'anything'}. The AI runs on your desktop device and streams answers here — it can read and (with your approval) edit the drive.
-              </Text>
-            ) : (
-              messages.map((m, i) => {
-                // The trailing empty assistant message is the response slot. While busy, show the
-                // thinking indicator right there — left side, under the last user message, exactly
-                // where the answer will stream in. It's replaced by the text once the first token lands.
-                if (m.role === 'assistant' && !m.content) {
-                  if (!turnActiveHere || i !== messages.length - 1) return null
-                  return (
-                    <View key={i} style={[s.bubble, s.aiBubble, s.thinkingBubble]}>
-                      <ActivityIndicator size='small' color={t.accent} />
-                      <Text style={s.thinkingText} numberOfLines={1}>{activity || 'Thinking…'}</Text>
-                    </View>
-                  )
-                }
+      <View style={[s.flex, lift > 0 ? { paddingBottom: lift } : null]}>
+        <ScrollView ref={scrollRef} style={s.body} contentContainerStyle={s.bodyPad}>
+          {messages.length === 0 ? (
+            <Text style={s.empty}>
+              Ask about {driveUrl ? 'this drive' : 'anything'}. The AI runs on your desktop device and streams answers here — it can read and (with your approval) edit the drive.
+            </Text>
+          ) : (
+            messages.map((m, i) => {
+              // The trailing empty assistant message is the response slot. While busy, show the
+              // thinking indicator right there — left side, under the last user message, exactly
+              // where the answer will stream in. It's replaced by the text once the first token lands.
+              if (m.role === 'assistant' && !m.content) {
+                if (!turnActiveHere || i !== messages.length - 1) return null
                 return (
-                  <View key={i} style={[s.bubble, m.role === 'user' ? s.userBubble : s.aiBubble]}>
-                    {m.role === 'user'
-                      ? <Text style={s.userText}>{m.content}</Text>
-                      : <Markdown text={m.content} />}
+                  <View key={i} style={[s.bubble, s.aiBubble, s.thinkingBubble]}>
+                    <ActivityIndicator size='small' color={t.accent} />
+                    <Text style={s.thinkingText} numberOfLines={1}>{activity || 'Thinking…'}</Text>
                   </View>
                 )
-              })
-            )}
-            {error && <Text style={s.error}>⚠️ {error}</Text>}
-          </ScrollView>
-
-          {driveUrl && draftPaths.length > 0 && !turnActiveHere && (
-            <View style={s.draftBanner}>
-              <Text style={s.draftText}>
-                ✎ Draft ready — {draftPaths.length} change{draftPaths.length > 1 ? 's' : ''} to this page
-              </Text>
-              {draftBusy ? (
-                <ActivityIndicator size='small' color={t.accent} />
-              ) : (
-                <View style={s.draftBtns}>
-                  <TouchableOpacity onPress={() => onPreviewDraft?.(url)} hitSlop={6}>
-                    <Text style={s.draftLink}>Preview</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => draftAction('discardDraft')} hitSlop={6}>
-                    <Text style={s.draftDanger}>Discard</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => draftAction('publishDraft')} hitSlop={6}>
-                    <Text style={s.draftPrimary}>Publish</Text>
-                  </TouchableOpacity>
+              }
+              return (
+                <View key={i} style={[s.bubble, m.role === 'user' ? s.userBubble : s.aiBubble]}>
+                  {m.role === 'user'
+                    ? <Text style={s.userText}>{m.content}</Text>
+                    : <Markdown text={m.content} />}
                 </View>
-              )}
-            </View>
+              )
+            })
           )}
+          {error && <Text style={s.error}>⚠️ {error}</Text>}
+        </ScrollView>
 
-          <View style={s.inputRow}>
-            <TextInput
-              style={s.input}
-              value={input}
-              onChangeText={setInput}
-              placeholder='Message the AI…'
-              placeholderTextColor={t.textMuted}
-              multiline
-              editable={!busy}
-              onSubmitEditing={send}
-            />
-            {turnActiveHere ? (
-              <TouchableOpacity style={[s.sendBtn, s.stopBtn]} onPress={stop}>
-                <Text style={s.sendText}>Stop</Text>
-              </TouchableOpacity>
+        {driveUrl && draftPaths.length > 0 && !turnActiveHere && (
+          <View style={s.draftBanner}>
+            <Text style={s.draftText}>
+              ✎ Draft ready — {draftPaths.length} change{draftPaths.length > 1 ? 's' : ''} to this page
+            </Text>
+            {draftBusy ? (
+              <ActivityIndicator size='small' color={t.accent} />
             ) : (
-              <TouchableOpacity style={[s.sendBtn, (!input.trim() || busy) && s.sendDisabled]} onPress={send} disabled={!input.trim() || busy}>
-                <Text style={s.sendText}>Send</Text>
-              </TouchableOpacity>
+              <View style={s.draftBtns}>
+                <TouchableOpacity onPress={() => onPreviewDraft?.(url)} hitSlop={6}>
+                  <Text style={s.draftLink}>Preview</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => draftAction('discardDraft')} hitSlop={6}>
+                  <Text style={s.draftDanger}>Discard</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => draftAction('publishDraft')} hitSlop={6}>
+                  <Text style={s.draftPrimary}>Publish</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
-        </Wrapper>
-      </SafeAreaView>
-    </Modal>
+        )}
+
+        <View style={s.inputRow}>
+          <TextInput
+            style={s.input}
+            value={input}
+            onChangeText={setInput}
+            placeholder='Message the AI…'
+            placeholderTextColor={t.textMuted}
+            multiline
+            editable={!busy}
+            onSubmitEditing={send}
+          />
+          {turnActiveHere ? (
+            <TouchableOpacity style={[s.sendBtn, s.stopBtn]} onPress={stop}>
+              <Text style={s.sendText}>Stop</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={[s.sendBtn, (!input.trim() || busy) && s.sendDisabled]} onPress={send} disabled={!input.trim() || busy}>
+              <Text style={s.sendText}>Send</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </View>
   )
 }
 
@@ -267,7 +272,9 @@ type Styles = ReturnType<typeof makeStyles>
 
 function makeStyles (t: Theme) {
   return StyleSheet.create({
-    root: { flex: 1, backgroundColor: t.bg },
+    // Covers the whole screen area inside the app's safe-area padding (Yoga lays an absolute child
+    // out from its parent's padding box), so the panel never sits under the status or nav bar.
+    overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: t.bg, zIndex: 50, elevation: 50 },
     flex: { flex: 1 },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 48 },
     title: { color: t.text, fontSize: 18, fontWeight: '700' },
