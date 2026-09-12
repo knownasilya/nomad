@@ -1,9 +1,11 @@
+import { app, powerSaveBlocker, powerMonitor } from 'electron';
 import EventEmitter from 'events';
 import emitStream from 'emit-stream';
 import http from 'http';
 import https from 'https';
 import b4a from 'b4a';
 import { URL } from 'url';
+import * as logLib from '../../logger';
 import * as settingsDb from '../../dbs/settings';
 import * as sitedata from '../../dbs/sitedata';
 import * as permissions from '../../ui/permissions';
@@ -15,6 +17,12 @@ import * as modelContext from './model-context';
 import { jsonSchemaToParameters, pageToolResultToText } from './webmcp-schema';
 import * as daemon from '../../hyper/daemon';
 import * as aiBridge from '../../hyper/ai-bridge';
+import {
+  createAwakeController,
+  readLinuxAcState,
+  setCurrent as setCurrentAwake,
+  REASON_PROVIDER,
+} from '../../ai/awake';
 
 // Built-in system context always appended to every conversation's system prompt.
 // KEEP IN SYNC with nomad.dev/content/docs/api/apis/ — when a new API is added
@@ -514,12 +522,70 @@ aiBridge.setServeChat(async ({ messages, opts, signal, requestPermission, sendCh
   });
 });
 
+// Keep-awake (ADR-0013 §7 amendment). This module is the AI composition root, so it owns the ONE
+// awake controller and injects it into the Bridge — the same pattern as setServeChat, and it keeps
+// the `electron` import out of the controller so it stays unit-testable.
+//
+// Deferred to daemon-ready, NOT module load: `powerMonitor` throws if touched before app-ready, and
+// the settings DB syncAwakeHold reads is initialised later in the same main.js ready handler. The
+// daemon signal is after both, and is the point from which a Provider can be reached anyway.
+let awake = null;
+
+function initAwake() {
+  if (awake) return;
+  awake = createAwakeController({
+    powerSaveBlocker,
+    powerMonitor,
+    onWillQuit: (fn) => {
+      app.on('will-quit', fn);
+    },
+    readAcState: () => readLinuxAcState(),
+    logger: logLib.get().child({ category: 'ai', subcategory: 'awake' }),
+  });
+  awake.setup();
+  setCurrentAwake(awake); // lets bg/browser.js read status without an import cycle
+  aiBridge.setAwake(awake);
+  settingsDb.on('set:ai_share_provider', () => syncAwakeHold());
+  settingsDb.on('set:ai_keep_awake', () => syncAwakeHold());
+  syncAwakeHold();
+
+  // A suspend we failed to prevent (lid close, explicit Sleep) drops every swarm connection. On
+  // wake, re-scan: ensureInstalled() re-attaches to live connections and openOnConn no-ops for
+  // peers we already know, so this is safe to call repeatedly. It does not fix a stale socket —
+  // secret-stream's own keepalive times those out — but it shortens the window after a sleep we
+  // could not block.
+  powerMonitor.on('resume', () => {
+    try {
+      aiBridge.install();
+    } catch {}
+  });
+}
+
+// The standing hold needs BOTH opt-ins: sharing (there is someone to stay awake FOR) and keep-awake
+// (the user accepted that this machine stops sleeping). Re-evaluated whenever either one changes.
+async function syncAwakeHold() {
+  if (!awake) return;
+  const [sharing, keepAwake] = await Promise.all([
+    settingsDb.get('ai_share_provider'),
+    settingsDb.get('ai_keep_awake'),
+  ]);
+  if (sharing && keepAwake) awake.start(REASON_PROVIDER);
+  else awake.stop(REASON_PROVIDER);
+}
+
 // Bring the Bridge's swarm listener up so a Provider receives HELLO even if it never runs a chat
 // itself. Install as soon as the swarm EXISTS (not a connection — openOnConn fires per connection):
 // if the hyper stack is already up when this module loads, install now; otherwise wait for 'ready'.
 // This avoids a premature no-op attempt at module load (which happens before daemon.setup()).
-if (daemon.getSwarm()) aiBridge.install();
-else daemon.on('ready', () => aiBridge.install());
+if (daemon.getSwarm()) {
+  aiBridge.install();
+  initAwake();
+} else {
+  daemon.on('ready', () => {
+    aiBridge.install();
+    initAwake();
+  });
+}
 
 // A stand-in `sender` for a remote turn. runChat/executeTool only need getURL() (drive scoping +
 // AI Config resolution); findTab() returns undefined for it, so config resolves Drive-level then

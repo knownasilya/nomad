@@ -26,6 +26,7 @@ import * as logLib from '../logger';
 import * as daemon from './daemon';
 import * as vault from './vault';
 import * as settingsDb from '../dbs/settings';
+import { REASON_TURN as AWAKE_REASON_TURN } from '../ai/awake';
 import {
   AI_BRIDGE_PROTOCOL,
   AI_BRIDGE_VERSION,
@@ -46,6 +47,7 @@ export const SHARE_PROVIDER_SETTING = 'ai_share_provider';
 const peers = new Map();
 let installed = false;
 let serveChat = null; // registered by bg/ai.ts: ({ messages, opts, signal, requestPermission, sendChunk, sendTool }) => Promise<void>
+let awake = null; // registered by bg/ai.ts: the shared keep-awake controller (bg/ai/awake.js)
 
 let _reqSeq = 0;
 function nextReqId() {
@@ -59,6 +61,13 @@ function nextReqId() {
 // web-apis side means the agentic loop + tools live in exactly one place.
 export function setServeChat(handler) {
   serveChat = handler;
+}
+
+// bg/ai.ts owns the one awake controller (it has the `electron` import); the Bridge only needs to
+// hold it for the length of a served turn. Injected rather than imported for the same reason
+// serveChat is: this module stays free of the AI/Electron layers above it.
+export function setAwake(controller) {
+  awake = controller;
 }
 
 // Serving as a Provider (§7 opt-in). Serving also requires a reachable local AI Runtime, checked
@@ -351,6 +360,10 @@ async function onRequest(peer, f) {
   // Keepalive: remote inference can take a while to load the model / produce the first token, during
   // which no chunks flow. Ping the Client so it doesn't hit its idle timeout on a healthy-but-slow turn.
   const heartbeat = setInterval(() => sendFrame(peer, { t: FRAME.HEARTBEAT, id }), 15000);
+  // Don't let idle sleep cut a healthy-but-slow turn mid-stream. Unlike the standing provider hold
+  // this one is NOT battery-gated (bg/ai/awake.js): a turn is bounded to minutes, and suspending
+  // mid-answer is a worse trade than the battery it costs.
+  awake?.start(AWAKE_REASON_TURN);
   try {
     await serveChat({
       messages: f.messages,
@@ -367,6 +380,7 @@ async function onRequest(peer, f) {
   } finally {
     clearInterval(heartbeat);
     peer.serveReqs.delete(id);
+    if (!anyServing()) awake?.stop(AWAKE_REASON_TURN);
   }
 }
 
@@ -573,6 +587,14 @@ function _probeRuntime(baseUrl, token) {
       resolve(false);
     }
   });
+}
+
+// The turn hold is a single refcounted reason, so it must only be released once every peer's turn
+// has ended — otherwise two concurrent Clients would have the first one to finish drop the hold
+// out from under the second.
+function anyServing() {
+  for (const peer of peers.values()) if (peer.serveReqs.size > 0) return true;
+  return false;
 }
 
 function noProviderError() {

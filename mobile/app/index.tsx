@@ -704,6 +704,7 @@ export default function Browser () {
   }, [])
 
   return (
+    <>
     <SafeAreaView style={s.root} edges={['top', 'bottom']}>
       <StatusBar barStyle={t.scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={t.bg} />
       <TabStrip
@@ -813,16 +814,6 @@ export default function Browser () {
         onViewSource={viewSource}
       />
 
-      <AiPanel
-        visible={aiOpen}
-        onClose={() => setAiOpen(false)}
-        url={active.url}
-        title={active.title}
-        aiChat={backend.aiChat}
-        onPrompt={(permission) => confirmModifyDrive(permission, describeDrive(permission))}
-        onPreviewDraft={onPreviewDraft}
-      />
-
       <Library
         visible={libraryOpen}
         onClose={() => setLibraryOpen(false)}
@@ -864,6 +855,21 @@ export default function Browser () {
         onClose={closeExplorer}
       />
     </SafeAreaView>
+
+    {/* Rendered OUTSIDE the SafeAreaView on purpose. AiPanel is a full-screen absolute overlay (not
+        a Modal — see its render comment), and an absolutely-positioned child is not inset by its
+        parent's padding, so nesting it here made its inset behaviour depend on a detail of the
+        parent it could not see. Out here it simply fills the window and owns both insets itself. */}
+    <AiPanel
+      visible={aiOpen}
+      onClose={() => setAiOpen(false)}
+      url={active.url}
+      title={active.title}
+      aiChat={backend.aiChat}
+      onPrompt={(permission) => confirmModifyDrive(permission, describeDrive(permission))}
+      onPreviewDraft={onPreviewDraft}
+    />
+    </>
   )
 }
 

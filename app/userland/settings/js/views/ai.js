@@ -11,6 +11,7 @@ class AiSettingsView extends LitElement {
       settings: { type: Object },
       testStatus: { type: Object },
       availableModels: { type: Array },
+      keepAwakeStatus: { type: Object },
     };
   }
 
@@ -23,14 +24,25 @@ class AiSettingsView extends LitElement {
     this.settings = undefined;
     this.testStatus = null; // null | 'testing' | {ok, models} | {error}
     this.availableModels = null; // null until a successful Test Connection fetches the catalogue
+    this.keepAwakeStatus = null; // {holding, paused, onBattery, unsupported} from bg/ai/awake.js
   }
 
   async load() {
     this.settings = await nomad.browser.getSettings();
+    this.refreshKeepAwake();
     this.requestUpdate();
   }
 
   unload() {}
+
+  async refreshKeepAwake() {
+    try {
+      this.keepAwakeStatus = await nomad.browser.getAiKeepAwakeStatus();
+    } catch {
+      this.keepAwakeStatus = null;
+    }
+    this.requestUpdate();
+  }
 
   // rendering
   // =
@@ -142,6 +154,7 @@ class AiSettingsView extends LitElement {
             have none of their own. Requests are limited to devices in your Vault.
             Off by default, since your runtime may be metered or run on battery.
           </p>
+          ${this.renderKeepAwake()}
         </div>
       </div>
     `;
@@ -194,11 +207,57 @@ class AiSettingsView extends LitElement {
     toast.create('Setting updated');
   }
 
+  renderKeepAwake() {
+    const sharing = !!this.settings.ai_share_provider;
+    const on = !!this.settings.ai_keep_awake;
+    const status = this.keepAwakeStatus;
+    return html`
+      <label class="sub-setting">
+        <input
+          type="checkbox"
+          ?checked=${on}
+          ?disabled=${!sharing}
+          @change=${this.onKeepAwakeChange}
+        />
+        Keep this device awake while sharing
+      </label>
+      <p class="description sub-setting">
+        A sleeping device can't answer. This stops the idle-sleep timer while sharing
+        is on — it does <strong>not</strong> keep the device awake with the lid closed.
+        Paused automatically on battery.
+      </p>
+      ${on && sharing && status ? this.renderKeepAwakeStatus(status) : ''}
+    `;
+  }
+
+  renderKeepAwakeStatus(status) {
+    if (status.unsupported) {
+      return html`<p class="keep-awake-status warn">${status.unsupported}</p>`;
+    }
+    if (status.paused) {
+      return html`<p class="keep-awake-status warn">Paused — running on battery.</p>`;
+    }
+    if (status.holding) {
+      return html`<p class="keep-awake-status ok">Keeping this device awake.</p>`;
+    }
+    return '';
+  }
+
+  onKeepAwakeChange(e) {
+    const on = e.currentTarget.checked ? 1 : 0;
+    this.settings.ai_keep_awake = on;
+    nomad.browser.setSetting('ai_keep_awake', on);
+    toast.create(on ? 'This device will stay awake while sharing' : 'This device may sleep again');
+    // The bg gate (battery / platform support) resolves asynchronously; re-read rather than guess.
+    setTimeout(() => this.refreshKeepAwake(), 250);
+  }
+
   onShareProviderChange(e) {
     const on = e.currentTarget.checked ? 1 : 0;
     this.settings.ai_share_provider = on;
     nomad.browser.setSetting('ai_share_provider', on);
     toast.create(on ? 'Sharing AI with your other devices' : 'Stopped sharing AI');
+    setTimeout(() => this.refreshKeepAwake(), 250);
   }
 }
 
