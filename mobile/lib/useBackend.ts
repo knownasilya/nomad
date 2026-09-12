@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react'
+import { AppState, type AppStateStatus } from 'react-native'
 import { Worklet } from 'react-native-bare-kit'
 import { Paths } from 'expo-file-system'
 import RPC from 'bare-rpc'
 import b4a from 'b4a'
 
 import bundle from '../app/app.bundle.mjs'
+import { holdForAiTurn } from './hostingService'
 import {
   RPC_OPEN,
   RPC_CLOSE,
@@ -140,9 +142,34 @@ export function useBackend (handlers: BackendHandlers): Backend {
   const pending = useRef<Record<string, (msg: any) => void>>({})
   // reqId -> streaming AI event sink (many RPC_AI_EVENT frames per turn; see aiChat)
   const aiStreams = useRef<Record<string, (msg: any) => void>>({})
+  // Keep-alive: how many things currently need the backend to go on running while the app is
+  // backgrounded, and the worklet they need kept awake. Only AI turns take a hold today.
+  const awakeHolds = useRef(0)
+  const workletRef = useRef<any>(null)
 
   useEffect(() => {
     const worklet = new Worklet()
+    const w = worklet as any
+    workletRef.current = worklet
+    // react-native-bare-kit registers its OWN AppState listener at import time, which suspends the
+    // worklet on every 'background' transition. That parks the Bare event loop, so the Hyperswarm
+    // connection to the AI Provider stalls and an in-flight turn dies the moment the user switches
+    // away — the "AI disconnects in the background" symptom. That listener reaches the worklet
+    // through its instance update(), so shadowing update() suppresses the suspend at the source
+    // instead of racing to resume after it. With no holds the original behaviour runs untouched,
+    // so an idle app still sleeps as it should.
+    const suspendOnBackground = w.update.bind(worklet)
+    w.update = (state?: AppStateStatus) => {
+      if (state === 'background' && awakeHolds.current > 0) return
+      return suspendOnBackground(state)
+    }
+    // Belt and braces: if anything else suspends the worklet (a state we didn't see, a future
+    // bare-kit change), a hold still gets it running again on the next AppState change.
+    const appStateSub = AppState.addEventListener('change', () => {
+      if (awakeHolds.current > 0 && w.suspended) {
+        try { worklet.resume() } catch {}
+      }
+    })
     // Pass the document directory so the backend has somewhere to store cores.
     worklet.start('/app.bundle', bundle, [Paths.document.uri])
 
@@ -170,6 +197,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
     rpcRef.current = rpc
 
     return () => {
+      appStateSub.remove()
       if (typeof worklet.terminate === 'function') worklet.terminate()
     }
   }, [])
@@ -210,6 +238,27 @@ export function useBackend (handlers: BackendHandlers): Backend {
     })
   }
 
+  // Take a keep-awake hold on the backend (and, on Android, on the foreground service that stops
+  // the OS freezing the process). Returns the release; it is safe to call more than once. Releasing
+  // the LAST hold while the app is already in the background suspends the worklet there and then —
+  // without that, work started in the foreground would leave the backend running until the user
+  // came back, since nothing else re-checks AppState in between.
+  function acquireAwake (): () => void {
+    awakeHolds.current++
+    const releaseService = holdForAiTurn()
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      awakeHolds.current = Math.max(0, awakeHolds.current - 1)
+      releaseService()
+      const worklet = workletRef.current
+      if (awakeHolds.current === 0 && worklet && !worklet.suspended && AppState.currentState !== 'active') {
+        try { worklet.update('background') } catch {}
+      }
+    }
+  }
+
   // Streaming nomad.ai.chat(). Registers a sink by reqId, forwards each frame to the handlers, and
   // clears on done|error. Uses an IDLE (heartbeat) timeout — reset on every frame — not the fixed
   // 15s the request/response calls use, since a turn legitimately runs much longer than any single
@@ -219,8 +268,12 @@ export function useBackend (handlers: BackendHandlers): Backend {
     const reqId = `ai_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
     if (!rpc) { h.onError?.('backend not ready'); return { cancel () {} } }
 
+    // A turn can legitimately run for minutes (model load, tool round-trips) and the user will
+    // background the app mid-answer, so hold the backend awake until it settles.
+    const releaseHold = acquireAwake()
+
     let idle: ReturnType<typeof setTimeout>
-    const cleanup = () => { clearTimeout(idle); delete aiStreams.current[reqId] }
+    const cleanup = () => { clearTimeout(idle); delete aiStreams.current[reqId]; releaseHold() }
     const armIdle = () => {
       clearTimeout(idle)
       idle = setTimeout(() => { cleanup(); h.onError?.('AI stream timed out') }, 60000)

@@ -609,13 +609,19 @@ export default function Browser () {
   }, [step])
 
   // Android hardware back navigates back instead of exiting the app. Returning false when there's
-  // nowhere to go lets Android background the app as usual. A visible full-screen Modal (AI/Library/…)
-  // handles its own back via onRequestClose, so this handler won't fire while one is open.
+  // nowhere to go lets Android background the app as usual. A visible full-screen Modal (Library/…)
+  // handles its own back via onRequestClose, so this handler won't fire while one is open — but the
+  // AI panel is a plain in-tree overlay (see AiPanel), so closing it is this handler's job. Keeping
+  // that here, rather than in a second BackHandler inside the panel, avoids depending on the order
+  // RN happens to call two registered handlers in.
   useEffect(() => {
     if (Platform.OS !== 'android') return
-    const sub = BackHandler.addEventListener('hardwareBackPress', goBackActive)
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (aiOpen) { setAiOpen(false); return true }
+      return goBackActive()
+    })
     return () => sub.remove()
-  }, [goBackActive])
+  }, [goBackActive, aiOpen])
 
   // --- render ------------------------------------------------------------
   const canBack = active.sp > 0 || (active.kind === 'web' && !!active.webCanGoBack)
