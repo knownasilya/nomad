@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.6.0](https://github.com/knownasilya/nomad/compare/v1.5.1...v1.6.0) (2026-09-12)
+
+
+### Features
+
+* **ai:** move the AI Sidebar into the shell and add WebMCP page tools ([2c8c9c9](https://github.com/knownasilya/nomad/commit/2c8c9c9db127def9559ef564efc0112ffe033742))
+
+
+### Bug Fixes
+
+* **fs:** gate cross-drive writes and writer-management on Autobase drives ([b8f30cd](https://github.com/knownasilya/nomad/commit/b8f30cd682711effbf3a76faefe8ff2e3947bf4b))
+* **fs:** self-heal typeless autobase registry entries from the serve path ([d6c94a4](https://github.com/knownasilya/nomad/commit/d6c94a40180169be70a0edbc477b98a609457807))
+* **mobile:** keep the AI panel above the keyboard and alive in the background ([af72f55](https://github.com/knownasilya/nomad/commit/af72f552e22e90aef4a864f0253dd9919feb34c8))
+* **shell-window:** clear window controls in the sidebar layout and hide them in fullscreen ([9dd5114](https://github.com/knownasilya/nomad/commit/9dd5114f6b477bd33119ac034a3bc57c2b93f13d))
+* **shell-window:** Linux window controls on the left, macOS-style ([2a77a6e](https://github.com/knownasilya/nomad/commit/2a77a6e6e604306e8320340720b167c6874f3f1f))
+
 ### [1.5.1](https://github.com/knownasilya/nomad/compare/v1.5.0...v1.5.1) (2026-07-11)
 
 
