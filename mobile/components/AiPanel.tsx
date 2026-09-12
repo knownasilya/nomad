@@ -146,24 +146,33 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
     })
   }
 
-  // How far to lift the input row. The panel's bottom edge already sits above the bottom safe-area
-  // inset (the screen's SafeAreaView pads it), so the lift is the gap between that edge and the top
-  // of the keyboard — and the two platforms measure the keyboard differently:
-  //   Android — RN reports `imeInsets.bottom - systemBars.bottom`, i.e. the nav-bar inset is
-  //             already taken out, so the reported height IS the gap.
+  // How much room to leave below the input row.
+  //
+  // This panel fills the whole window and owns BOTH safe-area insets itself: it is an
+  // absoluteFillObject overlay rendered outside the screen's SafeAreaView (see app/index.tsx), so
+  // nothing above it pads anything. Under Expo 55's mandatory edge-to-edge that means the Android
+  // navigation bar is ours to clear — otherwise the composer sits underneath the back buttons.
+  // Every sibling panel is a Modal, which gets its own window and never has to think about this;
+  // AiPanel is deliberately not one (see the render comment below).
+  //
+  // The keyboard is then measured differently per platform:
+  //   Android — keyboardDidShow reports `imeInsets.bottom - systemBars.bottom`, i.e. the nav-bar
+  //             inset is ALREADY taken out, so the gap from the screen edge up to the keyboard is
+  //             that height plus the inset. With no keyboard the same sum leaves exactly the inset.
   //   iOS     — `endCoordinates.height` runs to the bottom of the screen, home indicator included,
-  //             so the inset has to come off or the input floats one inset too high.
-  const lift = keyboardHeight > 0
-    ? Math.max(Platform.OS === 'ios' ? keyboardHeight - insets.bottom : keyboardHeight, 0)
-    : 0
+  //             so it IS the gap; with no keyboard, fall back to the home-indicator inset.
+  const bottomPad = Platform.OS === 'ios'
+    ? (keyboardHeight > 0 ? keyboardHeight : insets.bottom)
+    : keyboardHeight + insets.bottom
 
   // Rendered as an in-tree overlay, NOT a Modal. On Android a Modal is its own Dialog window, and
   // RN only emits keyboardDidShow/Hide from the activity's root view — so a Modal never hears the
   // keyboard and its input row stays buried under it. `elevation` keeps the overlay above the
-  // page WebView, which ignores zIndex.
+  // page WebView, which ignores zIndex. The cost of not being a Modal is the safe-area handling
+  // above: a Modal window gets insets for free, this has to apply them by hand.
   if (!visible) return null
   return (
-    <View style={s.overlay}>
+    <View style={[s.overlay, { paddingTop: insets.top }]}>
       <View style={s.header}>
         <Text style={s.title}>AI</Text>
         <View style={s.headerRight}>
@@ -187,7 +196,7 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
         <Text numberOfLines={1} style={s.url}>General chat (no page context)</Text>
       )}
 
-      <View style={[s.flex, lift > 0 ? { paddingBottom: lift } : null]}>
+      <View style={[s.flex, bottomPad > 0 ? { paddingBottom: bottomPad } : null]}>
         <ScrollView ref={scrollRef} style={s.body} contentContainerStyle={s.bodyPad}>
           {messages.length === 0 ? (
             <Text style={s.empty}>
