@@ -244,6 +244,7 @@ export const WEBAPI = {
   getInfo,
   getDaemonStatus,
   getDaemonNetworkStatus,
+  getAiKeepAwakeStatus,
   checkForUpdates,
   restartBrowser,
   setRunOnStartup,
