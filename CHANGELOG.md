@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.7.0](https://github.com/knownasilya/nomad/compare/v1.6.0...v1.7.0) (2026-09-12)
+
+
+### Features
+
+* **ai:** keep the Provider device awake while it shares its AI runtime ([555538c](https://github.com/knownasilya/nomad/commit/555538cb4229eb5577c5825e0cca8c9f31e9c1a2))
+
+
+### Bug Fixes
+
+* **ai:** register getAiKeepAwakeStatus on the browser WEBAPI object ([0fd24ae](https://github.com/knownasilya/nomad/commit/0fd24aedca5633529d3d3c068f2c0d64ebbb6484))
+* **mobile:** keep the AI panel's composer above the Android navigation bar ([ef47afc](https://github.com/knownasilya/nomad/commit/ef47afcdcf57f60f4a9e9c98301c7077b0629054))
+
 ## [1.6.0](https://github.com/knownasilya/nomad/compare/v1.5.1...v1.6.0) (2026-09-12)
 
 
