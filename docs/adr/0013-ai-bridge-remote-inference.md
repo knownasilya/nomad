@@ -85,3 +85,54 @@ live channel — the same pattern as the existing `nomad/autobase-control` write
   localStorage.
 - **Keep the three AI surfaces in sync** (per CLAUDE.md): any `nomad.ai.chat` signature/opts change
   touches `bg/ai.ts`, `fg/ai.ts`, and the external `ai` manifest.
+
+## Amendment — keeping the Provider awake
+
+A sleeping Device is not a Provider. Decision 3 makes availability come from the live handshake and
+decision 5 makes the Bridge stateless, so there is no store-and-forward to hide a suspended laptop
+behind: its swarm connections drop, a new turn fails `pickProvider` with `NoAiProviderError`, and an
+in-flight turn rejects with "AI Provider disconnected". Recovery on wake is automatic (the swarm
+rejoins, `openOnConn` reopens the channel) but costs seconds, and the user must retry the turn.
+
+`app/bg/ai/awake.js` therefore holds an Electron `powerSaveBlocker` while the Device serves, under a
+**second opt-in** (`ai_keep_awake`) nested under decision 7's `ai_share_provider`. Sharing a runtime
+and never sleeping again are different-sized commitments; a user who accepted the first has not
+accepted the second.
+
+Two refcounted holds:
+
+- `ai-provider` — the standing hold, and the only one that buys reachability: the Device must already
+  be awake to receive a `request` frame at all. **Battery-gated** — pinning a laptop awake on battery
+  is how a user returns to a dead machine.
+- `ai-turn` — held across one served turn, so idle sleep cannot cut a healthy-but-slow turn
+  mid-stream (the same failure the 15s `heartbeat` frame exists for). **Not** battery-gated: a turn is
+  bounded to minutes, and suspending mid-answer is the worse trade.
+
+### What this does and does not deliver
+
+On macOS `prevent-app-suspension` maps to `kIOPMAssertionTypePreventUserIdleSystemSleep`, which blocks
+the **idle** timer only. So this delivers *open on the desk, untouched, still reachable* and **not**
+*closed in a bag*. The Settings copy says so; do not let it drift.
+
+On Linux it is worse before it is better. Chromium picks its inhibit backend from the **detected
+desktop environment**, never probes the bus, and does not use systemd-logind at all — so on an
+unrecognised session (sway, i3, Hyprland, a bare session) `powerSaveBlocker` is a **silent no-op**:
+`start()` still returns an id and `isStarted()` still reports `true`. That is undetectable through the
+API, so we make the call regardless and report the likely no-op in `getStatus().unsupported` rather
+than failing quietly.
+
+Linux also emits **neither** power event (`on-ac` is darwin/win32, `on-battery` is darwin only), so
+battery state is polled while a hold is active. `isOnBatteryPower()` is unreliable there and a flat
+`false` would defeat the gate on exactly the machine that needs it, so `/sys/class/power_supply` is
+read first and the Electron API is the fallback. A machine with no battery device reports AC forever,
+which is what makes an always-on desktop Provider work with no special-casing.
+
+### Seam left open
+
+The real Linux fix is a logind inhibitor (`org.freedesktop.login1.Manager.Inhibit`, `what=idle:sleep`,
+`mode=block`, holding the returned fd) over a pure-JS D-Bus client. That also unlocks what macOS
+cannot do at all: adding `handle-lid-switch` makes a **closed** laptop stay reachable. It drops in
+behind the existing `start`/`stop` surface — deliberately a seam, not built here.
+
+Beyond that, the durable answer is decision 3's deferred half: a user-designated preferred Provider,
+pointed at a Device that is always on.

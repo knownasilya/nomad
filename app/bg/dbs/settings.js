@@ -30,6 +30,7 @@ const GLOBAL_SETTINGS = new Set([
   'ai_default_model',
   'ai_access_token',
   'ai_share_provider',
+  'ai_keep_awake',
   'ai_sidebar_width',
   'cert_exceptions',
 ]);
@@ -94,6 +95,7 @@ export const setup = async function (opts) {
     ai_access_token: '',
     ai_space_default: '',
     ai_share_provider: 0, // opt-in (ADR-0013 §7): off until the user shares this Device's AI
+    ai_keep_awake: 0, // opt-in: hold a powerSaveBlocker while sharing, so an idle Device stays reachable
 
     cert_exceptions: [],
     adblock_lists: [

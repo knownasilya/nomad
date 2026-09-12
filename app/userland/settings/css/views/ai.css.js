@@ -115,6 +115,34 @@ const cssStr = css`
     color: var(--red, #c0392b);
   }
 
+  /* The keep-awake sub-setting, indented under "Share this device's AI". */
+  .sub-setting {
+    margin-left: 22px;
+  }
+
+  label.sub-setting {
+    display: block;
+    margin-top: 10px;
+  }
+
+  input[type='checkbox']:disabled + * ,
+  label.sub-setting input[type='checkbox']:disabled {
+    opacity: 0.5;
+  }
+
+  .keep-awake-status {
+    margin: 4px 0 0 22px;
+    font-size: 13px;
+  }
+
+  .keep-awake-status.ok {
+    color: var(--green, #3b8b3b);
+  }
+
+  .keep-awake-status.warn {
+    color: var(--yellow-dark, #b8860b);
+  }
+
   .badge-experimental {
     font-size: 11px;
     font-weight: 500;

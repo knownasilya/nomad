@@ -38,6 +38,7 @@ import * as modals from './ui/subwindows/modals';
 import * as siteInfo from './ui/subwindows/site-info';
 import { findWebContentsParentWindow, spawnAndExecuteJs } from './lib/electron';
 import * as hyperDaemon from './hyper/daemon';
+import * as aiAwake from './ai/awake';
 import * as bookmarks from './filesystem/bookmarks';
 import { getDriveIdentFull } from './filesystem/index';
 import * as wcTrust from './wc-trust';
@@ -652,6 +653,12 @@ export function getInfo() {
 
 export async function getDaemonStatus() {
   return hyperDaemon.getDaemonStatus();
+}
+
+// Settings → AI surfaces this so a keep-awake hold that is paused (on battery) or inert (a Linux
+// session with no inhibit backend) is visible, instead of looking like a broken phone.
+export async function getAiKeepAwakeStatus() {
+  return aiAwake.getStatus();
 }
 
 export async function getDaemonNetworkStatus() {
