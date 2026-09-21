@@ -1815,6 +1815,10 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     await shellMenus.update(getWindow(this.sender), opts);
   },
 
+  async showToast(message, opts) {
+    await prompts.create(this.sender, 'toast', { message, duration: opts?.duration });
+  },
+
   async toggleSiteInfo(opts) {
     await siteInfo.toggle(getWindow(this.sender), opts);
   },

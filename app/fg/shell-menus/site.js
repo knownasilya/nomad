@@ -37,20 +37,16 @@ class SiteMenu extends LitElement {
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
-        <div class="section">
-          <div class="menu-item" @click=${this.onCopyURL}>
-            <i class="fas fa-link"></i>
-            <span class="label">Copy URL</span>
-          </div>
-          ${this.driveInfo
-            ? html`
+        ${this.driveInfo
+          ? html`
+              <div class="section">
                 <div class="menu-item" @click=${this.onCopyDriveKey}>
                   <i class="fas fa-fingerprint"></i>
                   <span class="label">Copy Drive Key</span>
                 </div>
-              `
-            : ''}
-        </div>
+              </div>
+            `
+          : ''}
         ${this.driveInfo
           ? html`
               <div class="section">
@@ -87,11 +83,6 @@ class SiteMenu extends LitElement {
 
   onOpenPage(e, url) {
     bg.shellMenus.createTab(url);
-    bg.shellMenus.close();
-  }
-
-  onCopyURL() {
-    writeToClipboard(this.url);
     bg.shellMenus.close();
   }
 

@@ -53,6 +53,7 @@ export default {
   showMenu: 'promise',
   toggleMenu: 'promise',
   updateMenu: 'promise',
+  showToast: 'promise',
   toggleSiteInfo: 'promise',
   focusShellWindow: 'promise',
   focusPage: 'promise',

@@ -51,9 +51,19 @@ export async function create(webContents, promptName, params = {}) {
   var parentWindow = findWebContentsParentWindow(webContents);
   var tab = tabManager.getActive(parentWindow);
 
-  // make sure a prompt window doesnt already exist
+  // if a prompt window already exists (eg a toast fired again before the last one closed),
+  // just re-show it with the new prompt/params instead of leaving the old one to finish on its own
   if (tab.id in views) {
-    return;
+    var existingView = views[tab.id];
+    existingView.promptName = promptName;
+    if (tab.browserWindow) {
+      tab.browserWindow.addBrowserView(existingView);
+      setBounds(existingView, tab);
+    }
+    await existingView.webContents.executeJavaScript(
+      `showPrompt("${promptName}", ${JSON.stringify(params)}); undefined`
+    );
+    return existingView;
   }
 
   if (!tab.isActive) {
@@ -107,7 +117,7 @@ export function hide(tab) {
 }
 
 export function close(tab) {
-  if (tab.id in views) {
+  if (tab && tab.id in views) {
     var view = views[tab.id];
     if (tab.browserWindow) {
       tab.browserWindow.removeBrowserView(view);
@@ -117,12 +127,23 @@ export function close(tab) {
   }
 }
 
+// finds the tab that owns a prompt view's webContents -- prompt views aren't tab panes, so
+// tabManager.findTab() (which searches panes) can't locate them; the `tab` stashed on the view
+// at creation time is the source of truth
+function findTabByPromptWebContents(webContents) {
+  for (let tabId in views) {
+    if (views[tabId].webContents === webContents) {
+      return views[tabId].tab;
+    }
+  }
+}
+
 // rpc api
 // =
 
 rpc.exportAPI('background-process-prompts', promptsRPCManifest, {
   async close() {
-    close(tabManager.findTab(this.sender));
+    close(findTabByPromptWebContents(this.sender));
   },
 
   async createTab(url) {
@@ -140,10 +161,12 @@ rpc.exportAPI('background-process-prompts', promptsRPCManifest, {
 // =
 
 function getDefaultWidth(view) {
+  if (view.promptName === 'toast') return 220;
   return 380;
 }
 
 function getDefaultHeight(view) {
+  if (view.promptName === 'toast') return 42;
   return 80;
 }
 
@@ -151,7 +174,14 @@ function setBounds(view, tab, { width, height } = {}) {
   var parentBounds = tab.browserWindow.getContentBounds();
   width = Math.min(width || getDefaultWidth(view), parentBounds.width - 20);
   height = Math.min(height || getDefaultHeight(view), parentBounds.height - 20);
-  var y = getAddedWindowSettings(tab.browserWindow).isShellInterfaceHidden ? 10 : 95;
+  // Toasts sit right under the navbar, using the tab's own content-area top edge so it lands in
+  // the right place whether tabs are on top (Y_POSITION) or in the sidebar (Y_POSITION_SIDEBAR).
+  var y =
+    view.promptName === 'toast'
+      ? tab.tabBounds.y + 6
+      : getAddedWindowSettings(tab.browserWindow).isShellInterfaceHidden
+        ? 10
+        : 95;
   view.setBounds({
     x: parentBounds.width - width - MARGIN_SIZE * 2,
     y,

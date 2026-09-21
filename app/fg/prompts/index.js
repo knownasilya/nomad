@@ -1,5 +1,6 @@
 import { LitElement, html } from 'lit';
 import './progress';
+import './toast';
 
 class PromptsWrapper extends LitElement {
   static get properties() {
@@ -46,6 +47,8 @@ class PromptsWrapper extends LitElement {
     switch (this.currentPrompt) {
       case 'progress':
         return html`<progress-prompt></progress-prompt>`;
+      case 'toast':
+        return html`<toast-prompt></toast-prompt>`;
     }
     return html`<div></div>`;
   }

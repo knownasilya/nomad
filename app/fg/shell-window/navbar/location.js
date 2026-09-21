@@ -8,6 +8,7 @@ import buttonResetCSS from './button-reset.css';
 import tooltipCSS from './tooltip.css';
 import './site-info';
 import { isHyperUrl } from '../../../lib/urls';
+import { writeToClipboard } from '../../lib/event-handlers';
 
 const isHyperHashRegex = /^[a-z0-9]{64}/i;
 const NETWORK_STATS_POLL_INTERVAL = 5000; // ms
@@ -171,9 +172,9 @@ class NavbarLocation extends LitElement {
       >
       </shell-window-navbar-site-info>
       ${this.renderLocation()} ${this.renderZoom()} ${this.renderLiveReloadingBtn()}
-      ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderPeers()} ${this.renderDonateBtn()}
-      ${'' /* DISABLED this.renderShareBtn()*/} ${this.renderBookmarkBtn()} ${this.renderAiBtn()}
-      ${this.renderSiteBtn()}
+      ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderCopyUrlBtn()}
+      ${this.renderPeers()} ${this.renderDonateBtn()} ${'' /* DISABLED this.renderShareBtn()*/}
+      ${this.renderBookmarkBtn()} ${this.renderAiBtn()} ${this.renderSiteBtn()}
     `;
   }
 
@@ -322,6 +323,14 @@ class NavbarLocation extends LitElement {
     `;
   }
 
+  renderCopyUrlBtn() {
+    return html`
+      <button class="copy-url" @click=${this.onClickCopyUrl} title="Copy URL">
+        <i class="fas fa-link"></i>
+      </button>
+    `;
+  }
+
   renderBookmarkBtn() {
     return html`
       <button class="bookmark" @click=${this.onClickBookmark} title="Bookmark this page">
@@ -343,10 +352,7 @@ class NavbarLocation extends LitElement {
           ? 'Previewing Draft — showing your unpublished changes. Click to view the published version.'
           : 'This Drive has a Draft (unpublished changes). Click to preview it — visible only to you.'}
       >
-        <span
-          class="fas fa-pen-nib"
-          style=${this.draftPreviewing ? 'color: #2864dc' : ''}
-        ></span>
+        <span class="fas fa-pen-nib" style=${this.draftPreviewing ? 'color: #2864dc' : ''}></span>
       </button>
     `;
   }
@@ -565,6 +571,11 @@ class NavbarLocation extends LitElement {
     this.isDonateMenuOpen = false;
   }
 
+  onClickCopyUrl() {
+    writeToClipboard(this.url);
+    bg.views.showToast('Copied URL');
+  }
+
   async onClickBookmark() {
     var rect = this.shadowRoot.querySelector('.bookmark').getClientRects()[0];
     // show menu
@@ -668,6 +679,28 @@ NavbarLocation.styles = [
       width: 27px;
       border-radius: 0;
       color: var(--text-color--location-btn);
+      transition: background-color 0.12s ease, transform 0.08s ease;
+    }
+
+    /* Stronger hover/press feedback than the shared button-reset gives, since these buttons sit in a
+       dense row and need to read as clickable at a glance. */
+    button:not(:disabled):hover {
+      background: rgba(0, 0, 0, 0.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      button:not(:disabled):hover {
+        background: rgba(255, 255, 255, 0.12);
+      }
+    }
+
+    button:not(:disabled):active {
+      background: rgba(0, 0, 0, 0.16);
+      transform: scale(0.88);
+    }
+    @media (prefers-color-scheme: dark) {
+      button:not(:disabled):active {
+        background: rgba(255, 255, 255, 0.2);
+      }
     }
 
     button.text {
@@ -699,7 +732,7 @@ NavbarLocation.styles = [
       color: var(--text-color--location-bookmark--pressed);
     }
 
-    button .fa-link {
+    button.copy-url .fa-link {
       font-size: 14px;
     }
 
