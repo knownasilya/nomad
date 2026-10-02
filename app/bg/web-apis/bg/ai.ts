@@ -14,7 +14,7 @@ import { findTab } from '../../ui/tabs/manager';
 import * as wcTrust from '../../wc-trust';
 import fsAPI from './fs';
 import * as modelContext from './model-context';
-import { jsonSchemaToParameters, pageToolResultToText } from './webmcp-schema';
+import { pageToolResultToText } from './webmcp-schema';
 import * as daemon from '../../hyper/daemon';
 import * as aiBridge from '../../hyper/ai-bridge';
 import {
@@ -23,301 +23,21 @@ import {
   setCurrent as setCurrentAwake,
   REASON_PROVIDER,
 } from '../../ai/awake';
+import { STANDING_PROMPT } from '../../ai/api-reference.mjs';
+import {
+  assertCallAllowed,
+  buildCatalog,
+  MODEL_TOOLS,
+  search as searchCatalog,
+  visibleCapabilities,
+} from '../../ai/search-execute.mjs';
+import { executeInUtilityProcess } from '../../ai/execute-host.mjs';
 
-// Built-in system context always appended to every conversation's system prompt.
-// KEEP IN SYNC with nomad.dev/content/docs/api/apis/ — when a new API is added
-// or an existing method signature changes, update both the docs and this string.
-const NOMAD_API_REFERENCE = `\
-You are an AI assistant embedded in Nomad, a peer-to-peer web browser that hosts and serves websites via Hyperdrive (hyper:// protocol). Pages running in Nomad have access to the following JavaScript APIs under the global \`nomad\` object:
 
-## nomad.page + nomad.parseUrl — This page's URL identity
+// The model is offered search and execute (MODEL_TOOLS). Drive, page, and guide
+// capabilities stay behind search. Gates (write / vision / renderer) live in
+// visibleCapabilities so the catalog and execute agree.
 
-\`nomad.page\` is the authoritative way for a drive frontend to learn its own drive and current route.
-ALWAYS prefer it over parsing \`location\` — on mobile the page renders in a WebView where
-\`location.host\`/\`pathname\` are unreliable; \`nomad.page\` is provided by the host on both platforms.
-
-\`\`\`js
-nomad.page                       // { url, origin, key, version, path, search } — null on non-hyper pages
-const drive = nomad.fs.drive(nomad.page.origin)   // this page's own drive
-const route = nomad.page.path                     // e.g. '/posts/2026-07-10-hello/'
-
-nomad.parseUrl('hyper://key.../a/b?x=1')  // pure parser for any hyper URL → same shape, null if not hyper
-\`\`\`
-
-## nomad.fs — The filesystem API for hyper:// drives
-
-\`nomad.fs\` is THE API for reading and writing \`hyper://\` drives. Every drive is a multi-writer
-Autobase (a drive can gain writers via invites without ever changing its URL); \`nomad.fs\` handles
-files, drive lifecycle, and writer management through one surface. \`stat\` carries real
-\`mtime\`/\`ctime\`/\`size\`, and \`get(path, 'json')\` parses JSON for you.
-
-\`\`\`js
-// Scoped handle (paths are relative to the drive) …
-const drive = nomad.fs.drive('hyper://key...')
-const info  = await drive.getInfo()
-const st    = await drive.stat('/index.json')          // { isFile(), size, mtime, ctime, ... }
-const text  = await drive.readFile('/index.html')
-const obj   = await drive.get('/index.json', 'json')   // real JSON decode (parsed for you)
-const list  = await drive.list('/')
-await drive.writeFile('/notes.txt', 'hello')
-await drive.put('/data.bin', bytes)
-await drive.del('/old.txt')
-await drive.copy('/a', '/b'); await drive.rename('/b', '/c')
-drive.watch('/', () => { /* changed */ })
-
-// … or url-first helpers (no scoped instance)
-const text2 = await nomad.fs.readFile('hyper://key.../index.html')
-await nomad.fs.writeFile('hyper://key.../notes.txt', 'hello')
-const entries = await nomad.fs.query('hyper://key.../posts/')   // listing under a prefix
-
-// Every drive is multi-writer-capable and keeps its URL forever, but "collaborative" is a policy
-// flag — LOCKED (single-writer) by default. Unlock without changing the URL:
-await nomad.fs.configure(url, { collaborative: true })   // or pass { collaborative: true } to createDrive
-const { collaborative } = await nomad.fs.getInfo(url)    // is it accepting writers?
-
-// Multi-writer: invite/approve writers so others can write to the same drive (this also unlocks it)
-const inviteUrl = await drive.createInvite()
-await nomad.fs.claimInvite(inviteUrl)                 // recipient calls this
-const requests = await drive.listRequests()            // [{ writerKey, profileUrl }]
-await drive.approveRequest(writerKey)
-const writers = await drive.listWriters()
-
-// Draft Mode (ADR-0012): stage edits privately (synced across YOUR devices, invisible to other
-// peers) until you Publish. While Draft Mode is on, put/del stage instead of going live.
-await drive.beginDraft()                               // subsequent writes stage
-await drive.writeFile('/index.html', '<h1>wip</h1>')   // staged, NOT replicated
-const html = await drive.readFile('/index.html', { draft: true })   // preview the merged view
-const { mode, changes } = await drive.draftStatus()    // changes: [{ path, op, conflict }]
-await drive.publishDraft({ paths: ['/posts/x/'] })     // fold a subtree onto the drive (goes live)
-await drive.discardDraft()                             // throw the whole Draft away
-\`\`\`
-
-## nomad.shell — Browser dialogs and library management
-
-\`\`\`js
-// Dialogs
-const files = await nomad.shell.selectFileDialog({ title, select: ['file'], filters: { extensions: ['png'] }, allowMultiple: true })
-// => [{ path, origin, url }]
-
-const file  = await nomad.shell.saveFileDialog({ title, defaultFilename: 'out.txt', extension: 'txt' })
-const url   = await nomad.shell.selectDriveDialog({ title, writable: true, tag: 'website' })
-
-// Library
-await nomad.shell.saveDriveDialog(url)
-await nomad.shell.tagDrive(url, 'website blog')
-await nomad.shell.unsaveDrive(url)
-const drives = await nomad.shell.listDrives({ tag: 'website', writable: true })
-
-// Properties dialog
-await nomad.shell.drivePropertiesDialog(url)
-\`\`\`
-
-## nomad.ai — AI chat (this API)
-
-\`\`\`js
-const messages = [{ role: 'user', content: 'Hello' }]
-for await (const chunk of nomad.ai.chat(messages, {
-  model,               // optional: override the resolved model for this turn
-  think: false,         // optional: ask the runtime to skip its reasoning phase
-  effort: 'medium',     // optional: 'low' | 'medium' | 'high' reasoning_effort (when think !== false)
-  onReasoning: (t) => {},// optional: reasoning-stream chunks (when think !== false)
-})) {
-  process(chunk) // string chunk streamed from the model
-}
-
-const { models, current } = await nomad.ai.listModels() // the AI server's model catalogue
-const { builtin, page } = await nomad.ai.listTools()     // tools offered for a turn from this page
-const { reasoning } = await nomad.ai.modelInfo(model)    // is that model a reasoning model?
-\`\`\`
-
-## nomad.panes — Multi-pane tab layout
-
-\`\`\`js
-nomad.panes.setAttachable()                               // mark this pane as attachable
-const pane = await nomad.panes.attachToLastActivePane()   // attach to the previously focused pane
-const pane = await nomad.panes.create(url, { attach: true }) // open url in a new pane
-await nomad.panes.navigate(pane.id, url)
-await nomad.panes.focus(pane.id)
-const res  = await nomad.panes.executeJavaScript(pane.id, script)
-const cssId = await nomad.panes.injectCss(pane.id, styles)
-await nomad.panes.uninjectCss(pane.id, cssId)
-
-// Events on nomad.panes
-nomad.panes.addEventListener('pane-attached',  e => { /* e.detail.id */ })
-nomad.panes.addEventListener('pane-detached',  e => { })
-nomad.panes.addEventListener('pane-navigated', e => { /* e.detail.url */ })
-\`\`\`
-
-## nomad.peersockets — Real-time peer messaging
-
-Messages are scoped to the current Hyperdrive and its connected peers.
-
-\`\`\`js
-// Track peers
-const peerIds = new Set()
-const peerEvents = nomad.peersockets.watch()
-peerEvents.addEventListener('join',  e => peerIds.add(e.peerId))
-peerEvents.addEventListener('leave', e => peerIds.delete(e.peerId))
-
-// Send/receive on a named topic
-const topic = nomad.peersockets.join('chat')
-topic.send(peerId, new TextEncoder().encode('hello'))
-topic.addEventListener('message', e => {
-  console.log(e.peerId, new TextDecoder().decode(e.message))
-})
-\`\`\`
-
-## Page-provided tools (WebMCP)
-
-A page can register its own tools with \`document.modelContext.registerTool({ name, description, inputSchema, execute })\`
-(the \`navigator.modelContext\` alias also works). When the current page has registered tools they are
-offered to you with a \`page_\` name prefix — a page tool \`search\` appears to you as \`page_search\`.
-Call them like any built-in tool; the result comes back from the page. They run in the page and can
-only do what the page's own scripts can do.
-
-## After using tools
-
-When you finish calling tools, ALWAYS write a short plain-language reply to the user — confirm what
-you did (or answer their question). Never end your turn silently right after a tool result.
-
----
-The current drive's URL is \`location.href\`. A drive can freely read/write its own files; writing to other drives requires the user to grant permission.
-
-## Resolving which file to edit from a URL
-
-When a user asks you to edit the current page, derive the target file path from the URL as follows:
-
-1. **Exact file path** — if \`location.pathname\` has an extension (e.g. \`/about.html\`, \`/posts/hello.md\`), that is the file to edit.
-2. **Directory / trailing slash** — if the pathname is \`/\` or ends with \`/\`, the browser resolves index files in this priority order:
-   - \`index.html\` (checked first — wins if it exists)
-   - \`index.md\`
-   - \`index.txt\`
-   Read the drive to find which one exists, then edit that file.
-3. **Extensionless path** — treat it as a directory (append \`/\`) and apply the same index-file lookup above.
-
-Example: on \`hyper://abc.../\` you would check for \`/index.html\` first, then \`/index.md\`, then \`/index.txt\`, and edit whichever one exists. Use \`nomad.fs.stat()\` to test existence.
-
-## Building an SPA frontend (the \`fallback\` convention)
-
-To make a drive a single-page app that owns its whole URL space, put the app shell at \`/index.html\`
-and declare in \`/index.json\`:
-
-\`\`\`json
-{ "title": "My App", "fallback": "/index.html" }
-\`\`\`
-
-Real files always win; when a page navigation hits a path with no file, the browser serves
-\`/index.html\` instead (HTTP 200, URL unchanged) so the app routes via \`nomad.page.path\`.
-Sub-resource \`fetch()\`es to missing paths still 404. Reference assets by absolute path
-(\`/app.js\`, not \`./app.js\`) — the shell is served under arbitrary routes. Prefer this over the
-legacy \`/.ui/ui.html\` convention (which shadows real HTML files and needs a stub \`/index.html\`);
-if a drive declares \`fallback\`, any \`/.ui/ui.html\` is ignored.`;
-
-// Built-in tools exposed to the model
-const BUILTIN_TOOLS = [
-  {
-    type: 'function',
-    function: {
-      name: 'readDriveFile',
-      description: 'Read the text content of a file in the current Drive.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Absolute path to the file, e.g. /index.html' },
-        },
-        required: ['path'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'listDriveFiles',
-      description: 'List files and directories at a path in the current Drive.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Directory path to list, e.g. / or /src' },
-        },
-        required: ['path'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'fetchUrl',
-      description: 'Fetch the text content of an http or https URL.',
-      parameters: {
-        type: 'object',
-        properties: {
-          url: { type: 'string', description: 'The URL to fetch (http or https only)' },
-        },
-        required: ['url'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'writeDriveFile',
-      description: 'Write text content to a file in the current Drive. Requires user permission.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Absolute path to write, e.g. /index.html' },
-          content: { type: 'string', description: 'Text content to write' },
-        },
-        required: ['path', 'content'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'readCurrentPage',
-      description:
-        "Read the visible text content of the page currently open in this tab. Works on any page — " +
-        "http/https sites included, not just hyper:// Drives. For a hyper:// Drive, prefer " +
-        'readDriveFile/listDriveFiles to read its actual source files instead of the rendered page.',
-      parameters: { type: 'object', properties: {}, required: [] },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'screenshotCurrentPage',
-      description:
-        'Take a screenshot of the page currently open in this tab and view it — use this for ' +
-        "visual questions readCurrentPage's text extraction can't answer (layout, images, " +
-        'charts, how something looks).',
-      parameters: { type: 'object', properties: {}, required: [] },
-    },
-  },
-];
-
-// screenshotCurrentPage only makes sense (and is only offered) when the resolved model reports
-// vision support — see modelInfo() above. Kept separate from BUILTIN_TOOLS so it's easy to
-// include/exclude per turn without touching the read-only tool list content.
-const VISION_TOOL_NAME = 'screenshotCurrentPage';
-
-// Tools that need a real renderer behind `sender` (executeJavaScript / capturePage). A remote
-// Bridge turn runs on this Device for a page open on ANOTHER one, so its sender is the synthetic
-// stand-in from makeRemoteSender() and these can only fail — withhold them rather than let the
-// model burn a turn on "Reading page content is not available for this request" (ADR-0013 §1).
-const RENDERER_TOOL_NAMES = ['readCurrentPage', VISION_TOOL_NAME];
-
-// Shared by listTools() (what the Tools panel shows the user before a turn) and runChat() (what
-// the model is actually offered) — kept as one function so they can never disagree about which
-// gated tools are available for a given allowWrite/allowVision/remote combination.
-function filterBuiltinTools({ allowWrite, allowVision, remote = false }) {
-  return BUILTIN_TOOLS.filter((t) => {
-    if (remote && RENDERER_TOOL_NAMES.includes(t.function.name)) return false;
-    if (t.function.name === 'writeDriveFile') return allowWrite;
-    if (t.function.name === VISION_TOOL_NAME) return !!allowVision;
-    return true;
-  });
-}
 
 export default {
   async testConnection(baseUrl) {
@@ -376,14 +96,18 @@ export default {
     }
   },
 
-  // The tools the agent would be offered for a turn from this sender: the built-ins (minus the
-  // write tool on read-only Drives) and any WebMCP tools the current page has registered. This
-  // is a read-only listing for the chat UI — it never triggers the `webmcpTools` prompt.
+  // What a turn can reach. `builtin` is the two tools the model is offered (search, execute).
+  // `capabilities` is what search can find, with the same write/vision gates execute enforces.
+  // Page tools are listed for the panel only — this never triggers the `webmcpTools` prompt.
   async listTools(opts: any = {}) {
     const allowWrite = opts.allowWrite !== false;
-    const builtin = filterBuiltinTools({ allowWrite, allowVision: opts.allowVision }).map((t) => ({
+    const builtin = MODEL_TOOLS.map((t) => ({
       name: t.function.name,
       description: t.function.description || '',
+    }));
+    const capabilities = visibleCapabilities({ allowWrite, allowVision: opts.allowVision }).map((c) => ({
+      name: c.name,
+      description: c.description,
     }));
 
     const wcId = this.sender?.id;
@@ -399,17 +123,17 @@ export default {
       }
     }
     const page = descriptors.map((t) => ({ name: t.name, description: t.description || '' }));
-    return { builtin, page, pageOrigin: origin, pageGranted: granted };
+    return { builtin, capabilities, page, pageOrigin: origin, pageGranted: granted };
   },
 
   // opts (optional):
   //   driveUrl   — resolve tools + AI Config against this Drive instead of the sender's URL. The
   //                shell AI sidebar passes this for nomad://editor/nomad://explorer tabs (their
   //                own sender is the app, not the Drive) — see ai-shell.ts's resolveActiveDrive.
-  //   allowWrite — when false, the writeDriveFile tool is withheld (read-only Drives).
-  //   usePageTools   — offer the sender page's WebMCP tools (document.modelContext) to the
-  //                    model, namespaced `page_*`. Defaults to true when no driveUrl is set,
-  //                    false otherwise. Local path only.
+  //   allowWrite — when false, search hides writeDriveFile and execute refuses it.
+  //   usePageTools   — let search list this page's WebMCP tools (document.modelContext).
+  //                    Defaults to true when no driveUrl is set, false otherwise. Local path only.
+  //   ownerId    — reserved for Personas. Accepted and not stored.
   //   pageToolsWcId  — override the webContents whose page tools are used (a trusted nomad://
   //                    caller aiming at a tab other than its own sender). Defaults to the sender.
   //   model      — override the resolved model for this turn (from the chat UI's picker).
@@ -637,23 +361,24 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     );
   }
 
-  // Withhold the write tool on read-only Drives so the model won't attempt edits it can't make,
-  // and withhold the screenshot tool unless the caller has confirmed (via modelInfo) that the
-  // resolved model actually supports image input — offering it to a text-only model means
-  // silently sending an image it can't use.
-  const builtinTools = filterBuiltinTools({ allowWrite, allowVision: opts.allowVision, remote: opts.remote });
-
-  // WebMCP: tools the current page registered via document.modelContext. Local path only
-  // (the renderer must be reachable), namespaced `page_` so they can't shadow builtins, and
-  // gated once per origin by the user (bypassed for trusted nomad://* interfaces).
-  const pageTools = await resolvePageTools(opts, sender, emitter);
-  const tools = [...builtinTools, ...pageTools];
+  // The model is offered search and execute. Write, vision, and renderer gates are applied
+  // inside the catalog so a read-only Drive or a text-only model never sees the capability,
+  // and a remote Bridge turn never sees tools that need this Device's renderer.
+  const pageListed =
+    opts.remote || opts.usePageTools === false ? null : await resolvePageTools(opts, sender, emitter);
+  const catalog = buildCatalog({
+    allowWrite,
+    allowVision: opts.allowVision,
+    remote: opts.remote,
+    pageTools: pageListed,
+    ownerId: opts.ownerId,
+  });
+  const tools = MODEL_TOOLS;
 
   // opts.context (from the AI Sidebar) pins the agent to the Drive + open file it
-  // is editing — the built-in reference talks about `location.href`, which for the
-  // editor/explorer is the app URL, not the Drive. Put it last so it's the most
-  // immediate instruction.
-  const systemContent = [systemPrompt, NOMAD_API_REFERENCE, opts.context]
+  // is editing. The standing prompt no longer inlines the whole API reference — search loads
+  // a guide when the turn needs it. Put context last so it's the most immediate instruction.
+  const systemContent = [systemPrompt, STANDING_PROMPT, opts.context]
     .filter(Boolean)
     .join('\n\n---\n\n');
   const fullMessages = [{ role: 'system', content: systemContent }, ...messages];
@@ -713,6 +438,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
             pageToolsWcId: opts.pageToolsWcId,
             remote: opts.remote,
             signal,
+            catalog,
           });
         } catch (err) {
           console.error(`[ai] tool "${tc.function.name}" failed:`, err);
@@ -811,6 +537,7 @@ async function executeTool(name, args, sender, opts: any = {}) {
     pageToolsWcId = null,
     remote = false,
     signal = null,
+    catalog = null,
   } = opts;
   // WebMCP page tool — round-trip to the renderer that registered it. Access was already
   // consented per-origin in resolvePageTools(); running it can only do what page JS can do.
@@ -837,6 +564,42 @@ async function executeTool(name, args, sender, opts: any = {}) {
   };
 
   switch (name) {
+    case 'search': {
+      if (!catalog) throw new Error('search is not available in this context');
+      return JSON.stringify(searchCatalog(args, catalog), null, 2);
+    }
+    case 'execute': {
+      if (!catalog) throw new Error('execute is not available in this context');
+      if (typeof args?.code !== 'string') throw new Error('execute requires code');
+      if (args.params != null && (typeof args.params !== 'object' || Array.isArray(args.params))) {
+        throw new Error('params must be an object');
+      }
+      let imageDataUrl = null;
+      const value = await executeInUtilityProcess({
+        code: args.code,
+        params: args.params,
+        signal,
+        invoke: async (call) => {
+          assertCallAllowed(call.target, call.name, catalog);
+          const toolName = call.target === 'page' ? 'page_' + call.name : call.target;
+          if (emitter) {
+            emitter.emit('tool', {
+              phase: 'start',
+              name: toolName,
+              summary: toolSummary(toolName, call.args || {}),
+            });
+          }
+          const inner = await executeTool(toolName, call.args || {}, sender, opts);
+          if (inner && typeof inner === 'object' && inner.imageDataUrl) imageDataUrl = inner.imageDataUrl;
+          return inner;
+        },
+      });
+      if (imageDataUrl) {
+        const text = typeof value === 'string' ? value : value && value.text ? value.text : JSON.stringify(value);
+        return { text: text || 'Screenshot captured (attached).', imageDataUrl };
+      }
+      return typeof value === 'string' ? value : JSON.stringify(value);
+    }
     case 'readDriveFile': {
       const base = requireDrive();
       // Route through nomad.fs (fsAPI) so BOTH drive backends work — the raw
@@ -888,8 +651,8 @@ async function executeTool(name, args, sender, opts: any = {}) {
       // `sender` is the relevant webContents in every caller (the tab itself for a content page's
       // own nomad.ai.chat(), or the active tab's pane.webContents for the shell AI sidebar — see
       // ai-shell.ts) — so this just reads whatever page that webContents currently has loaded.
-      // Defense in depth: filterBuiltinTools() already withholds this tool on a remote Bridge
-      // turn, where `sender` is the synthetic stand-in and has no renderer to script.
+      // A remote Bridge turn's catalog omits this capability. If a module calls it anyway,
+      // there is no renderer on the synthetic sender.
       if (typeof sender.executeJavaScript !== 'function') {
         throw new Error(
           'Reading the rendered page is not available here — the page is open on another device. ' +
@@ -911,10 +674,9 @@ async function executeTool(name, args, sender, opts: any = {}) {
       return text.length > MAX ? text.slice(0, MAX) + '\n…[truncated]' : text;
     }
     case 'screenshotCurrentPage': {
-      // Only ever reached when runChat included the tool, which only happens when opts.allowVision
-      // was set (the caller confirmed via modelInfo that the resolved model supports image input)
-      // — see BUILTIN_TOOLS filtering above. Returns { text, imageDataUrl }, a shape the tool loop
-      // (below) recognises and turns into a follow-up multimodal user message — most OpenAI-
+      // Only reached when the catalog includes this capability, which requires the caller to
+      // have confirmed via modelInfo that the model accepts images. Returns { text, imageDataUrl },
+      // a shape the tool loop turns into a follow-up multimodal user message — most OpenAI-
       // compatible servers don't support image content on a `tool`-role message itself.
       if (typeof sender.capturePage !== 'function') {
         throw new Error('Screenshots are not available for this request');
@@ -942,9 +704,9 @@ async function executeTool(name, args, sender, opts: any = {}) {
   }
 }
 
-// Resolve the current page's WebMCP tools into OpenAI function defs, after a one-time
-// per-origin permission prompt. Returns [] on the remote path, when the page has none, or
-// when the user declines.
+// Resolve the current page's WebMCP tools after a one-time per-origin permission prompt.
+// Returns the descriptors search lists. [] when the page has none or the user declines.
+// The caller passes null instead on a remote turn, so the page domain stays hidden.
 async function resolvePageTools(opts, sender, emitter) {
   if (!opts.usePageTools || !opts.pageToolsWcId || opts.remote) {
     modelContext.trace('resolvePageTools skipped', {
@@ -979,20 +741,23 @@ async function resolvePageTools(opts, sender, emitter) {
     return [];
   }
 
-  return descriptors.map((t) => ({
-    type: 'function',
-    function: {
-      name: 'page_' + t.name,
-      description: t.description || '',
-      parameters: jsonSchemaToParameters(t.inputSchema),
-    },
-  }));
+  return descriptors;
 }
 
 // Human-readable one-liner describing a tool call, shown live in the sidebar.
 function toolSummary(name, args) {
   if (name.startsWith('page_')) return `Running ${name.slice(5)}`;
   switch (name) {
+    case 'search':
+      if (args.entity) {
+        const ref = Array.isArray(args.entity) ? args.entity.join(', ') : args.entity;
+        return `Opening ${ref}`;
+      }
+      if (args.query) return `Searching “${args.query}”`;
+      if (args.domain) return `Listing ${args.domain}`;
+      return 'Listing what the assistant can do';
+    case 'execute':
+      return 'Running a module';
     case 'readDriveFile':
       return `Reading ${args.path || ''}`.trim();
     case 'listDriveFiles':

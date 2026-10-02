@@ -982,10 +982,18 @@ class ShellWindowAiSidebar extends LitElement {
     if (!t) return html`<div class="tools-panel">Loading…</div>`;
     return html`
       <div class="tools-panel">
-        <h4>Built-in</h4>
-        ${(t.builtin || []).map(
-          (x) => html`<div class="tool"><code>${x.name}</code> <span class="d">${x.description}</span></div>`
-        )}
+              <h4>Built-in</h4>
+              ${(t.builtin || []).map(
+                (x) => html`<div class="tool"><code>${x.name}</code> <span class="d">${x.description}</span></div>`
+              )}
+              ${t.capabilities && t.capabilities.length
+                ? html`
+                    <h4>Capabilities</h4>
+                    ${t.capabilities.map(
+                      (x) => html`<div class="tool"><code>${x.name}</code> <span class="d">${x.description}</span></div>`
+                    )}
+                  `
+                : ''}
         ${t.page && t.page.length
           ? html`
               <h4>From this page (${t.page.length})</h4>

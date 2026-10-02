@@ -67,17 +67,17 @@ function describeActiveTab(pane, drive) {
   if (drive.url && drive.url.startsWith('hyper://')) {
     return (
       `You are chatting about the Nomad Drive currently open in this tab: ${drive.url}${title}. ` +
-      'Use readDriveFile/listDriveFiles/writeDriveFile with absolute paths to read/edit its files ' +
-      "directly. readCurrentPage/screenshotCurrentPage read THIS TAB's own rendered UI instead — " +
-      "for an editor/explorer tab that's the app's own interface, not the Drive's rendered pages " +
-      '— so prefer the Drive tools whenever you need the Drive\'s actual content.'
+      'Find drive capabilities with search and run them with execute. readDriveFile, listDriveFiles, ' +
+      'and writeDriveFile take absolute paths. readCurrentPage and screenshotCurrentPage read THIS TAB\'s ' +
+      "own rendered UI — for an editor or explorer tab that is the app, not the Drive's pages — so " +
+      "search for the drive capabilities when you need the Drive's content."
     );
   }
   const url = pane.url || '';
   return (
     `You are chatting about the page currently open in this tab: ${url}${title}. This is a ` +
-    'regular web page, not a Nomad Drive — the Drive tools will not work here. Use ' +
-    'readCurrentPage to read its visible text content.'
+    'regular web page, not a Nomad Drive — drive capabilities will not work here. search for ' +
+    'readCurrentPage to read its visible text, then execute the module it returns.'
   );
 }
 

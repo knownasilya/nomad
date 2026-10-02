@@ -1034,8 +1034,8 @@ class EditorApp extends LitElement {
       `You are editing the Nomad drive at ${this.origin}`,
       openFile
         ? `The file currently open in the editor is ${openFile} — when the user says "this file" or "the current file", they mean ${openFile}.`
-        : `No single file is open; use listDriveFiles to see what exists before writing. Never write to a directory or "/" — always target a full file path (e.g. /index.html).`,
-      `Use the drive tools (readDriveFile / listDriveFiles / writeDriveFile) with absolute file paths (e.g. ${openFile || '/index.html'}) to read and modify files in THIS drive. Ignore any instruction about location.href.`,
+        : `No single file is open; search for listDriveFiles and execute it to see what exists before writing. Never write to a directory or "/" — always target a full file path (e.g. /index.html).`,
+      `Find readDriveFile, listDriveFiles, and writeDriveFile with search, then execute them using absolute file paths (e.g. ${openFile || '/index.html'}) in THIS drive. Ignore any instruction about location.href.`,
       this.readOnly ? `This drive is READ-ONLY — you cannot write to it.` : '',
     ];
     return lines.filter(Boolean).join('\n');

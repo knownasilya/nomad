@@ -192,7 +192,7 @@ declare namespace Nomad {
     testConnection(baseUrl: string): Promise<any>;
     /** The AI server's model catalogue: { models: string[], current: string | null }. */
     listModels(): Promise<{ models: string[]; current: string | null }>;
-    /** Tools the agent would be offered for a turn: { builtin, page, pageOrigin, pageGranted }. */
+    /** Tools a turn can reach: { builtin: search and execute, capabilities, page, pageOrigin, pageGranted }. */
     listTools(opts?: { driveUrl?: string; allowWrite?: boolean }): Promise<any>;
     /** Whether a model is a reasoning model: { reasoning: boolean, probed: boolean }. */
     modelInfo(model: string): Promise<{ reasoning: boolean; probed: boolean }>;
