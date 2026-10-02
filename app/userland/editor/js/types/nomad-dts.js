@@ -4,7 +4,7 @@
 // KEEP IN SYNC with the actual API surface. Per ../../../../CLAUDE.md, when a
 // nomad.* method is added or changed, update all three:
 //   1. nomad.dev/content/docs/api/apis/<api-name>.md
-//   2. NOMAD_API_REFERENCE in app/bg/web-apis/bg/ai.js
+//   2. API_REFERENCE in app/bg/ai/api-reference.mjs
 //   3. this file
 //
 // Authored as a JS module exporting a template-literal string so it bundles with

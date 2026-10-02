@@ -109,7 +109,7 @@ export default {
       }
 
       // Pin the agent to the actual Drive/tab it's chatting about — without this, `location.href`
-      // in NOMAD_API_REFERENCE's guidance is meaningless (this call runs from the shell window,
+      // in API_REFERENCE's guidance is meaningless (this call runs from the shell window,
       // not the page) and, for editor/explorer, the Drive tools have no Drive to target at all.
       const drive = await resolveActiveDrive(pane);
       let context = describeActiveTab(pane, drive);
