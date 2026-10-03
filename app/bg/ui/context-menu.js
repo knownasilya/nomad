@@ -370,7 +370,7 @@ export default function registerContextMenu() {
 export function shouldShowMenuItem(id, { tab, webContents }) {
   switch (id) {
     case 'move-pane':
-      return tab.panes.length > 1;
+      return !!tab && tab.panes.length > 1;
     default:
       return true;
   }

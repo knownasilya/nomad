@@ -117,7 +117,13 @@ class Identity extends LitElement {
 
   onSubscribe() {
     if (!this.url) return;
-    window.open('nomad://reader/?subscribe=' + encodeURIComponent(this.url));
+    // Open in a TAB via the browser API — NOT window.open. The site-info panel is a subwindow, so
+    // window.open there creates a standalone OS window with no `nomad` bridge injected, and the
+    // Reader then throws `nomad is not defined`. openUrl routes to a real tab in the current Space
+    // (the same call the rest of site-info uses to open drive URLs).
+    nomad.browser.openUrl('nomad://reader/?subscribe=' + encodeURIComponent(this.url), {
+      setActive: true,
+    });
   }
 }
 

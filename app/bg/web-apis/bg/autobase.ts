@@ -1,6 +1,8 @@
 import { parseDriveUrl } from '../../../lib/urls';
 import b4a from 'b4a';
 import * as autobases from '../../hyper/autobases';
+import * as discovery from '../../hyper/discovery';
+import { sanitizeListingFields } from '../../../lib/listing';
 import * as archivesDb from '../../dbs/archives';
 import * as auditLog from '../../dbs/audit-log';
 import * as filesystem from '../../filesystem/index';
@@ -287,6 +289,9 @@ const autobaseAPI = {
       for (const k of allowed) {
         if (k in settings) updates[k] = settings[k];
       }
+      // Discovery vocabulary (ADR-0016): normalize before persisting — slugify topics, cap at 5,
+      // dedupe/cap keywords at 12, coerce indexable to boolean. Only present keys are touched.
+      Object.assign(updates, sanitizeListingFields(settings));
       const updated = Object.assign({}, existing, updates);
       // index.json is a small control record — inline (readable without a blob core).
       await autobases.putInline(sess, '/index.json', JSON.stringify(updated, null, 2));
@@ -294,6 +299,19 @@ const autobaseAPI = {
       // (URL unchanged). This is the "create locked, unlock later" path (ADR-0010).
       if ('collaborative' in settings)
         await autobases.setCollaborative(sess, !!settings.collaborative);
+      // Listing switch: joining/leaving INDEX_TOPIC follows the persisted `indexable` state, and
+      // the intake handshake re-broadcasts the current manifest fields (ADR-0016 §2). Effective
+      // state is whatever now sits in index.json (updated may have merged over an existing value).
+      await discovery
+        .setListed(sess.key, {
+          indexable: !!updated.indexable,
+          title: updated.title,
+          description: updated.description,
+          topics: Array.isArray(updated.topics) ? updated.topics : [],
+          keywords: Array.isArray(updated.keywords) ? updated.keywords : [],
+          type: updated.type,
+        })
+        .catch(() => {});
     });
   },
 
