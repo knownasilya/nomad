@@ -12,6 +12,7 @@ import {
   pageToolCode,
   assertCallAllowed,
 } from '../../app/bg/ai/search-execute.mjs';
+import { timeoutMessage, unwrapMessage } from '../../app/bg/ai/execute-messages.mjs';
 
 function catalog(overrides = {}) {
   return buildCatalog({
@@ -144,6 +145,34 @@ describe('execute modules', () => {
       '}',
     ].join('\n');
     await expect(runModule(code, {}, async () => null)).rejects.toThrow(/eval|disabled|Code generation/i);
+  });
+});
+
+describe('utility-process messages', () => {
+  const run = { type: 'run', code: 'x', params: {} };
+
+  it('reads the child parentPort event, which has data and ports and no type', () => {
+    expect(unwrapMessage({ data: run, ports: [] })).toEqual(run);
+  });
+
+  it('reads a payload the parent receives directly', () => {
+    expect(unwrapMessage({ type: 'call', callId: 1, target: 'writeDriveFile', args: {} })).toMatchObject({
+      type: 'call',
+      callId: 1,
+    });
+  });
+
+  it('reads a message wrapper whose type is message', () => {
+    expect(unwrapMessage({ type: 'message', data: { type: 'done', ok: true, value: 'ping' } })).toEqual({
+      type: 'done',
+      ok: true,
+      value: 'ping',
+    });
+  });
+
+  it('says when the module never reported back', () => {
+    expect(timeoutMessage(false, '')).toMatch(/before the module reported back/);
+    expect(timeoutMessage(true, 'boom')).toMatch(/waiting for the module to finish: boom/);
   });
 });
 

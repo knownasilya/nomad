@@ -3,15 +3,10 @@
 // The module never sees the parent process: its only bridge is nomad:runtime.
 
 import { runModule } from './search-execute.mjs'
+import { unwrapMessage } from './execute-messages.mjs'
 
 let seq = 0
 const pending = new Map()
-
-function unwrap(event) {
-  // Electron delivers parentPort messages as { data, type: 'message' }.
-  if (event && event.data && event.data.type && event.type === 'message') return event.data
-  return event
-}
 
 function callParent(payload) {
   const callId = ++seq
@@ -22,7 +17,7 @@ function callParent(payload) {
 }
 
 process.parentPort.on('message', async (event) => {
-  const msg = unwrap(event)
+  const msg = unwrapMessage(event)
   if (!msg || typeof msg !== 'object') return
   if (msg.type === 'callResult') {
     const waiter = pending.get(msg.callId)

@@ -4,6 +4,7 @@
 
 import { app, utilityProcess } from 'electron'
 import { join } from 'path'
+import { timeoutMessage, unwrapMessage } from './execute-messages.mjs'
 
 const IDLE_MS = 20_000
 
@@ -14,7 +15,14 @@ export function executeInUtilityProcess({ code, params, invoke, signal }) {
       stdio: 'pipe',
     })
     let settled = false
+    let heard = false
+    let stderr = ''
     let timer = null
+    if (child.stderr) {
+      child.stderr.on('data', (chunk) => {
+        stderr = (stderr + String(chunk)).slice(-2000)
+      })
+    }
 
     const finish = (fn, value) => {
       if (settled) return
@@ -30,7 +38,7 @@ export function executeInUtilityProcess({ code, params, invoke, signal }) {
     }
     const arm = () => {
       clearTimeout(timer)
-      timer = setTimeout(() => finish(reject, new Error('execute timed out')), IDLE_MS)
+      timer = setTimeout(() => finish(reject, new Error(timeoutMessage(heard, stderr))), IDLE_MS)
     }
     const onAbort = () => finish(reject, abortError())
     if (signal) {
@@ -43,8 +51,9 @@ export function executeInUtilityProcess({ code, params, invoke, signal }) {
     arm()
 
     child.on('message', async (message) => {
-      const msg = message && message.type === 'message' && message.data ? message.data : message
+      const msg = unwrapMessage(message)
       if (!msg || settled) return
+      heard = true
       if (msg.type === 'call') {
         clearTimeout(timer)
         try {
