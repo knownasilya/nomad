@@ -32,6 +32,9 @@ import {
   visibleCapabilities,
 } from '../../ai/search-execute.mjs';
 import { executeInUtilityProcess } from '../../ai/execute-host.mjs';
+import { callAgentHost, focusedPane, isAgentHostApp, resolveActiveDrive } from '../../ai/active-tab.mjs';
+import { MCP_PORT } from '../../ai/localhost-mcp.mjs';
+import { startLocalhostMcp } from '../../ai/localhost-mcp-host.mjs';
 
 
 // The model is offered search and execute (MODEL_TOOLS). Drive, page, and guide
@@ -1080,3 +1083,60 @@ function runtimeError(status, body, tools, hasToken) {
   }
   return new Error(msg);
 }
+
+// One search or execute for a program on this machine. The catalog is the focused
+// window's active tab, and writes still go through the permission prompt.
+export async function callLocalTool(name, args) {
+  if (name !== 'search' && name !== 'execute') throw new Error(`Unknown tool: ${name}`);
+  const pane = focusedPane();
+  const sender = pane?.webContents;
+  if (!sender || (typeof sender.isDestroyed === 'function' && sender.isDestroyed())) {
+    throw new Error('No active tab');
+  }
+  const drive = await resolveActiveDrive(pane);
+  if (name === 'execute' && isAgentHostApp(pane.url)) {
+    const ok = await callAgentHost(
+      pane,
+      'window.__nomadAiHost && window.__nomadAiHost.prepareForAgentRun ? window.__nomadAiHost.prepareForAgentRun() : true'
+    );
+    if (ok === false) throw new Error('Save your changes before running the assistant.');
+  }
+  const emitter = new EventEmitter();
+  if (isAgentHostApp(pane.url)) {
+    emitter.on('tool', (event) => {
+      if (event && event.phase === 'write' && event.path) {
+        callAgentHost(
+          pane,
+          `window.__nomadAiHost && window.__nomadAiHost.onAgentWroteFile && window.__nomadAiHost.onAgentWroteFile(${JSON.stringify(event.path)})`
+        );
+      }
+    });
+  }
+  const pageListed = await resolvePageTools(
+    { usePageTools: true, pageToolsWcId: sender.id },
+    sender,
+    emitter
+  );
+  const catalog = buildCatalog({
+    allowWrite: drive.url ? drive.writable : true,
+    allowVision: true,
+    remote: false,
+    pageTools: pageListed,
+  });
+  return executeTool(name, args || {}, sender, {
+    driveUrl: drive.url || undefined,
+    emitter,
+    pageToolsWcId: sender.id,
+    catalog,
+  });
+}
+
+function bootLocalhostMcp() {
+  if (process.env.NOMAD_MCP === '0') return;
+  const fromEnv = Number(process.env.NOMAD_MCP_PORT);
+  const port = Number.isInteger(fromEnv) && fromEnv > 0 ? fromEnv : MCP_PORT;
+  startLocalhostMcp({ port, callTool: (name, args) => callLocalTool(name, args) });
+}
+
+if (app.isReady()) bootLocalhostMcp();
+else app.whenReady().then(bootLocalhostMcp);

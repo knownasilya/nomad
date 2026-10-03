@@ -50,7 +50,7 @@ The three should always reflect the same surface area.
 
 `search` and `execute` are model tools on the chat turn (`MODEL_TOOLS` in `app/bg/ai/search-execute.mjs`), wired in `app/bg/web-apis/bg/ai.ts`. `execute` forks `app/bg/ai/execute-worker.mjs` via `app/bg/ai/execute-host.mjs`. The worker stays a real `.mjs` on disk: the utility process loads that path, and the chat bundle does not inline it.
 
-Leave `search` and `execute` out of the nomad.dev API pages and out of `nomad-dts.js`. `nomad.ai.listTools()` returns `{ builtin, capabilities, page, pageOrigin, pageGranted }`. `builtin` is search and execute. `capabilities` is the catalog behind search, with the same write and vision gates `execute` enforces. If the nomad.dev `listTools` page describes that return value, keep `capabilities` in it.
+A program on this machine can call the same two tools over MCP at `http://127.0.0.1:47655/mcp` (`app/bg/ai/localhost-mcp.mjs`, started from `ai.ts`). It binds to loopback and uses the focused window's active tab. `NOMAD_MCP=0` turns it off. `NOMAD_MCP_PORT` changes the port. Leave `search` and `execute` out of the nomad.dev API pages and out of `nomad-dts.js`. `nomad.ai.listTools()` returns `{ builtin, capabilities, page, pageOrigin, pageGranted }`. `builtin` is search and execute. `capabilities` is the catalog behind search, with the same write and vision gates `execute` enforces. If the nomad.dev `listTools` page describes that return value, keep `capabilities` in it.
 
 ## WebMCP page tools (`document.modelContext`)
 

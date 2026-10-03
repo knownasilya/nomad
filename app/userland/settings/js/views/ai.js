@@ -69,6 +69,9 @@ class AiSettingsView extends LitElement {
           <p>
             The model runtime and downloads are managed by your inference
             server — Nomad only connects to it.
+            A program on this computer can also call the assistant's
+            <code>search</code> and <code>execute</code> tools at
+            <code>http://127.0.0.1:47655/mcp</code>.
             <a href="https://nomad.pages.dev/docs/api/apis/nomad.ai/" target="_blank">API documentation</a>
           </p>
         </div>

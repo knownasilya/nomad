@@ -17,6 +17,7 @@
 
 import { findWebContentsParentWindow } from '../../lib/electron';
 import { getActive } from '../../ui/tabs/manager';
+import { callAgentHost, isAgentHostApp, resolveActiveDrive } from '../../ai/active-tab.mjs';
 import aiAPI, { routeChat, createChatStream } from './ai';
 import * as chatStore from '../../ai/chat-store';
 
@@ -24,40 +25,6 @@ function activePane(sender) {
   const win = findWebContentsParentWindow(sender);
   const tab = win && getActive(win);
   return tab?.primaryPane || null;
-}
-
-// Editor/explorer get special agent-run integration (which Drive is really open, save-before-run,
-// reload-after-write) via a `window.__nomadAiHost` global they define — see editor/js/main.js +
-// explorer/js/main.js for the implementation of getAgentDrive/getAgentContext/prepareForAgentRun/
-// onAgentWroteFile.
-function isAgentHostApp(url) {
-  return typeof url === 'string' && (url.startsWith('nomad://editor') || url.startsWith('nomad://explorer'));
-}
-
-async function callHost(pane, expr) {
-  try {
-    return await pane.webContents.executeJavaScript(expr);
-  } catch {
-    return undefined;
-  }
-}
-
-// { url, writable } for the Drive this tab is actually about — pane.url/pane.writable for an
-// ordinary tab, or asked of the host app for editor/explorer (whose own tab URL is the app, not
-// the Drive). `url` is null when there's no Drive in play (a plain http/https page, or a host app
-// with nothing open).
-async function resolveActiveDrive(pane) {
-  if (isAgentHostApp(pane.url)) {
-    const info = await callHost(
-      pane,
-      'window.__nomadAiHost && window.__nomadAiHost.getAgentDrive && window.__nomadAiHost.getAgentDrive()'
-    );
-    return { url: info?.url || null, writable: !!info?.writable };
-  }
-  if (typeof pane.url === 'string' && pane.url.startsWith('hyper://')) {
-    return { url: pane.url, writable: !!pane.writable };
-  }
-  return { url: null, writable: false };
 }
 
 // Fallback context when the host app doesn't supply its own (richer) getAgentContext() — or for
@@ -100,7 +67,7 @@ export default {
         // — no changes needed to the shared runChat/executeTool loop in ai.ts.
         emitter.on('tool', (e) => {
           if (e && e.phase === 'write' && e.path) {
-            callHost(
+            callAgentHost(
               pane,
               `window.__nomadAiHost && window.__nomadAiHost.onAgentWroteFile && window.__nomadAiHost.onAgentWroteFile(${JSON.stringify(e.path)})`
             );
@@ -114,12 +81,12 @@ export default {
       const drive = await resolveActiveDrive(pane);
       let context = describeActiveTab(pane, drive);
       if (hostApp) {
-        const hostCtx = await callHost(
+        const hostCtx = await callAgentHost(
           pane,
           'window.__nomadAiHost && window.__nomadAiHost.getAgentContext && window.__nomadAiHost.getAgentContext()'
         );
         if (hostCtx) context = hostCtx;
-        const ok = await callHost(
+        const ok = await callAgentHost(
           pane,
           'window.__nomadAiHost && window.__nomadAiHost.prepareForAgentRun ? window.__nomadAiHost.prepareForAgentRun() : true'
         );
@@ -167,7 +134,7 @@ export default {
   async notifyAgentWroteFile(path) {
     const pane = activePane(this.sender);
     if (!pane || !isAgentHostApp(pane.url)) return;
-    await callHost(
+    await callAgentHost(
       pane,
       `window.__nomadAiHost && window.__nomadAiHost.onAgentWroteFile && window.__nomadAiHost.onAgentWroteFile(${JSON.stringify(path)})`
     );
