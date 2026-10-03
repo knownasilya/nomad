@@ -35,15 +35,22 @@ See [docs/releasing.md](docs/releasing.md) for the CI jobs, Android signing/keys
 
 ## Keeping the built-in AI prompt in sync with docs
 
-`app/bg/web-apis/bg/ai.js` contains a `NOMAD_API_REFERENCE` constant that is injected as a system prompt into every `nomad.ai.chat()` call. It is a hand-maintained summary of the public JavaScript APIs.
+`app/bg/ai/api-reference.mjs` is the hand-maintained summary of the public JavaScript APIs. It exports two strings:
+
+- `STANDING_PROMPT` is the system text every `nomad.ai.chat()` turn receives. It teaches the two tools the model is offered, `search` and `execute`.
+- `API_REFERENCE` is the guide corpus. `search` (`app/bg/ai/search-execute.mjs`) splits it on `##` headings into entities such as `guide:nomad.fs` and `guide:nomad.fs#draft-mode`, and returns a section when the model opens that entity. Stable ids for the current headings live in `GUIDE_IDS` in that file. A new `##` heading still appears; its id is slugged until you add a prefix there.
 
 **Whenever you add or change an API**, update all three:
 1. `nomad.dev/content/docs/api/apis/<api-name>.md` — the user-facing docs
-2. The `NOMAD_API_REFERENCE` constant in `app/bg/web-apis/bg/ai.js` — the in-app AI context
+2. `API_REFERENCE` in `app/bg/ai/api-reference.mjs` — the guide `search` serves. Edit `STANDING_PROMPT` in the same file when the every-turn instructions need to change.
 3. `app/userland/editor/js/types/nomad-dts.js` — the `nomad.*` TypeScript declarations that drive
    autocomplete/hover in the code editor (Monaco)
 
 The three should always reflect the same surface area.
+
+`search` and `execute` are model tools on the chat turn (`MODEL_TOOLS` in `app/bg/ai/search-execute.mjs`), wired in `app/bg/web-apis/bg/ai.ts`. `execute` forks `app/bg/ai/execute-worker.mjs` via `app/bg/ai/execute-host.mjs`. The worker stays a real `.mjs` on disk: the utility process loads that path, and the chat bundle does not inline it.
+
+Leave `search` and `execute` out of the nomad.dev API pages and out of `nomad-dts.js`. `nomad.ai.listTools()` returns `{ builtin, capabilities, page, pageOrigin, pageGranted }`. `builtin` is search and execute. `capabilities` is the catalog behind search, with the same write and vision gates `execute` enforces. If the nomad.dev `listTools` page describes that return value, keep `capabilities` in it.
 
 ## WebMCP page tools (`document.modelContext`)
 
@@ -52,12 +59,13 @@ register tools the built-in AI assistant can call. The polyfill (`@mcp-b/webmcp-
 injected into every eligible page's **main world** by `app/fg/webview-preload/model-context.js`
 (same technique as `prompt.js`); tool descriptors + invocations are bridged to bg by
 `app/bg/web-apis/bg/model-context.ts` (pure helpers split into `webmcp-schema.ts` +
-`webmcp-invoke.ts`, both unit-tested). `bg/ai.ts` `runChat` merges them into the turn's tool list
-namespaced `page_*`, gated once per origin by the `webmcpTools:<origin>` permission. **Local path
-only** — page tools are never sent over the AI Bridge. This is a web-platform API, not a `nomad.*`
-API, so the sync triad above does not apply; the only touchpoints are a short note in
-`NOMAD_API_REFERENCE`, a `Document`/`Navigator` block in `nomad-dts.js`, and
-`nomad.dev/content/docs/api/developers/webmcp.md`.
+`webmcp-invoke.ts`, both unit-tested). `bg/ai.ts` `runChat` lists them in the `page` domain of
+`search` on a local turn with page tools enabled. `execute` calls one as `nomad.page.<registeredName>(params)`.
+The host invokes it as `page_<name>` through `invokePageTool`, gated once per origin by the
+`webmcpTools:<origin>` permission. **Local path only** — page tools are never sent over the AI Bridge.
+This is a web-platform API, so the sync triad above does not apply; the touchpoints are the
+`## Page-provided tools (WebMCP)` section of `API_REFERENCE` (guide id `webmcp`), a `Document`/`Navigator`
+block in `nomad-dts.js`, and `nomad.dev/content/docs/api/developers/webmcp.md`.
 
 **Debugging:** `nomad://webmcp` (the WebMCP Inspector app — `app/userland/webmcp/`, backed by
 the internal `webmcp-devtools` API over `bg/model-context.ts`'s `listAll()` / `getInvokeLog()` /
@@ -111,7 +119,7 @@ source of truth). Desktop's `manifests/external/fs.js` re-exports it; mobile bui
 `dispatchNomad` for `api:'fs'`). So a drive app written to `nomad.fs` runs on both platforms — on
 mobile, reads work; writes + writer-management currently reject until the mobile writable-bridge lands.
 When you add/rename an fs method, edit `shared/fs-manifest.mjs` AND update `bg/fs.js`, `fg/fs.js`, the
-mobile shim + dispatcher, plus `nomad-dts.js` / `NOMAD_API_REFERENCE` / nomad.dev docs.
+mobile shim + dispatcher, plus `nomad-dts.js` / `API_REFERENCE` in `app/bg/ai/api-reference.mjs` / nomad.dev docs.
 
 ### Draft Mode (ADR-0012)
 

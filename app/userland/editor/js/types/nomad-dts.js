@@ -4,7 +4,7 @@
 // KEEP IN SYNC with the actual API surface. Per ../../../../CLAUDE.md, when a
 // nomad.* method is added or changed, update all three:
 //   1. nomad.dev/content/docs/api/apis/<api-name>.md
-//   2. NOMAD_API_REFERENCE in app/bg/web-apis/bg/ai.js
+//   2. API_REFERENCE in app/bg/ai/api-reference.mjs
 //   3. this file
 //
 // Authored as a JS module exporting a template-literal string so it bundles with
@@ -192,7 +192,7 @@ declare namespace Nomad {
     testConnection(baseUrl: string): Promise<any>;
     /** The AI server's model catalogue: { models: string[], current: string | null }. */
     listModels(): Promise<{ models: string[]; current: string | null }>;
-    /** Tools the agent would be offered for a turn: { builtin, page, pageOrigin, pageGranted }. */
+    /** Tools a turn can reach: { builtin: search and execute, capabilities, page, pageOrigin, pageGranted }. */
     listTools(opts?: { driveUrl?: string; allowWrite?: boolean }): Promise<any>;
     /** Whether a model is a reasoning model: { reasoning: boolean, probed: boolean }. */
     modelInfo(model: string): Promise<{ reasoning: boolean; probed: boolean }>;

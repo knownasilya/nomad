@@ -1023,7 +1023,7 @@ export class ExplorerApp extends LitElement {
     const lines = [
       `You are working in the Nomad drive at hyper://${new URL(info.url).hostname}`,
       `The user is currently viewing ${here} in the file explorer (this is usually a directory).`,
-      `Use the drive tools (readDriveFile / listDriveFiles / writeDriveFile) with absolute file paths to read and modify files in THIS drive. When writing, always target a full file path with a filename (e.g. ${here.endsWith('/') ? here : here + '/'}index.html) — never a directory or "/". Ignore any instruction about location.href.`,
+      `Find readDriveFile, listDriveFiles, and writeDriveFile with search, then execute them using absolute file paths to read and modify files in THIS drive. When writing, always target a full file path with a filename (e.g. ${here.endsWith('/') ? here : here + '/'}index.html) — never a directory or "/". Ignore any instruction about location.href.`,
       info.writable ? '' : `This drive is READ-ONLY — you cannot write to it.`,
     ];
     return lines.filter(Boolean).join('\n');
