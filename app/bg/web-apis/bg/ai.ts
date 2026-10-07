@@ -922,7 +922,10 @@ function streamCompletion(baseUrl, model, messages, tools, emitter, signal?, opt
       // makes some servers 400.
       ...(Array.isArray(tools) && tools.length ? { tools } : {}),
       stream: true,
-      ...(noThink ? { think: false, chat_template_kwargs: { enable_thinking: false } } : {}),
+      // `enable_thinking` is the field MTPLX's chat schema actually reads for Qwen.
+      // `think` and `chat_template_kwargs` cover Ollama and llama.cpp. All three are
+      // sent only when the caller asked to skip reasoning.
+      ...(noThink ? { think: false, enable_thinking: false, chat_template_kwargs: { enable_thinking: false } } : {}),
       ...(!noThink && effort ? { reasoning_effort: effort } : {}),
       ...(maxTokens ? { max_tokens: maxTokens } : {}),
     });
