@@ -168,7 +168,16 @@ declare namespace Nomad {
     isCollaborativeDrive(url: string): Promise<boolean>;
   }
 
-  type AiMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+  type AiContentPart =
+    | { type: 'text'; text: string }
+    | { type: 'image_url'; image_url: { url: string } };
+  type AiMessage = {
+    role: 'system' | 'user' | 'assistant';
+    /** Plain text, or text and image_url parts. */
+    content: string | AiContentPart[];
+    /** One or more images for this message: data:image (png, jpeg, webp, gif) or http(s) URLs. At most 8. Appended after content. */
+    images?: Array<string | { url: string }>;
+  };
   interface AiChatOpts {
     /** Resolve tools + AI Config against this Drive instead of the caller's URL. */
     driveUrl?: string;
@@ -194,12 +203,26 @@ declare namespace Nomad {
     chat(messages: AiMessage[], opts?: AiChatOpts): AsyncIterableIterator<string>;
     /** Test connectivity to an AI provider base URL. */
     testConnection(baseUrl: string): Promise<any>;
-    /** The AI server's model catalogue: { models: string[], current: string | null }. */
+    /** Models for the active runtime: { models: string[], current: string | null }. */
     listModels(): Promise<{ models: string[]; current: string | null }>;
+    /** Detected local runtimes and named OpenAI servers: { active, model, runtimes }. */
+    listRuntimes(): Promise<{
+      active: string;
+      model: string;
+      runtimes: Array<{
+        id: string;
+        name: string;
+        kind: 'openai' | 'claude' | 'cursor';
+        detected: boolean;
+        available: boolean;
+        baseUrl: string;
+        hasToken: boolean;
+      }>;
+    }>;
     /** Tools a turn can reach: { builtin: search and execute, capabilities, page, pageOrigin, pageGranted }. */
     listTools(opts?: { driveUrl?: string; allowWrite?: boolean }): Promise<any>;
-    /** Whether a model is a reasoning model: { reasoning: boolean, probed: boolean }. */
-    modelInfo(model: string): Promise<{ reasoning: boolean; probed: boolean }>;
+    /** Whether a model is a reasoning and/or vision model. vision is reliable for Ollama only. */
+    modelInfo(model: string): Promise<{ reasoning: boolean; vision: boolean; probed: boolean }>;
   }
 
   interface SelectFileResult { path: string; origin: string; url: string; }

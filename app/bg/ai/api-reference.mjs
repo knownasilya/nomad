@@ -16,7 +16,7 @@ search:
 execute runs the module from that hit. Pass { code, params }. The module starts with import { nomad } from 'nomad:runtime' and default-exports async function main(params). Put varying arguments in params. Page tools are nomad.page.<name>(params). A page tool named search is nomad.page.search, not the search tool.
 
 When you finish, write a short plain-language reply. Never end the turn silently after a tool result.
-`
+`;
 
 export const API_REFERENCE = `\
 You are an AI assistant embedded in Nomad, a peer-to-peer web browser that hosts and serves websites via Hyperdrive (hyper:// protocol). Pages running in Nomad have access to the following JavaScript APIs under the global \`nomad\` object:
@@ -107,6 +107,9 @@ await nomad.shell.drivePropertiesDialog(url)
 
 \`\`\`js
 const messages = [{ role: 'user', content: 'Hello' }]
+// Images, one or more (at most 8): data:image png/jpeg/webp/gif, or an http(s) URL.
+// content may instead be [{ type:'text', text }, { type:'image_url', image_url:{ url } }, ...]
+// const messages = [{ role: 'user', content: 'What is in these photos?', images: [jpegDataUrl, pngDataUrl] }]
 for await (const chunk of nomad.ai.chat(messages, {
   model,               // optional: override the resolved model for this turn
   think: false,         // optional: ask the runtime to skip its reasoning phase
@@ -118,9 +121,10 @@ for await (const chunk of nomad.ai.chat(messages, {
   process(chunk) // string chunk streamed from the model
 }
 
-const { models, current } = await nomad.ai.listModels() // the AI server's model catalogue
+const { models, current } = await nomad.ai.listModels() // models for the active runtime
+const { active, runtimes } = await nomad.ai.listRuntimes() // detected Claude/Cursor/Ollama/LM Studio, plus named OpenAI servers
 const { builtin, capabilities, page } = await nomad.ai.listTools() // search and execute, the capabilities behind them, and this page's tools
-const { reasoning } = await nomad.ai.modelInfo(model)    // is that model a reasoning model?
+const { reasoning, vision } = await nomad.ai.modelInfo(model) // reasoning, and vision (Ollama /api/show only)
 \`\`\`
 
 ## nomad.panes — Multi-pane tab layout

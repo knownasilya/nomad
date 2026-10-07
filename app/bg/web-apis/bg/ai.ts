@@ -25,6 +25,7 @@ import {
 } from '../../ai/awake';
 import { STANDING_PROMPT } from '../../ai/api-reference.mjs';
 import { completionStreamError } from '../../ai/stream-error.mjs';
+import { normalizeChatMessages } from '../../ai/chat-messages.mjs';
 import {
   assertCallAllowed,
   buildCatalog,
@@ -33,18 +34,29 @@ import {
   visibleCapabilities,
 } from '../../ai/search-execute.mjs';
 import { executeInUtilityProcess } from '../../ai/execute-host.mjs';
-import { callAgentHost, focusedPane, isAgentHostApp, resolveActiveDrive } from '../../ai/active-tab.mjs';
+import {
+  callAgentHost,
+  focusedPane,
+  isAgentHostApp,
+  resolveActiveDrive,
+} from '../../ai/active-tab.mjs';
 import { MCP_PORT } from '../../ai/localhost-mcp.mjs';
 import { startLocalhostMcp } from '../../ai/localhost-mcp-host.mjs';
-
+import { streamAgent } from '../../ai/agent-cli.mjs';
+import {
+  getActiveRuntime,
+  listRuntimeCatalog,
+  modelsForRuntime,
+  testCliRuntime,
+} from '../../ai/active-runtime.mjs';
 
 // The model is offered search and execute (MODEL_TOOLS). Drive, page, and guide
 // capabilities stay behind search. Gates (write / vision / renderer) live in
 // visibleCapabilities so the catalog and execute agree.
 
-
 export default {
   async testConnection(baseUrl) {
+    if (baseUrl === 'claude' || baseUrl === 'cursor') return testCliRuntime(baseUrl);
     const url = (baseUrl || 'http://localhost:11434/v1').replace(/\/$/, '') + '/models';
     const token = await settingsDb.get('ai_access_token');
     try {
@@ -63,14 +75,29 @@ export default {
     }
   },
 
-  // The AI server's model catalogue (OpenAI-compatible `/models`), plus the configured global
-  // default so a picker can label its "Default" entry. Errors are swallowed to an empty list.
+  // Detected local apps (Claude, Cursor, a running Ollama or LM Studio) plus the named
+  // OpenAI-compatible servers. `active` is the one chat will use.
+  async listRuntimes() {
+    return listRuntimeCatalog();
+  },
+
+  // Models for the active runtime, plus the configured default so a picker can label it.
   async listModels() {
-    const baseUrl = (await settingsDb.get('ai_base_url')) || 'http://localhost:11434/v1';
-    const token = await settingsDb.get('ai_access_token');
-    const current = (await settingsDb.get('ai_default_model')) || null;
+    const { runtime, model } = await getActiveRuntime();
+    const current = model || null;
+    if (!runtime || runtime.available === false) return { models: [], current };
+    if (runtime.kind !== 'openai') {
+      try {
+        return { models: await modelsForRuntime(runtime), current };
+      } catch (err) {
+        return { models: [], current, error: err.message || 'Could not list models' };
+      }
+    }
     try {
-      const data: any = await fetchJson(baseUrl.replace(/\/$/, '') + '/models', token);
+      const data: any = await fetchJson(
+        runtime.baseUrl.replace(/\/$/, '') + '/models',
+        runtime.accessToken
+      );
       const models = (data.data || [])
         .map((m) => m.id)
         .filter((id) => typeof id === 'string')
@@ -88,13 +115,19 @@ export default {
   // if wrong) but vision:false (never silently send an image a model can't use).
   async modelInfo(model) {
     if (!model) return { reasoning: true, vision: false, probed: false };
-    const baseUrl = (await settingsDb.get('ai_base_url')) || 'http://localhost:11434/v1';
-    const token = await settingsDb.get('ai_access_token');
-    const root = baseUrl.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+    const { runtime } = await getActiveRuntime();
+    if (!runtime || runtime.kind !== 'openai')
+      return { reasoning: true, vision: false, probed: false };
+    const token = runtime.accessToken;
+    const root = runtime.baseUrl.replace(/\/v1\/?$/, '').replace(/\/$/, '');
     try {
       const data: any = await postJson(root + '/api/show', { model }, token);
       const caps = Array.isArray(data.capabilities) ? data.capabilities : [];
-      return { reasoning: caps.includes('thinking'), vision: caps.includes('vision'), probed: true };
+      return {
+        reasoning: caps.includes('thinking'),
+        vision: caps.includes('vision'),
+        probed: true,
+      };
     } catch {
       return { reasoning: true, vision: false, probed: false };
     }
@@ -109,10 +142,12 @@ export default {
       name: t.function.name,
       description: t.function.description || '',
     }));
-    const capabilities = visibleCapabilities({ allowWrite, allowVision: opts.allowVision }).map((c) => ({
-      name: c.name,
-      description: c.description,
-    }));
+    const capabilities = visibleCapabilities({ allowWrite, allowVision: opts.allowVision }).map(
+      (c) => ({
+        name: c.name,
+        description: c.description,
+      })
+    );
 
     const wcId = this.sender?.id;
     const descriptors = wcId ? modelContext.getPageToolsForWc(wcId) : [];
@@ -146,7 +181,9 @@ export default {
   //   effort     — 'low' | 'medium' | 'high'; sent as reasoning_effort when think !== false.
   chat(messages, opts) {
     const sender = this.sender;
-    return createChatStream((emitter, signal) => routeChat(messages, sender, emitter, { ...opts, signal }));
+    return createChatStream((emitter, signal) =>
+      routeChat(messages, sender, emitter, { ...opts, signal })
+    );
   },
 };
 
@@ -219,38 +256,40 @@ async function routeChat(messages, sender, emitter, opts) {
 // module load. The loop + tools are the SAME runChat used locally; only the plumbing differs —
 // a synthetic sender carries the Client's driveUrl, events are forwarded as frames, and the
 // modifyDrive prompt is relayed to the Client via requestPermission (ADR-0013 §1, §6).
-aiBridge.setServeChat(async ({ messages, opts, signal, requestPermission, sendChunk, sendTool }) => {
-  const driveUrl = opts?.driveUrl;
-  const sender = makeRemoteSender(driveUrl);
+aiBridge.setServeChat(
+  async ({ messages, opts, signal, requestPermission, sendChunk, sendTool }) => {
+    const driveUrl = opts?.driveUrl;
+    const sender = makeRemoteSender(driveUrl);
 
-  // Draft actions delegated from the Client (the phone often can't write a Provider-owned Drive, so
-  // publish runs HERE where the Drive is writable — ADR-0010/0012). These reuse the request path with
-  // no chat: run the fs op and finish (the Bridge sends DONE/ERROR).
-  if (opts?.publishDraft && driveUrl) {
-    await fsAPI.publishDraft.call({ sender }, driveUrl, {});
-    return;
-  }
-  if (opts?.discardDraft && driveUrl) {
-    await fsAPI.discardDraft.call({ sender }, driveUrl, {});
-    return;
-  }
+    // Draft actions delegated from the Client (the phone often can't write a Provider-owned Drive, so
+    // publish runs HERE where the Drive is writable — ADR-0010/0012). These reuse the request path with
+    // no chat: run the fs op and finish (the Bridge sends DONE/ERROR).
+    if (opts?.publishDraft && driveUrl) {
+      await fsAPI.publishDraft.call({ sender }, driveUrl, {});
+      return;
+    }
+    if (opts?.discardDraft && driveUrl) {
+      await fsAPI.discardDraft.call({ sender }, driveUrl, {});
+      return;
+    }
 
-  const emitter = new EventEmitter();
-  emitter.on('error', () => {});
-  emitter.on('chunk', (e) => sendChunk(e.text));
-  emitter.on('tool', (e) => sendTool(e));
-  // `reasoning` events are local-only for now (no Bridge frame for them) — `think:false` still
-  // takes effect remotely because opts.think is forwarded to this runChat.
-  // Remote AI edits stage into the Drive's Vault-hosted Draft (ADR-0012) so the phone user can
-  // review + publish, rather than writing the live Drive directly.
-  await runChat(messages, sender, emitter, {
-    ...opts,
-    signal,
-    requestPermission,
-    draft: true,
-    remote: true, // no reachable renderer here — disables WebMCP page tools
-  });
-});
+    const emitter = new EventEmitter();
+    emitter.on('error', () => {});
+    emitter.on('chunk', (e) => sendChunk(e.text));
+    emitter.on('tool', (e) => sendTool(e));
+    // `reasoning` events are local-only for now (no Bridge frame for them) — `think:false` still
+    // takes effect remotely because opts.think is forwarded to this runChat.
+    // Remote AI edits stage into the Drive's Vault-hosted Draft (ADR-0012) so the phone user can
+    // review + publish, rather than writing the live Drive directly.
+    await runChat(messages, sender, emitter, {
+      ...opts,
+      signal,
+      requestPermission,
+      draft: true,
+      remote: true, // no reachable renderer here — disables WebMCP page tools
+    });
+  }
+);
 
 // Keep-awake (ADR-0013 §7 amendment). This module is the AI composition root, so it owns the ONE
 // awake controller and injects it into the Bridge — the same pattern as setServeChat, and it keeps
@@ -345,22 +384,28 @@ export { routeChat };
 // =
 
 async function runChat(messages, sender, emitter, opts: any = {}) {
+  const chatMessages = normalizeChatMessages(messages);
   const driveUrl = opts.driveUrl || null;
   const allowWrite = opts.allowWrite !== false; // default true
   // Independent lookups — run concurrently rather than paying the sum of their latencies on
   // every single chat turn.
-  const [resolved, defaultModel, baseUrl, token] = await Promise.all([
+  const [resolved, active] = await Promise.all([
     resolveAiConfig(sender, driveUrl),
-    settingsDb.get('ai_default_model'),
-    settingsDb.get('ai_base_url'),
-    settingsDb.get('ai_access_token'),
+    getActiveRuntime(),
   ]);
   const systemPrompt = resolved.systemPrompt;
+  const runtime = active.runtime;
   // Model is a user preference, never a Drive's to set — the chat UI's picker (opts.model, e.g.
   // the AI sidebar's per-site choice) wins over the global default setting.
-  const model = opts.model || defaultModel;
-  const resolvedBaseUrl = baseUrl || 'http://localhost:11434/v1';
+  const model = opts.model || active.model;
 
+  if (!runtime || runtime.available === false) {
+    throw new Error(
+      runtime?.available === false
+        ? `${runtime.name} is not available on this computer. Choose another runtime in Settings → AI.`
+        : 'No AI runtime configured. Choose one in Settings → AI.'
+    );
+  }
   if (!model) {
     throw new Error(
       'No AI model configured. Set a default model in Settings → AI, or pick one in the AI sidebar.'
@@ -371,7 +416,9 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   // inside the catalog so a read-only Drive or a text-only model never sees the capability,
   // and a remote Bridge turn never sees tools that need this Device's renderer.
   const pageListed =
-    opts.remote || opts.usePageTools === false ? null : await resolvePageTools(opts, sender, emitter);
+    opts.remote || opts.usePageTools === false
+      ? null
+      : await resolvePageTools(opts, sender, emitter);
   const catalog = buildCatalog({
     allowWrite,
     allowVision: opts.allowVision,
@@ -382,8 +429,11 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   // tools:false is a plain completion: no search/execute, and no standing prompt telling the
   // model to call them. A local runtime that injects its own tool contract (MTPLX) otherwise
   // spends the free memory on that contract before it writes a single token.
-  const offerTools = opts.tools !== false;
-  const tools = offerTools ? MODEL_TOOLS : null;
+  // Claude and Cursor run as local CLIs. Claude still reaches search/execute through
+  // Nomad's loopback MCP; Cursor answers in ask mode and does not get that tool prompt.
+  const cli = runtime.kind === 'claude' || runtime.kind === 'cursor';
+  const offerTools = opts.tools !== false && runtime.kind !== 'cursor';
+  const tools = offerTools && !cli ? MODEL_TOOLS : null;
 
   // opts.context (from the AI Sidebar) pins the agent to the Drive + open file it
   // is editing. The standing prompt no longer inlines the whole API reference — search loads
@@ -391,7 +441,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   const systemContent = [systemPrompt, offerTools ? STANDING_PROMPT : '', opts.context]
     .filter(Boolean)
     .join('\n\n---\n\n');
-  const fullMessages = [{ role: 'system', content: systemContent }, ...messages];
+  const fullMessages = [{ role: 'system', content: systemContent }, ...chatMessages];
 
   let msgHistory = fullMessages;
   const signal = opts.signal || null;
@@ -402,15 +452,16 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   try {
     while (true) {
       if (signal?.aborted) break;
-      const { finishReason, toolCalls, textContent }: any = await streamCompletion(
-        resolvedBaseUrl,
-        model,
-        msgHistory,
-        tools,
-        emitter,
-        signal,
-        { think: opts.think, effort: opts.effort, token, maxTokens: opts.maxTokens }
-      );
+      const { finishReason, toolCalls, textContent }: any = cli
+        ? await streamAgent({ ...runtime, model }, msgHistory, emitter, signal, {
+            mcpUrl: `http://127.0.0.1:${MCP_PORT}/mcp`,
+          })
+        : await streamCompletion(runtime.baseUrl, model, msgHistory, tools, emitter, signal, {
+            think: opts.think,
+            effort: opts.effort,
+            token: runtime.accessToken,
+            maxTokens: opts.maxTokens,
+          });
 
       if (finishReason !== 'tool_calls' || toolCalls.length === 0) break;
 
@@ -600,12 +651,18 @@ async function executeTool(name, args, sender, opts: any = {}) {
             });
           }
           const inner = await executeTool(toolName, call.args || {}, sender, opts);
-          if (inner && typeof inner === 'object' && inner.imageDataUrl) imageDataUrl = inner.imageDataUrl;
+          if (inner && typeof inner === 'object' && inner.imageDataUrl)
+            imageDataUrl = inner.imageDataUrl;
           return inner;
         },
       });
       if (imageDataUrl) {
-        const text = typeof value === 'string' ? value : value && value.text ? value.text : JSON.stringify(value);
+        const text =
+          typeof value === 'string'
+            ? value
+            : value && value.text
+              ? value.text
+              : JSON.stringify(value);
         return { text: text || 'Screenshot captured (attached).', imageDataUrl };
       }
       return typeof value === 'string' ? value : JSON.stringify(value);
@@ -653,7 +710,13 @@ async function executeTool(name, args, sender, opts: any = {}) {
       // the live Drive, so the change is reviewable/publishable (ADR-0012).
       await fsAPI.writeFile.call(ctx, target, args.content, draft ? { draft: true } : {});
       if (emitter) {
-        emitter.emit('tool', { phase: 'write', name: 'writeDriveFile', path: cleanPath, priorContent, draft: !!draft });
+        emitter.emit('tool', {
+          phase: 'write',
+          name: 'writeDriveFile',
+          path: cleanPath,
+          priorContent,
+          draft: !!draft,
+        });
       }
       return `File written successfully to ${cleanPath}`;
     }
@@ -705,7 +768,11 @@ async function executeTool(name, args, sender, opts: any = {}) {
       // "show" the image itself. Emit it separately so the chat UI can render it for the human,
       // the same way writeDriveFile's 'write' event drives the file-checkpoint UI above.
       if (emitter) {
-        emitter.emit('tool', { phase: 'screenshot', name: 'screenshotCurrentPage', imageDataUrl: dataUrl });
+        emitter.emit('tool', {
+          phase: 'screenshot',
+          name: 'screenshotCurrentPage',
+          imageDataUrl: dataUrl,
+        });
       }
       return { text: 'Screenshot captured (attached).', imageDataUrl: dataUrl };
     }
@@ -808,7 +875,6 @@ async function readTextOrNull(ctx, url) {
     return null;
   }
 }
-
 
 function fetchText(url) {
   return new Promise((resolve, reject) => {
@@ -925,7 +991,9 @@ function streamCompletion(baseUrl, model, messages, tools, emitter, signal?, opt
       // `enable_thinking` is the field MTPLX's chat schema actually reads for Qwen.
       // `think` and `chat_template_kwargs` cover Ollama and llama.cpp. All three are
       // sent only when the caller asked to skip reasoning.
-      ...(noThink ? { think: false, enable_thinking: false, chat_template_kwargs: { enable_thinking: false } } : {}),
+      ...(noThink
+        ? { think: false, enable_thinking: false, chat_template_kwargs: { enable_thinking: false } }
+        : {}),
       ...(!noThink && effort ? { reasoning_effort: effort } : {}),
       ...(maxTokens ? { max_tokens: maxTokens } : {}),
     });
@@ -951,8 +1019,12 @@ function streamCompletion(baseUrl, model, messages, tools, emitter, signal?, opt
           res.on('data', (chunk) => {
             errBody += chunk.toString();
           });
-          res.on('end', () => settle(reject, runtimeError(res.statusCode, errBody, tools, !!opts.token)));
-          res.on('error', () => settle(reject, runtimeError(res.statusCode, errBody, tools, !!opts.token)));
+          res.on('end', () =>
+            settle(reject, runtimeError(res.statusCode, errBody, tools, !!opts.token))
+          );
+          res.on('error', () =>
+            settle(reject, runtimeError(res.statusCode, errBody, tools, !!opts.token))
+          );
           return;
         }
 
@@ -983,7 +1055,9 @@ function streamCompletion(baseUrl, model, messages, tools, emitter, signal?, opt
             const streamErr = completionStreamError(parsed);
             if (streamErr) {
               settle(reject, new Error(streamErr));
-              try { res.destroy(); } catch {}
+              try {
+                res.destroy();
+              } catch {}
               return;
             }
 
@@ -1097,7 +1171,10 @@ function runtimeError(status, body, tools, hasToken) {
   } catch {
     /* not JSON */
   }
-  if (!detail) detail = String(body || '').trim().slice(0, 300);
+  if (!detail)
+    detail = String(body || '')
+      .trim()
+      .slice(0, 300);
 
   let msg = `AI Runtime error ${status}` + (detail ? `: ${detail}` : '');
   if (status === 401 || status === 403) {

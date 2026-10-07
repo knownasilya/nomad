@@ -12,6 +12,7 @@ const JSON_ENCODED_SETTINGS = [
   'adblock_lists',
   'sidebar_collapsed_groups',
   'cert_exceptions',
+  'ai_servers',
 ];
 
 // Settings that are always global (never per-space)
@@ -29,6 +30,8 @@ const GLOBAL_SETTINGS = new Set([
   'ai_base_url',
   'ai_default_model',
   'ai_access_token',
+  'ai_servers',
+  'ai_active',
   'ai_share_provider',
   'ai_keep_awake',
   'ai_sidebar_width',
@@ -93,6 +96,8 @@ export const setup = async function (opts) {
     ai_base_url: 'http://localhost:11434/v1',
     ai_default_model: '',
     ai_access_token: '',
+    ai_servers: [],
+    ai_active: '',
     ai_space_default: '',
     ai_share_provider: 0, // opt-in (ADR-0013 §7): off until the user shares this Device's AI
     ai_keep_awake: 0, // opt-in: hold a powerSaveBlocker while sharing, so an idle Device stays reachable

@@ -10,6 +10,8 @@ export function setup(rpc) {
 
   return {
     ai: {
+      // messages: { role, content, images? }[]. content is a string or text/image_url parts.
+      //   images is one or more data:image or http(s) URLs (at most 8), appended after content.
       // opts (optional): { driveUrl, allowWrite, context, usePageTools, pageToolsWcId, model,
       //                    think, tools, maxTokens, onToolEvent, onReasoning }
       //   driveUrl / allowWrite / context are forwarded to bg (see bg/ai.ts).
@@ -50,6 +52,9 @@ export function setup(rpc) {
       listModels() {
         return aiRPC.listModels();
       },
+      listRuntimes() {
+        return aiRPC.listRuntimes();
+      },
       listTools(opts: any = {}) {
         return aiRPC.listTools({ driveUrl: opts.driveUrl, allowWrite: opts.allowWrite });
       },
@@ -59,4 +64,3 @@ export function setup(rpc) {
     },
   };
 }
-

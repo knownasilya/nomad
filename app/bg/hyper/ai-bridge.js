@@ -26,6 +26,7 @@ import * as logLib from '../logger';
 import * as daemon from './daemon';
 import * as vault from './vault';
 import * as settingsDb from '../dbs/settings';
+import { getActiveRuntime } from '../ai/active-runtime.mjs';
 import { REASON_TURN as AWAKE_REASON_TURN } from '../ai/awake';
 import {
   AI_BRIDGE_PROTOCOL,
@@ -84,7 +85,14 @@ export async function isSharingEnabled() {
 //   onTool(event)            — tool activity (start / write Checkpoint payloads)
 //   onPrompt(permission)     — reverse consent: return Promise<boolean> (this Device is where the
 //                              human is, so the modifyDrive prompt is shown HERE, not on the Provider)
-export async function requestRemoteChat({ messages, opts = {}, signal = null, onChunk, onTool, onPrompt }) {
+export async function requestRemoteChat({
+  messages,
+  opts = {},
+  signal = null,
+  onChunk,
+  onTool,
+  onPrompt,
+}) {
   ensureInstalled();
   const peer = await pickProvider(signal);
   const id = nextReqId();
@@ -93,7 +101,10 @@ export async function requestRemoteChat({ messages, opts = {}, signal = null, on
     peer.clientReqs.set(id, { onChunk, onTool, onPrompt, resolve, reject });
     if (signal) {
       if (signal.aborted) sendFrame(peer, { t: FRAME.CANCEL, id });
-      else signal.addEventListener('abort', () => sendFrame(peer, { t: FRAME.CANCEL, id }), { once: true });
+      else
+        signal.addEventListener('abort', () => sendFrame(peer, { t: FRAME.CANCEL, id }), {
+          once: true,
+        });
     }
     // Only forward the Drive-scoping + model-picker opts; signal/requestPermission are
     // reconstructed Provider-side. Keep in sync with the opts object ai.ts's routeChat() builds
@@ -295,7 +306,12 @@ async function onHello(peer) {
   const reachable = await localRuntimeReachable();
   logger.info('ai-bridge HELLO received', { peerId: peer.peerId, hasHandler, sharing, reachable });
   if (!hasHandler || !sharing || !reachable) {
-    logger.info('ai-bridge replying UNAVAILABLE', { peerId: peer.peerId, hasHandler, sharing, reachable });
+    logger.info('ai-bridge replying UNAVAILABLE', {
+      peerId: peer.peerId,
+      hasHandler,
+      sharing,
+      reachable,
+    });
     return sendFrame(peer, { t: FRAME.UNAVAILABLE });
   }
   const { nonceHex } = makeChallenge(crypto);
@@ -345,7 +361,8 @@ async function getWriterSignerKey(deviceKeyHex) {
 }
 
 async function onRequest(peer, f) {
-  if (!peer.authedClient) return sendFrame(peer, { t: FRAME.ERROR, id: f.id, message: 'not authenticated' });
+  if (!peer.authedClient)
+    return sendFrame(peer, { t: FRAME.ERROR, id: f.id, message: 'not authenticated' });
   const id = f.id;
   const controller = new AbortController();
   const entry = { controller, promptResolve: null };
@@ -455,7 +472,9 @@ async function pickProvider(signal) {
   const candidates = [...peers.values()];
   if (!candidates.length) throw noProviderError();
 
-  const attempts = candidates.map((peer) => ensureClientReady(peer).then((ok) => (ok ? peer : null)));
+  const attempts = candidates.map((peer) =>
+    ensureClientReady(peer).then((ok) => (ok ? peer : null))
+  );
   // Resolve as soon as one succeeds; otherwise wait for all to settle.
   const ready = await firstTruthy(attempts, signal);
   if (!ready) throw noProviderError();
@@ -464,7 +483,8 @@ async function pickProvider(signal) {
 
 function ensureClientReady(peer) {
   if (peer.clientState === 'ready') return Promise.resolve(true);
-  if (peer.clientState === 'denied' || peer.clientState === 'unavailable') return Promise.resolve(false);
+  if (peer.clientState === 'denied' || peer.clientState === 'unavailable')
+    return Promise.resolve(false);
   return new Promise((resolve) => {
     peer.readyWaiters.push(resolve);
     if (peer.clientState === 'idle') {
@@ -537,7 +557,7 @@ async function isVaultMember(deviceKeyHex) {
   }
 }
 
-let _reachCache = { at: 0, ok: false, baseUrl: null, token: null };
+let _reachCache = { at: 0, ok: false, key: null };
 // Cheap, cached probe of the local AI Runtime so onHello doesn't hammer it (§4 cached check).
 // Exported so the routing layer (bg/ai.ts) makes the SAME local-first decision from one probe.
 // Uses Node http/https (NOT global fetch): in the Electron main process global fetch routes through
@@ -545,18 +565,20 @@ let _reachCache = { at: 0, ok: false, baseUrl: null, token: null };
 // (see fetchJson in bg/ai.ts). Using fetch here made this always-false → the Provider replied
 // UNAVAILABLE to every Client → "No AI Device is online".
 export async function localRuntimeReachable() {
-  const baseUrl = (await settingsDb.get('ai_base_url')) || 'http://localhost:11434/v1';
-  const token = await settingsDb.get('ai_access_token');
+  const { runtime } = await getActiveRuntime();
+  const key = runtime
+    ? `${runtime.kind}:${runtime.id}:${runtime.baseUrl || ''}:${runtime.accessToken || ''}`
+    : '';
   const now = Date.now();
-  if (
-    _reachCache.baseUrl === baseUrl &&
-    _reachCache.token === token &&
-    now - _reachCache.at < 15000
-  ) {
+  if (_reachCache.key === key && now - _reachCache.at < 15000) {
     return _reachCache.ok;
   }
-  const ok = await _probeRuntime(baseUrl, token);
-  _reachCache = { at: now, ok, baseUrl, token };
+  let ok = false;
+  if (runtime && runtime.available !== false) {
+    ok =
+      runtime.kind === 'openai' ? await _probeRuntime(runtime.baseUrl, runtime.accessToken) : true;
+  }
+  _reachCache = { at: now, ok, key };
   return ok;
 }
 

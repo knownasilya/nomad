@@ -92,14 +92,45 @@ const cssStr = css`
     box-shadow: 0 0 0 2px rgba(41, 95, 203, 0.2);
   }
 
-  .input-row {
+  .server-add,
+  .server-edit {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .server-add input[type='text'],
+  .server-edit input[type='text'],
+  .server-edit input[type='password'],
+  .server-add input[type='password'] {
+    width: 160px;
+  }
+
+  .server-add input[type='text']:nth-of-type(2),
+  .server-edit input[type='text']:nth-of-type(2) {
+    flex: 1;
+    min-width: 220px;
+    width: auto;
+  }
+
+  .runtime {
+    padding: 6px 0;
+  }
+
+  .runtime-pick {
     display: flex;
     align-items: center;
     gap: 8px;
+    font-weight: 500;
   }
 
-  .input-row input[type='text'] {
-    width: 300px;
+  .runtime-kind {
+    margin-left: 6px;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--text-color--light);
   }
 
   .test-status {
