@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.8.0](https://github.com/knownasilya/nomad/compare/v1.7.0...v1.8.0) (2026-10-07)
+
+
+### Features
+
+* **ai:** allow plain completions with a token cap ([a28d804](https://github.com/knownasilya/nomad/commit/a28d804c565f92c6cb3a6bb966c355e2c78c7f8a))
+* **ai:** multi-runtime support (Claude, Cursor, named OpenAI servers) ([da054c8](https://github.com/knownasilya/nomad/commit/da054c87b80f6f3610feb9b4ad4a8959bb223904))
+* **ai:** offer the model search and execute ([93e886e](https://github.com/knownasilya/nomad/commit/93e886e32c2a18f21127714d5a1f756d4e3d83e3))
+* **ai:** serve search and execute on loopback ([ca82b44](https://github.com/knownasilya/nomad/commit/ca82b44f76e4e12dbd790f54b04d1546b0a8f601))
+* **navbar:** add Copy URL button with toast confirmation ([ce1abd9](https://github.com/knownasilya/nomad/commit/ce1abd972b3ee3446dca5f70cace3d5b93e7dfc9))
+
+
+### Bug Fixes
+
+* **ai:** accept the utility process message event ([e2ec3eb](https://github.com/knownasilya/nomad/commit/e2ec3ebc99f649a1a83f232021be4dce1846cb75))
+* **ai:** send enable_thinking when reasoning is turned off ([fecc61f](https://github.com/knownasilya/nomad/commit/fecc61ffa97b77a250a1f9346774b79b6abad720))
+* **drives:** keep folder and git sync on collaborative drives ([680f3dc](https://github.com/knownasilya/nomad/commit/680f3dc580fa7b7642fad0d184f91cac5e71dfad))
+* **drives:** release the core when a Hyperdrive open fails ([fce0b0a](https://github.com/knownasilya/nomad/commit/fce0b0a93fc7c1a1bb0647adc9295a1463f66454))
+* **mobile:** show a shared space's drives in My Library ([2d0997c](https://github.com/knownasilya/nomad/commit/2d0997c8f6cc6c8c26f66eae81f4d4d58702d9f2))
+
 ## [1.7.0](https://github.com/knownasilya/nomad/compare/v1.6.0...v1.7.0) (2026-09-12)
 
 
