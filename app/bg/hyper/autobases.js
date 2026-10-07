@@ -160,6 +160,20 @@ export function getCollaborativeDrive(key) {
   return sessions[keyStr];
 }
 
+// True when this key is already open, or archives metadata recorded it as an Autobase
+// at create time. The drive registry (/drives.json) can lose its type marker; this is
+// the other local signal, and it does not open the core.
+export async function isKnownAutobase(key) {
+  const keyStr = typeof key === 'string' ? key : b4a.toString(key, 'hex');
+  if (sessions[keyStr]) return true;
+  try {
+    const meta = await archivesDb.getMeta(keyStr, { noDefault: true });
+    return !!(meta && meta.type === 'autobase');
+  } catch {
+    return false;
+  }
+}
+
 export async function getOrLoadCollaborativeDrive(key) {
   const sess = getCollaborativeDrive(key);
   if (sess) return sess;

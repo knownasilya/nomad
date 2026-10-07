@@ -262,11 +262,15 @@ export const protocolHandler = async function (request, respond) {
     { url: urlp.origin, path: urlp.pathname },
     undefined,
     async () => {
-      // check if this URL belongs to an autobase collaborative drive. getDriveConfig only
-      // knows locally-registered drives, so also honor an already-loaded collaborative session
-      // (covers remote drives navigated to by URL that aren't in the local registry).
+      // Autobase drives must not be opened as a Hyperdrive first. A failed Hyperdrive open
+      // holds the core, and the Autobase load that follows never finishes — the tab spins.
+      // Registry type, an already-loaded session, or archives metadata (set at create time,
+      // which survives a registry entry that lost its type marker) all count.
       const driveCfg = filesystem.getDriveConfig(driveKey);
-      if ((driveCfg && driveCfg.type === 'autobase') || autobases.getCollaborativeDrive(driveKey)) {
+      if (
+        (driveCfg && driveCfg.type === 'autobase') ||
+        (await autobases.isKnownAutobase(driveKey))
+      ) {
         logger.silly(`Serving autobase drive ${logUrl}`, { url: request.url });
         return serveAutobase(
           driveKey,

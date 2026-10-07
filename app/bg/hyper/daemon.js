@@ -1,13 +1,12 @@
 // @ts-nocheck
 import { app } from 'electron';
 import path from 'path';
-import { randomBytes } from 'crypto';
 import Corestore from 'corestore';
 import Hyperswarm from 'hyperswarm';
-import Hyperdrive from 'hyperdrive';
 import b4a from 'b4a';
 import EventEmitter from 'events';
 import * as logLib from '../logger';
+import { openHyperdrive } from './open-hyperdrive';
 
 const baseLogger = logLib.get();
 const logger = baseLogger.child({ category: 'hyper', subcategory: 'daemon' });
@@ -132,15 +131,13 @@ export async function createHyperdriveSession(opts) {
     return sess;
   }
 
-  // Base session
-  // Each drive gets its own namespaced Corestore session. This is critical: Hyperdrive's
-  // _close() calls this.corestore.close(), which would destroy the root store (and all
-  // other drives' mutexes) if drives shared the root store directly. With a namespaced
-  // session (_attached=null by default), close() only affects this drive's cores.
-  // Replication streams are inherited from the root store, so swarm replication still works.
-  const driveStore = store.namespace(randomBytes(32));
-  const drive = keyBuf ? new Hyperdrive(driveStore, keyBuf) : new Hyperdrive(driveStore);
-  await drive.ready();
+  // Base session. openHyperdrive gives the drive its own namespaced Corestore session:
+  // Hyperdrive._close() calls corestore.close(), which would destroy the root store (and
+  // every other drive's cores) if drives shared it. A namespaced session's close() only
+  // affects this drive. Replication streams are inherited from the root store.
+  // A failed open also closes that namespace — otherwise the core stays locked and a
+  // later Autobase open of the same key never finishes.
+  const drive = await openHyperdrive(store, keyBuf);
 
   const keyStr = b4a.toString(drive.key, 'hex');
   const discKeyStr = b4a.toString(drive.discoveryKey, 'hex');
