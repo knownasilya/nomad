@@ -7,6 +7,8 @@ import b4a from 'b4a';
 import Hyperblobs from 'hyperblobs';
 import { randomBytes } from 'crypto';
 import { EventEmitter } from 'events';
+import { promises as nodefs } from 'fs';
+import path from 'path';
 import {
   createFsCore,
   createBlobStore,
@@ -237,6 +239,34 @@ export async function putInline(sess, path, data, opts = {}) {
 export async function deletePath(sess, path) {
   await sess.base.append({ op: 'del', path });
   await sess.base.update();
+}
+
+// Copy a local directory into the drive as blob puts, then one view update.
+// `ignore` matches entry names at any depth ('.git', 'index.json'). Drive paths stay
+// slash-separated; index.json is typically ignored so the create-time manifest is kept.
+export async function importDirectory(sess, srcPath, { ignore = [], dstPath = '/' } = {}) {
+  const ignoreSet = new Set(ignore);
+  const ops = [];
+
+  async function walk(absDir, destDir) {
+    const entries = await nodefs.readdir(absDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (ignoreSet.has(entry.name)) continue;
+      const fullSrc = path.join(absDir, entry.name);
+      const fullDst = (destDir.endsWith('/') ? destDir : destDir + '/') + entry.name;
+      if (entry.isDirectory()) {
+        await walk(fullSrc, fullDst);
+      } else if (entry.isFile()) {
+        const buf = await nodefs.readFile(fullSrc);
+        ops.push(await buildPutBlobOp(sess, fullDst, buf));
+      }
+    }
+  }
+
+  await walk(srcPath, dstPath);
+  for (const op of ops) await sess.base.append(op);
+  if (ops.length) await sess.base.update();
+  return ops.length;
 }
 
 // Read a path's raw content bytes (resolves inline value OR blob pointer). null if missing.

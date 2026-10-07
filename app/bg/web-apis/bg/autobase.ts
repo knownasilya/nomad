@@ -1,7 +1,10 @@
 import { parseDriveUrl } from '../../../lib/urls';
 import b4a from 'b4a';
+import { promises as nodefs } from 'fs';
 import * as autobases from '../../hyper/autobases';
 import * as archivesDb from '../../dbs/archives';
+import { gitCloneToTmp } from '../../lib/git';
+import * as wcTrust from '../../wc-trust';
 import * as auditLog from '../../dbs/audit-log';
 import * as filesystem from '../../filesystem/index';
 import * as spacesDb from '../../dbs/spaces';
@@ -30,14 +33,30 @@ const autobaseAPI = {
   // Drive lifecycle
   // =
 
-  async createCollaborativeDrive({ title, description, type, collaborative, prompt }: any = {}) {
+  async createCollaborativeDrive({
+    title,
+    description,
+    type,
+    collaborative,
+    prompt,
+    fromGitUrl,
+  }: any = {}) {
     if (prompt !== false) {
       let res;
       try {
         res = await modals.create(this.sender, 'create-drive', {
           title,
           description,
+          collaborative,
         });
+        // The create dialog saves the folder link, then asks the caller to open the sync
+        // step. Without this, the selection is stored and never shown.
+        if (res && res.gotoSync) {
+          await modals.create(this.sender, 'folder-sync', {
+            url: res.url,
+            closeAfterSync: true,
+          });
+        }
       } catch (e) {
         if (e.name !== 'Error') throw e;
       }
@@ -45,24 +64,51 @@ const autobaseAPI = {
       return res.url;
     }
 
-    const meta: any = {};
-    if (title) meta.title = title;
-    if (description) meta.description = description;
-    if (type) meta.type = type;
-    // Locked (single-writer) by default; the toggle in the create modal sets this.
-    if (typeof collaborative !== 'undefined') meta.collaborative = !!collaborative;
-    const sess = await autobases.createCollaborativeDrive(meta);
-    // Use configAutobaseDrive instead of configDriveForSpace — the latter calls
-    // getOrLoadDrive() which tries to open the URL as a Hyperdrive and hangs.
-    await filesystem.configAutobaseDrive(sess.url, { tags: ['collaborative'] });
-    // Store title in archivesDb so the library sidebar shows the correct name.
-    const key = _keyFromUrl(sess.url);
-    await archivesDb.setMeta(key, {
-      title: meta.title || '',
-      type: 'autobase',
-      writable: true,
-    } as any);
-    return sess.url;
+    // Git clone shells out to the local filesystem. Only trusted callers (the create modal).
+    if (!wcTrust.isWcTrusted(this.sender)) fromGitUrl = undefined;
+
+    let importFolder;
+    try {
+      if (fromGitUrl) {
+        try {
+          importFolder = await gitCloneToTmp(fromGitUrl);
+        } catch (e) {
+          throw new Error('Failed to clone git repo: ' + e.toString());
+        }
+      }
+
+      const meta: any = {};
+      if (title) meta.title = title;
+      if (description) meta.description = description;
+      if (type) meta.type = type;
+      // Locked (single-writer) by default; the toggle in the create modal sets this.
+      if (typeof collaborative !== 'undefined') meta.collaborative = !!collaborative;
+      const sess = await autobases.createCollaborativeDrive(meta);
+      // Use configAutobaseDrive instead of configDriveForSpace — the latter calls
+      // getOrLoadDrive() which tries to open the URL as a Hyperdrive and hangs.
+      await filesystem.configAutobaseDrive(sess.url, { tags: ['collaborative'] });
+      // Store title in archivesDb so the library sidebar shows the correct name.
+      const key = _keyFromUrl(sess.url);
+      await archivesDb.setMeta(key, {
+        title: meta.title || '',
+        type: 'autobase',
+        writable: true,
+      } as any);
+
+      if (importFolder) {
+        try {
+          // Keep the manifest written above; drop the cloned .git directory.
+          await autobases.importDirectory(sess, importFolder, { ignore: ['.git', 'index.json'] });
+        } catch (e) {
+          throw new Error('Failed to import git repo: ' + e.toString());
+        }
+      }
+      return sess.url;
+    } finally {
+      if (importFolder) {
+        await nodefs.rm(importFolder, { recursive: true, force: true }).catch(() => {});
+      }
+    }
   },
 
   async isCollaborativeDrive(url) {

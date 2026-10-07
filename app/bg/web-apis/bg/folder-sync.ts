@@ -1,10 +1,14 @@
 import { dialog } from 'electron';
 import { promises as nodefs } from 'fs';
 import path from 'path';
+import b4a from 'b4a';
 import watch from 'recursive-watch';
 import { Readable } from 'streamx';
 import { debounce as _debounce } from '../../../lib/async';
 import hyper from '../../hyper/index';
+import * as autobases from '../../hyper/autobases';
+import * as archivesDb from '../../dbs/archives';
+import * as filesystem from '../../filesystem/index';
 import * as folderSyncDb from '../../dbs/folder-sync';
 import * as modals from '../../ui/subwindows/modals';
 import { UserDeniedError } from 'beaker-error-constants';
@@ -23,7 +27,7 @@ var activeAutoSyncs = {}; // {[key]: {stopwatch, ignoredFiles}
 export default {
   async chooseFolderDialog(url) {
     var drive = await getDrive(url);
-    var key = drive.key.toString('hex');
+    var key = driveKeyHex(drive);
     var current = await folderSyncDb.get(key);
     var res = await dialog.showOpenDialog({
       title: 'Select folder to sync',
@@ -42,6 +46,7 @@ export default {
         ignoredFiles: DEFAULT_IGNORED_FILES,
       });
     }
+    await exportMissingManifest(drive, res.filePaths[0]);
     return res.filePaths[0];
   },
 
@@ -61,7 +66,7 @@ export default {
 
   async get(url) {
     var drive = await getDrive(url);
-    var key = drive.key.toString('hex');
+    var key = driveKeyHex(drive);
     var current = await folderSyncDb.get(key);
     if (!current) return;
     return {
@@ -73,7 +78,7 @@ export default {
 
   async set(url, values) {
     var drive = await getDrive(url);
-    var key = drive.key.toString('hex');
+    var key = driveKeyHex(drive);
     var current = await folderSyncDb.get(key);
     if (current) {
       await folderSyncDb.update(key, values);
@@ -81,12 +86,13 @@ export default {
       values.ignoredFiles = values.ignoredFiles || DEFAULT_IGNORED_FILES;
       await folderSyncDb.insert(key, values);
     }
+    if (values.localPath) await exportMissingManifest(drive, values.localPath);
     stopAutosync(key);
   },
 
   async updateIgnoredFiles(url, files) {
     var drive = await getDrive(url);
-    var key = drive.key.toString('hex');
+    var key = driveKeyHex(drive);
     await folderSyncDb.update(key, {
       ignoredFiles: files.join('\n'),
     });
@@ -97,23 +103,24 @@ export default {
 
   async remove(url) {
     var drive = await getDrive(url);
-    var key = drive.key.toString('hex');
+    var key = driveKeyHex(drive);
     await folderSyncDb.del(key);
     stopAutosync(key);
   },
 
   async compare(url) {
     const drive = await getDrive(url);
-    const current = await folderSyncDb.get(drive.key.toString('hex'));
+    const current = await folderSyncDb.get(driveKeyHex(drive));
     if (!current?.localPath) return [];
+    await exportMissingManifest(drive, current.localPath);
     return _compare(drive, current.localPath, current.ignoredFiles || '');
   },
 
   async restoreFile(url, filepath) {
     const drive = await getDrive(url);
-    const current = await folderSyncDb.get(drive.key.toString('hex'));
+    const current = await folderSyncDb.get(driveKeyHex(drive));
     if (!current?.localPath) return;
-    const buf = await drive.drive.get(filepath);
+    const buf = await readDriveFile(drive, filepath);
     if (!buf) return;
     const localFilePath = path.join(current.localPath, filepath);
     await nodefs.mkdir(path.dirname(localFilePath), { recursive: true });
@@ -124,7 +131,7 @@ export default {
 
   async enableAutoSync(url) {
     var drive = await getDrive(url);
-    var key = drive.key.toString('hex');
+    var key = driveKeyHex(drive);
     var current = await folderSyncDb.get(key);
     if (!current || !current.localPath) return;
     stopAutosync(key);
@@ -133,7 +140,7 @@ export default {
 
   async disableAutoSync(url) {
     var drive = await getDrive(url);
-    stopAutosync(drive.key.toString('hex'));
+    stopAutosync(driveKeyHex(drive));
   },
 };
 
@@ -141,10 +148,95 @@ export default {
 // =
 
 async function getDrive(url) {
-  var drive = await hyper.drives.getOrLoadDrive(url);
+  const key = await hyper.drives.fromURLToKey(url, true);
+  const keyStr = typeof key === 'string' ? key : b4a.toString(key, 'hex');
+  // Opening an Autobase core as a Hyperdrive hangs. Every new drive is an Autobase,
+  // including ones created with the collaborative toggle off.
+  let drive;
+  if (await isAutobaseKey(keyStr)) {
+    drive = await autobases.getOrLoadCollaborativeDrive(keyStr);
+  } else {
+    drive = await hyper.drives.getOrLoadDrive(keyStr);
+  }
   if (!drive) throw new Error('Unable to load drive');
   if (!drive.writable) throw new Error('Must be a writable drive');
   return drive;
+}
+
+async function isAutobaseKey(key) {
+  if (autobases.getCollaborativeDrive(key)) return true;
+  const cfg = filesystem.getDriveConfig(key);
+  if (cfg && cfg.type === 'autobase') return true;
+  try {
+    const meta = await archivesDb.getMeta(key);
+    if (meta && meta.type === 'autobase') return true;
+  } catch {}
+  return false;
+}
+
+function isAutobaseSession(drive) {
+  return !!(drive && drive.base);
+}
+
+// Writer records are apply-authored control data, not files the user synced in.
+function isSystemPath(filepath) {
+  return typeof filepath === 'string' && filepath.startsWith('/.data/walled.garden/writers/');
+}
+
+function driveKeyHex(drive) {
+  if (typeof drive.keyStr === 'string') return drive.keyStr;
+  if (typeof drive.key === 'string') return drive.key;
+  return b4a.toString(drive.key, 'hex');
+}
+
+async function listDriveFiles(drive) {
+  const driveFiles = new Map();
+  if (isAutobaseSession(drive)) {
+    for (const { path: drivePath, record } of await autobases.listRecords(drive, '/')) {
+      if (isSystemPath(drivePath)) continue;
+      driveFiles.set(drivePath, {
+        key: drivePath,
+        value: { blob: { byteLength: autobases.recordByteLength(record) } },
+      });
+    }
+    return driveFiles;
+  }
+  for await (const entry of drive.drive.list('/', { recursive: true })) {
+    driveFiles.set(entry.key, entry);
+  }
+  return driveFiles;
+}
+
+async function readDriveFile(drive, filepath) {
+  if (isAutobaseSession(drive)) return autobases.readContent(drive, filepath);
+  const buf = await drive.drive.get(filepath);
+  return buf || null;
+}
+
+async function writeDriveFile(drive, filepath, buf) {
+  if (isSystemPath(filepath)) return;
+  if (isAutobaseSession(drive)) return autobases.writeFile(drive, filepath, buf);
+  return drive.drive.put(filepath, buf);
+}
+
+async function deleteDriveFile(drive, filepath) {
+  if (isSystemPath(filepath)) return;
+  if (isAutobaseSession(drive)) return autobases.deletePath(drive, filepath);
+  return drive.drive.del(filepath);
+}
+
+// index.json is on the default ignore list so a folder that lacks it is not treated as
+// "delete the manifest." That also means sync never writes the manifest into the folder.
+// Seed it once when a folder is first attached, and leave an existing file alone.
+async function exportMissingManifest(drive, localPath) {
+  const dest = path.join(localPath, 'index.json');
+  try {
+    await nodefs.access(dest);
+    return;
+  } catch {}
+  const buf = await readDriveFile(drive, '/index.json');
+  if (!buf) return;
+  await nodefs.writeFile(dest, buf);
 }
 
 function sync(url) {
@@ -155,7 +247,7 @@ function sync(url) {
     let drive, current;
     try {
       drive = await getDrive(url);
-      current = await folderSyncDb.get(drive.key.toString('hex'));
+      current = await folderSyncDb.get(driveKeyHex(drive));
     } catch (e) {
       stream.destroy(e);
       return;
@@ -164,6 +256,12 @@ function sync(url) {
     if (!current?.localPath) {
       stream.push(null);
       return;
+    }
+
+    try {
+      await exportMissingManifest(drive, current.localPath);
+    } catch {
+      // a missing manifest should not abort the rest of the sync
     }
 
     const ignoreFilter = createIgnoreFilter(current.ignoredFiles || '');
@@ -183,10 +281,10 @@ function sync(url) {
         if (change.change === 'add' || change.change === 'mod') {
           const localFile = path.join(current.localPath, change.path);
           const buf = await nodefs.readFile(localFile);
-          await drive.drive.put(change.path, buf);
+          await writeDriveFile(drive, change.path, buf);
           stream.push({ op: 'writeFile', path: change.path });
         } else if (change.change === 'del') {
-          await drive.drive.del(change.path);
+          await deleteDriveFile(drive, change.path);
           stream.push({ op: 'unlink', path: change.path });
         }
       } catch {
@@ -204,10 +302,7 @@ async function _compare(drive, localPath, ignoredFilesStr) {
   const ignoreFilter = createIgnoreFilter(ignoredFilesStr);
   const localFiles = await _listLocalFiles(localPath, ignoreFilter);
 
-  const driveFiles = new Map();
-  for await (const entry of drive.drive.list('/', { recursive: true })) {
-    driveFiles.set(entry.key, entry);
-  }
+  const driveFiles = await listDriveFiles(drive);
 
   const changes = [];
 

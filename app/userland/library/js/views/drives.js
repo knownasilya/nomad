@@ -42,10 +42,6 @@ export class DrivesView extends LitElement {
   async load() {
     var drives = await nomad.drives.list({ includeSystem: false });
 
-    drives.forEach((drive) => {
-      drive.isPear = drive.info?.type === 'pear-app';
-    });
-
     drives = drives.filter((drive) => {
       // move forks onto their parents
       if (drive.forkOf) {

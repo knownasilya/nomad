@@ -16,7 +16,6 @@ class CreateDriveModal extends LitElement {
       errors: { type: Object },
       fromGit: { type: Boolean },
       gitUrl: { type: String },
-      isPear: { type: Boolean },
       isCollaborative: { type: Boolean },
     };
   }
@@ -87,7 +86,6 @@ class CreateDriveModal extends LitElement {
     this.fromFolderPath = undefined;
     this.fromGit = false;
     this.gitUrl = undefined;
-    this.isPear = false;
     // ADR-0010: every drive is an Autobase, but "Collaborative" now means "accepts writer-access
     // requests" (a policy lock). Default LOCKED / single-writer — the safer default; the drive can
     // be unlocked later without changing its URL (or automatically when you invite a writer).
@@ -155,11 +153,6 @@ class CreateDriveModal extends LitElement {
               placeholder="Tags (optional, separated by spaces)"
             />
             <label class="toggle non-fullwidth">
-              <input type="checkbox" ?checked=${this.isPear} @click=${this.onTogglePear} />
-              <div class="switch"></div>
-              <span class="text">Create as Pear app</span>
-            </label>
-            <label class="toggle non-fullwidth">
               <input
                 type="checkbox"
                 ?checked=${this.isCollaborative}
@@ -183,15 +176,16 @@ class CreateDriveModal extends LitElement {
               type="button"
               @click=${this.onClickFromFolder}
               tabindex="8"
-              ?disabled=${this.isProcessing || this.fromGit || this.isCollaborative}
+              ?disabled=${this.isProcessing || this.fromGit}
+              title=${this.fromFolderPath || 'Choose a folder to sync'}
             >
-              From Folder
+              ${this.fromFolderPath ? this.folderName() : 'From Folder'}
             </button>
             <button
               type="button"
               @click=${this.onClickFromGit}
               tabindex="7"
-              ?disabled=${this.isProcessing || !!this.fromFolderPath || this.isCollaborative}
+              ?disabled=${this.isProcessing || !!this.fromFolderPath}
             >
               From Git Repo ${this.fromGit ? html`<span class="fas fa-times"></span>` : ''}
             </button>
@@ -281,41 +275,21 @@ class CreateDriveModal extends LitElement {
     this.isProcessing = true;
 
     try {
-      var url;
-      if (this.isCollaborative) {
-        url = await bg.fs.createCollaborativeDrive({
-          title: this.title,
-          description: this.description,
-          collaborative: true, // accepts writer-access requests
-          prompt: false,
-        });
-      } else {
-        url = await bg.fs.createDrive({
-          title: this.title,
-          description: this.description,
-          collaborative: false, // locked / single-writer (unlock later, same URL)
-          tags: this.tags.split(' '),
-          author: this.author,
-          fromGitUrl: this.fromGit ? this.gitUrl : undefined,
-          prompt: false,
-        });
-      }
-      if (this.isPear && !this.isCollaborative) {
-        if (this.fromFolderPath) {
-          await bg.folderSync.set(url, { localPath: this.fromFolderPath });
-        }
-        this.cbs.resolve({
-          url,
-          gotoSync: !!this.fromFolderPath,
-          isPear: true,
-          pearName: this.title,
-        });
-        return;
-      }
-      if (this.fromFolderPath && !this.isCollaborative) {
+      // Collaborative is a policy flag (accept writer requests), not a different backend.
+      // Folder sync and a git import work the same either way.
+      var url = await bg.fs.createDrive({
+        title: this.title,
+        description: this.description,
+        collaborative: !!this.isCollaborative,
+        tags: this.tags.split(' '),
+        author: this.author,
+        fromGitUrl: this.fromGit ? this.gitUrl : undefined,
+        prompt: false,
+      });
+      if (this.fromFolderPath) {
         await bg.folderSync.set(url, { localPath: this.fromFolderPath });
       }
-      this.cbs.resolve({ url, gotoSync: !this.isCollaborative && !!this.fromFolderPath });
+      this.cbs.resolve({ url, gotoSync: !!this.fromFolderPath });
     } catch (e) {
       if (e.message && e.message.includes('git')) {
         this.isProcessing = false;
@@ -336,10 +310,12 @@ class CreateDriveModal extends LitElement {
     });
     if (!folder || !folder.length) return;
     this.fromFolderPath = folder[0];
+    this.requestUpdate();
   }
 
-  onTogglePear() {
-    this.isPear = !this.isPear;
+  folderName() {
+    const parts = String(this.fromFolderPath).split(/[/\\]/);
+    return parts[parts.length - 1] || this.fromFolderPath;
   }
 
   onToggleCollaborative() {
