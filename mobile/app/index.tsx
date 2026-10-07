@@ -647,7 +647,9 @@ export default function Browser () {
       }).catch(() => {})
     }
     fetchOnce()
-    const timers = [1500, 4000, 9000].map((d) => setTimeout(fetchOnce, d))
+    // The backend shares one in-flight open per drive, so early retries just wait on the first
+    // open. The later ones catch a /drives.json that lands after a slow cold open.
+    const timers = [1500, 4000, 9000, 20000, 40000].map((d) => setTimeout(fetchOnce, d))
     return () => { cancelled = true; timers.forEach(clearTimeout) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spacesApi.activeSpace.rootDriveKey, spacesApi.activeSpace.ns, libraryOpen])

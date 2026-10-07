@@ -319,13 +319,16 @@ export function useBackend (handlers: BackendHandlers): Backend {
         const rpc = rpcRef.current
         if (!rpc) return resolve({ ok: false, drives: [], message: 'backend not ready' })
         const reqId = `sd_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
-        // Don't hang if the backend predates RPC_SPACE_DRIVES (rebuild with npm run bundle).
+        // Don't hang if the backend predates RPC_SPACE_DRIVES (rebuild with npm run bundle). The
+        // limit must outlast a cold open of a shared space's Root Drive: swarm join, up to 15 s of
+        // replication (AUTOBASE_LOAD_TIMEOUT), then the registry's own retries. A shorter limit
+        // drops the real answer and the Library stays empty.
         const timer = setTimeout(() => {
           if (pending.current[reqId]) {
             delete pending.current[reqId]
             resolve({ ok: false, drives: [], message: 'backend did not respond' })
           }
-        }, 12000)
+        }, 45000)
         pending.current[reqId] = (msg: any) => { clearTimeout(timer); resolve(msg) }
         const req = rpc.request(RPC_SPACE_DRIVES)
         req.send(b4a.from(JSON.stringify({ reqId, rootDriveKey, ns })))

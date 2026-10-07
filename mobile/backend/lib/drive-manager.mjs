@@ -54,6 +54,7 @@ export default class DriveManager {
     // handler feeds them all.
     this.swarm.on('connection', (conn) => this.store.replicate(conn))
     this.drives = new Map() // cacheKey -> { drive, discovery, reader, close, refs }
+    this.opening = new Map() // cacheKey -> Promise<entry> for opens still in flight
   }
 
   get peers () {
@@ -76,14 +77,27 @@ export default class DriveManager {
     const cached = this.drives.get(ck)
     if (cached) return cached
 
-    onStatus('opening', `Opening ${driveType}…`)
-    const entry = driveType === DRIVE_AUTOBASE
-      ? await this._openAutobase(key, ck, onStatus, ns)
-      : await this._openHyperdrive(key, ck, onStatus, ns)
+    // A cold open can take many seconds (swarm join + replication). Callers that arrive meanwhile
+    // (a space switch reads the registry and bookmarks at once, then retries) share this open.
+    // Otherwise each one opens a second structure on the same namespace and joins the swarm again.
+    const inflight = this.opening.get(ck)
+    if (inflight) return inflight
 
-    entry.refs = 1
-    this.drives.set(ck, entry)
-    return entry
+    const opening = (async () => {
+      onStatus('opening', `Opening ${driveType}…`)
+      const entry = driveType === DRIVE_AUTOBASE
+        ? await this._openAutobase(key, ck, onStatus, ns)
+        : await this._openHyperdrive(key, ck, onStatus, ns)
+      entry.refs = 1
+      this.drives.set(ck, entry)
+      return entry
+    })()
+    this.opening.set(ck, opening)
+    try {
+      return await opening
+    } finally {
+      this.opening.delete(ck)
+    }
   }
 
   // Create a brand-new writable drive (mirrors nomad's createNewDrive:
