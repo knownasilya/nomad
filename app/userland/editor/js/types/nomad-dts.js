@@ -178,6 +178,10 @@ declare namespace Nomad {
     model?: string;
     /** When false, ask the runtime to skip its reasoning phase. Default true. */
     think?: boolean;
+    /** When false, a plain completion: no search/execute tools and no standing tool prompt. Default true. */
+    tools?: boolean;
+    /** Cap the completion. Sent as max_tokens. Values above 8192 are clamped. */
+    maxTokens?: number;
     /** Reasoning effort ('low' | 'medium' | 'high'); sent as reasoning_effort when think !== false. */
     effort?: 'low' | 'medium' | 'high';
     /** Fires per state-reporting tool call — currently writeDriveFile: { path, priorContent }. */

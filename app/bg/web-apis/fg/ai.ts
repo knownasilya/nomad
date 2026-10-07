@@ -11,10 +11,12 @@ export function setup(rpc) {
   return {
     ai: {
       // opts (optional): { driveUrl, allowWrite, context, usePageTools, pageToolsWcId, model,
-      //                    think, onToolEvent, onReasoning }
+      //                    think, tools, maxTokens, onToolEvent, onReasoning }
       //   driveUrl / allowWrite / context are forwarded to bg (see bg/ai.ts).
       //   usePageTools / pageToolsWcId control WebMCP page tools (document.modelContext).
       //   model overrides the resolved model; think:false asks the runtime to skip reasoning.
+      //   tools:false is a plain completion (no search/execute, no standing tool prompt).
+      //   maxTokens caps the completion (sent as max_tokens).
       //   onToolEvent(e) fires for each tool the agent runs that reports state —
       //     writeDriveFile (e.path / e.priorContent for undo) and page_* tools.
       //   onReasoning(text) fires for each reasoning-stream chunk (only when think !== false and
@@ -30,6 +32,8 @@ export function setup(rpc) {
             model: opts.model,
             think: opts.think,
             effort: opts.effort,
+            tools: opts.tools,
+            maxTokens: opts.maxTokens,
           })
         );
         if (typeof opts.onToolEvent === 'function') {

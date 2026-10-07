@@ -110,6 +110,8 @@ export async function requestRemoteChat({ messages, opts = {}, signal = null, on
         model: opts.model || null,
         think: opts.think,
         effort: opts.effort || null,
+        tools: opts.tools,
+        maxTokens: opts.maxTokens,
       },
     });
   }).finally(() => peer.clientReqs.delete(id));

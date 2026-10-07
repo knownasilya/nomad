@@ -24,6 +24,7 @@ import {
   REASON_PROVIDER,
 } from '../../ai/awake';
 import { STANDING_PROMPT } from '../../ai/api-reference.mjs';
+import { completionStreamError } from '../../ai/stream-error.mjs';
 import {
   assertCallAllowed,
   buildCatalog,
@@ -202,6 +203,8 @@ async function routeChat(messages, sender, emitter, opts) {
       model: opts.model,
       think: opts.think,
       effort: opts.effort,
+      tools: opts.tools,
+      maxTokens: opts.maxTokens,
     },
     signal: opts.signal,
     onChunk: (text) => emitter.emit('chunk', { text }),
@@ -376,12 +379,16 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     pageTools: pageListed,
     ownerId: opts.ownerId,
   });
-  const tools = MODEL_TOOLS;
+  // tools:false is a plain completion: no search/execute, and no standing prompt telling the
+  // model to call them. A local runtime that injects its own tool contract (MTPLX) otherwise
+  // spends the free memory on that contract before it writes a single token.
+  const offerTools = opts.tools !== false;
+  const tools = offerTools ? MODEL_TOOLS : null;
 
   // opts.context (from the AI Sidebar) pins the agent to the Drive + open file it
   // is editing. The standing prompt no longer inlines the whole API reference — search loads
   // a guide when the turn needs it. Put context last so it's the most immediate instruction.
-  const systemContent = [systemPrompt, STANDING_PROMPT, opts.context]
+  const systemContent = [systemPrompt, offerTools ? STANDING_PROMPT : '', opts.context]
     .filter(Boolean)
     .join('\n\n---\n\n');
   const fullMessages = [{ role: 'system', content: systemContent }, ...messages];
@@ -402,7 +409,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
         tools,
         emitter,
         signal,
-        { think: opts.think, effort: opts.effort, token }
+        { think: opts.think, effort: opts.effort, token, maxTokens: opts.maxTokens }
       );
 
       if (finishReason !== 'tool_calls' || toolCalls.length === 0) break;
@@ -907,13 +914,17 @@ function streamCompletion(baseUrl, model, messages, tools, emitter, signal?, opt
     // `reasoning_effort` is the OpenAI-standard knob (also honoured by Ollama / llama.cpp for
     // reasoning models); only sent when thinking is on and the UI picked a level.
     const effort = ['low', 'medium', 'high'].includes(opts.effort) ? opts.effort : null;
+    const maxTokens = completionMaxTokens(opts.maxTokens);
     const body = JSON.stringify({
       model,
       messages,
-      tools,
+      // Omit `tools` entirely when this turn is a plain completion. Sending `tools: null`
+      // makes some servers 400.
+      ...(Array.isArray(tools) && tools.length ? { tools } : {}),
       stream: true,
       ...(noThink ? { think: false, chat_template_kwargs: { enable_thinking: false } } : {}),
       ...(!noThink && effort ? { reasoning_effort: effort } : {}),
+      ...(maxTokens ? { max_tokens: maxTokens } : {}),
     });
 
     const proto = urlp.protocol === 'https:' ? https : http;
@@ -964,6 +975,15 @@ function streamCompletion(baseUrl, model, messages, tools, emitter, signal?, opt
               continue;
             }
 
+            // HTTP 200 can still be a refusal. MTPLX reports out-of-memory as
+            // finish_reason "error" plus a top-level error object, then ends the stream.
+            const streamErr = completionStreamError(parsed);
+            if (streamErr) {
+              settle(reject, new Error(streamErr));
+              try { res.destroy(); } catch {}
+              return;
+            }
+
             const choice = parsed.choices?.[0];
             if (!choice) continue;
             if (choice.finish_reason) finishReason = choice.finish_reason;
@@ -974,7 +994,10 @@ function streamCompletion(baseUrl, model, messages, tools, emitter, signal?, opt
             // Reasoning tokens arrive on a side channel (`reasoning_content` for Ollama/DeepSeek,
             // `reasoning` for others). Forward them as `reasoning` events — never into textContent,
             // which is the visible answer and the tool-loop's assistant message.
-            const reasoning = delta.reasoning_content ?? delta.reasoning;
+            // Ollama's native field is `thinking`; OpenAI-compat servers use `reasoning` or
+            // `reasoning_content`. A thinking model with `think:false` often emits none of these
+            // and also leaves `content` empty.
+            const reasoning = delta.reasoning_content ?? delta.reasoning ?? delta.thinking;
             if (typeof reasoning === 'string' && reasoning) {
               emitter.emit('reasoning', { text: reasoning });
             }
@@ -1039,6 +1062,12 @@ function streamCompletion(baseUrl, model, messages, tools, emitter, signal?, opt
 
 // A cancel is a normal, expected stop — not a failure. runChat swallows it and ends the stream
 // cleanly rather than emitting an 'error', so the Client sees a graceful halt.
+function completionMaxTokens(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(Math.floor(n), 8192);
+}
+
 function abortError() {
   const err: any = new Error('aborted');
   err.name = 'AbortError';

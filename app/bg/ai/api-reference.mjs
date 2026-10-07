@@ -110,6 +110,8 @@ const messages = [{ role: 'user', content: 'Hello' }]
 for await (const chunk of nomad.ai.chat(messages, {
   model,               // optional: override the resolved model for this turn
   think: false,         // optional: ask the runtime to skip its reasoning phase
+  tools: false,         // optional: plain completion, no search/execute and no standing tool prompt
+  maxTokens: 1600,      // optional: cap the completion (sent as max_tokens, max 8192)
   effort: 'medium',     // optional: 'low' | 'medium' | 'high' reasoning_effort (when think !== false)
   onReasoning: (t) => {},// optional: reasoning-stream chunks (when think !== false)
 })) {
