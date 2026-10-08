@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.9.0](https://github.com/knownasilya/nomad/compare/v1.8.1...v1.9.0) (2026-10-08)
+
+
+### Features
+
+* **discovery:** add opt-in drive listing, manifest crawler, and nomad://search ([fc74956](https://github.com/knownasilya/nomad/commit/fc7495618e3da2d41cec83d7bc9bc5dd5ae4818b))
+
+
+### Bug Fixes
+
+* **mobile:** keep bottom sheets above the Android navigation bar ([b0b0c96](https://github.com/knownasilya/nomad/commit/b0b0c969dbac88d768a8688752206081ce8bafc0))
+* **spaces:** don't crash setup when moving the default space root ([c75e1a6](https://github.com/knownasilya/nomad/commit/c75e1a6ce4c6f796d6b18d562dd73ddad0e3d59b))
+
 ### [1.8.1](https://github.com/knownasilya/nomad/compare/v1.8.0...v1.8.1) (2026-10-08)
 
 
