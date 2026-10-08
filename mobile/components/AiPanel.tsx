@@ -152,8 +152,8 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
   // absoluteFillObject overlay rendered outside the screen's SafeAreaView (see app/index.tsx), so
   // nothing above it pads anything. Under Expo 55's mandatory edge-to-edge that means the Android
   // navigation bar is ours to clear — otherwise the composer sits underneath the back buttons.
-  // Every sibling panel is a Modal, which gets its own window and never has to think about this;
-  // AiPanel is deliberately not one (see the render comment below).
+  // AiPanel is deliberately not a Modal (see the render comment below). A Modal would not fix this
+  // anyway: a transparent Modal is edge-to-edge too, which is why bottom sheets use BottomSheet.
   //
   // The keyboard is then measured differently per platform:
   //   Android — keyboardDidShow reports `imeInsets.bottom - systemBars.bottom`, i.e. the nav-bar
@@ -168,8 +168,8 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
   // Rendered as an in-tree overlay, NOT a Modal. On Android a Modal is its own Dialog window, and
   // RN only emits keyboardDidShow/Hide from the activity's root view — so a Modal never hears the
   // keyboard and its input row stays buried under it. `elevation` keeps the overlay above the
-  // page WebView, which ignores zIndex. The cost of not being a Modal is the safe-area handling
-  // above: a Modal window gets insets for free, this has to apply them by hand.
+  // page WebView, which ignores zIndex. Because nothing above it pads anything, it applies the
+  // safe-area insets by hand (above).
   if (!visible) return null
   return (
     <View style={[s.overlay, { paddingTop: insets.top }]}>

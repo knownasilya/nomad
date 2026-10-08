@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { View, Text, TouchableOpacity, ScrollView, Image, Modal, StyleSheet, StatusBar, Alert, Keyboard, BackHandler, Platform } from 'react-native'
+import { View, Text, TouchableOpacity, ScrollView, Image, StyleSheet, StatusBar, Alert, Keyboard, BackHandler, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { WebView } from 'react-native-webview'
 import type { WebViewNavigation } from 'react-native-webview'
@@ -11,6 +11,7 @@ import AddressBar from '../components/AddressBar'
 import HyperView from '../components/HyperView'
 import Suggestions from '../components/Suggestions'
 import Library from '../components/Library'
+import BottomSheet from '../components/BottomSheet'
 import Devices from '../components/Devices'
 import SpaceSwitcher from '../components/SpaceSwitcher'
 import DevTools from '../components/DevTools'
@@ -1022,17 +1023,13 @@ function Menu ({ visible, onClose, items }: { visible: boolean; onClose: () => v
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   return (
-    <Modal visible={visible} transparent animationType='fade' onRequestClose={onClose}>
-      <TouchableOpacity style={s.menuBackdrop} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} style={s.menuSheet} onPress={() => {}}>
-          {items.map((it) => (
-            <TouchableOpacity key={it.label} style={s.menuItem} disabled={it.disabled} onPress={() => { onClose(); it.onPress() }}>
-              <Text style={[s.menuItemText, it.disabled && { color: t.textMuted }]}>{it.label}</Text>
-            </TouchableOpacity>
-          ))}
+    <BottomSheet visible={visible} onClose={onClose} style={s.menuSheet}>
+      {items.map((it) => (
+        <TouchableOpacity key={it.label} style={s.menuItem} disabled={it.disabled} onPress={() => { onClose(); it.onPress() }}>
+          <Text style={[s.menuItemText, it.disabled && { color: t.textMuted }]}>{it.label}</Text>
         </TouchableOpacity>
-      </TouchableOpacity>
-    </Modal>
+      ))}
+    </BottomSheet>
   )
 }
 
@@ -1069,8 +1066,7 @@ function makeStyles (t: Theme) {
     spaceDot: { width: 10, height: 10, borderRadius: radius.pill },
     spaceChipText: { color: t.text, fontSize: 13, fontWeight: '500' },
     toolBtnDisabled: { color: t.border },
-    menuBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
-    menuSheet: { backgroundColor: t.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, paddingVertical: 8, paddingBottom: 28 },
+    menuSheet: { backgroundColor: t.surface, paddingVertical: 8, paddingBottom: 28 },
     menuItem: { paddingHorizontal: 22, paddingVertical: 15 },
     menuItemText: { color: t.text, fontSize: 16 },
     home: { flex: 1, backgroundColor: t.bg },

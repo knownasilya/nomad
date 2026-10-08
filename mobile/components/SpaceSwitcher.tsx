@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import {
-  Modal,
   View,
   Text,
   TextInput,
@@ -9,6 +8,7 @@ import {
   ActivityIndicator,
   StyleSheet
 } from 'react-native'
+import BottomSheet from './BottomSheet'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
 import { SPACE_COLORS, type Space } from '../lib/useSpaces'
 
@@ -61,78 +61,71 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
   }
 
   return (
-    <Modal visible={visible} transparent animationType='fade' onRequestClose={close}>
-      <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={close}>
-        <TouchableOpacity style={s.sheet} activeOpacity={1} onPress={() => {}}>
-          <View style={s.handle} />
-          <Text style={s.title}>Spaces</Text>
+    <BottomSheet visible={visible} onClose={close} style={s.sheet}>
+      <View style={s.handle} />
+      <Text style={s.title}>Spaces</Text>
 
-          <ScrollView style={s.list} keyboardShouldPersistTaps='handled'>
-            {spaces.map((sp) => (
+      <ScrollView style={s.list} keyboardShouldPersistTaps='handled'>
+        {spaces.map((sp) => (
+          <TouchableOpacity
+            key={sp.id}
+            style={s.row}
+            onPress={() => { onSwitch(sp.id); close() }}
+          >
+            <View style={[s.dot, { backgroundColor: sp.color }]} />
+            <Text style={s.rowName} numberOfLines={1}>{sp.name}</Text>
+            {sp.rootDriveKey && shared.has(sp.rootDriveKey)
+              ? <Text style={s.shared} accessibilityLabel='Shared across your devices'>⇆</Text>
+              : null}
+            {sp.id === activeSpaceId ? <Text style={s.check}>✓</Text> : null}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      {anyShared ? <Text style={s.legend}>⇆ shared across your devices</Text> : null}
+
+      {creating ? (
+        <View style={s.form}>
+          <TextInput
+            style={s.input}
+            placeholder='Space name'
+            placeholderTextColor={t.textMuted}
+            value={name}
+            onChangeText={setName}
+            autoFocus
+            editable={!busy}
+            onSubmitEditing={submit}
+          />
+          <View style={s.swatches}>
+            {SPACE_COLORS.map((c) => (
               <TouchableOpacity
-                key={sp.id}
-                style={s.row}
-                onPress={() => { onSwitch(sp.id); close() }}
-              >
-                <View style={[s.dot, { backgroundColor: sp.color }]} />
-                <Text style={s.rowName} numberOfLines={1}>{sp.name}</Text>
-                {sp.rootDriveKey && shared.has(sp.rootDriveKey)
-                  ? <Text style={s.shared} accessibilityLabel='Shared across your devices'>⇆</Text>
-                  : null}
-                {sp.id === activeSpaceId ? <Text style={s.check}>✓</Text> : null}
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-          {anyShared ? <Text style={s.legend}>⇆ shared across your devices</Text> : null}
-
-          {creating ? (
-            <View style={s.form}>
-              <TextInput
-                style={s.input}
-                placeholder='Space name'
-                placeholderTextColor={t.textMuted}
-                value={name}
-                onChangeText={setName}
-                autoFocus
-                editable={!busy}
-                onSubmitEditing={submit}
+                key={c}
+                style={[s.swatch, { backgroundColor: c }, color === c && s.swatchActive]}
+                onPress={() => setColor(c)}
               />
-              <View style={s.swatches}>
-                {SPACE_COLORS.map((c) => (
-                  <TouchableOpacity
-                    key={c}
-                    style={[s.swatch, { backgroundColor: c }, color === c && s.swatchActive]}
-                    onPress={() => setColor(c)}
-                  />
-                ))}
-              </View>
-              <View style={s.formActions}>
-                <TouchableOpacity style={s.btnGhost} onPress={reset} disabled={busy}>
-                  <Text style={s.btnGhostText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[s.btn, (!name.trim() || busy) && s.btnDisabled]} onPress={submit} disabled={!name.trim() || busy}>
-                  {busy ? <ActivityIndicator color={t.onAccent} /> : <Text style={s.btnText}>Create</Text>}
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : (
-            <TouchableOpacity style={s.newBtn} onPress={() => setCreating(true)}>
-              <Text style={s.newBtnText}>+ New space</Text>
+            ))}
+          </View>
+          <View style={s.formActions}>
+            <TouchableOpacity style={s.btnGhost} onPress={reset} disabled={busy}>
+              <Text style={s.btnGhostText}>Cancel</Text>
             </TouchableOpacity>
-          )}
+            <TouchableOpacity style={[s.btn, (!name.trim() || busy) && s.btnDisabled]} onPress={submit} disabled={!name.trim() || busy}>
+              {busy ? <ActivityIndicator color={t.onAccent} /> : <Text style={s.btnText}>Create</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <TouchableOpacity style={s.newBtn} onPress={() => setCreating(true)}>
+          <Text style={s.newBtnText}>+ New space</Text>
         </TouchableOpacity>
-      </TouchableOpacity>
-    </Modal>
+      )}
+    </BottomSheet>
   )
 }
 
 function makeStyles (t: Theme) {
   return StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
     sheet: {
       backgroundColor: t.bg,
-      borderTopLeftRadius: radius.lg,
-      borderTopRightRadius: radius.lg,
       paddingHorizontal: space.lg,
       paddingTop: space.sm,
       paddingBottom: space.xl,

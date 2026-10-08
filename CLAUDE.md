@@ -184,3 +184,16 @@ get a menu entry in `fg/shell-menus/browser.js`. See `docs/adr/0008` and `0009`.
 The "Create Drive From This Template" starter drives (forum, blog, microblog, …) live in the sibling
 **`nomad.dev`** repo (`static/templates/` + `content/docs/templates/`), not here. See `nomad.dev/CLAUDE.md`
 for how a template is structured and how to add one.
+
+## Mobile: safe areas on Android
+
+The mobile app (Expo 55) is **edge-to-edge** on Android: it draws behind the status bar and the
+navigation bar. A `transparent` `Modal` gets **no** inset, so a panel pinned to the bottom of one
+lands under the back/home buttons.
+- For a bottom sheet, use `mobile/components/BottomSheet.tsx`. It owns the Modal, the backdrop,
+  close-on-tap-outside, and the bottom inset. Don't hand-build `<Modal transparent>` + a
+  `justifyContent: 'flex-end'` backdrop.
+- Anything else pinned to an edge outside a `SafeAreaView` (an overlay like `AiPanel`, a centered
+  dialog that can grow tall) must apply `useSafeAreaInsets()` itself.
+- A full-screen `Modal` is safe when its content sits in a `SafeAreaView` with the right `edges`
+  (see `Library`, `FileExplorer`).
