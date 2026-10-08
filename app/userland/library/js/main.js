@@ -8,6 +8,7 @@ import { EditBookmarkPopup } from 'nomad://app-stdlib/js/com/popups/edit-bookmar
 import { AddContactPopup } from './com/add-contact-popup.js';
 import mainCSS from '../css/main.css.js';
 import './views/drives.js';
+import './views/listings.js';
 import './views/bookmarks.js';
 import './views/contacts.js';
 import './views/history.js';
@@ -117,6 +118,11 @@ export class LibraryApp extends LitElement {
                 <span class="label">Hyperdrives</span>`
             )}
             ${pageNav(
+              'listings',
+              html`<span class="fas fa-fw fa-broadcast-tower"></span>
+                <span class="label">Listings</span>`
+            )}
+            ${pageNav(
               'bookmarks',
               html`<span class="far fa-fw fa-star"></span>
                 <span class="label">Bookmarks</span>`
@@ -148,6 +154,9 @@ export class LibraryApp extends LitElement {
                   loadable
                 ></drives-view>
               `
+            : ''}
+          ${this.view === 'listings'
+            ? html`<listings-view class="full-size" .filter=${this.filter} loadable></listings-view>`
             : ''}
           ${this.view === 'bookmarks'
             ? html`
