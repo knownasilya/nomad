@@ -149,9 +149,10 @@ export async function setup() {
   spaceRootDrives[1] = rootDrive;
   // Paired Devices still follow the old key in the Vault. Point that record at the new one. This
   // runs in the background and must never fail setup.
-  _moveDefaultSpaceRoot(staleRootUrl, browsingProfile.url).catch((e) =>
-    logger.warn('Could not move the default space in the vault', { error: e.toString() })
-  );
+  _moveDefaultSpaceRoot(staleRootUrl, browsingProfile.url)
+    .catch((e) => logger.warn('Could not move the default space in the vault', { error: e.toString() }))
+    .then(() => _recoverDriveList())
+    .catch((e) => logger.warn('Could not recover the drive list', { error: e.toString() }));
 
   // Pre-load all other spaces' root drives so hyper://private/ resolves to the
   // correct drive for each space before any restored tabs fire their first request.
@@ -665,6 +666,58 @@ async function _moveDefaultSpaceRoot(staleRootUrl, rootUrl) {
     if (fromKey && toKey && fromKey !== toKey) return vault.queueSpaceRootMove(fromKey, toKey);
   }
   return vault.runPendingSpaceRootMove();
+}
+
+// Setup recreates an unusable root drive empty, so the drive list (/drives.json) of the old one was
+// left behind. If this root still has no drives, copy the list from each earlier root the Vault
+// says moved here. Merges by key, so it is safe to run on every start.
+async function _recoverDriveList() {
+  if (drives.length) return;
+  const rootKey = rootDrive.keyStr;
+  const fromKeys = (await vault.listSpaces()).filter((s) => s.movedTo === rootKey).map((s) => s.rootDriveKey);
+  for (const key of fromKeys) {
+    const list = await _readOldDriveList(key);
+    if (!list.length) {
+      logger.info('No drive list in earlier root drive', { key });
+      continue;
+    }
+    const release = await lock('filesystem:drives');
+    try {
+      for (const d of list) {
+        if (d && d.key && !drives.find((x) => x.key === d.key)) drives.push(d);
+      }
+      await _put(rootDrive, '/drives.json', b4a.from(JSON.stringify({ drives }, null, 2)));
+    } finally {
+      release();
+    }
+    logger.info('Recovered drive list from earlier root drive', { key, count: list.length });
+  }
+}
+
+// An earlier root may be an Autobase or (before ADR-0010) a Hyperdrive. Try both, each with a time
+// limit: opening a key as the wrong type can hang.
+async function _readOldDriveList(key) {
+  const withTimeout = (p) =>
+    Promise.race([p, new Promise((resolve) => setTimeout(() => resolve(null), 20000))]).catch(() => null);
+  const parse = (buf) => {
+    try {
+      const list = JSON.parse(b4a.toString(buf)).drives;
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  };
+  const ab = await withTimeout(autobases.getOrLoadCollaborativeDrive(key));
+  if (ab && !autobases.viewEmpty(ab)) {
+    const buf = await withTimeout(autobases.readContent(ab, '/drives.json'));
+    if (buf) return parse(buf);
+  }
+  const hd = await withTimeout(hyper.drives.loadDrive(key));
+  if (hd && hd.drive) {
+    const buf = await withTimeout(hd.drive.get('/drives.json'));
+    if (buf) return parse(buf);
+  }
+  return [];
 }
 
 async function _createRootDrive() {
