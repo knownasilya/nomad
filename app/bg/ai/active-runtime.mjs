@@ -79,7 +79,6 @@ function testClaude(bin) {
       '-p',
       '--output-format', 'stream-json',
       '--verbose',
-      '--bare',
       '--tools', '',
       '--dangerously-skip-permissions',
     ];

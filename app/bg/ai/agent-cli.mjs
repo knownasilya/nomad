@@ -201,7 +201,6 @@ async function claudeArgs(runtime, system, mcpUrl) {
     'stream-json',
     '--include-partial-messages',
     '--verbose',
-    '--bare',
     '--tools',
     '',
     '--dangerously-skip-permissions',
