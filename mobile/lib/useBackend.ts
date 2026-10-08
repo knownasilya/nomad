@@ -71,7 +71,8 @@ export interface PairedMsg {
 }
 
 export interface VaultDevice { key: string; name: string; platform: string; addedAt?: string }
-export interface VaultSpace { rootDriveKey: string; name: string; icon?: string; color?: string }
+// movedTo: the Space's Root Drive got a new key; this record only points at it.
+export interface VaultSpace { rootDriveKey: string; name: string; icon?: string; color?: string; movedTo?: string }
 export interface VaultMsg {
   reqId: string
   hasVault: boolean

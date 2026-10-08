@@ -77,14 +77,25 @@ export function useSpaces (backend: Backend): Spaces {
       // This device was removed from the Vault on another device: drop the shared markers and
       // downgrade the synced spaces to local-only copies (mirrors a manual unlink, minus the prompt).
       if (v.removed) { leaveVaultRef.current(); return }
-      const keys = v.hasVault && v.spaces ? v.spaces.map((sp) => sp.rootDriveKey).filter(Boolean) : []
+      const live = v.hasVault && v.spaces ? v.spaces.filter((sp) => sp.rootDriveKey && !sp.movedTo) : []
+      const keys = live.map((sp) => sp.rootDriveKey)
       setVaultKeys(keys)
       if (!keys.length) return
+      // A Space whose Root Drive got a new key on another device: old key -> new key.
+      const moves = new Map((v.spaces || []).filter((sp) => sp.movedTo).map((sp) => [sp.rootDriveKey, sp.movedTo!]))
       setSpaces((prev) => {
-        const have = new Set(prev.map((s) => s.rootDriveKey).filter(Boolean) as string[])
+        // Repoint local copies in place. The id stays, so the space keeps its tabs and history.
+        let moved = false
+        const repointed = prev.map((s) => {
+          const to = s.rootDriveKey && moves.get(s.rootDriveKey)
+          if (!to || prev.some((o) => o.rootDriveKey === to)) return s
+          moved = true
+          return { ...s, rootDriveKey: to, rootDriveUrl: `hyper://${to}/`, ns: undefined }
+        })
+        const have = new Set(repointed.map((s) => s.rootDriveKey).filter(Boolean) as string[])
         const additions: Space[] = []
-        v.spaces!.forEach((vs, i) => {
-          if (!vs.rootDriveKey || have.has(vs.rootDriveKey)) return
+        live.forEach((vs, i) => {
+          if (have.has(vs.rootDriveKey)) return
           additions.push({
             id: vs.rootDriveKey,
             name: vs.name || 'Space',
@@ -97,8 +108,8 @@ export function useSpaces (backend: Backend): Spaces {
             source: 'vault'
           })
         })
-        if (!additions.length) return prev
-        const next = [...prev, ...additions]
+        if (!additions.length && !moved) return prev
+        const next = [...repointed, ...additions]
         persist(next)
         return next
       })

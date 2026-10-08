@@ -124,6 +124,31 @@ export async function registerSpace(space, rootDriveKey) {
   logger.info('Registered space in vault', { spaceId: space.id, rootDriveKey });
 }
 
+// A Space's Root Drive got a new key on this Device (setup recreates an unusable root drive).
+// Index the Space under the new key and leave the old record as a `movedTo` pointer, so paired
+// Devices repoint their copy of the Space instead of adding a second one. Writers of the old Root
+// Drive are not Writers of the new one, so fan the known Devices out to it.
+export async function moveSpaceRoot(fromKey, toKey) {
+  const sess = await getVault();
+  if (!sess) return;
+  const old = await _readRecord(sess, `${SPACES_PREFIX}${fromKey}.json`);
+  if (!old || old.movedTo) return;
+  await _putRecord(sess, `${SPACES_PREFIX}${toKey}.json`, { ...old, rootDriveKey: toKey });
+  await _putRecord(sess, `${SPACES_PREFIX}${fromKey}.json`, { rootDriveKey: fromKey, movedTo: toKey });
+  const root = await autobases.getOrLoadCollaborativeDrive(toKey);
+  if (root) {
+    for (const device of await listDevices()) {
+      try {
+        await root.base.append({ addWriter: device.key });
+      } catch (e) {
+        logger.warn('addWriter on moved root failed', { deviceKey: device.key, error: e.toString() });
+      }
+    }
+    await root.base.update();
+  }
+  logger.info('Moved space root in vault', { fromKey, toKey });
+}
+
 // Add a Device: make its key a Writer of the Vault AND of every indexed Root Drive (fan-out),
 // then record human-readable metadata. The Autobase oplog (addWriter) is the security boundary;
 // the device record is for naming/management.
@@ -238,7 +263,7 @@ export async function fanOutRemoveWriter(deviceKey) {
 async function _forEachSpaceDrive(fn) {
   const spaces = await listSpaces();
   for (const space of spaces) {
-    if (!space.rootDriveKey) continue;
+    if (!space.rootDriveKey || space.movedTo) continue;
     const sess = await autobases.getOrLoadCollaborativeDrive(space.rootDriveKey);
     if (sess) await fn(sess);
   }
@@ -257,9 +282,18 @@ export async function syncSpacesFromVault() {
       .map((s) => (s.root_drive_url ? drives.fromURLToKey(s.root_drive_url) : null))
       .filter(Boolean)
   );
+  // A moved Root Drive: repoint the local copy of the Space so it doesn't turn into a second one.
+  for (const vs of vaultSpaces) {
+    if (!vs.movedTo || !haveKeys.has(vs.rootDriveKey) || haveKeys.has(vs.movedTo)) continue;
+    const space = local.find((s) => s.root_drive_url && drives.fromURLToKey(s.root_drive_url) === vs.rootDriveKey);
+    if (!space) continue;
+    await spacesDb.update(space.id, { rootDriveUrl: `hyper://${vs.movedTo}/` });
+    haveKeys.delete(vs.rootDriveKey);
+    haveKeys.add(vs.movedTo);
+  }
   let created = 0;
   for (const vs of vaultSpaces) {
-    if (!vs.rootDriveKey || haveKeys.has(vs.rootDriveKey)) continue;
+    if (!vs.rootDriveKey || vs.movedTo || haveKeys.has(vs.rootDriveKey)) continue;
     const space = await spacesDb.create({
       name: vs.name || 'Space',
       icon: vs.icon || 'circle',

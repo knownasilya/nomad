@@ -145,8 +145,18 @@ export async function setup() {
   hyper.drives.ensureHosting(hostKeys);
   await migrateAddressBook();
 
-  await spacesDb.backfillDefaultSpaceDrive(browsingProfile.url);
+  const staleRootUrl = await spacesDb.backfillDefaultSpaceDrive(browsingProfile.url);
   spaceRootDrives[1] = rootDrive;
+  if (staleRootUrl) {
+    // Paired Devices still follow the old key in the Vault. Point that record at the new one.
+    const fromKey = await hyper.drives.fromURLToKey(staleRootUrl, true).catch(() => null);
+    const toKey = await hyper.drives.fromURLToKey(browsingProfile.url, true);
+    if (fromKey && fromKey !== toKey) {
+      vault
+        .moveSpaceRoot(fromKey, toKey)
+        .catch((e) => logger.warn('Could not move the default space in the vault', { error: e.toString() }));
+    }
+  }
 
   // Pre-load all other spaces' root drives so hyper://private/ resolves to the
   // correct drive for each space before any restored tabs fire their first request.

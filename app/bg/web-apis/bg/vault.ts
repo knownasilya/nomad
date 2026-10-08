@@ -63,7 +63,8 @@ export default {
   },
 
   async listSpaces() {
-    return vault.listSpaces();
+    // A `movedTo` record only points paired Devices at a Space's new Root Drive; it isn't a Space.
+    return (await vault.listSpaces()).filter((s) => !s.movedTo);
   },
 
   // Member side: ensure a Vault exists, then mint an invite code.

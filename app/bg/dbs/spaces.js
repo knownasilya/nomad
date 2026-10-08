@@ -22,15 +22,20 @@ export async function setup() {
 }
 
 // Called from filesystem.setup() after the root drive URL is known
+// The default space's Root Drive is always the profile's root drive. Keep the stored URL in step
+// with it: setup recreates the root drive when the old one is unusable, and a stale URL here is what
+// the Vault publishes to other Devices. Returns the previous URL when it changed, else null.
 export async function backfillDefaultSpaceDrive(rootDriveUrl) {
   // Always query DB directly — don't rely on the in-memory cache being ready
   const space = await db.get('SELECT * FROM spaces WHERE id = 1');
-  if (space && !space.root_drive_url) {
+  if (space && space.root_drive_url !== rootDriveUrl) {
     await db.run('UPDATE spaces SET root_drive_url = ? WHERE id = 1', [rootDriveUrl]);
     // refresh cache entry
     const cached = spacesCache.find((s) => s.id === 1);
     if (cached) cached.root_drive_url = rootDriveUrl;
+    return space.root_drive_url || null;
   }
+  return null;
 }
 
 export async function list() {
