@@ -73,6 +73,37 @@ export function messageText(content) {
     .join('\n');
 }
 
+// The images in a chat as Anthropic image blocks. `claude -p` reads them from one
+// stream-json user message on stdin; a photo saved to a file would need a Read tool,
+// and Claude runs with its tools off.
+export function imageBlocks(messages) {
+  const blocks = [];
+  for (const message of messages || []) {
+    if (message?.role === 'system' || !Array.isArray(message?.content)) continue;
+    for (const part of message.content) {
+      const url = part?.type === 'image_url' ? part.image_url?.url : null;
+      if (typeof url !== 'string') continue;
+      const data = url.match(/^data:image\/(png|jpeg|jpg|webp|gif);base64,([A-Za-z0-9+/=\s]+)$/);
+      if (data) {
+        const type = data[1] === 'jpg' ? 'jpeg' : data[1];
+        blocks.push({
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/' + type, data: data[2].replace(/\s/g, '') },
+        });
+      } else if (/^https?:\/\//i.test(url)) {
+        blocks.push({ type: 'image', source: { type: 'url', url } });
+      }
+    }
+  }
+  return blocks;
+}
+
+// One stream-json user line for `claude --input-format stream-json`: images first, then text.
+export function claudeUserLine(prompt, images) {
+  const content = [...(images || []), { type: 'text', text: prompt || '' }];
+  return JSON.stringify({ type: 'user', message: { role: 'user', content } }) + '\n';
+}
+
 // The CLI takes one prompt plus an optional system string. Tool messages stay in
 // the transcript so a follow-up turn still sees what search/execute returned.
 export function promptFromMessages(messages) {

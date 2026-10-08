@@ -7,7 +7,12 @@ import { spawn } from 'child_process';
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { createAgentReducer, promptFromMessages } from './agent-stream.mjs';
+import {
+  claudeUserLine,
+  createAgentReducer,
+  imageBlocks,
+  promptFromMessages,
+} from './agent-stream.mjs';
 
 export function streamAgent(runtime, messages, emitter, signal, { mcpUrl } = {}) {
   return new Promise((resolve, reject) => {
@@ -20,6 +25,7 @@ export function streamAgent(runtime, messages, emitter, signal, { mcpUrl } = {})
     let text = '';
     let system = '';
     let prompt = '';
+    let stdin = '';
     let photoDir = null;
 
     const finish = (fn, arg) => {
@@ -74,7 +80,6 @@ export function streamAgent(runtime, messages, emitter, signal, { mcpUrl } = {})
           }
           finish(resolve, { finishReason: 'stop', toolCalls: [], textContent: text });
         });
-        const stdin = runtime.kind === 'cursor' && system ? `${system}\n\n${prompt}` : prompt;
         proc.stdin.end(stdin);
       })
       .catch((err) => {
@@ -101,25 +106,29 @@ export function streamAgent(runtime, messages, emitter, signal, { mcpUrl } = {})
     }
 
     async function prepare() {
-      const photos = await materializePromptImages(messages);
-      photoDir = photos.dir;
-      const built = promptFromMessages(photos.messages);
-      system = built.system;
-      prompt = built.prompt;
       let args;
-      const dropPhotos = () => {
-        if (photoDir) rm(photoDir, { recursive: true, force: true }).catch(() => {});
-      };
       if (runtime.kind === 'cursor') {
+        // Cursor runs in ask mode inside the photo folder, so it can open the files.
+        const photos = await materializePromptImages(messages);
+        photoDir = photos.dir;
+        const built = promptFromMessages(photos.messages);
+        system = built.system;
+        prompt = built.prompt;
+        stdin = system ? `${system}\n\n${prompt}` : prompt;
         args = cursorArgs(runtime, photoDir);
-        cleanup = dropPhotos;
-      } else {
-        const prepared = await claudeArgs(runtime, system, mcpUrl);
-        args = prepared.args;
         cleanup = () => {
-          prepared.cleanup();
-          dropPhotos();
+          if (photoDir) rm(photoDir, { recursive: true, force: true }).catch(() => {});
         };
+      } else {
+        // Claude's tools are off, so a photo goes inline as an image block.
+        const built = promptFromMessages(messages);
+        const images = imageBlocks(messages);
+        system = built.system;
+        prompt = built.prompt;
+        stdin = images.length ? claudeUserLine(prompt, images) : prompt;
+        const prepared = await claudeArgs(runtime, system, mcpUrl, images.length > 0);
+        args = prepared.args;
+        cleanup = prepared.cleanup;
       }
       return spawn(runtime.bin, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -192,7 +201,7 @@ async function writeDataImage(dir, url, index) {
   return name;
 }
 
-async function claudeArgs(runtime, system, mcpUrl) {
+async function claudeArgs(runtime, system, mcpUrl, streamInput) {
   const args = [
     '-p',
     '--model',
@@ -205,6 +214,7 @@ async function claudeArgs(runtime, system, mcpUrl) {
     '',
     '--dangerously-skip-permissions',
   ];
+  if (streamInput) args.push('--input-format', 'stream-json');
   if (system) args.push('--append-system-prompt', system);
   let cleanup = () => {};
   if (mcpUrl && process.env.NOMAD_MCP !== '0') {

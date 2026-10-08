@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createAgentReducer } from '../../app/bg/ai/agent-stream.mjs'
+import { claudeUserLine, createAgentReducer, imageBlocks } from '../../app/bg/ai/agent-stream.mjs'
 
 function collect(lines) {
   const reduce = createAgentReducer()
@@ -62,5 +62,42 @@ describe('createAgentReducer', () => {
 
   it('ignores non-JSON lines', () => {
     expect(collect(['not json', '', '   '])).toEqual([])
+  })
+})
+
+describe('imageBlocks', () => {
+  it('turns data and http image parts into Anthropic image blocks', () => {
+    const blocks = imageBlocks([
+      { role: 'system', content: [{ type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } }] },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'What is this?' },
+          { type: 'image_url', image_url: { url: 'data:image/jpg;base64,QU\nJD' } },
+          { type: 'image_url', image_url: { url: 'https://example.com/a.png' } },
+          { type: 'image_url', image_url: { url: 'file:///etc/passwd' } },
+        ],
+      },
+    ])
+    expect(blocks).toEqual([
+      { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'QUJD' } },
+      { type: 'image', source: { type: 'url', url: 'https://example.com/a.png' } },
+    ])
+  })
+
+  it('returns nothing for a text-only chat', () => {
+    expect(imageBlocks([{ role: 'user', content: 'Hello' }])).toEqual([])
+  })
+})
+
+describe('claudeUserLine', () => {
+  it('puts the images before the text in one user message', () => {
+    const image = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } }
+    const line = claudeUserLine('User: Food in the photo.', [image])
+    expect(line.endsWith('\n')).toBe(true)
+    expect(JSON.parse(line)).toEqual({
+      type: 'user',
+      message: { role: 'user', content: [image, { type: 'text', text: 'User: Food in the photo.' }] },
+    })
   })
 })
