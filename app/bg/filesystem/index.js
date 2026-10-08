@@ -669,29 +669,43 @@ async function _moveDefaultSpaceRoot(staleRootUrl, rootUrl) {
 }
 
 // Setup recreates an unusable root drive empty, so the drive list (/drives.json) of the old one was
-// left behind. If this root still has no drives, copy the list from each earlier root the Vault
-// says moved here. Merges by key, so it is safe to run on every start.
+// left behind. If this root still has no drives, copy the list from an earlier root the Vault says
+// moved here, or rebuild it from local drive history (below). Merges by key, and does nothing once
+// the root has drives, so it is safe to run on every start.
 async function _recoverDriveList() {
   if (drives.length) return;
   const rootKey = rootDrive.keyStr;
   const fromKeys = (await vault.listSpaces()).filter((s) => s.movedTo === rootKey).map((s) => s.rootDriveKey);
+  let list = [];
   for (const key of fromKeys) {
-    const list = await _readOldDriveList(key);
-    if (!list.length) {
-      logger.info('No drive list in earlier root drive', { key });
-      continue;
-    }
-    const release = await lock('filesystem:drives');
-    try {
-      for (const d of list) {
-        if (d && d.key && !drives.find((x) => x.key === d.key)) drives.push(d);
-      }
-      await _put(rootDrive, '/drives.json', b4a.from(JSON.stringify({ drives }, null, 2)));
-    } finally {
-      release();
-    }
-    logger.info('Recovered drive list from earlier root drive', { key, count: list.length });
+    list = await _readOldDriveList(key);
+    if (list.length) break;
+    logger.info('No drive list in earlier root drive', { key });
   }
+  // No earlier list to copy (it was lost with the old root): rebuild from the Autobase drives this
+  // Device created, which its local drive history still records. Skip Space roots and the Vault.
+  if (!list.length && fromKeys.length) {
+    const skip = new Set([rootKey, ...fromKeys]);
+    for (const sp of await spacesDb.list()) {
+      if (sp.root_drive_url) skip.add(hyper.drives.fromURLToKey(sp.root_drive_url));
+    }
+    const vaultKey = await vault.getVaultKey();
+    if (vaultKey) skip.add(vaultKey);
+    const rows = await db.all(`SELECT key FROM archives_meta WHERE type = 'autobase' AND isOwner = 1`);
+    list = rows.filter((r) => r.key && !skip.has(r.key)).map((r) => ({ key: r.key, type: 'autobase' }));
+    logger.info('Rebuilding drive list from local drive history', { count: list.length });
+  }
+  if (!list.length) return;
+  const release = await lock('filesystem:drives');
+  try {
+    for (const d of list) {
+      if (d && d.key && !drives.find((x) => x.key === d.key)) drives.push(d);
+    }
+    await _put(rootDrive, '/drives.json', b4a.from(JSON.stringify({ drives }, null, 2)));
+  } finally {
+    release();
+  }
+  logger.info('Recovered drive list', { count: drives.length });
 }
 
 // An earlier root may be an Autobase or (before ADR-0010) a Hyperdrive. Try both, each with a time
