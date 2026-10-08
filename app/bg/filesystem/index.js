@@ -147,16 +147,11 @@ export async function setup() {
 
   const staleRootUrl = await spacesDb.backfillDefaultSpaceDrive(browsingProfile.url);
   spaceRootDrives[1] = rootDrive;
-  if (staleRootUrl) {
-    // Paired Devices still follow the old key in the Vault. Point that record at the new one.
-    const fromKey = await hyper.drives.fromURLToKey(staleRootUrl, true).catch(() => null);
-    const toKey = await hyper.drives.fromURLToKey(browsingProfile.url, true);
-    if (fromKey && fromKey !== toKey) {
-      vault
-        .moveSpaceRoot(fromKey, toKey)
-        .catch((e) => logger.warn('Could not move the default space in the vault', { error: e.toString() }));
-    }
-  }
+  // Paired Devices still follow the old key in the Vault. Point that record at the new one. This
+  // runs in the background and must never fail setup.
+  _moveDefaultSpaceRoot(staleRootUrl, browsingProfile.url).catch((e) =>
+    logger.warn('Could not move the default space in the vault', { error: e.toString() })
+  );
 
   // Pre-load all other spaces' root drives so hyper://private/ resolves to the
   // correct drive for each space before any restored tabs fire their first request.
@@ -660,6 +655,17 @@ export async function migrateAddressBook() {
 // session type so the module works whether a session is an Autobase (has `.base`) or a legacy
 // Hyperdrive (`.drive` is a Hyperdrive). Autobase content goes through the shared fs-core helpers
 // (inline value for these small control records / JSON bodies; see autobases.js).
+
+// Queue the Vault move when the default space's root changed, then retry any move still queued
+// from an earlier start. fromURLToKey returns a key, returns a promise (DNS), or throws, so await it.
+async function _moveDefaultSpaceRoot(staleRootUrl, rootUrl) {
+  if (staleRootUrl) {
+    const fromKey = await hyper.drives.fromURLToKey(staleRootUrl, true);
+    const toKey = await hyper.drives.fromURLToKey(rootUrl, true);
+    if (fromKey && toKey && fromKey !== toKey) return vault.queueSpaceRootMove(fromKey, toKey);
+  }
+  return vault.runPendingSpaceRootMove();
+}
 
 async function _createRootDrive() {
   return autobases.createCollaborativeDrive({});

@@ -22,6 +22,7 @@ import * as pdb from '../dbs/profile-data-db';
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'vault' });
 
 const VAULT_KEY_SETTING = 'vault_key';
+const PENDING_ROOT_MOVE_SETTING = 'vault_pending_root_move';
 const VAULT_VERSION = 1;
 
 const META_PATH = '/.vault/meta.json';
@@ -122,6 +123,24 @@ export async function registerSpace(space, rootDriveKey) {
     createdAt: space.created_at || new Date().toISOString(),
   });
   logger.info('Registered space in vault', { spaceId: space.id, rootDriveKey });
+}
+
+// Queue a Root Drive move and try it now. The queue (a "<fromKey>:<toKey>" setting) outlives a failed
+// attempt: setup updates the local space record first, so once that is saved, nothing else on this
+// Device remembers the old key.
+export async function queueSpaceRootMove(fromKey, toKey) {
+  await settingsDb.set(PENDING_ROOT_MOVE_SETTING, `${fromKey}:${toKey}`);
+  return runPendingSpaceRootMove();
+}
+
+// Retry a queued Root Drive move. Setup calls this on every start; it clears the queue once the
+// move is done (or there is no Vault record to move).
+export async function runPendingSpaceRootMove() {
+  const pending = await settingsDb.get(PENDING_ROOT_MOVE_SETTING);
+  if (!pending) return;
+  const [fromKey, toKey] = String(pending).split(':');
+  if (fromKey && toKey && fromKey !== toKey) await moveSpaceRoot(fromKey, toKey);
+  await settingsDb.set(PENDING_ROOT_MOVE_SETTING, '');
 }
 
 // A Space's Root Drive got a new key on this Device (setup recreates an unusable root drive).
