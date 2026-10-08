@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.11.0](https://github.com/knownasilya/nomad/compare/v1.10.0...v1.11.0) (2026-10-08)
+
+
+### Features
+
+* **devices:** show sync status for the Vault and each space ([086d9f5](https://github.com/knownasilya/nomad/commit/086d9f5f9308f9d6d28d77dca95f550d0425f6f2))
+
 ## [1.10.0](https://github.com/knownasilya/nomad/compare/v1.9.0...v1.10.0) (2026-10-08)
 
 
