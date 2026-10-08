@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.8.1](https://github.com/knownasilya/nomad/compare/v1.8.0...v1.8.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **ai:** send photos to Claude as inline image blocks ([700e5c2](https://github.com/knownasilya/nomad/commit/700e5c283fd5299131d8e33615d15aa4e53c76d0))
+* **ai:** use the existing Claude CLI login ([9768a95](https://github.com/knownasilya/nomad/commit/9768a955d682a7b0cb71c1437e68593581068dc0))
+* **spaces:** keep the shared Personal space on the live root drive ([bd3ca22](https://github.com/knownasilya/nomad/commit/bd3ca22fed0e13e5084c4a213f2e3e1a91aa9095))
+
 ## [1.8.0](https://github.com/knownasilya/nomad/compare/v1.7.0...v1.8.0) (2026-10-07)
 
 
