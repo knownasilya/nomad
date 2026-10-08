@@ -2,10 +2,10 @@
 // Cursor, Ollama, or LM Studio is actually present. Reads settings on each call
 // so a change in the settings page applies to the next chat turn.
 
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import * as settingsDb from '../dbs/settings';
 import { detectRuntimes } from './detect-runtimes.mjs';
-import { createAgentReducer, parseCursorModels } from './agent-stream.mjs';
+import { createAgentReducer, parseClaudeModels, parseCursorModels } from './agent-stream.mjs';
 import { CLAUDE_MODELS, resolveServers, pickActive, sameBaseUrl } from './runtimes.mjs';
 
 async function readConfig() {
@@ -96,7 +96,7 @@ function testClaude(bin) {
         const detail = String(stderr || '').trim().slice(0, 300) || err.message || 'Claude CLI failed';
         return resolve({ ok: false, error: detail });
       }
-      resolve({ ok: true, models: CLAUDE_MODELS.length });
+      listClaudeModels(bin).then((models) => resolve({ ok: true, models: models.length }));
     });
     child.stdin.end('hi');
   });
@@ -116,11 +116,59 @@ function testCursor(bin) {
   });
 }
 
+// A CLI runtime's models as { models, labels }: `models` are the values to pass to --model,
+// `labels` maps a value to a readable name where the CLI gives one. null for a server runtime.
 export async function modelsForRuntime(runtime) {
-  if (!runtime || runtime.available === false) return [];
-  if (runtime.kind === 'claude') return [...CLAUDE_MODELS];
-  if (runtime.kind === 'cursor') return listCursorModels(runtime.bin);
+  if (!runtime || runtime.available === false) return { models: [], labels: {} };
+  if (runtime.kind === 'claude') {
+    const list = await listClaudeModels(runtime.bin);
+    return { models: list.map((m) => m.value), labels: Object.fromEntries(list.map((m) => [m.value, m.label])) };
+  }
+  if (runtime.kind === 'cursor') return { models: await listCursorModels(runtime.bin), labels: {} };
   return null;
+}
+
+// Ask the `claude` CLI for its models: the same `initialize` control request the Agent SDK sends
+// for supportedModels(). It needs no prompt and makes no model call. The list only changes when
+// the CLI updates, so keep it for a while. Falls back to the plain aliases if the CLI won't answer.
+const CLAUDE_MODELS_TTL = 10 * 60 * 1000;
+let claudeModelsCache = null; // { bin, at, list }
+
+function listClaudeModels(bin) {
+  const fallback = CLAUDE_MODELS.map((value) => ({ value, label: value }));
+  if (!bin) return Promise.resolve(fallback);
+  const c = claudeModelsCache;
+  if (c && c.bin === bin && Date.now() - c.at < CLAUDE_MODELS_TTL) return Promise.resolve(c.list);
+  return new Promise((resolve) => {
+    let out = '';
+    let done = false;
+    const finish = (list) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      child.kill();
+      if (list.length) claudeModelsCache = { bin, at: Date.now(), list };
+      resolve(list.length ? list : fallback);
+    };
+    const child = spawn(
+      bin,
+      ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose'],
+      { env: process.env, stdio: ['pipe', 'pipe', 'ignore'] }
+    );
+    const timer = setTimeout(() => finish([]), 10000);
+    child.on('error', () => finish([]));
+    child.on('close', () => finish(parseClaudeModels(out)));
+    child.stdout.on('data', (chunk) => {
+      out += chunk;
+      if (out.includes('"control_response"')) {
+        const list = parseClaudeModels(out);
+        if (list.length) finish(list);
+      }
+    });
+    child.stdin.write(
+      JSON.stringify({ type: 'control_request', request_id: 'nomad-models', request: { subtype: 'initialize' } }) + '\n'
+    );
+  });
 }
 
 function listCursorModels(bin) {

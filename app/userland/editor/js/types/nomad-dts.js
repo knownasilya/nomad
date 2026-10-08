@@ -203,8 +203,8 @@ declare namespace Nomad {
     chat(messages: AiMessage[], opts?: AiChatOpts): AsyncIterableIterator<string>;
     /** Test connectivity to an AI provider base URL. */
     testConnection(baseUrl: string): Promise<any>;
-    /** Models for the active runtime: { models: string[], current: string | null }. */
-    listModels(): Promise<{ models: string[]; current: string | null }>;
+    /** Models for the active runtime. labels maps a model to a readable name when the runtime gives one (the Claude CLI does). */
+    listModels(): Promise<{ models: string[]; current: string | null; labels?: Record<string, string> }>;
     /** Detected local runtimes and named OpenAI servers: { active, model, runtimes }. */
     listRuntimes(): Promise<{
       active: string;

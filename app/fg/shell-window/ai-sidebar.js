@@ -737,7 +737,8 @@ class ShellWindowAiSidebar extends LitElement {
   async _loadModels() {
     if (!this._models) {
       try {
-        const { models } = await bg.aiShell.listModels();
+        const { models, labels } = await bg.aiShell.listModels();
+        this._modelLabels = labels || {};
         this._models = models || [];
       } catch {
         this._models = [];
@@ -931,7 +932,7 @@ class ShellWindowAiSidebar extends LitElement {
         <select title="Model" .value=${this._model} @change=${this._onModelChange} ?disabled=${this.streaming}>
           <option value="">Default</option>
           ${[...new Set([...(this._models || []), ...(this._model ? [this._model] : [])])].map(
-            (m) => html`<option value=${m} ?selected=${m === this._model}>${m}</option>`
+            (m) => html`<option value=${m} ?selected=${m === this._model}>${this._modelLabels?.[m] || m}</option>`
           )}
         </select>
         <label title="Let the model show its reasoning; uncheck to ask it to skip thinking">

@@ -128,6 +128,34 @@ export function promptFromMessages(messages) {
   return { system: system.join('\n\n'), prompt: lines.join('\n\n') };
 }
 
+// The `claude` CLI's own model list: the `models` array in its reply to an `initialize` control
+// request (stream-json mode). Returns [{ value, label }] — `value` goes to --model as is. An alias
+// (value differs from resolvedModel) is labelled with the version it runs today. "default" is
+// dropped: an empty model already means the CLI's default.
+export function parseClaudeModels(text) {
+  for (const raw of String(text || '').split('\n')) {
+    let msg;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    if (msg?.type !== 'control_response') continue;
+    const res = msg.response?.response || msg.response || {};
+    if (!Array.isArray(res.models)) return [];
+    const out = [];
+    for (const m of res.models) {
+      const value = typeof m?.value === 'string' ? m.value : '';
+      if (!value || value === 'default') continue;
+      const name = m.displayName || value;
+      const label = m.resolvedModel && m.resolvedModel !== value ? `${name} (latest, "${value}")` : name;
+      out.push({ value, label });
+    }
+    return out;
+  }
+  return [];
+}
+
 export function parseCursorModels(text) {
   const ids = [];
   for (const raw of String(text || '').split('\n')) {

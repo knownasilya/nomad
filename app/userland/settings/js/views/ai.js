@@ -25,6 +25,7 @@ class AiSettingsView extends LitElement {
     this.settings = undefined;
     this.testStatus = null; // null | 'testing' | {ok, models} | {error}
     this.availableModels = null; // null until the active runtime's catalogue loads
+    this.modelLabels = {}; // value -> readable name, when the runtime gives one (the Claude CLI does)
     this.catalog = null; // { active, model, runtimes } from nomad.ai.listRuntimes()
     this.draft = { name: '', baseUrl: '', accessToken: '' };
     this.keepAwakeStatus = null; // {holding, paused, onBattery, unsupported} from bg/ai/awake.js
@@ -134,7 +135,7 @@ class AiSettingsView extends LitElement {
                 <select id="ai-default-model" style="width: 260px" @change=${this.onAiDefaultModelChange}>
                   <option value="" ?selected=${!model}>— none —</option>
                   ${[...new Set([...this.availableModels, ...(model ? [model] : [])])].map(
-                    (m) => html`<option value="${m}" ?selected=${m === model}>${m}</option>`
+                    (m) => html`<option value="${m}" ?selected=${m === model}>${this.modelLabels[m] || m}</option>`
                   )}
                 </select>
               `
@@ -269,7 +270,8 @@ class AiSettingsView extends LitElement {
 
   async refreshModels() {
     try {
-      const { models } = await nomad.ai.listModels();
+      const { models, labels } = await nomad.ai.listModels();
+      this.modelLabels = labels || {};
       this.availableModels = models || [];
     } catch {
       this.availableModels = null;

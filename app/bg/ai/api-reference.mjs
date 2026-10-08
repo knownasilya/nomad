@@ -121,7 +121,7 @@ for await (const chunk of nomad.ai.chat(messages, {
   process(chunk) // string chunk streamed from the model
 }
 
-const { models, current } = await nomad.ai.listModels() // models for the active runtime
+const { models, current, labels } = await nomad.ai.listModels() // models for the active runtime; labels: model -> readable name, when known
 const { active, runtimes } = await nomad.ai.listRuntimes() // detected Claude/Cursor/Ollama/LM Studio, plus named OpenAI servers
 const { builtin, capabilities, page } = await nomad.ai.listTools() // search and execute, the capabilities behind them, and this page's tools
 const { reasoning, vision } = await nomad.ai.modelInfo(model) // reasoning, and vision (Ollama /api/show only)

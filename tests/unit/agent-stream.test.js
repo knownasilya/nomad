@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { claudeUserLine, createAgentReducer, imageBlocks } from '../../app/bg/ai/agent-stream.mjs'
+import { claudeUserLine, createAgentReducer, imageBlocks, parseClaudeModels } from '../../app/bg/ai/agent-stream.mjs'
 
 function collect(lines) {
   const reduce = createAgentReducer()
@@ -99,5 +99,31 @@ describe('claudeUserLine', () => {
       type: 'user',
       message: { role: 'user', content: [image, { type: 'text', text: 'User: Food in the photo.' }] },
     })
+  })
+})
+
+describe('parseClaudeModels', () => {
+  const reply = (models) => JSON.stringify({
+    type: 'control_response',
+    response: { subtype: 'success', request_id: 'm1', response: { models } }
+  })
+
+  it('reads the models from the initialize reply and labels aliases with their version', () => {
+    const text = [
+      '{"type":"system","subtype":"init"}',
+      reply([
+        { value: 'default', resolvedModel: 'claude-opus-5-5', displayName: 'Default (recommended)' },
+        { value: 'opus', resolvedModel: 'claude-opus-5-5', displayName: 'Opus 5.5' },
+        { value: 'claude-opus-5', resolvedModel: 'claude-opus-5', displayName: 'Opus 5' }
+      ])
+    ].join('\n')
+    expect(parseClaudeModels(text)).toEqual([
+      { value: 'opus', label: 'Opus 5.5 (latest, "opus")' },
+      { value: 'claude-opus-5', label: 'Opus 5' }
+    ])
+  })
+
+  it('returns an empty list when there is no reply', () => {
+    expect(parseClaudeModels('not json\n{"type":"result"}')).toEqual([])
   })
 })

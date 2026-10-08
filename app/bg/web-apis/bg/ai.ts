@@ -88,7 +88,8 @@ export default {
     if (!runtime || runtime.available === false) return { models: [], current };
     if (runtime.kind !== 'openai') {
       try {
-        return { models: await modelsForRuntime(runtime), current };
+        const { models, labels } = await modelsForRuntime(runtime);
+        return { models, current, labels };
       } catch (err) {
         return { models: [], current, error: err.message || 'Could not list models' };
       }

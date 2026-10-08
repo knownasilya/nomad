@@ -4,8 +4,9 @@
 export const OLLAMA_URL = 'http://127.0.0.1:11434/v1';
 export const LMSTUDIO_URL = 'http://127.0.0.1:1234/v1';
 
-// Aliases the `claude` CLI accepts for whichever model is current.
-export const CLAUDE_MODELS = ['sonnet', 'opus', 'haiku'];
+// Fallback when the `claude` CLI can't report its models (see listClaudeModels). These aliases
+// always run the latest model of their family, so they never go stale.
+export const CLAUDE_MODELS = ['opus', 'sonnet', 'haiku', 'fable'];
 
 const RESERVED_IDS = new Set(['claude', 'cursor', 'ollama', 'lmstudio']);
 
