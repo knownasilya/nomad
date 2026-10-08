@@ -21,6 +21,7 @@ class DevicesView extends LitElement {
       editingKey: { type: String },
       editName: { type: String },
       confirmingKey: { type: String },
+      sync: { type: Object },
     };
   }
 
@@ -43,6 +44,7 @@ class DevicesView extends LitElement {
     this.editingKey = '';
     this.editName = '';
     this.confirmingKey = '';
+    this.sync = null; // nomad.vault.getSyncStatus(): { connections, vault, spaces }
     this._pendingStream = null;
     this._pollTimer = null;
   }
@@ -99,6 +101,7 @@ class DevicesView extends LitElement {
   async _refresh() {
     this.devices = (await nomad.vault.listDevices()) || [];
     this.pending = (await nomad.vault.listPendingRequests()) || [];
+    this.sync = await nomad.vault.getSyncStatus().catch(() => null);
     this.requestUpdate();
   }
 
@@ -169,6 +172,11 @@ class DevicesView extends LitElement {
         ${this.renderDeviceList()}
       </div>
 
+      <div class="section">
+        <h2>Sync status</h2>
+        ${this.renderSync()}
+      </div>
+
       ${this.pending && this.pending.length
         ? html`<div class="section">
             <h2>Pending requests</h2>
@@ -194,6 +202,65 @@ class DevicesView extends LitElement {
       <div class="section">
         <h2>Join from another device</h2>
         ${this.renderJoinForm()}
+      </div>
+    `;
+  }
+
+  // Connection and replication state of the Vault and each Space. A Space listed on only one side
+  // (here vs the Vault index) is the usual reason another Device sees an empty Space.
+  renderSync() {
+    const s = this.sync;
+    if (!s) return html`<div class="empty-state">Checking sync status…</div>`;
+    return html`
+      <div class="list">
+        <div class="row">
+          <span class="icon fas fa-fw fa-network-wired"></span>
+          <div class="body">
+            <div class="name">Network</div>
+            <div class="meta">
+              ${s.connections === 0
+                ? html`<span class="tag warn">No peers connected</span>`
+                : html`${s.connections} peer connection${s.connections === 1 ? '' : 's'}`}
+            </div>
+          </div>
+        </div>
+        ${s.vault ? this.renderSyncRow('fa-key', 'Vault', s.vault, []) : ''}
+        ${s.spaces.map((sp) =>
+          this.renderSyncRow('fa-layer-group', sp.name || 'Space', sp, [
+            !sp.here ? html`<span class="tag warn">Not on this device</span>` : '',
+            !sp.inVault ? html`<span class="tag warn">Not shared in Vault</span>` : '',
+            sp.movedTo ? html`<span class="tag">Moved to <code>${sp.movedTo.slice(0, 8)}…</code></span>` : '',
+            sp.driveCount !== null && sp.driveCount !== undefined
+              ? html`<span class="tag">${sp.driveCount} drive${sp.driveCount === 1 ? '' : 's'}</span>`
+              : '',
+          ])
+        )}
+      </div>
+      <p class="hint">
+        Each of your devices should list the same spaces, with the same key. Synced means this
+        device has everything its connected peers have.
+      </p>
+    `;
+  }
+
+  renderSyncRow(icon, name, st, tags) {
+    const key = st.key || st.rootDriveKey || '';
+    let state;
+    if (st.loaded === false) state = html`<span class="tag">Not loaded</span>`;
+    else if (st.peers === 0) state = html`<span class="tag warn">No peers</span>`;
+    else if (st.remoteLength > st.length) state = html`<span class="tag warn">Syncing ${st.length}/${st.remoteLength}</span>`;
+    else state = html`<span class="tag ok">Synced · ${st.peers} peer${st.peers === 1 ? '' : 's'}</span>`;
+    return html`
+      <div class="row">
+        <span class="icon fas fa-fw ${icon}"></span>
+        <div class="body">
+          <div class="name">${name} <code class="key" title=${key}>${key.slice(0, 8)}…</code></div>
+          <div class="meta">
+            ${state}
+            ${st.loaded === false ? '' : html`<span class="tag">${st.writable ? 'Writable' : 'Read-only'}</span>`}
+            ${tags}
+          </div>
+        </div>
       </div>
     `;
   }

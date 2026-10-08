@@ -4,6 +4,7 @@ export default {
   getThisDevice: 'promise',
   listDevices: 'promise',
   listSpaces: 'promise',
+  getSyncStatus: 'promise',
 
   // adding devices (member side)
   createInvite: 'promise', // -> { code }

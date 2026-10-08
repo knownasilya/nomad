@@ -838,6 +838,7 @@ export default function Browser () {
         vaultStatus={backend.vaultStatus}
         renameDevice={backend.renameDevice}
         removeDevice={backend.removeDevice}
+        spaces={spacesApi.spaces}
         onUnlinked={handleUnlinked}
       />
 

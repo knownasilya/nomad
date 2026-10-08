@@ -14,6 +14,7 @@
 import b4a from 'b4a';
 import * as logLib from '../logger';
 import * as autobases from './autobases';
+import * as daemon from './daemon';
 import * as drives from './drives';
 import * as settingsDb from '../dbs/settings';
 import * as spacesDb from '../dbs/spaces';
@@ -151,7 +152,10 @@ export async function moveSpaceRoot(fromKey, toKey) {
   const sess = await getVault();
   if (!sess) return;
   const old = await _readRecord(sess, `${SPACES_PREFIX}${fromKey}.json`);
-  if (!old || old.movedTo) return;
+  if (!old || old.movedTo) {
+    logger.info('No space root to move in vault', { fromKey, toKey, found: !!old, movedTo: old?.movedTo });
+    return;
+  }
   await _putRecord(sess, `${SPACES_PREFIX}${toKey}.json`, { ...old, rootDriveKey: toKey });
   await _putRecord(sess, `${SPACES_PREFIX}${fromKey}.json`, { rootDriveKey: fromKey, movedTo: toKey });
   const root = await autobases.getOrLoadCollaborativeDrive(toKey);
@@ -344,6 +348,74 @@ export async function syncSpacesToVault() {
   }
   if (registered) logger.info('Synced spaces to vault', { registered });
   return { registered };
+}
+
+// Sync status for the Devices page: the Vault, plus every Space known here OR in the Vault index,
+// so a Space this Device has under one key and the Vault under another shows up as a mismatch.
+// Only reads drives that are already loaded — never opens one, so this can't hang on a missing peer.
+export async function getSyncStatus() {
+  const swarm = await daemon.getDaemonStatus();
+  const vaultSess = await getVault();
+  const vaultSpaces = vaultSess ? await listSpaces() : [];
+  const local = await spacesDb.list();
+
+  const byKey = new Map();
+  for (const sp of local) {
+    const key = sp.root_drive_url ? drives.fromURLToKey(sp.root_drive_url) : null;
+    if (key) byKey.set(key, { name: sp.name, rootDriveKey: key, here: true, inVault: false });
+  }
+  for (const vs of vaultSpaces) {
+    if (!vs.rootDriveKey) continue;
+    const row = byKey.get(vs.rootDriveKey) || { name: vs.name, rootDriveKey: vs.rootDriveKey, here: false };
+    row.inVault = true;
+    if (vs.movedTo) row.movedTo = vs.movedTo;
+    byKey.set(vs.rootDriveKey, row);
+  }
+
+  const spaces = [];
+  for (const row of byKey.values()) {
+    const sess = autobases.getCollaborativeDrive(row.rootDriveKey);
+    const st = sess ? await _driveStatus(sess) : { loaded: false };
+    let driveCount = null;
+    if (sess) {
+      try {
+        const reg = await autobases.readJson(sess, '/drives.json');
+        driveCount = Array.isArray(reg?.drives) ? reg.drives.length : 0;
+      } catch {}
+    }
+    spaces.push({ ...row, ...st, driveCount });
+  }
+  return {
+    connections: swarm.connections || 0,
+    vault: vaultSess ? await _driveStatus(vaultSess) : null,
+    spaces,
+  };
+}
+
+// One Autobase's replication state. `peers` and the lengths come from its bootstrap core (the
+// creating writer's log): synced when every peer's length is no longer than ours.
+async function _driveStatus(sess) {
+  const base = sess.base;
+  const out = {
+    loaded: true,
+    key: sess.keyStr,
+    writable: !!base.writable,
+    viewLength: base.view?.core?.length ?? 0,
+    peers: 0,
+    length: 0,
+    remoteLength: 0,
+  };
+  const core = daemon.getCorestore().get({ key: base.key });
+  try {
+    await core.ready();
+    out.peers = core.peers.length;
+    out.length = core.length;
+    out.remoteLength = Math.max(core.length, ...core.peers.map((p) => p.remoteLength || 0));
+  } catch {
+  } finally {
+    await core.close().catch(() => {});
+  }
+  return out;
 }
 
 // internal record helpers (Hyperbee view <-> JSON)

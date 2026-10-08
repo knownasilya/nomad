@@ -633,7 +633,7 @@ async function handlePairSubmit ({ reqId, code, name = 'Mobile device' }) {
   }
 }
 
-async function handleVaultStatus ({ reqId }) {
+async function handleVaultStatus ({ reqId, spaceKeys = [] }) {
   try {
     if (!vault) {
       // Paired but the base hasn't finished opening yet (right after pairing, or during startup):
@@ -671,10 +671,20 @@ async function handleVaultStatus ({ reqId }) {
       'localExists', !!vault.local,
       'deviceKeys', devices.map((d) => (d.key || '').slice(0, 8)).join(','),
       'peers', manager.peers)
-    send(RPC_VAULT, { reqId, hasVault: true, vaultKey: loadVaultKey(), thisDeviceKey, ...index })
+    send(RPC_VAULT, { reqId, hasVault: true, vaultKey: loadVaultKey(), thisDeviceKey, ...index, sync: await syncStatus(index, spaceKeys) })
   } catch (err) {
     send(RPC_VAULT, { reqId, hasVault: false, message: err.message || String(err) })
   }
+}
+
+// Sync status for the Devices screen: the Vault and every Space this phone has OR the Vault lists.
+// `spaceKeys` are the phone's own Space Root Drive keys (the UI keeps the Space list).
+async function syncStatus (index, spaceKeys) {
+  const keys = new Set([...(spaceKeys || []), ...(index.spaces || []).map((s) => s.rootDriveKey)].filter(Boolean))
+  const spaces = []
+  for (const key of keys) spaces.push(await manager.autobaseStatus(key))
+  const vaultKeyHex = vault.key ? b4a.toString(vault.key, 'hex') : ''
+  return { connections: manager.peers, vault: await manager.autobaseStatus(vaultKeyHex, vault), spaces }
 }
 
 async function handleOpen ({ tabId, url, driveType = DRIVE_HYPERDRIVE, ns = null, detect = true }) {

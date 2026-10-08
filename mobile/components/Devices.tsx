@@ -12,7 +12,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
-import type { Backend, VaultMsg } from '../lib/useBackend'
+import type { Backend, DriveSync, VaultMsg } from '../lib/useBackend'
+import type { Space } from '../lib/useSpaces'
 
 const DEVICE_NAME_KEY = 'hb:deviceName'
 const DEFAULT_DEVICE_NAME = 'My phone'
@@ -24,6 +25,8 @@ interface Props {
   vaultStatus: Backend['vaultStatus']
   renameDevice: Backend['renameDevice']
   removeDevice: Backend['removeDevice']
+  // This phone's Spaces, so the sync status can line them up with the Vault's.
+  spaces?: Space[]
   // Fired after this phone leaves the Vault (self-unlink succeeded), so the host can clean up the
   // spaces that were shared from other devices.
   onUnlinked?: () => void
@@ -32,9 +35,14 @@ interface Props {
 // Devices screen — link this phone to your identity's Vault so it can read and edit all your
 // spaces and drives. Mobile is a *candidate*: you enter an invite code generated on a trusted
 // (desktop) device, then approve the request there. See nomad/docs/multi-device-protocol.md.
-export default function Devices ({ visible, onClose, pair, vaultStatus, renameDevice, removeDevice, onUnlinked }: Props) {
+export default function Devices ({ visible, onClose, pair, vaultStatus: vaultStatusFor, renameDevice, removeDevice, spaces = [], onUnlinked }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
+
+  // Every status read sends this phone's Space keys, so the backend reports their sync state too.
+  const spaceKeysRef = useRef<string[]>([])
+  spaceKeysRef.current = spaces.map((sp) => sp.rootDriveKey).filter(Boolean) as string[]
+  const vaultStatus = () => vaultStatusFor(spaceKeysRef.current)
 
   const [status, setStatus] = useState<VaultMsg | null>(null)
   const [loading, setLoading] = useState(true)
@@ -326,19 +334,8 @@ export default function Devices ({ visible, onClose, pair, vaultStatus, renameDe
                   </View>
                 )}
 
-                <Text style={[s.sectionTitle, { marginTop: space.xl }]}>Shared spaces</Text>
-                {(status.spaces || []).length === 0 ? (
-                  <Text style={s.empty}>No spaces synced yet.</Text>
-                ) : (
-                  <View style={s.list}>
-                    {(status.spaces || []).map((sp) => (
-                      <View key={sp.rootDriveKey} style={s.row}>
-                        <View style={[s.dot, { backgroundColor: sp.color || t.accent }]} />
-                        <Text style={s.rowName}>{sp.name}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
+                <Text style={[s.sectionTitle, { marginTop: space.xl }]}>Sync status</Text>
+                <SyncStatusList status={status} spaces={spaces} s={s} t={t} />
 
                 {/* Always-available escape hatch: leave the Vault on this phone. Works even if this
                     device's own row is gone (e.g. it was removed on another device while the app was
@@ -418,6 +415,80 @@ export default function Devices ({ visible, onClose, pair, vaultStatus, renameDe
 
 type Styles = ReturnType<typeof makeStyles>
 
+// Connection and replication state of the Vault and each Space. A Space that is on only one side
+// (this phone vs the Vault index), or under a different key, is the usual reason a Space looks empty.
+function SyncStatusList ({ status, spaces, s, t }: { status: VaultMsg; spaces: Space[]; s: Styles; t: Theme }) {
+  const sync = status.sync
+  if (!sync) return <Text style={s.empty}>Checking sync status…</Text>
+  const vaultSpaces = status.spaces || []
+  const rows = sync.spaces.map((st) => {
+    const mine = spaces.find((sp) => sp.rootDriveKey === st.key)
+    const inVault = vaultSpaces.find((vs) => vs.rootDriveKey === st.key)
+    return { st, name: mine?.name || inVault?.name || 'Space', mine: !!mine, inVault: !!inVault, movedTo: inVault?.movedTo }
+  })
+  return (
+    <>
+      <View style={s.list}>
+        <View style={s.row}>
+          <View style={s.rowBody}>
+            <Text style={s.rowName}>Network</Text>
+            <View style={s.tagRow}>
+              {sync.connections === 0
+                ? <Text style={[s.tag, s.tagWarn]}>No peers connected</Text>
+                : <Text style={s.tag}>{sync.connections} peer connection{sync.connections === 1 ? '' : 's'}</Text>}
+            </View>
+          </View>
+        </View>
+        <SyncRow name='Vault' st={sync.vault} tags={[]} s={s} t={t} />
+        {rows.map(({ st, name, mine, inVault, movedTo }) => (
+          <SyncRow
+            key={st.key}
+            name={name}
+            st={st}
+            s={s}
+            t={t}
+            tags={[
+              !mine ? 'Not on this phone' : '',
+              !inVault ? 'Not shared in Vault' : '',
+              movedTo ? `Moved to ${movedTo.slice(0, 8)}…` : ''
+            ].filter(Boolean)}
+          />
+        ))}
+      </View>
+      <Text style={[s.hint, { marginTop: space.sm }]}>
+        Each of your devices should list the same spaces, with the same key. Synced means this phone
+        has everything its connected peers have.
+      </Text>
+    </>
+  )
+}
+
+function SyncRow ({ name, st, tags, s, t }: { name: string; st: DriveSync; tags: string[]; s: Styles; t: Theme }) {
+  let state: { label: string; warn?: boolean; ok?: boolean }
+  if (!st.loaded) state = { label: 'Not opened yet' }
+  else if (!st.peers) state = { label: 'No peers', warn: true }
+  else if ((st.remoteLength || 0) > (st.length || 0)) state = { label: `Syncing ${st.length}/${st.remoteLength}`, warn: true }
+  else state = { label: `Synced · ${st.peers} peer${st.peers === 1 ? '' : 's'}`, ok: true }
+  return (
+    <View style={s.row}>
+      <View style={s.rowBody}>
+        <View style={s.nameRow}>
+          <Text style={s.rowName}>{name}</Text>
+          <Text style={s.keyText}>{(st.key || '').slice(0, 8)}…</Text>
+        </View>
+        <View style={s.tagRow}>
+          <Text style={[s.tag, state.warn && s.tagWarn, state.ok && { color: t.secure }]}>{state.label}</Text>
+          {st.loaded ? <Text style={s.tag}>{st.writable ? 'Writable' : 'Read-only'}</Text> : null}
+          {typeof st.driveCount === 'number'
+            ? <Text style={s.tag}>{st.driveCount} drive{st.driveCount === 1 ? '' : 's'}</Text>
+            : null}
+          {tags.map((tag) => <Text key={tag} style={[s.tag, s.tagWarn]}>{tag}</Text>)}
+        </View>
+      </View>
+    </View>
+  )
+}
+
 function makeStyles (t: Theme) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: t.bg },
@@ -475,6 +546,10 @@ function makeStyles (t: Theme) {
     leaveConfirm: { gap: space.sm },
     link: { color: t.accent, fontSize: 14, fontWeight: '500', paddingHorizontal: space.xs },
     dot: { width: 12, height: 12, borderRadius: radius.pill },
+    keyText: { fontSize: 11, color: t.textMuted, fontFamily: 'monospace' },
+    tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.xs },
+    tag: { fontSize: 11, color: t.textDim, backgroundColor: t.surfaceAlt, borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 1, overflow: 'hidden' },
+    tagWarn: { color: '#b9770e' },
     input: {
       backgroundColor: t.inputBg,
       borderWidth: 1,

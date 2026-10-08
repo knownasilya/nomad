@@ -67,6 +67,11 @@ export default {
     return (await vault.listSpaces()).filter((s) => !s.movedTo);
   },
 
+  // Replication state of the Vault and each Space, for the Devices page's sync panel.
+  async getSyncStatus() {
+    return vault.getSyncStatus();
+  },
+
   // Member side: ensure a Vault exists, then mint an invite code.
   async createInvite() {
     const code = await pairing.createInvite();

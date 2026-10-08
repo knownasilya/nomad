@@ -450,6 +450,35 @@ export default class DriveManager {
     return { entries, writable: isWritable(drive) }
   }
 
+  // Replication state of one Autobase for the Devices page: peers and lengths of its bootstrap core
+  // (the creating writer's log), plus the drive count in /drives.json for a Space Root Drive. Only
+  // reads a base that is already open — never opens one, so it can't hang on a missing peer.
+  async autobaseStatus (keyHex, base = null) {
+    if (!base) {
+      const entry = this.drives.get(this.cacheKey(DRIVE_AUTOBASE, keyHex))
+      if (!entry) return { key: keyHex, loaded: false }
+      base = entry.drive
+    }
+    const out = { key: keyHex, loaded: true, writable: isWritable(base), peers: 0, length: 0, remoteLength: 0, driveCount: null }
+    const core = this.store.get({ key: base.key })
+    try {
+      await core.ready()
+      out.peers = core.peers.length
+      out.length = core.length
+      out.remoteLength = Math.max(core.length, ...core.peers.map((p) => p.remoteLength || 0))
+    } catch {} finally {
+      await core.close().catch(() => {})
+    }
+    try {
+      const buf = await beeReader(base.view, this.store).read('/drives.json')
+      if (buf) {
+        const parsed = JSON.parse(b4a.toString(buf))
+        out.driveCount = Array.isArray(parsed.drives) ? parsed.drives.length : 0
+      }
+    } catch {}
+    return out
+  }
+
   // A Space's drive registry: the `/drives.json` inside its (Autobase) Root Drive, listing the
   // drives that Space knows about. Read path (no ns needed) so Vault-synced spaces work too.
   // Returns the raw registry entries: [{ key, type?, tags?, forkOf? }].

@@ -97,6 +97,22 @@ const cssStr = css`
     background: var(--bg-color--light);
     color: var(--text-color--light);
   }
+  .row .meta .tag + .tag {
+    margin-left: 4px;
+  }
+  .row .tag.ok {
+    background: rgba(58, 179, 110, 0.15);
+    color: #2e8b57;
+  }
+  .row .tag.warn {
+    background: rgba(232, 160, 37, 0.18);
+    color: #b9770e;
+  }
+  .row code.key {
+    font-size: 11px;
+    font-weight: normal;
+    color: var(--text-color--light);
+  }
   .row .tag.this {
     background: var(--blue);
     color: #fff;
