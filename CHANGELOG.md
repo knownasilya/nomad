@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.11.1](https://github.com/knownasilya/nomad/compare/v1.11.0...v1.11.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **spaces:** recover the drive list from an earlier root drive ([bea6130](https://github.com/knownasilya/nomad/commit/bea6130ce7f8fa0b2b490f7d934ce0bbb8f40294))
+
 ## [1.11.0](https://github.com/knownasilya/nomad/compare/v1.10.0...v1.11.0) (2026-10-08)
 
 
