@@ -1,11 +1,71 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Keyboard, Platform, StyleSheet } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image, Alert, Keyboard, Platform, StyleSheet } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { AiChatHandlers, AiChatHandle } from '../lib/useBackend'
+import { pickImages } from '../lib/pickImages'
 import Markdown from './Markdown'
 
-interface ChatMsg { role: 'user' | 'assistant'; content: string }
+// `images` are data:image URLs — nomad.ai.chat's short form, which the Provider expands into
+// image_url parts (app/bg/ai/chat-messages.mjs).
+interface ChatMsg { role: 'user' | 'assistant'; content: string; images?: string[] }
+
+const MAX_IMAGES = 4
+// The Bridge sends the whole transcript every turn, as one frame. Past this many data-URL
+// characters the oldest photos are left out of the request (the transcript keeps them).
+const IMAGE_BUDGET = 8_000_000
+
+// Pins the turn to the open tab, like the desktop sidebar's describeActiveTab
+// (app/bg/web-apis/bg/ai-shell.ts). The Provider puts it LAST in the system prompt, after the
+// Drive's /ai/system.md. That file often serves the Drive's own app code (Pantry's says "JSON
+// only."), so this also says who the reply is for.
+function describeContext (driveUrl: string | null, title?: string): string {
+  const audience =
+    "You are the assistant in the Nomad app on the person's phone. Answer them in plain language; Markdown is fine. " +
+    "An earlier instruction that asks for JSON or another machine format is for the Drive's own app code, not for this chat."
+  if (!driveUrl) return audience + ' No Drive is open, so drive capabilities will not work.'
+  const name = title ? ` ("${title}")` : ''
+  return (
+    `${audience} The person has this Nomad Drive open: ${driveUrl}${name}. ` +
+    'Find drive capabilities with search and run them with execute. readDriveFile, listDriveFiles, and writeDriveFile take absolute paths.'
+  )
+}
+
+// If a reply still arrives as one wrapper object — {"reply": "…"}, maybe in a ```json fence — show
+// the text inside. Anything else is left as it is. `partial` also reads a wrapper that is still
+// streaming in, so the person sees words rather than JSON while it arrives.
+const WRAPPER_KEYS = ['reply', 'answer', 'response', 'message', 'text', 'content']
+function unwrapReply (text: string, partial = false): string {
+  let s = text.trim()
+  const fence = /^```[\w-]*[^\S\n]*\n([\s\S]*?)(?:\n```\s*)?$/.exec(s)
+  if (fence) s = fence[1].trim()
+  else if (partial && /^```[\w-]*$/.test(s)) return ''
+  if (partial && !s) return ''
+  if (!s.startsWith('{')) return text
+  try {
+    const obj = JSON.parse(s)
+    const keys = obj && typeof obj === 'object' && !Array.isArray(obj) ? Object.keys(obj) : []
+    const key = keys.length === 1 && WRAPPER_KEYS.includes(keys[0]) ? keys[0] : null
+    return key && typeof obj[key] === 'string' ? obj[key] : text
+  } catch {}
+  if (!partial) return text
+  if (/^\{\s*(?:"\w*"?\s*:?\s*)?$/.test(s)) return ''
+  const m = /^\{\s*"(\w+)"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(s)
+  if (!m || !WRAPPER_KEYS.includes(m[1])) return text
+  try { return JSON.parse('"' + m[2] + '"') } catch { return text }
+}
+
+// Leaves the oldest photos out of the request once the transcript's photos pass IMAGE_BUDGET.
+function fitImages (history: ChatMsg[]): ChatMsg[] {
+  const size = (m: ChatMsg) => (m.images || []).reduce((n, url) => n + url.length, 0)
+  let total = history.reduce((n, m) => n + size(m), 0)
+  return history.map((m) => {
+    if (total <= IMAGE_BUDGET || !m.images?.length) return m
+    total -= size(m)
+    const note = `[${m.images.length} earlier photo${m.images.length > 1 ? 's' : ''} not sent again]`
+    return { role: m.role, content: m.content ? `${m.content}\n${note}` : note }
+  })
+}
 
 // Human label for a tool-activity event from runChat (e.g. { phase:'start', summary:'Reading /x' }
 // or { phase:'write', name:'writeDriveFile', path:'/x' }).
@@ -54,6 +114,9 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
   // on tab A vs tab B — or with no page — shows that context's own history. In-memory for the session.
   const [conversations, setConversations] = useState<Record<string, ChatMsg[]>>({})
   const [input, setInput] = useState('')
+  // Photos waiting in the composer for the next send (data:image URLs).
+  const [attachments, setAttachments] = useState<string[]>([])
+  const [attaching, setAttaching] = useState(false)
   const [busy, setBusy] = useState(false)
   // What the agent is doing right now — surfaced as a status line so a long tool phase (drive I/O +
   // model round-trips, no streamed text) doesn't look frozen.
@@ -89,7 +152,7 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
 
   // Switching context (opening the panel for a different tab) starts clean — a half-typed draft or a
   // stale error from one context shouldn't leak into another. The transcript itself is preserved.
-  useEffect(() => { setInput(''); setError(null) }, [contextKey])
+  useEffect(() => { setInput(''); setAttachments([]); setError(null) }, [contextKey])
 
   // Append streamed text to the trailing (assistant) message.
   const appendToLast = (chunk: string) =>
@@ -101,18 +164,32 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
       return copy
     })
 
+  // Store the reply without a JSON wrapper, so the next turn's history doesn't teach the model to
+  // keep wrapping.
+  const settleLast = () =>
+    setMessages((prev) => {
+      const last = prev[prev.length - 1]
+      if (!last || last.role !== 'assistant') return prev
+      const content = unwrapReply(last.content)
+      return content === last.content ? prev : [...prev.slice(0, -1), { ...last, content }]
+    })
+
+  const canSend = !busy && !attaching && (!!input.trim() || attachments.length > 0)
+
   const send = () => {
     const text = input.trim()
-    if (!text || busy) return
+    if (!canSend) return
     setError(null)
-    const history: ChatMsg[] = [...messages, { role: 'user', content: text }]
+    const userMsg: ChatMsg = attachments.length ? { role: 'user', content: text, images: attachments } : { role: 'user', content: text }
+    const history: ChatMsg[] = [...messages, userMsg]
     setMessages([...history, { role: 'assistant', content: '' }])
     setInput('')
+    setAttachments([])
     setBusy(true)
     setActivity('Thinking…')
     setActiveTurnKey(contextKey)
     const sendKey = contextKey
-    handleRef.current = aiChat(history, { driveUrl: driveUrl || undefined }, {
+    handleRef.current = aiChat(fitImages(history), { driveUrl: driveUrl || undefined, context: describeContext(driveUrl, title) }, {
       onChunk: (chunk) => { setActivity('Responding…'); appendToLast(chunk) },
       onTool: (event: any) => {
         setActivity(toolLabel(event))
@@ -124,13 +201,31 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
           })
         }
       },
-      onDone: () => { setBusy(false); setActivity(null); setActiveTurnKey(null); handleRef.current = null },
-      onError: (message) => { setBusy(false); setActivity(null); setActiveTurnKey(null); handleRef.current = null; setError(message) },
+      onDone: () => { settleLast(); setBusy(false); setActivity(null); setActiveTurnKey(null); handleRef.current = null },
+      onError: (message) => { settleLast(); setBusy(false); setActivity(null); setActiveTurnKey(null); handleRef.current = null; setError(message) },
       onPrompt: onPrompt
     })
   }
 
-  const stop = () => { handleRef.current?.cancel(); handleRef.current = null; setBusy(false); setActivity(null); setActiveTurnKey(null) }
+  const stop = () => { handleRef.current?.cancel(); handleRef.current = null; settleLast(); setBusy(false); setActivity(null); setActiveTurnKey(null) }
+
+  const attach = (source: 'camera' | 'library') => {
+    setAttaching(true)
+    setError(null)
+    pickImages(source, MAX_IMAGES - attachments.length)
+      .then((urls) => setAttachments((prev) => [...prev, ...urls].slice(0, MAX_IMAGES)))
+      .catch((err) => setError(err?.message || String(err)))
+      .finally(() => setAttaching(false))
+  }
+
+  const chooseAttach = () => {
+    if (busy || attaching || attachments.length >= MAX_IMAGES) return
+    Alert.alert('Add a photo', undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Take photo', onPress: () => attach('camera') },
+      { text: 'Choose photos', onPress: () => attach('library') }
+    ])
+  }
 
   const clearDraft = () => setDrafts((prev) => { const c = { ...prev }; delete c[contextKey]; return c })
 
@@ -204,11 +299,13 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
             </Text>
           ) : (
             messages.map((m, i) => {
+              const streaming = turnActiveHere && i === messages.length - 1
+              const shown = m.role === 'assistant' ? unwrapReply(m.content, streaming) : m.content
               // The trailing empty assistant message is the response slot. While busy, show the
               // thinking indicator right there — left side, under the last user message, exactly
               // where the answer will stream in. It's replaced by the text once the first token lands.
-              if (m.role === 'assistant' && !m.content) {
-                if (!turnActiveHere || i !== messages.length - 1) return null
+              if (m.role === 'assistant' && !shown) {
+                if (!streaming) return null
                 return (
                   <View key={i} style={[s.bubble, s.aiBubble, s.thinkingBubble]}>
                     <ActivityIndicator size='small' color={t.accent} />
@@ -216,11 +313,25 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
                   </View>
                 )
               }
+              if (m.role === 'assistant') {
+                return (
+                  <View key={i} style={[s.bubble, s.aiBubble]}>
+                    <Markdown text={shown} />
+                  </View>
+                )
+              }
               return (
-                <View key={i} style={[s.bubble, m.role === 'user' ? s.userBubble : s.aiBubble]}>
-                  {m.role === 'user'
-                    ? <Text style={s.userText}>{m.content}</Text>
-                    : <Markdown text={m.content} />}
+                <View key={i} style={s.userMsg}>
+                  {!!m.images?.length && (
+                    <View style={s.userImages}>
+                      {m.images.map((uri, j) => <Image key={j} source={{ uri }} style={s.userImage} />)}
+                    </View>
+                  )}
+                  {!!m.content && (
+                    <View style={[s.bubble, s.userBubble]}>
+                      <Text style={s.userText}>{m.content}</Text>
+                    </View>
+                  )}
                 </View>
               )
             })
@@ -251,26 +362,58 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
           </View>
         )}
 
-        <View style={s.inputRow}>
-          <TextInput
-            style={s.input}
-            value={input}
-            onChangeText={setInput}
-            placeholder='Message the AI…'
-            placeholderTextColor={t.textMuted}
-            multiline
-            editable={!busy}
-            onSubmitEditing={send}
-          />
-          {turnActiveHere ? (
-            <TouchableOpacity style={[s.sendBtn, s.stopBtn]} onPress={stop}>
-              <Text style={s.sendText}>Stop</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={[s.sendBtn, (!input.trim() || busy) && s.sendDisabled]} onPress={send} disabled={!input.trim() || busy}>
-              <Text style={s.sendText}>Send</Text>
-            </TouchableOpacity>
+        <View style={s.composer}>
+          {(attachments.length > 0 || attaching) && (
+            <ScrollView horizontal style={s.attachRow} contentContainerStyle={s.attachRowPad} keyboardShouldPersistTaps='handled'>
+              {attachments.map((uri, i) => (
+                <View key={i} style={s.attachItem}>
+                  <Image source={{ uri }} style={s.attachImage} />
+                  <TouchableOpacity
+                    style={s.attachRemove}
+                    hitSlop={8}
+                    onPress={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+                  >
+                    <Text style={s.attachRemoveText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {attaching && (
+                <View style={[s.attachImage, s.attachLoading]}>
+                  <ActivityIndicator size='small' color={t.accent} />
+                </View>
+              )}
+            </ScrollView>
           )}
+
+          <View style={s.inputRow}>
+            <TouchableOpacity
+              style={[s.attachBtn, (busy || attaching || attachments.length >= MAX_IMAGES) && s.sendDisabled]}
+              onPress={chooseAttach}
+              disabled={busy || attaching || attachments.length >= MAX_IMAGES}
+              accessibilityLabel='Add a photo'
+            >
+              <Text style={s.attachBtnText}>＋</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={s.input}
+              value={input}
+              onChangeText={setInput}
+              placeholder='Message the AI…'
+              placeholderTextColor={t.textMuted}
+              multiline
+              editable={!busy}
+              onSubmitEditing={send}
+            />
+            {turnActiveHere ? (
+              <TouchableOpacity style={[s.sendBtn, s.stopBtn]} onPress={stop}>
+                <Text style={s.sendText}>Stop</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={[s.sendBtn, !canSend && s.sendDisabled]} onPress={send} disabled={!canSend}>
+                <Text style={s.sendText}>Send</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
     </View>
@@ -316,6 +459,9 @@ function makeStyles (t: Theme) {
     empty: { color: t.textMuted, fontSize: 13, lineHeight: 19 },
     bubble: { maxWidth: '88%', paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.md },
     userBubble: { alignSelf: 'flex-end', backgroundColor: t.trustBg },
+    userMsg: { alignSelf: 'flex-end', alignItems: 'flex-end', maxWidth: '88%', gap: 6 },
+    userImages: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 },
+    userImage: { width: 120, height: 120, borderRadius: radius.md, backgroundColor: t.surfaceAlt },
     aiBubble: { alignSelf: 'flex-start', backgroundColor: t.surface },
     userText: { color: t.trustText, fontSize: 15, lineHeight: 21 },
     aiText: { color: t.text, fontSize: 15, lineHeight: 21 },
@@ -328,7 +474,17 @@ function makeStyles (t: Theme) {
     draftLink: { color: t.accent, fontSize: 15, fontWeight: '600' },
     draftDanger: { color: t.danger, fontSize: 15, fontWeight: '600' },
     draftPrimary: { color: t.secure, fontSize: 15, fontWeight: '700' },
-    inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
+    composer: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
+    attachRow: { flexGrow: 0 },
+    attachRowPad: { paddingHorizontal: 10, paddingTop: 10, gap: 8 },
+    attachItem: { position: 'relative' },
+    attachImage: { width: 64, height: 64, borderRadius: radius.sm, backgroundColor: t.surfaceAlt },
+    attachLoading: { alignItems: 'center', justifyContent: 'center' },
+    attachRemove: { position: 'absolute', top: 3, right: 3, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
+    attachRemoveText: { color: '#fff', fontSize: 11 },
+    attachBtn: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: t.inputBg, alignItems: 'center', justifyContent: 'center' },
+    attachBtnText: { color: t.accent, fontSize: 22, lineHeight: 26 },
+    inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 10 },
     input: { flex: 1, maxHeight: 120, color: t.text, fontSize: 15, backgroundColor: t.inputBg, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 9 },
     sendBtn: { paddingHorizontal: 16, paddingVertical: 11, borderRadius: radius.md, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center' },
     stopBtn: { backgroundColor: t.danger },

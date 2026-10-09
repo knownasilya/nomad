@@ -134,6 +134,9 @@ export function createAiBridge ({ swarm, getVault }) {
         if (signal.aborted) sendFrame(peer, { t: FRAME.CANCEL, id })
         else signal.addEventListener('abort', () => sendFrame(peer, { t: FRAME.CANCEL, id }), { once: true })
       }
+      // Keep in sync with the desktop client (app/bg/hyper/ai-bridge.js requestRemoteChat): an opt
+      // left out here is silently dropped for every phone turn. Pantry's tools:false + maxTokens
+      // were lost this way, so its JSON-only prompts ran with the full tool contract attached.
       sendFrame(peer, {
         t: FRAME.REQUEST,
         id,
@@ -142,6 +145,11 @@ export function createAiBridge ({ swarm, getVault }) {
           driveUrl: opts.driveUrl || null,
           allowWrite: opts.allowWrite,
           context: opts.context || null,
+          model: opts.model || null,
+          think: opts.think,
+          effort: opts.effort || null,
+          tools: opts.tools,
+          maxTokens: opts.maxTokens,
           publishDraft: opts.publishDraft || false, // delegate publish to the Provider (writes the Drive)
           discardDraft: opts.discardDraft || false
         }

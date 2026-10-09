@@ -34,6 +34,14 @@
           }
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Nomad lets you attach photos to a message for the AI.",
+          "cameraPermission": "Nomad lets you take a photo to attach to a message for the AI.",
+          "microphonePermission": false
+        }
+      ],
       "./plugins/withGradleVersion",
       "./plugins/withReleaseSigning"
     ]

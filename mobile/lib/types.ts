@@ -150,10 +150,23 @@ export const NOMAD_SHIM = `(function(){
     function end(){ done = true; if (waitResolve){ var r = waitResolve; waitResolve = waitReject = null; r({ value: undefined, done: true }); } }
     function error(e){ if (waitReject){ var r = waitReject; waitResolve = waitReject = null; r(e); } else { err = e; } }
     aiStreams[id] = { push: push, end: end, error: error, onTool: opts.onToolEvent };
+    // The same opts desktop's fg/ai.ts forwards. driveUrl defaults to THIS page's Drive: desktop
+    // reads the Drive (and its /ai/system.md) from the calling page's own URL, but the Provider
+    // only sees driveUrl, so without it a page's own chat() ran with no Drive at all.
+    var chatOpts = {
+      driveUrl: opts.driveUrl || (page && page.origin) || null,
+      allowWrite: opts.allowWrite,
+      context: opts.context || null,
+      model: opts.model || null,
+      think: opts.think,
+      effort: opts.effort || null,
+      tools: opts.tools,
+      maxTokens: opts.maxTokens
+    };
     try {
       window.ReactNativeWebView.postMessage(JSON.stringify({
         type: 'nomad-ai-chat',
-        payload: { id: id, messages: messages, opts: { driveUrl: opts.driveUrl || null, allowWrite: opts.allowWrite, context: opts.context || null } }
+        payload: { id: id, messages: messages, opts: chatOpts }
       }));
     } catch (e) { delete aiStreams[id]; error(e); }
     var it = {
