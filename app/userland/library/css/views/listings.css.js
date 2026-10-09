@@ -1,21 +1,38 @@
 import { css } from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
 
+// Colors come from the shared tokens (app-stdlib/css/colors.css) and the Library's own --lib-*
+// tokens (library/css/main.css), so the view follows light and dark mode with the other views.
 const cssStr = css`
   :host {
     display: block;
     padding: 6px 4px 40px;
+    /* Solid fills (toggle, Save) keep one indigo: white on it reads in both modes. */
+    --listing-fill: #4f46e5;
+    --listing-accent: var(--lib-nav-active-text, #4f46e5);
+    --listing-accent-soft: var(--lib-nav-active-bg, #eef2ff);
+    --listing-ok: #16a34a;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :host {
+      --listing-ok: #4ade80;
+    }
   }
 
   .intro {
-    color: #64748b;
+    color: var(--text-color--light);
     font-size: 13px;
     line-height: 1.5;
     margin: 4px 6px 16px;
     max-width: 640px;
   }
 
+  .intro strong {
+    color: var(--text-color--default);
+  }
+
   .empty {
-    color: #94a3b8;
+    color: var(--text-color--pretty-light);
     text-align: center;
     padding: 40px 0;
   }
@@ -27,14 +44,15 @@ const cssStr = css`
   }
 
   .row {
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--border-color--very-light);
     border-radius: 10px;
     padding: 12px 14px;
-    background: #fff;
+    background: var(--bg-color--default);
+    color: var(--text-color--default);
   }
   .row.listed {
-    border-color: #c7d2fe;
-    box-shadow: 0 0 0 1px #eef2ff inset;
+    border-color: var(--listing-accent);
+    box-shadow: 0 0 0 1px var(--listing-accent-soft) inset;
   }
 
   .row-head {
@@ -48,6 +66,7 @@ const cssStr = css`
   }
   .title {
     font-weight: 600;
+    color: var(--text-color--default);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -56,25 +75,25 @@ const cssStr = css`
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: #4f46e5;
-    background: #eef2ff;
+    color: var(--listing-accent);
+    background: var(--listing-accent-soft);
     border-radius: 999px;
     padding: 1px 7px;
   }
   .url {
     font-size: 12px;
-    color: #94a3b8;
+    color: var(--text-color--pretty-light);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .state {
     font-size: 12px;
-    color: #94a3b8;
+    color: var(--text-color--pretty-light);
     flex-shrink: 0;
   }
   .row.listed .state {
-    color: #4f46e5;
+    color: var(--listing-accent);
     font-weight: 600;
   }
 
@@ -95,7 +114,7 @@ const cssStr = css`
   .switch {
     position: absolute;
     inset: 0;
-    background: #cbd5e1;
+    background: var(--border-color--default);
     border-radius: 999px;
     transition: background 0.15s;
   }
@@ -111,10 +130,14 @@ const cssStr = css`
     transition: transform 0.15s;
   }
   .toggle input:checked + .switch {
-    background: #4f46e5;
+    background: var(--listing-fill);
   }
   .toggle input:checked + .switch::before {
     transform: translateX(16px);
+  }
+  .toggle input:focus-visible + .switch {
+    outline: 2px solid var(--listing-accent);
+    outline-offset: 2px;
   }
 
   .fields {
@@ -129,20 +152,30 @@ const cssStr = css`
   .flabel {
     display: block;
     font-size: 12px;
-    color: #334155;
+    color: var(--text-color--lightish);
     margin-bottom: 4px;
   }
   .flabel em {
-    color: #94a3b8;
+    color: var(--text-color--pretty-light);
     font-style: normal;
   }
   .fields input {
     width: 100%;
     box-sizing: border-box;
     padding: 7px 9px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid var(--border-color--light);
     border-radius: 6px;
     font-size: 13px;
+    color: var(--text-color--default);
+    background: var(--bg-color--secondary);
+  }
+  .fields input::placeholder {
+    color: var(--text-color--pretty-light);
+  }
+  .fields input:focus {
+    outline: none;
+    border-color: var(--listing-accent);
+    box-shadow: 0 0 0 2px var(--listing-accent-soft);
   }
 
   .actions {
@@ -154,8 +187,8 @@ const cssStr = css`
   .actions button {
     cursor: pointer;
     padding: 6px 14px;
-    border: 1px solid #4f46e5;
-    background: #4f46e5;
+    border: 1px solid var(--listing-fill);
+    background: var(--listing-fill);
     color: #fff;
     border-radius: 6px;
     font-size: 13px;
@@ -166,7 +199,7 @@ const cssStr = css`
   }
   .status {
     font-size: 12px;
-    color: #16a34a;
+    color: var(--listing-ok);
   }
 `;
 

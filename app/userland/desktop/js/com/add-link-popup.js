@@ -23,6 +23,9 @@ export class AddLinkPopup extends BasePopup {
         .popup-inner {
           width: 1000px;
           background: var(--bg-color--default);
+          color: var(--text-color--default);
+          /* Scrollbars and form controls follow the OS theme instead of staying light. */
+          color-scheme: light dark;
         }
 
         .popup-inner .body {
@@ -65,11 +68,11 @@ export class AddLinkPopup extends BasePopup {
           padding: 4px;
           margin: 10px;
           border-radius: 8px;
-          background: #f6f6fd;
+          background: var(--bg-color--light);
         }
 
         nav button {
-          background: #fff;
+          background: var(--bg-color--default);
           box-shadow: rgba(0, 0, 0, 0.15) 0px 1px 1px;
         }
 
@@ -80,7 +83,7 @@ export class AddLinkPopup extends BasePopup {
         nav .path span {
           margin-left: 4px;
           letter-spacing: 0.3px;
-          color: #667;
+          color: var(--text-color--light);
         }
 
         .history {
@@ -88,16 +91,20 @@ export class AddLinkPopup extends BasePopup {
         }
 
         .empty {
-          color: rgba(0, 0, 0, 0.5);
+          color: var(--text-color--light);
           padding: 20px;
         }
 
+        /* Each row is an <a>: without these it takes the UA link color and underline, which is
+           dark blue on the dark popup. */
         .suggestion {
           display: flex;
           align-items: center;
           padding: 10px;
           overflow: hidden;
           user-select: none;
+          color: var(--text-color--default);
+          text-decoration: none;
         }
 
         .suggestion .thumb {
@@ -108,6 +115,7 @@ export class AddLinkPopup extends BasePopup {
           margin: 0 20px 0 10px;
           border: 1px solid var(--border-color--light);
           border-radius: 3px;
+          background: var(--bg-color--secondary);
         }
 
         .suggestion .details {
@@ -128,15 +136,18 @@ export class AddLinkPopup extends BasePopup {
         .suggestion .title {
           font-size: 14px;
           font-weight: 500;
+          color: var(--text-color--default);
         }
 
         .suggestion .url {
           font-size: 12px;
-          color: var(--blue);
+          color: var(--text-color--link);
         }
 
-        .suggestion:hover {
-          background: var(--bg-color--secondary);
+        .suggestion:hover,
+        .suggestion:focus-visible {
+          background: var(--bg-color--light);
+          outline: none;
         }
       `,
     ];
