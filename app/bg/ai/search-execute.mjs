@@ -7,7 +7,7 @@
 import vm from 'node:vm'
 import { API_REFERENCE } from './api-reference.mjs'
 
-export const DOMAINS = ['capability', 'guide', 'page']
+export const DOMAINS = ['capability', 'guide', 'page', 'drive']
 
 const GUIDE_BUDGET = 12000
 const MAX_HITS = 8
@@ -34,6 +34,9 @@ const DOMAIN_COPY = {
   capability: 'Read and write the current Drive, fetch an http(s) URL, and read or screenshot the open page.',
   guide: 'Sections of the Nomad API reference. Open one with entity guide:<id>.',
   page: 'Tools the current page registered. Open one with entity page:<name>.',
+  drive:
+    'Drives their owners listed for public search (what nomad://search finds), with their hyper:// URLs. ' +
+    'Search by topic or words. Nothing here when the search crawler is off.',
 }
 
 export const CAPABILITIES = [
@@ -164,15 +167,53 @@ function guideRecord(id, title, markdown) {
 const GUIDES = splitGuides(API_REFERENCE)
 
 export function buildCatalog(opts) {
-  const { allowWrite, allowVision, remote, pageTools, ownerId } = opts || {}
+  const { allowWrite, allowVision, remote, pageTools, listedDrives, ownerId } = opts || {}
   const caps = visibleCapabilities({ allowWrite, allowVision, remote })
   return {
     capabilities: caps,
     guides: GUIDES,
     // null hides the page domain (remote turn, or page tools not in play).
     pageTools: pageTools == null ? null : pageTools.map(pageRecord),
+    // Listed drives matching this search, fetched by the host from the search crawler before it
+    // calls search (listed-drives.mjs); see withListedDrives. null hides the drive domain.
+    listedDrives: listedDrives == null ? null : listedDrives.map(driveRecord),
     // Reserved until Personas choose a home. Passed through and not read.
     ownerId,
+  }
+}
+
+// Copy the drive domain's records into a catalog: the host fetches them per search, since which
+// drives match depends on the query (needsListedDrives says which searches need them).
+export function withListedDrives(catalog, listedDrives) {
+  return { ...catalog, listedDrives: listedDrives == null ? null : listedDrives.map(driveRecord) }
+}
+
+// What the host should fetch from the search crawler for this search call: a query to run (''
+// for all drives), or null when the call doesn't touch the drive domain.
+export function needsListedDrives(input) {
+  const query = typeof input?.query === 'string' ? input.query.trim() : ''
+  const domain = input?.domain
+  const entity = input?.entity
+  if (entity != null) {
+    const refs = Array.isArray(entity) ? entity : [entity]
+    return refs.some((r) => typeof r === 'string' && r.startsWith('drive:')) ? '' : null
+  }
+  if (domain != null && domain !== 'drive') return null
+  return query
+}
+
+function driveRecord(d) {
+  const key = String(d.driveKey || d.name || '')
+  return {
+    name: key,
+    title: String(d.title || 'Untitled drive'),
+    description: String(d.description || ''),
+    url: `hyper://${key}/`,
+    type: d.type || null,
+    topics: Array.isArray(d.topics) ? d.topics.map(String) : [],
+    keywords: Array.isArray(d.keywords) ? d.keywords.map(String) : [],
+    // The crawler's own (fuzzy) match score, so its ranking carries over.
+    score: Number(d.score) || 0,
   }
 }
 
@@ -195,6 +236,9 @@ export function search(input, catalog) {
   if (domain === 'page' && catalog.pageTools == null) {
     throw new Error('page tools are not available in this context')
   }
+  if (domain === 'drive' && catalog.listedDrives == null) {
+    throw new Error('listed drives are not available in this context')
+  }
   if (entity != null) return { kind: 'detail', details: entityDetails(entity, catalog) }
   if (!query && !domain) return { kind: 'index', domains: domainIndex(catalog) }
   if (domain && !query) {
@@ -213,6 +257,7 @@ function domainIndex(catalog) {
   for (const domain of DOMAINS) {
     const items = listDomain(domain, catalog)
     if (domain === 'page' && catalog.pageTools == null) continue
+    if (domain === 'drive' && catalog.listedDrives == null) continue
     rows.push({
       domain,
       description: DOMAIN_COPY[domain],
@@ -234,6 +279,7 @@ function listDomain(domain, catalog) {
   if (domain === 'capability') return catalog.capabilities
   if (domain === 'guide') return catalog.guides
   if (domain === 'page') return catalog.pageTools || []
+  if (domain === 'drive') return catalog.listedDrives || []
   return []
 }
 
@@ -243,6 +289,7 @@ function rank(query, domain, catalog) {
   const hits = []
   for (const d of pools) {
     if (d === 'page' && catalog.pageTools == null) continue
+    if (d === 'drive' && catalog.listedDrives == null) continue
     for (const item of listDomain(d, catalog)) hits.push(scoreHit(d, item, tokens))
   }
   hits.sort((a, b) => b.score - a.score || a.entity.localeCompare(b.entity))
@@ -258,6 +305,7 @@ function rank(query, domain, catalog) {
 }
 
 function scoreHit(domain, item, tokens) {
+  if (domain === 'drive') return driveHit(item)
   const name = item.name || item.id
   const title = item.title || name
   const summary = item.description || item.summary || ''
@@ -278,6 +326,23 @@ function scoreHit(domain, item, tokens) {
   if (domain === 'capability') hit.call = { code: capabilityCode(name), inputSchema: item.inputSchema }
   if (domain === 'page') hit.call = { code: pageToolCode(name), inputSchema: item.inputSchema }
   return hit
+}
+
+// A listed drive is already a search result: the crawler matched it (fuzzily) against this query,
+// so its score carries over (doubled, to sit among capability and guide scores). There is nothing
+// to execute — the model gives the user the URL.
+function driveHit(item) {
+  return {
+    entity: `drive:${item.name}`,
+    type: 'drive',
+    title: item.title,
+    summary: item.description.slice(0, 180),
+    url: item.url,
+    ...(item.topics.length ? { topics: item.topics } : {}),
+    ...(item.type ? { kind: item.type } : {}),
+    score: item.score * 2,
+    call: undefined,
+  }
 }
 
 function entityDetails(entity, catalog) {
@@ -321,6 +386,15 @@ function openEntity(ref, catalog) {
       inputSchema: tool.inputSchema,
       code: pageToolCode(id),
     }
+  }
+  if (type === 'drive') {
+    if (catalog.listedDrives == null) throw new Error('listed drives are not available in this context')
+    const drive = catalog.listedDrives.find((d) => d.name === id)
+    if (!drive) throw new Error(`unknown listed drive "${id}"`)
+    const { name, score, ...rest } = drive
+    void name
+    void score
+    return { entity: `drive:${id}`, type: 'drive', ...rest }
   }
   if (type === 'guide') {
     const guide = catalog.guides.find((g) => g.id === id)
@@ -512,9 +586,9 @@ export const MODEL_TOOLS = [
     function: {
       name: 'search',
       description:
-        'Find a capability, a guide section, or a page tool. {} lists domains. ' +
-        '{query} ranks. {domain} lists one domain. {entity} opens one or more refs ' +
-        '(capability:<name>, guide:<id>, page:<name>).',
+        'Find a capability, a guide section, a page tool, or a drive listed for public search. ' +
+        '{} lists domains. {query} ranks. {domain} lists one domain. {entity} opens one or more refs ' +
+        '(capability:<name>, guide:<id>, page:<name>, drive:<key>).',
       parameters: {
         type: 'object',
         properties: {

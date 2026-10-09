@@ -11,6 +11,8 @@ import {
   capabilityCode,
   pageToolCode,
   assertCallAllowed,
+  needsListedDrives,
+  withListedDrives,
 } from '../../app/bg/ai/search-execute.mjs';
 import { timeoutMessage, unwrapMessage } from '../../app/bg/ai/execute-messages.mjs';
 
@@ -182,5 +184,68 @@ describe('assertCallAllowed', () => {
     expect(() => assertCallAllowed('writeDriveFile', undefined, cat)).toThrow(/not available/);
     expect(() => assertCallAllowed('page', 'nope', cat)).toThrow(/unknown page tool/);
     expect(() => assertCallAllowed('page', 'publishPost', cat)).not.toThrow();
+  });
+});
+
+describe('search: drives listed for public search', () => {
+  const blogKey = 'a'.repeat(64);
+  // What the search crawler returns for a query (listed-drives.mjs), best first.
+  const listed = [
+    {
+      driveKey: blogKey,
+      type: 'walled.garden/feed',
+      title: 'My Blog',
+      description: 'A peer-to-peer blog.',
+      topics: ['blog'],
+      keywords: ['personal'],
+      score: 3,
+    },
+  ];
+
+  it('hides the drive domain unless the host supplied listed drives', () => {
+    expect(search({}, catalog()).domains.map((d) => d.domain)).not.toContain('drive');
+    expect(() => search({ domain: 'drive' }, catalog())).toThrow(/not available/);
+  });
+
+  it('lists the domain with a count, 0 when the crawler is off', () => {
+    const on = search({}, withListedDrives(catalog(), listed)).domains.find((d) => d.domain === 'drive');
+    expect(on).toMatchObject({ count: 1, samples: [blogKey] });
+    const off = search({}, withListedDrives(catalog(), [])).domains.find((d) => d.domain === 'drive');
+    expect(off.count).toBe(0);
+  });
+
+  it('returns a listed drive as a hit with its URL and nothing to execute', () => {
+    const { hits } = search({ query: 'pee', domain: 'drive' }, withListedDrives(catalog(), listed));
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({
+      entity: `drive:${blogKey}`,
+      type: 'drive',
+      title: 'My Blog',
+      url: `hyper://${blogKey}/`,
+      topics: ['blog'],
+    });
+    expect(hits[0]).not.toHaveProperty('call');
+    expect(hits[0]).not.toHaveProperty('score');
+  });
+
+  it('ranks drive hits among the other domains', () => {
+    const { hits } = search({ query: 'blog' }, withListedDrives(catalog(), listed));
+    expect(hits.map((h) => h.entity)).toContain(`drive:${blogKey}`);
+  });
+
+  it('opens a drive entity', () => {
+    const [d] = search({ entity: `drive:${blogKey}` }, withListedDrives(catalog(), listed)).details;
+    expect(d).toMatchObject({ entity: `drive:${blogKey}`, title: 'My Blog', keywords: ['personal'] });
+    expect(() => search({ entity: 'drive:nope' }, withListedDrives(catalog(), listed))).toThrow(/unknown listed drive/);
+  });
+
+  it('tells the host which searches need listed drives', () => {
+    expect(needsListedDrives({})).toBe(''); // the domain index counts them
+    expect(needsListedDrives({ query: ' gardening ' })).toBe('gardening');
+    expect(needsListedDrives({ query: 'x', domain: 'drive' })).toBe('x');
+    expect(needsListedDrives({ domain: 'drive' })).toBe('');
+    expect(needsListedDrives({ query: 'x', domain: 'guide' })).toBeNull();
+    expect(needsListedDrives({ entity: 'guide:nomad.fs' })).toBeNull();
+    expect(needsListedDrives({ entity: ['guide:nomad.fs', `drive:${blogKey}`] })).toBe('');
   });
 });

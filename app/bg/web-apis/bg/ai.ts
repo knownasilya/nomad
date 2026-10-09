@@ -30,9 +30,12 @@ import {
   assertCallAllowed,
   buildCatalog,
   MODEL_TOOLS,
+  needsListedDrives,
   search as searchCatalog,
   visibleCapabilities,
+  withListedDrives,
 } from '../../ai/search-execute.mjs';
+import { searchListedDrives } from '../../ai/listed-drives.mjs';
 import { executeInUtilityProcess } from '../../ai/execute-host.mjs';
 import {
   callAgentHost,
@@ -628,7 +631,14 @@ async function executeTool(name, args, sender, opts: any = {}) {
   switch (name) {
     case 'search': {
       if (!catalog) throw new Error('search is not available in this context');
-      return JSON.stringify(searchCatalog(args, catalog), null, 2);
+      // Listed drives depend on the query, so they're fetched from the search crawler per call
+      // (chat turns and the localhost MCP both land here). [] when the crawler is off.
+      const driveQuery = needsListedDrives(args);
+      const searched =
+        driveQuery == null
+          ? catalog
+          : withListedDrives(catalog, await searchListedDrives(driveQuery));
+      return JSON.stringify(searchCatalog(args, searched), null, 2);
     }
     case 'execute': {
       if (!catalog) throw new Error('execute is not available in this context');
