@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.12.0](https://github.com/knownasilya/nomad/compare/v1.11.2...v1.12.0) (2026-10-09)
+
+
+### Features
+
+* **ai:** the AI's search tool finds drives listed for public search ([31562a6](https://github.com/knownasilya/nomad/commit/31562a6d296bd7a7d97db36abf89f46a5ad27e1a))
+* **library:** the Listings toggle lists or unlists right away ([0f909dc](https://github.com/knownasilya/nomad/commit/0f909dce28d5fdd251e903e0f53de03c02376878))
+* **mobile:** Chrome-style tab grid and pinned home shortcuts ([be4f2a5](https://github.com/knownasilya/nomad/commit/be4f2a51af1447ccf82c5232ecf11f0d640ec5ec))
+* **mobile:** photos in the AI panel, plain-text replies, nomad.ai in drive apps ([e377151](https://github.com/knownasilya/nomad/commit/e37715112a2f2141efb063bedd76324cecda0952))
+* **search:** redesign nomad://search to match My Library ([67bcd42](https://github.com/knownasilya/nomad/commit/67bcd4241f6db33be2f06b65054abb2e7d994d77))
+* **search:** run the search crawler in the browser, synced across devices ([54dcc47](https://github.com/knownasilya/nomad/commit/54dcc4781079f45fdb6a507666cee457809765c5))
+
+
+### Bug Fixes
+
+* **desktop:** readable Create shortcut dialog and Listings page in dark mode ([0ec146f](https://github.com/knownasilya/nomad/commit/0ec146f12a37e1a3e64cf510f9ebd371ca8f8986))
+* **tabs:** reopen on the tab that was active when the window closed ([da21419](https://github.com/knownasilya/nomad/commit/da21419e06f8b649f1e111512220b33c50f1e2fb))
+
 ### [1.11.2](https://github.com/knownasilya/nomad/compare/v1.11.1...v1.11.2) (2026-10-08)
 
 
