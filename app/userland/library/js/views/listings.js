@@ -10,6 +10,7 @@ import listingsCSS from '../../css/views/listings.css.js';
 // rather than the site-info panel: listing is a property of a drive you own, managed centrally
 // alongside your other drives — not a per-page action. Each row edits the drive's index.json
 // `indexable` / `topics` / `keywords` via nomad.fs.configure (the bg normalizes on save).
+// The toggle saves at once; Save appears only on a listed drive, for its topics and keywords.
 
 export class ListingsView extends LitElement {
   static get properties() {
@@ -47,14 +48,19 @@ export class ListingsView extends LitElement {
         } catch {
           /* no/empty manifest — treat as unlisted */
         }
+        const topicsStr = (Array.isArray(manifest.topics) ? manifest.topics : []).join(', ');
+        const keywordsStr = (Array.isArray(manifest.keywords) ? manifest.keywords : []).join(', ');
         return {
           url: d.url,
           key: d.key,
           title: (d.info && d.info.title) || manifest.title || d.url,
           isFeed: manifest.type === 'walled.garden/feed',
           indexable: !!manifest.indexable,
-          topicsStr: (Array.isArray(manifest.topics) ? manifest.topics : []).join(', '),
-          keywordsStr: (Array.isArray(manifest.keywords) ? manifest.keywords : []).join(', '),
+          topicsStr,
+          keywordsStr,
+          // What is saved, so Save can stay off until the fields change.
+          savedTopicsStr: topicsStr,
+          savedKeywordsStr: keywordsStr,
           saving: false,
           status: '',
         };
@@ -111,6 +117,7 @@ export class ListingsView extends LitElement {
             <input
               type="checkbox"
               .checked=${r.indexable}
+              ?disabled=${r.saving}
               @change=${(e) => this.onToggle(r, e.target.checked)}
             />
             <span class="switch"></span>
@@ -135,6 +142,7 @@ export class ListingsView extends LitElement {
                     .value=${r.topicsStr}
                     @input=${(e) => {
                       r.topicsStr = e.target.value;
+                      this.requestUpdate();
                     }}
                   />
                 </label>
@@ -146,18 +154,28 @@ export class ListingsView extends LitElement {
                     .value=${r.keywordsStr}
                     @input=${(e) => {
                       r.keywordsStr = e.target.value;
+                      this.requestUpdate();
                     }}
                   />
                 </label>
               </div>
             `
           : ''}
-        <div class="actions">
-          <button ?disabled=${r.saving} @click=${() => this.onSave(r)}>
-            ${r.saving ? 'Saving…' : 'Save'}
-          </button>
-          ${r.status ? html`<span class="status">${r.status}</span>` : ''}
-        </div>
+        ${r.indexable || r.status
+          ? html`
+              <div class="actions">
+                ${r.indexable
+                  ? html`<button
+                      ?disabled=${r.saving || !this.isDirty(r)}
+                      @click=${() => this.onSave(r)}
+                    >
+                      ${r.saving ? 'Saving…' : 'Save'}
+                    </button>`
+                  : ''}
+                ${r.status ? html`<span class="status">${r.status}</span>` : ''}
+              </div>
+            `
+          : ''}
       </div>
     `;
   }
@@ -165,14 +183,23 @@ export class ListingsView extends LitElement {
   // events
   // =
 
-  onToggle(r, checked) {
-    r.indexable = checked;
-    r.status = '';
-    this.requestUpdate();
+  isDirty(r) {
+    return r.topicsStr !== r.savedTopicsStr || r.keywordsStr !== r.savedKeywordsStr;
   }
 
+  // Listing on or off takes effect at once. If the save fails, the toggle goes back.
+  async onToggle(r, checked) {
+    const before = r.indexable;
+    r.indexable = checked;
+    if (!(await this.onSave(r))) {
+      r.indexable = before;
+      this.requestUpdate();
+    }
+  }
+
+  // Returns whether the save worked.
   async onSave(r) {
-    if (r.saving) return;
+    if (r.saving) return false;
     r.saving = true;
     r.status = '';
     this.requestUpdate();
@@ -188,11 +215,15 @@ export class ListingsView extends LitElement {
         topics: splitList(r.topicsStr),
         keywords: splitList(r.keywordsStr),
       });
+      r.savedTopicsStr = r.topicsStr;
+      r.savedKeywordsStr = r.keywordsStr;
       r.status = r.indexable ? 'Listed for search' : 'Unlisted';
       toast.create(r.indexable ? 'Drive listed for search' : 'Drive unlisted');
+      return true;
     } catch (e) {
       r.status = 'Error: ' + (e && e.message ? e.message : 'could not save');
       toast.create(r.status, 'error');
+      return false;
     } finally {
       r.saving = false;
       this.requestUpdate();
