@@ -22,6 +22,9 @@ function bundleApplication() {
   genSchemaTypes();
   return Promise.all([
     bundle(p(appDir, 'main.js'), p(appDir, 'main.build.js')),
+    // The crawler's utility-process entry (bg/hyper/crawler-host.js). Bundled so it carries the
+    // repo-root shared/ modules, which a packaged build does not ship.
+    bundle(p(appDir, 'tools/crawler-process.mjs'), p(appDir, 'tools/crawler-process.build.js')),
     bundle(p(fgDir, 'webview-preload/index.js'), p(fgDir, 'webview-preload/index.build.js'), {
       browserify: true,
     }),

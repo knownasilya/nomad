@@ -29,6 +29,9 @@ const VAULT_VERSION = 1;
 const META_PATH = '/.vault/meta.json';
 const SPACES_PREFIX = '/.vault/spaces/';
 const DEVICES_PREFIX = '/.vault/devices/';
+// Settings that follow the user to every Device (bg/hyper/synced-settings.js): one record per key,
+// { key, value, updatedAt }, so two Devices changing different settings never overwrite each other.
+const SETTINGS_PREFIX = '/.vault/settings/';
 
 // Identity & lifecycle
 // =
@@ -106,8 +109,32 @@ export async function listDevices() {
   return _readPrefix(sess, DEVICES_PREFIX);
 }
 
+// The synced settings as { key: value }. Empty with no Vault.
+export async function listSyncedSettings() {
+  const sess = await getVault();
+  if (!sess) return {};
+  const out = {};
+  for (const rec of await _readPrefix(sess, SETTINGS_PREFIX)) {
+    if (rec && typeof rec.key === 'string') out[rec.key] = rec.value;
+  }
+  return out;
+}
+
 // Index writes
 // =
+
+// Store a synced setting for the user's other Devices. Returns false with no Vault (nothing to
+// sync with yet). Never creates a Vault just for this.
+export async function putSyncedSetting(key, value) {
+  const sess = await getVault();
+  if (!sess) return false;
+  await _putRecord(sess, `${SETTINGS_PREFIX}${key}.json`, {
+    key,
+    value,
+    updatedAt: new Date().toISOString(),
+  });
+  return true;
+}
 
 // Record a Space in the Vault so other Devices can discover and replicate its Root Drive.
 // Keyed by rootDriveKey (globally stable) — NOT space.id, which is a device-local autoincrement

@@ -36,6 +36,7 @@ const GLOBAL_SETTINGS = new Set([
   'ai_keep_awake',
   'ai_sidebar_width',
   'cert_exceptions',
+  'crawler_enabled',
 ]);
 
 // globals
@@ -101,6 +102,9 @@ export const setup = async function (opts) {
     ai_space_default: '',
     ai_share_provider: 0, // opt-in (ADR-0013 §7): off until the user shares this Device's AI
     ai_keep_awake: 0, // opt-in: hold a powerSaveBlocker while sharing, so an idle Device stays reachable
+    // Run the discovery crawler that nomad://search queries (bg/hyper/crawler-host.js). Synced to
+    // the user's other Devices through the Vault (bg/hyper/synced-settings.js).
+    crawler_enabled: 1,
 
     cert_exceptions: [],
     adblock_lists: [

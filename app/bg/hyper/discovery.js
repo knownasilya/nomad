@@ -38,6 +38,9 @@ const peers = new Map();
 let seq = 0;
 let installed = false;
 let joined = false;
+// Called after every change to the listed set (bg/hyper/crawler-host.js feeds the browser's own
+// crawler from it).
+const changeListeners = new Set();
 
 // Public API
 // =
@@ -77,6 +80,11 @@ export async function setListed(key, rec) {
   }
 
   seq++;
+  for (const fn of changeListeners) {
+    try {
+      fn();
+    } catch {}
+  }
   await _syncSwarmMembership();
   ensureInstalled();
   _broadcast(); // push the new set to any crawler already connected
@@ -85,6 +93,17 @@ export async function setListed(key, rec) {
 /** Debug/introspection: the drive keys currently announced. */
 export function getListed() {
   return [...listed.values()];
+}
+
+/** The listed set as the LISTING frames a crawler would receive over the wire. */
+export function getListingFrames() {
+  return [...listed.values()].map((rec) => listingFrame({ ...rec, seq }));
+}
+
+/** Run `fn` after every change to the listed set. Returns an unsubscribe function. */
+export function onChange(fn) {
+  changeListeners.add(fn);
+  return () => changeListeners.delete(fn);
 }
 
 // internal

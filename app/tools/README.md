@@ -26,7 +26,7 @@ Environment: `NOMAD_CRAWLER_PORT` is an alternative to `--port`.
 
    | Endpoint | Returns |
    |---|---|
-   | `GET /search?q=<terms>&topic=<slug>` | ranked matches (global; `topic` is an optional exact facet) |
+   | `GET /search?q=<terms>&topic=<slug>` | ranked matches (global; `topic` is an optional exact facet). Fuzzy: each word may match the start of a word, part of one, or with a typo, across title, keywords, topics, and description (in that order of weight) |
    | `GET /topics` | the emergent topic directory with counts |
    | `GET /stats` | `{ drives, topics }` |
 

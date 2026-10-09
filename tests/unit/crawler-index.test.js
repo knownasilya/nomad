@@ -15,7 +15,7 @@ import {
   listingFrame,
   FRAME,
 } from '../../shared/listing-wire.mjs';
-import { createIndex } from '../../app/tools/crawler-index.mjs';
+import { createIndex, createLocalFeed } from '../../app/tools/crawler-index.mjs';
 
 let crypto, b4a;
 async function loadDep(side, name) {
@@ -85,7 +85,7 @@ describe('index ingest + query', () => {
     idx.ingest(feed);
     idx.ingest(app);
     expect(idx.stats()).toEqual({ drives: 2, topics: 3 });
-    const r = idx.search('composting', ''); // exact-token match (no stemming in v1)
+    const r = idx.search('composting', '');
     expect(r).toHaveLength(1);
     expect(r[0].driveKey).toBe('a'.repeat(64));
     // keyword match
@@ -122,6 +122,98 @@ describe('index ingest + query', () => {
     expect(r[0].topics).toHaveLength(5);
     expect(r[0].keywords).toHaveLength(12);
     expect(r[0].topics.every((t) => t === t.toLowerCase())).toBe(true);
+  });
+
+  it('finds a feed by a word in its title', () => {
+    const idx = createIndex(() => 1000);
+    idx.ingest(
+      listingFrame({
+        driveKey: 'd'.repeat(64),
+        type: 'walled.garden/feed',
+        title: 'My Blog',
+        description: 'A peer-to-peer blog.',
+        topics: ['blog'],
+        keywords: ['personal'],
+      })
+    );
+    expect(idx.search('blog', '').map((x) => x.title)).toEqual(['My Blog']);
+  });
+
+  describe('fuzzy matching', () => {
+    const blog = listingFrame({
+      driveKey: 'd'.repeat(64),
+      type: 'walled.garden/feed',
+      title: 'My Blog',
+      description: 'A peer-to-peer blog.',
+      topics: ['blog'],
+      keywords: ['personal'],
+    });
+    const cafe = listingFrame({
+      driveKey: 'e'.repeat(64),
+      title: 'Café Menu',
+      description: 'Coffee and pastries, updated daily',
+      topics: ['food'],
+    });
+    const make = () => {
+      const idx = createIndex(() => 1000);
+      for (const f of [feed, app, blog, cafe]) idx.ingest(f);
+      return idx;
+    };
+    const titles = (r) => r.map((x) => x.title);
+
+    it('matches the start of a word, as you type ("pee" finds "peer")', () => {
+      expect(titles(make().search('pee', ''))).toEqual(['My Blog']);
+      expect(titles(make().search('perma', ''))).toContain('Permaculture Weekly');
+    });
+
+    it('matches inside a word', () => {
+      expect(titles(make().search('culture', ''))).toEqual(['Permaculture Weekly']);
+    });
+
+    it('forgives a typo in the description', () => {
+      expect(titles(make().search('compsting', ''))).toEqual(['Permaculture Weekly']); // missing letter
+      expect(titles(make().search('pastires', ''))).toEqual(['Café Menu']); // swapped letters
+    });
+
+    it('ignores accents and case', () => {
+      expect(titles(make().search('CAFE', ''))).toEqual(['Café Menu']);
+    });
+
+    it('searches topics too', () => {
+      expect(titles(make().search('games', ''))).toEqual(['Chess']);
+    });
+
+    it('does not fuzz short words', () => {
+      expect(make().search('bl', '').length).toBe(1); // prefix only: blog
+      expect(make().search('cat', '')).toEqual([]); // not "chat"/"cafe" by a typo
+    });
+
+    it('ranks more matched words first, then title over description', () => {
+      const idx = make();
+      // "blog" is in My Blog's title; "coffee" only in the café's description
+      expect(titles(idx.search('blog coffee', '')).slice(0, 2).sort()).toEqual(['Café Menu', 'My Blog']);
+      expect(titles(idx.search('peer blog', ''))[0]).toBe('My Blog');
+      const r = idx.search('chess', '');
+      expect(r[0].title).toBe('Chess'); // title match outranks its "play chess" description match
+    });
+  });
+
+  it('removes a drive', () => {
+    const idx = createIndex(() => 1000);
+    idx.ingest(feed);
+    expect(idx.remove('a'.repeat(64))).toBe(true);
+    expect(idx.stats()).toEqual({ drives: 0, topics: 0 });
+  });
+
+  it('local feed: each update is the full set, so a missing drive was unlisted', () => {
+    const idx = createIndex(() => 1000);
+    const apply = createLocalFeed(idx);
+    apply([feed, app]);
+    expect(idx.stats().drives).toBe(2);
+    apply([app]); // the feed was unlisted
+    expect(idx.search('', '').map((x) => x.title)).toEqual(['Chess']);
+    apply([]);
+    expect(idx.stats().drives).toBe(0);
   });
 
   it('updates in place on a re-listing, preserving firstSeen', () => {

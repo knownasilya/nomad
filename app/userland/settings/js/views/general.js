@@ -82,8 +82,8 @@ class GeneralSettingsView extends LitElement {
         ${this.renderProtocolSettings()} ${this.renderThemeSettings()}
       </div>
       <div class="form-group">
-        <h2>Search Settings</h2>
-        ${this.renderSearchSettings()}
+        <h2 id="search">Search Settings</h2>
+        ${this.renderSearchSettings()} ${this.renderCrawlerSettings()}
       </div>
       <div class="form-group">
         <h2>Nomad Analytics</h2>
@@ -478,6 +478,30 @@ class GeneralSettingsView extends LitElement {
     `;
   }
 
+  // The discovery crawler behind nomad://search (bg/hyper/crawler-host.js). The setting syncs to
+  // the user's other Devices.
+  renderCrawlerSettings() {
+    return html`
+      <div class="section">
+        <p>
+          The search crawler finds drives that their owners listed, so you can
+          search them at <code>nomad://search</code>. This setting applies to all
+          your devices.
+        </p>
+
+        <div class="radio-item">
+          <input
+            type="checkbox"
+            id="crawlerEnabled"
+            ?checked=${this.settings.crawler_enabled == 1}
+            @change=${this.onCrawlerToggle}
+          />
+          <label for="crawlerEnabled">Run the search crawler</label>
+        </div>
+      </div>
+    `;
+  }
+
   renderDefaultZoomSettings() {
     const opt = (v, label) => html`
       <option value=${v} ?selected=${v === this.settings.default_zoom}>
@@ -716,6 +740,12 @@ class GeneralSettingsView extends LitElement {
     nomad.browser.setSetting('sidebar_width', this.settings.sidebar_width);
     toast.create('Setting updated');
     this.requestUpdate();
+  }
+
+  onCrawlerToggle(e) {
+    this.settings.crawler_enabled = e.target.checked ? 1 : 0;
+    nomad.browser.setSetting('crawler_enabled', this.settings.crawler_enabled);
+    toast.create(e.target.checked ? 'Search crawler on' : 'Search crawler off');
   }
 
   onRunBackgroundToggle(e) {

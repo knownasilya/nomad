@@ -22,6 +22,8 @@ import dbs from './bg/dbs/index';
 import hyper from './bg/hyper/index';
 import * as filesystem from './bg/filesystem/index';
 import * as bookmarkPins from './bg/filesystem/pins';
+import * as syncedSettings from './bg/hyper/synced-settings';
+import * as crawlerHost from './bg/hyper/crawler-host';
 import * as webapis from './bg/web-apis/bg';
 
 import * as initWindow from './bg/ui/init-window';
@@ -182,6 +184,10 @@ app.on('ready', async function () {
   downloads.setup();
   log.info('Initializing permissions manager');
   permissions.setup();
+  // Synced settings first, so a Device that turned the crawler off elsewhere stops it here soon.
+  syncedSettings.setup();
+  log.info('Starting the discovery crawler');
+  crawlerHost.setup();
   log.info('Program setup complete');
 
   // theming
