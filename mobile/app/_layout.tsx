@@ -12,7 +12,11 @@ export default function RootLayout () {
           headerShown: false,
           contentStyle: { backgroundColor: t.bg }
         }}
-      />
+      >
+        <Stack.Screen name='index' />
+        {/* The tab grid fades in over the browser, like Chrome's switcher, rather than sliding. */}
+        <Stack.Screen name='tabs' options={{ animation: 'fade' }} />
+      </Stack>
     </SafeAreaProvider>
   )
 }

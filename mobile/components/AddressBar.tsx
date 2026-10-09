@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, type Ref } from 'react'
 import { View, TextInput, TouchableOpacity, Text, StyleSheet } from 'react-native'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { DriveType } from '../lib/hyperUrl'
@@ -20,12 +20,13 @@ interface Props {
   hasDraft?: boolean // drive has unpublished draft changes (ADR-0012)
   draftPreviewing?: boolean // this tab is rendering the merged draft
   onToggleDraft?: () => void
+  inputRef?: Ref<TextInput> // lets the browser focus the field, e.g. on a new tab from the tab grid
 }
 
 // nomad-style location bar: back/forward nav, a rounded input with a leading
 // trust indicator and drive-type chip, and a reload/go button on the right.
 export default function AddressBar (props: Props) {
-  const { value, onChangeText, onSubmit, onReload, loading, isHyper, canBack, canForward, onBack, onForward, onFocus, onBlur, hasDraft, draftPreviewing, onToggleDraft } = props
+  const { value, onChangeText, onSubmit, onReload, loading, isHyper, canBack, canForward, onBack, onForward, onFocus, onBlur, hasDraft, draftPreviewing, onToggleDraft, inputRef } = props
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
 
@@ -40,6 +41,7 @@ export default function AddressBar (props: Props) {
       <View style={[s.inputWrap, isHyper && { borderColor: t.trustText }]}>
         <Text style={[s.trust, { color: isHyper ? t.secure : t.textMuted }]}>{isHyper ? '⬡' : '◯'}</Text>
         <TextInput
+          ref={inputRef}
           style={s.input}
           value={value}
           onChangeText={onChangeText}

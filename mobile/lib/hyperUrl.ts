@@ -50,3 +50,26 @@ export function hyperKeyOf (url: string): string {
   const slash = s.indexOf('/')
   return (slash === -1 ? s : s.slice(0, slash)).toLowerCase()
 }
+
+// The same canonical form desktop's normalizeUrl (app/lib/urls.ts) gives a URL: no userinfo, no
+// default port, and at least a '/' path. Pinned shortcuts are stored and matched in this form in
+// /nomad/pins.json, so both devices must agree on it. http(s) hosts are lowercased; a hyper:// host
+// is an opaque key and is kept as written, as WHATWG URL does.
+export function normalizeUrl (url: string): string {
+  const m = /^([a-z][a-z0-9+.-]*):\/\/([^/?#]*)([^?#]*)(\?[^#]*)?(#.*)?$/i.exec((url || '').trim())
+  if (!m) return url
+  const scheme = m[1].toLowerCase()
+  let host = m[2].replace(/^[^@]*@/, '')
+  if (scheme === 'http' || scheme === 'https') {
+    host = host.toLowerCase().replace(scheme === 'https' ? /:443$/ : /:80$/, '')
+  }
+  return `${scheme}://${host}${m[3] || '/'}${m[4] || ''}${m[5] || ''}`
+}
+
+// What a favicon belongs to: the host of a web URL, or the drive key of a hyper:// URL. Every page
+// of a site shares one icon.
+export function siteKeyOf (url: string): string {
+  if (isHyperUrl(url)) return 'hyper:' + hyperKeyOf(url)
+  const m = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/?#]*@)?([^/?#:]+)/i.exec((url || '').trim())
+  return m ? m[1].toLowerCase() : ''
+}

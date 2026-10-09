@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { View, Text, TouchableOpacity, ScrollView, Image, StyleSheet, StatusBar, Alert, Keyboard, BackHandler, Platform } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, StyleSheet, StatusBar, Alert, Keyboard, BackHandler, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { WebView } from 'react-native-webview'
 import type { WebViewNavigation } from 'react-native-webview'
+import { router, useFocusEffect } from 'expo-router'
+import { captureRef } from 'react-native-view-shot'
 import * as Clipboard from 'expo-clipboard'
 import b4a from 'b4a'
 
-import TabStrip from '../components/TabStrip'
 import AddressBar from '../components/AddressBar'
 import HyperView from '../components/HyperView'
 import Suggestions from '../components/Suggestions'
@@ -16,6 +17,7 @@ import Devices from '../components/Devices'
 import SpaceSwitcher from '../components/SpaceSwitcher'
 import DevTools from '../components/DevTools'
 import AiPanel from '../components/AiPanel'
+import Shortcuts from '../components/Shortcuts'
 import FileExplorer, { type ExplorerDrive } from '../components/FileExplorer'
 import type { HyperRender } from '../components/HyperView'
 import { useBackend } from '../lib/useBackend'
@@ -23,9 +25,14 @@ import { syncHostingService } from '../lib/hostingService'
 import HostingSettings from '../components/HostingSettings'
 import { usePersistence, type SavedSite, type SavedDrive } from '../lib/usePersistence'
 import { useSpaces, PERSONAL_ID } from '../lib/useSpaces'
+import { useFavicons } from '../lib/useFavicons'
 import { resolveAddress, isHyperUrl, shortKey, hyperKeyOf, type DriveType } from '../lib/hyperUrl'
 import { useTheme, radius, type Theme } from '../lib/theme'
-import { CONSOLE_SHIM, VIEW_SOURCE_JS, type ContentMsg, type StatusMsg, type ErrorMsg, type LogEntry } from '../lib/types'
+import { CONSOLE_SHIM, FAVICON_JS, VIEW_SOURCE_JS, type ContentMsg, type StatusMsg, type ErrorMsg, type LogEntry } from '../lib/types'
+import { publishTabs, setTabActions, type TabThumb } from '../lib/tabSwitcher'
+
+// Thumbnails for the tab grid are scaled to this width; a grid card is about half a phone wide.
+const THUMB_WIDTH = 360
 
 type Kind = 'home' | 'web' | 'hyper'
 
@@ -243,8 +250,10 @@ export default function Browser () {
   const persist = usePersistence(spacesApi.activeSpaceId, {
     backend,
     rootDriveKey: spacesApi.activeSpace.rootDriveKey,
-    ns: spacesApi.activeSpace.ns
+    ns: spacesApi.activeSpace.ns,
+    onError: (message) => Alert.alert('Couldn’t save', message)
   })
+  const favicons = useFavicons()
   persistRef.current = persist
   activeSpaceIdRef.current = spacesApi.activeSpaceId
 
@@ -449,6 +458,18 @@ export default function Browser () {
       if (msg.type === 'navigate' && typeof msg.url === 'string') navigate(activeIdRef.current, msg.url)
       else if (msg.type === 'console') setLogs((prev) => [...prev.slice(-199), { level: msg.level, text: msg.text, ts: Date.now() }])
       else if (msg.type === 'source') setSource(String(msg.html || ''))
+      // A page's icon (FAVICON_JS). Kept per site. A drive page is served from the loopback gateway,
+      // so it counts toward the tab's hyper:// drive, and only a data URL outlives the gateway port.
+      else if (msg.type === 'favicon') {
+        const tab = tabsRef.current.find((tb) => tb.id === activeIdRef.current)
+        if (!tab) return
+        const dataUrl = typeof msg.dataUrl === 'string' && msg.dataUrl.startsWith('data:image/') ? msg.dataUrl : null
+        if (tab.kind === 'hyper' && tab.url && dataUrl) favicons.remember(tab.url, dataUrl)
+        else if (tab.kind === 'web' && typeof msg.page === 'string') {
+          const href = typeof msg.href === 'string' && /^https?:\/\//.test(msg.href) ? msg.href : null
+          if (dataUrl || href) favicons.remember(msg.page, (dataUrl || href)!)
+        }
+      }
       else if (msg.type === 'nomad-rpc' && msg.payload && msg.payload.id) {
         const wv = webviews.current[activeIdRef.current]
         backendRef.current.nomad(msg.payload).then((result) => {
@@ -476,7 +497,7 @@ export default function Browser () {
         delete aiHandles.current[msg.payload.id]
       }
     },
-    [navigate, describeDrive]
+    [navigate, describeDrive, favicons.remember]
   )
 
   const viewSource = useCallback(() => {
@@ -547,6 +568,18 @@ export default function Browser () {
   }, [explorerDrive, active, reload])
 
   // --- tab management ----------------------------------------------------
+  // Each tab's last look, taken when the tab grid opens (only the active tab is ever on screen).
+  const [thumbs, setThumbs] = useState<Record<string, TabThumb>>({})
+  const contentRef = useRef<View>(null)
+  const contentSize = useRef({ width: 0, height: 0 })
+  const dropThumbs = (ids: string[]) =>
+    setThumbs((prev) => {
+      if (!ids.some((id) => prev[id])) return prev
+      const next = { ...prev }
+      for (const id of ids) delete next[id]
+      return next
+    })
+
   const openTab = useCallback(() => {
     const tb = blankTab()
     setTabs((prev) => [...prev, tb])
@@ -565,11 +598,91 @@ export default function Browser () {
           setActiveId(fresh.id)
           return [fresh]
         }
-        if (id === activeId) setActiveId(next[next.length - 1].id)
+        if (id === activeIdRef.current) setActiveId(next[next.length - 1].id)
         return next
       })
+      dropThumbs([id])
     },
-    [activeId, backend]
+    [backend]
+  )
+
+  // Close every tab in the active space and start over with one new tab.
+  const closeAllTabs = useCallback(() => {
+    const closing = tabsRef.current
+    for (const tb of closing) {
+      if (tb.driveKey) backend.close(tb.driveType, tb.driveKey)
+      delete webviews.current[tb.id]
+    }
+    dropThumbs(closing.map((tb) => tb.id))
+    const fresh = blankTab()
+    setTabs([fresh])
+    setActiveId(fresh.id)
+  }, [backend])
+
+  // Snapshot the active tab's content area for its grid card. Best-effort: a failed capture just
+  // leaves the card on its placeholder.
+  const captureActive = useCallback(async () => {
+    const id = activeIdRef.current
+    const { width, height } = contentSize.current
+    if (!contentRef.current || !width || !height) return
+    try {
+      const uri = await captureRef(contentRef, {
+        format: 'jpg',
+        quality: 0.6,
+        width: THUMB_WIDTH,
+        height: Math.round((THUMB_WIDTH * height) / width),
+        result: 'data-uri'
+      })
+      setThumbs((prev) => ({ ...prev, [id]: { uri, aspect: width / height } }))
+    } catch {}
+  }, [])
+
+  // Open the tab grid (app/tabs.tsx). The capture gets a short head start so the current tab's
+  // card shows what was just on screen; a slow one lands in the grid when it finishes.
+  const gridOpening = useRef(false)
+  const openTabGrid = useCallback(async () => {
+    if (gridOpening.current) return
+    gridOpening.current = true
+    Keyboard.dismiss()
+    setUrlFocused(false)
+    await Promise.race([captureActive(), new Promise((resolve) => setTimeout(resolve, 400))])
+    router.push('/tabs')
+    gridOpening.current = false
+  }, [captureActive])
+
+  const addressRef = useRef<TextInput>(null)
+  const focusAddressOnReturn = useRef(false)
+
+  // Feed the tab grid route: what it shows, and what its buttons do.
+  useEffect(() => {
+    publishTabs({
+      tabs: tabs.map((tb) => ({
+        id: tb.id, title: tb.title, url: tb.url, kind: tb.kind, loading: tb.loading, thumb: thumbs[tb.id], icon: tb.url ? favicons.iconFor(tb.url) : undefined
+      })),
+      activeId,
+      spaceName: spacesApi.activeSpace.name,
+      spaceColor: spacesApi.activeSpace.color
+    })
+  }, [tabs, activeId, thumbs, favicons.iconFor, spacesApi.activeSpace.name, spacesApi.activeSpace.color])
+  useEffect(() => {
+    setTabActions({
+      select: setActiveId,
+      close: closeTab,
+      // A new tab from the grid comes back ready to type into, as in Chrome.
+      open: () => { openTab(); focusAddressOnReturn.current = true },
+      closeAll: closeAllTabs
+    })
+    return () => setTabActions(null)
+  }, [closeTab, openTab, closeAllTabs])
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!focusAddressOnReturn.current) return
+      focusAddressOnReturn.current = false
+      // Wait for the grid's fade-out; focusing mid-transition can drop the keyboard on Android.
+      const timer = setTimeout(() => addressRef.current?.focus(), 250)
+      return () => clearTimeout(timer)
+    }, [])
   )
 
   const onWebNav = useCallback(
@@ -614,15 +727,18 @@ export default function Browser () {
   // handles its own back via onRequestClose, so this handler won't fire while one is open — but the
   // AI panel is a plain in-tree overlay (see AiPanel), so closing it is this handler's job. Keeping
   // that here, rather than in a second BackHandler inside the panel, avoids depending on the order
-  // RN happens to call two registered handlers in.
-  useEffect(() => {
-    if (Platform.OS !== 'android') return
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (aiOpen) { setAiOpen(false); return true }
-      return goBackActive()
-    })
-    return () => sub.remove()
-  }, [goBackActive, aiOpen])
+  // RN happens to call two registered handlers in. Registered only while this screen has focus:
+  // with the tab grid pushed on top, back must pop the grid, not step the tab's history under it.
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'android') return
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (aiOpen) { setAiOpen(false); return true }
+        return goBackActive()
+      })
+      return () => sub.remove()
+    }, [goBackActive, aiOpen])
+  )
 
   // --- render ------------------------------------------------------------
   const canBack = active.sp > 0 || (active.kind === 'web' && !!active.webCanGoBack)
@@ -710,13 +826,6 @@ export default function Browser () {
     <>
     <SafeAreaView style={s.root} edges={['top', 'bottom']}>
       <StatusBar barStyle={t.scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={t.bg} />
-      <TabStrip
-        tabs={tabs.map((tb) => ({ id: tb.id, title: tb.title, isHyper: tb.kind === 'hyper', loading: tb.loading }))}
-        activeId={activeId}
-        onSelect={setActiveId}
-        onClose={closeTab}
-        onNew={openTab}
-      />
       <AddressBar
         value={active.input}
         onChangeText={(text) => patch(active.id, { input: text })}
@@ -734,22 +843,36 @@ export default function Browser () {
         hasDraft={!!active.hasDraft}
         draftPreviewing={!!active.draftPreviewing}
         onToggleDraft={onToggleDraftPreview}
+        inputRef={addressRef}
       />
 
       {/* Only the active tab is mounted: keeping inactive panes in an absolute
           stack let Android WebViews (which ignore zIndex) paint over the active
-          one. Per-tab navigation state lives in `tabs`, so nothing is lost. */}
-      <View style={s.content}>
+          one. Per-tab navigation state lives in `tabs`, so nothing is lost.
+          contentRef is what the tab grid's thumbnail captures; collapsable={false} keeps the
+          View in the native tree on Android so there is something to capture. */}
+      <View
+        ref={contentRef}
+        collapsable={false}
+        style={s.content}
+        onLayout={(e) => { contentSize.current = { width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height } }}
+      >
         <TabPane
           key={active.id}
           tab={active}
-          bookmarks={persist.bookmarks}
-          history={persist.history}
+          home={{
+            pins: persist.pins,
+            history: persist.history,
+            iconFor: favicons.iconFor,
+            suggest: persist.suggest,
+            onAddPin: (url, title) => persist.setPinned(url, title, true),
+            onRemovePin: (url) => persist.setPinned(url, '', false),
+            onRefresh: persist.refreshSynced
+          }}
           onNavigate={(url) => navigate(active.id, url)}
           onWebNav={(nav) => onWebNav(active.id, nav)}
           onHyperNav={(hyperUrl, canGoBack, title) => onHyperNav(active.id, hyperUrl, canGoBack, title)}
           onMessage={handleWebMessage}
-          onRemoveBookmark={(url) => persist.toggleBookmark(url, '')}
           onClearHistory={persist.clearHistory}
           onOpenLibrary={() => setLibraryOpen(true)}
           registerWebView={(ref) => { webviews.current[active.id] = ref }}
@@ -782,6 +905,7 @@ export default function Browser () {
           onPress={() => persist.toggleBookmark(active.url, active.title)}
         />
         <ToolButton label='✦' active={aiOpen} onPress={() => setAiOpen(true)} />
+        <TabCountButton count={tabs.length} onPress={openTabGrid} />
         <ToolButton label='☰' onPress={() => setMenuOpen(true)} />
       </View>
 
@@ -794,6 +918,9 @@ export default function Browser () {
           { label: 'Devices', onPress: () => setDevicesOpen(true) },
           { label: 'Developer tools', onPress: () => { viewSource(); setDevtoolsOpen(true) } },
           { label: 'Copy link', disabled: !active.url, onPress: copyLink },
+          persist.isPinned(active.url)
+            ? { label: 'Remove from home shortcuts', onPress: () => persist.setPinned(active.url, '', false) }
+            : { label: 'Add to home shortcuts', disabled: !active.url, onPress: () => persist.setPinned(active.url, active.title, true) },
           { label: activeHosted ? 'Stop hosting this drive' : 'Host this drive', disabled: !canHostActive, onPress: toggleHosting },
           { label: 'Hosting settings', onPress: () => setHostingSettingsOpen(true) },
           { label: 'Reload', disabled: active.kind === 'home', onPress: reload }
@@ -877,26 +1004,33 @@ export default function Browser () {
   )
 }
 
+// What the home page shows: pinned shortcuts and recent pages.
+interface HomeData {
+  pins: SavedSite[]
+  history: SavedSite[]
+  iconFor: (url: string) => string | undefined
+  suggest: (query: string, limit?: number) => SavedSite[]
+  onAddPin: (url: string, title: string) => void
+  onRemovePin: (url: string) => void
+  onRefresh: () => void
+}
+
 function TabPane ({
   tab,
-  bookmarks,
-  history,
+  home,
   onNavigate,
   onWebNav,
   onMessage,
-  onRemoveBookmark,
   onClearHistory,
   onOpenLibrary,
   registerWebView,
   onHyperNav
 }: {
   tab: Tab
-  bookmarks: SavedSite[]
-  history: SavedSite[]
+  home: HomeData
   onNavigate: (url: string) => void
   onWebNav: (nav: WebViewNavigation) => void
   onMessage: (data: string) => void
-  onRemoveBookmark: (url: string) => void
   onClearHistory: () => void
   onOpenLibrary: () => void
   registerWebView: (ref: WebView | null) => void
@@ -906,10 +1040,8 @@ function TabPane ({
   if (tab.kind === 'home') {
     return (
       <Home
-        bookmarks={bookmarks}
-        history={history}
+        home={home}
         onNavigate={onNavigate}
-        onRemoveBookmark={onRemoveBookmark}
         onClearHistory={onClearHistory}
         onOpenLibrary={onOpenLibrary}
       />
@@ -928,6 +1060,7 @@ function TabPane ({
       onNavigationStateChange={onWebNav}
       onMessage={(e) => onMessage(e.nativeEvent.data)}
       injectedJavaScriptBeforeContentLoaded={CONSOLE_SHIM}
+      injectedJavaScript={FAVICON_JS}
       webviewDebuggingEnabled
       allowsBackForwardNavigationGestures
     />
@@ -935,22 +1068,21 @@ function TabPane ({
 }
 
 function Home ({
-  bookmarks,
-  history,
+  home,
   onNavigate,
-  onRemoveBookmark,
   onClearHistory,
   onOpenLibrary
 }: {
-  bookmarks: SavedSite[]
-  history: SavedSite[]
+  home: HomeData
   onNavigate: (url: string) => void
-  onRemoveBookmark: (url: string) => void
   onClearHistory: () => void
   onOpenLibrary: () => void
 }) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
+  const { pins, history, iconFor, suggest, onAddPin, onRemovePin, onRefresh } = home
+  // Pins can change on another device, so pick up the latest whenever home opens.
+  useEffect(() => { onRefresh() }, [onRefresh])
   return (
     <ScrollView style={s.home} contentContainerStyle={s.homeContent}>
       <View style={s.brandRow}>
@@ -965,15 +1097,14 @@ function Home ({
       </View>
       <Text style={s.hint}>Enter a web address, a search, or a hyper:// drive key. Open My Library to manage drives, bookmarks, and history.</Text>
 
-      <Section title='Bookmarks'>
-        {bookmarks.length === 0 ? (
-          <Text style={s.empty}>Tap the star to save a page.</Text>
-        ) : (
-          bookmarks.map((b, i) => (
-            <SiteRow key={b.url} site={b} hyper={b.url.startsWith('hyper://')} divider={i > 0} onPress={() => onNavigate(b.url)} onLongPress={() => onRemoveBookmark(b.url)} />
-          ))
-        )}
-      </Section>
+      <Shortcuts
+        pins={pins}
+        iconFor={iconFor}
+        suggest={suggest}
+        onOpen={onNavigate}
+        onAdd={onAddPin}
+        onRemove={onRemovePin}
+      />
 
       <Section title='Recent' action={history.length ? { label: 'Clear', onPress: onClearHistory } : undefined}>
         {history.length === 0 ? (
@@ -1044,6 +1175,20 @@ function ToolButton ({ label, onPress, disabled, active }: { label: string; onPr
   )
 }
 
+// Chrome's tab switcher button: the open-tab count in a rounded square. Past 99 it gives up and
+// grins, as Chrome does.
+function TabCountButton ({ count, onPress }: { count: number; onPress: () => void }) {
+  const t = useTheme()
+  const s = useMemo(() => makeStyles(t), [t])
+  return (
+    <TouchableOpacity style={s.toolBtn} onPress={onPress} hitSlop={6} accessibilityLabel={`${count} open ${count === 1 ? 'tab' : 'tabs'}`}>
+      <View style={s.tabCount}>
+        <Text style={s.tabCountText}>{count > 99 ? ':D' : count}</Text>
+      </View>
+    </TouchableOpacity>
+  )
+}
+
 function makeStyles (t: Theme) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: t.bg },
@@ -1067,6 +1212,8 @@ function makeStyles (t: Theme) {
     spaceDot: { width: 10, height: 10, borderRadius: radius.pill },
     spaceChipText: { color: t.text, fontSize: 13, fontWeight: '500' },
     toolBtnDisabled: { color: t.border },
+    tabCount: { minWidth: 22, height: 22, paddingHorizontal: 3, borderRadius: 5, borderWidth: 2, borderColor: t.textDim, alignItems: 'center', justifyContent: 'center' },
+    tabCountText: { color: t.textDim, fontSize: 11, fontWeight: '700' },
     menuSheet: { backgroundColor: t.surface, paddingVertical: 8, paddingBottom: 28 },
     menuItem: { paddingHorizontal: 22, paddingVertical: 15 },
     menuItemText: { color: t.text, fontSize: 16 },

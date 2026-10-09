@@ -547,15 +547,22 @@ async function handleAddVaultSpace ({ reqId, rootDriveKey, name, icon, color }) 
   }
 }
 
-async function handleBookmarks ({ reqId, action, rootDriveKey, ns = null, href, title }) {
+// Bookmarks and pinned shortcuts in a space's Root Drive. Every reply carries both lists, so the UI
+// stays in step from any call. 'pin' with `addBookmark` also writes the bookmark, because desktop
+// only shows a pin that has one; the UI decides, since it knows the bookmark hrefs.
+async function handleBookmarks ({ reqId, action, rootDriveKey, ns = null, href, title, addBookmark = false }) {
   try {
     const key = b4a.from(rootDriveKey, 'hex')
     if (action === 'add') await manager.addBookmark(key, ns, { href, title })
     else if (action === 'remove') await manager.removeBookmark(key, ns, href)
-    const bookmarks = await manager.listBookmarks(key, ns)
-    send(RPC_BOOKMARKS_RESULT, { reqId, ok: true, bookmarks })
+    else if (action === 'pin') {
+      if (addBookmark) await manager.addBookmark(key, ns, { href, title })
+      await manager.setPinned(key, ns, href, true)
+    } else if (action === 'unpin') await manager.setPinned(key, ns, href, false)
+    const [bookmarks, pins] = await Promise.all([manager.listBookmarks(key, ns), manager.listPins(key, ns)])
+    send(RPC_BOOKMARKS_RESULT, { reqId, ok: true, bookmarks, pins })
   } catch (err) {
-    send(RPC_BOOKMARKS_RESULT, { reqId, ok: false, bookmarks: [], message: err.message || String(err) })
+    send(RPC_BOOKMARKS_RESULT, { reqId, ok: false, bookmarks: [], pins: [], message: err.message || String(err) })
   }
 }
 

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { useTheme, radius, type Theme } from '../lib/theme'
-import { type DirEntry, CONSOLE_SHIM, NOMAD_SHIM } from '../lib/types'
+import { type DirEntry, CONSOLE_SHIM, FAVICON_JS, NOMAD_SHIM } from '../lib/types'
 import { shortKey } from '../lib/hyperUrl'
 
 export type HyperRender =
@@ -44,6 +44,7 @@ export default function HyperView ({ render, onNavigate, onMessage, registerWebV
   const webProps = {
     originWhitelist: ['*'],
     injectedJavaScriptBeforeContentLoaded: CONSOLE_SHIM + NOMAD_SHIM,
+    injectedJavaScript: FAVICON_JS, // reports the page's icon for shortcuts and tab cards
     webviewDebuggingEnabled: true,
     onMessage: (e: any) => onMessage(e.nativeEvent.data),
     onRenderProcessGone: onRendererGone('renderer'),

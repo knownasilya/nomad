@@ -63,6 +63,41 @@ export const CONSOLE_SHIM = `(function(){
   true;
 })();`
 
+// Run after each page load to report the page's icon for shortcuts and tab cards. Picks the biggest
+// declared icon (an SVG counts as big), else /favicon.ico, and draws it to a canvas so RN gets a
+// PNG data URL: that also covers SVG icons (RN's Image can't draw SVG) and drive pages served from
+// the loopback gateway, whose URLs stop working later. A cross-origin icon without CORS taints the
+// canvas, so then only its URL is sent.
+export const FAVICON_JS = `(function(){
+  try {
+    if (window.__nomadFavicon) return; window.__nomadFavicon = true;
+    function post(m){ try { m.type = 'favicon'; m.page = location.href; window.ReactNativeWebView.postMessage(JSON.stringify(m)); } catch(e){} }
+    var best = null, bestSize = -1, links = document.querySelectorAll('link[rel]');
+    for (var i = 0; i < links.length; i++) {
+      var l = links[i], rel = (l.getAttribute('rel') || '').toLowerCase();
+      var touch = rel.indexOf('apple-touch-icon') !== -1;
+      if (!l.href || (!touch && rel.split(/\\s+/).indexOf('icon') === -1)) continue;
+      var size = touch ? 180 : 32, m = /(\\d+)x\\d+/.exec(l.getAttribute('sizes') || '');
+      if (m) size = parseInt(m[1], 10);
+      if (/svg/i.test(l.type || '') || /\\.svg([?#]|$)/i.test(l.href)) size = 1000;
+      if (size > bestSize) { best = l.href; bestSize = size; }
+    }
+    var href = best || (location.origin + '/favicon.ico');
+    var img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function(){
+      try {
+        var c = document.createElement('canvas'); c.width = c.height = 96;
+        c.getContext('2d').drawImage(img, 0, 0, 96, 96);
+        post({ dataUrl: c.toDataURL('image/png'), href: href });
+      } catch (e) { post({ href: href }); }
+    };
+    img.onerror = function(){ if (best) post({ href: href }); };
+    img.src = href;
+  } catch (e) {}
+  true;
+})();`
+
 // Injected into drive WebViews so in-page `nomad.fs.*` calls (used by app frontends like the blog
 // template) work on mobile. Exposes the SAME `nomad.fs` surface as desktop (ADR-0010) — the method
 // list is the canonical shared/fs-manifest.mjs — over a postMessage bridge to the Bare backend

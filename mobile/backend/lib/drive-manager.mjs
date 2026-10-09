@@ -561,6 +561,29 @@ export default class DriveManager {
     await this._del(DRIVE_AUTOBASE, entry.drive, `/bookmarks/${slug}.json`)
   }
 
+  // Pinned shortcuts: the hrefs in /nomad/pins.json, a JSON array in the same Root Drive — the file
+  // desktop's new tab page reads (app/bg/filesystem/pins.js). A pin shows on desktop only when a
+  // bookmark with that href exists too, so pinning also needs a bookmark (the caller adds it).
+  async listPins (rootDriveKey, ns = null) {
+    const entry = await this.open(DRIVE_AUTOBASE, rootDriveKey, () => {}, ns)
+    try {
+      const buf = await entry.reader.read('/nomad/pins.json')
+      const data = buf ? JSON.parse(b4a.toString(buf)) : []
+      return Array.isArray(data) ? data.filter((v) => typeof v === 'string' && v) : []
+    } catch {
+      return []
+    }
+  }
+
+  async setPinned (rootDriveKey, ns, href, pinned) {
+    const entry = await this.open(DRIVE_AUTOBASE, rootDriveKey, () => {}, ns)
+    if (!isWritable(entry.drive)) throw new Error('This space is read-only on this device')
+    const pins = await this.listPins(rootDriveKey, ns)
+    if (pins.includes(href) === !!pinned) return // already as asked
+    const next = pinned ? [...pins, href] : pins.filter((p) => p !== href)
+    await this._put(DRIVE_AUTOBASE, entry.drive, '/nomad/pins.json', b4a.from(JSON.stringify(next, null, 2)), { inline: true })
+  }
+
   // Raw file bytes for editing (no markdown/html rendering, no asset inlining).
   async readFile (driveType, key, ns, path) {
     const { reader } = await this._openOwned(driveType, key, ns)

@@ -45,7 +45,8 @@ import {
 } from '../rpc-commands.mjs'
 
 export interface Bookmark { href: string; title: string; createdAt?: string }
-export interface BookmarksMsg { reqId?: string; ok: boolean; bookmarks: Bookmark[]; message?: string }
+// `pins`: the space's pinned-shortcut hrefs (/nomad/pins.json), sent with every bookmarks reply.
+export interface BookmarksMsg { reqId?: string; ok: boolean; bookmarks: Bookmark[]; pins?: string[]; message?: string }
 export interface HostingMsg { reqId?: string; ok: boolean; hosted?: boolean; count?: number; paused?: boolean; usageBytes?: number; dailyLimitMB?: number; message?: string }
 import type { DriveType } from './hyperUrl'
 import type { StatusMsg, ContentMsg, ErrorMsg, CreatedMsg, DirEntry } from './types'
@@ -119,6 +120,9 @@ export interface Backend {
   bookmarksList: (rootDriveKey: string, ns?: string) => Promise<BookmarksMsg>
   bookmarkAdd: (rootDriveKey: string, ns: string | undefined, href: string, title: string) => Promise<BookmarksMsg>
   bookmarkRemove: (rootDriveKey: string, ns: string | undefined, href: string) => Promise<BookmarksMsg>
+  // addBookmark: also write a bookmark for it — desktop only shows a pin that has one.
+  bookmarkPin: (rootDriveKey: string, ns: string | undefined, href: string, title: string, addBookmark: boolean) => Promise<BookmarksMsg>
+  bookmarkUnpin: (rootDriveKey: string, ns: string | undefined, href: string) => Promise<BookmarksMsg>
   hosting: (action: 'get' | 'set' | 'count' | 'settings', opts?: { driveType?: DriveType; key?: string; on?: boolean; dailyLimitMB?: number }) => Promise<HostingMsg>
   fsList: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
   fsRead: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
@@ -461,6 +465,8 @@ export function useBackend (handlers: BackendHandlers): Backend {
     bookmarksList: (rootDriveKey, ns) => bmCall({ action: 'list', rootDriveKey, ns }),
     bookmarkAdd: (rootDriveKey, ns, href, title) => bmCall({ action: 'add', rootDriveKey, ns, href, title }),
     bookmarkRemove: (rootDriveKey, ns, href) => bmCall({ action: 'remove', rootDriveKey, ns, href }),
+    bookmarkPin: (rootDriveKey, ns, href, title, addBookmark) => bmCall({ action: 'pin', rootDriveKey, ns, href, title, addBookmark }),
+    bookmarkUnpin: (rootDriveKey, ns, href) => bmCall({ action: 'unpin', rootDriveKey, ns, href }),
     // Query/toggle hosting (seeding) a drive — desktop's "Host This Hyperdrive" — and
     // read/write the daily hosting budget ('settings' with dailyLimitMB, 0 = unlimited).
     hosting (action, opts = {}) {
@@ -478,7 +484,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
     }
   }
 
-  function bmCall (payload: { action: string; rootDriveKey: string; ns?: string; href?: string; title?: string }) {
+  function bmCall (payload: { action: string; rootDriveKey: string; ns?: string; href?: string; title?: string; addBookmark?: boolean }) {
     return new Promise<BookmarksMsg>((resolve) => {
       const rpc = rpcRef.current
       if (!rpc) return resolve({ ok: false, bookmarks: [], message: 'backend not ready' })

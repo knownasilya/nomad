@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import type { DriveType } from './hyperUrl'
+import { normalizeUrl, type DriveType } from './hyperUrl'
 import type { Backend } from './useBackend'
 
 export interface SavedSite {
@@ -18,6 +18,7 @@ export interface SavedDrive {
 }
 
 const BOOKMARKS_KEY = 'hb:bookmarks'
+const PINS_KEY = 'hb:pins'
 const HISTORY_KEY = 'hb:history'
 const DRIVES_KEY = 'hb:drives'
 const HISTORY_LIMIT = 200
@@ -28,7 +29,10 @@ const driveKey = (url: string) => (url.replace('hyper://', '').split('/')[0] || 
 const fromDriveBookmarks = (bms: Array<{ href: string; title: string; createdAt?: string }>): SavedSite[] =>
   bms.map((b) => ({ url: b.href, title: b.title || b.href, ts: b.createdAt ? Date.parse(b.createdAt) : 0 }))
 
-// Bookmarks, browsing history, and the library of known drives (each with its
+// A failed write to a synced space (e.g. it is read-only on this phone) is reported here.
+type OnError = (message: string) => void
+
+// Bookmarks, pinned shortcuts, browsing history, and the library of known drives (each with its
 // drive type, which is fixed when the drive is created). Persisted to
 // AsyncStorage; state is held in memory for reactive rendering.
 //
@@ -36,15 +40,19 @@ const fromDriveBookmarks = (bms: Array<{ href: string; title: string; createdAt?
 // for the legacy global behaviour. Switching spaceId reloads that space's data.
 export function usePersistence (
   spaceId?: string,
-  opts?: { backend?: Backend; rootDriveKey?: string; ns?: string }
+  opts?: { backend?: Backend; rootDriveKey?: string; ns?: string; onError?: OnError }
 ) {
   const [bookmarks, setBookmarks] = useState<SavedSite[]>([])
+  // Pinned shortcuts for the home page. In a synced space these are the hrefs in the Root Drive's
+  // /nomad/pins.json (shared with desktop's new tab page); `pins` below adds their titles.
+  const [pinHrefs, setPinHrefs] = useState<string[]>([])
+  const [localPins, setLocalPins] = useState<SavedSite[]>([])
   const [history, setHistory] = useState<SavedSite[]>([])
   const [drives, setDrives] = useState<SavedDrive[]>([])
 
   const keys = useMemo(() => {
     const suffix = spaceId ? `:${spaceId}` : ''
-    return { bookmarks: BOOKMARKS_KEY + suffix, history: HISTORY_KEY + suffix, drives: DRIVES_KEY + suffix }
+    return { bookmarks: BOOKMARKS_KEY + suffix, pins: PINS_KEY + suffix, history: HISTORY_KEY + suffix, drives: DRIVES_KEY + suffix }
   }, [spaceId])
   const keysRef = useRef(keys)
   keysRef.current = keys
@@ -52,13 +60,34 @@ export function usePersistence (
   optsRef.current = opts
   const bookmarksRef = useRef(bookmarks)
   bookmarksRef.current = bookmarks
+  const pinHrefsRef = useRef(pinHrefs)
+  pinHrefsRef.current = pinHrefs
   // When the space has a Root Drive, bookmarks live there (synced); otherwise they're local.
   const rootDriveKey = opts?.rootDriveKey
   const ns = opts?.ns
 
+  // Apply a bookmarks reply from the backend (it always carries the pins too).
+  const applyDriveReply = useCallback((res: { ok: boolean; bookmarks: Array<{ href: string; title: string; createdAt?: string }>; pins?: string[]; message?: string }) => {
+    if (!res.ok) {
+      if (res.message) optsRef.current?.onError?.(res.message)
+      return
+    }
+    setBookmarks(fromDriveBookmarks(res.bookmarks))
+    setPinHrefs(res.pins || [])
+  }, [])
+
+  // Re-read bookmarks and pins from the Root Drive — they change on other devices too.
+  const refreshSynced = useCallback(() => {
+    const o = optsRef.current
+    if (!o?.rootDriveKey || !o.backend) return
+    o.backend.bookmarksList(o.rootDriveKey, o.ns).then((res) => { if (res.ok) applyDriveReply(res) }).catch(() => {})
+  }, [applyDriveReply])
+
   useEffect(() => {
     // Reset so the previous space's data doesn't linger while the new space loads.
     setBookmarks([])
+    setPinHrefs([])
+    setLocalPins([])
     setHistory([])
     setDrives([])
     // History + the local drive list are always device-local (history isn't synced in nomad).
@@ -72,17 +101,21 @@ export function usePersistence (
         } catch {}
       }
     })
-    // Bookmarks: from the Root Drive when available (synced), else local.
+    // Bookmarks and pins: from the Root Drive when available (synced), else local.
     if (rootDriveKey && optsRef.current?.backend) {
-      optsRef.current.backend.bookmarksList(rootDriveKey, ns).then((res) => {
-        if (res.ok) setBookmarks(fromDriveBookmarks(res.bookmarks))
-      }).catch(() => {})
+      refreshSynced()
     } else {
-      AsyncStorage.getItem(keys.bookmarks).then((v) => {
-        if (v) { try { setBookmarks(JSON.parse(v)) } catch {} }
+      AsyncStorage.multiGet([keys.bookmarks, keys.pins]).then((pairs) => {
+        for (const [key, value] of pairs) {
+          if (!value) continue
+          try {
+            if (key === keys.bookmarks) setBookmarks(JSON.parse(value))
+            else setLocalPins(JSON.parse(value))
+          } catch {}
+        }
       })
     }
-  }, [keys, rootDriveKey, ns])
+  }, [keys, rootDriveKey, ns, refreshSynced])
 
   const recordVisit = useCallback((url: string, title: string) => {
     if (!url || url === 'about:home') return
@@ -97,11 +130,17 @@ export function usePersistence (
     if (!url || url === 'about:home') return
     const o = optsRef.current
     if (o?.rootDriveKey && o.backend) {
+      const { backend, rootDriveKey: rk, ns: rns } = o
       const exists = bookmarksRef.current.some((b) => b.url === url)
-      const p = exists
-        ? o.backend.bookmarkRemove(o.rootDriveKey, o.ns, url)
-        : o.backend.bookmarkAdd(o.rootDriveKey, o.ns, url, title || url)
-      p.then((res) => { if (res.ok) setBookmarks(fromDriveBookmarks(res.bookmarks)) }).catch(() => {})
+      const href = normalizeUrl(url)
+      const remove = () => backend.bookmarkRemove(rk, rns, url)
+      const p = !exists
+        ? backend.bookmarkAdd(rk, rns, url, title || url)
+        // Desktop unpins a bookmark it removes; do the same, so no pin is left without its title.
+        : pinHrefsRef.current.includes(href)
+          ? backend.bookmarkUnpin(rk, rns, href).then(remove)
+          : remove()
+      p.then(applyDriveReply).catch(() => {})
       return
     }
     setBookmarks((prev) => {
@@ -112,7 +151,42 @@ export function usePersistence (
       AsyncStorage.setItem(keysRef.current.bookmarks, JSON.stringify(next))
       return next
     })
-  }, [])
+  }, [applyDriveReply])
+
+  // Pinned shortcuts, in the order they were pinned. A synced pin takes its title from the
+  // bookmark with the same href — the same place desktop's new tab page gets it.
+  const pins = useMemo<SavedSite[]>(() => {
+    if (!rootDriveKey) return localPins
+    return pinHrefs.map((href) => {
+      const bm = bookmarks.find((b) => normalizeUrl(b.url) === href)
+      return { url: href, title: bm?.title || href, ts: bm?.ts || 0 }
+    })
+  }, [rootDriveKey, localPins, pinHrefs, bookmarks])
+
+  const isPinned = useCallback((url: string) => {
+    const href = normalizeUrl(url)
+    return pins.some((p) => normalizeUrl(p.url) === href)
+  }, [pins])
+
+  const setPinned = useCallback((url: string, title: string, pinned: boolean) => {
+    if (!url || url === 'about:home') return
+    const href = normalizeUrl(url)
+    const o = optsRef.current
+    if (o?.rootDriveKey && o.backend) {
+      const hasBookmark = bookmarksRef.current.some((b) => normalizeUrl(b.url) === href)
+      const p = pinned
+        ? o.backend.bookmarkPin(o.rootDriveKey, o.ns, href, title || href, !hasBookmark)
+        : o.backend.bookmarkUnpin(o.rootDriveKey, o.ns, href)
+      p.then(applyDriveReply).catch(() => {})
+      return
+    }
+    setLocalPins((prev) => {
+      const rest = prev.filter((p) => normalizeUrl(p.url) !== href)
+      const next = pinned ? [...rest, { url: href, title: title || href, ts: Date.now() }] : rest
+      AsyncStorage.setItem(keysRef.current.pins, JSON.stringify(next))
+      return next
+    })
+  }, [applyDriveReply])
 
   const isBookmarked = useCallback((url: string) => bookmarks.some((b) => b.url === url), [bookmarks])
 
@@ -183,6 +257,10 @@ export function usePersistence (
 
   return {
     bookmarks,
+    pins,
+    isPinned,
+    setPinned,
+    refreshSynced,
     history,
     drives,
     recordVisit,
