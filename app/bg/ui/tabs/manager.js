@@ -48,6 +48,7 @@ var backgroundTabs = []; // Array<Tab>
 var preloadedNewTabs = {}; // map of {[win.id]: Tab}
 var lastSelectedTabIndex = {}; // map of {[win.id]: Number}
 var lastActiveTabBySpace = {}; // map of {[win.id]: {[spaceId]: Tab}}
+var restoringWindows = new Set(); // win.ids whose tabs are being recreated from a session snapshot
 var closedItems = {}; // map of {[win.id]: Array<Object>}
 var windowEvents = {}; // mapof {[win.id]: EventEmitter}
 var tabGroups = {}; // map of {[win.id]: Array<{id, name, color}>}
@@ -132,7 +133,12 @@ class Tab extends EventEmitter {
   }
 
   getSessionSnapshot() {
+    const winId = this.browserWindow?.id;
     return {
+      // So a restored window comes back on the tab you left (and each space on its own last tab).
+      // `undefined` drops out of the JSON, so only the flagged tabs carry these.
+      isActive: this.isActive || undefined,
+      isSpaceActive: lastActiveTabBySpace[winId]?.[this.spaceId] === this || undefined,
       isPinned: this.isPinned,
       groupId: this.groupId,
       spaceId: this.spaceId,
@@ -1069,6 +1075,9 @@ export function setActive(win, tab) {
 
   windowMenu.onSetCurrentLocation(win);
   emitReplaceState(win);
+  // Record the switch, so a restart reopens on this tab. Skipped mid-restore: the snapshot would
+  // hold only the tabs recreated so far.
+  if (!restoringWindows.has(win.id)) triggerSessionSnapshot(win);
 }
 
 export function resize(win) {
@@ -1087,17 +1096,38 @@ export function initializeWindowFromSnapshot(win, snapshot) {
   const pages = Array.isArray(snapshot) ? snapshot : snapshot.pages || [];
   const groups = Array.isArray(snapshot) ? [] : snapshot.groups || [];
   tabGroups[win.id] = groups;
-  for (let page of pages) {
-    if (typeof page === 'string') {
-      // legacy compat- pages were previously just url strings
-      create(win, page);
-    } else {
-      create(win, null, {
+  restoringWindows.add(win.id);
+  let restoredActive;
+  try {
+    for (let page of pages) {
+      if (typeof page === 'string') {
+        // legacy compat- pages were previously just url strings
+        create(win, page);
+        continue;
+      }
+      const tab = create(win, null, {
         isPinned: page.isPinned,
         fromSnapshot: page,
       });
+      if (!tab) continue;
+      if (page.isSpaceActive && tab.spaceId) {
+        lastActiveTabBySpace[win.id] = lastActiveTabBySpace[win.id] || {};
+        lastActiveTabBySpace[win.id][tab.spaceId] = tab;
+      }
+      if (page.isActive) restoredActive = tab;
     }
+    // create() activated the first tab. Go back to the one that was active when the window closed,
+    // or else this space's last active tab, as long as it is in the space the window opens on.
+    const spaceId = getWindowActiveSpaceId(win);
+    const target =
+      restoredActive && restoredActive.spaceId === spaceId
+        ? restoredActive
+        : lastActiveTabBySpace[win.id]?.[spaceId];
+    if (target) setActive(win, target);
+  } finally {
+    restoringWindows.delete(win.id);
   }
+  triggerSessionSnapshot(win);
 }
 
 export function initializeBackgroundFromSnapshot(snapshot) {
