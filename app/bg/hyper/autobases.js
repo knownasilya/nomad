@@ -65,7 +65,7 @@ export async function createCollaborativeDrive(meta = {}) {
   await base.ready();
 
   const keyStr = b4a.toString(base.key, 'hex');
-  const sess = _makeSession(keyStr, base, true);
+  const sess = _makeSession(keyStr, base);
   // Whether this drive accepts writer-access requests (locked by default). Persisted in index.json.
   sess.collaborative = !!meta.collaborative;
   sessions[keyStr] = sess;
@@ -116,7 +116,7 @@ async function _loadCollaborativeDriveInner(keyStr) {
   // joins during setup for the same reason.
   _joinSwarm(base);
 
-  const sess = _makeSession(keyStr, base, base.writable);
+  const sess = _makeSession(keyStr, base);
   sessions[keyStr] = sess;
 
   // base.update() returns immediately with an EMPTY view if no peer has delivered the
@@ -131,7 +131,6 @@ async function _loadCollaborativeDriveInner(keyStr) {
     await base.update();
   }
 
-  sess.writable = base.writable;
   // Read the accepts-writers flag from index.json now the view has synced. If collaborative, open
   // the writer-request channels (they were skipped during _joinSwarm since the flag wasn't known yet).
   sess.collaborative = await _readCollaborativeFlag(sess);
@@ -412,13 +411,17 @@ export function requestWriterAccess(bootstrapKey, { writerKey, profileUrl }) {
 // internal
 // =
 
-function _makeSession(keyStr, base, writable) {
+function _makeSession(keyStr, base) {
   return {
     key: base.key,
     keyStr,
     discoveryKey: base.discoveryKey,
     url: `hyper://${keyStr}/`,
-    writable,
+    // Live, not a copy: a Device added as a writer after the load (a Device that just paired into
+    // the Vault) turns writable without reloading the drive.
+    get writable() {
+      return !!base.writable;
+    },
     base,
     // Locked by default: a drive does NOT accept writer-access requests unless `collaborative`
     // is true (from its index.json). A drive can be unlocked later without changing its URL —
