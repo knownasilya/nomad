@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.13.0](https://github.com/knownasilya/nomad/compare/v1.12.0...v1.13.0) (2026-10-10)
+
+
+### Features
+
+* **mobile:** Reader and Notes on the phone ([bbaa0bf](https://github.com/knownasilya/nomad/commit/bbaa0bf77cc6356ce9a0d332d6ddc879beafdd7a))
+* **notes:** Markdown notes with Obsidian-style Live Preview and [[links]] ([40cbb40](https://github.com/knownasilya/nomad/commit/40cbb40d05e0cce64641d77eb729696bb6efca61))
+* **reader:** dark mode, styled like Search ([8fb1bd3](https://github.com/knownasilya/nomad/commit/8fb1bd305babeecb0675995a3b10da6b040ee993))
+* **vault:** Reader subscriptions and Notes live in the Vault (ADR-0017) ([abaa049](https://github.com/knownasilya/nomad/commit/abaa04916d6096344c9440749fb5cec7180002ab))
+
+
+### Bug Fixes
+
+* **autobases:** a Device that joins a Drive turns writable without a restart ([94053f8](https://github.com/knownasilya/nomad/commit/94053f876e460bc33a64438cde682c402418cde7))
+* **shell:** dark scrollbars in the Tab Sidebar ([3df32a9](https://github.com/knownasilya/nomad/commit/3df32a92c699318512f748eac18390b9bda4cfa4))
+
 ## [1.12.0](https://github.com/knownasilya/nomad/compare/v1.11.2...v1.12.0) (2026-10-09)
 
 
