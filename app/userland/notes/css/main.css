@@ -27,6 +27,10 @@ body {
   --note-bg: var(--bg-color--default);
   --note-font: var(--system-font);
   --note-code-font: var(--code-font);
+  /* The editor fills its pane (js/editor/index.js centers a 760px column by default). */
+  --note-width: none;
+  --note-gutter: 32px;
+  --note-padding: 24px var(--note-gutter) 40px;
 
   margin: 0;
   font-size: 13px;
@@ -212,7 +216,8 @@ header .brand img {
 
 .layout {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  /* minmax(0, …): long unbroken text (a mention's preview) must not widen the note column. */
+  grid-template-columns: 260px minmax(0, 1fr);
   flex: 1;
   min-height: 0;
 }
@@ -350,23 +355,31 @@ main {
   color: var(--nts-err);
 }
 
-/* The note scrolls as one page: the editor grows with its text, linked mentions follow it. */
+/* The note scrolls as one page. The editor takes all the height its text doesn't, so the whole
+   pane is the writing area and linked mentions sit at the bottom. */
 .page {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
 
 .cm-host {
-  min-height: 55%;
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+}
+
+.cm-host .cm-editor {
+  flex: 1 0 auto;
 }
 
 .banner {
   display: flex;
   align-items: center;
   gap: 10px;
-  max-width: 704px;
-  margin: 18px auto 0;
+  margin: 18px var(--note-gutter) 0;
   padding: 10px 12px;
   border: 1px solid var(--nts-warn-border);
   border-radius: 8px;
@@ -380,8 +393,7 @@ main {
 }
 
 .backlinks {
-  max-width: 704px;
-  margin: 8px auto 64px;
+  margin: 8px var(--note-gutter) 40px;
   padding-top: 14px;
   border-top: 1px solid var(--border-color--very-light);
 }
@@ -481,6 +493,6 @@ main {
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
   .layout {
-    grid-template-columns: 200px 1fr;
+    grid-template-columns: 200px minmax(0, 1fr);
   }
 }
