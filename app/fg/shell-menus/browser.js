@@ -88,6 +88,11 @@ class BrowserMenu extends LitElement {
             <span class="label">Reader</span>
           </div>
 
+          <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'nomad://notes')}>
+            <img class="favicon" src="asset:favicon:nomad://notes/" />
+            <span class="label">Notes</span>
+          </div>
+
           <div class="menu-item" @click=${(e) => this.onOpenPage(e, 'nomad://search')}>
             <img class="favicon" src="asset:favicon:nomad://search/" />
             <span class="label">Search</span>

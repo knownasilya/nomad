@@ -57,6 +57,10 @@ function bundleApplication() {
     bundle(p(userlandDir, 'settings/js/main.js'), p(userlandDir, 'settings/js/main.build.js'), {
       browserify: true,
     }),
+    // nomad://notes carries CodeMirror (its editor) and the repo-root shared/vault-apps.mjs.
+    bundle(p(userlandDir, 'notes/js/main.js'), p(userlandDir, 'notes/js/main.build.js'), {
+      browserify: true,
+    }),
   ]);
 }
 

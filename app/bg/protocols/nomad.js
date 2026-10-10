@@ -497,6 +497,15 @@ async function nomadProtocol(request) {
     if (requestUrl === 'nomad://history' || requestUrl.startsWith('nomad://history/')) {
       return serveAppAsset(requestUrl, path.join(__dirname, 'userland', 'history'), cb);
     }
+    if (requestUrl === 'nomad://notes' || requestUrl.startsWith('nomad://notes/')) {
+      return serveAppAsset(
+        requestUrl,
+        path.join(__dirname, 'userland', 'notes'),
+        cb,
+        // @ts-ignore
+        { fallbackToIndexHTML: true }
+      );
+    }
     if (requestUrl === 'nomad://reader' || requestUrl.startsWith('nomad://reader/')) {
       return serveAppAsset(
         requestUrl,

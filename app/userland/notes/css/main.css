@@ -1,0 +1,486 @@
+/* nomad://notes — styled like nomad://reader and nomad://search: the app-stdlib tokens for color and
+   type, the 50px header, My Library's sidebar. Light and dark follow the OS. */
+@import 'nomad://app-stdlib/css/common.css';
+@import 'nomad://app-stdlib/css/fontawesome.css';
+
+body {
+  --nts-search-bg: rgba(0, 0, 0, 0.055);
+  --nts-header-bg: #fff;
+  --nts-sidebar-bg: #fff;
+  --nts-accent: #4040e7;
+  --nts-accent-soft: rgba(64, 64, 231, 0.09);
+  --nts-fill: #4f46e5; /* solid buttons: white text reads on it in both modes */
+  --nts-nav-hover-bg: var(--bg-color--semi-light);
+  --nts-row-hover: #f5f5fb;
+  --nts-err: #dc2626;
+  --nts-warn-bg: #fff7e6;
+  --nts-warn-border: #f5d48a;
+
+  /* The editor's colors (js/editor/index.js reads these). */
+  --note-text: var(--text-color--default);
+  --note-muted: var(--text-color--pretty-light);
+  --note-accent: var(--nts-accent);
+  --note-accent-soft: var(--nts-accent-soft);
+  --note-border: var(--border-color--light);
+  --note-code-bg: rgba(0, 0, 0, 0.045);
+  --note-selection: rgba(64, 64, 231, 0.16);
+  --note-bg: var(--bg-color--default);
+  --note-font: var(--system-font);
+  --note-code-font: var(--code-font);
+
+  margin: 0;
+  font-size: 13px;
+  background: var(--bg-color--secondary);
+  color: var(--text-color--default);
+  color-scheme: light dark;
+  overflow: hidden;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    --nts-search-bg: rgba(255, 255, 255, 0.07);
+    --nts-header-bg: #1e1e24;
+    --nts-sidebar-bg: #1e1e24;
+    --nts-accent: #7b9fff;
+    --nts-accent-soft: rgba(93, 128, 255, 0.13);
+    --nts-row-hover: #2a2a34;
+    --nts-err: #f87171;
+    --nts-warn-bg: #2e2717;
+    --nts-warn-border: #5c4a1f;
+    --note-code-bg: rgba(255, 255, 255, 0.07);
+    --note-selection: rgba(123, 159, 255, 0.28);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: var(--nts-accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* header */
+
+header {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 520px) 1fr;
+  align-items: center;
+  gap: 10px;
+  height: 50px;
+  flex-shrink: 0;
+  padding: 0 10px 0 0;
+  background: var(--nts-header-bg);
+  border-bottom: 1px solid var(--border-color--semi-light);
+}
+
+header .brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  white-space: nowrap;
+}
+
+header .brand img {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+}
+
+.search-ctrl {
+  position: relative;
+}
+
+.search-ctrl .fa-search {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--text-color--pretty-light);
+  pointer-events: none;
+}
+
+.search-ctrl input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px 0 34px;
+  background: var(--nts-search-bg);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text-color--default);
+  outline: none;
+}
+
+.search-ctrl input:focus {
+  background: var(--bg-color--default);
+  border-color: var(--nts-accent);
+  box-shadow: 0 0 0 3px var(--nts-accent-soft);
+}
+
+.header-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* buttons */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color--light);
+  border-radius: 6px;
+  background: var(--bg-color--default);
+  color: var(--text-color--default);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--nts-row-hover);
+}
+
+.btn.primary {
+  border-color: var(--nts-fill);
+  background: var(--nts-fill);
+  color: #fff;
+}
+
+.btn.primary:hover {
+  filter: brightness(1.08);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-color--light);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.icon-btn:hover {
+  background: var(--nts-search-bg);
+  color: var(--text-color--default);
+}
+
+.icon-btn.danger:hover {
+  color: var(--nts-err);
+}
+
+.icon-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* layout */
+
+.layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  flex: 1;
+  min-height: 0;
+}
+
+/* sidebar: the notes */
+
+nav {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--nts-sidebar-bg);
+  border-right: 1px solid var(--border-color--semi-light);
+}
+
+nav .notes {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.note-item {
+  display: block;
+  width: calc(100% - 12px);
+  margin: 1px 6px;
+  padding: 8px 11px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.note-item:hover {
+  background: var(--nts-nav-hover-bg);
+}
+
+.note-item.current {
+  background: var(--nts-accent-soft);
+}
+
+.note-item .title {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-color--default);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-item.current .title {
+  color: var(--nts-accent);
+}
+
+.note-item .sub {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--text-color--pretty-light);
+  white-space: nowrap;
+}
+
+.note-item .sub .date {
+  flex-shrink: 0;
+  color: var(--text-color--light);
+}
+
+.note-item .sub .snippet {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+nav .list-msg {
+  padding: 18px 17px;
+  font-size: 12px;
+  color: var(--text-color--pretty-light);
+}
+
+nav footer {
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--border-color--very-light);
+}
+
+.sync-note {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-color--pretty-light);
+}
+
+.sync-note .fas {
+  margin-top: 2px;
+}
+
+/* editor */
+
+main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-color--default);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  flex-shrink: 0;
+  padding: 0 10px 0 14px;
+  border-bottom: 1px solid var(--border-color--very-light);
+  font-size: 12px;
+  color: var(--text-color--pretty-light);
+}
+
+.toolbar .tool {
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+}
+
+.toolbar .spacer {
+  flex: 1;
+}
+
+.toolbar .saved {
+  margin-right: 6px;
+}
+
+.toolbar .saved.err {
+  color: var(--nts-err);
+}
+
+/* The note scrolls as one page: the editor grows with its text, linked mentions follow it. */
+.page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.cm-host {
+  min-height: 55%;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 704px;
+  margin: 18px auto 0;
+  padding: 10px 12px;
+  border: 1px solid var(--nts-warn-border);
+  border-radius: 8px;
+  background: var(--nts-warn-bg);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.banner span:not(.fas) {
+  flex: 1;
+}
+
+.backlinks {
+  max-width: 704px;
+  margin: 8px auto 64px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color--very-light);
+}
+
+.backlinks h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-color--pretty-light);
+}
+
+.backlinks .count {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--nts-search-bg);
+  font-size: 10px;
+}
+
+.backlinks ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.backlinks .mention {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.backlinks .mention:hover {
+  background: var(--nts-row-hover);
+}
+
+.backlinks .mention .title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--nts-accent);
+}
+
+.backlinks .mention .snippet {
+  display: block;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--text-color--pretty-light);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backlinks .none {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-color--pretty-light);
+}
+
+/* states */
+
+.notice {
+  max-width: 420px;
+  margin: 72px auto 0;
+  padding: 0 20px;
+  text-align: center;
+  color: var(--text-color--light);
+}
+
+.notice-icon {
+  margin-bottom: 10px;
+  font-size: 22px;
+  color: var(--text-color--pretty-light);
+}
+
+.notice h2 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-color--default);
+}
+
+.notice p {
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+
+@media (max-width: 700px) {
+  header {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .layout {
+    grid-template-columns: 200px 1fr;
+  }
+}
