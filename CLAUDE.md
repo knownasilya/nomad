@@ -179,6 +179,35 @@ amendment). The built-in **`nomad://reader`** (`app/userland/reader/`) subscribe
 internal apps register in `bg/protocols/nomad.js` (pass `{ fallbackToIndexHTML: true }` for SPA routing) and
 get a menu entry in `fg/shell-menus/browser.js`. See `docs/adr/0008` and `0009`.
 
+### Reader and Notes data lives in the Vault (ADR-0017)
+
+`nomad://reader` subscriptions (per Space) and read marks, and `nomad://notes` notes (per user), go
+through the internal `nomad.vault` API (`readerState`/`readerFollow`/…/`listNotes`/`saveNote`/
+`deleteNote`/`renameNoteLinks`/`watchAppData`, backed by `bg/web-apis/bg/vault-apps.ts`). They are
+Vault records, so the phone sees them (`mobile/components/Reader.tsx`, `Notes.tsx`, over `RPC_APPS`).
+The record layout and the shared rules (titles, `[[links]]`, conflict copies, read marks) are
+`shared/vault-apps.mjs`, used by desktop and mobile (tests: `tests/unit/vault-apps*.test.js`). The
+first write makes a Vault; a solo Vault can still join another one and bring its data (`adoptVault`).
+
+The Notes editor (`app/userland/notes/js/editor/`, CodeMirror 6, Obsidian-style Live Preview) is
+bundled into `notes/js/main.build.js` by `scripts/build.js`, and into the phone's WebView page
+`mobile/lib/noteEditorHtml.ts` (committed) by **`npm run build:note-editor`** — rerun that after
+changing the editor or `shared/vault-apps.mjs`.
+
+## Look and feel: every UI supports dark mode and matches the rest
+
+Every new or changed screen must work in light **and** dark, and look like its neighbours.
+- **Desktop `nomad://` apps:** import `nomad://app-stdlib/css/common.css` (and `fontawesome.css`), and
+  color only with its tokens (`--bg-color--*`, `--text-color--*`, `--border-color--*`). Put
+  app-specific colors in `--<app>-*` variables on `body`, and override them under
+  `@media (prefers-color-scheme: dark)`. Copy the shell from `nomad://search` / `nomad://reader` /
+  `nomad://notes`: the 50px header with the brand favicon, My Library's sidebar, bordered result
+  lists, the `.notice` empty state, and `.btn` / `.btn.primary` / `.icon-btn`. No hard-coded
+  light-only hex colors.
+- **Mobile:** colors come only from `useTheme()` (`mobile/lib/theme.ts`). Follow the `Library.tsx`
+  full-screen-modal pattern: 52px header, `t.surface` cards with hairline borders, `t.accent` buttons.
+- Check both schemes before calling UI work done.
+
 ## Drive templates live in `nomad.dev`
 
 The "Create Drive From This Template" starter drives (forum, blog, microblog, …) live in the sibling
