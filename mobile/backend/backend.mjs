@@ -11,6 +11,7 @@ import { HttpGateway } from './lib/http-gateway.mjs'
 import { parseHyperUrl } from './lib/hyper-url.mjs'
 import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault } from './lib/vault.mjs'
 import * as drafts from './lib/drafts.mjs'
+import * as vaultApps from './lib/vault-apps.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
 import {
   RPC_OPEN,
@@ -47,6 +48,8 @@ import {
   RPC_AI_CANCEL,
   RPC_AI_PROMPT_RESULT,
   RPC_AI_EVENT,
+  RPC_APPS,
+  RPC_APPS_RESULT,
   DRIVE_HYPERDRIVE,
   DRIVE_AUTOBASE
 } from '../rpc-commands.mjs'
@@ -253,6 +256,7 @@ const rpc = new RPC(IPC, (req) => {
   else if (req.command === RPC_AI_CHAT) handleAiChat(msg)
   else if (req.command === RPC_AI_CANCEL) handleAiCancel(msg)
   else if (req.command === RPC_AI_PROMPT_RESULT) handleAiPromptResult(msg)
+  else if (req.command === RPC_APPS) handleApps(msg)
 })
 
 // --- file-system ops on writable drives you own --------------------------
@@ -490,6 +494,36 @@ async function dispatchNomad (api, method, url, args) {
     throw new Error(`nomad.fs.${method} isn’t supported on mobile yet`)
   }
   throw new Error(`Unsupported nomad call: ${api}.${method}`)
+}
+
+// --- Reader and Notes (ADR-0017) -----------------------------------------
+// Both live in the Vault, so they need this phone to be linked. Reading a Feed doesn't, but the
+// Reader only reads the Feeds the Vault lists. Replies with one RPC_APPS_RESULT keyed by reqId.
+async function handleApps ({ reqId, app, action, ...args }) {
+  try {
+    if (app === 'reader' && action === 'feed') {
+      send(RPC_APPS_RESULT, { reqId, ok: true, value: await vaultApps.loadFeed(manager, args.url) })
+      return
+    }
+    if (!vault) {
+      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: 'Link this phone to use Reader and Notes' })
+      return
+    }
+    let value
+    const { space } = args // the Reader's Space (its Root Drive key)
+    if (app === 'reader' && action === 'state') value = await vaultApps.readerState(vault, space)
+    else if (app === 'reader' && action === 'follow') value = await vaultApps.follow(vault, space, args.url)
+    else if (app === 'reader' && action === 'unfollow') value = await vaultApps.unfollow(vault, space, args.url)
+    else if (app === 'reader' && action === 'saveRead') value = await vaultApps.saveRead(vault, space, args.add, args.loaded)
+    else if (app === 'notes' && action === 'list') value = await vaultApps.listNotes(vault)
+    else if (app === 'notes' && action === 'save') value = await vaultApps.saveNote(vault, { id: args.id, body: args.body, baseUpdatedAt: args.baseUpdatedAt })
+    else if (app === 'notes' && action === 'delete') value = await vaultApps.deleteNote(vault, args.id)
+    else if (app === 'notes' && action === 'renameLinks') value = await vaultApps.renameNoteLinks(vault, { id: args.id, from: args.from, to: args.to })
+    else throw new Error(`Unknown ${app} action: ${action}`)
+    send(RPC_APPS_RESULT, { reqId, ok: true, value })
+  } catch (err) {
+    send(RPC_APPS_RESULT, { reqId, ok: false, message: err.message || String(err) })
+  }
 }
 
 // Minimal stand-in for nomad.schemas.validate on mobile (the full Zod schemas

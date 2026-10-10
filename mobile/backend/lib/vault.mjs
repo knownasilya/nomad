@@ -7,7 +7,7 @@ import { makeMetadata, decodeInlineJson } from '../../../shared/fs-core.mjs'
 
 // Vault index records are small JSON control records — stored inline in the v1 view
 // ({ metadata, blob:null, value: base64(JSON) }); see shared/fs-core.mjs. This builds that op.
-function _inlineOp (path, obj) {
+export function inlineOp (path, obj) {
   const bytes = b4a.from(typeof obj === 'string' ? obj : JSON.stringify(obj))
   return { op: 'put', path, metadata: makeMetadata({ mtime: Date.now(), ctime: Date.now() }), value: b4a.toString(bytes, 'base64') }
 }
@@ -60,7 +60,7 @@ export async function pairDevice ({ store, swarm, code, name, platform = 'mobile
 
 // base.update() can block on a freshly-paired Vault while it first replicates from the inviter.
 // Bound it so callers (the Vault-status RPC) never hang on it; we read whatever's linearised.
-function _boundedUpdate (base, ms = 4000) {
+export function boundedUpdate (base, ms = 4000) {
   return Promise.race([base.update().catch(() => {}), new Promise((r) => setTimeout(r, ms))])
 }
 
@@ -69,7 +69,7 @@ export async function openVault (store, swarm, vaultKey) {
   const base = openAutobaseDrive(store, b4a.from(vaultKey, 'hex'))
   await base.ready()
   swarm.join(base.discoveryKey)
-  await _boundedUpdate(base)
+  await boundedUpdate(base)
   // localKey here MUST match the key sent during pairing ([pairing] candidate localKey). If it
   // doesn't, the desktop added the wrong writer and this device can never become writable.
   console.log('[vault] openVault', vaultKey.slice(0, 8),
@@ -87,7 +87,7 @@ export async function renameDevice (base, deviceKey, name) {
   const rec = node && decodeInlineJson(node.value, b4a)
   if (!rec) return
   rec.name = name
-  await base.append(_inlineOp(path, rec))
+  await base.append(inlineOp(path, rec))
   await base.update()
 }
 
@@ -130,12 +130,12 @@ export async function addSpaceToVault (base, { rootDriveKey, name, icon, color }
     sortOrder: 0,
     createdAt: new Date().toISOString()
   }
-  await base.append(_inlineOp(`/.vault/spaces/${rootDriveKey}.json`, rec))
+  await base.append(inlineOp(`/.vault/spaces/${rootDriveKey}.json`, rec))
   await base.update()
 }
 
 export async function readVaultIndex (base) {
-  await _boundedUpdate(base)
+  await boundedUpdate(base)
   return {
     spaces: await _readPrefix(base.view, SPACES_PREFIX),
     devices: await _readPrefix(base.view, DEVICES_PREFIX),

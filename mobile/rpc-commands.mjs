@@ -18,6 +18,11 @@ export const RPC_SPACE_ADD_DRIVE = 17 // { reqId, rootDriveKey, ns?, key, type? 
 export const RPC_HOSTING = 18 // { reqId, action:'get'|'set'|'count'|'settings', driveType?, key?, on?, dailyLimitMB? } query/toggle hosting (seeding) a drive, or read/write the daily budget
 export const RPC_BOOKMARKS = 26 // { reqId, action:'list'|'add'|'remove', rootDriveKey, ns?, href?, title? }
 export const RPC_NOMAD = 40 // { reqId, api, method, url?, args } an in-page nomad.* call from a drive WebView
+// The phone's Reader and Notes (ADR-0017), over the Vault. Never reachable from a drive WebView.
+//   reader: 'state' | 'follow' {url} | 'unfollow' {url} | 'saveRead' {add, loaded} — each with {space}
+//           'feed' {url}
+//   notes:  'list' | 'save' {id?, body, baseUpdatedAt?} | 'delete' {id} | 'renameLinks' {id, from, to}
+export const RPC_APPS = 46 // { reqId, app: 'reader'|'notes', action, ...args }
 
 // UI -> backend: AI chat is STREAMING (nomad.ai.chat is a readable), so unlike RPC_NOMAD it can't
 // use the single-reply RPC_*_RESULT pattern. One RPC_AI_CHAT fans out many RPC_AI_EVENT frames
@@ -48,6 +53,7 @@ export const RPC_SPACE_DRIVES_RESULT = 31 // { reqId, ok, drives?, message? } re
 export const RPC_BOOKMARKS_RESULT = 32 // { reqId, ok, bookmarks?, message? } reply to RPC_BOOKMARKS
 export const RPC_HOSTING_RESULT = 33 // { reqId, ok, hosted?, count?, paused?, usageBytes?, dailyLimitMB?, message? } reply to RPC_HOSTING
 export const RPC_NOMAD_RESULT = 41 // { reqId, ok, value?, error? } reply to RPC_NOMAD
+export const RPC_APPS_RESULT = 47 // { reqId, ok, value?, noVault?, message? } reply to RPC_APPS
 export const RPC_AI_EVENT = 45 // { reqId, kind:'chunk'|'tool'|'prompt'|'done'|'error', text?, event?, permission?, message? } one streamed AI frame
 
 // Drive types understood by the backend resolver.

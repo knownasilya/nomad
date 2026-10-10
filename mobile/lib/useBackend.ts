@@ -41,7 +41,9 @@ import {
   RPC_AI_CHAT,
   RPC_AI_CANCEL,
   RPC_AI_PROMPT_RESULT,
-  RPC_AI_EVENT
+  RPC_AI_EVENT,
+  RPC_APPS,
+  RPC_APPS_RESULT
 } from '../rpc-commands.mjs'
 
 export interface Bookmark { href: string; title: string; createdAt?: string }
@@ -131,8 +133,19 @@ export interface Backend {
   fsRename: (driveType: DriveType, key: string, ns: string, from: string, to: string, isDir: boolean) => Promise<FsResult>
   fsMkdir: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
   nomad: (payload: NomadCall) => Promise<NomadResult>
+  apps: <T = unknown>(app: AppName, action: string, args?: Record<string, unknown>) => Promise<AppsResult<T>>
   aiChat: (messages: unknown[], opts: Record<string, unknown>, handlers: AiChatHandlers) => AiChatHandle
 }
+
+// The phone's Reader and Notes (ADR-0017). `noVault`: this phone isn't linked, so there's no data.
+export type AppName = 'reader' | 'notes'
+export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
+// title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
+// conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
+export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string }
+export interface ReaderState { follows: string[]; read: string[]; writable: boolean }
+export interface FeedPost { title: string; summary: string; tags: string[]; createdAt: string; url: string; feedUrl: string; feedTitle: string }
+export interface Feed { url: string; title: string; posts: FeedPost[] }
 
 // An in-page nomad.* call forwarded from a drive WebView (see NOMAD_SHIM).
 export interface NomadCall { id?: string; api: string; method: string; url?: string | null; args?: unknown[] }
@@ -207,7 +220,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
         // Streaming: many frames per reqId, so the sink stays registered until it sees done|error.
         aiStreams.current[msg.reqId]?.(msg)
       }
-      else if (req.command === RPC_CREATED || req.command === RPC_PAIRED || req.command === RPC_VAULT || req.command === RPC_FS_RESULT || req.command === RPC_SPACE_DRIVES_RESULT || req.command === RPC_BOOKMARKS_RESULT || req.command === RPC_HOSTING_RESULT || req.command === RPC_NOMAD_RESULT) {
+      else if (req.command === RPC_CREATED || req.command === RPC_PAIRED || req.command === RPC_VAULT || req.command === RPC_FS_RESULT || req.command === RPC_SPACE_DRIVES_RESULT || req.command === RPC_BOOKMARKS_RESULT || req.command === RPC_HOSTING_RESULT || req.command === RPC_NOMAD_RESULT || req.command === RPC_APPS_RESULT) {
         pending.current[msg.reqId]?.(msg)
         delete pending.current[msg.reqId]
       }
@@ -253,6 +266,22 @@ export function useBackend (handlers: BackendHandlers): Backend {
       pending.current[reqId] = (msg: NomadResult) => { clearTimeout(timer); resolve(msg) }
       const req = rpc.request(RPC_NOMAD)
       req.send(b4a.from(JSON.stringify({ reqId, ...payload })))
+    })
+  }
+
+  // A Reader or Notes call. Always resolves, so screens can show `message` instead of catching.
+  // Opening a Feed may wait on the swarm (both drive types, ~15 s each), so it gets longer.
+  function appsCall<T> (app: AppName, action: string, args: Record<string, unknown> = {}): Promise<AppsResult<T>> {
+    return new Promise<AppsResult<T>>((resolve) => {
+      const rpc = rpcRef.current
+      if (!rpc) return resolve({ ok: false, message: 'backend not ready' })
+      const reqId = `ap_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
+      const timer = setTimeout(() => {
+        if (pending.current[reqId]) { delete pending.current[reqId]; resolve({ ok: false, message: 'backend did not respond' }) }
+      }, action === 'feed' ? 45000 : 15000)
+      pending.current[reqId] = (msg: AppsResult<T>) => { clearTimeout(timer); resolve(msg) }
+      const req = rpc.request(RPC_APPS)
+      req.send(b4a.from(JSON.stringify({ reqId, app, action, ...args })))
     })
   }
 
@@ -325,6 +354,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
 
   return {
     nomad: (payload) => nomadCall(payload),
+    apps: (app, action, args) => appsCall(app, action, args),
     aiChat: (messages, opts, handlers) => aiChat(messages, opts, handlers),
     fsList: (driveType, key, ns, path) => fsCall(RPC_FS_LIST, { driveType, key, ns, path }),
     fsRead: (driveType, key, ns, path) => fsCall(RPC_FS_READ, { driveType, key, ns, path }),

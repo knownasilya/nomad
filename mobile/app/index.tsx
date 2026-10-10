@@ -12,6 +12,8 @@ import AddressBar from '../components/AddressBar'
 import HyperView from '../components/HyperView'
 import Suggestions from '../components/Suggestions'
 import Library from '../components/Library'
+import Reader from '../components/Reader'
+import Notes from '../components/Notes'
 import BottomSheet from '../components/BottomSheet'
 import Devices from '../components/Devices'
 import SpaceSwitcher from '../components/SpaceSwitcher'
@@ -186,6 +188,8 @@ export default function Browser () {
   // menu / devtools / library overlay state
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [devicesOpen, setDevicesOpen] = useState(false)
+  const [readerOpen, setReaderOpen] = useState(false)
+  const [notesOpen, setNotesOpen] = useState(false)
   const [spacesOpen, setSpacesOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [devtoolsOpen, setDevtoolsOpen] = useState(false)
@@ -526,6 +530,30 @@ export default function Browser () {
     },
     [active.id, navTo, persist]
   )
+
+  // A Reader post opens in the current tab, like an item from My Library.
+  const openFromReader = useCallback(
+    (url: string) => {
+      setReaderOpen(false)
+      openFromLibrary(url)
+    },
+    [openFromLibrary]
+  )
+
+  // A web or hyper:// link in a note opens in the current tab.
+  const openFromNotes = useCallback(
+    (url: string) => {
+      setNotesOpen(false)
+      openFromLibrary(url)
+    },
+    [openFromLibrary]
+  )
+
+  // Reader and Notes need a linked phone; their "Open Devices" button closes them first.
+  const openDevicesFrom = useCallback((close: () => void) => {
+    close()
+    setDevicesOpen(true)
+  }, [])
 
   // Create a brand-new writable drive (nomad's createNewDrive): the backend
   // generates a key + URL; we save it (with its ns, so it reopens writable) and
@@ -914,6 +942,8 @@ export default function Browser () {
         onClose={() => setMenuOpen(false)}
         items={[
           { label: 'My Library', onPress: () => setLibraryOpen(true) },
+          { label: 'Reader', onPress: () => setReaderOpen(true) },
+          { label: 'Notes', onPress: () => setNotesOpen(true) },
           { label: 'Edit files', disabled: !ownedActive, onPress: () => ownedActive && openExplorer(ownedActive) },
           { label: 'Devices', onPress: () => setDevicesOpen(true) },
           { label: 'Developer tools', onPress: () => { viewSource(); setDevtoolsOpen(true) } },
@@ -956,6 +986,23 @@ export default function Browser () {
         onRemoveDrive={persist.removeDrive}
         onRemoveBookmark={(url) => persist.toggleBookmark(url, '')}
         onClearHistory={persist.clearHistory}
+      />
+
+      <Reader
+        visible={readerOpen}
+        onClose={() => setReaderOpen(false)}
+        apps={backend.apps}
+        space={spacesApi.activeSpace.rootDriveKey}
+        onOpenPost={openFromReader}
+        onOpenDevices={() => openDevicesFrom(() => setReaderOpen(false))}
+      />
+
+      <Notes
+        visible={notesOpen}
+        onClose={() => setNotesOpen(false)}
+        apps={backend.apps}
+        onOpenDevices={() => openDevicesFrom(() => setNotesOpen(false))}
+        onOpenUrl={openFromNotes}
       />
 
       <Devices
