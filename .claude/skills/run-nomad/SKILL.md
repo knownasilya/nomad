@@ -100,6 +100,25 @@ ss phone-editor
 EOF
 ```
 
+Type in the URL bar and read its suggestions. The input lives in the shell window's shadow roots,
+the suggestions in their own page (`nomad://location-bar/`), and the input needs `focus` to fire its
+focus handler:
+
+```bash
+node .claude/skills/run-nomad/driver.mjs <<'EOF'
+launch
+go nomad://library/names
+eval nomad.vault.setName({ name: 'notes', url: 'nomad://notes/', title: 'Notes' }).then((n) => n.name)
+attach shell-window
+focus
+eval (() => { const find = (root, sel) => root.querySelector(sel) || [...root.querySelectorAll('*')].map((n) => n.shadowRoot && find(n.shadowRoot, sel)).find(Boolean); const input = find(document, '.input-container input'); input.focus(); input.value = 'notes'; input.dispatchEvent(new Event('input')); return 'typed'; })()
+wait 1500
+attach location-bar
+text
+ss urlbar
+EOF
+```
+
 Typing in the Notes editor (CodeMirror) needs focus emulated and the view focused first:
 
 ```bash
@@ -175,6 +194,11 @@ single-instance lock).
   (`getOwnerBrowserWindow` of null). Pass `{ prompt: false }`.
 - **The tab strip and Tab Sidebar live in `nomad://shell-window/`**, not in a tab. Screenshots of it
   show the tab area blank (tab contents are separate views). `size` shrinks it so lists overflow.
+- **`go` navigates through DevTools, not the way a user does.** It skips the tab's own navigation
+  hooks (`Pane.loadURL`), so `go hyper://<name>/` hangs on a DNS lookup instead of following the
+  user's name. Test user navigation through the URL bar recipe, or `nomad.browser.openUrl`.
+- **My Library paints late on a fresh profile.** A screenshot one second after `go nomad://library/…`
+  can come out blank; `wait 2500` first.
 - **Two Nomads on one Mac pair, but don't fully sync.** In October 2026, one could join the other's
   Vault (`nomad.vault.createInvite` / `submitInvite` / `approveDevice`), yet Vault writes from the
   device that joined never reached the other one, on the old join path too. Don't use this setup to

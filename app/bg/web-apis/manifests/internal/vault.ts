@@ -30,4 +30,10 @@ export default {
   deleteNote: 'promise',
   renameNoteLinks: 'promise', // ({ id, from, to }) -> number of notes changed
   watchAppData: 'readable', // 'changed' when the Vault changes
+
+  // Names (bg/hyper/names.js)
+  listNames: 'promise', // -> [{ name, url, title, createdAt, updatedAt }]
+  namesForUrl: 'promise', // (url) -> the names that point to that page
+  setName: 'promise', // ({ name, url, title, previous? }) -> record
+  removeName: 'promise',
 };

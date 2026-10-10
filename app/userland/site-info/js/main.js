@@ -9,6 +9,7 @@ import * as contextMenu from '../../app-stdlib/js/com/context-menu.js';
 import * as toast from '../../app-stdlib/js/com/toast.js';
 import * as nomadPermissions from '../../../lib/permissions';
 import mainCSS from '../css/main.css.js';
+import { nameTarget, normalizeName } from '../../../../shared/names.mjs';
 import './com/site-perms.js';
 import './com/identity.js';
 import './com/drive-forks.js';
@@ -26,6 +27,8 @@ class SiteInfoApp extends LitElement {
       cert: { type: Object },
       requestedPerms: { type: Object },
       forks: { type: Array },
+      names: { type: Array }, // the user's names for this page (nomad.vault.namesForUrl)
+      naming: { type: Object }, // { value, previous, error } while the name field is open
     };
   }
 
@@ -155,6 +158,9 @@ class SiteInfoApp extends LitElement {
         this.view = 'identity';
       }
 
+      // The user's names for this page (bg/hyper/names.js). nomad:// pages can be named too.
+      this.names = await nomad.vault.namesForUrl(this.url).catch(() => []);
+
       // all sites: get cert and requested perms
       var perms;
       [perms, this.cert] = await Promise.all([
@@ -264,9 +270,90 @@ class SiteInfoApp extends LitElement {
                 `
               : ''}
           </p>
+          ${this.renderName()}
         </div>
       </div>
     `;
+  }
+
+  // A short name for this page: typing it in the URL bar, or opening hyper://<name>/, comes here.
+  renderName() {
+    if (!this.url || !/^(hyper|https?|nomad):/.test(this.url)) return '';
+    if (this.naming) {
+      return html`
+        <form class="name-row editing" @submit=${this.onSaveName}>
+          <span class="name-prefix">hyper://</span>
+          <input
+            class="name-input"
+            .value=${this.naming.value}
+            placeholder="name"
+            aria-label="Name"
+            @input=${(e) => (this.naming = { ...this.naming, value: e.target.value, error: '' })}
+            @keydown=${(e) => e.key === 'Escape' && this.onCancelName(e)}
+          />
+          <span class="name-prefix">/</span>
+          <button type="submit" class="primary">Save</button>
+          <button type="button" @click=${this.onCancelName}>Cancel</button>
+          ${this.naming.error ? html`<div class="name-error">${this.naming.error}</div>` : ''}
+        </form>
+      `;
+    }
+    const [named] = this.names || [];
+    if (named) {
+      return html`
+        <div class="name-row">
+          <span class="fas fa-fw fa-at"></span>
+          <code class="name-chip">hyper://${named.name}/</code>
+          <button @click=${() => this.onStartName(named.name)}>Rename</button>
+          <button @click=${() => this.onRemoveName(named.name)}>Remove</button>
+        </div>
+      `;
+    }
+    return html`
+      <div class="name-row">
+        <button @click=${() => this.onStartName('')}>
+          <span class="fas fa-fw fa-at"></span> Give it a name
+        </button>
+        <span class="name-hint">Then type the name in the URL bar, or ask the AI to use it.</span>
+      </div>
+    `;
+  }
+
+  onStartName(previous) {
+    this.naming = { value: previous || normalizeName(this.info?.title || ''), previous, error: '' };
+    this.updateComplete.then(() => this.shadowRoot.querySelector('.name-input')?.focus());
+  }
+
+  onCancelName(e) {
+    e?.preventDefault();
+    this.naming = null;
+  }
+
+  async onSaveName(e) {
+    e.preventDefault();
+    const name = normalizeName(this.naming.value);
+    try {
+      await nomad.vault.setName({
+        name,
+        url: nameTarget(this.url),
+        title: this.info?.title || this.hostname,
+        previous: this.naming.previous || undefined,
+      });
+      this.naming = null;
+      this.names = await nomad.vault.namesForUrl(this.url);
+      toast.create(`Named hyper://${name}/`, 'success');
+    } catch (err) {
+      this.naming = { ...this.naming, error: err.message || String(err) };
+    }
+  }
+
+  async onRemoveName(name) {
+    try {
+      await nomad.vault.removeName(name);
+      this.names = await nomad.vault.namesForUrl(this.url);
+    } catch (err) {
+      toast.create(err.message || String(err), 'error');
+    }
   }
 
   renderNav() {
