@@ -249,3 +249,36 @@ describe('search: drives listed for public search', () => {
     expect(needsListedDrives({ entity: ['guide:nomad.fs', `drive:${blogKey}`] })).toBe('');
   });
 });
+
+describe('search: the user\'s names', () => {
+  const key = 'b'.repeat(64);
+  const names = [
+    { name: 'blog', url: `hyper://${key}/`, title: 'My Blog' },
+    { name: 'todo', url: 'hyper://private/apps/todo/', title: 'Todo app' },
+    { name: 'gh', url: 'https://github.com/knownasilya', title: 'GitHub' },
+  ];
+
+  it('hides the name domain unless the host supplied names', () => {
+    expect(search({}, catalog()).domains.map((d) => d.domain)).not.toContain('name');
+    expect(() => search({ domain: 'name' }, catalog())).toThrow(/not available/);
+    const row = search({}, catalog({ names })).domains.find((d) => d.domain === 'name');
+    expect(row).toMatchObject({ count: 3, samples: ['blog', 'todo', 'gh'] });
+  });
+
+  it('returns a name with what it points to and its short address', () => {
+    const { hits } = search({ query: 'blog', domain: 'name' }, catalog({ names }));
+    expect(hits[0]).toMatchObject({ entity: 'name:blog', type: 'name', title: 'My Blog', url: `hyper://${key}/`, shortcut: 'hyper://blog/', kind: 'drive' });
+    const [todo] = search({ entity: 'name:todo' }, catalog({ names })).details;
+    expect(todo).toMatchObject({ kind: 'app', url: 'hyper://private/apps/todo/' });
+    const [gh] = search({ entity: 'name:gh' }, catalog({ names })).details;
+    expect(gh.kind).toBe('page');
+    expect(() => search({ entity: 'name:nope' }, catalog({ names }))).toThrow(/unknown name/);
+  });
+
+  it('lets the drive tools take a drive', () => {
+    const caps = catalog().capabilities;
+    for (const n of ['readDriveFile', 'listDriveFiles', 'writeDriveFile']) {
+      expect(caps.find((c) => c.name === n).inputSchema.properties).toHaveProperty('drive');
+    }
+  });
+});

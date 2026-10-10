@@ -131,6 +131,10 @@ _Avoid_: followers list, subscriber list, friend
 A private Markdown note the user writes in the built-in Notes app (`nomad://notes`, and Notes on the phone). Its first line is its title. Notes link to each other by title, the way Obsidian does (`[[Title]]`); a link to a missing Note creates it. Notes live in the Vault, so they follow the user to every linked Device (ADR-0017). A Note is not a Post: it is never published or replicated to anyone else.
 _Avoid_: memo, document, page, post
 
+**Name**:
+A short word the user gives a Drive, an app folder inside a private drive, or any URL ("blog", "gh"). Typing it in the URL bar, or opening `hyper://<name>/`, goes to what it names; the AI can look names up and work in a named Drive. One set per user, kept in the Vault. `hyper://<name>/` is a shortcut the user's own navigation follows, not a second address: the page loads at its real URL (ADR-0018).
+_Avoid_: alias, nickname, petname, bookmark, keyword
+
 **Conflict copy**:
 The Note saved when two Devices edit the same Note at once: the later edit is kept as a new Note marked "(conflict copy)", so neither edit is lost. The user merges and deletes it.
 _Avoid_: duplicate, fork, version

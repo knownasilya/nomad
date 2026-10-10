@@ -36,12 +36,13 @@ const DEVICES_PREFIX = '/.vault/devices/';
 // { key, value, updatedAt }, so two Devices changing different settings never overwrite each other.
 const SETTINGS_PREFIX = '/.vault/settings/';
 // The user's own data a solo Vault brings along when this Device joins another Vault: Reader
-// subscriptions, Notes (ADR-0017), and Drafts (ADR-0012). The rest (meta, Spaces, Devices,
-// settings) belongs to the Vault being joined.
+// subscriptions, Notes (ADR-0017), names (shared/names.mjs), and Drafts (ADR-0012). The rest
+// (meta, Spaces, Devices, settings) belongs to the Vault being joined.
 const READER_PREFIX = '/.vault/reader/';
 const NOTES_PREFIX = '/.vault/notes/';
+const NAMES_PREFIX = '/.vault/names/';
 const DRAFTS_PREFIX = '/.drafts/';
-const CARRY_PREFIXES = [READER_PREFIX, NOTES_PREFIX, DRAFTS_PREFIX];
+const CARRY_PREFIXES = [READER_PREFIX, NOTES_PREFIX, NAMES_PREFIX, DRAFTS_PREFIX];
 
 // Emits 'changed' when this Device switches to another Vault, so code that follows the Vault's
 // updates (bg/web-apis/bg/vault-apps.ts watch) can follow the new one.

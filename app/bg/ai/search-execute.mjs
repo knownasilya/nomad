@@ -7,7 +7,7 @@
 import vm from 'node:vm'
 import { API_REFERENCE } from './api-reference.mjs'
 
-export const DOMAINS = ['capability', 'guide', 'page', 'drive']
+export const DOMAINS = ['capability', 'guide', 'page', 'drive', 'name']
 
 const GUIDE_BUDGET = 12000
 const MAX_HITS = 8
@@ -31,30 +31,49 @@ const GUIDE_IDS = [
 ]
 
 const DOMAIN_COPY = {
-  capability: 'Read and write the current Drive, fetch an http(s) URL, and read or screenshot the open page.',
+  capability:
+    'Read and write the current Drive or a named one, fetch an http(s) URL, and read or screenshot the open page.',
   guide: 'Sections of the Nomad API reference. Open one with entity guide:<id>.',
   page: 'Tools the current page registered. Open one with entity page:<name>.',
   drive:
     'Drives their owners listed for public search (what nomad://search finds), with their hyper:// URLs. ' +
     'Search by topic or words. Nothing here when the search crawler is off.',
+  name:
+    'Names the user gave their drives, apps and pages ("blog", "notes"), with what each points to. ' +
+    'Pass a drive or app name as `drive` to readDriveFile, listDriveFiles or writeDriveFile. ' +
+    'hyper://<name>/ opens it in a tab.',
 }
 
 export const CAPABILITIES = [
   {
     name: 'readDriveFile',
-    description: 'Read the text content of a file in the current Drive.',
+    description: 'Read the text content of a file in the current Drive, or in a named one (`drive`).',
     inputSchema: {
       type: 'object',
-      properties: { path: { type: 'string', description: 'Absolute path to the file, e.g. /index.html' } },
+      properties: {
+        path: { type: 'string', description: 'Absolute path to the file, e.g. /index.html' },
+        drive: {
+          type: 'string',
+          description:
+            'Optional. Another drive: one of the user\'s names (search domain "name"), hyper://<name>/, or a hyper:// URL. Omit for the current Drive.',
+        },
+      },
       required: ['path'],
     },
   },
   {
     name: 'listDriveFiles',
-    description: 'List files and directories at a path in the current Drive.',
+    description: 'List files and directories at a path in the current Drive, or in a named one (`drive`).',
     inputSchema: {
       type: 'object',
-      properties: { path: { type: 'string', description: 'Directory path to list, e.g. / or /src' } },
+      properties: {
+        path: { type: 'string', description: 'Directory path to list, e.g. / or /src' },
+        drive: {
+          type: 'string',
+          description:
+            'Optional. Another drive: one of the user\'s names (search domain "name"), hyper://<name>/, or a hyper:// URL. Omit for the current Drive.',
+        },
+      },
       required: ['path'],
     },
   },
@@ -69,12 +88,18 @@ export const CAPABILITIES = [
   },
   {
     name: 'writeDriveFile',
-    description: 'Write text content to a file in the current Drive. Requires user permission.',
+    description:
+      'Write text content to a file in the current Drive, or in a named one (`drive`). Requires user permission for that drive.',
     inputSchema: {
       type: 'object',
       properties: {
         path: { type: 'string', description: 'Absolute path to write, e.g. /index.html' },
         content: { type: 'string', description: 'Text content to write' },
+        drive: {
+          type: 'string',
+          description:
+            'Optional. Another drive: one of the user\'s names (search domain "name"), hyper://<name>/, or a hyper:// URL. Omit for the current Drive.',
+        },
       },
       required: ['path', 'content'],
     },
@@ -167,7 +192,7 @@ function guideRecord(id, title, markdown) {
 const GUIDES = splitGuides(API_REFERENCE)
 
 export function buildCatalog(opts) {
-  const { allowWrite, allowVision, remote, pageTools, listedDrives, ownerId } = opts || {}
+  const { allowWrite, allowVision, remote, pageTools, listedDrives, names, ownerId } = opts || {}
   const caps = visibleCapabilities({ allowWrite, allowVision, remote })
   return {
     capabilities: caps,
@@ -177,6 +202,8 @@ export function buildCatalog(opts) {
     // Listed drives matching this search, fetched by the host from the search crawler before it
     // calls search (listed-drives.mjs); see withListedDrives. null hides the drive domain.
     listedDrives: listedDrives == null ? null : listedDrives.map(driveRecord),
+    // The user's names (shared/names.mjs records). null hides the name domain.
+    names: names == null ? null : names.map(nameRecord),
     // Reserved until Personas choose a home. Passed through and not read.
     ownerId,
   }
@@ -217,6 +244,19 @@ function driveRecord(d) {
   }
 }
 
+// What a name points to: a drive (a hyper:// root), an app (a folder in a drive), or a page.
+function nameRecord(n) {
+  const url = String(n.url || '')
+  const kind = /^hyper:\/\/[^/]+\/?$/i.test(url) ? 'drive' : url.startsWith('hyper://') ? 'app' : 'page'
+  return {
+    name: String(n.name),
+    title: String(n.title || n.name),
+    description: `${kind} at ${url}`,
+    url,
+    kind,
+  }
+}
+
 function pageRecord(tool) {
   return {
     name: String(tool.name),
@@ -239,6 +279,9 @@ export function search(input, catalog) {
   if (domain === 'drive' && catalog.listedDrives == null) {
     throw new Error('listed drives are not available in this context')
   }
+  if (domain === 'name' && catalog.names == null) {
+    throw new Error('names are not available in this context')
+  }
   if (entity != null) return { kind: 'detail', details: entityDetails(entity, catalog) }
   if (!query && !domain) return { kind: 'index', domains: domainIndex(catalog) }
   if (domain && !query) {
@@ -258,6 +301,7 @@ function domainIndex(catalog) {
     const items = listDomain(domain, catalog)
     if (domain === 'page' && catalog.pageTools == null) continue
     if (domain === 'drive' && catalog.listedDrives == null) continue
+    if (domain === 'name' && catalog.names == null) continue
     rows.push({
       domain,
       description: DOMAIN_COPY[domain],
@@ -280,6 +324,7 @@ function listDomain(domain, catalog) {
   if (domain === 'guide') return catalog.guides
   if (domain === 'page') return catalog.pageTools || []
   if (domain === 'drive') return catalog.listedDrives || []
+  if (domain === 'name') return catalog.names || []
   return []
 }
 
@@ -290,6 +335,7 @@ function rank(query, domain, catalog) {
   for (const d of pools) {
     if (d === 'page' && catalog.pageTools == null) continue
     if (d === 'drive' && catalog.listedDrives == null) continue
+    if (d === 'name' && catalog.names == null) continue
     for (const item of listDomain(d, catalog)) hits.push(scoreHit(d, item, tokens))
   }
   hits.sort((a, b) => b.score - a.score || a.entity.localeCompare(b.entity))
@@ -325,6 +371,7 @@ function scoreHit(domain, item, tokens) {
   }
   if (domain === 'capability') hit.call = { code: capabilityCode(name), inputSchema: item.inputSchema }
   if (domain === 'page') hit.call = { code: pageToolCode(name), inputSchema: item.inputSchema }
+  if (domain === 'name') Object.assign(hit, { url: item.url, shortcut: `hyper://${name}/`, kind: item.kind })
   return hit
 }
 
@@ -395,6 +442,12 @@ function openEntity(ref, catalog) {
     void name
     void score
     return { entity: `drive:${id}`, type: 'drive', ...rest }
+  }
+  if (type === 'name') {
+    if (catalog.names == null) throw new Error('names are not available in this context')
+    const n = catalog.names.find((x) => x.name === id)
+    if (!n) throw new Error(`unknown name "${id}"`)
+    return { entity: `name:${id}`, type: 'name', title: n.title, url: n.url, shortcut: `hyper://${id}/`, kind: n.kind }
   }
   if (type === 'guide') {
     const guide = catalog.guides.find((g) => g.id === id)

@@ -17,6 +17,7 @@ import * as modelContext from './model-context';
 import { pageToolResultToText } from './webmcp-schema';
 import * as daemon from '../../hyper/daemon';
 import * as aiBridge from '../../hyper/ai-bridge';
+import * as names from '../../hyper/names';
 import {
   createAwakeController,
   readLinuxAcState,
@@ -428,6 +429,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     allowVision: opts.allowVision,
     remote: opts.remote,
     pageTools: pageListed,
+    names: names.list(),
     ownerId: opts.ownerId,
   });
   // tools:false is a plain completion: no search/execute, and no standing prompt telling the
@@ -627,6 +629,14 @@ async function executeTool(name, args, sender, opts: any = {}) {
     if (!senderUrl.startsWith('hyper://')) throw new Error('Not browsing a Drive');
     return driveBaseUrl(senderUrl);
   };
+  // The drive a drive tool works on: `drive` (one of the user's names, hyper://<name>/, or a
+  // hyper:// URL; hyper/names.js), else the current Drive. `url` names the drive the write
+  // permission is asked for.
+  const driveFor = (drive) => {
+    if (drive == null || drive === '') return { base: requireDrive(), url: senderUrl, current: true };
+    const url = names.resolveDrive(drive);
+    return { base: url.replace(/\/+$/, ''), url, current: false };
+  };
 
   switch (name) {
     case 'search': {
@@ -679,7 +689,7 @@ async function executeTool(name, args, sender, opts: any = {}) {
       return typeof value === 'string' ? value : JSON.stringify(value);
     }
     case 'readDriveFile': {
-      const base = requireDrive();
+      const { base } = driveFor(args.drive);
       // Route through nomad.fs (fsAPI) so BOTH drive backends work — the raw
       // per-writer Hyperdrive read hangs on an Autobase collaborative drive.
       const text = await readTextOrNull(ctx, fullDriveUrl(base, args.path));
@@ -687,7 +697,7 @@ async function executeTool(name, args, sender, opts: any = {}) {
       return text;
     }
     case 'listDriveFiles': {
-      const base = requireDrive();
+      const { base } = driveFor(args.drive);
       const entries = await fsAPI.list.call(ctx, fullDriveUrl(base, args.path || '/'), {});
       return JSON.stringify((entries || []).map((e) => e.key ?? e.name ?? e));
     }
@@ -699,7 +709,8 @@ async function executeTool(name, args, sender, opts: any = {}) {
       return fetchText(args.url);
     }
     case 'writeDriveFile': {
-      const base = requireDrive();
+      const drive = driveFor(args.drive);
+      const base = drive.base;
       // LLMs frequently append a trailing slash to a file path; strip it. Reject
       // only when nothing but slashes is left (i.e. the Drive root / a directory),
       // returning a corrective message so the model retries with a real filename.
@@ -710,7 +721,7 @@ async function executeTool(name, args, sender, opts: any = {}) {
         );
       }
       const target = fullDriveUrl(base, cleanPath);
-      const driveKey = parseDriveUrl(senderUrl).hostname;
+      const driveKey = parseDriveUrl(drive.url).hostname;
       const allowed = await permit('modifyDrive:' + driveKey, sender);
       if (!allowed) throw new Error('Write permission denied');
       // Capture the file's pre-write content (or null if it didn't exist) BEFORE
@@ -720,7 +731,9 @@ async function executeTool(name, args, sender, opts: any = {}) {
       // `draft:true` (remote AI edits) stages into the Drive's Vault-hosted Draft instead of writing
       // the live Drive, so the change is reviewable/publishable (ADR-0012).
       await fsAPI.writeFile.call(ctx, target, args.content, draft ? { draft: true } : {});
-      if (emitter) {
+      // The 'write' event makes an undo Checkpoint for the current Drive (and tells the editor to
+      // reload). A write to a named drive isn't the current Drive, so it makes neither.
+      if (emitter && drive.current) {
         emitter.emit('tool', {
           phase: 'write',
           name: 'writeDriveFile',
@@ -729,7 +742,7 @@ async function executeTool(name, args, sender, opts: any = {}) {
           draft: !!draft,
         });
       }
-      return `File written successfully to ${cleanPath}`;
+      return `File written successfully to ${drive.current ? cleanPath : target}`;
     }
     case 'readCurrentPage': {
       // `sender` is the relevant webContents in every caller (the tab itself for a content page's
@@ -847,11 +860,11 @@ function toolSummary(name, args) {
     case 'execute':
       return 'Running a module';
     case 'readDriveFile':
-      return `Reading ${args.path || ''}`.trim();
+      return `Reading ${args.drive ? args.drive + ' ' : ''}${args.path || ''}`.trim();
     case 'listDriveFiles':
-      return `Listing ${args.path || '/'}`.trim();
+      return `Listing ${args.drive ? args.drive + ' ' : ''}${args.path || '/'}`.trim();
     case 'writeDriveFile':
-      return `Writing ${args.path || ''}`.trim();
+      return `Writing ${args.drive ? args.drive + ' ' : ''}${args.path || ''}`.trim();
     case 'fetchUrl':
       return `Fetching ${args.url || ''}`.trim();
     case 'readCurrentPage':
@@ -1242,6 +1255,7 @@ export async function callLocalTool(name, args) {
     allowVision: true,
     remote: false,
     pageTools: pageListed,
+    names: names.list(),
   });
   return executeTool(name, args || {}, sender, {
     driveUrl: drive.url || undefined,

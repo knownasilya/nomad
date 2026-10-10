@@ -194,6 +194,16 @@ bundled into `notes/js/main.build.js` by `scripts/build.js`, and into the phone'
 `mobile/lib/noteEditorHtml.ts` (committed) by **`npm run build:note-editor`** — rerun that after
 changing the editor or `shared/vault-apps.mjs`.
 
+### Names (ADR-0018)
+
+The user's short names for Drives, app folders and URLs live in the Vault (`/.vault/names/`, rules in
+`shared/names.mjs`, kept in memory by `app/bg/hyper/names.js`). `hyper://<name>/` is resolved **only**
+where the user navigates (`ui/tabs/pane.js` `loadURL` and `onWillNavigate`) and in the AI's drive tools
+(`drive` argument in `bg/web-apis/bg/ai.ts`). Don't resolve names in the hyper:// protocol handler or
+in `nomad.fs` for pages: that gives a Drive a second origin and lets any page probe the user's names.
+Names are managed in My Library → Names and the site-info panel; the URL bar suggests them
+(`fg/lib/location.js`).
+
 ## Look and feel: every UI supports dark mode and matches the rest
 
 Every new or changed screen must work in light **and** dark, and look like its neighbours.

@@ -74,8 +74,22 @@ like §1.1. `<space>` is a Space's Root Drive key: subscriptions are per Space, 
 - `read.json` is one record, so a writer reads it, merges (`mergeReadState`), and writes it back.
 - Joining (§2): a Device whose own Vault is **solo** (created here, no other Device) may adopt
   another Vault. It records the old key in its `vault_carry_from` setting and copies
-  `/.vault/reader/`, `/.vault/notes/`, and `/.drafts/` across once the new Vault is writable.
+  `/.vault/reader/`, `/.vault/notes/`, `/.vault/names/` (§1.3), and `/.drafts/` across once the new
+  Vault is writable.
   Desktop only; the phone never makes a Vault of its own.
+
+### 1.3 Names (ADR-0018)
+
+The user's short names for Drives, app folders and URLs, one set per user. Rules and helpers in
+`shared/names.mjs`; desktop reads and writes them in `app/bg/hyper/names.js`.
+
+| Path | Payload (JSON, stored inline) |
+|------|--------------|
+| `/.vault/names/<name>.json` | `{ name, url, title, createdAt, updatedAt }` |
+
+A name is a lowercase DNS label that isn't a Drive key or reserved. `url` is a `hyper://`, `http(s)://`
+or `nomad://` URL; for a page in a Drive it's the page's folder. A solo Vault that joins another
+(§1.2) brings `/.vault/names/` along; a name already in the joined Vault wins.
 
 ## 2. Pairing (blind-pairing)
 

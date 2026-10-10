@@ -23,6 +23,7 @@ import hyper from './bg/hyper/index';
 import * as filesystem from './bg/filesystem/index';
 import * as bookmarkPins from './bg/filesystem/pins';
 import * as syncedSettings from './bg/hyper/synced-settings';
+import * as names from './bg/hyper/names';
 import * as crawlerHost from './bg/hyper/crawler-host';
 import * as webapis from './bg/web-apis/bg';
 
@@ -186,6 +187,8 @@ app.on('ready', async function () {
   permissions.setup();
   // Synced settings first, so a Device that turned the crawler off elsewhere stops it here soon.
   syncedSettings.setup();
+  // The user's names (hyper://<name>/ and the URL bar), from the Vault.
+  names.setup();
   log.info('Starting the discovery crawler');
   crawlerHost.setup();
   log.info('Program setup complete');
