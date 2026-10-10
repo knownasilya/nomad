@@ -50,6 +50,33 @@ reads `/.vault/spaces/*` to discover every Space and the drives to replicate. De
 for human-readable names/management; the Vault's own writer set (autobase oplog) remains the
 security boundary.
 
+### 1.2 Reader and Notes records (ADR-0017)
+
+The built-in Reader and Notes keep their data in the Vault, so every linked Device sees it. Paths,
+record builders, and the rules for titles, links, conflicts, and read marks live in
+`shared/vault-apps.mjs`, which desktop (`app/bg/web-apis/bg/vault-apps.ts`) and mobile
+(`mobile/backend/lib/vault-apps.mjs`) both import. Every record is an inline JSON control record,
+like §1.1. `<space>` is a Space's Root Drive key: subscriptions are per Space, notes per user.
+
+| Path | Payload (JSON, stored inline) |
+|------|--------------|
+| `/.vault/reader/<space>/follows/<host>.json` | `{ url: 'hyper://<host>/', addedAt }` — one per subscribed Feed |
+| `/.vault/reader/<space>/read.json` | `{ read: [postUrl] }` — posts marked read, sorted |
+| `/.vault/reader/<space>/imported.json` | `{ importedAt }` — the Space's old Reader file was copied in |
+| `/.vault/notes/<id>.json` | `{ type: 'nomad/note', id, body, createdAt, updatedAt, conflictOf? }` |
+
+- A Note's body is Markdown; its title is its first line with text, and is never stored. Notes link
+  with `[[Title]]`, `[[Title#Heading|text]]`, or `[text](Title.md)`, resolved by title (ignoring
+  case), then by id (`makeResolver`). A Note id is a time-sortable `[a-z0-9-]` slug.
+- A save sends `baseUpdatedAt`, the version it started from. When the stored Note has moved past it,
+  the save becomes a new Note with `conflictOf` (`planNoteSave`). Retitling a Note rewrites the
+  links in the others (`linkRenames`).
+- `read.json` is one record, so a writer reads it, merges (`mergeReadState`), and writes it back.
+- Joining (§2): a Device whose own Vault is **solo** (created here, no other Device) may adopt
+  another Vault. It records the old key in its `vault_carry_from` setting and copies
+  `/.vault/reader/`, `/.vault/notes/`, and `/.drafts/` across once the new Vault is writable.
+  Desktop only; the phone never makes a Vault of its own.
+
 ## 2. Pairing (blind-pairing)
 
 Uses Holepunch [`blind-pairing`](https://github.com/holepunchto/blind-pairing-core) over the existing

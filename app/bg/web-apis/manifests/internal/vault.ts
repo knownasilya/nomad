@@ -1,6 +1,6 @@
 export default {
   // status & listing
-  getStatus: 'promise', // { hasVault, thisDevice, deviceCount }
+  getStatus: 'promise', // { hasVault, canJoin, thisDevice, deviceCount }
   getThisDevice: 'promise',
   listDevices: 'promise',
   listSpaces: 'promise',
@@ -19,4 +19,15 @@ export default {
   // managing
   renameDevice: 'promise',
   removeDevice: 'promise',
+
+  // Reader and Notes data (bg/vault-apps.ts)
+  readerState: 'promise', // -> { follows, read, writable, linked } for the caller's Space
+  readerFollow: 'promise',
+  readerUnfollow: 'promise',
+  readerSaveRead: 'promise',
+  listNotes: 'promise', // -> { notes, writable, linked }
+  saveNote: 'promise', // ({ id?, body, baseUpdatedAt? }) -> note (a conflict copy on a conflict)
+  deleteNote: 'promise',
+  renameNoteLinks: 'promise', // ({ id, from, to }) -> number of notes changed
+  watchAppData: 'readable', // 'changed' when the Vault changes
 };

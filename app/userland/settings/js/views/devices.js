@@ -11,6 +11,7 @@ class DevicesView extends LitElement {
       loading: { type: Boolean },
       error: { type: String },
       hasVault: { type: Boolean },
+      canJoin: { type: Boolean },
       thisDevice: { type: Object },
       devices: { type: Array },
       pending: { type: Array },
@@ -34,6 +35,7 @@ class DevicesView extends LitElement {
     this.loading = true;
     this.error = '';
     this.hasVault = false;
+    this.canJoin = true; // a solo Vault (no other Device) can still join another one
     this.thisDevice = null;
     this.devices = [];
     this.pending = [];
@@ -55,6 +57,7 @@ class DevicesView extends LitElement {
     try {
       const status = await nomad.vault.getStatus();
       this.hasVault = status.hasVault;
+      this.canJoin = status.canJoin !== false;
       this.thisDevice = status.thisDevice;
       if (this.hasVault) {
         await this._refresh();
@@ -199,10 +202,16 @@ class DevicesView extends LitElement {
         `}
       </div>
 
-      <div class="section">
-        <h2>Join from another device</h2>
-        ${this.renderJoinForm()}
-      </div>
+      ${this.canJoin
+        ? html`<div class="section">
+            <h2>Join from another device</h2>
+            <p class="hint">
+              Already set up on another device? Paste an invite code from it. Your notes and Reader
+              subscriptions on this device come along.
+            </p>
+            ${this.renderJoinForm()}
+          </div>`
+        : ''}
     `;
   }
 

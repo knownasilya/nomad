@@ -50,6 +50,7 @@ export const setup = function (rpc) {
   internal.watchlist.createEventsStream = () => fromEventStream(watchlistRPC.createEventsStream());
   internal.vault = Object.assign({}, vaultRPC);
   internal.vault.watchPendingRequests = () => fromEventStream(vaultRPC.watchPendingRequests());
+  internal.vault.watchAppData = () => fromEventStream(vaultRPC.watchAppData());
   internal.webmcp = Object.assign({}, webmcpRPC);
   internal.webmcp.watch = () => fromEventStream(webmcpRPC.watch());
 

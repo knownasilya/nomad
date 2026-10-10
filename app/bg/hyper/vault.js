@@ -12,6 +12,7 @@
 // at /.vault/* paths so both nomad and mobile persist them with the shared apply function.
 
 import b4a from 'b4a';
+import { EventEmitter } from 'events';
 import * as logLib from '../logger';
 import * as autobases from './autobases';
 import * as daemon from './daemon';
@@ -24,6 +25,8 @@ const logger = logLib.get().child({ category: 'hyper', subcategory: 'vault' });
 
 const VAULT_KEY_SETTING = 'vault_key';
 const PENDING_ROOT_MOVE_SETTING = 'vault_pending_root_move';
+// The solo Vault this Device left to join another one, until its data is copied across.
+const CARRY_FROM_SETTING = 'vault_carry_from';
 const VAULT_VERSION = 1;
 
 const META_PATH = '/.vault/meta.json';
@@ -32,6 +35,17 @@ const DEVICES_PREFIX = '/.vault/devices/';
 // Settings that follow the user to every Device (bg/hyper/synced-settings.js): one record per key,
 // { key, value, updatedAt }, so two Devices changing different settings never overwrite each other.
 const SETTINGS_PREFIX = '/.vault/settings/';
+// The user's own data a solo Vault brings along when this Device joins another Vault: Reader
+// subscriptions, Notes (ADR-0017), and Drafts (ADR-0012). The rest (meta, Spaces, Devices,
+// settings) belongs to the Vault being joined.
+const READER_PREFIX = '/.vault/reader/';
+const NOTES_PREFIX = '/.vault/notes/';
+const DRAFTS_PREFIX = '/.drafts/';
+const CARRY_PREFIXES = [READER_PREFIX, NOTES_PREFIX, DRAFTS_PREFIX];
+
+// Emits 'changed' when this Device switches to another Vault, so code that follows the Vault's
+// updates (bg/web-apis/bg/vault-apps.ts watch) can follow the new one.
+export const events = new EventEmitter();
 
 // Identity & lifecycle
 // =
@@ -53,24 +67,116 @@ export async function ensureVault({ profileUrl } = {}) {
   return createVault({ profileUrl });
 }
 
+let _carryWatched = false;
+
 export async function getVault() {
   const key = await getVaultKey();
   if (!key) return null;
-  return autobases.getOrLoadCollaborativeDrive(key);
+  const sess = await autobases.getOrLoadCollaborativeDrive(key);
+  // A copy from a left Vault that a restart cut short: finish it once the Vault is writable.
+  if (!_carryWatched && sess) {
+    _carryWatched = true;
+    _watchCarry(sess);
+  }
+  return sess;
+}
+
+// A Vault that this Device created and no other Device has joined. A Device can leave such a Vault
+// to join another one (adoptVault); one that has its own Vault otherwise can't. A Vault this Device
+// joined is never solo, even with every other Device removed: its writer core is the Device's root
+// writer core, which the Vault being joined needs too (multi-device-protocol §3).
+export async function isSolo(sess = null) {
+  sess = sess || (await getVault());
+  if (!sess) return true;
+  const base = sess.base;
+  if (!base?.local?.key || !b4a.equals(base.local.key, base.key)) return false;
+  const own = b4a.toString(base.local.key, 'hex');
+  const devices = await _readPrefix(sess, DEVICES_PREFIX);
+  return devices.every((d) => d.key === own);
 }
 
 // Candidate side: this Device just paired into an existing Vault. Persist the received key and
 // load the base (writable once the member's addWriter has linearised). Callers then sync Spaces
-// from the Vault index. Refuses to clobber an existing Vault.
+// from the Vault index. A Device with its own solo Vault leaves it and brings its data along
+// (CARRY_PREFIXES); any other existing Vault is refused.
 export async function adoptVault(vaultKey) {
   const existing = await getVaultKey();
-  if (existing && existing !== vaultKey) {
-    throw new Error('This Device already belongs to a Vault');
+  const leaving = existing && existing !== vaultKey;
+  if (leaving) {
+    if (!(await isSolo())) throw new Error('This Device already belongs to a Vault');
+    await settingsDb.set(CARRY_FROM_SETTING, existing);
+    logger.info('Leaving a solo vault to join another', { from: existing, to: vaultKey });
   }
   await settingsDb.set(VAULT_KEY_SETTING, vaultKey);
   const sess = await autobases.loadCollaborativeDrive(vaultKey);
   logger.info('Adopted vault', { key: vaultKey, writable: sess?.writable });
+  if (leaving) {
+    events.emit('changed', { key: vaultKey });
+    _watchCarry(sess);
+  }
   return sess;
+}
+
+// Copy the data of the solo Vault this Device left (CARRY_FROM_SETTING) into the current Vault.
+// The new Vault turns writable only after the inviting Device's addWriter linearises, so try now
+// and again on each update until the copy is done. The old Vault stays on disk, unused.
+function _watchCarry(sess) {
+  const base = sess?.base;
+  const tryCarry = () =>
+    runPendingCarry()
+      .then((done) => {
+        if (done && base) base.removeListener('update', tryCarry);
+      })
+      .catch((e) => logger.warn('Could not copy data from the old vault yet', { error: e.toString() }));
+  if (base) base.on('update', tryCarry);
+  tryCarry();
+}
+
+let _carrying = null;
+
+// Resolves true when there is nothing (left) to copy.
+export function runPendingCarry() {
+  if (!_carrying) _carrying = _carry().finally(() => (_carrying = null));
+  return _carrying;
+}
+
+async function _carry() {
+  const from = await settingsDb.get(CARRY_FROM_SETTING);
+  if (!from) return true;
+  const to = await getVault();
+  if (!to || !to.writable) return false;
+  const old = await autobases.getOrLoadCollaborativeDrive(from);
+  let copied = 0;
+  for (const prefix of CARRY_PREFIXES) {
+    for (const { path, value } of await _readPrefixEntries(old, prefix)) {
+      if (await _carryRecord(to, path, value)) copied++;
+    }
+  }
+  await settingsDb.set(CARRY_FROM_SETTING, '');
+  autobases.unloadCollaborativeDrive(from);
+  logger.info('Copied data from the old vault', { from, copied });
+  return true;
+}
+
+// Put one record from the old Vault, unless the new Vault already has a better one: a Note keeps
+// the newer edit, read marks are merged, and anything else already there wins.
+async function _carryRecord(sess, path, value) {
+  const have = await autobases.readJson(sess, path);
+  if (have) {
+    if (path.startsWith(NOTES_PREFIX) && value?.updatedAt > have.updatedAt) {
+      await _putRecord(sess, path, value);
+      return true;
+    }
+    if (path.startsWith(READER_PREFIX) && path.endsWith('/read.json')) {
+      const read = [...new Set([...(have.read || []), ...(value?.read || [])])].sort();
+      if (read.length === (have.read || []).length) return false;
+      await _putRecord(sess, path, { read });
+      return true;
+    }
+    return false;
+  }
+  await _putRecord(sess, path, value);
+  return true;
 }
 
 async function createVault({ profileUrl } = {}) {
@@ -85,6 +191,7 @@ async function createVault({ profileUrl } = {}) {
     profileUrl: profileUrl || null,
   });
   logger.info('Created vault', { key: sess.keyStr });
+  events.emit('changed', { key: sess.keyStr });
   return sess;
 }
 
@@ -109,6 +216,14 @@ export async function listDevices() {
   return _readPrefix(sess, DEVICES_PREFIX);
 }
 
+// How many Devices other than this one are in the Vault.
+export async function otherDeviceCount() {
+  const sess = await getVault();
+  if (!sess) return 0;
+  const own = sess.base?.local?.key ? b4a.toString(sess.base.local.key, 'hex') : null;
+  return (await _readPrefix(sess, DEVICES_PREFIX)).filter((d) => d.key !== own).length;
+}
+
 // The synced settings as { key: value }. Empty with no Vault.
 export async function listSyncedSettings() {
   const sess = await getVault();
@@ -118,6 +233,38 @@ export async function listSyncedSettings() {
     if (rec && typeof rec.key === 'string') out[rec.key] = rec.value;
   }
   return out;
+}
+
+// App records: the Reader's and Notes' data (shared/vault-apps.mjs, ADR-0017). Reads give null / []
+// with no Vault. Callers create the Vault on first use (ensureVault): this Device can still join
+// another Vault later, since a solo Vault comes along (adoptVault).
+
+export async function readAppRecord(path) {
+  const sess = await getVault();
+  if (!sess) return null;
+  return _readRecord(sess, path);
+}
+
+export async function listAppRecords(prefix) {
+  const sess = await getVault();
+  if (!sess) return [];
+  return _readPrefix(sess, prefix);
+}
+
+export async function putAppRecord(path, obj) {
+  await _putRecord(await _writableVault(), path, obj);
+}
+
+export async function delAppRecord(path) {
+  await _delRecord(await _writableVault(), path);
+}
+
+async function _writableVault() {
+  const sess = await ensureVault();
+  if (!sess.writable) {
+    throw new Error('This device can’t write to your Vault yet. Keep your other device online until it syncs, then try again.');
+  }
+  return sess;
 }
 
 // Index writes
@@ -185,6 +332,11 @@ export async function moveSpaceRoot(fromKey, toKey) {
   }
   await _putRecord(sess, `${SPACES_PREFIX}${toKey}.json`, { ...old, rootDriveKey: toKey });
   await _putRecord(sess, `${SPACES_PREFIX}${fromKey}.json`, { rootDriveKey: fromKey, movedTo: toKey });
+  // The Space's Reader subscriptions are keyed by its Root Drive key (ADR-0017): move them too.
+  const readerFrom = `${READER_PREFIX}${fromKey}/`;
+  for (const { path, value } of await _readPrefixEntries(sess, readerFrom)) {
+    await _carryRecord(sess, `${READER_PREFIX}${toKey}/${path.slice(readerFrom.length)}`, value);
+  }
   const root = await autobases.getOrLoadCollaborativeDrive(toKey);
   if (root) {
     for (const device of await listDevices()) {
@@ -460,6 +612,20 @@ async function _delRecord(sess, path) {
 async function _readRecord(sess, path) {
   await sess.base.update();
   return autobases.readJson(sess, path);
+}
+
+// Like _readPrefix, with each record's path.
+async function _readPrefixEntries(sess, prefix) {
+  await sess.base.update();
+  const out = [];
+  for await (const node of sess.drive.createReadStream({ gte: prefix, lt: prefix + '\xff' })) {
+    try {
+      const buf = await autobases.resolveRecordContent(node.value);
+      const path = typeof node.key === 'string' ? node.key : b4a.toString(node.key);
+      if (buf) out.push({ path, value: JSON.parse(b4a.toString(buf)) });
+    } catch {}
+  }
+  return out;
 }
 
 async function _readPrefix(sess, prefix) {

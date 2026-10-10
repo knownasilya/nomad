@@ -120,12 +120,20 @@ A single blog entry: a directory under a Blog's `/posts/` holding a `post.json` 
 _Avoid_: article, entry, page
 
 **Reader**:
-The in-browser feature that subscribes to Feeds and presents their Posts as an aggregated, RSS-like stream.
+The in-browser feature that subscribes to Feeds and presents their Posts as an aggregated, RSS-like stream. Each Space has its own Follows. They and the read marks live in the Vault, so every linked Device shows the same Feeds for a Space (ADR-0017).
 _Avoid_: feed reader, aggregator, rss client
 
 **Follow**:
-Subscribing to a Feed by adding its URL to the user's own `walled.garden/follows` record (outbound-only) in their private Root Drive. Because a Follow is stored on the *follower's* side and no aggregate follower list is ever published, who follows a user is not exposed at the data layer (ADR-0013). There is deliberately no "Followers" list or count.
+Subscribing to a Feed by recording its URL on the user's own side (outbound-only), in the Vault, for one Space (ADR-0017). Because a Follow is stored on the *follower's* side and no aggregate follower list is ever published, who follows a user is not exposed at the data layer (ADR-0013). There is deliberately no "Followers" list or count.
 _Avoid_: followers list, subscriber list, friend
+
+**Note**:
+A private Markdown note the user writes in the built-in Notes app (`nomad://notes`, and Notes on the phone). Its first line is its title. Notes link to each other by title, the way Obsidian does (`[[Title]]`); a link to a missing Note creates it. Notes live in the Vault, so they follow the user to every linked Device (ADR-0017). A Note is not a Post: it is never published or replicated to anyone else.
+_Avoid_: memo, document, page, post
+
+**Conflict copy**:
+The Note saved when two Devices edit the same Note at once: the later edit is kept as a new Note marked "(conflict copy)", so neither edit is lost. The user merges and deletes it.
+_Avoid_: duplicate, fork, version
 
 ### Discovery
 
@@ -159,7 +167,7 @@ A named user context with its own Root Drive and browser session isolation (sepa
 _Avoid_: profile, account, identity, workspace
 
 **Vault**:
-The private, identity-level Collaborative Drive that indexes a single user's Spaces (by Root Drive key) and trusted Devices, and holds that user's in-flight Drafts. It is the root of trust for multi-device: every Device the user owns is a Writer of the Vault, and a new Device joins by pairing into it. Because every Device already writes the Vault, it is also where Drafts live so they sync privately across a user's Devices. Distinct from a Space — the Vault is the parent that ties one user's Spaces and Devices together.
+The private, identity-level Collaborative Drive that indexes a single user's Spaces (by Root Drive key) and trusted Devices, and holds that user's in-flight Drafts, Reader Follows, and Notes. It is the root of trust for multi-device: every Device the user owns is a Writer of the Vault, and a new Device joins by pairing into it. Because every Device already writes the Vault, it is also where Drafts, Follows, and Notes live, so they sync privately across a user's Devices. Distinct from a Space — the Vault is the parent that ties one user's Spaces and Devices together.
 _Avoid_: account, identity, profile, keyring, sync base
 
 **Device**:

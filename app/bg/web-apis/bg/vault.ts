@@ -8,6 +8,7 @@ import b4a from 'b4a';
 import { EventEmitter } from 'events';
 import * as vault from '../../hyper/vault';
 import * as pairing from '../../hyper/device-pairing';
+import * as vaultApps from './vault-apps';
 
 function thisPlatform() {
   return 'desktop';
@@ -49,6 +50,9 @@ export default {
     const devices = sess ? await vault.listDevices() : [];
     return {
       hasVault: !!sess,
+      // A solo Vault (no other Device joined it) can be left to join another Vault; its notes and
+      // subscriptions come along (hyper/vault.js adoptVault).
+      canJoin: await vault.isSolo(sess),
       thisDevice: await getThisDeviceInfo(),
       deviceCount: devices.length,
     };
@@ -130,5 +134,43 @@ export default {
 
   async removeDevice(deviceKey) {
     return vault.removeDevice(deviceKey);
+  },
+
+  // Reader and Notes data (vault-apps.ts), in the Vault. `this` is the RPC event, which carries the
+  // calling page and so its Space.
+  async readerState() {
+    return vaultApps.readerState(this);
+  },
+
+  async readerFollow(url) {
+    return vaultApps.follow(this, url);
+  },
+
+  async readerUnfollow(url) {
+    return vaultApps.unfollow(this, url);
+  },
+
+  async readerSaveRead(add, loaded) {
+    return vaultApps.saveRead(this, add, loaded);
+  },
+
+  async listNotes() {
+    return vaultApps.listNotes();
+  },
+
+  async saveNote(note) {
+    return vaultApps.saveNote(this, note);
+  },
+
+  async deleteNote(id) {
+    return vaultApps.deleteNote(this, id);
+  },
+
+  async renameNoteLinks(change) {
+    return vaultApps.renameNoteLinks(this, change);
+  },
+
+  watchAppData() {
+    return vaultApps.watch();
   },
 };
