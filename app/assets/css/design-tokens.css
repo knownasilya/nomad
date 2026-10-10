@@ -68,6 +68,11 @@ body {
   --text-color--pane-status-bar: #888;
   --text-color--pane-status-bar--active: #555;
   --text-color--pane-status-bar-indicator: #4d82e4;
+
+  /* Scrollbars in the shell chrome (scrollbar-color: thumb, track). Without these, Chromium draws
+     light scrollbars even when the chrome is dark. */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.22);
+  --scrollbar-track: transparent;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -124,6 +129,8 @@ body {
     --bg-color--tab--dragover: #ddddea;
     --bg-color--tab-close--hover: #222;
     --bg-color--tab-close--current--hover: #222;
+
+    --scrollbar-thumb: rgba(255, 255, 255, 0.2);
 
     --border-color--navbar: #222;
     --stroke-color--navbar-btn: #bbb;

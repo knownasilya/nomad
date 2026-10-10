@@ -614,6 +614,13 @@ ShellWindowSidebar.styles = css`
     min-height: 0;
   }
 
+  /* Thin scrollbars in the chrome's colors (design-tokens.css), so they follow light and dark. */
+  .sidebar-tabs,
+  .spaces-popup-list {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
   .tab-separator {
     height: 1px;
     background: var(--border-color--tab);
