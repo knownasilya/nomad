@@ -11,7 +11,7 @@
 //
 // Commands: help · launch [keep] · go <url> · ss [name] · dark · light · focus · size <w> <h> [mobile]
 //           eval <js> · text [selector] · click <selector> [| text] · type <text> · key <Key>
-//           html <file> · targets · attach <url text | tab> · log [n] · wait <ms> · quit
+//           mouse <x> <y> · html <file> · targets · attach <url text | tab> · log [n] · wait <ms> · quit
 //
 // Env: NOMAD_RUN_DIR (profile + shots + logs; default $TMPDIR/nomad-run), NOMAD_RUN_PORT (9333).
 
@@ -204,6 +204,16 @@ const COMMANDS = {
       return 'ok';
     })()`);
     out('click', arg, '->', r);
+  },
+
+  // A real left click at page coordinates (CSS pixels), for UI that reads the click's position, such
+  // as CodeMirror placing the cursor. Get coordinates with eval and getBoundingClientRect().
+  async mouse(arg = '') {
+    const [x, y] = arg.split(/\s+/).map(Number);
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await needTab().send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
+    }
+    out('mouse', x, y);
   },
 
   // Types into whatever has focus (focus an editor first, e.g. with eval).

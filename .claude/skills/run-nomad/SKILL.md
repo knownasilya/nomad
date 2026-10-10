@@ -61,6 +61,7 @@ port from 9333). Open the PNG and look at it.
 | `eval <js>` | run JS in the page, await it, print the result as JSON (`window.nomad` is there on nomad:// pages) |
 | `text [selector]` | text of the page or an element, including Lit shadow roots |
 | `click <selector> [\| text]` | mousedown + mouseup + click on the first match (or the one with exactly that text) |
+| `mouse <x> <y>` | a real left click at page coordinates, for UI that reads where you clicked (CodeMirror cursor placement); get coordinates with `eval` and `getBoundingClientRect()` |
 | `type <text>` / `key <Key>` | type into the focused element / press Enter, Backspace, Tab, Escape, arrows |
 | `targets` | list every page (tabs, `nomad://shell-window/`, menus) |
 | `attach <url text>` / `attach tab` | drive another page, e.g. `attach shell-window` for the tab strip and Tab Sidebar |
