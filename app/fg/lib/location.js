@@ -1,5 +1,6 @@
 import { examineLocationInput } from '../../lib/urls';
 import { joinPath } from '../../lib/strings';
+import { matchNames } from '../../../shared/names.mjs';
 
 /**
  * Used by ../shell-window/navbar/location.js
@@ -40,9 +41,10 @@ export async function queryAutocomplete(bg, ctx, onResults) {
     onResults(true);
   }
 
-  var [historyResults, bookmarks] = await Promise.all([
+  var [historyResults, bookmarks, names] = await Promise.all([
     ctx.inputValue ? bg.history.search(ctx.inputValue) : [],
     ctx.bookmarksFetch,
+    ctx.namesFetch || [],
   ]);
 
   // abort if changes to the input have occurred since triggering these queries
@@ -116,6 +118,20 @@ export async function queryAutocomplete(bg, ctx, onResults) {
   if (ctx.inputValue.includes(' ')) finalResults = [searchResult].concat(finalResults);
   else if (isProbablyUrl) finalResults = [gotoResult, searchResult].concat(finalResults);
   else finalResults = [searchResult, gotoResult].concat(finalResults);
+
+  // The user's names (bg/hyper/names.js). The exact name goes first, so typing "blog" and pressing
+  // Enter opens it; names that only start with or contain the input follow the search entry, so a
+  // short query still searches.
+  var nameResults = matchNames(ctx.inputValue, names).map((r) => ({
+    url: `hyper://${r.name}/`,
+    title: r.title || r.name,
+    name: r.name,
+    target: r.url,
+    isName: true,
+  }));
+  var exact = nameResults.filter((r) => r.name === ctx.inputValue.toLowerCase().replace(/^hyper:\/\/|\/$/g, ''));
+  var partial = nameResults.filter((r) => !exact.includes(r));
+  finalResults = exact.concat(finalResults.slice(0, 2), partial, finalResults.slice(2));
 
   // render
   ctx.results = finalResults;

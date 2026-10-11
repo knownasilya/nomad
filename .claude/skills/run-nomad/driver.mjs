@@ -98,8 +98,13 @@ const COMMANDS = {
     // VS Code's terminal exports ELECTRON_RUN_AS_NODE=1, which makes Electron start as plain Node.
     const { ELECTRON_RUN_AS_NODE, ...env } = process.env;
     const logFd = fs.openSync(LOG, 'w');
+    // The loopback MCP stays off, unless NOMAD_RUN_MCP_PORT names a port for it: the user's own
+    // Nomad may hold the usual one (47655).
+    const mcp = process.env.NOMAD_RUN_MCP_PORT
+      ? { NOMAD_MCP: '1', NOMAD_MCP_PORT: process.env.NOMAD_RUN_MCP_PORT }
+      : { NOMAD_MCP: '0' };
     child = spawn(ELECTRON, [`--remote-debugging-port=${PORT}`, path.join(ROOT, 'app')], {
-      env: { ...env, NOMAD_USER_DATA_PATH: PROFILE, NOMAD_MCP: '0', NOMAD_DEV_MODE: '1' },
+      env: { ...env, NOMAD_USER_DATA_PATH: PROFILE, ...mcp, NOMAD_DEV_MODE: '1' },
       stdio: ['ignore', logFd, logFd],
     });
     child.on('exit', (code) => {

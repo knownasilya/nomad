@@ -200,6 +200,38 @@ export const PERMS = {
     requiresRefresh: false,
     dangerous: true,
   },
+  // The AI's access to the user's Notes and Reader (ADR-0019): four grants, asked even on a trusted
+  // nomad:// page (promptTrusted), since the AI asks, not Nomad's own code.
+  notesRead: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+    promptTrusted: true,
+  },
+  notesWrite: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+    promptTrusted: true,
+  },
+  readerRead: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    promptTrusted: true,
+  },
+  readerWrite: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    promptTrusted: true,
+  },
 };
 
 export const PERM_ICONS = {
@@ -231,6 +263,10 @@ export const PERM_ICONS = {
   panesAttach: 'fas fa-columns',
   panesInject: 'fas fa-columns',
   webmcpTools: 'fas fa-plug',
+  notesRead: 'fas fa-sticky-note',
+  notesWrite: 'fas fa-sticky-note',
+  readerRead: 'fas fa-rss',
+  readerWrite: 'fas fa-rss',
 };
 
 export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
@@ -278,6 +314,14 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Inject code into other open pages';
     case 'webmcpTools':
       return 'Let the AI assistant use tools this page provides';
+    case 'notesRead':
+      return 'Let the AI assistant read your Notes';
+    case 'notesWrite':
+      return 'Let the AI assistant create and edit your Notes';
+    case 'readerRead':
+      return 'Let the AI assistant read your Reader feeds and posts';
+    case 'readerWrite':
+      return 'Let the AI assistant follow and unfollow feeds and mark posts read';
 
     case 'network':
       if (permParam === '*') return 'Access the network freely';

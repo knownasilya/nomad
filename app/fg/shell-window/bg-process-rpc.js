@@ -9,6 +9,7 @@ import overlayManifest from '../../bg/rpc-manifests/overlay';
 import spacesManifest from '../../bg/rpc-manifests/spaces';
 import viewsManifest from '../../bg/rpc-manifests/views';
 import watchlistManifest from '../../bg/web-apis/manifests/internal/watchlist';
+import vaultManifest from '../../bg/web-apis/manifests/internal/vault';
 
 export const bookmarks = rpc.importAPI('bookmarks', bookmarksManifest);
 export const beakerBrowser = rpc.importAPI('nomad-browser', browserManifest);
@@ -20,3 +21,5 @@ export const overlay = rpc.importAPI('background-process-overlay', overlayManife
 export const spaces = rpc.importAPI('background-process-spaces', spacesManifest);
 export const views = rpc.importAPI('background-process-views', viewsManifest);
 export const watchlist = rpc.importAPI('watchlist', watchlistManifest);
+// The user's names, for the URL bar (bg/hyper/names.js).
+export const vault = rpc.importAPI('vault', vaultManifest);

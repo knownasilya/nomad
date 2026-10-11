@@ -82,9 +82,12 @@ interface Props {
   onClose: () => void
   url: string
   title?: string
+  // The active Space's Root Drive key: the AI may use this Space's Reader (ADR-0019).
+  space?: string
   // backend.aiChat — streams a turn over the AI Bridge to a desktop AI Provider (ADR-0013).
   aiChat: (messages: unknown[], opts: Record<string, unknown>, handlers: AiChatHandlers) => AiChatHandle
-  // Native consent for a relayed modifyDrive write (the human is here on the phone).
+  // Native consent for a relayed permission: a modifyDrive write, or Notes or Reader access (the
+  // human is here on the phone).
   onPrompt?: (permission: string) => boolean | Promise<boolean>
   // Render the current Drive's Draft in the tab (set preview + reload + close the panel).
   onPreviewDraft?: (url: string) => void
@@ -94,7 +97,7 @@ interface Props {
 // Provider) — this phone has no local runtime — and is scoped to the tab's Drive so the Provider
 // resolves that Drive's AI Config. The Client owns the transcript (ADR-0013 §5): each send ships
 // the full history, so the panel keeps `messages` and forwards them.
-export default function AiPanel ({ visible, onClose, url, title, aiChat, onPrompt, onPreviewDraft }: Props) {
+export default function AiPanel ({ visible, onClose, url, title, space, aiChat, onPrompt, onPreviewDraft }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const insets = useSafeAreaInsets()
@@ -189,7 +192,9 @@ export default function AiPanel ({ visible, onClose, url, title, aiChat, onPromp
     setActivity('Thinking…')
     setActiveTurnKey(contextKey)
     const sendKey = contextKey
-    handleRef.current = aiChat(fitImages(history), { driveUrl: driveUrl || undefined, context: describeContext(driveUrl, title) }, {
+    // The panel is the user's own AI: a personal turn, with their names, Notes, and this Space's
+    // Reader (ADR-0018, ADR-0019).
+    handleRef.current = aiChat(fitImages(history), { driveUrl: driveUrl || undefined, context: describeContext(driveUrl, title), personal: true, space }, {
       onChunk: (chunk) => { setActivity('Responding…'); appendToLast(chunk) },
       onTool: (event: any) => {
         setActivity(toolLabel(event))

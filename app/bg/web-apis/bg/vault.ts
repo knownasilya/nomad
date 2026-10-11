@@ -9,6 +9,7 @@ import { EventEmitter } from 'events';
 import * as vault from '../../hyper/vault';
 import * as pairing from '../../hyper/device-pairing';
 import * as vaultApps from './vault-apps';
+import * as names from '../../hyper/names';
 
 function thisPlatform() {
   return 'desktop';
@@ -172,5 +173,24 @@ export default {
 
   watchAppData() {
     return vaultApps.watch();
+  },
+
+  // Names (hyper/names.js): short words for drives, apps in a private drive, and any URL.
+  async listNames() {
+    return names.list();
+  },
+
+  // The names that point to the page at `url`.
+  async namesForUrl(url) {
+    return names.forUrl(url);
+  },
+
+  // ({ name, url, title, previous? }) -> record. `previous` renames.
+  async setName(rec) {
+    return names.set(rec || {});
+  },
+
+  async removeName(name) {
+    return names.remove(name);
   },
 };

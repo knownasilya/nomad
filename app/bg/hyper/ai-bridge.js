@@ -123,6 +123,9 @@ export async function requestRemoteChat({
         effort: opts.effort || null,
         tools: opts.tools,
         maxTokens: opts.maxTokens,
+        // A turn of the user's own AI (ai.ts chat(), ADR-0018, ADR-0019), and its Reader's Space.
+        personal: opts.personal === true,
+        space: opts.space || null,
       },
     });
   }).finally(() => peer.clientReqs.delete(id));

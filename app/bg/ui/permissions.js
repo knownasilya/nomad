@@ -110,13 +110,13 @@ export async function checkLabsPerm({ perm, labApi, apiDocsUrl, sender }) {
 async function onPermissionRequestHandler(webContents, permission, cb, opts) {
   const url = webContents.getURL();
 
-  // always allow trusted interfaces
-  if (wcTrust.isWcTrusted(webContents)) {
+  // always allow trusted interfaces, except for a perm the AI asks for (promptTrusted)
+  const PERM = PERMS[getPermId(permission)];
+  if (wcTrust.isWcTrusted(webContents) && !PERM?.promptTrusted) {
     return cb(true);
   }
 
   // check if the perm is auto-allowed or auto-disallowed
-  const PERM = PERMS[getPermId(permission)];
   if (!PERM) return cb(false);
   if (PERM && PERM.alwaysAllow) return cb(true);
   if (PERM && PERM.alwaysDisallow) return cb(false);

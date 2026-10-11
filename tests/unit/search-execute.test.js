@@ -249,3 +249,70 @@ describe('search: drives listed for public search', () => {
     expect(needsListedDrives({ entity: ['guide:nomad.fs', `drive:${blogKey}`] })).toBe('');
   });
 });
+
+describe('search: a personal turn (the user\'s own AI)', () => {
+  const key = 'b'.repeat(64);
+  const names = [
+    { name: 'blog', url: `hyper://${key}/`, title: 'My Blog' },
+    { name: 'todo', url: 'hyper://private/apps/todo/', title: 'Todo app' },
+    { name: 'gh', url: 'https://github.com/knownasilya', title: 'GitHub' },
+  ];
+  const personal = (o = {}) => catalog({ personal: true, names, ...o });
+  const VAULT_CAPS = ['listNotes', 'readNote', 'writeNote', 'listReaderPosts', 'readReaderPost', 'followFeed', 'unfollowFeed', 'markPostsRead'];
+
+  it('hides the name domain unless the turn is personal', () => {
+    expect(search({}, catalog()).domains.map((d) => d.domain)).not.toContain('name');
+    expect(() => search({ domain: 'name' }, catalog())).toThrow(/not available/);
+    expect(() => search({ entity: 'name:blog' }, catalog())).toThrow(/not available/);
+    // Names a host passes by mistake on a page's turn still stay out.
+    expect(catalog({ names }).names).toBe(null);
+    const row = search({}, personal()).domains.find((d) => d.domain === 'name');
+    expect(row).toMatchObject({ count: 3, samples: ['blog', 'todo', 'gh'] });
+  });
+
+  it('returns a name with what it points to and its short address', () => {
+    const { hits } = search({ query: 'blog', domain: 'name' }, personal());
+    expect(hits[0]).toMatchObject({ entity: 'name:blog', type: 'name', title: 'My Blog', url: `hyper://${key}/`, shortcut: 'hyper://blog/', kind: 'drive' });
+    const [todo] = search({ entity: 'name:todo' }, personal()).details;
+    expect(todo).toMatchObject({ kind: 'app', url: 'hyper://private/apps/todo/' });
+    const [gh] = search({ entity: 'name:gh' }, personal()).details;
+    expect(gh.kind).toBe('page');
+    expect(() => search({ entity: 'name:nope' }, personal())).toThrow(/unknown name/);
+  });
+
+  it('lets the drive tools take a drive only on a personal turn', () => {
+    const own = personal().capabilities;
+    const page = catalog().capabilities;
+    for (const n of ['readDriveFile', 'listDriveFiles', 'writeDriveFile']) {
+      const named = own.find((c) => c.name === n);
+      expect(named.inputSchema.properties).toHaveProperty('drive');
+      expect(named.description).toMatch(/named one/);
+      const plain = page.find((c) => c.name === n);
+      expect(plain.inputSchema.properties).not.toHaveProperty('drive');
+      expect(plain.description).not.toMatch(/named/);
+    }
+    // No names yet is still a personal turn.
+    const empty = personal({ names: [] }).capabilities.find((c) => c.name === 'readDriveFile');
+    expect(empty.inputSchema.properties).toHaveProperty('drive');
+  });
+
+  it('offers Notes and Reader only on a personal turn', () => {
+    for (const n of VAULT_CAPS) {
+      expect(catalog().capabilities.some((c) => c.name === n)).toBe(false);
+      expect(() => assertCallAllowed(n, n, catalog())).toThrow(/not available/);
+      expect(personal().capabilities.some((c) => c.name === n)).toBe(true);
+      expect(() => assertCallAllowed(n, n, personal())).not.toThrow();
+    }
+    // A read-only Drive (allowWrite false) or a remote turn doesn't hide them.
+    const remote = personal({ allowWrite: false, remote: true }).capabilities.map((c) => c.name);
+    expect(remote).toEqual(expect.arrayContaining(VAULT_CAPS));
+  });
+
+  it('finds the Notes and Reader capabilities by plain words', () => {
+    const top = (q) => search({ query: q, domain: 'capability' }, personal()).hits.slice(0, 3).map((h) => h.entity);
+    expect(top('notes')).toContain('capability:listNotes');
+    expect(top('edit a note')).toContain('capability:writeNote');
+    expect(top('reader posts')).toContain('capability:listReaderPosts');
+    expect(top('follow feed')).toContain('capability:followFeed');
+  });
+});

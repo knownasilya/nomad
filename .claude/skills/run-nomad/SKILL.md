@@ -100,6 +100,25 @@ ss phone-editor
 EOF
 ```
 
+Type in the URL bar and read its suggestions. The input lives in the shell window's shadow roots,
+the suggestions in their own page (`nomad://location-bar/`), and the input needs `focus` to fire its
+focus handler:
+
+```bash
+node .claude/skills/run-nomad/driver.mjs <<'EOF'
+launch
+go nomad://library/names
+eval nomad.vault.setName({ name: 'notes', url: 'nomad://notes/', title: 'Notes' }).then((n) => n.name)
+attach shell-window
+focus
+eval (() => { const find = (root, sel) => root.querySelector(sel) || [...root.querySelectorAll('*')].map((n) => n.shadowRoot && find(n.shadowRoot, sel)).find(Boolean); const input = find(document, '.input-container input'); input.focus(); input.value = 'notes'; input.dispatchEvent(new Event('input')); return 'typed'; })()
+wait 1500
+attach location-bar
+text
+ss urlbar
+EOF
+```
+
 Typing in the Notes editor (CodeMirror) needs focus emulated and the view focused first:
 
 ```bash
@@ -167,6 +186,15 @@ single-instance lock).
 - **The profile is isolated by `NOMAD_USER_DATA_PATH`**, which also gives the run its own
   single-instance lock, so it runs beside the user's Nomad. `NOMAD_MCP=0` keeps it off the MCP port.
   Nothing it does reaches the user's Vault or phone.
+- **To call the AI's tools, turn the MCP on** with `NOMAD_RUN_MCP_PORT=47699` (any port but the
+  user's 47655), then POST JSON-RPC `tools/call` (`search` or `execute`) to
+  `http://127.0.0.1:47699/mcp`. That is a personal turn, so Names, Notes and Reader work. A Notes or
+  Reader capability opens a permission prompt in `nomad://perm-prompt/` and waits: feed the driver
+  from a pipe so it can `attach perm-prompt` and click `.prompt-accept` (in a shadow root, so through
+  `eval`) while the call waits.
+- **A run that dies can leave its Electron up on the DevTools port**, and the next `launch` attaches
+  to it, with its profile gone (`SQLITE_READONLY`). Stop what listens there:
+  `kill $(lsof -ti tcp:9333 -sTCP:LISTEN)`.
 - **A driven window never has OS focus.** `document.hasFocus()` is false, so focus-dependent UI acts as
   if blurred: the Notes editor shows everything formatted and hides Markdown marks. Use `focus`.
 - **Settings, Library and the shell chrome are Lit components.** `document.body.innerText` misses
@@ -175,6 +203,11 @@ single-instance lock).
   (`getOwnerBrowserWindow` of null). Pass `{ prompt: false }`.
 - **The tab strip and Tab Sidebar live in `nomad://shell-window/`**, not in a tab. Screenshots of it
   show the tab area blank (tab contents are separate views). `size` shrinks it so lists overflow.
+- **`go` navigates through DevTools, not the way a user does.** It skips the tab's own navigation
+  hooks (`Pane.loadURL`), so `go hyper://<name>/` hangs on a DNS lookup instead of following the
+  user's name. Test user navigation through the URL bar recipe, or `nomad.browser.openUrl`.
+- **My Library paints late on a fresh profile.** A screenshot one second after `go nomad://library/…`
+  can come out blank; `wait 2500` first.
 - **Two Nomads on one Mac pair, but don't fully sync.** In October 2026, one could join the other's
   Vault (`nomad.vault.createInvite` / `submitInvite` / `approveDevice`), yet Vault writes from the
   device that joined never reached the other one, on the old join path too. Don't use this setup to

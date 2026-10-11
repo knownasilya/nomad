@@ -90,6 +90,10 @@ _Avoid_: agent config, AI settings, model config
 The collapsible right-hand panel, docked to the browser window itself (not any one tab), that hosts an agentic chat over whichever site the active tab is showing. Toggled by the robot icon in the URL bar (`app/fg/shell-window/navbar/location.js`) and rendered as shell chrome (`app/fg/shell-window/ai-sidebar.js`), so it survives tab switches and site navigation rather than being injected into or hosted by a page. Talks to the AI engine over an internal-only RPC surface (`bg/web-apis/bg/ai-shell.ts`) that resolves "the active tab" itself, rather than `nomad.ai.chat()`'s page-facing surface. On `nomad://editor` / `nomad://explorer` it gets extra integration (unsaved-buffer gating, post-write reload) via a `window.__nomadAiHost` hook those apps define. Replaced the separate Chat Bubble (a floating overlay a Drive opted into via `"chatBubble": true`) and the old in-page AI Sidebar (editor/explorer-only, `app-stdlib` component) that this unifies.
 _Avoid_: agent sidebar, chat sidebar, prompt panel, chat bubble, sidebar (unqualified — see Tab Sidebar)
 
+**Personal turn**:
+A chat turn of the user's own AI: the AI Sidebar, the phone's AI panel over the AI Bridge, or a program on this machine using the loopback MCP. Only a personal turn may use the user's Names, their other Drives, their Notes and their Reader, and it still asks permission for Notes and Reader (ADR-0019). A page's `nomad.ai.chat()` turn is never personal.
+_Avoid_: trusted turn, private turn, owner turn
+
 **Prompt Session**:
 One conversation in the AI Sidebar — the ordered transcript of user turns and assistant turns, plus the Checkpoints produced by those turns. Reverting the whole session undoes every Checkpoint it produced. Persisted per site in `hyper://private/.ai-chat/` (keyed by a hash of the site's origin, see `app/bg/ai/chat-store.js`), with a session list so past Prompt Sessions for a site can be reopened — not just the most recent one.
 _Avoid_: chat session, thread, conversation
@@ -130,6 +134,10 @@ _Avoid_: followers list, subscriber list, friend
 **Note**:
 A private Markdown note the user writes in the built-in Notes app (`nomad://notes`, and Notes on the phone). Its first line is its title. Notes link to each other by title, the way Obsidian does (`[[Title]]`); a link to a missing Note creates it. Notes live in the Vault, so they follow the user to every linked Device (ADR-0017). A Note is not a Post: it is never published or replicated to anyone else.
 _Avoid_: memo, document, page, post
+
+**Name**:
+A short word the user gives a Drive, an app folder inside a private drive, or any URL ("blog", "gh"). Typing it in the URL bar, or opening `hyper://<name>/`, goes to what it names; the AI can look names up and work in a named Drive. One set per user, kept in the Vault. `hyper://<name>/` is a shortcut the user's own navigation follows, not a second address: the page loads at its real URL (ADR-0018).
+_Avoid_: alias, nickname, petname, bookmark, keyword
 
 **Conflict copy**:
 The Note saved when two Devices edit the same Note at once: the later edit is kept as a new Note marked "(conflict copy)", so neither edit is lost. The user merges and deletes it.

@@ -7,7 +7,7 @@
 import vm from 'node:vm'
 import { API_REFERENCE } from './api-reference.mjs'
 
-export const DOMAINS = ['capability', 'guide', 'page', 'drive']
+export const DOMAINS = ['capability', 'guide', 'page', 'drive', 'name']
 
 const GUIDE_BUDGET = 12000
 const MAX_HITS = 8
@@ -37,12 +37,17 @@ const DOMAIN_COPY = {
   drive:
     'Drives their owners listed for public search (what nomad://search finds), with their hyper:// URLs. ' +
     'Search by topic or words. Nothing here when the search crawler is off.',
+  name:
+    'Names the user gave their drives, apps and pages ("blog", "notes"), with what each points to. ' +
+    'Pass a drive or app name as `drive` to readDriveFile, listDriveFiles or writeDriveFile. ' +
+    'hyper://<name>/ opens it in a tab.',
 }
 
 export const CAPABILITIES = [
   {
     name: 'readDriveFile',
     description: 'Read the text content of a file in the current Drive.',
+    namedDescription: 'Read the text content of a file in the current Drive, or in a named one (`drive`).',
     inputSchema: {
       type: 'object',
       properties: { path: { type: 'string', description: 'Absolute path to the file, e.g. /index.html' } },
@@ -52,6 +57,7 @@ export const CAPABILITIES = [
   {
     name: 'listDriveFiles',
     description: 'List files and directories at a path in the current Drive.',
+    namedDescription: 'List files and directories at a path in the current Drive, or in a named one (`drive`).',
     inputSchema: {
       type: 'object',
       properties: { path: { type: 'string', description: 'Directory path to list, e.g. / or /src' } },
@@ -70,6 +76,8 @@ export const CAPABILITIES = [
   {
     name: 'writeDriveFile',
     description: 'Write text content to a file in the current Drive. Requires user permission.',
+    namedDescription:
+      'Write text content to a file in the current Drive, or in a named one (`drive`). Requires user permission for that drive.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -98,6 +106,117 @@ export const CAPABILITIES = [
     inputSchema: { type: 'object', properties: {}, required: [] },
     gates: { vision: true, renderer: true },
   },
+  // The user's Notes and Reader (vault-tools.mjs). Only a personal turn sees them, and each asks
+  // the user's permission: read Notes, write Notes, read Reader, change Reader (ADR-0019).
+  {
+    name: 'listNotes',
+    description:
+      "Find the user's Notes (nomad://notes): id, title and a short preview, newest first. " +
+      'Pass `query` to search their text. Asks permission to read Notes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Optional. Words that must all be in the note' },
+        limit: { type: 'number', description: 'Optional. How many, up to 100 (default 20)' },
+      },
+      required: [],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'readNote',
+    description:
+      "Read one of the user's Notes in full: its Markdown, the titles it links to, and its updatedAt " +
+      '(pass that to writeNote to edit it). Find it by `id` or `title`. Asks permission to read Notes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'The note id, from listNotes' },
+        title: { type: 'string', description: 'Or the note title (its first line)' },
+      },
+      required: [],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'writeNote',
+    description:
+      'Create a Note (no `id`), or replace the text of one (`id`, and the updatedAt readNote gave as ' +
+      '`baseUpdatedAt`). The first line is its title; link Notes with [[Title]]. If the Note changed ' +
+      'since you read it, your text is kept as a conflict copy. Asks permission to write Notes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        body: { type: 'string', description: 'The whole note, in Markdown' },
+        id: { type: 'string', description: 'Optional. The note to replace' },
+        baseUpdatedAt: { type: 'string', description: 'Required with id: the updatedAt from readNote' },
+      },
+      required: ['body'],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'listReaderPosts',
+    description:
+      'List posts from the feeds the user follows in Reader (nomad://reader), newest first, with whether ' +
+      'each is read, and the feeds. Pass `query` to search titles and summaries, `feed` for one feed, ' +
+      '`unread: true` for unread posts. Asks permission to read Reader.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Optional. Words that must all be in the post' },
+        feed: { type: 'string', description: "Optional. A followed feed's hyper:// URL" },
+        unread: { type: 'boolean', description: 'Optional. Only posts not yet read' },
+        limit: { type: 'number', description: 'Optional. How many, up to 100 (default 20)' },
+      },
+      required: [],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'readReaderPost',
+    description:
+      'Read one post from a feed the user follows in Reader: title, date, tags and text. Asks permission ' +
+      'to read Reader.',
+    inputSchema: {
+      type: 'object',
+      properties: { url: { type: 'string', description: 'The post URL, from listReaderPosts' } },
+      required: ['url'],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'followFeed',
+    description: 'Follow a feed in Reader, by its hyper:// URL. Asks permission to change Reader.',
+    inputSchema: {
+      type: 'object',
+      properties: { url: { type: 'string', description: "The feed's hyper:// URL" } },
+      required: ['url'],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'unfollowFeed',
+    description: 'Stop following a feed in Reader. Asks permission to change Reader.',
+    inputSchema: {
+      type: 'object',
+      properties: { url: { type: 'string', description: "The feed's hyper:// URL" } },
+      required: ['url'],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'markPostsRead',
+    description: 'Mark posts read in Reader. Asks permission to change Reader.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        urls: { type: 'array', items: { type: 'string' }, description: 'Post URLs, from listReaderPosts' },
+      },
+      required: ['urls'],
+    },
+    gates: { personal: true },
+  },
 ]
 
 const RUNTIME_IMPORT = /^import\s+\{\s*nomad\s*\}\s+from\s+['"]nomad:runtime['"]\s*;?/
@@ -120,12 +239,32 @@ export function pageToolCode(name) {
   )
 }
 
-export function visibleCapabilities({ allowWrite = true, allowVision = false, remote = false } = {}) {
+// The drive tools' `drive` argument: another of the user's Drives, by name or hyper:// URL. Only a
+// personal turn (the user's own AI) gets it, and executeTool refuses it on any other turn, so a
+// page's own nomad.ai.chat() stays on its own Drive (ADR-0018).
+const DRIVE_ARG = {
+  type: 'string',
+  description:
+    'Optional. Another drive: one of the user\'s names (search domain "name"), hyper://<name>/, or a hyper:// URL. Omit for the current Drive.',
+}
+
+// `personal`: a turn of the user's own AI (the AI Sidebar, the phone's AI panel, the loopback MCP),
+// never a page's nomad.ai.chat(). It adds the user's Notes and Reader, and `drive` on the drive tools.
+export function visibleCapabilities({ allowWrite = true, allowVision = false, remote = false, personal = false } = {}) {
   return CAPABILITIES.filter((cap) => {
     if (cap.gates?.write && !allowWrite) return false
     if (cap.gates?.vision && !allowVision) return false
     if (cap.gates?.renderer && remote) return false
+    if (cap.gates?.personal && !personal) return false
     return true
+  }).map(({ namedDescription, ...cap }) => {
+    if (!personal || !namedDescription) return cap
+    const { inputSchema } = cap
+    return {
+      ...cap,
+      description: namedDescription,
+      inputSchema: { ...inputSchema, properties: { ...inputSchema.properties, drive: DRIVE_ARG } },
+    }
   })
 }
 
@@ -167,16 +306,20 @@ function guideRecord(id, title, markdown) {
 const GUIDES = splitGuides(API_REFERENCE)
 
 export function buildCatalog(opts) {
-  const { allowWrite, allowVision, remote, pageTools, listedDrives, ownerId } = opts || {}
-  const caps = visibleCapabilities({ allowWrite, allowVision, remote })
+  const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, names, ownerId } = opts || {}
+  const caps = visibleCapabilities({ allowWrite, allowVision, remote, personal: !!personal })
   return {
     capabilities: caps,
+    // The user's own AI: its turn may use their names, Notes, Reader and other Drives (see above).
+    personal: !!personal,
     guides: GUIDES,
     // null hides the page domain (remote turn, or page tools not in play).
     pageTools: pageTools == null ? null : pageTools.map(pageRecord),
     // Listed drives matching this search, fetched by the host from the search crawler before it
     // calls search (listed-drives.mjs); see withListedDrives. null hides the drive domain.
     listedDrives: listedDrives == null ? null : listedDrives.map(driveRecord),
+    // The user's names (shared/names.mjs records), on a personal turn only. null hides the name domain.
+    names: !personal || names == null ? null : names.map(nameRecord),
     // Reserved until Personas choose a home. Passed through and not read.
     ownerId,
   }
@@ -217,6 +360,19 @@ function driveRecord(d) {
   }
 }
 
+// What a name points to: a drive (a hyper:// root), an app (a folder in a drive), or a page.
+function nameRecord(n) {
+  const url = String(n.url || '')
+  const kind = /^hyper:\/\/[^/]+\/?$/i.test(url) ? 'drive' : url.startsWith('hyper://') ? 'app' : 'page'
+  return {
+    name: String(n.name),
+    title: String(n.title || n.name),
+    description: `${kind} at ${url}`,
+    url,
+    kind,
+  }
+}
+
 function pageRecord(tool) {
   return {
     name: String(tool.name),
@@ -239,6 +395,9 @@ export function search(input, catalog) {
   if (domain === 'drive' && catalog.listedDrives == null) {
     throw new Error('listed drives are not available in this context')
   }
+  if (domain === 'name' && catalog.names == null) {
+    throw new Error('names are not available in this context')
+  }
   if (entity != null) return { kind: 'detail', details: entityDetails(entity, catalog) }
   if (!query && !domain) return { kind: 'index', domains: domainIndex(catalog) }
   if (domain && !query) {
@@ -258,6 +417,7 @@ function domainIndex(catalog) {
     const items = listDomain(domain, catalog)
     if (domain === 'page' && catalog.pageTools == null) continue
     if (domain === 'drive' && catalog.listedDrives == null) continue
+    if (domain === 'name' && catalog.names == null) continue
     rows.push({
       domain,
       description: DOMAIN_COPY[domain],
@@ -280,6 +440,7 @@ function listDomain(domain, catalog) {
   if (domain === 'guide') return catalog.guides
   if (domain === 'page') return catalog.pageTools || []
   if (domain === 'drive') return catalog.listedDrives || []
+  if (domain === 'name') return catalog.names || []
   return []
 }
 
@@ -290,6 +451,7 @@ function rank(query, domain, catalog) {
   for (const d of pools) {
     if (d === 'page' && catalog.pageTools == null) continue
     if (d === 'drive' && catalog.listedDrives == null) continue
+    if (d === 'name' && catalog.names == null) continue
     for (const item of listDomain(d, catalog)) hits.push(scoreHit(d, item, tokens))
   }
   hits.sort((a, b) => b.score - a.score || a.entity.localeCompare(b.entity))
@@ -325,6 +487,7 @@ function scoreHit(domain, item, tokens) {
   }
   if (domain === 'capability') hit.call = { code: capabilityCode(name), inputSchema: item.inputSchema }
   if (domain === 'page') hit.call = { code: pageToolCode(name), inputSchema: item.inputSchema }
+  if (domain === 'name') Object.assign(hit, { url: item.url, shortcut: `hyper://${name}/`, kind: item.kind })
   return hit
 }
 
@@ -395,6 +558,12 @@ function openEntity(ref, catalog) {
     void name
     void score
     return { entity: `drive:${id}`, type: 'drive', ...rest }
+  }
+  if (type === 'name') {
+    if (catalog.names == null) throw new Error('names are not available in this context')
+    const n = catalog.names.find((x) => x.name === id)
+    if (!n) throw new Error(`unknown name "${id}"`)
+    return { entity: `name:${id}`, type: 'name', title: n.title, url: n.url, shortcut: `hyper://${id}/`, kind: n.kind }
   }
   if (type === 'guide') {
     const guide = catalog.guides.find((g) => g.id === id)

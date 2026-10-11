@@ -97,6 +97,41 @@ ${toastCSS}
     word-break: break-word;
   }
 
+  /* The page's name (hyper://<name>/). */
+  .name-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 11px;
+  }
+  .name-chip {
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--bg-color--nav--selected);
+    color: var(--text-color--default);
+    font-size: 11px;
+  }
+  .name-hint {
+    color: var(--text-color--verifier);
+  }
+  .name-prefix {
+    color: var(--text-color--verifier);
+    font-family: var(--code-font, monospace);
+  }
+  .name-input {
+    width: 110px;
+    height: 24px;
+    padding: 0 6px;
+    font-size: 12px;
+    font-family: var(--code-font, monospace);
+  }
+  .name-error {
+    flex-basis: 100%;
+    color: #cc1010;
+  }
+
   .nav {
     display: flex;
     align-items: center;

@@ -87,6 +87,7 @@ class NavbarLocation extends LitElement {
         })
       ),
       searchEnginesPromise: bg.beakerBrowser.getSetting('search_engines'),
+      namesFetch: this.fetchNames(),
     };
     this._isAutocompleteOpen = false;
     this.dontShowAutocompleteOnNextFocus = false; // helper to avoid showing autocomplete on new tab
@@ -100,6 +101,11 @@ class NavbarLocation extends LitElement {
 
     // listen for commands from the main process
     ipcRenderer.on('command', this.onCommand.bind(this));
+  }
+
+  // The user's names, for suggestions. Fetched again on each focus, since they change on any Device.
+  fetchNames() {
+    return bg.vault.listNames().catch(() => []);
   }
 
   get isAutocompleteOpen() {
@@ -425,6 +431,7 @@ class NavbarLocation extends LitElement {
 
   async onFocusLocation(e) {
     var input = e.currentTarget;
+    this.autocompleteState.namesFetch = this.fetchNames();
     if (!this.url.startsWith('nomad://desktop')) {
       input.value = this.url;
     } else {

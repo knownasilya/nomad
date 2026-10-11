@@ -37,7 +37,7 @@ See [docs/releasing.md](docs/releasing.md) for the CI jobs, Android signing/keys
 
 `app/bg/ai/api-reference.mjs` is the hand-maintained summary of the public JavaScript APIs. It exports two strings:
 
-- `STANDING_PROMPT` is the system text every `nomad.ai.chat()` turn receives. It teaches the two tools the model is offered, `search` and `execute`.
+- `STANDING_PROMPT` is the system text every `nomad.ai.chat()` turn receives. It teaches the two tools the model is offered, `search` and `execute`. `PERSONAL_PROMPT` is added on a personal turn (the user's own AI): Names, Notes and Reader.
 - `API_REFERENCE` is the guide corpus. `search` (`app/bg/ai/search-execute.mjs`) splits it on `##` headings into entities such as `guide:nomad.fs` and `guide:nomad.fs#draft-mode`, and returns a section when the model opens that entity. Stable ids for the current headings live in `GUIDE_IDS` in that file. A new `##` heading still appears; its id is slugged until you add a prefix there.
 
 **Whenever you add or change an API**, update all three:
@@ -193,6 +193,31 @@ The Notes editor (`app/userland/notes/js/editor/`, CodeMirror 6, Obsidian-style 
 bundled into `notes/js/main.build.js` by `scripts/build.js`, and into the phone's WebView page
 `mobile/lib/noteEditorHtml.ts` (committed) by **`npm run build:note-editor`** — rerun that after
 changing the editor or `shared/vault-apps.mjs`.
+
+### Names (ADR-0018)
+
+The user's short names for Drives, app folders and URLs live in the Vault (`/.vault/names/`, rules in
+`shared/names.mjs`, kept in memory by `app/bg/hyper/names.js`). `hyper://<name>/` is resolved **only**
+where the user navigates (`ui/tabs/pane.js` `loadURL` and `onWillNavigate`) and in the AI's drive tools
+(`drive` argument in `bg/web-apis/bg/ai.ts`). Don't resolve names in the hyper:// protocol handler or
+in `nomad.fs` for pages: that gives a Drive a second origin and lets any page probe the user's names.
+Only the user's own AI gets names and `drive`: the AI Sidebar (`ai-shell.ts`), the phone's AI panel over
+the Bridge, and the loopback MCP. That is a **personal turn** (flag `personal`); `ai.ts` `chat()` (a
+page's `nomad.ai.chat()`) and the phone's WebView handler force it off. Keep it that way for any new
+chat entry point.
+
+### The AI and the user's Notes and Reader (ADR-0019)
+
+A personal turn also gets capabilities for Notes (`listNotes`, `readNote`, `writeNote`) and Reader
+(`listReaderPosts`, `readReaderPost`, `followFeed`, `unfollowFeed`, `markPostsRead`). Their entries are
+in `CAPABILITIES` with `gates: { personal: true }`; the pure logic is `app/bg/ai/vault-tools.mjs`
+(`VAULT_TOOL_PERMS` maps each to its permission); the I/O is `app/bg/web-apis/bg/ai-vault.ts`. Each asks
+one of four permissions, `notesRead`, `notesWrite`, `readerRead`, `readerWrite` (`app/lib/permissions.ts`,
+`promptTrusted`, so a `nomad://` page asks too), once per turn. A phone turn sends its Reader `space`
+on the Bridge, and the phone's prompt text is `VAULT_PROMPTS` in `mobile/app/index.tsx`. A new
+capability of this kind needs all of these, plus a line in `PERSONAL_PROMPT`.
+Names are managed in My Library → Names and the site-info panel; the URL bar suggests them
+(`fg/lib/location.js`).
 
 ## Look and feel: every UI supports dark mode and matches the rest
 

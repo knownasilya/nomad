@@ -8,6 +8,7 @@ import { parseDriveUrl, stripUrlHash, isHyperOrPearUrl } from '../../../lib/urls
 import { toNiceUrl } from '../../../lib/strings';
 import { throttle, pick } from '../../../lib/async';
 import * as zoom from './zoom';
+import * as names from '../../hyper/names';
 import * as modals from '../subwindows/modals';
 import * as overlay from '../subwindows/overlay';
 import * as windowMenu from '../window-menu';
@@ -393,7 +394,9 @@ export class Pane extends EventEmitter {
   // =
 
   loadURL(url, opts = undefined) {
-    this.webContents.loadURL(url, opts);
+    // hyper://<name>/ is a shortcut to what the user named (hyper/names.js): the tab goes to the
+    // real address, so the drive keeps one origin and no page can resolve a name for itself.
+    this.webContents.loadURL(names.resolveUrl(url) || url, opts);
   }
 
   reload() {
@@ -765,6 +768,13 @@ export class Pane extends EventEmitter {
   }
 
   async onWillNavigate(e, url) {
+    // A link to hyper://<name>/ in a page: go to the real address instead (see loadURL).
+    const named = names.resolveUrl(url);
+    if (named) {
+      e.preventDefault();
+      this.loadURL(named);
+      return;
+    }
     if (!url.startsWith('nomad://cert-bypass-')) return;
     e.preventDefault();
     await this._handleCertBypass(
