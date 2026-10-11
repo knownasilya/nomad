@@ -24,7 +24,13 @@ goes to what it names, and the AI can look names up and read or write a named Dr
 3. **The AI resolves names explicitly.** Its search tool has a `name` domain, and its drive tools
    (`readDriveFile`, `listDriveFiles`, `writeDriveFile`) take an optional `drive`: a name,
    `hyper://<name>/`, or a hyper:// URL. A write asks permission for the Drive it writes.
-4. **A `hyper://private/…` target follows the current Space**, because `private` resolves when the
+4. **Only the user's own AI sees names.** That is the AI Sidebar, the phone's AI panel (over the AI
+   Bridge, which admits only the user's Devices), and the loopback MCP. A page's `nomad.ai.chat()`
+   gets neither the `name` domain nor the `drive` argument, on desktop or on the phone, whatever
+   options it passes: it works on its own Drive only. The flag is `personal` (a personal turn),
+   set by `ai-shell.ts` and the phone's `AiPanel`, forced off by `ai.ts` `chat()` and the phone's
+   WebView handler, and carried on the Bridge request. It also gates Notes and Reader (ADR-0019).
+5. **A `hyper://private/…` target follows the current Space**, because `private` resolves when the
    tab loads it. Name the Space's root key instead to pin one Space.
 
 ## Why not an alias like `hyper://private/`
@@ -34,10 +40,14 @@ goes to what it names, and the AI can look names up and read or write a named Dr
 - If the protocol handler resolved names, any page could probe them, for example with
   `<img src="hyper://bank/favicon.ico">`, and learn what the user named. A shortcut resolves only in
   the user's own navigation, so a page that requests `hyper://<name>/` gets "no DNS record".
+- For the same reason a page can't ask the AI. Any http(s) or hyper:// page may call
+  `nomad.ai.chat()` with no prompt, and it reads the reply. If that turn had the names, the page could
+  ask for the list, or for a named Drive's files.
 
 ## Consequences
 
 - A link to `hyper://blog/` works only for its author; shared links keep the real key.
 - Writes the AI makes to a named Drive get no editor undo Checkpoint; those are for the current Drive.
 - A solo Vault brings its names along when it joins another Vault (ADR-0017).
-- The phone doesn't resolve names yet.
+- The phone's URL bar doesn't resolve names yet. Its AI panel uses them, because the Provider runs
+  the turn with its own copy of the Vault.

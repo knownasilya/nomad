@@ -90,6 +90,10 @@ _Avoid_: agent config, AI settings, model config
 The collapsible right-hand panel, docked to the browser window itself (not any one tab), that hosts an agentic chat over whichever site the active tab is showing. Toggled by the robot icon in the URL bar (`app/fg/shell-window/navbar/location.js`) and rendered as shell chrome (`app/fg/shell-window/ai-sidebar.js`), so it survives tab switches and site navigation rather than being injected into or hosted by a page. Talks to the AI engine over an internal-only RPC surface (`bg/web-apis/bg/ai-shell.ts`) that resolves "the active tab" itself, rather than `nomad.ai.chat()`'s page-facing surface. On `nomad://editor` / `nomad://explorer` it gets extra integration (unsaved-buffer gating, post-write reload) via a `window.__nomadAiHost` hook those apps define. Replaced the separate Chat Bubble (a floating overlay a Drive opted into via `"chatBubble": true`) and the old in-page AI Sidebar (editor/explorer-only, `app-stdlib` component) that this unifies.
 _Avoid_: agent sidebar, chat sidebar, prompt panel, chat bubble, sidebar (unqualified — see Tab Sidebar)
 
+**Personal turn**:
+A chat turn of the user's own AI: the AI Sidebar, the phone's AI panel over the AI Bridge, or a program on this machine using the loopback MCP. Only a personal turn may use the user's Names, their other Drives, their Notes and their Reader, and it still asks permission for Notes and Reader (ADR-0019). A page's `nomad.ai.chat()` turn is never personal.
+_Avoid_: trusted turn, private turn, owner turn
+
 **Prompt Session**:
 One conversation in the AI Sidebar — the ordered transcript of user turns and assistant turns, plus the Checkpoints produced by those turns. Reverting the whole session undoes every Checkpoint it produced. Persisted per site in `hyper://private/.ai-chat/` (keyed by a hash of the site's origin, see `app/bg/ai/chat-store.js`), with a session list so past Prompt Sessions for a site can be reopened — not just the most recent one.
 _Avoid_: chat session, thread, conversation

@@ -23,7 +23,7 @@ const logger = logLib.get().child({ category: 'hyper', subcategory: 'vault-apps'
 const LEGACY_FOLLOWS = 'hyper://private/.data/walled.garden/follows.json';
 const LEGACY_READ = 'hyper://private/.data/reader/read-state.json';
 
-async function spaceKey(ctx): Promise<string> {
+export async function spaceKey(ctx): Promise<string> {
   const spaceId = ctx?.sender ? filesystem.getSpaceIdForWebContents(ctx.sender.id) : null;
   const url = spaceId ? filesystem.getSpaceRootDriveUrl(spaceId) : null;
   const key = url ? await drives.fromURLToKey(url, true) : null;
@@ -88,31 +88,47 @@ async function vaultInfo() {
 export async function readerState(ctx) {
   const space = await spaceKey(ctx);
   await importLegacy(ctx, space);
-  return {
-    follows: apps.followUrls(await vault.listAppRecords(apps.followsPrefix(space))),
-    read: (await vault.readAppRecord(apps.readPath(space)))?.read || [],
-    ...(await vaultInfo()),
-  };
+  return { ...(await readerOf(space)), ...(await vaultInfo()) };
 }
 
 export async function follow(ctx, url) {
-  const space = await spaceKey(ctx);
-  const path = apps.followPath(space, url); // throws for a non-hyper address
-  if (!(await vault.readAppRecord(path))) await vault.putAppRecord(path, apps.followRecord(url));
+  await followIn(await spaceKey(ctx), url);
   return readerState(ctx);
 }
 
 export async function unfollow(ctx, url) {
-  const space = await spaceKey(ctx);
-  if (apps.driveRoot(url)) await vault.delAppRecord(apps.followPath(space, url));
+  await unfollowIn(await spaceKey(ctx), url);
   return readerState(ctx);
 }
 
 // Mark posts read. `loaded` maps each feed that just loaded to its post URLs, so marks for deleted
 // posts are dropped (mergeReadState). Merges with what other Devices marked; never replaces it.
 export async function saveRead(ctx, add = [], loaded = {}) {
-  const space = await spaceKey(ctx);
-  const { follows, read } = await readerState(ctx);
+  await saveReadIn(await spaceKey(ctx), add, loaded);
+}
+
+// The same, for a Space named by its key: the AI (ai-vault.ts) may run a turn for another Device,
+// with no page here to name the Space.
+
+// { follows: [feedUrl], read: [postUrl] }
+export async function readerOf(space) {
+  return {
+    follows: apps.followUrls(await vault.listAppRecords(apps.followsPrefix(space))),
+    read: (await vault.readAppRecord(apps.readPath(space)))?.read || [],
+  };
+}
+
+export async function followIn(space, url) {
+  const path = apps.followPath(space, url); // throws for a non-hyper address
+  if (!(await vault.readAppRecord(path))) await vault.putAppRecord(path, apps.followRecord(url));
+}
+
+export async function unfollowIn(space, url) {
+  if (apps.driveRoot(url)) await vault.delAppRecord(apps.followPath(space, url));
+}
+
+export async function saveReadIn(space, add = [], loaded = {}) {
+  const { follows, read } = await readerOf(space);
   const next = apps.mergeReadState(read, add, follows, loaded);
   if (next.length === read.length && next.every((u, i) => u === read[i])) return;
   await vault.putAppRecord(apps.readPath(space), { read: next });
@@ -121,7 +137,7 @@ export async function saveRead(ctx, add = [], loaded = {}) {
 // Notes
 // =
 
-async function allNotes() {
+export async function allNotes() {
   return apps.sortNotes((await vault.listAppRecords(apps.NOTES_PREFIX)).filter(apps.isNote));
 }
 

@@ -1,25 +1,33 @@
-// Standing prompt for every chat turn, plus the long API reference search serves
-// as guides. KEEP IN SYNC with nomad.dev/content/docs/api/apis/ — when a nomad.*
-// method changes, update the docs and API_REFERENCE.
+// Standing prompt for every chat turn, the personal prompt the user's own AI adds, plus the long
+// API reference search serves as guides. KEEP IN SYNC with nomad.dev/content/docs/api/apis/ — when
+// a nomad.* method changes, update the docs and API_REFERENCE.
 
 export const STANDING_PROMPT = `\
 You are an AI assistant embedded in Nomad, a peer-to-peer web browser.
 
-You have two tools, search and execute. search finds a capability, a guide section, a tool the current page registered, a drive listed for public search, or one of the user's names. execute runs one module that calls what search found.
+You have two tools, search and execute. search finds a capability, a guide section, a tool the current page registered, or a drive listed for public search. execute runs one module that calls what search found.
 
 search:
-- {} lists domains (capability, guide, page, drive, name)
+- {} lists domains (capability, guide, page, drive)
 - { "query": "..." } ranks matches. Add "domain" to search inside one domain
 - { "domain": "capability" } lists that domain
-- { "entity": "capability:writeDriveFile" } opens one hit. Guides are guide:<id>, page tools are page:<name>, listed drives are drive:<key>, names are name:<name>. A guide accepts a #heading. Pass up to 10 entities.
+- { "entity": "capability:writeDriveFile" } opens one hit. Guides are guide:<id>, page tools are page:<name>, listed drives are drive:<key>. A guide accepts a #heading. Pass up to 10 entities.
 
 The drive domain is Nomad's public search: drives their owners listed, found by topic or words. To find sites, blogs, or apps on the network, search with { "query": "...", "domain": "drive" }. A drive hit is not something to execute; give the user its hyper:// URL.
-
-The name domain is the user's own short names for their drives, apps and pages ("blog", "notes"). When the user mentions one ("add a post to my blog"), search { "query": "blog", "domain": "name" }, then pass the name as \`drive\` to readDriveFile, listDriveFiles or writeDriveFile. hyper://<name>/ opens it in a tab.
 
 execute runs the module from that hit. Pass { code, params }. The module starts with import { nomad } from 'nomad:runtime' and default-exports async function main(params). Put varying arguments in params. Page tools are nomad.page.<name>(params). A page tool named search is nomad.page.search, not the search tool.
 
 When you finish, write a short plain-language reply. Never end the turn silently after a tool result.
+`;
+
+// Added to the standing prompt on a personal turn: the user's own AI (the AI Sidebar, the phone's AI
+// panel, the loopback MCP), never a page's nomad.ai.chat(). ADR-0018, ADR-0019.
+export const PERSONAL_PROMPT = `\
+You are the user's own assistant, so you can reach their own data.
+
+Names: search also has a name domain, the user's short names for their drives, apps and pages ("blog", "notes"). A name opens as name:<name>. When the user mentions one ("add a post to my blog"), search { "query": "blog", "domain": "name" }, then pass the name as \`drive\` to readDriveFile, listDriveFiles or writeDriveFile. hyper://<name>/ opens it in a tab.
+
+Notes and Reader: capabilities read and write the user's Notes (listNotes, readNote, writeNote) and their Reader feeds and posts (listReaderPosts, readReaderPost, followFeed, unfollowFeed, markPostsRead). Reading and changing each is a separate permission, which the user grants when you first use it. If the user says no, tell them and don't try again. To edit a note, read it with readNote and pass its updatedAt to writeNote as baseUpdatedAt.
 `;
 
 export const API_REFERENCE = `\

@@ -101,6 +101,9 @@ export default {
         // nomad://editor, never itself a Drive), so the resolved Drive's own writability wins.
         allowWrite: drive.url ? drive.writable : opts.allowWrite,
         context,
+        // The sidebar is the user's own AI: its turn is personal, so it gets their names, other
+        // Drives, Notes and Reader (ADR-0018, ADR-0019). A page's nomad.ai.chat() never is.
+        personal: true,
         signal,
       });
     });

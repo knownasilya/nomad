@@ -31,8 +31,7 @@ const GUIDE_IDS = [
 ]
 
 const DOMAIN_COPY = {
-  capability:
-    'Read and write the current Drive or a named one, fetch an http(s) URL, and read or screenshot the open page.',
+  capability: 'Read and write the current Drive, fetch an http(s) URL, and read or screenshot the open page.',
   guide: 'Sections of the Nomad API reference. Open one with entity guide:<id>.',
   page: 'Tools the current page registered. Open one with entity page:<name>.',
   drive:
@@ -47,33 +46,21 @@ const DOMAIN_COPY = {
 export const CAPABILITIES = [
   {
     name: 'readDriveFile',
-    description: 'Read the text content of a file in the current Drive, or in a named one (`drive`).',
+    description: 'Read the text content of a file in the current Drive.',
+    namedDescription: 'Read the text content of a file in the current Drive, or in a named one (`drive`).',
     inputSchema: {
       type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Absolute path to the file, e.g. /index.html' },
-        drive: {
-          type: 'string',
-          description:
-            'Optional. Another drive: one of the user\'s names (search domain "name"), hyper://<name>/, or a hyper:// URL. Omit for the current Drive.',
-        },
-      },
+      properties: { path: { type: 'string', description: 'Absolute path to the file, e.g. /index.html' } },
       required: ['path'],
     },
   },
   {
     name: 'listDriveFiles',
-    description: 'List files and directories at a path in the current Drive, or in a named one (`drive`).',
+    description: 'List files and directories at a path in the current Drive.',
+    namedDescription: 'List files and directories at a path in the current Drive, or in a named one (`drive`).',
     inputSchema: {
       type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Directory path to list, e.g. / or /src' },
-        drive: {
-          type: 'string',
-          description:
-            'Optional. Another drive: one of the user\'s names (search domain "name"), hyper://<name>/, or a hyper:// URL. Omit for the current Drive.',
-        },
-      },
+      properties: { path: { type: 'string', description: 'Directory path to list, e.g. / or /src' } },
       required: ['path'],
     },
   },
@@ -88,18 +75,14 @@ export const CAPABILITIES = [
   },
   {
     name: 'writeDriveFile',
-    description:
+    description: 'Write text content to a file in the current Drive. Requires user permission.',
+    namedDescription:
       'Write text content to a file in the current Drive, or in a named one (`drive`). Requires user permission for that drive.',
     inputSchema: {
       type: 'object',
       properties: {
         path: { type: 'string', description: 'Absolute path to write, e.g. /index.html' },
         content: { type: 'string', description: 'Text content to write' },
-        drive: {
-          type: 'string',
-          description:
-            'Optional. Another drive: one of the user\'s names (search domain "name"), hyper://<name>/, or a hyper:// URL. Omit for the current Drive.',
-        },
       },
       required: ['path', 'content'],
     },
@@ -123,6 +106,117 @@ export const CAPABILITIES = [
     inputSchema: { type: 'object', properties: {}, required: [] },
     gates: { vision: true, renderer: true },
   },
+  // The user's Notes and Reader (vault-tools.mjs). Only a personal turn sees them, and each asks
+  // the user's permission: read Notes, write Notes, read Reader, change Reader (ADR-0019).
+  {
+    name: 'listNotes',
+    description:
+      "Find the user's Notes (nomad://notes): id, title and a short preview, newest first. " +
+      'Pass `query` to search their text. Asks permission to read Notes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Optional. Words that must all be in the note' },
+        limit: { type: 'number', description: 'Optional. How many, up to 100 (default 20)' },
+      },
+      required: [],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'readNote',
+    description:
+      "Read one of the user's Notes in full: its Markdown, the titles it links to, and its updatedAt " +
+      '(pass that to writeNote to edit it). Find it by `id` or `title`. Asks permission to read Notes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'The note id, from listNotes' },
+        title: { type: 'string', description: 'Or the note title (its first line)' },
+      },
+      required: [],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'writeNote',
+    description:
+      'Create a Note (no `id`), or replace the text of one (`id`, and the updatedAt readNote gave as ' +
+      '`baseUpdatedAt`). The first line is its title; link Notes with [[Title]]. If the Note changed ' +
+      'since you read it, your text is kept as a conflict copy. Asks permission to write Notes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        body: { type: 'string', description: 'The whole note, in Markdown' },
+        id: { type: 'string', description: 'Optional. The note to replace' },
+        baseUpdatedAt: { type: 'string', description: 'Required with id: the updatedAt from readNote' },
+      },
+      required: ['body'],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'listReaderPosts',
+    description:
+      'List posts from the feeds the user follows in Reader (nomad://reader), newest first, with whether ' +
+      'each is read, and the feeds. Pass `query` to search titles and summaries, `feed` for one feed, ' +
+      '`unread: true` for unread posts. Asks permission to read Reader.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Optional. Words that must all be in the post' },
+        feed: { type: 'string', description: "Optional. A followed feed's hyper:// URL" },
+        unread: { type: 'boolean', description: 'Optional. Only posts not yet read' },
+        limit: { type: 'number', description: 'Optional. How many, up to 100 (default 20)' },
+      },
+      required: [],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'readReaderPost',
+    description:
+      'Read one post from a feed the user follows in Reader: title, date, tags and text. Asks permission ' +
+      'to read Reader.',
+    inputSchema: {
+      type: 'object',
+      properties: { url: { type: 'string', description: 'The post URL, from listReaderPosts' } },
+      required: ['url'],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'followFeed',
+    description: 'Follow a feed in Reader, by its hyper:// URL. Asks permission to change Reader.',
+    inputSchema: {
+      type: 'object',
+      properties: { url: { type: 'string', description: "The feed's hyper:// URL" } },
+      required: ['url'],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'unfollowFeed',
+    description: 'Stop following a feed in Reader. Asks permission to change Reader.',
+    inputSchema: {
+      type: 'object',
+      properties: { url: { type: 'string', description: "The feed's hyper:// URL" } },
+      required: ['url'],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'markPostsRead',
+    description: 'Mark posts read in Reader. Asks permission to change Reader.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        urls: { type: 'array', items: { type: 'string' }, description: 'Post URLs, from listReaderPosts' },
+      },
+      required: ['urls'],
+    },
+    gates: { personal: true },
+  },
 ]
 
 const RUNTIME_IMPORT = /^import\s+\{\s*nomad\s*\}\s+from\s+['"]nomad:runtime['"]\s*;?/
@@ -145,12 +239,32 @@ export function pageToolCode(name) {
   )
 }
 
-export function visibleCapabilities({ allowWrite = true, allowVision = false, remote = false } = {}) {
+// The drive tools' `drive` argument: another of the user's Drives, by name or hyper:// URL. Only a
+// personal turn (the user's own AI) gets it, and executeTool refuses it on any other turn, so a
+// page's own nomad.ai.chat() stays on its own Drive (ADR-0018).
+const DRIVE_ARG = {
+  type: 'string',
+  description:
+    'Optional. Another drive: one of the user\'s names (search domain "name"), hyper://<name>/, or a hyper:// URL. Omit for the current Drive.',
+}
+
+// `personal`: a turn of the user's own AI (the AI Sidebar, the phone's AI panel, the loopback MCP),
+// never a page's nomad.ai.chat(). It adds the user's Notes and Reader, and `drive` on the drive tools.
+export function visibleCapabilities({ allowWrite = true, allowVision = false, remote = false, personal = false } = {}) {
   return CAPABILITIES.filter((cap) => {
     if (cap.gates?.write && !allowWrite) return false
     if (cap.gates?.vision && !allowVision) return false
     if (cap.gates?.renderer && remote) return false
+    if (cap.gates?.personal && !personal) return false
     return true
+  }).map(({ namedDescription, ...cap }) => {
+    if (!personal || !namedDescription) return cap
+    const { inputSchema } = cap
+    return {
+      ...cap,
+      description: namedDescription,
+      inputSchema: { ...inputSchema, properties: { ...inputSchema.properties, drive: DRIVE_ARG } },
+    }
   })
 }
 
@@ -192,18 +306,20 @@ function guideRecord(id, title, markdown) {
 const GUIDES = splitGuides(API_REFERENCE)
 
 export function buildCatalog(opts) {
-  const { allowWrite, allowVision, remote, pageTools, listedDrives, names, ownerId } = opts || {}
-  const caps = visibleCapabilities({ allowWrite, allowVision, remote })
+  const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, names, ownerId } = opts || {}
+  const caps = visibleCapabilities({ allowWrite, allowVision, remote, personal: !!personal })
   return {
     capabilities: caps,
+    // The user's own AI: its turn may use their names, Notes, Reader and other Drives (see above).
+    personal: !!personal,
     guides: GUIDES,
     // null hides the page domain (remote turn, or page tools not in play).
     pageTools: pageTools == null ? null : pageTools.map(pageRecord),
     // Listed drives matching this search, fetched by the host from the search crawler before it
     // calls search (listed-drives.mjs); see withListedDrives. null hides the drive domain.
     listedDrives: listedDrives == null ? null : listedDrives.map(driveRecord),
-    // The user's names (shared/names.mjs records). null hides the name domain.
-    names: names == null ? null : names.map(nameRecord),
+    // The user's names (shared/names.mjs records), on a personal turn only. null hides the name domain.
+    names: !personal || names == null ? null : names.map(nameRecord),
     // Reserved until Personas choose a home. Passed through and not read.
     ownerId,
   }

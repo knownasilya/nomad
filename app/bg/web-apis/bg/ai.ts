@@ -18,13 +18,17 @@ import { pageToolResultToText } from './webmcp-schema';
 import * as daemon from '../../hyper/daemon';
 import * as aiBridge from '../../hyper/ai-bridge';
 import * as names from '../../hyper/names';
+import * as vaultApps from './vault-apps';
+import { isVaultTool, runVaultTool } from './ai-vault';
 import {
   createAwakeController,
   readLinuxAcState,
   setCurrent as setCurrentAwake,
   REASON_PROVIDER,
 } from '../../ai/awake';
-import { STANDING_PROMPT } from '../../ai/api-reference.mjs';
+import { STANDING_PROMPT, PERSONAL_PROMPT } from '../../ai/api-reference.mjs';
+import { askOncePerTurn } from '../../ai/vault-tools.mjs';
+import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
 import { completionStreamError } from '../../ai/stream-error.mjs';
 import { normalizeChatMessages } from '../../ai/chat-messages.mjs';
 import {
@@ -184,10 +188,13 @@ export default {
   //   think      — when false, ask the runtime to skip reasoning; when true (default) the
   //                model's reasoning stream is forwarded as `reasoning` events.
   //   effort     — 'low' | 'medium' | 'high'; sent as reasoning_effort when think !== false.
+  // A page's turn is never personal, whatever opts it passes: no names, no other Drive, no Notes
+  // or Reader (ADR-0018, ADR-0019). Only the user's own AI is: the shell AI sidebar (ai-shell.ts),
+  // the phone's AI panel over the Bridge, and the loopback MCP (callLocalTool).
   chat(messages, opts) {
     const sender = this.sender;
     return createChatStream((emitter, signal) =>
-      routeChat(messages, sender, emitter, { ...opts, signal })
+      routeChat(messages, sender, emitter, { ...opts, personal: false, signal })
     );
   },
 };
@@ -247,6 +254,9 @@ async function routeChat(messages, sender, emitter, opts) {
       effort: opts.effort,
       tools: opts.tools,
       maxTokens: opts.maxTokens,
+      personal: opts.personal === true,
+      // The Reader's Space is this tab's: the Provider has no tab to ask.
+      space: opts.personal === true ? await vaultApps.spaceKey({ sender }).catch(() => null) : null,
     },
     signal: opts.signal,
     onChunk: (text) => emitter.emit('chunk', { text }),
@@ -288,6 +298,11 @@ aiBridge.setServeChat(
     // review + publish, rather than writing the live Drive directly.
     await runChat(messages, sender, emitter, {
       ...opts,
+      // The Client is one of the user's Devices (the Bridge admits only Vault Writers), and it
+      // sets personal only for the user's own AI, never for a page's nomad.ai.chat(). `space` is
+      // its Reader's Space.
+      personal: opts?.personal === true,
+      space: isSpaceKey(opts?.space) ? opts.space : null,
       signal,
       requestPermission,
       draft: true,
@@ -429,9 +444,13 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     allowVision: opts.allowVision,
     remote: opts.remote,
     pageTools: pageListed,
-    names: names.list(),
+    // The user's own AI (see chat()): their names, Notes, Reader and other Drives.
+    personal: !!opts.personal,
+    names: opts.personal ? names.list() : null,
     ownerId: opts.ownerId,
   });
+  // One answer per Notes or Reader permission per turn (vault-tools.mjs askOncePerTurn).
+  const requestPermission = askOncePerTurn(opts.requestPermission || permissions.requestPermission);
   // tools:false is a plain completion: no search/execute, and no standing prompt telling the
   // model to call them. A local runtime that injects its own tool contract (MTPLX) otherwise
   // spends the free memory on that contract before it writes a single token.
@@ -444,7 +463,12 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   // opts.context (from the AI Sidebar) pins the agent to the Drive + open file it
   // is editing. The standing prompt no longer inlines the whole API reference — search loads
   // a guide when the turn needs it. Put context last so it's the most immediate instruction.
-  const systemContent = [systemPrompt, offerTools ? STANDING_PROMPT : '', opts.context]
+  const systemContent = [
+    systemPrompt,
+    offerTools ? STANDING_PROMPT : '',
+    offerTools && opts.personal ? PERSONAL_PROMPT : '',
+    opts.context,
+  ]
     .filter(Boolean)
     .join('\n\n---\n\n');
   const fullMessages = [{ role: 'system', content: systemContent }, ...chatMessages];
@@ -500,10 +524,12 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
           result = await executeTool(tc.function.name, args, sender, {
             driveUrl,
             emitter,
-            requestPermission: opts.requestPermission,
+            requestPermission,
             draft: opts.draft,
             pageToolsWcId: opts.pageToolsWcId,
             remote: opts.remote,
+            // Another Device's Reader Space; a local turn uses the tab's.
+            space: opts.remote ? opts.space : null,
             signal,
             catalog,
           });
@@ -603,6 +629,7 @@ async function executeTool(name, args, sender, opts: any = {}) {
     draft = false,
     pageToolsWcId = null,
     remote = false,
+    space = null,
     signal = null,
     catalog = null,
   } = opts;
@@ -631,12 +658,20 @@ async function executeTool(name, args, sender, opts: any = {}) {
   };
   // The drive a drive tool works on: `drive` (one of the user's names, hyper://<name>/, or a
   // hyper:// URL; hyper/names.js), else the current Drive. `url` names the drive the write
-  // permission is asked for.
+  // permission is asked for. Only a personal turn (catalog.personal) may name another Drive; a
+  // page's own nomad.ai.chat() stays on its Drive.
   const driveFor = (drive) => {
     if (drive == null || drive === '') return { base: requireDrive(), url: senderUrl, current: true };
+    if (!catalog?.personal) throw new Error('Only the current Drive is available here');
     const url = names.resolveDrive(drive);
     return { base: url.replace(/\/+$/, ''), url, current: false };
   };
+
+  // The user's Notes and Reader (ai-vault.ts): a personal turn only, each after its permission.
+  if (isVaultTool(name)) {
+    if (!catalog?.personal) throw new Error(`${name} is not available here`);
+    return runVaultTool(name, args || {}, { ctx, space, permit });
+  }
 
   switch (name) {
     case 'search': {
@@ -1255,6 +1290,8 @@ export async function callLocalTool(name, args) {
     allowVision: true,
     remote: false,
     pageTools: pageListed,
+    // A program on this machine driving the user's browser is the user's own AI (loopback only).
+    personal: true,
     names: names.list(),
   });
   return executeTool(name, args || {}, sender, {

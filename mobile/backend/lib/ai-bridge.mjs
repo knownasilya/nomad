@@ -151,7 +151,11 @@ export function createAiBridge ({ swarm, getVault }) {
           tools: opts.tools,
           maxTokens: opts.maxTokens,
           publishDraft: opts.publishDraft || false, // delegate publish to the Provider (writes the Drive)
-          discardDraft: opts.discardDraft || false
+          discardDraft: opts.discardDraft || false,
+          // A turn of the user's own AI: the AI panel only; a page's chat never is (app/index.tsx).
+          // `space` is the Space whose Reader the AI may use.
+          personal: opts.personal === true,
+          space: opts.space || null
         }
       })
     }).finally(() => peer.clientReqs.delete(id))

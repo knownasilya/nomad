@@ -126,23 +126,36 @@ function decodeContent (msg: ContentMsg): HyperRender {
   return { type: 'text', text: `Binary file (${mime})`, mime }
 }
 
-// Native consent for a relayed AI write (ADR-0013 §6): the agentic turn runs on the desktop
-// Provider, but the human is here on the phone, so the modifyDrive prompt is shown natively. The
-// prompt names the target drive (title + URL) so the user knows exactly what's being edited; the
-// caller resolves that from the `modifyDrive:<hexDriveKey>` permission (see describeDrive).
+// Native consent for a relayed AI permission (ADR-0013 §6): the agentic turn runs on the desktop
+// Provider, but the human is here on the phone, so the prompt is shown natively. A modifyDrive prompt
+// names the target drive (title + URL) so the user knows exactly what's being edited; the caller
+// resolves that from the `modifyDrive:<hexDriveKey>` permission (see describeDrive). The Notes and
+// Reader permissions (ADR-0019) each say what the AI wants; the Provider asks each once per turn.
 // NOT cancelable: the user must explicitly tap Allow or Deny. (An `onDismiss`/cancelable dialog on
 // Android can fire onDismiss alongside a button press and race it to resolve false — which denied
 // writes even after the user tapped Allow.) The `settled` guard keeps the first choice
 // authoritative regardless of any duplicate callback.
-function confirmModifyDrive (permission: string, drive?: { name: string; url: string }): Promise<boolean> {
+const VAULT_PROMPTS: Record<string, { title: string; message: string }> = {
+  notesRead: { title: 'Allow AI to read your Notes?', message: 'The AI running on your other device wants to read your Notes.' },
+  notesWrite: { title: 'Allow AI to edit your Notes?', message: 'The AI running on your other device wants to create or change your Notes.' },
+  readerRead: { title: 'Allow AI to read your Reader?', message: 'The AI running on your other device wants to read the feeds you follow and their posts.' },
+  readerWrite: { title: 'Allow AI to change your Reader?', message: 'The AI running on your other device wants to follow or unfollow feeds, or mark posts read.' }
+}
+
+function confirmAiPermission (permission: string, drive?: { name: string; url: string }): Promise<boolean> {
+  const vaultPrompt = VAULT_PROMPTS[permission]
   const name = drive?.name || 'this drive'
   const url = drive?.url || ''
+  const title = vaultPrompt ? vaultPrompt.title : 'Allow AI to edit?'
+  const message = vaultPrompt
+    ? vaultPrompt.message
+    : `The AI running on your other device wants to make changes to this drive:\n\n${name}${url ? `\n${url}` : ''}`
   return new Promise((resolve) => {
     let settled = false
     const settle = (v: boolean) => { if (!settled) { settled = true; resolve(v) } }
     Alert.alert(
-      'Allow AI to edit?',
-      `The AI running on your other device wants to make changes to this drive:\n\n${name}${url ? `\n${url}` : ''}`,
+      title,
+      message,
       [
         { text: 'Deny', style: 'cancel', onPress: () => settle(false) },
         { text: 'Allow', onPress: () => settle(true) }
@@ -488,12 +501,15 @@ export default function Browser () {
         const wv = webviews.current[activeIdRef.current]
         const inject = (ev: unknown) =>
           wv?.injectJavaScript(`window.__nomadAiEvent(${JSON.stringify(id)}, ${JSON.stringify(ev)}); true;`)
-        aiHandles.current[id] = backendRef.current.aiChat(msg.payload.messages || [], msg.payload.opts || {}, {
+        // A page's turn is never personal, whatever it posts: no names, other Drives, Notes or
+        // Reader (ADR-0018, ADR-0019).
+        const opts = { ...(msg.payload.opts || {}), personal: false, space: null }
+        aiHandles.current[id] = backendRef.current.aiChat(msg.payload.messages || [], opts, {
           onChunk: (text) => inject({ kind: 'chunk', text }),
           onTool: (event) => inject({ kind: 'tool', event }),
           onDone: () => { delete aiHandles.current[id]; inject({ kind: 'done' }) },
           onError: (message) => { delete aiHandles.current[id]; inject({ kind: 'error', message }) },
-          onPrompt: (permission) => confirmModifyDrive(permission, describeDrive(permission))
+          onPrompt: (permission) => confirmAiPermission(permission, describeDrive(permission))
         })
       }
       else if (msg.type === 'nomad-ai-cancel' && msg.payload && msg.payload.id) {
@@ -1043,8 +1059,9 @@ export default function Browser () {
       onClose={() => setAiOpen(false)}
       url={active.url}
       title={active.title}
+      space={spacesApi.activeSpace.rootDriveKey}
       aiChat={backend.aiChat}
-      onPrompt={(permission) => confirmModifyDrive(permission, describeDrive(permission))}
+      onPrompt={(permission) => confirmAiPermission(permission, describeDrive(permission))}
       onPreviewDraft={onPreviewDraft}
     />
     </>
