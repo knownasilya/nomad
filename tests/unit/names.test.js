@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   normalizeName,
+  suggestName,
   nameError,
   namePath,
   makeNameRecord,
@@ -16,8 +17,11 @@ const KEY = 'a'.repeat(64);
 describe('names', () => {
   it('turns typed words into a valid name', () => {
     expect(normalizeName('  My Blog ')).toBe('my-blog');
-    expect(normalizeName('Garden_Notes.v2')).toBe('garden-notes-v2');
     expect(normalizeName('--héllo!!--')).toBe('hllo');
+    // A typed dot stays, so the save says why it isn't allowed.
+    expect(normalizeName('Garden_Notes.v2')).toBe('garden-notes.v2');
+    expect(suggestName('Garden_Notes.v2')).toBe('garden-notes-v2');
+    expect(suggestName('example.com')).toBe('example-com');
   });
   it('accepts DNS labels and refuses keys and reserved words', () => {
     expect(nameError('blog')).toBe(null);
@@ -27,6 +31,13 @@ describe('names', () => {
     expect(nameError('-blog')).toMatch(/lowercase/);
     expect(nameError(KEY)).toMatch(/drive key/);
     expect(nameError('private')).toMatch(/reserved/);
+    expect(nameError('my.blog')).toMatch(/dots/);
+    expect(nameError('blog.example.com')).toMatch(/dots/);
+  });
+  it('refuses names Chromium reads as a number', () => {
+    // hyper:// is a standard scheme, so these hosts become IPv4 addresses (hyper://0.0.0.123/).
+    for (const n of ['123', '2024', '0777', '0x1f', '0x', '0xdeadbeef']) expect(nameError(n)).toMatch(/number/);
+    for (const n of ['1e3', 'deadbeef', '42-a', 'a1', '0xg']) expect(nameError(n)).toBe(null);
     expect(namePath('blog')).toBe('/.vault/names/blog.json');
     expect(() => namePath('../x')).toThrow();
   });
@@ -35,6 +46,9 @@ describe('names', () => {
     expect(a).toEqual({ name: 'blog', url: `hyper://${KEY}/`, title: 'My Blog', createdAt: 'T1', updatedAt: 'T1' });
     expect(makeNameRecord({ name: 'blog', url: 'https://x.org' }, a, 'T2').createdAt).toBe('T1');
     expect(isNameRecord(a)).toBe(true);
+    // A record a later version wrote with a name this one can't use is skipped, not broken.
+    expect(isNameRecord({ name: 'work.blog', url: `hyper://${KEY}/` })).toBe(false);
+    expect(isNameRecord({ name: '123', url: `hyper://${KEY}/` })).toBe(false);
     expect(() => makeNameRecord({ name: 'blog', url: 'javascript:alert(1)' })).toThrow(/points to/);
   });
   it('names a hyper:// page by its folder, any other URL whole', () => {

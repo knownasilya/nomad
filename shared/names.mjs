@@ -17,25 +17,39 @@ export const RESERVED_NAMES = ['private', 'localhost', 'nomad', 'about', 'new'];
 
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
-// A name as the user might type it, made into a valid one: lowercase, words joined by hyphens.
+// Hosts Chromium reads as an IPv4 number, because hyper:// is a standard scheme: hyper://123/
+// becomes hyper://0.0.0.123/ (and 0x1f, 0777 likewise) before a tab or link ever sees the name.
+const NUMBER = /^(?:[0-9]+|0x[0-9a-f]*)$/;
+
+// A name as the user might type it, tidied: lowercase, words joined by hyphens. A dot stays, so
+// nameError can say why it isn't allowed instead of quietly making it a different name.
 export function normalizeName(raw) {
   return String(raw || '')
     .trim()
     .toLowerCase()
-    .replace(/[\s_.]+/g, '-')
-    .replace(/[^a-z0-9-]/g, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^a-z0-9.-]/g, '')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 63)
     .replace(/-$/, '');
 }
 
+// A name to offer for a page with this title ("example.com" gives "example-com").
+export function suggestName(title) {
+  return normalizeName(String(title || '').replace(/\./g, ' '));
+}
+
 // Why a name can't be used, or null when it can. A name is a lowercase DNS label (letters, digits,
-// hyphens, up to 63), so hyper://<name>/ is a valid address; it can't look like a drive key.
+// hyphens, up to 63), so hyper://<name>/ is a valid address; it can't look like a drive key or a
+// number. Dots are kept for later (DNS names such as blog.example.com, or names inside a Space), and
+// a Device skips a record whose name it can't use (isNameRecord), so a later rule can allow them.
 export function nameError(name) {
   if (!name) return 'Enter a name';
   if (/^[0-9a-f]{64}$/.test(name)) return 'That looks like a drive key';
+  if (name.includes('.')) return 'Names can’t contain dots';
   if (!LABEL.test(name)) return 'Use lowercase letters, digits and hyphens (up to 63)';
+  if (NUMBER.test(name)) return 'That reads as a number (an IP address). Add a letter';
   if (RESERVED_NAMES.includes(name)) return `“${name}” is reserved`;
   return null;
 }

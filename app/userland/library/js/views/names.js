@@ -11,13 +11,14 @@ import namesCSS from '../../css/views/names.css.js';
 // or opening hyper://<name>/, goes to what it names; the AI can look names up and use them.
 // A page can also be named from its site-info panel.
 
-// The name rules live in shared/names.mjs (bg checks them on save); this only tidies typing.
+// The name rules live in shared/names.mjs (bg checks them on save); this only tidies typing, like
+// its normalizeName. A dot stays, so the save says dots aren't allowed.
 const tidy = (s) =>
   String(s || '')
     .trim()
     .toLowerCase()
-    .replace(/[\s_.]+/g, '-')
-    .replace(/[^a-z0-9-]/g, '');
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^a-z0-9.-]/g, '');
 
 export class NamesView extends LitElement {
   static get properties() {

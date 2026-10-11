@@ -9,7 +9,7 @@ import * as contextMenu from '../../app-stdlib/js/com/context-menu.js';
 import * as toast from '../../app-stdlib/js/com/toast.js';
 import * as nomadPermissions from '../../../lib/permissions';
 import mainCSS from '../css/main.css.js';
-import { nameTarget, normalizeName } from '../../../../shared/names.mjs';
+import { nameTarget, normalizeName, suggestName } from '../../../../shared/names.mjs';
 import './com/site-perms.js';
 import './com/identity.js';
 import './com/drive-forks.js';
@@ -320,7 +320,7 @@ class SiteInfoApp extends LitElement {
   }
 
   onStartName(previous) {
-    this.naming = { value: previous || normalizeName(this.info?.title || ''), previous, error: '' };
+    this.naming = { value: previous || suggestName(this.info?.title), previous, error: '' };
     this.updateComplete.then(() => this.shadowRoot.querySelector('.name-input')?.focus());
   }
 

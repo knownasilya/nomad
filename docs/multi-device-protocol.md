@@ -87,7 +87,8 @@ The user's short names for Drives, app folders and URLs, one set per user. Rules
 |------|--------------|
 | `/.vault/names/<name>.json` | `{ name, url, title, createdAt, updatedAt }` |
 
-A name is a lowercase DNS label that isn't a Drive key or reserved. `url` is a `hyper://`, `http(s)://`
+A name is a lowercase DNS label that isn't a Drive key, a number (`123`, `0x1f`) or reserved, and has
+no dot (dots are kept for later; a Device skips a record whose name it can't use). `url` is a `hyper://`, `http(s)://`
 or `nomad://` URL; for a page in a Drive it's the page's folder. A solo Vault that joins another
 (§1.2) brings `/.vault/names/` along; a name already in the joined Vault wins.
 

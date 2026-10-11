@@ -12,6 +12,11 @@ goes to what it names, and the AI can look names up and read or write a named Dr
 1. **One set per user, in the Vault** (`/.vault/names/<name>.json`), so every Space and every linked
    Device has the same names. A name is a lowercase DNS label, so `hyper://<name>/` is a valid URL;
    it can't be a Drive key or a reserved word (`private`, `localhost`, `nomad`, `about`, `new`).
+   - **No dots.** They are kept for later: DNS names such as `blog.example.com`, or names inside a
+     Space. A Device skips a record whose name it can't use, so a later version can allow them
+     without breaking older Devices. The UI refuses a typed dot; it doesn't turn it into a hyphen.
+   - **Not a number.** `hyper://` is a standard scheme, so Chromium reads a host such as `123`,
+     `0777` or `0x1f` as an IPv4 address (`hyper://0.0.0.123/`) before the name is looked up.
 2. **`hyper://<name>/` is a navigation shortcut.** A tab that opens it (`Pane.loadURL`, or a link
    followed with `will-navigate`) loads the real address instead, with the rest of the path, query
    and hash appended. Nothing else resolves names: not the hyper:// protocol handler, and not
