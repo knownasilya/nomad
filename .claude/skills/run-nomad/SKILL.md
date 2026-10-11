@@ -186,6 +186,15 @@ single-instance lock).
 - **The profile is isolated by `NOMAD_USER_DATA_PATH`**, which also gives the run its own
   single-instance lock, so it runs beside the user's Nomad. `NOMAD_MCP=0` keeps it off the MCP port.
   Nothing it does reaches the user's Vault or phone.
+- **To call the AI's tools, turn the MCP on** with `NOMAD_RUN_MCP_PORT=47699` (any port but the
+  user's 47655), then POST JSON-RPC `tools/call` (`search` or `execute`) to
+  `http://127.0.0.1:47699/mcp`. That is a personal turn, so Names, Notes and Reader work. A Notes or
+  Reader capability opens a permission prompt in `nomad://perm-prompt/` and waits: feed the driver
+  from a pipe so it can `attach perm-prompt` and click `.prompt-accept` (in a shadow root, so through
+  `eval`) while the call waits.
+- **A run that dies can leave its Electron up on the DevTools port**, and the next `launch` attaches
+  to it, with its profile gone (`SQLITE_READONLY`). Stop what listens there:
+  `kill $(lsof -ti tcp:9333 -sTCP:LISTEN)`.
 - **A driven window never has OS focus.** `document.hasFocus()` is false, so focus-dependent UI acts as
   if blurred: the Notes editor shows everything formatted and hides Markdown marks. Use `focus`.
 - **Settings, Library and the shell chrome are Lit components.** `document.body.innerText` misses
