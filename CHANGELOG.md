@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.14.0](https://github.com/knownasilya/nomad/compare/v1.13.0...v1.14.0) (2026-10-11)
+
+
+### Features
+
+* **ai:** the user's own AI can use their Notes and Reader ([d417fd0](https://github.com/knownasilya/nomad/commit/d417fd0888bfee5629a56922204e971ef4e1985d))
+* **names:** short names for drives, apps and pages, in the URL bar and for the AI ([d181c36](https://github.com/knownasilya/nomad/commit/d181c36d23aa1b30bde5be1cd72c087619699c60))
+
+
+### Bug Fixes
+
+* **names:** refuse dots, and names Chromium reads as numbers ([6ea4b81](https://github.com/knownasilya/nomad/commit/6ea4b8131da3153a7a0e162f9dadfa5b11b9b725))
+* **notes:** the editor fills its pane ([380fff1](https://github.com/knownasilya/nomad/commit/380fff1815d707253ed2d7d35634e23a660ed31f))
+
 ## [1.13.0](https://github.com/knownasilya/nomad/compare/v1.12.0...v1.13.0) (2026-10-10)
 
 
