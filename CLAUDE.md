@@ -210,7 +210,9 @@ that way for any new chat entry point.
 
 ### The assistant is not tied to a tab (ADR-0021)
 
-The AI Sidebar and the phone's AI panel each keep one conversation, not one per site. Their turns have
+The AI Sidebar and the phone's AI panel each keep one conversation, not one per site. The sidebar's
+open state and width belong to the window (`toggleAiSidebarOpen` in `bg/ui/windows.js`), so it stays
+open across tabs. Their turns have
 no Drive of their own: `runChat` passes a `currentTab` lookup, and `executeTool` calls it on every call
 (live in the sidebar's window; on the phone, the `tab` snapshot the phone sends). That tab is the call's
 sender, so a permission prompt is for the tab's site, and `askOncePerTurn` keeps one answer per

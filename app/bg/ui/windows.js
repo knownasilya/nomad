@@ -517,11 +517,18 @@ export function toggleSidebarCollapsed(win) {
   win.emit('resize');
 }
 
-// The AI sidebar's width (right-docked, toggled from the URL bar) is a shared/window-level
-// preference, like the tab sidebar's own width above — but whether it's OPEN is per-tab (see
-// Pane#aiSidebarOpen in bg/ui/tabs/pane.js), not tracked here.
+// The AI sidebar (right-docked, toggled from the URL bar) belongs to the window, like the tab
+// sidebar above: its width, and whether it's open. Its assistant isn't tied to a tab (ADR-0021),
+// so it stays open when the user changes tabs.
 export function setAiSidebarWidth(win, width) {
   updateAddedWindowSettings(win, { aiSidebarWidth: width });
+  tabManager.emitReplaceState(win);
+  win.emit('resize');
+}
+
+export function toggleAiSidebarOpen(win) {
+  const current = getAddedWindowSettings(win).aiSidebarOpen || false;
+  updateAddedWindowSettings(win, { aiSidebarOpen: !current });
   tabManager.emitReplaceState(win);
   win.emit('resize');
 }
@@ -538,6 +545,7 @@ export async function initSidebarSettings(win, settingsDb) {
     sidebarSide: sidebarSide || 'left',
     sidebarWidth: Number(sidebarWidth) || 220,
     aiSidebarWidth: Number(aiSidebarWidth) || 380,
+    aiSidebarOpen: false,
     sidebarCollapsed: false,
   });
 }

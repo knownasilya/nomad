@@ -34,7 +34,8 @@ used the focused desktop tab and a personal catalog. The turn's own settings nev
    with no token is an outside program. A turn uses the port the MCP really listens on
    (`NOMAD_MCP_PORT`), so a dev run never sends its calls to the user's own Nomad.
 3. **The assistant is not tied to a tab.** The desktop sidebar and the phone panel each keep one
-   conversation, not one per site or per drive. A tab switch doesn't stop a turn. A personal turn
+   conversation, not one per site or per drive. A tab switch doesn't stop a turn. The sidebar belongs
+   to the window: it stays open, at the same width, when the user changes tabs (`bg/ui/windows.js`). A personal turn
    starts with no drive: `runChat` passes a `currentTab` lookup, and `executeTool` calls it on every
    call. On desktop it is looked up live in the sidebar's own window. On the phone it is the `tab`
    snapshot (`{ url, title }`) that the phone sends with each message, because the desktop can't see a
