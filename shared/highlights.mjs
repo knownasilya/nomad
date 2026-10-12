@@ -121,6 +121,26 @@ export function withTextDirective(url, text) {
   return (base.includes('#') ? base : base + '#') + ':~:text=' + text;
 }
 
+// The fragments to look for, in order, to find text the AI quotes from a page (as readCurrentPage
+// gives it: a line break between blocks, a tab between table cells). A match can't cross a block, so
+// a quote of more than one block is found by its first and last block. A quote cut with '…' is found
+// by the text before and after the cut.
+export function quoteFragments(quote) {
+  const parts = (re) =>
+    String(quote || '')
+      .split(re)
+      .map(oneLine)
+      .filter(Boolean);
+  const span = (list) =>
+    list.length > 1 ? { textStart: list[0], textEnd: list[list.length - 1] } : { textStart: list[0] };
+  const out = [];
+  for (const list of [parts(/[\n\t]/), parts(/[\n\t]|…|\.\.\./)]) {
+    const f = list.length && span(list);
+    if (f && !out.some((o) => o.textStart === f.textStart && o.textEnd === f.textEnd)) out.push(f);
+  }
+  return out;
+}
+
 // Records
 // =
 
@@ -209,13 +229,14 @@ function sourceLabel(url, title) {
 }
 
 // The body of a new Note about a Highlight: the page's title, the quoted text, and a link that
-// opens the page at the text. The user writes below it.
-export function highlightNoteBody({ title, quote, link }) {
+// opens the page at the text. The user writes below it; `text` is what the AI wrote there.
+export function highlightNoteBody({ title, quote, link, text = '' }) {
   const heading = oneLine(title) || 'Highlight';
   const lines = clip(String(quote || '').replace(/\r\n?/g, '\n'), MAX_NOTE_QUOTE)
     .split('\n')
     .map((l) => l.trim())
     .filter((l, i, all) => l || (i > 0 && all[i - 1])) // one empty line at most between paragraphs
     .map((l) => (l ? '> ' + l : '>'));
-  return `# ${heading}\n\n${lines.join('\n')}\n\nFrom [${sourceLabel(link, title)}](${noteLinkUrl(link)})\n\n`;
+  const own = String(text || '').trim();
+  return `# ${heading}\n\n${lines.join('\n')}\n\nFrom [${sourceLabel(link, title)}](${noteLinkUrl(link)})\n\n${own ? own + '\n' : ''}`;
 }

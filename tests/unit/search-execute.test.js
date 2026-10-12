@@ -308,11 +308,21 @@ describe('search: a personal turn (the user\'s own AI)', () => {
     expect(remote).toEqual(expect.arrayContaining(VAULT_CAPS));
   });
 
+  it('offers highlightText on a personal turn on this computer only', () => {
+    expect(catalog().capabilities.some((c) => c.name === 'highlightText')).toBe(false);
+    expect(personal().capabilities.some((c) => c.name === 'highlightText')).toBe(true);
+    // It finds the text in the tab's page, which a remote turn (the phone) has no way to reach.
+    const remote = personal({ remote: true });
+    expect(remote.capabilities.some((c) => c.name === 'highlightText')).toBe(false);
+    expect(() => assertCallAllowed('highlightText', 'highlightText', remote)).toThrow(/not available/);
+  });
+
   it('finds the Notes and Reader capabilities by plain words', () => {
     const top = (q) => search({ query: q, domain: 'capability' }, personal()).hits.slice(0, 3).map((h) => h.entity);
     expect(top('notes')).toContain('capability:listNotes');
     expect(top('edit a note')).toContain('capability:writeNote');
     expect(top('reader posts')).toContain('capability:listReaderPosts');
     expect(top('follow feed')).toContain('capability:followFeed');
+    expect(top('highlight')).toContain('capability:highlightText');
   });
 });

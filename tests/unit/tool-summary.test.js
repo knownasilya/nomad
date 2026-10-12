@@ -44,6 +44,8 @@ export default async function main(params) {
     )
     expect(toolSummary('writeNote', { body: '# Groceries\n- milk' })).toBe('Saving the Note “Groceries”')
     expect(toolSummary('markPostsRead', { urls: ['a', 'b'] })).toBe('Marking 2 posts as read')
+    expect(toolSummary('highlightText', { text: 'the smallest planet' })).toBe('Highlighting “the smallest planet”')
+    expect(toolSummary('highlightText', { text: 'x', note: 'Why it matters' })).toBe('Highlighting “x” and adding a Note')
     expect(toolSummary('page_add_item', {})).toBe("Using this page's add_item tool")
   })
 

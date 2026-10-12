@@ -317,7 +317,7 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
     case 'notesRead':
       return 'Let the AI assistant read your Notes';
     case 'notesWrite':
-      return 'Let the AI assistant create and edit your Notes';
+      return 'Let the AI assistant create and edit your Notes and Highlights';
     case 'readerRead':
       return 'Let the AI assistant read your Reader feeds and posts';
     case 'readerWrite':

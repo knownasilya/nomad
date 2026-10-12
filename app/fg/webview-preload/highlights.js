@@ -8,8 +8,8 @@ follow (text-fragments-polyfill) and marked with the CSS Custom Highlight API, s
 not changed. A Highlight with a Note gets a small button at its end; it opens the Note in a new tab.
 
 bg calls into this world through `window.__nomadHighlights` (the page's scripts can't see it): to
-learn what a right-click was on, to make a text directive for the selection, and to show a short
-message. Main frame of http(s) and hyper pages only.
+learn what a right-click was on, to make a text directive for the selection or for text the AI
+quoted, and to show a short message. Main frame of http(s) and hyper pages only.
 */
 
 import { ipcRenderer, webFrame } from 'electron';
@@ -22,7 +22,7 @@ import {
   isValidRangeForFragmentGeneration,
   GenerateFragmentStatus,
 } from 'text-fragments-polyfill/dist/fragment-generation-utils.js';
-import { textDirective } from '../../../shared/highlights.mjs';
+import { textDirective, quoteFragments } from '../../../shared/highlights.mjs';
 
 const HIGHLIGHT = 'nomad-highlight';
 const HIGHLIGHT_CSS = `::highlight(${HIGHLIGHT}) { background-color: rgba(255, 208, 0, 0.42); }`;
@@ -256,6 +256,26 @@ export function setupHighlights() {
           return { error: String(reason || 'failed').toLowerCase() };
         }
         return { text: textDirective(res.fragment), quote: range.toString() };
+      },
+      // A text directive for text the AI quoted from this page, where it first shows up:
+      // { text, quote } or { error }.
+      findQuote(quote) {
+        if (!document.body) return { error: 'not-found' };
+        for (const fragment of quoteFragments(quote)) {
+          const directive = textDirective(fragment);
+          const range = find(directive);
+          if (!range) continue;
+          // A generated directive is short and names this place alone. The one that found it
+          // also does, since a directive marks its first match.
+          let text = directive;
+          try {
+            const res = generateFragmentFromRange(range);
+            if (res.status === GenerateFragmentStatus.SUCCESS && res.fragment)
+              text = textDirective(res.fragment);
+          } catch {}
+          return { text, quote: range.toString() };
+        }
+        return { error: 'not-found' };
       },
       say,
     }),

@@ -38,6 +38,7 @@ const GLOBAL_SETTINGS = new Set([
   'ai_sidebar_width',
   'cert_exceptions',
   'crawler_enabled',
+  'highlights_hidden',
 ]);
 
 // globals
@@ -106,6 +107,8 @@ export const setup = async function (opts) {
     // Run the discovery crawler that nomad://search queries (bg/hyper/crawler-host.js). Synced to
     // the user's other Devices through the Vault (bg/hyper/synced-settings.js).
     crawler_enabled: 1,
+    // View > Hide Highlights: no page draws the user's Highlights (bg/ui/highlights.js).
+    highlights_hidden: 0,
 
     cert_exceptions: [],
     adblock_lists: [

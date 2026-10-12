@@ -398,16 +398,37 @@ main {
   border-top: 1px solid var(--border-color--very-light);
 }
 
-.backlinks h3 {
+.backlinks summary {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: fit-content;
   margin: 0 0 8px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-color--pretty-light);
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.backlinks summary::-webkit-details-marker {
+  display: none;
+}
+
+.backlinks summary:hover {
+  color: var(--text-color--default);
+}
+
+.backlinks summary .fas {
+  font-size: 9px;
+  transition: transform 0.12s;
+}
+
+.backlinks[open] summary .fas {
+  transform: rotate(90deg);
 }
 
 .backlinks .count {
@@ -417,9 +438,13 @@ main {
   font-size: 10px;
 }
 
+/* Many mentions scroll inside the box, so they don't push the note far up. */
 .backlinks ul {
+  max-height: min(280px, 40vh);
   margin: 0;
   padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   list-style: none;
 }
 

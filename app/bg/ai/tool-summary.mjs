@@ -14,6 +14,7 @@ const PURPOSES = {
   listNotes: 'look through your Notes',
   readNote: 'read a Note',
   writeNote: 'save a Note',
+  highlightText: 'highlight text on this page',
   listReaderPosts: 'look through Reader',
   readReaderPost: 'read a Reader post',
   followFeed: 'follow a feed',
@@ -60,6 +61,10 @@ export function toolSummary(name, args) {
     case 'writeNote': {
       const title = firstLine(a.body);
       return title ? `Saving the Note ${quote(title)}` : 'Saving a Note';
+    }
+    case 'highlightText': {
+      const what = a.text ? quote(a.text) : 'text on this page';
+      return a.note ? `Highlighting ${what} and adding a Note` : `Highlighting ${what}`;
     }
     case 'listReaderPosts':
       if (a.query) return `Looking in Reader for ${quote(a.query)}`;

@@ -3,15 +3,18 @@
 // them; a Note is an ordinary Note (bg/web-apis/bg/vault-apps.ts) that quotes the text and links
 // back to it with a '#:~:text=' link.
 //
-// The page context menu (context-menu.js) gets its items from menuItems(). The webview preload
+// The page context menu (context-menu.js) gets its items from menuItems(), and the AI's
+// highlightText capability calls highlightForAi(). The webview preload
 // (fg/webview-preload/highlights.js) draws a page's Highlights: it asks for them on
 // 'nomad-highlights:list', and sends 'nomad-highlights:open-note' when its note button is pressed.
-// To read the selection and show a message, this module calls into the preload's world.
+// To read the selection, find quoted text and show a message, this module calls into the
+// preload's world.
 
 import { app, ipcMain, clipboard, webContents as allWebContents } from 'electron';
 import * as vault from '../hyper/vault';
 import * as vaultApps from '../web-apis/bg/vault-apps';
 import * as tabManager from './tabs/manager';
+import * as settingsDb from '../dbs/settings';
 import * as logLib from '../logger';
 import * as hl from '../../../shared/highlights.mjs';
 import { isNoteId, notePath, isNote } from '../../../shared/vault-apps.mjs';
@@ -21,12 +24,21 @@ const logger = logLib.get().child({ category: 'browser', subcategory: 'highlight
 // Electron runs a context-isolated preload in world 999; its globals are out of the page's reach.
 const PRELOAD_WORLD = 999;
 const PAGE_CALL_TIMEOUT = 500;
+const FIND_QUOTE_TIMEOUT = 5000; // a long page takes a while to search
 const CHANGED = 'nomad-highlights:changed';
 
-export function setup() {
+// View > Hide Highlights: while true, no page draws them. The window menu reads it as it builds,
+// so it is kept here, not only in the `highlights_hidden` setting.
+let hidden = false;
+
+export async function setup() {
+  try {
+    hidden = !!Number(await settingsDb.get('highlights_hidden'));
+  } catch {}
+
   ipcMain.handle('nomad-highlights:list', async (e) => {
     const page = senderPage(e);
-    if (!page) return [];
+    if (!page || hidden) return [];
     return (await listFor(page)).map((h) => ({ id: h.id, text: h.text, hasNote: h.hasNote }));
   });
 
@@ -56,6 +68,19 @@ export function setup() {
     });
   });
 }
+
+export const areHidden = () => hidden;
+
+// Every page redraws: with its Highlights, or with none.
+export async function setHidden(value) {
+  hidden = !!value;
+  await settingsDb.set('highlights_hidden', hidden ? 1 : 0);
+  for (const wc of allWebContents.getAllWebContents()) {
+    if (!wc.isDestroyed() && hl.pageUrl(wc.getURL())) wc.send(CHANGED, {});
+  }
+}
+
+const HIDDEN_NOTE = 'Highlights are hidden. To see them, choose View > Show Highlights.';
 
 // The context menu
 // =
@@ -126,6 +151,7 @@ async function addHighlight(wc, { withNote = false } = {}) {
     await vault.putAppRecord(hl.highlightPath(rec.url, rec.id), rec);
     pageChanged(rec.url, wc);
     if (note) openNote(wc, note.id, { write: true });
+    else if (hidden) say(wc, 'Highlighted. ' + HIDDEN_NOTE);
   } catch (err) {
     logger.warn('Could not save a highlight', { error: err?.message });
     say(wc, 'Not saved: ' + (err?.message || err));
@@ -166,8 +192,9 @@ async function removeHighlight(wc, h) {
   }
 }
 
-function createNote(url, title, { text, quote }) {
-  const body = hl.highlightNoteBody({ title, quote, link: hl.withTextDirective(url, text) });
+function createNote(url, title, { text, quote }, own = '') {
+  const link = hl.withTextDirective(url, text);
+  const body = hl.highlightNoteBody({ title, quote, link, text: own });
   return vaultApps.saveNote(null, { body });
 }
 
@@ -179,6 +206,72 @@ function openNote(wc, noteId, { write = false } = {}) {
   /** @type {any} create() types its options from its defaults, which name every option */
   const opts = { setActive: true, adjacentActive: true, spaceId: tab?.spaceId };
   tabManager.create(win, `nomad://notes/${noteId}${write ? '?write' : ''}`, opts);
+}
+
+// The AI
+// =
+
+// The AI's highlightText (ai-vault.ts, after the notesWrite permission): marks `text`, which the AI
+// quoted from the page in `wc`, as "Highlight" does. With `note`, it also makes a Note, as
+// "Highlight and Add Note" does, with the AI's words below the quote. The Note doesn't open: the
+// user didn't ask for a tab. Text already highlighted keeps its Highlight, and a Note it has.
+/**
+ * @param {Electron.WebContents} wc
+ * @param {{ text?: string, note?: string }} [args]
+ */
+export async function highlightForAi(wc, { text, note } = {}) {
+  assertCanHighlight(wc, { text });
+  const url = wc.getURL();
+  const page = hl.pageUrl(url);
+  const frag = await callPage(wc, `findQuote(${JSON.stringify(text)})`, FIND_QUOTE_TIMEOUT);
+  if (!frag || !frag.text || !hl.isTextDirective(frag.text)) {
+    throw new Error(
+      'That text is not on the page. Quote it exactly as readCurrentPage gives it, at least a few whole words.'
+    );
+  }
+  const own = typeof note === 'string' ? note.trim() : '';
+  const title = wc.getTitle();
+  const prev = (await listFor(page)).find((h) => h.text === frag.text) || null;
+  const forModel = (rec, noteId, extra = {}) => ({
+    id: rec.id,
+    quote: frag.quote,
+    link: hl.withTextDirective(url, rec.text),
+    ...(noteId ? { noteId, noteUrl: `nomad://notes/${noteId}` } : {}),
+    ...extra,
+  });
+
+  if (prev && (!own || prev.hasNote)) {
+    return forModel(prev, prev.hasNote ? prev.noteId : null, {
+      alreadyHighlighted: true,
+      ...(own ? { message: 'This text already has a Note. Read it (readNote), then edit it (writeNote).' } : {}),
+    });
+  }
+  // The Note first: a Highlight that points at no Note is worse than a Note with no Highlight.
+  const made = own ? await createNote(url, title || prev?.title, frag, own) : null;
+  const fields = prev || { id: hl.newHighlightId(), url, text: frag.text, quote: frag.quote, title };
+  const rec = hl.makeHighlight({ ...fields, noteId: made?.id }, prev);
+  await vault.putAppRecord(hl.highlightPath(rec.url, rec.id), rec);
+  pageChanged(rec.url);
+  return forModel(rec, rec.noteId, {
+    ...(prev ? { alreadyHighlighted: true } : {}),
+    // Saved, but the user won't see it on the page until they show Highlights again.
+    ...(hidden ? { highlightsHidden: HIDDEN_NOTE } : {}),
+  });
+}
+
+// Throws when the AI can't highlight `text` in `wc`. ai-vault.ts checks this before it asks
+// permission, so the user isn't asked for a call that can't work.
+/**
+ * @param {any} wc
+ * @param {{ text?: string }} [args]
+ */
+export function assertCanHighlight(wc, { text } = {}) {
+  if (typeof text !== 'string' || !text.trim()) throw new Error('Pass the text to highlight as `text`');
+  if (!wc || typeof wc.executeJavaScriptInIsolatedWorld !== 'function') {
+    throw new Error('Highlights need the page open in a tab on this computer');
+  }
+  const url = wc.getURL();
+  if (!hl.pageUrl(url)) throw new Error('Highlights work on web and hyper:// pages, and this tab shows ' + url);
 }
 
 // Data
@@ -216,11 +309,11 @@ function senderPage(e) {
 // The preload's world
 // =
 
-function callPage(wc, expr) {
+function callPage(wc, expr, timeout = PAGE_CALL_TIMEOUT) {
   const code = `(window.__nomadHighlights ? window.__nomadHighlights.${expr} : null)`;
   return Promise.race([
     wc.executeJavaScriptInIsolatedWorld(PRELOAD_WORLD, [{ code }]),
-    new Promise((resolve) => setTimeout(() => resolve(null), PAGE_CALL_TIMEOUT)),
+    new Promise((resolve) => setTimeout(() => resolve(null), timeout)),
   ]).catch(() => null);
 }
 

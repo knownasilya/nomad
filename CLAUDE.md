@@ -225,8 +225,9 @@ per model.
 
 ### The AI and the user's Notes and Reader (ADR-0019)
 
-A personal turn also gets capabilities for Notes (`listNotes`, `readNote`, `writeNote`) and Reader
-(`listReaderPosts`, `readReaderPost`, `followFeed`, `unfollowFeed`, `markPostsRead`). Their entries are
+A personal turn also gets capabilities for Notes (`listNotes`, `readNote`, `writeNote`), Highlights
+(`highlightText`, below) and Reader (`listReaderPosts`, `readReaderPost`, `followFeed`, `unfollowFeed`,
+`markPostsRead`). Their entries are
 in `CAPABILITIES` with `gates: { personal: true }`; the pure logic is `app/bg/ai/vault-tools.mjs`
 (`VAULT_TOOL_PERMS` maps each to its permission); the I/O is `app/bg/web-apis/bg/ai-vault.ts`. Each asks
 one of four permissions, `notesRead`, `notesWrite`, `readerRead`, `readerWrite` (`app/lib/permissions.ts`,
@@ -245,7 +246,14 @@ Highlight and Add Note. A Highlight is a Vault record (`/.vault/highlights/<page
 Note in a new tab; `app/fg/webview-preload/highlights.js` draws them with the CSS Custom Highlight
 API plus a note button in a closed shadow root. bg reads the selection by calling
 `window.__nomadHighlights` in the preload's isolated world (Electron's world 999); keep anything that
-reveals Highlights or Notes out of the page's main world. A Note is an ordinary Note; `?write` on
+reveals Highlights or Notes out of the page's main world.
+
+The AI makes them too: `highlightText({ text, note? })` finds text the AI quoted (`findQuote` in the
+preload, candidates from `quoteFragments`) and saves it like the menu items do (`highlightForAi`). It
+asks `notesWrite`, and only after `assertCanHighlight` passes. It needs the page's renderer
+(`gates: { personal, renderer }`), so the phone's AI panel doesn't get it. View > Hide Highlights
+(`window-menu.js`) sets the global `highlights_hidden` setting; while it is on, `nomad-highlights:list`
+gives every page an empty list. A Note is an ordinary Note; `?write` on
 `nomad://notes/<id>` puts the cursor at its end.
 
 ## Look and feel: every UI supports dark mode and matches the rest

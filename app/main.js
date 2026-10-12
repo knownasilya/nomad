@@ -178,7 +178,7 @@ app.on('ready', async function () {
   windowMenu.setup();
   log.info('Initializing context menus');
   registerContextMenu();
-  highlights.setup();
+  await highlights.setup();
   log.info('Initializing tray icon');
   trayIcon.setup();
   log.info('Initializing browser windows');

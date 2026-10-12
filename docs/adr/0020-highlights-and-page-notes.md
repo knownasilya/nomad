@@ -30,6 +30,17 @@ gets a small note button at its end, which opens the Note in a new tab. The rule
    selection and the Highlight under a right-click by calling into the preload's isolated world
    (Electron's world 999), which the page's scripts can't reach.
 5. **Top frame of http(s) and hyper:// pages only.** Not nomad:// pages, not frames.
+6. **The user's own AI can highlight too** (added 2026-10-12). `highlightText({ text, note? })` finds
+   the text the AI quoted from the page (as `readCurrentPage` gives it), where it first shows up, and
+   saves a Highlight. A quote of more than one block is found by its first and last block, since a
+   text directive can't cross a block. With `note`, it makes a Note as "Highlight and Add Note" does,
+   with the AI's words below the quote, but doesn't open it. Text already highlighted keeps its
+   Highlight; a Note it has is never replaced. It asks `notesWrite` (ADR-0019), and checks the tab
+   first, so a call that can't work doesn't ask.
+7. **View > Hide Highlights** (added 2026-10-12) stops every page from drawing them, until View > Show
+   Highlights. The choice is the browser-wide `highlights_hidden` setting, so it lasts after a
+   restart. A Highlight made while they are hidden is still saved, and the page or the AI says that
+   it is hidden.
 
 ## Consequences
 

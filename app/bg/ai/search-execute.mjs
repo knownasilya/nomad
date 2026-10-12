@@ -121,8 +121,8 @@ export const CAPABILITIES = [
     inputSchema: { type: 'object', properties: {}, required: [] },
     gates: { vision: true, renderer: true },
   },
-  // The user's Notes and Reader (vault-tools.mjs). Only a personal turn sees them, and each asks
-  // the user's permission: read Notes, write Notes, read Reader, change Reader (ADR-0019).
+  // The user's Notes, Highlights and Reader (vault-tools.mjs). Only a personal turn sees them, and
+  // each asks the user's permission: read Notes, write Notes, read Reader, change Reader (ADR-0019).
   {
     name: 'listNotes',
     description:
@@ -169,6 +169,24 @@ export const CAPABILITIES = [
       required: ['body'],
     },
     gates: { personal: true },
+  },
+  {
+    name: 'highlightText',
+    description:
+      'Highlight text on the page in the user\'s current tab, as the user does with right-click > Highlight. ' +
+      'Pass `text` exactly as readCurrentPage gives it (whole words; a quote of several paragraphs is found by its ' +
+      'first and last). Where the text shows up more than once, the first is marked. With `note`, also make a ' +
+      'Note that quotes the text and links back to it, with `note` below the quote. Web and hyper:// pages ' +
+      'only. Asks permission to write Notes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'The text on the page to highlight' },
+        note: { type: 'string', description: 'Optional. Markdown for a Note about the highlight' },
+      },
+      required: ['text'],
+    },
+    gates: { personal: true, renderer: true },
   },
   {
     name: 'listReaderPosts',

@@ -17,6 +17,7 @@ import { getEnvVar } from '../lib/env';
 import { isHyperOrPearUrl } from '../../lib/urls';
 import * as tabManager from './tabs/manager';
 import * as viewZoom from './tabs/zoom';
+import * as highlights from './highlights';
 import * as shellMenus from './subwindows/shell-menus';
 import { download } from './downloads';
 import hyper from '../hyper/index';
@@ -388,6 +389,15 @@ export function buildWindowMenu(opts = {}) {
         accelerator: 'CmdOrCtrl+0',
         click: function (item) {
           if (tab) viewZoom.zoomReset(tab);
+        },
+      },
+      { type: 'separator' },
+      {
+        id: 'toggleHighlights',
+        label: highlights.areHidden() ? 'Show Highlights' : 'Hide Highlights',
+        async click() {
+          await highlights.setHidden(!highlights.areHidden());
+          setApplicationMenu();
         },
       },
       { type: 'separator' },
