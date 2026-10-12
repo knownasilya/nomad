@@ -236,6 +236,18 @@ capability of this kind needs all of these, plus a line in `PERSONAL_PROMPT`.
 Names are managed in My Library → Names and the site-info panel; the URL bar suggests them
 (`fg/lib/location.js`).
 
+### Highlights (ADR-0020)
+
+Right-click selected text on an http(s) or hyper:// page: Copy Link to Highlight, Highlight, or
+Highlight and Add Note. A Highlight is a Vault record (`/.vault/highlights/<page>/<id>.json`, rules in
+`shared/highlights.mjs`) that names its text with a text directive (`#:~:text=`), made and found with
+`text-fragments-polyfill`. `app/bg/ui/highlights.js` stores them, builds the menu items, and opens a
+Note in a new tab; `app/fg/webview-preload/highlights.js` draws them with the CSS Custom Highlight
+API plus a note button in a closed shadow root. bg reads the selection by calling
+`window.__nomadHighlights` in the preload's isolated world (Electron's world 999); keep anything that
+reveals Highlights or Notes out of the page's main world. A Note is an ordinary Note; `?write` on
+`nomad://notes/<id>` puts the cursor at its end.
+
 ## Look and feel: every UI supports dark mode and matches the rest
 
 Every new or changed screen must work in light **and** dark, and look like its neighbours.
