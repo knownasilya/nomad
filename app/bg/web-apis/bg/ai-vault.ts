@@ -1,5 +1,5 @@
-// The AI's Notes and Reader capabilities (search-execute.mjs CAPABILITIES, ADR-0019): the Vault and
-// Drive reads and writes behind them. ai.ts executeTool calls runVaultTool on a personal turn only
+// The AI's Notes, Highlights and Reader capabilities (search-execute.mjs CAPABILITIES, ADR-0019): the
+// Vault and Drive reads and writes behind them. ai.ts executeTool calls runVaultTool on a personal turn only
 // (the user's own AI); each capability first asks its permission (vault-tools.mjs VAULT_TOOL_PERMS).
 //
 // Notes belong to the user. Reader follows belong to a Space: the calling tab's, or, for a turn
@@ -7,6 +7,7 @@
 
 import * as apps from '../../../../shared/vault-apps.mjs';
 import * as vaultApps from './vault-apps';
+import { highlightForAi, assertCanHighlight } from '../../ui/highlights';
 import fsAPI from './fs';
 import {
   VAULT_TOOL_PERMS,
@@ -35,6 +36,7 @@ export function isVaultTool(name) {
 // Space), permit (permission, sender) -> Promise<boolean>.
 export async function runVaultTool(name, args, { ctx, space = null, permit }) {
   const permission = VAULT_TOOL_PERMS[name];
+  if (name === 'highlightText') assertCanHighlight(ctx.sender, args);
   if (!(await permit(permission, ctx.sender)))
     throw new Error(`The user didn't allow ${permission}`);
   const readerSpace = async () => (apps.isSpaceKey(space) ? space : vaultApps.spaceKey(ctx));
@@ -70,6 +72,10 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
         conflictCopy: !!id && note.id !== id,
       });
     }
+
+    // Marks text on the page in the user's tab (ctx.sender), with a Note if the AI wrote one.
+    case 'highlightText':
+      return json(await highlightForAi(ctx.sender, args));
 
     case 'listReaderPosts': {
       const { follows, read } = await vaultApps.readerOf(await readerSpace());

@@ -17,6 +17,7 @@ import {
   sortHighlights,
   noteLinkUrl,
   highlightNoteBody,
+  quoteFragments,
 } from '../../shared/highlights.mjs';
 import { findLinks, noteTitle } from '../../shared/vault-apps.mjs';
 
@@ -112,6 +113,34 @@ describe('highlights: text directives', () => {
   });
 });
 
+describe('highlights: text the AI quotes', () => {
+  it('looks for a one-block quote as it is, spaces made one', () => {
+    expect(quoteFragments('  the smallest\u00a0  planet ')).toEqual([{ textStart: 'the smallest planet' }]);
+  });
+  it('finds a quote of several blocks by its first and last', () => {
+    expect(quoteFragments('First paragraph.\n\nSecond one.\nLast one.')).toEqual([
+      { textStart: 'First paragraph.', textEnd: 'Last one.' },
+    ]);
+    // Table cells, as innerText gives them.
+    expect(quoteFragments('Mercury\t0.39 AU')).toEqual([{ textStart: 'Mercury', textEnd: '0.39 AU' }]);
+  });
+  it('tries a quote cut with an ellipsis as it is, then by the text around the cut', () => {
+    expect(quoteFragments('It is the smallest … closest to the Sun')).toEqual([
+      { textStart: 'It is the smallest … closest to the Sun' },
+      { textStart: 'It is the smallest', textEnd: 'closest to the Sun' },
+    ]);
+    expect(quoteFragments('It is the smallest planet...')).toEqual([
+      { textStart: 'It is the smallest planet...' },
+      { textStart: 'It is the smallest planet' },
+    ]);
+  });
+  it('has nothing to look for in an empty quote', () => {
+    expect(quoteFragments('')).toEqual([]);
+    expect(quoteFragments(' \n\t ')).toEqual([]);
+    expect(quoteFragments(null)).toEqual([]);
+  });
+});
+
 describe('highlights: records', () => {
   it('makes ids that sort by time', () => {
     const a = newHighlightId(1000, () => 0.1);
@@ -186,6 +215,13 @@ describe('highlights: notes', () => {
     expect(noteTitle(body)).toBe('Mercury (planet)');
     // The link is a URL, not a link to another note.
     expect(findLinks(body)).toEqual([]);
+  });
+  it('puts what the AI wrote below the link', () => {
+    const body = highlightNoteBody({ title: 'Mercury', quote: 'hi', link, text: '  The **key** fact.\n' });
+    expect(body.endsWith(`(${noteLinkUrl(link)})\n\nThe **key** fact.\n`)).toBe(true);
+    expect(highlightNoteBody({ title: 'Mercury', quote: 'hi', link, text: '  ' })).toBe(
+      highlightNoteBody({ title: 'Mercury', quote: 'hi', link })
+    );
   });
   it('names a Drive page by its title, not its key', () => {
     const body = highlightNoteBody({

@@ -11,7 +11,7 @@ change them, on the desktop and from the phone. The capabilities are in
 | Capability | Permission |
 |---|---|
 | `listNotes`, `readNote` | `notesRead` |
-| `writeNote` | `notesWrite` |
+| `writeNote`, `highlightText` | `notesWrite` |
 | `listReaderPosts`, `readReaderPost` | `readerRead` |
 | `followFeed`, `unfollowFeed`, `markPostsRead` | `readerWrite` |
 
@@ -53,6 +53,10 @@ change them, on the desktop and from the phone. The capabilities are in
 ## Consequences
 
 - The AI's Notes and Reader writes make no undo Checkpoint; Checkpoints cover Drive files.
+- `highlightText` (added 2026-10-12, ADR-0020) marks text on the page in the user's tab, and with
+  `note` makes a Note about it. A Highlight sits beside the Notes and can make one, so it asks
+  `notesWrite`, not a fifth permission. It needs the page open on this computer, so a phone turn
+  doesn't get it.
 - The phone asks once per turn. It doesn't remember a grant, because it has no place to take one
   back yet.
 - `PERSONAL_PROMPT` (in `api-reference.mjs`) tells a personal turn about Names, Notes and Reader.

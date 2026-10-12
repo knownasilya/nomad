@@ -33,6 +33,7 @@ describe('vault tools: permissions', () => {
     // Reading and writing are separate grants for both.
     expect(VAULT_TOOL_PERMS.readNote).toBe('notesRead');
     expect(VAULT_TOOL_PERMS.writeNote).toBe('notesWrite');
+    expect(VAULT_TOOL_PERMS.highlightText).toBe('notesWrite');
     expect(VAULT_TOOL_PERMS.readReaderPost).toBe('readerRead');
     expect(VAULT_TOOL_PERMS.markPostsRead).toBe('readerWrite');
   });

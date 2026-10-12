@@ -15,6 +15,7 @@ export const VAULT_TOOL_PERMS = {
   listNotes: 'notesRead',
   readNote: 'notesRead',
   writeNote: 'notesWrite',
+  highlightText: 'notesWrite', // a Highlight lives beside the Notes, and may make one (ADR-0020)
   listReaderPosts: 'readerRead',
   readReaderPost: 'readerRead',
   followFeed: 'readerWrite',
