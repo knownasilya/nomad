@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.15.0](https://github.com/knownasilya/nomad/compare/v1.14.0...v1.15.0) (2026-10-12)
+
+
+### Features
+
+* **ai:** keep the AI sidebar open across tabs ([0041f5e](https://github.com/knownasilya/nomad/commit/0041f5ed8a32d81f77da2fdf4d8fb8e8b5e4bcfe))
+* **ai:** run a CLI turn's tools in that turn's context, and say each step in plain words ([079682d](https://github.com/knownasilya/nomad/commit/079682d1ad8387a271e9d68b462eb4f38e3c1e9b))
+* **ai:** the assistant is not tied to a tab ([493d942](https://github.com/knownasilya/nomad/commit/493d9420354edd4dce1be3e56f910a63f1a843be))
+* **highlights:** highlight text on a page and leave a note about it ([2bc1c14](https://github.com/knownasilya/nomad/commit/2bc1c1412c6ed1bed6115651e2e87c816dcf620f))
+
+
+### Bug Fixes
+
+* **ai:** show a Claude or Cursor CLI reply once, not three times ([e97a2c4](https://github.com/knownasilya/nomad/commit/e97a2c41f1454cd7b977db3b83668bb49e64aa20))
+
 ## [1.14.0](https://github.com/knownasilya/nomad/compare/v1.13.0...v1.14.0) (2026-10-11)
 
 
