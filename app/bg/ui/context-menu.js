@@ -8,6 +8,7 @@ import { download } from './downloads';
 import * as settingsDb from '../dbs/settings';
 import { runDrivePropertiesFlow } from './util';
 import { isHyperOrPearUrl } from '../../lib/urls';
+import * as highlights from './highlights';
 
 // NOTE
 // subtle but important!!
@@ -258,6 +259,9 @@ export default function registerContextMenu() {
         menuItems.push({ type: 'separator' });
       }
 
+      // highlights (./highlights.js): asks the page what the click was on
+      const marks = await highlights.menuItems(webContents, props);
+
       // clipboard
       if (props.isEditable) {
         menuItems.push({ label: 'Cut', role: 'cut', enabled: can('Cut') });
@@ -270,6 +274,13 @@ export default function registerContextMenu() {
         menuItems.push({ type: 'separator' });
       } else if (hasText) {
         menuItems.push({ label: 'Copy', role: 'copy', enabled: can('Copy') });
+        if (marks.copyLink) menuItems.push(marks.copyLink);
+        menuItems.push({ type: 'separator' });
+      }
+
+      // highlights and their notes
+      if (marks.items.length) {
+        menuItems.push(...marks.items);
         menuItems.push({ type: 'separator' });
       }
 

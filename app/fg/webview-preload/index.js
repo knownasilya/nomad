@@ -1,6 +1,7 @@
 import { ipcRenderer } from 'electron';
 import { setup as setupWebAPIs } from '../../bg/web-apis/fg';
 import { setupModelContext } from './model-context';
+import { setupHighlights } from './highlights';
 import { setup as setupPrompt } from './prompt';
 import { setup as setupExecuteJavascript } from './execute-javascript';
 import setupExitFullScreenHackfix from './exit-full-screen-hackfix';
@@ -16,6 +17,7 @@ resizeHackfix();
 
 setupWebAPIs();
 setupModelContext();
+setupHighlights();
 setupPrompt();
 setupExecuteJavascript();
 

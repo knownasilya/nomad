@@ -55,6 +55,11 @@ async function init() {
   const first = state.notes.find((n) => n.id === fromUrl) || state.notes[0];
   if (first) await openNote(first.id, { push: false });
   else renderAll();
+  // A note just made from a page Highlight opens with ?write: the cursor goes to its end, to type.
+  if (first && first.id === fromUrl && new URLSearchParams(location.search).has('write')) {
+    history.replaceState(null, '', location.pathname);
+    writeAtEnd();
+  }
   window.addEventListener('beforeunload', () => {
     save();
   });
@@ -63,6 +68,12 @@ async function init() {
     if (id && (!draft || draft.id !== id)) openNote(id, { push: false });
   });
   watchOtherDevices();
+}
+
+function writeAtEnd() {
+  if (!editor || !state.writable) return;
+  editor.view.dispatch({ selection: { anchor: editor.view.state.doc.length }, scrollIntoView: true });
+  editor.focus();
 }
 
 function idFromUrl() {
