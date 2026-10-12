@@ -13,8 +13,13 @@ import {
   imageBlocks,
   promptFromMessages,
 } from './agent-stream.mjs';
+import { TURN_HEADER } from './localhost-mcp.mjs';
+import { toolSummary } from './tool-summary.mjs';
 
-export function streamAgent(runtime, messages, emitter, signal, { mcpUrl } = {}) {
+// `mcpTurn` is the chat turn's token on the loopback MCP (ADR-0021).
+/** @param {{ mcpUrl?: string | null, mcpTurn?: string | null }} [mcp] */
+export function streamAgent(runtime, messages, emitter, signal, mcp = {}) {
+  const { mcpUrl, mcpTurn } = mcp;
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(abortError());
     let child;
@@ -97,7 +102,11 @@ export function streamAgent(runtime, messages, emitter, signal, { mcpUrl } = {})
           text += event.text;
           emitter.emit('chunk', { text: event.text });
         } else if (event.type === 'tool') {
-          emitter.emit('tool', { phase: 'start', name: event.name, summary: event.name });
+          emitter.emit('tool', {
+            phase: 'start',
+            name: event.name,
+            summary: toolSummary(event.name, event.input),
+          });
         } else if (event.type === 'error') {
           try { child?.kill('SIGTERM'); } catch { /* already gone */ }
           finish(reject, new Error(event.text));
@@ -126,7 +135,7 @@ export function streamAgent(runtime, messages, emitter, signal, { mcpUrl } = {})
         system = built.system;
         prompt = built.prompt;
         stdin = images.length ? claudeUserLine(prompt, images) : prompt;
-        const prepared = await claudeArgs(runtime, system, mcpUrl, images.length > 0);
+        const prepared = await claudeArgs(runtime, system, mcpUrl, images.length > 0, mcpTurn);
         args = prepared.args;
         cleanup = prepared.cleanup;
       }
@@ -201,7 +210,7 @@ async function writeDataImage(dir, url, index) {
   return name;
 }
 
-async function claudeArgs(runtime, system, mcpUrl, streamInput) {
+async function claudeArgs(runtime, system, mcpUrl, streamInput, mcpTurn) {
   const args = [
     '-p',
     '--model',
@@ -220,16 +229,19 @@ async function claudeArgs(runtime, system, mcpUrl, streamInput) {
   if (mcpUrl && process.env.NOMAD_MCP !== '0') {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'nomad-mcp-'));
     const file = path.join(dir, 'mcp.json');
-    await writeFile(
-      file,
-      JSON.stringify({
-        mcpServers: { nomad: { type: 'http', url: mcpUrl } },
-      })
-    );
+    await writeFile(file, JSON.stringify(mcpConfig(mcpUrl, mcpTurn)));
     args.push('--strict-mcp-config', '--mcp-config', file);
     cleanup = () => rm(dir, { recursive: true, force: true }).catch(() => {});
   }
   return { args, cleanup };
+}
+
+// The --mcp-config for Nomad's loopback MCP. With a turn token, the CLI sends it with every
+// call, so the call runs in that chat turn's context (ADR-0021).
+export function mcpConfig(url, turn) {
+  const server = { type: 'http', url };
+  if (turn) server.headers = { [TURN_HEADER]: turn };
+  return { mcpServers: { nomad: server } };
 }
 
 function abortError() {

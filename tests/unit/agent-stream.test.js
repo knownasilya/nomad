@@ -75,7 +75,7 @@ describe('createAgentReducer', () => {
       delta('Let me check.'),
       assistant({ type: 'text', text: 'Let me check.' }),
       event('content_block_start'),
-      assistant({ type: 'tool_use', name: 'mcp__nomad__execute' }),
+      assistant({ type: 'tool_use', name: 'mcp__nomad__execute', input: { code: 'nomad.listNotes()' } }),
       event('message_stop'),
       JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', content: 'hi' }] } }),
       event('message_start'),
@@ -86,7 +86,9 @@ describe('createAgentReducer', () => {
       event('message_stop'),
       JSON.stringify({ type: 'result', result: 'The command printed hi.' }),
     ])
-    expect(events.filter((e) => e.type === 'tool')).toEqual([{ type: 'tool', name: 'mcp__nomad__execute' }])
+    expect(events.filter((e) => e.type === 'tool')).toEqual([
+      { type: 'tool', name: 'mcp__nomad__execute', input: { code: 'nomad.listNotes()' } },
+    ])
     expect(events.filter((e) => e.type === 'text').map((e) => e.text).join('')).toBe('Let me check.The command printed hi.')
   })
 

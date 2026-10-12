@@ -67,14 +67,17 @@ function fitImages (history: ChatMsg[]): ChatMsg[] {
   })
 }
 
-// Human label for a tool-activity event from runChat (e.g. { phase:'start', summary:'Reading /x' }
-// or { phase:'write', name:'writeDriveFile', path:'/x' }).
-function toolLabel (e: any): string {
-  if (!e) return 'Working…'
-  if (e.summary) return e.summary
-  if (e.phase === 'write' && e.path) return `Wrote ${e.path}`
-  if (e.name) return e.name
-  return 'Working…'
+// One step of the running turn: a search, an execute, or a capability the code called. The
+// Provider writes the label in plain words (app/bg/ai/tool-summary.mjs).
+interface Step { label: string; done: boolean }
+// The step list shows the latest few; the rest collapse into one line.
+const MAX_STEPS_SHOWN = 5
+
+// The label for a tool event from runChat, or null when the event is not a step. A 'write' event
+// follows the 'start' event of the same write, and a screenshot is only for the transcript.
+function stepLabel (e: any): string | null {
+  if (!e || (e.phase !== 'start' && e.phase !== 'note')) return null
+  return e.summary || e.name || 'Working…'
 }
 
 interface Props {
@@ -121,9 +124,10 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
   const [attachments, setAttachments] = useState<string[]>([])
   const [attaching, setAttaching] = useState(false)
   const [busy, setBusy] = useState(false)
-  // What the agent is doing right now — surfaced as a status line so a long tool phase (drive I/O +
-  // model round-trips, no streamed text) doesn't look frozen.
-  const [activity, setActivity] = useState<string | null>(null)
+  // What the agent did and is doing in this turn, so a long tool phase (drive I/O + model
+  // round-trips, no streamed text) doesn't look frozen. The last step runs until the next step
+  // or the next text arrives.
+  const [steps, setSteps] = useState<Step[]>([])
   // Which context's transcript the in-flight turn belongs to, so a turn started for tab A keeps
   // running (and shows its thinking state) even if the panel is closed and reopened.
   const [activeTurnKey, setActiveTurnKey] = useState<string | null>(null)
@@ -151,7 +155,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
   const turnActiveHere = busy && activeTurnKey === contextKey
   const draftPaths = drafts[contextKey] || []
 
-  useEffect(() => { scrollRef.current?.scrollToEnd({ animated: true }) }, [messages])
+  useEffect(() => { scrollRef.current?.scrollToEnd({ animated: true }) }, [messages, steps])
 
   // Switching context (opening the panel for a different tab) starts clean — a half-typed draft or a
   // stale error from one context shouldn't leak into another. The transcript itself is preserved.
@@ -179,6 +183,9 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
 
   const canSend = !busy && !attaching && (!!input.trim() || attachments.length > 0)
 
+  const finishSteps = () => setSteps((prev) => prev.every((x) => x.done) ? prev : prev.map((x) => ({ ...x, done: true })))
+  const endTurn = () => { settleLast(); setBusy(false); setSteps([]); setActiveTurnKey(null); handleRef.current = null }
+
   const send = () => {
     const text = input.trim()
     if (!canSend) return
@@ -189,15 +196,16 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
     setInput('')
     setAttachments([])
     setBusy(true)
-    setActivity('Thinking…')
+    setSteps([])
     setActiveTurnKey(contextKey)
     const sendKey = contextKey
     // The panel is the user's own AI: a personal turn, with their names, Notes, and this Space's
     // Reader (ADR-0018, ADR-0019).
     handleRef.current = aiChat(fitImages(history), { driveUrl: driveUrl || undefined, context: describeContext(driveUrl, title), personal: true, space }, {
-      onChunk: (chunk) => { setActivity('Responding…'); appendToLast(chunk) },
+      onChunk: (chunk) => { finishSteps(); appendToLast(chunk) },
       onTool: (event: any) => {
-        setActivity(toolLabel(event))
+        const label = stepLabel(event)
+        if (label) setSteps((prev) => [...prev.map((x) => ({ ...x, done: true })), { label, done: event.phase === 'note' }])
         // A staged write → track it for the draft review banner (keyed to the turn's context).
         if (event && event.phase === 'write' && event.path) {
           setDrafts((prev) => {
@@ -206,13 +214,13 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
           })
         }
       },
-      onDone: () => { settleLast(); setBusy(false); setActivity(null); setActiveTurnKey(null); handleRef.current = null },
-      onError: (message) => { settleLast(); setBusy(false); setActivity(null); setActiveTurnKey(null); handleRef.current = null; setError(message) },
+      onDone: endTurn,
+      onError: (message) => { endTurn(); setError(message) },
       onPrompt: onPrompt
     })
   }
 
-  const stop = () => { handleRef.current?.cancel(); handleRef.current = null; settleLast(); setBusy(false); setActivity(null); setActiveTurnKey(null) }
+  const stop = () => { handleRef.current?.cancel(); endTurn() }
 
   const attach = (source: 'camera' | 'library') => {
     setAttaching(true)
@@ -244,6 +252,38 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
       onDone: () => { setDraftBusy(false); clearDraft() },
       onError: (message) => { setDraftBusy(false); setError(message) }
     })
+  }
+
+  // The turn's progress, under the answer as it streams in: done steps with a check, the running
+  // one with a spinner. Before any step or text, it says the AI is thinking.
+  const renderSteps = () => {
+    const last = messages[messages.length - 1]
+    const answering = last?.role === 'assistant' && !!unwrapReply(last.content, true)
+    if (!steps.length) {
+      if (answering) return null
+      return (
+        <View style={[s.bubble, s.aiBubble, s.stepRow]}>
+          <ActivityIndicator size='small' color={t.accent} />
+          <Text style={s.stepText}>{last?.content ? 'Writing the answer…' : 'Thinking…'}</Text>
+        </View>
+      )
+    }
+    const hidden = Math.max(0, steps.length - MAX_STEPS_SHOWN)
+    return (
+      <View style={[s.bubble, s.aiBubble, s.steps]}>
+        {hidden > 0 && <Text style={s.stepMore}>{hidden} earlier step{hidden > 1 ? 's' : ''}</Text>}
+        {steps.slice(hidden).map((step, i) => (
+          <View key={hidden + i} style={s.stepRow}>
+            <View style={s.stepIcon}>
+              {step.done
+                ? <Text style={s.stepCheck}>✓</Text>
+                : <ActivityIndicator size='small' color={t.accent} />}
+            </View>
+            <Text style={[s.stepText, step.done && s.stepDoneText]} numberOfLines={2}>{step.label}</Text>
+          </View>
+        ))}
+      </View>
+    )
   }
 
   // How much room to leave below the input row.
@@ -306,18 +346,9 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
             messages.map((m, i) => {
               const streaming = turnActiveHere && i === messages.length - 1
               const shown = m.role === 'assistant' ? unwrapReply(m.content, streaming) : m.content
-              // The trailing empty assistant message is the response slot. While busy, show the
-              // thinking indicator right there — left side, under the last user message, exactly
-              // where the answer will stream in. It's replaced by the text once the first token lands.
-              if (m.role === 'assistant' && !shown) {
-                if (!streaming) return null
-                return (
-                  <View key={i} style={[s.bubble, s.aiBubble, s.thinkingBubble]}>
-                    <ActivityIndicator size='small' color={t.accent} />
-                    <Text style={s.thinkingText} numberOfLines={1}>{activity || 'Thinking…'}</Text>
-                  </View>
-                )
-              }
+              // The trailing empty assistant message is the response slot. renderSteps() below
+              // stands in for it until the first words land.
+              if (m.role === 'assistant' && !shown) return null
               if (m.role === 'assistant') {
                 return (
                   <View key={i} style={[s.bubble, s.aiBubble]}>
@@ -341,6 +372,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
               )
             })
           )}
+          {turnActiveHere && renderSteps()}
           {error && <Text style={s.error}>⚠️ {error}</Text>}
         </ScrollView>
 
@@ -471,8 +503,13 @@ function makeStyles (t: Theme) {
     userText: { color: t.trustText, fontSize: 15, lineHeight: 21 },
     aiText: { color: t.text, fontSize: 15, lineHeight: 21 },
     error: { color: t.danger, fontSize: 13, paddingVertical: 6 },
-    thinkingBubble: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    thinkingText: { color: t.textDim, fontSize: 14, flexShrink: 1 },
+    steps: { gap: 6, paddingVertical: 8 },
+    stepRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    stepIcon: { width: 20, alignItems: 'center' },
+    stepCheck: { color: t.secure, fontSize: 13, fontWeight: '700' },
+    stepText: { color: t.textDim, fontSize: 14, flexShrink: 1 },
+    stepDoneText: { color: t.textMuted },
+    stepMore: { color: t.textMuted, fontSize: 12 },
     draftBanner: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border, backgroundColor: t.surface, paddingHorizontal: 16, paddingVertical: 10, gap: 10 },
     draftText: { color: t.text, fontSize: 13, fontWeight: '600' },
     draftBtns: { flexDirection: 'row', alignItems: 'center', gap: 20 },

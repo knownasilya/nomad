@@ -5,6 +5,7 @@ import { MCP_PORT, handleMcpHttp } from './localhost-mcp.mjs'
 
 const MAX_BODY = 512 * 1024
 
+/** @param {{ callTool?: (name: string, args: object, turn: object | null) => Promise<any>, port?: number }} [options] */
 export function startLocalhostMcp({ callTool, port = MCP_PORT } = {}) {
   const server = http.createServer((req, res) => {
     const chunks = []

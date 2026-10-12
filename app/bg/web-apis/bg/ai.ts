@@ -48,9 +48,10 @@ import {
   isAgentHostApp,
   resolveActiveDrive,
 } from '../../ai/active-tab.mjs';
-import { MCP_PORT } from '../../ai/localhost-mcp.mjs';
+import { closeTurn, openTurn } from '../../ai/localhost-mcp.mjs';
 import { startLocalhostMcp } from '../../ai/localhost-mcp-host.mjs';
 import { streamAgent } from '../../ai/agent-cli.mjs';
+import { toolSummary } from '../../ai/tool-summary.mjs';
 import {
   getActiveRuntime,
   listRuntimeCatalog,
@@ -476,6 +477,22 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   let msgHistory = fullMessages;
   const signal = opts.signal || null;
 
+  // Every tool call of this turn runs with these: the loop below, and a CLI's calls through the
+  // loopback MCP, which finds them by the turn's token (ADR-0021).
+  const toolOpts = {
+    driveUrl,
+    emitter,
+    requestPermission,
+    draft: opts.draft,
+    pageToolsWcId: opts.pageToolsWcId,
+    remote: opts.remote,
+    // Another Device's Reader Space; a local turn uses the tab's.
+    space: opts.remote ? opts.space : null,
+    signal,
+    catalog,
+  };
+  const mcpTurn = cli && mcpPort ? openTurn({ sender, toolOpts }) : null;
+
   // Tool loop — repeats when model calls tools. A cancel (signal.abort, from a local stream
   // close or a remote CANCEL frame) stops future work but never undoes a Checkpoint the turn
   // already wrote — the revert UI covers that (ADR-0013 §5c).
@@ -484,7 +501,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
       if (signal?.aborted) break;
       const { finishReason, toolCalls, textContent }: any = cli
         ? await streamAgent({ ...runtime, model }, msgHistory, emitter, signal, {
-            mcpUrl: `http://127.0.0.1:${MCP_PORT}/mcp`,
+            mcpUrl: mcpTurn ? `http://127.0.0.1:${mcpPort}/mcp` : null,
+            mcpTurn,
           })
         : await streamCompletion(runtime.baseUrl, model, msgHistory, tools, emitter, signal, {
             think: opts.think,
@@ -521,18 +539,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
           summary: toolSummary(tc.function.name, args),
         });
         try {
-          result = await executeTool(tc.function.name, args, sender, {
-            driveUrl,
-            emitter,
-            requestPermission,
-            draft: opts.draft,
-            pageToolsWcId: opts.pageToolsWcId,
-            remote: opts.remote,
-            // Another Device's Reader Space; a local turn uses the tab's.
-            space: opts.remote ? opts.space : null,
-            signal,
-            catalog,
-          });
+          result = await executeTool(tc.function.name, args, sender, toolOpts);
         } catch (err) {
           console.error(`[ai] tool "${tc.function.name}" failed:`, err);
           result = `Error: ${err.message}`;
@@ -564,6 +571,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     // A cancel surfaces as an AbortError from the in-flight streamCompletion; swallow it and
     // fall through to a clean 'done'. Any other error propagates to chat()'s catch → 'error'.
     if (!isAbort(err) && !signal?.aborted) throw err;
+  } finally {
+    if (mcpTurn) closeTurn(mcpTurn);
   }
 
   emitter.emit('done', { aborted: !!signal?.aborted });
@@ -881,36 +890,6 @@ async function resolvePageTools(opts, sender, emitter) {
 }
 
 // Human-readable one-liner describing a tool call, shown live in the sidebar.
-function toolSummary(name, args) {
-  if (name.startsWith('page_')) return `Running ${name.slice(5)}`;
-  switch (name) {
-    case 'search':
-      if (args.entity) {
-        const ref = Array.isArray(args.entity) ? args.entity.join(', ') : args.entity;
-        return `Opening ${ref}`;
-      }
-      if (args.query) return `Searching “${args.query}”`;
-      if (args.domain) return `Listing ${args.domain}`;
-      return 'Listing what the assistant can do';
-    case 'execute':
-      return 'Running a module';
-    case 'readDriveFile':
-      return `Reading ${args.drive ? args.drive + ' ' : ''}${args.path || ''}`.trim();
-    case 'listDriveFiles':
-      return `Listing ${args.drive ? args.drive + ' ' : ''}${args.path || '/'}`.trim();
-    case 'writeDriveFile':
-      return `Writing ${args.drive ? args.drive + ' ' : ''}${args.path || ''}`.trim();
-    case 'fetchUrl':
-      return `Fetching ${args.url || ''}`.trim();
-    case 'readCurrentPage':
-      return 'Reading this page';
-    case 'screenshotCurrentPage':
-      return 'Taking a screenshot';
-    default:
-      return name;
-  }
-}
-
 // A drive's origin (scheme + key), without any path. `nomad.fs` is URL-first, so
 // tool/config reads build a full `hyper://<key>/<path>` and let fsAPI dispatch to
 // the right backend (single-writer Hyperdrive vs multi-writer Autobase).
@@ -1254,8 +1233,12 @@ function runtimeError(status, body, tools, hasToken) {
 
 // One search or execute for a program on this machine. The catalog is the focused
 // window's active tab, and writes still go through the permission prompt.
-export async function callLocalTool(name, args) {
+// `turn` is set when the call comes from a CLI chat turn (ADR-0021): the call then runs with that
+// turn's sender and tool options (its drive, catalog, prompts, tool events and Stop). Without it,
+// the caller is another program on this machine, the user's own AI on the focused tab.
+export async function callLocalTool(name, args, turn = null) {
   if (name !== 'search' && name !== 'execute') throw new Error(`Unknown tool: ${name}`);
+  if (turn) return executeTool(name, args || {}, turn.sender, turn.toolOpts);
   const pane = focusedPane();
   const sender = pane?.webContents;
   if (!sender || (typeof sender.isDestroyed === 'function' && sender.isDestroyed())) {
@@ -1302,11 +1285,21 @@ export async function callLocalTool(name, args) {
   });
 }
 
+// The port the loopback MCP listens on, once it does. A CLI turn sends its calls here; with no
+// listener (NOMAD_MCP=0, or the port was taken) the CLI gets no Nomad tools.
+let mcpPort = null;
+
 function bootLocalhostMcp() {
   if (process.env.NOMAD_MCP === '0') return;
   const fromEnv = Number(process.env.NOMAD_MCP_PORT);
-  const port = Number.isInteger(fromEnv) && fromEnv > 0 ? fromEnv : MCP_PORT;
-  startLocalhostMcp({ port, callTool: (name, args) => callLocalTool(name, args) });
+  const server = startLocalhostMcp({
+    port: Number.isInteger(fromEnv) && fromEnv > 0 ? fromEnv : undefined,
+    callTool: (name, args, turn) => callLocalTool(name, args, turn),
+  });
+  server.on('listening', () => {
+    const addr = server.address();
+    mcpPort = addr && typeof addr === 'object' ? addr.port : null;
+  });
 }
 
 if (app.isReady()) bootLocalhostMcp();
