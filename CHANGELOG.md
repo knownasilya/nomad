@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.16.0](https://github.com/knownasilya/nomad/compare/v1.15.0...v1.16.0) (2026-10-12)
+
+
+### Features
+
+* **ai:** let the user's own AI highlight text, with or without a Note ([7e5d935](https://github.com/knownasilya/nomad/commit/7e5d935e9984c7c661bb2af22416f8b4f9d1536c))
+* **highlights:** View > Hide Highlights ([f5e6df5](https://github.com/knownasilya/nomad/commit/f5e6df5f07dbd459750352a5e81913262220eb0f))
+* **notes:** collapse linked mentions, and scroll a long list ([773563d](https://github.com/knownasilya/nomad/commit/773563d0a3bc77973968362f2e97abbf4cdb993b))
+
 ## [1.15.0](https://github.com/knownasilya/nomad/compare/v1.14.0...v1.15.0) (2026-10-12)
 
 
