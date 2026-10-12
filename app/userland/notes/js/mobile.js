@@ -18,6 +18,7 @@ import { noteTitle, noteSnippet, makeResolver, linkedIds } from '../../../../sha
 let editor = null;
 let current = { id: null, body: '' };
 let notes = [];
+let mentionsOpen = false; // the user opened Linked mentions; it stays open from note to note
 
 const post = (msg) => window.ReactNativeWebView?.postMessage(JSON.stringify(msg));
 
@@ -51,7 +52,8 @@ function applyTheme(t = {}) {
   document.documentElement.style.colorScheme = t.scheme === 'dark' ? 'dark' : 'light';
 }
 
-// Linked mentions: the other notes that link to this one. Tapping one opens it.
+// Linked mentions: the other notes that link to this one. Closed until the user opens it.
+// Tapping one opens that note.
 function renderMentions() {
   const box = document.getElementById('mentions');
   box.replaceChildren();
@@ -59,16 +61,23 @@ function renderMentions() {
   const all = live();
   const resolve = makeResolver(all);
   const linking = all.filter((n) => n.id && n.id !== current.id && linkedIds(n.body, resolve).includes(current.id));
-  const h = document.createElement('h3');
-  h.textContent = `Linked mentions · ${linking.length}`;
-  box.append(h);
+  const details = document.createElement('details');
+  details.open = mentionsOpen;
+  details.addEventListener('toggle', () => (mentionsOpen = details.open));
+  const summary = document.createElement('summary');
+  summary.textContent = `Linked mentions · ${linking.length}`;
+  details.append(summary);
+  box.append(details);
   if (!linking.length) {
     const p = document.createElement('p');
     p.className = 'none';
     p.textContent = 'No other note links here yet.';
-    box.append(p);
+    details.append(p);
     return;
   }
+  const list = document.createElement('div');
+  list.className = 'list';
+  details.append(list);
   for (const n of linking) {
     const b = document.createElement('button');
     b.className = 'mention';
@@ -84,7 +93,7 @@ function renderMentions() {
       b.append(s);
     }
     b.addEventListener('click', () => post({ type: 'openNote', id: n.id, heading: '' }));
-    box.append(b);
+    list.append(b);
   }
 }
 

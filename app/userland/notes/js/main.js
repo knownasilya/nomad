@@ -35,6 +35,7 @@ let saving = null; // the save in flight
 let saveTimer = null;
 let saveMsg = { kind: 'idle', text: '' };
 let banner = null; // { text, originalId } after a conflict copy was made
+let mentionsOpen = false; // the user opened Linked mentions; it stays open from note to note
 let editor = null;
 
 const app = document.getElementById('app');
@@ -481,14 +482,18 @@ function renderAround() {
   backSlot.replaceChildren(renderBacklinks());
 }
 
-// Linked mentions: the other notes that link to this one.
+// Linked mentions: the other notes that link to this one. Closed until the user opens it.
 function renderBacklinks() {
   if (!draft || !draft.id) return el('div', {});
   const notes = liveNotes();
   const resolve = makeResolver(notes);
   const linking = notes.filter((n) => n.id && n.id !== draft.id && linkedIds(n.body, resolve).includes(draft.id));
-  return el('section', { class: 'backlinks' }, [
-    el('h3', {}, [`Linked mentions`, el('span', { class: 'count' }, [String(linking.length)])]),
+  return el('details', { class: 'backlinks', open: mentionsOpen, ontoggle: (e) => (mentionsOpen = e.target.open) }, [
+    el('summary', {}, [
+      icon('chevron-right'),
+      `Linked mentions`,
+      el('span', { class: 'count' }, [String(linking.length)]),
+    ]),
     linking.length
       ? el(
           'ul',

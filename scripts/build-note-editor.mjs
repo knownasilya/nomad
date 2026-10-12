@@ -44,8 +44,13 @@ html, body { margin: 0; background: var(--note-page, #fff); color: var(--note-te
 body { font-family: var(--note-font); }
 #editor { min-height: 60vh; }
 #mentions { margin: 0 18px 40px; padding-top: 12px; border-top: 1px solid var(--note-border, #e2e2e8); }
-#mentions h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--note-muted); }
+#mentions summary { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--note-muted); list-style: none; -webkit-tap-highlight-color: transparent; }
+#mentions summary::-webkit-details-marker { display: none; }
+#mentions summary::before { content: ''; width: 5px; height: 5px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform 0.12s; }
+#mentions details[open] summary::before { transform: rotate(45deg); }
+#mentions details[open] summary { margin-bottom: 6px; }
 #mentions .none { margin: 0; font-size: 13px; color: var(--note-muted); }
+#mentions .list { max-height: 45vh; overflow-y: auto; overscroll-behavior: contain; }
 #mentions .mention { display: block; width: 100%; padding: 8px 0; border: 0; background: none; text-align: left; font: inherit; }
 #mentions .mention .title { display: block; font-size: 15px; font-weight: 600; color: var(--note-accent); }
 #mentions .mention .snippet { display: block; overflow: hidden; font-size: 13px; color: var(--note-muted); text-overflow: ellipsis; white-space: nowrap; }
