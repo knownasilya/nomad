@@ -63,6 +63,58 @@ describe('createAgentReducer', () => {
   it('ignores non-JSON lines', () => {
     expect(collect(['not json', '', '   '])).toEqual([])
   })
+
+  // The line order of a real `claude -p --include-partial-messages` run with one tool call.
+  it('sends each claude message once in a turn with a tool call', () => {
+    const delta = (text) => JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text } } })
+    const event = (type) => JSON.stringify({ type: 'stream_event', event: { type } })
+    const assistant = (block) => JSON.stringify({ type: 'assistant', message: { content: [block] } })
+    const events = collect([
+      event('message_start'),
+      event('content_block_start'),
+      delta('Let me check.'),
+      assistant({ type: 'text', text: 'Let me check.' }),
+      event('content_block_start'),
+      assistant({ type: 'tool_use', name: 'mcp__nomad__execute' }),
+      event('message_stop'),
+      JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', content: 'hi' }] } }),
+      event('message_start'),
+      event('content_block_start'),
+      delta('The command printed h'),
+      delta('i.'),
+      assistant({ type: 'text', text: 'The command printed hi.' }),
+      event('message_stop'),
+      JSON.stringify({ type: 'result', result: 'The command printed hi.' }),
+    ])
+    expect(events.filter((e) => e.type === 'tool')).toEqual([{ type: 'tool', name: 'mcp__nomad__execute' }])
+    expect(events.filter((e) => e.type === 'text').map((e) => e.text).join('')).toBe('Let me check.The command printed hi.')
+  })
+
+  it('keeps a claude delta that repeats the text before it', () => {
+    const delta = (text) => JSON.stringify({ type: 'stream_event', event: { delta: { type: 'text_delta', text } } })
+    expect(collect([delta('ha'), delta('ha')]).map((e) => e.text).join('')).toBe('haha')
+  })
+
+  // The line order of a real `cursor-agent -p --stream-partial-output` run with one tool call.
+  it('sends each cursor segment once, without the prompt or the thinking', () => {
+    const assistant = (text) => JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } })
+    const events = collect([
+      JSON.stringify({ type: 'system', subtype: 'init' }),
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'List the files.' }] } }),
+      JSON.stringify({ type: 'thinking', subtype: 'delta', text: 'I will list the files.' }),
+      JSON.stringify({ type: 'thinking', subtype: 'completed' }),
+      assistant("I'll"),
+      assistant(' look.'),
+      assistant("I'll look."),
+      JSON.stringify({ type: 'tool_call', subtype: 'started' }),
+      JSON.stringify({ type: 'tool_call', subtype: 'completed' }),
+      assistant('There are'),
+      assistant(' 0 files.'),
+      assistant('There are 0 files.'),
+      JSON.stringify({ type: 'result', subtype: 'success', result: "I'll look.There are 0 files." }),
+    ])
+    expect(events.map((e) => e.text).join('')).toBe("I'll look.There are 0 files.")
+  })
 })
 
 describe('imageBlocks', () => {
