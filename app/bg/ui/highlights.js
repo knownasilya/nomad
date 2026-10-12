@@ -14,6 +14,7 @@ import { app, ipcMain, clipboard, webContents as allWebContents } from 'electron
 import * as vault from '../hyper/vault';
 import * as vaultApps from '../web-apis/bg/vault-apps';
 import * as tabManager from './tabs/manager';
+import * as settingsDb from '../dbs/settings';
 import * as logLib from '../logger';
 import * as hl from '../../../shared/highlights.mjs';
 import { isNoteId, notePath, isNote } from '../../../shared/vault-apps.mjs';
@@ -26,10 +27,18 @@ const PAGE_CALL_TIMEOUT = 500;
 const FIND_QUOTE_TIMEOUT = 5000; // a long page takes a while to search
 const CHANGED = 'nomad-highlights:changed';
 
-export function setup() {
+// View > Hide Highlights: while true, no page draws them. The window menu reads it as it builds,
+// so it is kept here, not only in the `highlights_hidden` setting.
+let hidden = false;
+
+export async function setup() {
+  try {
+    hidden = !!Number(await settingsDb.get('highlights_hidden'));
+  } catch {}
+
   ipcMain.handle('nomad-highlights:list', async (e) => {
     const page = senderPage(e);
-    if (!page) return [];
+    if (!page || hidden) return [];
     return (await listFor(page)).map((h) => ({ id: h.id, text: h.text, hasNote: h.hasNote }));
   });
 
@@ -59,6 +68,19 @@ export function setup() {
     });
   });
 }
+
+export const areHidden = () => hidden;
+
+// Every page redraws: with its Highlights, or with none.
+export async function setHidden(value) {
+  hidden = !!value;
+  await settingsDb.set('highlights_hidden', hidden ? 1 : 0);
+  for (const wc of allWebContents.getAllWebContents()) {
+    if (!wc.isDestroyed() && hl.pageUrl(wc.getURL())) wc.send(CHANGED, {});
+  }
+}
+
+const HIDDEN_NOTE = 'Highlights are hidden. To see them, choose View > Show Highlights.';
 
 // The context menu
 // =
@@ -129,6 +151,7 @@ async function addHighlight(wc, { withNote = false } = {}) {
     await vault.putAppRecord(hl.highlightPath(rec.url, rec.id), rec);
     pageChanged(rec.url, wc);
     if (note) openNote(wc, note.id, { write: true });
+    else if (hidden) say(wc, 'Highlighted. ' + HIDDEN_NOTE);
   } catch (err) {
     logger.warn('Could not save a highlight', { error: err?.message });
     say(wc, 'Not saved: ' + (err?.message || err));
@@ -229,7 +252,11 @@ export async function highlightForAi(wc, { text, note } = {}) {
   const rec = hl.makeHighlight({ ...fields, noteId: made?.id }, prev);
   await vault.putAppRecord(hl.highlightPath(rec.url, rec.id), rec);
   pageChanged(rec.url);
-  return forModel(rec, rec.noteId, prev ? { alreadyHighlighted: true } : {});
+  return forModel(rec, rec.noteId, {
+    ...(prev ? { alreadyHighlighted: true } : {}),
+    // Saved, but the user won't see it on the page until they show Highlights again.
+    ...(hidden ? { highlightsHidden: HIDDEN_NOTE } : {}),
+  });
 }
 
 // Throws when the AI can't highlight `text` in `wc`. ai-vault.ts checks this before it asks

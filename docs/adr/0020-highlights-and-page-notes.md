@@ -37,6 +37,10 @@ gets a small note button at its end, which opens the Note in a new tab. The rule
    with the AI's words below the quote, but doesn't open it. Text already highlighted keeps its
    Highlight; a Note it has is never replaced. It asks `notesWrite` (ADR-0019), and checks the tab
    first, so a call that can't work doesn't ask.
+7. **View > Hide Highlights** (added 2026-10-12) stops every page from drawing them, until View > Show
+   Highlights. The choice is the browser-wide `highlights_hidden` setting, so it lasts after a
+   restart. A Highlight made while they are hidden is still saved, and the page or the AI says that
+   it is hidden.
 
 ## Consequences
 

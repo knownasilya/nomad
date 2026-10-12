@@ -251,7 +251,9 @@ reveals Highlights or Notes out of the page's main world.
 The AI makes them too: `highlightText({ text, note? })` finds text the AI quoted (`findQuote` in the
 preload, candidates from `quoteFragments`) and saves it like the menu items do (`highlightForAi`). It
 asks `notesWrite`, and only after `assertCanHighlight` passes. It needs the page's renderer
-(`gates: { personal, renderer }`), so the phone's AI panel doesn't get it. A Note is an ordinary Note; `?write` on
+(`gates: { personal, renderer }`), so the phone's AI panel doesn't get it. View > Hide Highlights
+(`window-menu.js`) sets the global `highlights_hidden` setting; while it is on, `nomad-highlights:list`
+gives every page an empty list. A Note is an ordinary Note; `?write` on
 `nomad://notes/<id>` puts the cursor at its end.
 
 ## Look and feel: every UI supports dark mode and matches the rest
