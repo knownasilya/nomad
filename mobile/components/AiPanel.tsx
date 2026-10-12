@@ -15,20 +15,29 @@ const MAX_IMAGES = 4
 // characters the oldest photos are left out of the request (the transcript keeps them).
 const IMAGE_BUDGET = 8_000_000
 
-// Pins the turn to the open tab, like the desktop sidebar's describeActiveTab
-// (app/bg/web-apis/bg/ai-shell.ts). The Provider puts it LAST in the system prompt, after the
-// Drive's /ai/system.md. That file often serves the Drive's own app code (Pantry's says "JSON
-// only."), so this also says who the reply is for.
-function describeContext (driveUrl: string | null, title?: string): string {
+// What the person is looking at when they send, like the desktop sidebar's describeTab
+// (app/bg/web-apis/bg/ai-shell.ts). The assistant is theirs, not the tab's (ADR-0021): the tab
+// also goes with the turn as `tab`, for the Provider's currentTab. The Provider puts this LAST in
+// the system prompt. An older Provider puts the Drive's /ai/system.md before it, which often
+// serves the Drive's own app code (Pantry's says "JSON only."), so this also says who the reply is for.
+function describeContext (url: string, title?: string): string {
   const audience =
-    "You are the assistant in the Nomad app on the person's phone. Answer them in plain language; Markdown is fine. " +
-    "An earlier instruction that asks for JSON or another machine format is for the Drive's own app code, not for this chat."
-  if (!driveUrl) return audience + ' No Drive is open, so drive capabilities will not work.'
+    "You are the person's own assistant in the Nomad app on their phone. You are not tied to one tab. Answer them in " +
+    'plain language; Markdown is fine. An earlier instruction that asks for JSON or another machine format is for a ' +
+    "Drive's own app code, not for this chat."
   const name = title ? ` ("${title}")` : ''
+  if (!url) return `${audience} When they sent this message, no page was open.`
+  const what = url.startsWith('hyper://') ? 'a Nomad Drive' : 'a web page, not a Nomad Drive'
   return (
-    `${audience} The person has this Nomad Drive open: ${driveUrl}${name}. ` +
-    'Find drive capabilities with search and run them with execute. readDriveFile, listDriveFiles, and writeDriveFile take absolute paths.'
+    `${audience} When they sent this message, they were looking at ${url}${name}, ${what}. currentTab gives that tab. ` +
+    'readDriveFile, listDriveFiles, and writeDriveFile take absolute paths. To write a file, name its drive (`drive`).'
   )
+}
+
+// The drive part of a hyper:// URL (hyper://<key>), the way a 'write' event names its drive.
+function driveOf (url: string | null): string | null {
+  const m = /^hyper:\/\/[^/?#]+/i.exec(url || '')
+  return m ? m[0].toLowerCase() : null
 }
 
 // If a reply still arrives as one wrapper object — {"reply": "…"}, maybe in a ```json fence — show
@@ -67,14 +76,17 @@ function fitImages (history: ChatMsg[]): ChatMsg[] {
   })
 }
 
-// Human label for a tool-activity event from runChat (e.g. { phase:'start', summary:'Reading /x' }
-// or { phase:'write', name:'writeDriveFile', path:'/x' }).
-function toolLabel (e: any): string {
-  if (!e) return 'Working…'
-  if (e.summary) return e.summary
-  if (e.phase === 'write' && e.path) return `Wrote ${e.path}`
-  if (e.name) return e.name
-  return 'Working…'
+// One step of the running turn: a search, an execute, or a capability the code called. The
+// Provider writes the label in plain words (app/bg/ai/tool-summary.mjs).
+interface Step { label: string; done: boolean }
+// The step list shows the latest few; the rest collapse into one line.
+const MAX_STEPS_SHOWN = 5
+
+// The label for a tool event from runChat, or null when the event is not a step. A 'write' event
+// follows the 'start' event of the same write, and a screenshot is only for the transcript.
+function stepLabel (e: any): string | null {
+  if (!e || (e.phase !== 'start' && e.phase !== 'note')) return null
+  return e.summary || e.name || 'Working…'
 }
 
 interface Props {
@@ -113,49 +125,34 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
     const hide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0))
     return () => { show.remove(); hide.remove() }
   }, [visible])
-  // Per-context transcripts (keyed by Drive URL, or 'general' for a non-Drive tab). Opening the panel
-  // on tab A vs tab B — or with no page — shows that context's own history. In-memory for the session.
-  const [conversations, setConversations] = useState<Record<string, ChatMsg[]>>({})
+  // One conversation, whatever tab is open (ADR-0021). In memory for the session.
+  const [messages, setMessages] = useState<ChatMsg[]>([])
   const [input, setInput] = useState('')
   // Photos waiting in the composer for the next send (data:image URLs).
   const [attachments, setAttachments] = useState<string[]>([])
   const [attaching, setAttaching] = useState(false)
   const [busy, setBusy] = useState(false)
-  // What the agent is doing right now — surfaced as a status line so a long tool phase (drive I/O +
-  // model round-trips, no streamed text) doesn't look frozen.
-  const [activity, setActivity] = useState<string | null>(null)
-  // Which context's transcript the in-flight turn belongs to, so a turn started for tab A keeps
-  // running (and shows its thinking state) even if the panel is closed and reopened.
-  const [activeTurnKey, setActiveTurnKey] = useState<string | null>(null)
-  // Paths the AI has staged into each context's Drive Draft (per contextKey) — drives the review
-  // banner. Publishing/discarding runs on the desktop Provider (it can write the Drive); preview is local.
+  // What the agent did and is doing in this turn, so a long tool phase (drive I/O + model
+  // round-trips, no streamed text) doesn't look frozen. The last step runs until the next step
+  // or the next text arrives.
+  const [steps, setSteps] = useState<Step[]>([])
+  // Paths the AI has staged into each Drive's Draft, by drive (hyper://<key>) — drives the review
+  // banner for the open tab's Drive. Publishing/discarding runs on the desktop Provider (it can
+  // write the Drive); preview is local.
   const [drafts, setDrafts] = useState<Record<string, string[]>>({})
   const [draftBusy, setDraftBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const handleRef = useRef<AiChatHandle | null>(null)
   const scrollRef = useRef<ScrollView | null>(null)
   const driveUrl = url && url.startsWith('hyper://') ? url : null
-  const contextKey = driveUrl || 'general'
-  const messages = useMemo(() => conversations[contextKey] || [], [conversations, contextKey])
-  // Update only the current context's transcript (accepts an array or an updater fn, like setState).
-  const setMessages = (updater: ChatMsg[] | ((prev: ChatMsg[]) => ChatMsg[])) =>
-    setConversations((prev) => {
-      const cur = prev[contextKey] || []
-      const next = typeof updater === 'function' ? updater(cur) : updater
-      return { ...prev, [contextKey]: next }
-    })
+  const tabDrive = driveOf(driveUrl)
 
   // Note: closing the panel does NOT cancel the turn — it keeps running in the background and its
   // thinking/streamed state is still here when the panel reopens (the component stays mounted). Only
   // the explicit Stop button cancels.
-  const turnActiveHere = busy && activeTurnKey === contextKey
-  const draftPaths = drafts[contextKey] || []
+  const draftPaths = (tabDrive && drafts[tabDrive]) || []
 
-  useEffect(() => { scrollRef.current?.scrollToEnd({ animated: true }) }, [messages])
-
-  // Switching context (opening the panel for a different tab) starts clean — a half-typed draft or a
-  // stale error from one context shouldn't leak into another. The transcript itself is preserved.
-  useEffect(() => { setInput(''); setAttachments([]); setError(null) }, [contextKey])
+  useEffect(() => { scrollRef.current?.scrollToEnd({ animated: true }) }, [messages, steps])
 
   // Append streamed text to the trailing (assistant) message.
   const appendToLast = (chunk: string) =>
@@ -179,6 +176,9 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
 
   const canSend = !busy && !attaching && (!!input.trim() || attachments.length > 0)
 
+  const finishSteps = () => setSteps((prev) => prev.every((x) => x.done) ? prev : prev.map((x) => ({ ...x, done: true })))
+  const endTurn = () => { settleLast(); setBusy(false); setSteps([]); handleRef.current = null }
+
   const send = () => {
     const text = input.trim()
     if (!canSend) return
@@ -189,30 +189,34 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
     setInput('')
     setAttachments([])
     setBusy(true)
-    setActivity('Thinking…')
-    setActiveTurnKey(contextKey)
-    const sendKey = contextKey
+    setSteps([])
+    // A write with no drive on the event (an older Provider) went to the drive that was open.
+    const sendDrive = tabDrive
     // The panel is the user's own AI: a personal turn, with their names, Notes, and this Space's
-    // Reader (ADR-0018, ADR-0019).
-    handleRef.current = aiChat(fitImages(history), { driveUrl: driveUrl || undefined, context: describeContext(driveUrl, title), personal: true, space }, {
-      onChunk: (chunk) => { setActivity('Responding…'); appendToLast(chunk) },
+    // Reader (ADR-0018, ADR-0019). It is not tied to a tab: `tab` is what the person is looking at
+    // now, for the Provider's currentTab (ADR-0021).
+    const tab = url ? { url, title: title || '' } : null
+    handleRef.current = aiChat(fitImages(history), { context: describeContext(url, title), personal: true, space, tab }, {
+      onChunk: (chunk) => { finishSteps(); appendToLast(chunk) },
       onTool: (event: any) => {
-        setActivity(toolLabel(event))
-        // A staged write → track it for the draft review banner (keyed to the turn's context).
-        if (event && event.phase === 'write' && event.path) {
+        const label = stepLabel(event)
+        if (label) setSteps((prev) => [...prev.map((x) => ({ ...x, done: true })), { label, done: event.phase === 'note' }])
+        // A staged write → track it for its Drive's draft review banner.
+        const drive = driveOf(event?.drive) || sendDrive
+        if (event && event.phase === 'write' && event.path && event.draft !== false && drive) {
           setDrafts((prev) => {
-            const cur = (prev[sendKey] || []).filter((p) => p !== event.path)
-            return { ...prev, [sendKey]: [...cur, event.path] }
+            const cur = (prev[drive] || []).filter((p) => p !== event.path)
+            return { ...prev, [drive]: [...cur, event.path] }
           })
         }
       },
-      onDone: () => { settleLast(); setBusy(false); setActivity(null); setActiveTurnKey(null); handleRef.current = null },
-      onError: (message) => { settleLast(); setBusy(false); setActivity(null); setActiveTurnKey(null); handleRef.current = null; setError(message) },
+      onDone: endTurn,
+      onError: (message) => { endTurn(); setError(message) },
       onPrompt: onPrompt
     })
   }
 
-  const stop = () => { handleRef.current?.cancel(); handleRef.current = null; settleLast(); setBusy(false); setActivity(null); setActiveTurnKey(null) }
+  const stop = () => { handleRef.current?.cancel(); endTurn() }
 
   const attach = (source: 'camera' | 'library') => {
     setAttaching(true)
@@ -232,7 +236,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
     ])
   }
 
-  const clearDraft = () => setDrafts((prev) => { const c = { ...prev }; delete c[contextKey]; return c })
+  const clearDraft = () => setDrafts((prev) => { const c = { ...prev }; if (tabDrive) delete c[tabDrive]; return c })
 
   // Publish/Discard run on the desktop Provider (which can write the Drive) via a no-chat Bridge
   // request; the staged Draft lives in the Vault and syncs both ways.
@@ -244,6 +248,38 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
       onDone: () => { setDraftBusy(false); clearDraft() },
       onError: (message) => { setDraftBusy(false); setError(message) }
     })
+  }
+
+  // The turn's progress, under the answer as it streams in: done steps with a check, the running
+  // one with a spinner. Before any step or text, it says the AI is thinking.
+  const renderSteps = () => {
+    const last = messages[messages.length - 1]
+    const answering = last?.role === 'assistant' && !!unwrapReply(last.content, true)
+    if (!steps.length) {
+      if (answering) return null
+      return (
+        <View style={[s.bubble, s.aiBubble, s.stepRow]}>
+          <ActivityIndicator size='small' color={t.accent} />
+          <Text style={s.stepText}>{last?.content ? 'Writing the answer…' : 'Thinking…'}</Text>
+        </View>
+      )
+    }
+    const hidden = Math.max(0, steps.length - MAX_STEPS_SHOWN)
+    return (
+      <View style={[s.bubble, s.aiBubble, s.steps]}>
+        {hidden > 0 && <Text style={s.stepMore}>{hidden} earlier step{hidden > 1 ? 's' : ''}</Text>}
+        {steps.slice(hidden).map((step, i) => (
+          <View key={hidden + i} style={s.stepRow}>
+            <View style={s.stepIcon}>
+              {step.done
+                ? <Text style={s.stepCheck}>✓</Text>
+                : <ActivityIndicator size='small' color={t.accent} />}
+            </View>
+            <Text style={[s.stepText, step.done && s.stepDoneText]} numberOfLines={2}>{step.label}</Text>
+          </View>
+        ))}
+      </View>
+    )
   }
 
   // How much room to leave below the input row.
@@ -284,40 +320,32 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
           <TouchableOpacity onPress={onClose} hitSlop={10} style={s.close}><Text style={s.closeText}>✕</Text></TouchableOpacity>
         </View>
       </View>
-      {driveUrl ? (
+      {url ? (
+        // The page the AI sees as the current tab. The dot is green for a Drive.
         <View style={s.pageBadge}>
-          <View style={s.pageDot} />
+          <View style={[s.pageDot, !driveUrl && s.pageDotWeb]} />
           <View style={s.pageBadgeText}>
             <Text numberOfLines={1} style={s.pageTitle}>{title || 'Untitled page'}</Text>
             <Text numberOfLines={1} style={s.pageUrl}>{url}</Text>
           </View>
         </View>
       ) : (
-        <Text numberOfLines={1} style={s.url}>General chat (no page context)</Text>
+        <Text numberOfLines={1} style={s.url}>No page open</Text>
       )}
 
       <View style={[s.flex, bottomPad > 0 ? { paddingBottom: bottomPad } : null]}>
         <ScrollView ref={scrollRef} style={s.body} contentContainerStyle={s.bodyPad}>
           {messages.length === 0 ? (
             <Text style={s.empty}>
-              Ask about {driveUrl ? 'this drive' : 'anything'}. The AI runs on your desktop device and streams answers here — it can read and (with your approval) edit the drive.
+              Ask anything. The AI runs on your desktop device and streams answers here. It can see the tab you're on, and it can read your drives and, with your approval, edit them.
             </Text>
           ) : (
             messages.map((m, i) => {
-              const streaming = turnActiveHere && i === messages.length - 1
+              const streaming = busy && i === messages.length - 1
               const shown = m.role === 'assistant' ? unwrapReply(m.content, streaming) : m.content
-              // The trailing empty assistant message is the response slot. While busy, show the
-              // thinking indicator right there — left side, under the last user message, exactly
-              // where the answer will stream in. It's replaced by the text once the first token lands.
-              if (m.role === 'assistant' && !shown) {
-                if (!streaming) return null
-                return (
-                  <View key={i} style={[s.bubble, s.aiBubble, s.thinkingBubble]}>
-                    <ActivityIndicator size='small' color={t.accent} />
-                    <Text style={s.thinkingText} numberOfLines={1}>{activity || 'Thinking…'}</Text>
-                  </View>
-                )
-              }
+              // The trailing empty assistant message is the response slot. renderSteps() below
+              // stands in for it until the first words land.
+              if (m.role === 'assistant' && !shown) return null
               if (m.role === 'assistant') {
                 return (
                   <View key={i} style={[s.bubble, s.aiBubble]}>
@@ -341,10 +369,11 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
               )
             })
           )}
+          {busy && renderSteps()}
           {error && <Text style={s.error}>⚠️ {error}</Text>}
         </ScrollView>
 
-        {driveUrl && draftPaths.length > 0 && !turnActiveHere && (
+        {driveUrl && draftPaths.length > 0 && !busy && (
           <View style={s.draftBanner}>
             <Text style={s.draftText}>
               ✎ Draft ready — {draftPaths.length} change{draftPaths.length > 1 ? 's' : ''} to this page
@@ -409,7 +438,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
               editable={!busy}
               onSubmitEditing={send}
             />
-            {turnActiveHere ? (
+            {busy ? (
               <TouchableOpacity style={[s.sendBtn, s.stopBtn]} onPress={stop}>
                 <Text style={s.sendText}>Stop</Text>
               </TouchableOpacity>
@@ -456,6 +485,7 @@ function makeStyles (t: Theme) {
       borderColor: t.border
     },
     pageDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: t.secure, marginRight: 8 },
+    pageDotWeb: { backgroundColor: t.textMuted },
     pageBadgeText: { flexShrink: 1 },
     pageTitle: { color: t.text, fontSize: 13, fontWeight: '600' },
     pageUrl: { color: t.textMuted, fontSize: 11, fontFamily: 'monospace', marginTop: 1 },
@@ -471,8 +501,13 @@ function makeStyles (t: Theme) {
     userText: { color: t.trustText, fontSize: 15, lineHeight: 21 },
     aiText: { color: t.text, fontSize: 15, lineHeight: 21 },
     error: { color: t.danger, fontSize: 13, paddingVertical: 6 },
-    thinkingBubble: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    thinkingText: { color: t.textDim, fontSize: 14, flexShrink: 1 },
+    steps: { gap: 6, paddingVertical: 8 },
+    stepRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    stepIcon: { width: 20, alignItems: 'center' },
+    stepCheck: { color: t.secure, fontSize: 13, fontWeight: '700' },
+    stepText: { color: t.textDim, fontSize: 14, flexShrink: 1 },
+    stepDoneText: { color: t.textMuted },
+    stepMore: { color: t.textMuted, fontSize: 12 },
     draftBanner: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border, backgroundColor: t.surface, paddingHorizontal: 16, paddingVertical: 10, gap: 10 },
     draftText: { color: t.text, fontSize: 13, fontWeight: '600' },
     draftBtns: { flexDirection: 'row', alignItems: 'center', gap: 20 },

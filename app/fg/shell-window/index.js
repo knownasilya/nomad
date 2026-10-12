@@ -35,8 +35,9 @@ class ShellWindowUI extends LitElement {
       sidebarSide: { type: String },
       sidebarWidth: { type: Number },
       sidebarCollapsed: { type: Boolean },
-      // aiSidebarWidth is shared/window-level; whether it's OPEN is per-tab — see this.activeTab.
+      // The AI sidebar's width and whether it's open are both window-level (ADR-0021).
       aiSidebarWidth: { type: Number },
+      aiSidebarOpen: { type: Boolean },
     };
   }
 
@@ -59,6 +60,7 @@ class ShellWindowUI extends LitElement {
     this.sidebarWidth = 220;
     this.sidebarCollapsed = false;
     this.aiSidebarWidth = 380;
+    this.aiSidebarOpen = false;
     this.setup();
   }
 
@@ -104,6 +106,7 @@ class ShellWindowUI extends LitElement {
       if (state.sidebarWidth) this.sidebarWidth = state.sidebarWidth;
       this.sidebarCollapsed = state.sidebarCollapsed || false;
       if (state.aiSidebarWidth) this.aiSidebarWidth = state.aiSidebarWidth;
+      this.aiSidebarOpen = state.aiSidebarOpen || false;
       this.stateHasChanged();
     });
     viewEvents.addEventListener('update-state', ({ index, state }) => {
@@ -204,8 +207,8 @@ class ShellWindowUI extends LitElement {
     }
     // The AI sidebar always docks right, independent of tabLayout/sidebarSide — reserve its width
     // on the right for both the navbar and (in top-bar layout) the tab strip above it, the same
-    // way the tab-list sidebar's own width is reserved above. Open/closed is per-tab.
-    const aiOpen = this.activeTab?.aiSidebarOpen ?? false;
+    // way the tab-list sidebar's own width is reserved above. Open/closed is per-window.
+    const aiOpen = this.aiSidebarOpen;
     const aiW = aiOpen ? this.aiSidebarWidth : 0;
     navMarginRight += aiW;
     const navbarStyle = [

@@ -153,9 +153,11 @@ export function createAiBridge ({ swarm, getVault }) {
           publishDraft: opts.publishDraft || false, // delegate publish to the Provider (writes the Drive)
           discardDraft: opts.discardDraft || false,
           // A turn of the user's own AI: the AI panel only; a page's chat never is (app/index.tsx).
-          // `space` is the Space whose Reader the AI may use.
+          // `space` is the Space whose Reader the AI may use, and `tab` ({ url, title }) the tab
+          // the user is on, for the Provider's currentTab (ADR-0021).
           personal: opts.personal === true,
-          space: opts.space || null
+          space: opts.space || null,
+          tab: opts.tab || null
         }
       })
     }).finally(() => peer.clientReqs.delete(id))

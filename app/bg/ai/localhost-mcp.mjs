@@ -3,11 +3,28 @@
 // request: application/json is not a simple content type, and this server
 // sends no CORS headers, so a cross-origin page stops at the preflight.
 
+import crypto from 'crypto'
 import { MODEL_TOOLS } from './search-execute.mjs'
 
 export const MCP_PORT = 47655
 export const MCP_PATH = '/mcp'
 const PROTOCOL_VERSIONS = ['2025-03-26', '2024-11-05']
+
+// A chat turn on a CLI runtime opens a turn here and gives the CLI its token. The CLI sends the
+// token in this header with every call, so the call runs in that turn's context (ADR-0021). A
+// call with no token comes from another program on this machine.
+export const TURN_HEADER = 'x-nomad-turn'
+const turns = new Map()
+
+export function openTurn(context) {
+  const token = crypto.randomBytes(32).toString('hex')
+  turns.set(token, context)
+  return token
+}
+
+export function closeTurn(token) {
+  turns.delete(token)
+}
 
 export function mcpToolList() {
   return MODEL_TOOLS.map((tool) => ({
@@ -59,7 +76,7 @@ export async function handleMcpHttp({ method, url, headers, body, remoteAddress,
   if (message.id == null) return { status: 202, headers: {}, body: '' }
 
   try {
-    const result = await dispatch(message.method, message.params || {}, callTool)
+    const result = await dispatch(message.method, message.params || {}, callTool, header(TURN_HEADER))
     return jsonRpc(message.id, { result })
   } catch (err) {
     const code = err && err.rpcCode ? err.rpcCode : -32603
@@ -67,7 +84,7 @@ export async function handleMcpHttp({ method, url, headers, body, remoteAddress,
   }
 }
 
-async function dispatch(method, params, callTool) {
+async function dispatch(method, params, callTool, token) {
   if (method === 'initialize') {
     const requested = params && params.protocolVersion
     return {
@@ -78,21 +95,25 @@ async function dispatch(method, params, callTool) {
   }
   if (method === 'ping') return {}
   if (method === 'tools/list') return { tools: mcpToolList() }
-  if (method === 'tools/call') return callMcpTool(params || {}, callTool)
+  if (method === 'tools/call') return callMcpTool(params || {}, callTool, token)
   const err = new Error(`method not found: ${method}`)
   err.rpcCode = -32601
   throw err
 }
 
-async function callMcpTool(params, callTool) {
+async function callMcpTool(params, callTool, token) {
   const name = params.name
   const args = params.arguments && typeof params.arguments === 'object' ? params.arguments : {}
   if (name !== 'search' && name !== 'execute') {
     return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true }
   }
   if (typeof callTool !== 'function') throw new Error('search and execute are not available')
+  // An unknown token never falls back to the focused tab: the turn ended, or the call came to
+  // the wrong Nomad.
+  const turn = token ? turns.get(token) : null
+  if (token && !turn) return { content: [{ type: 'text', text: 'This chat turn has ended.' }], isError: true }
   try {
-    const value = await callTool(name, args)
+    const value = await callTool(name, args, turn)
     return { content: contentFrom(value), isError: false }
   } catch (err) {
     return {

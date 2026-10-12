@@ -60,7 +60,7 @@ export function createAgentReducer() {
     const blocks = Array.isArray(msg.message?.content) ? msg.message.content : [];
     for (const block of blocks) {
       if (block?.type === 'tool_use' && typeof block.name === 'string' && block.name) {
-        events.push({ type: 'tool', name: block.name });
+        events.push({ type: 'tool', name: block.name, input: block.input });
         segment = '';
       }
       if (block?.type !== 'text' || typeof block.text !== 'string') continue;

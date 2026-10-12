@@ -50,7 +50,7 @@ The three should always reflect the same surface area.
 
 `search` and `execute` are model tools on the chat turn (`MODEL_TOOLS` in `app/bg/ai/search-execute.mjs`), wired in `app/bg/web-apis/bg/ai.ts`. `execute` forks `app/bg/ai/execute-worker.mjs` via `app/bg/ai/execute-host.mjs`. The worker stays a real `.mjs` on disk: the utility process loads that path, and the chat bundle does not inline it.
 
-A program on this machine can call the same two tools over MCP at `http://127.0.0.1:47655/mcp` (`app/bg/ai/localhost-mcp.mjs`, started from `ai.ts`). It binds to loopback and uses the focused window's active tab. `NOMAD_MCP=0` turns it off. `NOMAD_MCP_PORT` changes the port. Leave `search` and `execute` out of the nomad.dev API pages and out of `nomad-dts.js`. `nomad.ai.listTools()` returns `{ builtin, capabilities, page, pageOrigin, pageGranted }`. `builtin` is search and execute. `capabilities` is the catalog behind search, with the same write and vision gates `execute` enforces. If the nomad.dev `listTools` page describes that return value, keep `capabilities` in it.
+A program on this machine can call the same two tools over MCP at `http://127.0.0.1:47655/mcp` (`app/bg/ai/localhost-mcp.mjs`, started from `ai.ts`). It binds to loopback. A call from another program uses the focused window's active tab. A chat turn on a CLI runtime (Claude) uses the same MCP, but `runChat` opens a turn (`openTurn`) and the CLI sends its token in the `x-nomad-turn` header, so each call runs with that turn's sender, drive, catalog, prompts and tool events. An unknown token fails; it never falls back to the focused tab (ADR-0021). `NOMAD_MCP=0` turns it off. `NOMAD_MCP_PORT` changes the port. Leave `search` and `execute` out of the nomad.dev API pages and out of `nomad-dts.js`. `nomad.ai.listTools()` returns `{ builtin, capabilities, page, pageOrigin, pageGranted }`. `builtin` is search and execute. `capabilities` is the catalog behind search, with the same write and vision gates `execute` enforces. If the nomad.dev `listTools` page describes that return value, keep `capabilities` in it.
 
 ## WebMCP page tools (`document.modelContext`)
 
@@ -202,9 +202,26 @@ where the user navigates (`ui/tabs/pane.js` `loadURL` and `onWillNavigate`) and 
 (`drive` argument in `bg/web-apis/bg/ai.ts`). Don't resolve names in the hyper:// protocol handler or
 in `nomad.fs` for pages: that gives a Drive a second origin and lets any page probe the user's names.
 Only the user's own AI gets names and `drive`: the AI Sidebar (`ai-shell.ts`), the phone's AI panel over
-the Bridge, and the loopback MCP. That is a **personal turn** (flag `personal`); `ai.ts` `chat()` (a
-page's `nomad.ai.chat()`) and the phone's WebView handler force it off. Keep it that way for any new
-chat entry point.
+the Bridge, and the loopback MCP. That is a **personal turn**. Each turn has a **stage**
+(`app/bg/ai/stages.mjs`, ADR-0021): `page` (a page's `nomad.ai.chat()`, never personal), `sidebar`,
+`phone` and `outside` (the loopback MCP). `ai.ts` `chat()` sets `page`; the phone's WebView handler sends
+`personal: false`, and the Provider maps a remote turn to `phone` or `page` only (`remoteStage`). Keep it
+that way for any new chat entry point.
+
+### The assistant is not tied to a tab (ADR-0021)
+
+The AI Sidebar and the phone's AI panel each keep one conversation, not one per site. The sidebar's
+open state and width belong to the window (`toggleAiSidebarOpen` in `bg/ui/windows.js`), so it stays
+open across tabs. Their turns have
+no Drive of their own: `runChat` passes a `currentTab` lookup, and `executeTool` calls it on every call
+(live in the sidebar's window; on the phone, the `tab` snapshot the phone sends). That tab is the call's
+sender, so a permission prompt is for the tab's site, and `askOncePerTurn` keeps one answer per
+permission and site. The `currentTab` capability tells the model the tab. A read without `drive` uses
+the tab's drive; a write must name its drive (`pickToolDrive`). The Drive's own AI Config
+(`/ai/system.md`) is skipped for these turns. A `write` tool event names its `drive`, so the sidebar's
+Revert and the phone's Draft banner work per drive. The sidebar's sessions live in
+`hyper://private/.ai-chat/sessions/`; its model choice is the `ai_sidebar_prefs` setting, with vision
+per model.
 
 ### The AI and the user's Notes and Reader (ADR-0019)
 

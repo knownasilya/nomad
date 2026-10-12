@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { handleMcpHttp, isLoopback, mcpToolList } from '../../app/bg/ai/localhost-mcp.mjs';
+import { closeTurn, handleMcpHttp, isLoopback, mcpToolList, openTurn, TURN_HEADER } from '../../app/bg/ai/localhost-mcp.mjs';
+import { mcpConfig } from '../../app/bg/ai/agent-cli.mjs';
 
 function request(overrides = {}) {
   return handleMcpHttp({
@@ -100,6 +101,73 @@ describe('localhost mcp', () => {
     });
     expect(note.status).toBe(202);
     expect(note.body).toBe('');
+  });
+
+  describe('chat turns', () => {
+    const call = (headers, callTool) =>
+      request({
+        headers: { 'content-type': 'application/json', ...headers },
+        callTool,
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 7,
+          method: 'tools/call',
+          params: { name: 'execute', arguments: { code: 'x' } },
+        }),
+      });
+
+    it('runs a call in the context of the turn its token names', async () => {
+      const context = { toolOpts: { driveUrl: 'hyper://phone-drive/' } };
+      const token = openTurn(context);
+      let seen;
+      await call({ [TURN_HEADER]: token }, async (name, args, turn) => {
+        seen = turn;
+        return 'ok';
+      });
+      closeTurn(token);
+      expect(seen).toBe(context);
+    });
+
+    it('refuses an ended or unknown turn, and never falls back to the focused tab', async () => {
+      const token = openTurn({});
+      closeTurn(token);
+      let called = false;
+      const res = await call({ [TURN_HEADER]: token }, async () => {
+        called = true;
+        return 'ok';
+      });
+      const body = JSON.parse(res.body);
+      expect(called).toBe(false);
+      expect(body.result.isError).toBe(true);
+      expect(body.result.content[0].text).toBe('This chat turn has ended.');
+    });
+
+    it('gives a call with no token no turn', async () => {
+      let seen = 'unset';
+      await call({}, async (name, args, turn) => {
+        seen = turn;
+        return 'ok';
+      });
+      expect(seen).toBe(null);
+    });
+
+    it('makes a different token for each turn', () => {
+      const a = openTurn({});
+      const b = openTurn({});
+      closeTurn(a);
+      closeTurn(b);
+      expect(a).not.toBe(b);
+      expect(a).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('gives the CLI the token as a header', () => {
+      expect(mcpConfig('http://127.0.0.1:47655/mcp', 'abc')).toEqual({
+        mcpServers: {
+          nomad: { type: 'http', url: 'http://127.0.0.1:47655/mcp', headers: { [TURN_HEADER]: 'abc' } },
+        },
+      });
+      expect(mcpConfig('http://127.0.0.1:47655/mcp', null).mcpServers.nomad.headers).toBeUndefined();
+    });
   });
 
   it('rejects the wrong path, method, and body', async () => {

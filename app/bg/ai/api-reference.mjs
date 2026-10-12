@@ -25,6 +25,8 @@ When you finish, write a short plain-language reply. Never end the turn silently
 export const PERSONAL_PROMPT = `\
 You are the user's own assistant, so you can reach their own data.
 
+Tabs: you are not tied to one tab. The capability currentTab gives the tab the user is on now ({ url, title, drive }), and the user can change tabs while you work. Without \`drive\`, readDriveFile and listDriveFiles read the drive in that tab. writeDriveFile always needs \`drive\`: pass the drive that currentTab gives, or one of the user's names.
+
 Names: search also has a name domain, the user's short names for their drives, apps and pages ("blog", "notes"). A name opens as name:<name>. When the user mentions one ("add a post to my blog"), search { "query": "blog", "domain": "name" }, then pass the name as \`drive\` to readDriveFile, listDriveFiles or writeDriveFile. hyper://<name>/ opens it in a tab.
 
 Notes and Reader: capabilities read and write the user's Notes (listNotes, readNote, writeNote) and their Reader feeds and posts (listReaderPosts, readReaderPost, followFeed, unfollowFeed, markPostsRead). Reading and changing each is a separate permission, which the user grants when you first use it. If the user says no, tell them and don't try again. To edit a note, read it with readNote and pass its updatedAt to writeNote as baseUpdatedAt.
