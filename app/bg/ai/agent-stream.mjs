@@ -1,9 +1,20 @@
 // Turn one JSON line from `claude` / `cursor-agent` --output-format stream-json
-// into text the chat UI should append. Snapshots that repeat earlier text only
-// contribute the new suffix, so a final "result" line does not print the answer twice.
+// into text the chat UI should append. Both CLIs say each reply more than once:
+// - claude streams text_delta events, sends each whole block again as an
+//   `assistant` line, and sends the last message again as `result`.
+// - cursor sends `assistant` lines that are deltas, then one `assistant` line with
+//   the whole segment (the text up to a tool call), and at the end every segment
+//   again as `result`.
+// Only the first copy goes to the chat. Only `assistant` lines are reply text:
+// cursor also echoes the prompt as a `user` line and streams its reasoning as
+// `thinking` lines.
 
 export function createAgentReducer() {
-  let acc = '';
+  let reply = ''; // all the text sent so far
+  // The text sent in the current claude block, or since cursor's last tool call or
+  // whole segment.
+  let segment = '';
+  let deltas = false; // claude: text comes as stream events, so `assistant` lines are whole blocks
   return function reduce(line) {
     const trimmed = String(line || '').trim();
     if (!trimmed.startsWith('{')) return [];
@@ -14,50 +25,60 @@ export function createAgentReducer() {
       return [];
     }
     const events = [];
-    const blocks = Array.isArray(msg?.message?.content) ? msg.message.content : [];
+    const send = (text) => {
+      if (!text) return;
+      reply += text;
+      segment += text;
+      events.push({ type: 'text', text });
+    };
+
+    if (msg?.type === 'stream_event') {
+      if (msg.event?.type === 'content_block_start') segment = '';
+      const delta = msg.event?.delta;
+      if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
+        deltas = true;
+        send(delta.text);
+      }
+      return events;
+    }
+
+    if (msg?.type === 'result') {
+      if (typeof msg.result !== 'string') return events;
+      if (msg.is_error) return [{ type: 'error', text: msg.result }];
+      // A repeat of the last message (claude) or of the whole reply (cursor). Only
+      // text that did not stream before is new.
+      if (msg.result.startsWith(reply)) send(msg.result.slice(reply.length));
+      return events;
+    }
+
+    if (msg?.type === 'tool_call') {
+      segment = '';
+      return events;
+    }
+
+    if (msg?.type !== 'assistant') return events;
+    const blocks = Array.isArray(msg.message?.content) ? msg.message.content : [];
     for (const block of blocks) {
       if (block?.type === 'tool_use' && typeof block.name === 'string' && block.name) {
         events.push({ type: 'tool', name: block.name });
+        segment = '';
+      }
+      if (block?.type !== 'text' || typeof block.text !== 'string') continue;
+      // Skip text blocks on API error messages (e.g. auth failures): the `result` line
+      // that follows has `is_error: true` and produces a proper `error` event instead.
+      if (msg.is_api_error_message) continue;
+      if (deltas) {
+        // claude: the whole block, which already streamed. Send only what did not.
+        if (block.text.startsWith(segment)) send(block.text.slice(segment.length));
+      } else if (segment && block.text === segment) {
+        // cursor: the whole segment again.
+        segment = '';
+      } else {
+        send(block.text);
       }
     }
-    const pieces = [];
-    const delta = msg?.event?.delta;
-    if (
-      msg?.type === 'stream_event' &&
-      delta?.type === 'text_delta' &&
-      typeof delta.text === 'string'
-    ) {
-      pieces.push(delta.text);
-    }
-    if (typeof msg?.text === 'string') pieces.push(msg.text);
-    // Skip text blocks on API error messages (e.g. auth failures): the `result` line
-    // that follows has `is_error: true` and produces a proper `error` event instead.
-    if (!msg.is_api_error_message) {
-      for (const block of blocks) {
-        if (block?.type === 'text' && typeof block.text === 'string') pieces.push(block.text);
-      }
-    }
-    if (msg?.type === 'result' && typeof msg.result === 'string') {
-      if (msg.is_error) {
-        events.push({ type: 'error', text: msg.result });
-        return events;
-      }
-      pieces.push(msg.result);
-    }
-    for (const piece of pieces) events.push(...suffix(piece));
     return events;
   };
-
-  function suffix(text) {
-    if (!text) return [];
-    if (text.startsWith(acc)) {
-      const extra = text.slice(acc.length);
-      acc = text;
-      return extra ? [{ type: 'text', text: extra }] : [];
-    }
-    acc += text;
-    return [{ type: 'text', text }];
-  }
 }
 
 export function messageText(content) {
