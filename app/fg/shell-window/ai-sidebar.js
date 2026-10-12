@@ -116,7 +116,9 @@ class ShellWindowAiSidebar extends LitElement {
       z-index: 10;
       background: var(--bg-color--background);
       border-left: 1px solid var(--border-color--tab);
-      color: var(--text-color--default, #ddd);
+      /* The shell's tokens (assets/css/design-tokens.css) have no --text-color--default; the
+         input text color is its body text in both schemes. */
+      color: var(--text-color--default, var(--text-color--input));
       font-size: 13px;
     }
 
@@ -154,7 +156,7 @@ class ShellWindowAiSidebar extends LitElement {
     .header-actions button {
       background: transparent;
       border: 0;
-      color: var(--text-color--default, #ddd);
+      color: var(--text-color--default, var(--text-color--input));
       opacity: 0.7;
       cursor: pointer;
       padding: 4px 6px;
@@ -342,6 +344,9 @@ class ShellWindowAiSidebar extends LitElement {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+    .checkpoint-drive {
+      opacity: 0.65;
     }
     .revert-btn {
       margin-top: 4px;
@@ -534,12 +539,16 @@ class ShellWindowAiSidebar extends LitElement {
     // alone (that's the app's own URL, never the Drive it has open — see ai-shell.ts).
     this._driveUrl = null;
     this._driveWritable = false;
+    // Drives this conversation already started a Draft for (see _send).
+    this._draftDrives = new Set();
     this._activity = [];
     this._model = '';
     this._think = true;
     this._effort = '';
     this._reasoningModel = null;
     this._visionModel = false; // conservative default — never offer screenshots until confirmed
+    // The user's own "this model can see images", per model id ('' is the Settings default).
+    this._visionByModel = {};
     this._modelInfoCache = new Map();
     this._models = null;
     this._tools = null;
@@ -547,22 +556,20 @@ class ShellWindowAiSidebar extends LitElement {
     this._toolsOpen = false;
     this._sessions = [];
     this._sessionsOpen = false;
+    // The assistant is the user's, not a tab's (ADR-0021): one conversation and one model choice,
+    // whatever tab is open.
     this._loadModels();
-  }
-
-  // Chat/session storage is keyed by this — the resolved Drive's origin when there is one (so
-  // editing hyper://siteA vs hyper://siteB in the SAME editor tab never shares a session), else
-  // the tab's own origin (a plain web page).
-  get _origin() {
-    try {
-      return new URL(this._driveUrl || this.activeTab?.url || '').origin;
-    } catch {
-      return '';
-    }
+    this._loadPrefs();
+    this._loadSession();
   }
 
   get _driveBase() {
-    return this._driveUrl && this._driveUrl.startsWith('hyper://') ? this._origin : null;
+    if (!this._driveUrl || !this._driveUrl.startsWith('hyper://')) return null;
+    try {
+      return new URL(this._driveUrl).origin;
+    } catch {
+      return null;
+    }
   }
 
   get _writable() {
@@ -573,13 +580,9 @@ class ShellWindowAiSidebar extends LitElement {
     this.style.width = `${this.width}px`;
     const tabUrl = this.activeTab?.url || '';
     if (tabUrl !== this._loadedTabUrl) {
+      // A tab change doesn't touch the conversation or a running turn: the assistant can look at
+      // the new tab with currentTab. Only the Drive info below follows the tab.
       this._loadedTabUrl = tabUrl;
-      // If a turn is still streaming for the tab we're leaving, stop it — otherwise its next
-      // chunk lands in whatever this.messages holds for the NEW tab once _loadDriveInfo below
-      // replaces it, corrupting the new tab's (unrelated) session. _send()'s own captured-origin
-      // guards are the other half of this: even a turn that's mid-flight when this fires will
-      // still save to the session it actually belongs to, not wherever the UI has since moved on to.
-      if (this.streaming) this._stopChat?.();
       this._loadDriveInfo();
     }
     if (changedProperties.has('messages') || changedProperties.has('streaming')) {
@@ -587,11 +590,10 @@ class ShellWindowAiSidebar extends LitElement {
     }
   }
 
-  // Resolves _driveUrl/_driveWritable for the active tab, THEN (since that can change _origin)
-  // loads that origin's prefs/session. A plain hyper:// tab resolves locally; nomad://editor and
-  // nomad://explorer ask the host app itself — see ai-shell.ts's resolveActiveDrive, which this
-  // mirrors so the sidebar's own "read-only"/revert/Draft-Mode UI agrees with what the backend
-  // actually targets.
+  // Resolves _driveUrl/_driveWritable for the active tab. A plain hyper:// tab resolves locally;
+  // nomad://editor and nomad://explorer ask the host app itself — see ai-shell.ts's
+  // resolveActiveDrive, which this mirrors so the sidebar starts a Draft for the Drive the
+  // backend sees.
   async _loadDriveInfo() {
     const tabUrl = this.activeTab?.url || '';
     let driveUrl = null;
@@ -611,58 +613,52 @@ class ShellWindowAiSidebar extends LitElement {
     if ((this.activeTab?.url || '') !== tabUrl) return; // tab changed again while we were loading
     this._driveUrl = driveUrl;
     this._driveWritable = writable;
-    this._loadPrefs();
-    this._loadSession();
   }
 
-  // — site preferences: model/thinking/effort are a per-SITE choice (hyper://private/.ai-chat/…),
-  // independent of which chat is open — picking a model applies going forward, isn't reset by
-  // "New session" or reopening an older chat, and isn't part of any individual session's data. —
+  // — preferences: one model/thinking/effort choice for the sidebar, saved on this device
+  // (ADR-0021). It applies going forward, isn't reset by "New session" or reopening an older chat,
+  // and isn't part of any session's data. —
 
   async _loadPrefs() {
-    const origin = this._origin;
     let prefs = null;
     try {
-      prefs = await bg.aiShell.getSitePrefs(origin);
+      prefs = await bg.aiShell.getPrefs();
     } catch {
       /* none saved yet */
     }
-    if (this._origin !== origin) return; // origin changed again while we were loading
     this._model = prefs?.model || '';
     this._think = prefs?.think !== false;
     this._effort = prefs?.effort || '';
+    this._visionByModel = prefs?.vision || {};
     // Vision: prefer a saved manual choice (needed on servers modelInfo can't probe, e.g. LM
     // Studio / llama.cpp — anything without Ollama's /api/show); _refreshModelInfo() below will
     // still override this with a confident auto-detected answer when the probe succeeds.
-    this._visionModel = prefs?.vision === true;
+    this._visionModel = this._visionByModel[this._model] === true;
     this._refreshModelInfo();
   }
 
   async _savePrefs() {
-    const origin = this._origin;
-    if (!origin) return;
     try {
-      await bg.aiShell.saveSitePrefs(origin, {
+      await bg.aiShell.savePrefs({
         model: this._model,
         think: this._think,
         effort: this._effort,
-        vision: this._visionModel === true,
+        vision: this._visionByModel,
       });
     } catch {
       /* non-fatal */
     }
   }
 
-  // — session persistence (per-origin, hyper://private/.ai-chat/…) —
+  // — session persistence (one list, hyper://private/.ai-chat/sessions/) —
 
   async _loadSession() {
-    const origin = this._origin;
     this.streaming = false;
     try {
-      const lastId = await bg.aiShell.getLastSessionId(origin);
+      const lastId = await bg.aiShell.getLastSessionId();
       if (lastId) {
-        const data = await bg.aiShell.loadSession(origin, lastId);
-        if (data && this._origin === origin) {
+        const data = await bg.aiShell.loadSession(lastId);
+        if (data) {
           this.sessionId = lastId;
           this.messages = data.messages || [];
           return;
@@ -671,21 +667,18 @@ class ShellWindowAiSidebar extends LitElement {
     } catch {
       /* fall through to a fresh session */
     }
-    if (this._origin !== origin) return; // origin changed again while we were loading
     this.sessionId = await bg.aiShell.newSession();
     this.messages = [];
   }
 
-  // Always takes explicit (origin, sessionId, messages) rather than reading live state — a save
-  // triggered from a turn that outlives the user switching tabs must still land on the session it
-  // actually belongs to (see _send()'s captured turnOrigin/turnSessionId), not wherever this.origin
-  // /this.sessionId happen to point by the time the save actually runs.
-  async _saveSession(origin, sessionId, messages) {
-    if (!origin || !sessionId) return;
+  // Always takes explicit (sessionId, messages) rather than reading live state — a save triggered
+  // from a turn must land on the session it belongs to (see _send()'s captured turnSessionId).
+  async _saveSession(sessionId, messages) {
+    if (!sessionId) return;
     const firstUser = messages.find((m) => m.role === 'user');
     const title = firstUser ? firstUser.content.trim().slice(0, 60) : '';
     try {
-      await bg.aiShell.saveSession(origin, sessionId, { title, messages });
+      await bg.aiShell.saveSession(sessionId, { title, messages });
     } catch {
       /* non-fatal */
     }
@@ -695,6 +688,7 @@ class ShellWindowAiSidebar extends LitElement {
     if (this.streaming) return;
     this.sessionId = await bg.aiShell.newSession();
     this.messages = [];
+    this._draftDrives = new Set();
     this._sessionsOpen = false;
     this.requestUpdate();
   }
@@ -703,7 +697,7 @@ class ShellWindowAiSidebar extends LitElement {
     this._sessionsOpen = !this._sessionsOpen;
     if (this._sessionsOpen) {
       try {
-        this._sessions = await bg.aiShell.listSessions(this._origin);
+        this._sessions = await bg.aiShell.listSessions();
       } catch {
         this._sessions = [];
       }
@@ -715,16 +709,17 @@ class ShellWindowAiSidebar extends LitElement {
       this._sessionsOpen = false;
       return;
     }
-    const data = await bg.aiShell.loadSession(this._origin, id);
+    const data = await bg.aiShell.loadSession(id);
     this.sessionId = id;
     this.messages = data?.messages || [];
+    this._draftDrives = new Set();
     this._sessionsOpen = false;
   }
 
   async _deleteSession(e, id) {
     e.stopPropagation();
     try {
-      await bg.aiShell.deleteSession(this._origin, id);
+      await bg.aiShell.deleteSession(id);
     } catch {
       /* non-fatal */
     }
@@ -783,10 +778,9 @@ class ShellWindowAiSidebar extends LitElement {
 
   async _onModelChange(e) {
     this._model = e.target.value;
-    // Vision is really a per-model fact, not per-site, but prefs are stored per-site — so a
-    // manual "yes" set for a different model must not silently carry over here. If the new
-    // model's probe is confident, _refreshModelInfo() below overrides this right back.
-    this._visionModel = false;
+    // Vision is a per-model fact: start from the user's own choice for this model. If the new
+    // model's probe is confident, _refreshModelInfo() below overrides it.
+    this._visionModel = this._visionByModel[this._model] === true;
     // Awaited — saving prefs before the probe resolves would persist this reset-to-false instead
     // of whatever the (possibly async, possibly confident) probe determines a moment later.
     await this._refreshModelInfo();
@@ -805,6 +799,7 @@ class ShellWindowAiSidebar extends LitElement {
 
   _onVisionChange(e) {
     this._visionModel = e.target.checked;
+    this._visionByModel = { ...this._visionByModel, [this._model]: this._visionModel };
     this._savePrefs();
   }
 
@@ -813,7 +808,7 @@ class ShellWindowAiSidebar extends LitElement {
     // Re-fetch not just on first open but whenever what would be offered has actually changed
     // (switching models can flip vision support; navigating can flip writability) — otherwise a
     // panel opened once early keeps showing a stale list for the rest of the tab's lifetime.
-    const params = { allowWrite: this._writable, allowVision: this._visionModel === true };
+    const params = { allowVision: this._visionModel === true };
     const paramsKey = JSON.stringify(params);
     if (this._toolsOpen && (!this._tools || this._toolsParamsKey !== paramsKey)) {
       try {
@@ -826,7 +821,13 @@ class ShellWindowAiSidebar extends LitElement {
   }
 
   _openInspector() {
-    bg.views.createTab('nomad://webmcp?origin=' + encodeURIComponent(this._origin), {
+    let origin = '';
+    try {
+      origin = new URL(this.activeTab?.url || '').origin;
+    } catch {
+      /* no tab */
+    }
+    bg.views.createTab('nomad://webmcp?origin=' + encodeURIComponent(origin), {
       setActive: true,
     });
   }
@@ -885,7 +886,7 @@ class ShellWindowAiSidebar extends LitElement {
 
   _renderSessions() {
     if (!this._sessions.length) {
-      return html`<div class="sessions"><div class="sessions-empty">No past chats for this site yet.</div></div>`;
+      return html`<div class="sessions"><div class="sessions-empty">No past chats yet.</div></div>`;
     }
     return html`
       <div class="sessions">
@@ -910,16 +911,11 @@ class ShellWindowAiSidebar extends LitElement {
   }
 
   _renderChat() {
-    const readOnly = this._driveBase && !this._writable;
     return html`
-      ${readOnly
-        ? html`<div class="note">This drive is read-only. Chat is available, but the agent can't edit files.</div>`
-        : ''}
       ${this.messages.length === 0
         ? html`<div class="empty">
-            Ask the assistant about this page.${this._writable
-              ? ' Edits to this drive apply directly; use Revert to undo a turn.'
-              : ''}
+            Ask the assistant anything. It can see the tab you're on, and it can work with any drive you
+            name. Use Revert to undo a turn's edits.
           </div>`
         : html`<div class="messages">
             ${this.messages.map((m, i) => this._renderMessage(m, i))}
@@ -1072,8 +1068,11 @@ class ShellWindowAiSidebar extends LitElement {
     return html`
       <div class="checkpoint ${m.reverted ? 'reverted' : ''}">
         ${m.files.map(
-          (f) => html`<div class="checkpoint-file">
+          (f) => html`<div class="checkpoint-file" title=${f.drive ? f.drive + f.path : f.path}>
             <span class="fas fa-fw fa-${f.priorContent === null ? 'plus' : 'pen'}"></span> ${f.path}
+            ${f.drive && f.drive !== this._driveBase
+              ? html`<span class="checkpoint-drive">in ${f.drive.replace(/^hyper:\/\/([0-9a-f]{6})[0-9a-f]{58}$/i, 'hyper://$1…')}</span>`
+              : ''}
           </div>`
         )}
         ${m.reverted
@@ -1098,24 +1097,24 @@ class ShellWindowAiSidebar extends LitElement {
     const text = this.draft.trim();
     if (!text || this.streaming || !this.activeTab) return;
 
-    // Captured once, up front — this turn belongs to THIS origin/session no matter what the user
-    // does with the tab while it's in flight. The live this.messages only gets touched while
-    // isCurrent() holds; the turn always keeps mutating its own local turnMessages regardless, and
-    // the final save (in `finally`) always targets these captured values, never live state — so a
-    // mid-stream tab switch can neither corrupt the new tab's session nor lose this turn's save.
-    const turnOrigin = this._origin;
+    // Captured once, up front — this turn belongs to THIS session. A tab switch doesn't change
+    // that (ADR-0021). The live this.messages only gets touched while isCurrent() holds; the turn
+    // always keeps mutating its own local turnMessages regardless, and the final save (in
+    // `finally`) always targets turnSessionId, never live state.
     const turnSessionId = this.sessionId;
-    const isCurrent = () => this._origin === turnOrigin;
+    const isCurrent = () => this.sessionId === turnSessionId;
 
-    // Draft Mode (ADR-0012): auto-enable on the FIRST turn of a session on a writable Drive, so
-    // the agent's writes stage privately — the user reviews the whole Draft and Publishes/Discards.
-    if (this.messages.length === 0 && this._writable) {
+    // Draft Mode (ADR-0012): the first time this conversation is used on a writable Drive, start
+    // a Draft for it, so the agent's writes there stage privately — the user reviews the whole
+    // Draft and Publishes/Discards.
+    const tabDrive = this._writable ? this._driveBase : null;
+    if (tabDrive && !this._draftDrives.has(tabDrive)) {
+      this._draftDrives.add(tabDrive);
       try {
         await bg.fs.beginDraft(this._driveUrl);
       } catch (e) {
         console.warn('[ai-sidebar] beginDraft failed', e);
       }
-      if (!isCurrent()) return; // navigated away during the awaited beginDraft above
     }
 
     this.draft = '';
@@ -1141,12 +1140,14 @@ class ShellWindowAiSidebar extends LitElement {
       if (e.phase === 'start') {
         if (isCurrent()) this._activity = [...this._activity, { name: e.name, summary: e.summary }];
       } else if (e.phase === 'write' && e.path) {
+        // Each file keeps its drive: the assistant can write to any drive the user names.
         const msg = turnMessages[assistantIdx];
-        if (msg && !msg.files.some((f) => f.path === e.path)) {
+        const drive = e.drive || tabDrive || this._driveBase;
+        if (msg && !msg.files.some((f) => f.path === e.path && f.drive === drive)) {
           turnMessages = [...turnMessages];
           turnMessages[assistantIdx] = {
             ...msg,
-            files: [...msg.files, { path: e.path, priorContent: e.priorContent ?? null }],
+            files: [...msg.files, { drive, path: e.path, priorContent: e.priorContent ?? null }],
           };
         }
       } else if (e.phase === 'screenshot' && e.imageDataUrl) {
@@ -1185,7 +1186,6 @@ class ShellWindowAiSidebar extends LitElement {
           think: this._think,
           effort: this._think ? this._effort || undefined : undefined,
           allowVision: this._visionModel === true,
-          allowWrite: this._writable,
         })
       );
       eventTarget.addEventListener('tool', (e) => onToolEvent(e));
@@ -1237,7 +1237,7 @@ class ShellWindowAiSidebar extends LitElement {
         turnMessages[assistantIdx] = { ...cur, content: '_Stopped._' };
       }
       sync();
-      await this._saveSession(turnOrigin, turnSessionId, turnMessages);
+      await this._saveSession(turnSessionId, turnMessages);
     }
   }
 
@@ -1247,11 +1247,11 @@ class ShellWindowAiSidebar extends LitElement {
 
   async _revertTurn(msgIndex) {
     const msg = this.messages[msgIndex];
-    const base = this._driveBase;
-    if (!msg || !msg.files || msg.reverted || this.streaming || !base) return;
-    const origin = this._origin;
+    if (!msg || !msg.files || msg.reverted || this.streaming) return;
     const sessionId = this.sessionId;
     for (const f of [...msg.files].reverse()) {
+      const base = f.drive;
+      if (!base) continue;
       try {
         const fileUrl = base + f.path;
         if (f.priorContent === null) {
@@ -1261,17 +1261,17 @@ class ShellWindowAiSidebar extends LitElement {
         }
         // Mirrors the 'write' tool-event tap in a live turn — lets editor/explorer reload the
         // affected buffer/listing after a revert, same as after the original write.
-        await bg.aiShell.notifyAgentWroteFile(f.path);
+        await bg.aiShell.notifyAgentWroteFile(f.path, base);
       } catch (e) {
         console.error('[ai-sidebar] revert failed for', f.path, e);
       }
     }
-    // Navigated away mid-revert: the files were still correctly restored on disk above, but the
-    // live transcript now belongs to a different tab — leave it alone.
-    if (this._origin !== origin) return;
+    // Switched sessions mid-revert: the files were still restored above, but the live transcript
+    // is another session now — leave it alone.
+    if (this.sessionId !== sessionId) return;
     msg.reverted = true;
     this.messages = [...this.messages];
-    await this._saveSession(origin, sessionId, this.messages);
+    await this._saveSession(sessionId, this.messages);
     this.requestUpdate();
   }
 

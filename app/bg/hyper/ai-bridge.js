@@ -126,6 +126,8 @@ export async function requestRemoteChat({
         // A turn of the user's own AI (ai.ts chat(), ADR-0018, ADR-0019), and its Reader's Space.
         personal: opts.personal === true,
         space: opts.space || null,
+        // The user's tab ({ url, title }), for the Provider's currentTab (ADR-0021).
+        tab: opts.tab || null,
       },
     });
   }).finally(() => peer.clientReqs.delete(id));

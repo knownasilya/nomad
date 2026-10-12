@@ -46,12 +46,14 @@ import {
   callAgentHost,
   focusedPane,
   isAgentHostApp,
+  notifyAgentHostOfWrite,
   resolveActiveDrive,
 } from '../../ai/active-tab.mjs';
 import { closeTurn, openTurn } from '../../ai/localhost-mcp.mjs';
 import { startLocalhostMcp } from '../../ai/localhost-mcp-host.mjs';
 import { streamAgent } from '../../ai/agent-cli.mjs';
 import { toolSummary } from '../../ai/tool-summary.mjs';
+import { pickToolDrive, remoteStage, stageRules, tabSnapshot } from '../../ai/stages.mjs';
 import {
   getActiveRuntime,
   listRuntimeCatalog,
@@ -189,13 +191,19 @@ export default {
   //   think      — when false, ask the runtime to skip reasoning; when true (default) the
   //                model's reasoning stream is forwarded as `reasoning` events.
   //   effort     — 'low' | 'medium' | 'high'; sent as reasoning_effort when think !== false.
-  // A page's turn is never personal, whatever opts it passes: no names, no other Drive, no Notes
-  // or Reader (ADR-0018, ADR-0019). Only the user's own AI is: the shell AI sidebar (ai-shell.ts),
-  // the phone's AI panel over the Bridge, and the loopback MCP (callLocalTool).
+  // A page's turn is the page stage, whatever opts it passes: never personal, so no names, no
+  // other Drive, no Notes or Reader, and no tab but its own (ADR-0018, ADR-0019, ADR-0021). Only the
+  // user's own AI is personal: the shell AI sidebar (ai-shell.ts), the phone's AI panel over the
+  // Bridge, and the loopback MCP (callLocalTool).
   chat(messages, opts) {
     const sender = this.sender;
     return createChatStream((emitter, signal) =>
-      routeChat(messages, sender, emitter, { ...opts, personal: false, signal })
+      routeChat(messages, sender, emitter, {
+        ...opts,
+        stage: 'page',
+        currentTab: null,
+        signal,
+      })
     );
   },
 };
@@ -244,6 +252,8 @@ async function routeChat(messages, sender, emitter, opts) {
     const pageToolsWcId = usePageTools ? requestedWcId || sender.id || null : null;
     return runChat(messages, sender, emitter, { ...opts, usePageTools, pageToolsWcId });
   }
+  const rules = stageRules(opts.stage);
+  const tab = rules.tab && opts.currentTab ? await opts.currentTab() : null;
   await aiBridge.requestRemoteChat({
     messages,
     opts: {
@@ -255,9 +265,11 @@ async function routeChat(messages, sender, emitter, opts) {
       effort: opts.effort,
       tools: opts.tools,
       maxTokens: opts.maxTokens,
-      personal: opts.personal === true,
+      personal: rules.personal,
       // The Reader's Space is this tab's: the Provider has no tab to ask.
-      space: opts.personal === true ? await vaultApps.spaceKey({ sender }).catch(() => null) : null,
+      space: rules.personal ? await vaultApps.spaceKey({ sender }).catch(() => null) : null,
+      // The tab the user is on, for the Provider's currentTab (ADR-0021).
+      tab: tab ? tabSnapshot(tab) : null,
     },
     signal: opts.signal,
     onChunk: (text) => emitter.emit('chunk', { text }),
@@ -275,7 +287,11 @@ async function routeChat(messages, sender, emitter, opts) {
 aiBridge.setServeChat(
   async ({ messages, opts, signal, requestPermission, sendChunk, sendTool }) => {
     const driveUrl = opts?.driveUrl;
-    const sender = makeRemoteSender(driveUrl);
+    // The phone's AI panel is the phone stage; anything else from a remote Device is a page
+    // (ADR-0021). Only the phone stage gets the phone's tab.
+    const stage = remoteStage(opts?.personal);
+    const tab = stageRules(stage).tab ? tabSnapshot(opts?.tab) : null;
+    const sender = makeRemoteSender(driveUrl || tab?.url);
 
     // Draft actions delegated from the Client (the phone often can't write a Provider-owned Drive, so
     // publish runs HERE where the Drive is writable — ADR-0010/0012). These reuse the request path with
@@ -302,7 +318,17 @@ aiBridge.setServeChat(
       // The Client is one of the user's Devices (the Bridge admits only Vault Writers), and it
       // sets personal only for the user's own AI, never for a page's nomad.ai.chat(). `space` is
       // its Reader's Space.
-      personal: opts?.personal === true,
+      stage,
+      // The phone's tab when the user sent the message. The Provider can't see a phone WebView,
+      // so this is all currentTab knows. Whether the Provider can write the drive is unknown.
+      currentTab: tab
+        ? async () => ({
+            sender,
+            url: tab.url,
+            title: tab.title,
+            drive: tab.url.startsWith('hyper://') ? { url: tab.url, writable: null } : null,
+          })
+        : null,
       space: isSpaceKey(opts?.space) ? opts.space : null,
       signal,
       requestPermission,
@@ -406,12 +432,19 @@ export { routeChat };
 
 async function runChat(messages, sender, emitter, opts: any = {}) {
   const chatMessages = normalizeChatMessages(messages);
-  const driveUrl = opts.driveUrl || null;
+  // The turn's stage decides what it may do (ADR-0021). The user's own assistant (the AI Sidebar,
+  // the phone's AI panel) has no Drive of its own: each tool call looks up the user's current tab
+  // instead. A page's turn keeps its own Drive.
+  const rules = stageRules(opts.stage);
+  const personal = rules.personal;
+  const currentTab = rules.tab ? opts.currentTab || null : null;
+  const driveUrl = currentTab ? null : opts.driveUrl || null;
   const allowWrite = opts.allowWrite !== false; // default true
   // Independent lookups — run concurrently rather than paying the sum of their latencies on
   // every single chat turn.
   const [resolved, active] = await Promise.all([
-    resolveAiConfig(sender, driveUrl),
+    // A Drive's AI Config is for that Drive's own app, so the user's assistant skips it.
+    resolveAiConfig(sender, driveUrl, { drive: !currentTab }),
     getActiveRuntime(),
   ]);
   const systemPrompt = resolved.systemPrompt;
@@ -446,8 +479,9 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     remote: opts.remote,
     pageTools: pageListed,
     // The user's own AI (see chat()): their names, Notes, Reader and other Drives.
-    personal: !!opts.personal,
-    names: opts.personal ? names.list() : null,
+    personal,
+    tab: !!currentTab,
+    names: personal ? names.list() : null,
     ownerId: opts.ownerId,
   });
   // One answer per Notes or Reader permission per turn (vault-tools.mjs askOncePerTurn).
@@ -461,13 +495,13 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   const offerTools = opts.tools !== false && runtime.kind !== 'cursor';
   const tools = offerTools && !cli ? MODEL_TOOLS : null;
 
-  // opts.context (from the AI Sidebar) pins the agent to the Drive + open file it
-  // is editing. The standing prompt no longer inlines the whole API reference — search loads
-  // a guide when the turn needs it. Put context last so it's the most immediate instruction.
+  // opts.context (from the AI Sidebar or the phone) says what the user is looking at. The
+  // standing prompt no longer inlines the whole API reference — search loads a guide when the
+  // turn needs it. Put context last so it's the most immediate instruction.
   const systemContent = [
     systemPrompt,
     offerTools ? STANDING_PROMPT : '',
-    offerTools && opts.personal ? PERSONAL_PROMPT : '',
+    offerTools && personal ? PERSONAL_PROMPT : '',
     opts.context,
   ]
     .filter(Boolean)
@@ -481,6 +515,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   // loopback MCP, which finds them by the turn's token (ADR-0021).
   const toolOpts = {
     driveUrl,
+    currentTab,
     emitter,
     requestPermission,
     draft: opts.draft,
@@ -580,10 +615,11 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
 
 // Resolves a Drive's/Space's system prompt (persona/instructions) ONLY. Model selection is
 // deliberately NOT something a Drive or Space can dictate — it's a user preference (the global
-// ai_default_model setting, or a per-site override the AI sidebar keeps in hyper://private/), so
-// an untrusted Drive can't silently steer which model runs its instructions. See runChat's model
-// resolution below.
-async function resolveAiConfig(sender, driveUrl = null) {
+// ai_default_model setting, or the AI sidebar's own choice), so an untrusted Drive can't silently
+// steer which model runs its instructions. See runChat's model resolution below. `drive: false`
+// skips the Drive's own AI Config: it is for that Drive's app, not for the user's assistant, which
+// can read any tab (ADR-0021). The Space default still applies.
+async function resolveAiConfig(sender, driveUrl = null, { drive = true } = {}) {
   // A caller editing a Drive it isn't itself (e.g. a remote-turn synthetic sender) passes the
   // target Drive's URL explicitly; otherwise fall back to the sender's own URL — the normal case,
   // where `sender` already IS the page/tab whose Drive this is (a content page's own
@@ -592,7 +628,7 @@ async function resolveAiConfig(sender, driveUrl = null) {
   const ctx = { sender };
 
   // 1. Drive's /index.json
-  if (senderUrl.startsWith('hyper://')) {
+  if (drive && senderUrl.startsWith('hyper://')) {
     try {
       const base = driveBaseUrl(senderUrl);
       const indexStr = await readTextOrNull(ctx, fullDriveUrl(base, '/index.json'));
@@ -633,6 +669,7 @@ async function resolveAiConfig(sender, driveUrl = null) {
 async function executeTool(name, args, sender, opts: any = {}) {
   const {
     driveUrl = null,
+    currentTab = null,
     emitter = null,
     requestPermission = null,
     draft = false,
@@ -659,21 +696,26 @@ async function executeTool(name, args, sender, opts: any = {}) {
   // Consent gate for writes. Locally this is the app's permission prompt; on the Bridge the
   // Provider passes an override that relays the prompt back to the Client (ADR-0013 §6).
   const permit = requestPermission || permissions.requestPermission;
-  const senderUrl = driveUrl || sender.getURL();
+  // The user's own assistant is not tied to a tab (ADR-0021): each call looks up the tab the user
+  // is on now. That tab is the sender, so its site gets any permission prompt (ADR-0019 §4) and
+  // readCurrentPage reads it.
+  const tab = currentTab ? await currentTab() : null;
+  if (tab?.sender) sender = tab.sender;
   const ctx = { sender };
-  const requireDrive = () => {
-    if (!senderUrl.startsWith('hyper://')) throw new Error('Not browsing a Drive');
-    return driveBaseUrl(senderUrl);
-  };
   // The drive a drive tool works on: `drive` (one of the user's names, hyper://<name>/, or a
-  // hyper:// URL; hyper/names.js), else the current Drive. `url` names the drive the write
-  // permission is asked for. Only a personal turn (catalog.personal) may name another Drive; a
-  // page's own nomad.ai.chat() stays on its Drive.
-  const driveFor = (drive) => {
-    if (drive == null || drive === '') return { base: requireDrive(), url: senderUrl, current: true };
-    if (!catalog?.personal) throw new Error('Only the current Drive is available here');
-    const url = names.resolveDrive(drive);
-    return { base: url.replace(/\/+$/, ''), url, current: false };
+  // hyper:// URL; hyper/names.js), else the turn's own Drive, or the drive in the user's current
+  // tab. `url` names the drive the write permission is asked for. Only a personal turn
+  // (catalog.personal) may name another Drive; a page's own nomad.ai.chat() stays on its Drive.
+  const driveFor = (drive, write = false) => {
+    const picked = pickToolDrive({
+      drive,
+      write,
+      personal: !!catalog?.personal,
+      hasTab: !!currentTab,
+      own: currentTab ? tab?.drive?.url || null : driveUrl || sender.getURL(),
+      resolve: names.resolveDrive,
+    });
+    return { ...picked, base: driveBaseUrl(picked.url) };
   };
 
   // The user's Notes and Reader (ai-vault.ts): a personal turn only, each after its permission.
@@ -753,7 +795,7 @@ async function executeTool(name, args, sender, opts: any = {}) {
       return fetchText(args.url);
     }
     case 'writeDriveFile': {
-      const drive = driveFor(args.drive);
+      const drive = driveFor(args.drive, true);
       const base = drive.base;
       // LLMs frequently append a trailing slash to a file path; strip it. Reject
       // only when nothing but slashes is left (i.e. the Drive root / a directory),
@@ -775,12 +817,13 @@ async function executeTool(name, args, sender, opts: any = {}) {
       // `draft:true` (remote AI edits) stages into the Drive's Vault-hosted Draft instead of writing
       // the live Drive, so the change is reviewable/publishable (ADR-0012).
       await fsAPI.writeFile.call(ctx, target, args.content, draft ? { draft: true } : {});
-      // The 'write' event makes an undo Checkpoint for the current Drive (and tells the editor to
-      // reload). A write to a named drive isn't the current Drive, so it makes neither.
-      if (emitter && drive.current) {
+      // The 'write' event makes an undo Checkpoint, and tells an editor that shows this drive to
+      // reload. It names the drive: the user's own AI can write to any of the user's drives.
+      if (emitter) {
         emitter.emit('tool', {
           phase: 'write',
           name: 'writeDriveFile',
+          drive: base,
           path: cleanPath,
           priorContent,
           draft: !!draft,
@@ -788,10 +831,20 @@ async function executeTool(name, args, sender, opts: any = {}) {
       }
       return `File written successfully to ${drive.current ? cleanPath : target}`;
     }
+    case 'currentTab': {
+      if (!currentTab) throw new Error('currentTab is not available here');
+      return JSON.stringify({
+        url: tab?.url || null,
+        title: tab?.title || null,
+        drive: tab?.drive?.url || null,
+        // null: unknown (the phone's tab, from the Provider).
+        writable: tab?.drive ? tab.drive.writable : false,
+      });
+    }
     case 'readCurrentPage': {
       // `sender` is the relevant webContents in every caller (the tab itself for a content page's
-      // own nomad.ai.chat(), or the active tab's pane.webContents for the shell AI sidebar — see
-      // ai-shell.ts) — so this just reads whatever page that webContents currently has loaded.
+      // own nomad.ai.chat(), or for the shell AI sidebar the tab the user is on when this call
+      // runs — see currentTab above) — so this just reads whatever page it has loaded.
       // A remote Bridge turn's catalog omits this capability. If a module calls it anyway,
       // there is no renderer on the synthetic sender.
       if (typeof sender.executeJavaScript !== 'function') {
@@ -1253,16 +1306,9 @@ export async function callLocalTool(name, args, turn = null) {
     if (ok === false) throw new Error('Save your changes before running the assistant.');
   }
   const emitter = new EventEmitter();
-  if (isAgentHostApp(pane.url)) {
-    emitter.on('tool', (event) => {
-      if (event && event.phase === 'write' && event.path) {
-        callAgentHost(
-          pane,
-          `window.__nomadAiHost && window.__nomadAiHost.onAgentWroteFile && window.__nomadAiHost.onAgentWroteFile(${JSON.stringify(event.path)})`
-        );
-      }
-    });
-  }
+  emitter.on('tool', (event) => {
+    if (event?.phase === 'write') notifyAgentHostOfWrite(pane, event.drive, event.path);
+  });
   const pageListed = await resolvePageTools(
     { usePageTools: true, pageToolsWcId: sender.id },
     sender,

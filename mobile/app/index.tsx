@@ -502,8 +502,8 @@ export default function Browser () {
         const inject = (ev: unknown) =>
           wv?.injectJavaScript(`window.__nomadAiEvent(${JSON.stringify(id)}, ${JSON.stringify(ev)}); true;`)
         // A page's turn is never personal, whatever it posts: no names, other Drives, Notes or
-        // Reader (ADR-0018, ADR-0019).
-        const opts = { ...(msg.payload.opts || {}), personal: false, space: null }
+        // Reader, and no tab but its own (ADR-0018, ADR-0019, ADR-0021).
+        const opts = { ...(msg.payload.opts || {}), personal: false, space: null, tab: null }
         aiHandles.current[id] = backendRef.current.aiChat(msg.payload.messages || [], opts, {
           onChunk: (text) => inject({ kind: 'chunk', text }),
           onTool: (event) => inject({ kind: 'tool', event }),

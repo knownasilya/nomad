@@ -1,15 +1,13 @@
 // Backend for the shell-chrome AI sidebar (app/fg/shell-window/ai-sidebar.js). Unlike
 // manifests/external/ai.ts (called by a content page about itself), every call here originates
-// from the shell window's own renderer and is always about "whichever tab is active right now" —
-// so every method resolves the active tab's Pane first.
+// from the shell window's own renderer.
 //
-// For an ordinary page, that Pane's own webContents doubles as both `sender` (permission
-// attribution, page-tools scoping) AND the Drive being chatted about (sender.getURL()). For
-// nomad://editor / nomad://explorer, those are NOT the same thing — the tab's own URL is the app,
-// not the Drive it has open — so resolveActiveDrive() below asks the app itself (via
-// window.__nomadAiHost) which Drive it's really showing, and that's threaded through as an
-// explicit `driveUrl`/`allowWrite` override. Without this, every Drive tool (readDriveFile etc.)
-// fails with "Not browsing a Drive" the moment it's used from editor/explorer.
+// The sidebar's assistant is the user's, not a tab's (ADR-0021): one conversation across tabs. A
+// turn is the 'sidebar' stage. It has no Drive of its own; each tool call looks up the tab the user
+// is on at that moment (currentTabOf). That tab's own webContents is the call's sender, so a
+// permission prompt is for the tab's site (ADR-0019 §4). For nomad://editor and nomad://explorer,
+// the tab's own URL is the app, not the Drive it has open, so resolveActiveDrive() asks the app
+// itself (via window.__nomadAiHost) which Drive it shows.
 //
 // Session storage (chat-store.js) is a separate exception: it targets hyper://private/, which is
 // gated to trusted senders, so it deliberately uses `this.sender` (the shell window itself, always
@@ -17,9 +15,18 @@
 
 import { findWebContentsParentWindow } from '../../lib/electron';
 import { getActive } from '../../ui/tabs/manager';
-import { callAgentHost, isAgentHostApp, resolveActiveDrive } from '../../ai/active-tab.mjs';
+import {
+  callAgentHost,
+  isAgentHostApp,
+  notifyAgentHostOfWrite,
+  resolveActiveDrive,
+} from '../../ai/active-tab.mjs';
 import aiAPI, { routeChat, createChatStream } from './ai';
 import * as chatStore from '../../ai/chat-store';
+import * as settingsDb from '../../dbs/settings';
+
+// The sidebar's one model choice, on this device (ADR-0021).
+const PREFS_SETTING = 'ai_sidebar_prefs';
 
 function activePane(sender) {
   const win = findWebContentsParentWindow(sender);
@@ -27,65 +34,71 @@ function activePane(sender) {
   return tab?.primaryPane || null;
 }
 
-// Fallback context when the host app doesn't supply its own (richer) getAgentContext() — or for
-// any ordinary tab, where this is the only context the model gets.
-function describeActiveTab(pane, drive) {
+// The tab the user is on in the sidebar's window, right now — or null.
+async function currentTabOf(shell) {
+  const pane = activePane(shell);
+  const wc = pane?.webContents;
+  if (!wc || (typeof wc.isDestroyed === 'function' && wc.isDestroyed())) return null;
+  const drive = await resolveActiveDrive(pane);
+  return { sender: wc, url: pane.url || '', title: pane.title || '', drive: drive.url ? drive : null };
+}
+
+// What the user is looking at when they send. The model can ask currentTab again later, since the
+// user may change tabs while it works.
+function describeTab(pane, drive) {
   const title = pane.title ? ` ("${pane.title}")` : '';
-  if (drive.url && drive.url.startsWith('hyper://')) {
-    return (
-      `You are chatting about the Nomad Drive currently open in this tab: ${drive.url}${title}. ` +
-      'Find drive capabilities with search and run them with execute. readDriveFile, listDriveFiles, ' +
-      'and writeDriveFile take absolute paths. readCurrentPage and screenshotCurrentPage read THIS TAB\'s ' +
-      "own rendered UI — for an editor or explorer tab that is the app, not the Drive's pages — so " +
-      "search for the drive capabilities when you need the Drive's content."
-    );
-  }
-  const url = pane.url || '';
+  const where =
+    drive.url && drive.url.startsWith('hyper://')
+      ? `${pane.url}${title}. The Nomad Drive in it is ${drive.url}${drive.writable ? ', which they can write' : ''}`
+      : `${pane.url || 'a new tab'}${title}, a regular web page, not a Nomad Drive`;
   return (
-    `You are chatting about the page currently open in this tab: ${url}${title}. This is a ` +
-    'regular web page, not a Nomad Drive — drive capabilities will not work here. search for ' +
-    'readCurrentPage to read its visible text, then execute the module it returns.'
+    "You are the user's own assistant in Nomad's AI sidebar. You are not tied to one tab. When they " +
+    `sent this message, the user was looking at ${where}. currentTab gives the tab they are on now. ` +
+    "readCurrentPage and screenshotCurrentPage read that tab's rendered page; for a Drive, readDriveFile " +
+    'and listDriveFiles read its files. To write a file, name its drive (`drive`).'
   );
 }
 
+function cleanPrefs(prefs: any = {}) {
+  const vision = {};
+  for (const [model, on] of Object.entries(prefs?.vision || {})) {
+    if (typeof model === 'string' && model && typeof on === 'boolean') vision[model] = on;
+  }
+  return {
+    model: typeof prefs?.model === 'string' ? prefs.model : '',
+    think: prefs?.think !== false,
+    effort: typeof prefs?.effort === 'string' ? prefs.effort : '',
+    // The user's "this model can see images", per model id.
+    vision,
+  };
+}
+
 export default {
-  // opts: { model, think, effort, allowVision, onToolEvent, onReasoning } — same shape as
-  // window.nomad.ai.chat's opts, minus driveUrl/allowWrite/context/usePageTools/pageToolsWcId,
-  // which are always derived here from the active tab rather than accepted from the caller.
+  // opts: { model, think, effort, allowVision } — the sidebar's own choices. The rest of a turn's
+  // options are set here: the stage, the tab lookup and the context.
   chat(messages, opts: any = {}) {
-    const pane = activePane(this.sender);
+    const shell = this.sender;
+    const pane = activePane(shell);
     if (!pane) {
       return createChatStream(async () => {
         throw new Error('No active tab');
       });
     }
-    const hostApp = isAgentHostApp(pane.url);
 
     return createChatStream(async (emitter, signal) => {
-      if (hostApp) {
-        // Tap the same 'tool' events the sidebar UI itself listens to for the live activity trace
-        // — no changes needed to the shared runChat/executeTool loop in ai.ts.
-        emitter.on('tool', (e) => {
-          if (e && e.phase === 'write' && e.path) {
-            callAgentHost(
-              pane,
-              `window.__nomadAiHost && window.__nomadAiHost.onAgentWroteFile && window.__nomadAiHost.onAgentWroteFile(${JSON.stringify(e.path)})`
-            );
-          }
-        });
-      }
+      // An editor or explorer that shows the drive the AI wrote to reloads that file.
+      emitter.on('tool', (e) => {
+        if (e?.phase === 'write') notifyAgentHostOfWrite(activePane(shell), e.drive, e.path);
+      });
 
-      // Pin the agent to the actual Drive/tab it's chatting about — without this, `location.href`
-      // in API_REFERENCE's guidance is meaningless (this call runs from the shell window,
-      // not the page) and, for editor/explorer, the Drive tools have no Drive to target at all.
       const drive = await resolveActiveDrive(pane);
-      let context = describeActiveTab(pane, drive);
-      if (hostApp) {
+      let context = describeTab(pane, drive);
+      if (isAgentHostApp(pane.url)) {
         const hostCtx = await callAgentHost(
           pane,
           'window.__nomadAiHost && window.__nomadAiHost.getAgentContext && window.__nomadAiHost.getAgentContext()'
         );
-        if (hostCtx) context = hostCtx;
+        if (hostCtx) context += `\n\nThe app in that tab says:\n${hostCtx}`;
         const ok = await callAgentHost(
           pane,
           'window.__nomadAiHost && window.__nomadAiHost.prepareForAgentRun ? window.__nomadAiHost.prepareForAgentRun() : true'
@@ -94,16 +107,13 @@ export default {
       }
 
       await routeChat(messages, pane.webContents, emitter, {
-        ...opts,
-        driveUrl: drive.url || undefined,
-        // The active tab's own `allowWrite` (e.g. the shell sidebar's this._writable) only
-        // describes an ordinary hyper:// tab; for a host app it's meaningless (that tab is
-        // nomad://editor, never itself a Drive), so the resolved Drive's own writability wins.
-        allowWrite: drive.url ? drive.writable : opts.allowWrite,
+        model: opts.model,
+        think: opts.think,
+        effort: opts.effort,
+        allowVision: opts.allowVision,
+        stage: 'sidebar',
+        currentTab: () => currentTabOf(shell),
         context,
-        // The sidebar is the user's own AI: its turn is personal, so it gets their names, other
-        // Drives, Notes and Reader (ADR-0018, ADR-0019). A page's nomad.ai.chat() never is.
-        personal: true,
         signal,
       });
     });
@@ -122,9 +132,8 @@ export default {
     return aiAPI.listTools.call({ sender: pane?.webContents }, opts);
   },
 
-  // { url, writable } for the Drive the active tab is really about — lets the shell sidebar's own
-  // read-only note / revert / Draft-Mode-auto-stage logic work correctly for editor/explorer too,
-  // instead of only ever seeing those tabs' own nomad://editor URL (never a Drive).
+  // { url, writable } for the Drive the active tab is really about — lets the sidebar start a Draft
+  // for it, and find the editor/explorer's Drive, not those tabs' own nomad://editor URL.
   async getActiveDriveInfo() {
     const pane = activePane(this.sender);
     if (!pane) return { url: null, writable: false };
@@ -134,44 +143,39 @@ export default {
   // Mirrors the 'tool'/'write' event tap in chat() above, for writes that happen OUTSIDE a chat
   // turn — specifically the sidebar's "Revert this turn" button, which writes directly via
   // nomad.fs rather than through executeTool, so there's no tool event for chat() to tap.
-  async notifyAgentWroteFile(path) {
-    const pane = activePane(this.sender);
-    if (!pane || !isAgentHostApp(pane.url)) return;
-    await callAgentHost(
-      pane,
-      `window.__nomadAiHost && window.__nomadAiHost.onAgentWroteFile && window.__nomadAiHost.onAgentWroteFile(${JSON.stringify(path)})`
-    );
+  async notifyAgentWroteFile(path, drive) {
+    await notifyAgentHostOfWrite(activePane(this.sender), drive, path);
   },
 
-  async listSessions(origin) {
-    return chatStore.listSessions(this.sender, origin);
+  async listSessions() {
+    return chatStore.listSessions(this.sender);
   },
 
-  async loadSession(origin, sessionId) {
-    return chatStore.loadSession(this.sender, origin, sessionId);
+  async loadSession(sessionId) {
+    return chatStore.loadSession(this.sender, sessionId);
   },
 
   newSession() {
     return chatStore.newSessionId();
   },
 
-  async saveSession(origin, sessionId, data) {
-    return chatStore.saveSession(this.sender, origin, sessionId, data);
+  async saveSession(sessionId, data) {
+    return chatStore.saveSession(this.sender, sessionId, data);
   },
 
-  async deleteSession(origin, sessionId) {
-    return chatStore.deleteSession(this.sender, origin, sessionId);
+  async deleteSession(sessionId) {
+    return chatStore.deleteSession(this.sender, sessionId);
   },
 
-  async getLastSessionId(origin) {
-    return chatStore.getLastSessionId(this.sender, origin);
+  async getLastSessionId() {
+    return chatStore.getLastSessionId(this.sender);
   },
 
-  async getSitePrefs(origin) {
-    return chatStore.getPrefs(this.sender, origin);
+  async getPrefs() {
+    return cleanPrefs((await settingsDb.get(PREFS_SETTING)) as any);
   },
 
-  async saveSitePrefs(origin, prefs) {
-    return chatStore.savePrefs(this.sender, origin, prefs);
+  async savePrefs(prefs) {
+    await settingsDb.set(PREFS_SETTING, cleanPrefs(prefs));
   },
 };

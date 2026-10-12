@@ -27,7 +27,7 @@ const NOTES = [
 
 describe('vault tools: permissions', () => {
   it('gives every Notes and Reader capability one of the four permissions', () => {
-    const gated = CAPABILITIES.filter((c) => c.gates?.personal && !c.namedDescription).map((c) => c.name);
+    const gated = CAPABILITIES.filter((c) => c.gates?.personal && !c.gates?.tab && !c.namedDescription).map((c) => c.name);
     expect(gated.sort()).toEqual(Object.keys(VAULT_TOOL_PERMS).sort());
     expect([...new Set(Object.values(VAULT_TOOL_PERMS))].sort()).toEqual([...VAULT_PERMS].sort());
     // Reading and writing are separate grants for both.
@@ -48,6 +48,16 @@ describe('vault tools: permissions', () => {
     await ask('modifyDrive:abc', 'wc');
     expect(permit.mock.calls.map((c) => c[0])).toEqual(['notesRead', 'readerWrite', 'modifyDrive:abc', 'modifyDrive:abc']);
     expect(permit).toHaveBeenCalledWith('notesRead', 'wc');
+  });
+
+  it('asks again on another site in the same turn', async () => {
+    const permit = vi.fn(async () => true);
+    const ask = askOncePerTurn(permit);
+    const tab = (url) => ({ getURL: () => url });
+    await ask('notesRead', tab('hyper://aaa/index.html'));
+    await ask('notesRead', tab('hyper://aaa/about.html'));
+    await ask('notesRead', tab('https://example.com/'));
+    expect(permit).toHaveBeenCalledTimes(2);
   });
 
   it('asks again in the next turn', async () => {

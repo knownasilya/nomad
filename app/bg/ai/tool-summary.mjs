@@ -8,6 +8,7 @@ const PURPOSES = {
   listDriveFiles: 'list files',
   writeDriveFile: 'write a file',
   fetchUrl: 'fetch a web page',
+  currentTab: 'check your current tab',
   readCurrentPage: 'read this page',
   screenshotCurrentPage: 'take a screenshot of this page',
   listNotes: 'look through your Notes',
@@ -46,6 +47,8 @@ export function toolSummary(name, args) {
       return `Writing ${inDrive(a.path || 'a file', a.drive)}`;
     case 'fetchUrl':
       return a.url ? `Fetching ${a.url}` : 'Fetching a web page';
+    case 'currentTab':
+      return 'Checking which tab you are on';
     case 'readCurrentPage':
       return 'Reading this page';
     case 'screenshotCurrentPage':

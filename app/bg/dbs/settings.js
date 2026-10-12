@@ -13,6 +13,7 @@ const JSON_ENCODED_SETTINGS = [
   'sidebar_collapsed_groups',
   'cert_exceptions',
   'ai_servers',
+  'ai_sidebar_prefs',
 ];
 
 // Settings that are always global (never per-space)

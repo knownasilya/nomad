@@ -14,6 +14,6 @@ export default {
   saveSession: 'promise',
   deleteSession: 'promise',
   getLastSessionId: 'promise',
-  getSitePrefs: 'promise',
-  saveSitePrefs: 'promise',
+  getPrefs: 'promise',
+  savePrefs: 'promise',
 };

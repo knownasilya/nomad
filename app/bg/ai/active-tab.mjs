@@ -3,6 +3,7 @@
 
 import { BrowserWindow } from 'electron'
 import { getActive } from '../ui/tabs/manager'
+import { sameDrive } from './stages.mjs'
 
 export function isAgentHostApp(url) {
   return typeof url === 'string' && (url.startsWith('nomad://editor') || url.startsWith('nomad://explorer'))
@@ -31,6 +32,17 @@ export async function resolveActiveDrive(pane) {
     return { url: pane.url, writable: !!pane.writable }
   }
   return { url: null, writable: false }
+}
+
+// Tell an editor or explorer tab that the AI wrote a file, so it reloads it. Only when the tab
+// shows that drive: the user's own AI can write to any of the user's drives (ADR-0021).
+export async function notifyAgentHostOfWrite(pane, drive, path) {
+  if (!pane || !path || !isAgentHostApp(pane.url)) return
+  if (drive && !sameDrive((await resolveActiveDrive(pane)).url, drive)) return
+  await callAgentHost(
+    pane,
+    `window.__nomadAiHost && window.__nomadAiHost.onAgentWroteFile && window.__nomadAiHost.onAgentWroteFile(${JSON.stringify(path)})`
+  )
 }
 
 export function focusedPane() {

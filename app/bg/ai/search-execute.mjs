@@ -48,6 +48,7 @@ export const CAPABILITIES = [
     name: 'readDriveFile',
     description: 'Read the text content of a file in the current Drive.',
     namedDescription: 'Read the text content of a file in the current Drive, or in a named one (`drive`).',
+    tabDescription: "Read the text content of a file in a drive: a named one (`drive`), or the drive in the user's current tab.",
     inputSchema: {
       type: 'object',
       properties: { path: { type: 'string', description: 'Absolute path to the file, e.g. /index.html' } },
@@ -58,6 +59,8 @@ export const CAPABILITIES = [
     name: 'listDriveFiles',
     description: 'List files and directories at a path in the current Drive.',
     namedDescription: 'List files and directories at a path in the current Drive, or in a named one (`drive`).',
+    tabDescription:
+      "List files and directories at a path in a drive: a named one (`drive`), or the drive in the user's current tab.",
     inputSchema: {
       type: 'object',
       properties: { path: { type: 'string', description: 'Directory path to list, e.g. / or /src' } },
@@ -78,6 +81,9 @@ export const CAPABILITIES = [
     description: 'Write text content to a file in the current Drive. Requires user permission.',
     namedDescription:
       'Write text content to a file in the current Drive, or in a named one (`drive`). Requires user permission for that drive.',
+    tabDescription:
+      'Write text content to a file in a drive. Always name the drive (`drive`): the one currentTab gives, or one of the ' +
+      "user's names. Requires user permission for that drive.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -87,6 +93,15 @@ export const CAPABILITIES = [
       required: ['path', 'content'],
     },
     gates: { write: true },
+  },
+  {
+    name: 'currentTab',
+    description:
+      'The tab the user is looking at right now: { url, title, drive, writable }. `drive` is the hyper:// Drive open in ' +
+      'it, or null. The user can change tabs while you work, so ask again when it matters, and pass its drive to ' +
+      'writeDriveFile.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    gates: { personal: true, tab: true },
   },
   {
     name: 'readCurrentPage',
@@ -247,23 +262,45 @@ const DRIVE_ARG = {
   description:
     'Optional. Another drive: one of the user\'s names (search domain "name"), hyper://<name>/, or a hyper:// URL. Omit for the current Drive.',
 }
+// With a tab (the AI Sidebar, the phone's AI panel), the user's own AI has no Drive of its own
+// (ADR-0021). A read may use the drive in the user's current tab; a write names its drive.
+const TAB_DRIVE_ARG = {
+  type: 'string',
+  description:
+    'A drive: one of the user\'s names (search domain "name"), hyper://<name>/, or a hyper:// URL (currentTab gives the ' +
+    "one in the user's tab). Omit only to read from the drive in the user's current tab.",
+}
 
 // `personal`: a turn of the user's own AI (the AI Sidebar, the phone's AI panel, the loopback MCP),
 // never a page's nomad.ai.chat(). It adds the user's Notes and Reader, and `drive` on the drive tools.
-export function visibleCapabilities({ allowWrite = true, allowVision = false, remote = false, personal = false } = {}) {
+// `tab`: the turn has the user's current tab (the AI Sidebar, the phone's AI panel; ADR-0021). It
+// adds currentTab, and a write must name its drive.
+export function visibleCapabilities({
+  allowWrite = true,
+  allowVision = false,
+  remote = false,
+  personal = false,
+  tab = false,
+} = {}) {
   return CAPABILITIES.filter((cap) => {
     if (cap.gates?.write && !allowWrite) return false
     if (cap.gates?.vision && !allowVision) return false
     if (cap.gates?.renderer && remote) return false
     if (cap.gates?.personal && !personal) return false
+    if (cap.gates?.tab && !tab) return false
     return true
-  }).map(({ namedDescription, ...cap }) => {
+  }).map(({ namedDescription, tabDescription, ...cap }) => {
     if (!personal || !namedDescription) return cap
     const { inputSchema } = cap
+    const withTab = tab && tabDescription
     return {
       ...cap,
-      description: namedDescription,
-      inputSchema: { ...inputSchema, properties: { ...inputSchema.properties, drive: DRIVE_ARG } },
+      description: withTab ? tabDescription : namedDescription,
+      inputSchema: {
+        ...inputSchema,
+        properties: { ...inputSchema.properties, drive: withTab ? TAB_DRIVE_ARG : DRIVE_ARG },
+        required: withTab && cap.gates?.write ? [...inputSchema.required, 'drive'] : inputSchema.required,
+      },
     }
   })
 }
@@ -306,8 +343,8 @@ function guideRecord(id, title, markdown) {
 const GUIDES = splitGuides(API_REFERENCE)
 
 export function buildCatalog(opts) {
-  const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, names, ownerId } = opts || {}
-  const caps = visibleCapabilities({ allowWrite, allowVision, remote, personal: !!personal })
+  const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, tab, names, ownerId } = opts || {}
+  const caps = visibleCapabilities({ allowWrite, allowVision, remote, personal: !!personal, tab: !!personal && !!tab })
   return {
     capabilities: caps,
     // The user's own AI: its turn may use their names, Notes, Reader and other Drives (see above).
