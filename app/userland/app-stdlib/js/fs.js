@@ -1,5 +1,5 @@
 import { isFilenameBinary } from './is-ext-binary.js';
-import { urlToKey, joinPath, slugify } from './strings.js';
+import { joinPath, slugify } from './strings.js';
 
 // typedefs
 // =
@@ -8,7 +8,6 @@ import { urlToKey, joinPath, slugify } from './strings.js';
  * @typedef {Object} FSQueryOpts
  * @prop {string|string[]} path
  * @prop {string} [type]
- * @prop {string} [mount]
  * @prop {Object} [meta]
  * @prop {string} [sort] - 'name', 'ctime', 'mtime'
  * @prop {boolean} [reverse]
@@ -23,8 +22,6 @@ import { urlToKey, joinPath, slugify } from './strings.js';
  * @prop {Date} atime
  * @prop {Date} mtime
  * @prop {Date} ctime
- * @prop {Object} [mount]
- * @prop {string} [mount.key]
  * @prop {string} linkname
  *
  * @typedef {Object} FSQueryResult
@@ -33,7 +30,6 @@ import { urlToKey, joinPath, slugify } from './strings.js';
  * @prop {string} url
  * @prop {Stat} stat
  * @prop {string} drive
- * @prop {string} [mount]
  * @prop {any} [content]
  */
 
@@ -99,80 +95,6 @@ export async function ensureDir(fs, path) {
  */
 export async function ensureParentDir(fs, path) {
   return ensureDir(fs, path.split('/').slice(0, -1).join('/'));
-}
-
-/**
- * @param {Hyperdrive} fs
- * @param {string} path
- * @param {string} url
- * @return {Promise<void>}
- */
-export async function ensureMount(fs, path, url) {
-  try {
-    let st = await fs.stat(path).catch((e) => null);
-    let key = urlToKey(url);
-    if (!st) {
-      // add mount
-      await fs.mount(path, key);
-    } else if (st.mount) {
-      if (st.mount.key !== key) {
-        // change mount
-        await fs.unmount(path);
-        await fs.mount(path, key);
-      }
-    } else {
-      console.error(
-        'Warning! Filesystem expects a mount but an unexpected file exists at this location.',
-        { path }
-      );
-    }
-  } catch (e) {
-    console.error('Filesystem failed to mount drive', { path, url, error: e });
-  }
-}
-
-/**
- * @param {Hyperdrive} fs
- * @param {string} path
- * @return {Promise<void>}
- */
-export async function ensureUnmount(fs, path) {
-  try {
-    let st = await fs.stat(path).catch((e) => null);
-    if (st && st.mount) {
-      // remove mount
-      await fs.unmount(path);
-    }
-  } catch (e) {
-    console.error('Filesystem failed to unmount drive', { path, error: e });
-  }
-}
-
-/**
- * @param {string} pathSelector
- * @param {string} url
- * @param {Object} drive
- * @return {Promise<void>}
- */
-export async function ensureUnmountByUrl(pathSelector, url, drive) {
-  try {
-    let mounts = await drive.query({
-      path: pathSelector,
-      mount: url,
-    });
-    if (mounts[0]) {
-      // remove mount
-      await drive.unmount(mounts[0].path);
-    } else {
-      throw 'Mount not found';
-    }
-  } catch (e) {
-    console.error('Filesystem failed to unmount drive', {
-      pathSelector,
-      url,
-      error: e,
-    });
-  }
 }
 
 /**

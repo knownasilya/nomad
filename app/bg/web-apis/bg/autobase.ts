@@ -412,8 +412,6 @@ const autobaseAPI = {
     return autobaseAPI.del.call(this, url, opts || {});
   },
   async symlink() {},
-  async mount() {},
-  async unmount() {},
 
   // Writer management
   // =

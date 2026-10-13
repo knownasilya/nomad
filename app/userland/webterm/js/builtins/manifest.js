@@ -54,33 +54,16 @@ export default {
       autocomplete: 'files',
     },
     {
-      name: 'mount',
-      help: 'Mount a hyperdrive as a subfolder',
-      usage: 'mount {mount-url} {dst}',
-      autocomplete: 'files',
-    },
-    {
-      name: 'unmount',
-      help: 'Unmount a mounted hyperdrive',
-      usage: 'unmount {dst}',
-      autocomplete: 'files',
-    },
-    {
       name: 'query',
       help: 'Run a query across the filesystem',
       usage:
-        'query [{path...}] [-t file|folder|mount] [-m {url}] [-s name|ctime|mtime] [-r] [--limit n] [--offset n]',
+        'query [{path...}] [-t file|folder] [-s name|ctime|mtime] [-r] [--limit n] [--offset n]',
       autocomplete: 'files',
       options: [
         {
           name: 'type',
           abbr: 't',
-          help: 'Filter the type of result (file, folder, mount)',
-        },
-        {
-          name: 'mount',
-          abbr: 'm',
-          help: 'Filter to mounts of the given url',
+          help: 'Filter the type of result (file, folder)',
         },
         {
           name: 'sort',

@@ -291,16 +291,6 @@ const fsAPI = {
     const { api, url: u } = await _dispatch(this, url, 'write');
     return api.deleteMetadata.call(this, u, keys, opts);
   },
-  async mount(url, key, opts = {}) {
-    await _assertWrite(this, url);
-    const { api, url: u } = await _dispatch(this, url, 'write');
-    return api.mount.call(this, u, key, opts);
-  },
-  async unmount(url, opts = {}) {
-    await _assertWrite(this, url);
-    const { api, url: u } = await _dispatch(this, url, 'write');
-    return api.unmount.call(this, u, opts);
-  },
   async symlink(url, target, opts = {}) {
     await _assertWrite(this, url);
     const { api, url: u } = await _dispatch(this, url, 'write');

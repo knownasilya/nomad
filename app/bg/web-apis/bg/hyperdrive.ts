@@ -799,12 +799,6 @@ const hyperdriveAPI = {
   async symlink() {
     /* no-op: symlinks removed in v11 */
   },
-  async mount() {
-    /* no-op: mounts removed in v11 */
-  },
-  async unmount() {
-    /* no-op: mounts removed in v11 */
-  },
   async createNetworkActivityStream() {
     const { EventEmitter } = require('events');
     return new EventEmitter();

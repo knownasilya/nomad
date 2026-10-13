@@ -677,11 +677,6 @@ class EditorApp extends LitElement {
         disabled: this.readOnly,
         click: () => this.onClickNewFile(folderPath),
       });
-      items.push({
-        label: 'New Mount',
-        disabled: this.readOnly,
-        click: () => this.onClickNewMount(folderPath),
-      });
       items.push({ type: 'separator' });
       items.push({
         label: 'Refresh Files',
@@ -1329,9 +1324,7 @@ class EditorApp extends LitElement {
     if (this.readOnly) return;
     if (confirm('Are you sure you want to delete this file?')) {
       let st = await this.drive.stat(path);
-      if (st.mount && st.mount.key) {
-        await this.drive.unmount(path);
-      } else if (st.isDirectory()) {
+      if (st.isDirectory()) {
         await this.drive.rmdir(path, { recursive: true });
       } else {
         await this.drive.unlink(path);
@@ -1369,16 +1362,6 @@ class EditorApp extends LitElement {
       this.loadExplorer();
       this.load(joinPath(this.drive.url, path), true);
     }
-  }
-
-  async onClickNewMount(folderPath) {
-    if (this.readOnly) return;
-    var url = await nomad.shell.selectDriveDialog();
-    if (!url) return;
-    var name = await prompt('Enter the new mount name');
-    if (!name) return;
-    await this.drive.mount(joinPath(folderPath, name), url);
-    this.loadExplorer();
   }
 
   async onClickImportFiles(folderPath) {

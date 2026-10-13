@@ -4,7 +4,7 @@ import {
 } from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
 import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
 import { emit } from 'nomad://app-stdlib/js/dom.js';
-import { pluralize, toNiceDomain } from 'nomad://app-stdlib/js/strings.js';
+import { pluralize } from 'nomad://app-stdlib/js/strings.js';
 import { isFilenameBinary } from 'nomad://app-stdlib/js/is-ext-binary.js';
 import * as toast from 'nomad://app-stdlib/js/com/toast.js';
 import * as contextMenu from 'nomad://app-stdlib/js/com/context-menu.js';
@@ -622,7 +622,6 @@ class CompareDiffItem extends LitElement {
 
   render() {
     var icon = 'file';
-    if (this.diff.type === 'mount') icon = 'external-link-square-alt';
     if (this.diff.type === 'dir') icon = 'folder';
     return html`
       <div
@@ -719,7 +718,6 @@ class CompareDiffItemContent extends LitElement {
 
   renderDiff() {
     if (
-      this.diff.type === 'mount' ||
       this.diff.type === 'dir' ||
       isFilenameBinary(this.diff?.basePath || this.diff?.targetPath)
     ) {
@@ -752,36 +750,19 @@ class CompareDiffItemContent extends LitElement {
 
   renderLeftColumn() {
     if (this.diff.change === 'del' || this.diff.change === 'mod') {
-      return this.renderFileContent(
-        nomad.fs.drive(this.targetOrigin),
-        this.diff.targetPath,
-        this.diff.targetMountKey
-      );
+      return this.renderFileContent(nomad.fs.drive(this.targetOrigin), this.diff.targetPath);
     }
     return '';
   }
 
   renderRightColumn() {
     if (this.diff.change === 'add' || this.diff.change === 'mod') {
-      return this.renderFileContent(
-        nomad.fs.drive(this.baseOrigin),
-        this.diff.basePath,
-        this.diff.baseMountKey
-      );
+      return this.renderFileContent(nomad.fs.drive(this.baseOrigin), this.diff.basePath);
     }
     return '';
   }
 
-  renderFileContent(drive, path, mountKey) {
-    if (this.diff.type === 'mount') {
-      return html`
-        <span class="fas fa-fw fa-external-link-square-alt"></span>
-        Mount to
-        <a href="hyper://${mountKey}" target="_blank"
-          >${toNiceDomain(mountKey)}</a
-        >
-      `;
-    }
+  renderFileContent(drive, path) {
     if (this.diff.type === 'dir')
       return html`<span class="fas fa-fw fa-folder"></span> Directory`;
     if (/\.(png|jpe?g|gif)$/.test(path)) {

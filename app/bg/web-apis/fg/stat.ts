@@ -1,13 +1,6 @@
 // http://man7.org/linux/man-pages/man2/stat.2.html
 // mirrored from hyperdrive/lib/stat.js
 
-function toHex(buf) {
-  return buf.reduce(
-    (memo, i) => memo + ('0' + i.toString(16)).slice(-2), // pad with leading 0 if <16
-    ''
-  );
-}
-
 const IFSOCK = 49152; // 0b1100...
 const IFLNK = 40960; // 0b1010...
 const IFREG = 32768; // 0b1000...
@@ -29,7 +22,6 @@ export function createStat(data) {
     atime: new Date(data.mtime || 0),
     mtime: new Date(data.mtime || 0),
     ctime: new Date(data.ctime || 0),
-    mount: data.mount?.key ? { key: toHex(data.mount.key) } : null,
     linkname: data.linkname || null,
     metadata: data.metadata || {},
 

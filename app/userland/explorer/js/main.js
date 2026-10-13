@@ -6,7 +6,6 @@ import { timeDifference } from './lib/time.js';
 import * as toast from './com/toast.js';
 import * as contextMenu from './com/context-menu.js';
 import * as shareMenu from './com/share-menu.js';
-import { getAvailableName } from './lib/fs.js';
 import { toSimpleItemGroups, getSubicon } from './lib/files.js';
 import * as loc from './lib/location.js';
 import { constructItems as constructContextMenuItems } from './lib/context-menu.js';
@@ -525,7 +524,6 @@ export class ExplorerApp extends LitElement {
         @show-context-menu=${this.onShowMenu}
         @new-folder=${this.onNewFolder}
         @new-file=${this.onNewFile}
-        @new-mount=${this.onNewMount}
         @fork-drive=${this.onForkDrive}
         @drive-properties=${this.onDriveProperties}
         @export=${this.onExport}
@@ -1094,25 +1092,6 @@ export class ExplorerApp extends LitElement {
     }
   }
 
-  async onNewMount(e) {
-    if (!this.currentDriveInfo.writable) return;
-    var drive = nomad.fs.drive(this.currentDriveInfo.url);
-    var targetUrl = await nomad.shell.selectDriveDialog({
-      title: 'Select a site',
-    });
-    var target = nomad.fs.drive(targetUrl);
-    var info = await target.getInfo();
-    var name = await getAvailableName(drive, this.realPathname, info.title);
-    name = prompt('Enter the mount name', name);
-    try {
-      await drive.mount(joinPath(this.realPathname, name), target.url);
-    } catch (e) {
-      toast.create(e.toString(), 'error');
-      console.error(e);
-    }
-    this.load();
-  }
-
   async onForkDrive(e) {
     var drive = await nomad.fs.forkDrive(this.currentDriveInfo.url);
     toast.create('Site created');
@@ -1199,9 +1178,7 @@ export class ExplorerApp extends LitElement {
 
     var drive = nomad.fs.drive(this.currentDriveInfo.url);
     const del = async (path, stat) => {
-      if (stat.mount && stat.mount.key) {
-        await drive.unmount(path);
-      } else if (stat.isDirectory()) {
+      if (stat.isDirectory()) {
         await drive.rmdir(path, { recursive: true });
       } else {
         await drive.unlink(path);
