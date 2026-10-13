@@ -15,7 +15,9 @@ _Avoid_: hyperdrive, collaborative drive, site, archive, dat
 
 **Root Drive**:
 The Drive backing a Space. Contains `/drives.json` and any user-created content for that Space. Created
-automatically (as an Autobase) when a Space is first used.
+automatically (as an Autobase) when a Space is first used. A page reaches it as `hyper://private/`. A
+page can't open it, except for one file or folder the user allows, for one hour
+(`app/bg/web-apis/bg/private-drive-guard.ts`).
 _Avoid_: home drive, profile drive, user drive
 
 **Drive Registry**:

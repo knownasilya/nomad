@@ -232,6 +232,22 @@ export const PERMS = {
     requiresRefresh: false,
     promptTrusted: true,
   },
+  // One file or folder of the user's private drive (hyper://private/), for a limited time. The
+  // param is the path. Not persisted here: private-drive-guard.ts keeps the grant and ends it.
+  privateRead: {
+    persist: false,
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+  },
+  privateWrite: {
+    persist: false,
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+  },
 };
 
 export const PERM_ICONS = {
@@ -267,6 +283,8 @@ export const PERM_ICONS = {
   notesWrite: 'fas fa-sticky-note',
   readerRead: 'fas fa-rss',
   readerWrite: 'fas fa-rss',
+  privateRead: 'fas fa-lock',
+  privateWrite: 'fas fa-lock',
 };
 
 export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
@@ -322,6 +340,21 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Let the AI assistant read your Reader feeds and posts';
     case 'readerWrite':
       return 'Let the AI assistant follow and unfollow feeds and mark posts read';
+    case 'privateRead':
+    case 'privateWrite': {
+      const verb = permId === 'privateWrite' ? 'Read and change' : 'Read';
+      const what = permParam.endsWith('/') ? `${verb} the folder` : verb;
+      const m = permOpts?.minutes || 0;
+      const hours = m / 60;
+      const span =
+        Number.isInteger(hours) && hours >= 1
+          ? `${hours} hour${hours > 1 ? 's' : ''}`
+          : `${m} minutes`;
+      const time = m ? ` for ${span}` : '';
+      return html`<span
+        >${what} <code>hyper://private${permParam}</code> in your private drive${time}</span
+      >`;
+    }
 
     case 'network':
       if (permParam === '*') return 'Access the network freely';
