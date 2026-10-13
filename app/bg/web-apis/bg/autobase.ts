@@ -210,19 +210,37 @@ const autobaseAPI = {
     return [];
   },
 
+  // Emits 'changed' when something at `pathPattern` changes: a file, or a folder and everything in
+  // it (default: the whole drive). Hyperbee's own watch() never fires on an Autobase view, so this
+  // listens for the base's 'update' (as names.js and synced-settings.js do) and diffs the view
+  // against the version it saw last.
   async watch(url, pathPattern) {
     const { EventEmitter } = await import('events');
     const emitter: any = new EventEmitter();
+    emitter.close = () => {};
     try {
       const { sess } = await _lookupWithPath(url);
-      if (typeof sess.drive.watch === 'function') {
-        const prefix = _listPrefix(pathPattern || '/');
-        (async () => {
-          for await (const _ of sess.drive.watch({ gte: prefix, lt: prefix + '\xff' })) {
+      const path = (pathPattern || '/').replace(/\/+$/, '');
+      // From the path itself up to everything below it. A sibling whose name only adds characters
+      // that sort before '/' ('/a.json.bak') is inside this range too; a spare event is harmless.
+      const range = path ? { gte: path, lt: path + '/\xff' } : {};
+      let version = sess.drive.version;
+      const onUpdate = async () => {
+        const from = version;
+        version = sess.drive.version;
+        if (from === version) return;
+        try {
+          for await (const _ of sess.drive.createDiffStream(from, range)) {
             emitter.emit('changed', {});
+            return;
           }
-        })().catch(() => {});
-      }
+        } catch {
+          emitter.emit('changed', {}); // the view was rebuilt: let the caller re-read
+        }
+      };
+      sess.base.on('update', onUpdate);
+      // pauls-electron-rpc calls close() when the renderer tears down the stream
+      emitter.close = () => sess.base.removeListener('update', onUpdate);
     } catch {}
     return emitter;
   },

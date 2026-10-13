@@ -23,6 +23,7 @@ import { createFsWriteGuard } from './fs-write-guard';
 import { privateDrive } from './private-drive-access';
 import * as permissionsUI from '../../ui/permissions';
 import * as wcTrust from '../../wc-trust';
+import emitStream from 'emit-stream';
 
 // The backend-routing decisions (alias canonicalisation, autobase-vs-hyperdrive detection, the
 // no-wrong-backend-fallback gate) live in a pure, testable module. Here we just wire in the real
@@ -139,6 +140,18 @@ function _toBuffer(data, opts: any) {
   }
   if (data && typeof data === 'object') return Buffer.from(JSON.stringify(data), 'utf8');
   return Buffer.from(String(data), 'utf8');
+}
+
+// A 'readable' RPC sends a page only the 'data' chunks of a stream, as [event, payload]. A backend
+// returns a plain EventEmitter, so wrap it: then its 'changed' events reach the page, and closing
+// the page's stream stops the backend's listener.
+function _toEventStream(emitter) {
+  const stream: any = emitStream(emitter);
+  stream.close = () => {
+    emitter.close?.();
+    stream.destroy?.();
+  };
+  return stream;
 }
 
 // Canonicalise the url and split it into { baseKey, path } for the drafts module.
@@ -324,7 +337,7 @@ const fsAPI = {
   // --- Change notifications ('readable' — return the backend's emitter) ---
   async watch(url, pathPattern) {
     const { api, url: u } = await _dispatch(this, url);
-    return api.watch.call(this, u, pathPattern);
+    return _toEventStream(await api.watch.call(this, u, pathPattern));
   },
 
   // --- Drive lifecycle ---
@@ -386,7 +399,7 @@ const fsAPI = {
   },
   async watchRequests(url) {
     await _assertDrive(this, url);
-    return autobaseAPI.watchRequests.call(this, url);
+    return _toEventStream(await autobaseAPI.watchRequests.call(this, url));
   },
   async approveRequest(url, writerKey, opts = {}) {
     await _assertManage(this, url);
@@ -453,9 +466,8 @@ const fsAPI = {
       if (e && e.baseKey === baseKey) emitter.emit('changed', {});
     };
     drafts.events.on('changed', onChanged);
-    // pauls-electron-rpc calls close() when the renderer tears down the stream
     emitter.close = () => drafts.events.removeListener('changed', onChanged);
-    return emitter;
+    return _toEventStream(emitter);
   },
 };
 
