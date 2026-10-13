@@ -85,7 +85,7 @@ The live, authenticated channel between two of a user's Devices that carries a f
 _Avoid_: AI channel, AI relay, AI proxy, RPC channel
 
 **AI Config**:
-The `/ai/` folder inside a Drive, containing `system.md` (the system prompt) and optionally a `tools/` directory. A Drive has an AI Config when it includes this folder. Any Drive can opt into AI behaviour by adding an `ai` key to its `/index.json` — either `true` or a pointer string `"hyper://..."` delegating to another Drive's AI Config. This supplies the system prompt (persona/instructions) only — a Drive cannot dictate which model runs it; the model is always a user preference (the global default model in Settings → AI, or a per-site override the AI Sidebar keeps in `hyper://private/`).
+The `/ai/` folder inside a Drive, containing `system.md` (the system prompt). A Drive has an AI Config when it includes this folder. Any Drive can opt into AI behaviour by adding an `ai` key to its `/index.json` — either `true` or a pointer string `"hyper://..."` delegating to another Drive's AI Config. This supplies the system prompt (persona/instructions) only — a Drive cannot dictate which model runs it; the model is always a user preference (the global default model in Settings → AI, or the AI Sidebar's own choice, kept in the `ai_sidebar_prefs` setting).
 _Avoid_: agent config, AI settings, model config
 
 **AI Sidebar**:
@@ -97,7 +97,7 @@ A chat turn of the user's own AI: the AI Sidebar, the phone's AI panel over the 
 _Avoid_: trusted turn, private turn, owner turn
 
 **Prompt Session**:
-One conversation in the AI Sidebar — the ordered transcript of user turns and assistant turns, plus the Checkpoints produced by those turns. Reverting the whole session undoes every Checkpoint it produced. Persisted per site in `hyper://private/.ai-chat/` (keyed by a hash of the site's origin, see `app/bg/ai/chat-store.js`), with a session list so past Prompt Sessions for a site can be reopened — not just the most recent one.
+One conversation in the AI Sidebar — the ordered transcript of user turns and assistant turns, plus the Checkpoints produced by those turns. Reverting the whole session undoes every Checkpoint it produced. Persisted in `hyper://private/.ai-chat/sessions/` as one list for the whole sidebar, not one per site (see `app/bg/ai/chat-store.js`), so past Prompt Sessions can be reopened — not just the most recent one.
 _Avoid_: chat session, thread, conversation
 
 **Checkpoint**:
