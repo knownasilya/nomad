@@ -154,9 +154,7 @@ export async function rm(opts, dst) {
   if (!dst) throw new Error('dst is required');
   var { drive, pathname } = resolveParse(this.env, dst);
   var st = await drive.stat(pathname);
-  if (st.mount && st.mount.key) {
-    await drive.unmount(pathname);
-  } else if (st.isDirectory()) {
+  if (st.isDirectory()) {
     await drive.rmdir(pathname, { recursive: true });
   } else {
     await drive.unlink(pathname);
@@ -187,19 +185,6 @@ export async function readlink(opts, target) {
   if (!st) throw new Error('target does not exist');
   if (!st.linkname) throw new Error('not a symlink');
   return st.linkname;
-}
-
-export async function mount(opts, mountUrl, dst) {
-  if (!mountUrl) throw new Error('mount-url is required');
-  if (!dst) throw new Error('dst is required');
-  var { drive, pathname } = resolveParse(this.env, dst);
-  await drive.mount(pathname, mountUrl);
-}
-
-export async function unmount(opts, dst) {
-  if (!dst) throw new Error('dst is required');
-  var { drive, pathname } = resolveParse(this.env, dst);
-  await drive.unmount(pathname);
 }
 
 export async function query(opts = {}, ...paths) {

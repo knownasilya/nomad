@@ -36,6 +36,7 @@ import {
   InvalidPathError,
 } from 'beaker-error-constants';
 import * as wcTrust from '../../wc-trust';
+import { privateDrive } from './private-drive-access';
 
 // Returns the space ID for the given webContents — works for both tab panes and modal views.
 function getSenderSpaceId(sender) {
@@ -386,7 +387,7 @@ const hyperdriveAPI = {
         const { drive, isHistoric } = await lookupDrive(this.sender, urlp.hostname, urlp.version);
         if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
         pause();
-        await assertWritePermission(drive, this.sender);
+        await assertWritePermission(drive, this.sender, filepath);
         assertValidPath(filepath);
         assertUnprotectedFilePath(filepath, this.sender);
         resume();
@@ -408,7 +409,7 @@ const hyperdriveAPI = {
         );
         if (isHistoric) throw new ArchiveNotWritableError('Cannot modify a historic version');
         pause();
-        await assertWritePermission(drive, this.sender);
+        await assertWritePermission(drive, this.sender, filepath);
         assertUnprotectedFilePath(filepath, this.sender);
         resume();
         for await (const entry of checkoutFS.drive.list(filepath, { recursive: true })) {
@@ -798,12 +799,6 @@ const hyperdriveAPI = {
   async symlink() {
     /* no-op: symlinks removed in v11 */
   },
-  async mount() {
-    /* no-op: mounts removed in v11 */
-  },
-  async unmount() {
-    /* no-op: mounts removed in v11 */
-  },
   async createNetworkActivityStream() {
     const { EventEmitter } = require('events');
     return new EventEmitter();
@@ -840,14 +835,10 @@ async function assertReadPermission(drive, sender, filepath = undefined) {
 
   const ident = filesystem.getDriveIdent(driveUrl);
   if (ident.system) {
-    const origin = archivesDb.extractOrigin(sender.getURL()) + '/';
-    const senderUrl = sender.getURL();
-    if (
-      wcTrust.isWcTrusted(sender) ||
-      filesystem.isRootUrl(origin) ||
-      senderUrl.startsWith('hyper://')
-    )
-      return true;
+    // A page gets in only with a grant for this path (private-drive-guard.ts). No prompt here: the
+    // nomad.fs facade asks before it reaches this backend.
+    const key = parseDriveUrl(driveUrl).hostname;
+    if (await privateDrive.check({ sender }, key, filepath ?? '/', 'read')) return true;
     throw new PermissionsError('Cannot read the hyper://private/ drive');
   }
   return true;
@@ -863,7 +854,10 @@ async function assertWritePermission(drive, sender, filepath = undefined) {
   if (senderDatKey === driveKey) return true;
 
   const ident = filesystem.getDriveIdent(`hyper://${driveKey}`);
-  if (ident.system) throw new PermissionsError('Cannot write the hyper://private/ drive');
+  if (ident.system) {
+    if (await privateDrive.check({ sender }, driveKey, filepath ?? '/', 'write')) return true;
+    throw new PermissionsError('Cannot write the hyper://private/ drive');
+  }
 
   const allowed = await permissions.queryPermission(perm, sender);
   if (allowed) return true;

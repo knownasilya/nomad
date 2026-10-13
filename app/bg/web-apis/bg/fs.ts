@@ -20,8 +20,10 @@ import * as drafts from '../../hyper/drafts';
 import { parseDriveUrl } from '../../../lib/urls';
 import { createFsRouter } from './fs-router';
 import { createFsWriteGuard } from './fs-write-guard';
+import { privateDrive } from './private-drive-access';
 import * as permissionsUI from '../../ui/permissions';
 import * as wcTrust from '../../wc-trust';
+import emitStream from 'emit-stream';
 
 // The backend-routing decisions (alias canonicalisation, autobase-vs-hyperdrive detection, the
 // no-wrong-backend-fallback gate) live in a pure, testable module. Here we just wire in the real
@@ -42,8 +44,34 @@ const router = createFsRouter({
   },
   parseDriveUrl,
 });
-const _dispatch = (ctx, url) => router.dispatch(ctx, url);
-const _read = (ctx, method, url, rest) => router.read(ctx, method, url, rest);
+// Every call that reaches a drive passes the private-drive guard (private-drive-guard.ts) on the
+// canonical url, so a page can't reach any Space's `hyper://private/` through either backend.
+// `access` is 'read', 'write', or 'drive' (a call on the whole drive, never granted to a page).
+async function _assertPrivate(ctx, canonicalUrl, access) {
+  let key = canonicalUrl;
+  let path = '/';
+  try {
+    const p = parseDriveUrl(canonicalUrl);
+    key = p.hostname;
+    path = p.pathname || '/';
+  } catch {
+    /* an unparseable url is not a private drive */
+  }
+  await privateDrive.assert(ctx, key, path, access);
+}
+async function _dispatch(ctx, url, access = 'drive') {
+  const d = await router.dispatch(ctx, url);
+  await _assertPrivate(ctx, d.url, access);
+  return d;
+}
+async function _read(ctx, method, url, rest) {
+  await _assertPrivate(ctx, await router.canonical(ctx, url), 'read');
+  return router.read(ctx, method, url, rest);
+}
+// For the methods that hand a url straight to the Autobase backend.
+async function _assertDrive(ctx, url) {
+  await _assertPrivate(ctx, await router.canonical(ctx, url), 'drive');
+}
 
 // Cross-drive write / writer-management gate for Autobase drives (see fs-write-guard.ts). The
 // Hyperdrive backend already self-gates in hyperdrive.ts's assertWritePermission, so these are a
@@ -70,7 +98,7 @@ const writeGuard = createFsWriteGuard({
 });
 
 async function _assertWrite(ctx, url) {
-  const { isAutobase, baseKey } = await _baseInfo(ctx, url);
+  const { isAutobase, baseKey } = await _baseInfo(ctx, url, 'write');
   if (isAutobase) await writeGuard.assertWrite(ctx, baseKey);
 }
 async function _assertManage(ctx, url) {
@@ -114,9 +142,21 @@ function _toBuffer(data, opts: any) {
   return Buffer.from(String(data), 'utf8');
 }
 
+// A 'readable' RPC sends a page only the 'data' chunks of a stream, as [event, payload]. A backend
+// returns a plain EventEmitter, so wrap it: then its 'changed' events reach the page, and closing
+// the page's stream stops the backend's listener.
+function _toEventStream(emitter) {
+  const stream: any = emitStream(emitter);
+  stream.close = () => {
+    emitter.close?.();
+    stream.destroy?.();
+  };
+  return stream;
+}
+
 // Canonicalise the url and split it into { baseKey, path } for the drafts module.
-async function _baseInfo(ctx, url) {
-  const { api, url: u, isAutobase } = await _dispatch(ctx, url);
+async function _baseInfo(ctx, url, access = 'drive') {
+  const { api, url: u, isAutobase } = await _dispatch(ctx, url, access);
   let baseKey = u;
   let path = '/';
   try {
@@ -133,7 +173,7 @@ async function _baseInfo(ctx, url) {
 // not staged, the resolved { api, u } so the caller can dispatch without re-canonicalising.
 async function _stageWrite(ctx, url, kind, data, opts) {
   const o = _opts(opts);
-  const { api, url: u, isAutobase, baseKey, path } = await _baseInfo(ctx, url);
+  const { api, url: u, isAutobase, baseKey, path } = await _baseInfo(ctx, url, 'write');
   const wantDraft =
     isAutobase && o.draft !== false && (o.draft === true || (await drafts.getMode(baseKey)));
   if (!wantDraft) return { staged: false, api, u };
@@ -150,7 +190,7 @@ async function _readMerged(ctx, url, opts) {
   const o = _opts(opts);
   if (o.draft === false) return { handled: false, value: null };
   if (o.draft !== true && !drafts.anyPreview()) return { handled: false, value: null };
-  const { isAutobase, baseKey, path } = await _baseInfo(ctx, url);
+  const { isAutobase, baseKey, path } = await _baseInfo(ctx, url, 'read');
   if (!isAutobase) return { handled: false, value: null };
   if (o.draft !== true && !drafts.isPreview(baseKey)) return { handled: false, value: null };
   const buf = await drafts.readMerged(baseKey, path);
@@ -184,7 +224,7 @@ const fsAPI = {
     const base = await _read(this, 'list', url, [opts]);
     const o = _opts(opts);
     if (o.draft === false || (o.draft !== true && !drafts.anyPreview())) return base;
-    const { isAutobase, baseKey, path } = await _baseInfo(this, url);
+    const { isAutobase, baseKey, path } = await _baseInfo(this, url, 'read');
     if (!isAutobase || (o.draft !== true && !drafts.isPreview(baseKey))) return base;
     return drafts.mergeList(baseKey, path, base);
   },
@@ -192,7 +232,7 @@ const fsAPI = {
     const base = await _read(this, 'readdir', url, [opts]);
     const o = _opts(opts);
     if (o.draft === false || (o.draft !== true && !drafts.anyPreview())) return base;
-    const { isAutobase, baseKey, path } = await _baseInfo(this, url);
+    const { isAutobase, baseKey, path } = await _baseInfo(this, url, 'read');
     if (!isAutobase || (o.draft !== true && !drafts.isPreview(baseKey))) return base;
     const { removed, put } = await drafts.dirOverlay(baseKey, path);
     if (!removed.size && !put.size) return base;
@@ -246,37 +286,27 @@ const fsAPI = {
   },
   async mkdir(url, opts = {}) {
     await _assertWrite(this, url);
-    const { api, url: u } = await _dispatch(this, url);
+    const { api, url: u } = await _dispatch(this, url, 'write');
     return api.mkdir.call(this, u, opts);
   },
   async rmdir(url, opts = {}) {
     await _assertWrite(this, url);
-    const { api, url: u } = await _dispatch(this, url);
+    const { api, url: u } = await _dispatch(this, url, 'write');
     return api.rmdir.call(this, u, opts);
   },
   async updateMetadata(url, metadata, opts = {}) {
     await _assertWrite(this, url);
-    const { api, url: u } = await _dispatch(this, url);
+    const { api, url: u } = await _dispatch(this, url, 'write');
     return api.updateMetadata.call(this, u, metadata, opts);
   },
   async deleteMetadata(url, keys, opts = {}) {
     await _assertWrite(this, url);
-    const { api, url: u } = await _dispatch(this, url);
+    const { api, url: u } = await _dispatch(this, url, 'write');
     return api.deleteMetadata.call(this, u, keys, opts);
-  },
-  async mount(url, key, opts = {}) {
-    await _assertWrite(this, url);
-    const { api, url: u } = await _dispatch(this, url);
-    return api.mount.call(this, u, key, opts);
-  },
-  async unmount(url, opts = {}) {
-    await _assertWrite(this, url);
-    const { api, url: u } = await _dispatch(this, url);
-    return api.unmount.call(this, u, opts);
   },
   async symlink(url, target, opts = {}) {
     await _assertWrite(this, url);
-    const { api, url: u } = await _dispatch(this, url);
+    const { api, url: u } = await _dispatch(this, url, 'write');
     return api.symlink.call(this, u, target, opts);
   },
 
@@ -307,7 +337,7 @@ const fsAPI = {
   // --- Change notifications ('readable' — return the backend's emitter) ---
   async watch(url, pathPattern) {
     const { api, url: u } = await _dispatch(this, url);
-    return api.watch.call(this, u, pathPattern);
+    return _toEventStream(await api.watch.call(this, u, pathPattern));
   },
 
   // --- Drive lifecycle ---
@@ -323,6 +353,7 @@ const fsAPI = {
     return api.forkDrive.call(this, u, opts);
   },
   async loadDrive(url) {
+    await _assertDrive(this, url);
     return autobaseAPI.loadDrive.call(this, url);
   },
   async configure(url, settings, opts = {}) {
@@ -331,14 +362,19 @@ const fsAPI = {
     return api.configure.call(this, u, settings, opts);
   },
   async isCollaborativeDrive(url) {
+    await _assertDrive(this, url);
     return autobaseAPI.isCollaborativeDrive.call(this, url);
   },
 
   // query accepts either a url-first form fs.query(url, opts) or the legacy hyperdrive object
   // form fs.query({ drive, path, ... }) so migrated call sites keep working.
   async query(urlOrOpts, opts = {}) {
-    if (urlOrOpts && typeof urlOrOpts === 'object')
+    if (urlOrOpts && typeof urlOrOpts === 'object') {
+      // A glob over a drive is a drive-wide read: check every drive before the backend opens it.
+      const targets = [].concat(urlOrOpts.drive || []);
+      for (const d of targets) if (typeof d === 'string') await _assertDrive(this, d);
       return hyperdriveAPI.query.call(this, urlOrOpts);
+    }
     return _read(this, 'list', urlOrOpts, [opts]);
   },
 
@@ -354,13 +390,16 @@ const fsAPI = {
     return autobaseAPI.claimInvite.call(this, inviteUrl, opts);
   },
   async requestAccess(url, opts = {}) {
+    await _assertDrive(this, url);
     return autobaseAPI.requestAccess.call(this, url, opts);
   },
   async listRequests(url) {
+    await _assertDrive(this, url);
     return autobaseAPI.listRequests.call(this, url);
   },
   async watchRequests(url) {
-    return autobaseAPI.watchRequests.call(this, url);
+    await _assertDrive(this, url);
+    return _toEventStream(await autobaseAPI.watchRequests.call(this, url));
   },
   async approveRequest(url, writerKey, opts = {}) {
     await _assertManage(this, url);
@@ -375,6 +414,7 @@ const fsAPI = {
     return autobaseAPI.removeWriter.call(this, url, writerKey);
   },
   async listWriters(url) {
+    await _assertDrive(this, url);
     return autobaseAPI.listWriters.call(this, url);
   },
 
@@ -426,9 +466,8 @@ const fsAPI = {
       if (e && e.baseKey === baseKey) emitter.emit('changed', {});
     };
     drafts.events.on('changed', onChanged);
-    // pauls-electron-rpc calls close() when the renderer tears down the stream
     emitter.close = () => drafts.events.removeListener('changed', onChanged);
-    return emitter;
+    return _toEventStream(emitter);
   },
 };
 

@@ -40,7 +40,8 @@ import { findWebContentsParentWindow, spawnAndExecuteJs } from './lib/electron';
 import * as hyperDaemon from './hyper/daemon';
 import * as aiAwake from './ai/awake';
 import * as bookmarks from './filesystem/bookmarks';
-import { getDriveIdentFull } from './filesystem/index';
+import { getDriveIdentFull, isRootUrl } from './filesystem/index';
+import { isSameOrigin } from '../lib/urls';
 import * as wcTrust from './wc-trust';
 
 const logger = logLib.child({ category: 'browser' });
@@ -163,7 +164,11 @@ export async function setup() {
         // disallow all other requesters
         return cb({ cancel: true });
       }
-    } else if (details.url.startsWith('hyper://private')) {
+    } else if (
+      details.url.startsWith('hyper://private') ||
+      (details.url.startsWith('hyper://') && isRootUrl(details.url))
+    ) {
+      // A private drive: hyper://private/, or any Space's Root Drive by its key.
       if (details.resourceType === 'mainFrame') {
         // Always allow top-level navigation to hyper://private/ — it resolves via local DNS
         // to the user's root Hyperdrive regardless of what the tab's current URL is.
@@ -172,9 +177,9 @@ export async function setup() {
       if (!details.webContentsId) {
         return cb({ cancel: true });
       }
-      let wc = webContents.fromId(details.webContentsId);
-      if (/^(nomad:\/\/|hyper:\/\/private\/)/.test(wc.getURL())) {
-        // allow sub-resource requests from nomad pages and hyper://private/ itself
+      const pageUrl = webContents.fromId(details.webContentsId)?.getURL() || '';
+      if (/^(nomad:\/\/|hyper:\/\/private\/)/.test(pageUrl) || isSameOrigin(pageUrl, details.url)) {
+        // allow sub-resource requests from nomad pages and from the private drive itself
         cb({ cancel: false });
       } else {
         cb({ cancel: true });

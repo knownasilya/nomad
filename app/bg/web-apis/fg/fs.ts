@@ -112,12 +112,6 @@ export function setup(rpc) {
       async deleteMetadata(path, keys, opts = {}) {
         return fsRPC.deleteMetadata(joinPath(url, path), keys, opts);
       },
-      async mount(path, key, opts = {}) {
-        return fsRPC.mount(joinPath(url, path), key, opts);
-      },
-      async unmount(path, opts = {}) {
-        return fsRPC.unmount(joinPath(url, path), opts);
-      },
       async symlink(target, linkname, opts = {}) {
         return fsRPC.symlink(joinPath(url, linkname), target, opts);
       },
