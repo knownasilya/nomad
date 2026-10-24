@@ -3,7 +3,7 @@
 //
 // KEEP IN SYNC with the actual API surface. Per ../../../../CLAUDE.md, when a
 // nomad.* method is added or changed, update all three:
-//   1. nomad.dev/content/docs/api/apis/<api-name>.md
+//   1. nomad.dev/src/content/docs/docs/api/apis/<api-name>.md
 //   2. API_REFERENCE in app/bg/ai/api-reference.mjs
 //   3. this file
 //
@@ -475,7 +475,7 @@ declare const nomad: Nomad.Root;
 // --- WebMCP (document.modelContext) ---
 // A DOM polyfill Nomad injects into every eligible page (not a nomad.* API), so page
 // scripts can register tools that Nomad's AI assistant may call. See
-// nomad.dev/content/docs/api/developers/webmcp.md.
+// nomad.dev/src/content/docs/docs/api/developers/webmcp.md.
 declare namespace WebMCP {
   interface ToolDefinition {
     name: string;

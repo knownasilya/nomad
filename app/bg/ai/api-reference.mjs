@@ -1,5 +1,5 @@
 // Standing prompt for every chat turn, the personal prompt the user's own AI adds, plus the long
-// API reference search serves as guides. KEEP IN SYNC with nomad.dev/content/docs/api/apis/ — when
+// API reference search serves as guides. KEEP IN SYNC with nomad.dev/src/content/docs/docs/api/apis/ — when
 // a nomad.* method changes, update the docs and API_REFERENCE.
 
 export const STANDING_PROMPT = `\

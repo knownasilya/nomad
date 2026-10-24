@@ -128,7 +128,7 @@ console.log(
 );
 
 // Drive manifest (index.json) properties — kept in sync with the docs at
-// nomad.dev/content/docs/api/developers/index.json-manifest.md. A walled.garden
+// nomad.dev/src/content/docs/docs/api/developers/index.json-manifest.md. A walled.garden
 // record can be stored as a drive's index.json, where these fields are merged in
 // alongside the record — so every record branch allows them (optional) to avoid
 // additionalProperties:false flagging them.
