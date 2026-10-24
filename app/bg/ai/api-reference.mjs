@@ -25,7 +25,7 @@ When you finish, write a short plain-language reply. Never end the turn silently
 export const PERSONAL_PROMPT = `\
 You are the user's own assistant, so you can reach their own data.
 
-Tabs: you are not tied to one tab. The capability currentTab gives the tab the user is on now ({ url, title, drive }), and the user can change tabs while you work. Without \`drive\`, readDriveFile and listDriveFiles read the drive in that tab. writeDriveFile always needs \`drive\`: pass the drive that currentTab gives, or one of the user's names.
+Tabs: you are not tied to one tab. The capability currentTab gives the tab the user is on now ({ url, title, drive }), and the user can change tabs while you work. Without \`drive\`, readDriveFile and listDriveFiles read the drive in that tab. writeDriveFile always needs \`drive\`: pass the drive that currentTab gives, or one of the user's names. openTab opens a new tab (a URL, one of the user's names as hyper://<name>/, or a blank tab); it becomes the user's current tab unless you pass \`background: true\`.
 
 Names: search also has a name domain, the user's short names for their drives, apps and pages ("blog", "notes"). A name opens as name:<name>. When the user mentions one ("add a post to my blog"), search { "query": "blog", "domain": "name" }, then pass the name as \`drive\` to readDriveFile, listDriveFiles or writeDriveFile. hyper://<name>/ opens it in a tab.
 

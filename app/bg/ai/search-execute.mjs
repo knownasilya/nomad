@@ -31,7 +31,7 @@ const GUIDE_IDS = [
 ]
 
 const DOMAIN_COPY = {
-  capability: 'Read and write the current Drive, fetch an http(s) URL, and read or screenshot the open page.',
+  capability: 'Read and write the current Drive, fetch an http(s) URL, read or screenshot the open page, and open a new tab.',
   guide: 'Sections of the Nomad API reference. Open one with entity guide:<id>.',
   page: 'Tools the current page registered. Open one with entity page:<name>.',
   drive:
@@ -120,6 +120,22 @@ export const CAPABILITIES = [
       'charts, how something looks).',
     inputSchema: { type: 'object', properties: {}, required: [] },
     gates: { vision: true, renderer: true },
+  },
+  {
+    name: 'openTab',
+    description:
+      'Open a new tab in Nomad, next to the one the user is on. `url` is an http(s), hyper:// or nomad:// URL ' +
+      "(hyper://<name>/ opens one of the user's names); without it, a blank new tab opens. The new tab becomes " +
+      "the user's current tab unless `background` is true. Returns { url, title } once the page has loaded.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'Optional. The URL to open, e.g. https://example.com/ or hyper://blog/' },
+        background: { type: 'boolean', description: "Optional. Open it without switching the user's tab" },
+      },
+      required: [],
+    },
+    gates: { personal: true, renderer: true },
   },
   // The user's Notes, Highlights and Reader (vault-tools.mjs). Only a personal turn sees them, and
   // each asks the user's permission: read Notes, write Notes, read Reader, change Reader (ADR-0019).

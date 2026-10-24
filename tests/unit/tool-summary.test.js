@@ -36,6 +36,12 @@ export default async function main(params) {
     expect(toolSummary('mcp__nomad__execute', { code: 'nomad.listNotes()' })).toBe('Running code to look through your Notes')
   })
 
+  it('says what tab it opens', () => {
+    expect(toolSummary('openTab', { url: 'https://example.com/' })).toBe('Opening https://example.com/ in a new tab')
+    expect(toolSummary('openTab', {})).toBe('Opening a new tab')
+    expect(toolSummary('execute', { code: "nomad.openTab({ url: 'hyper://blog/' })" })).toBe('Running code to open a tab')
+  })
+
   it('names the file, the drive and the Note', () => {
     expect(toolSummary('readDriveFile', { path: '/index.html' })).toBe('Reading /index.html')
     expect(toolSummary('writeDriveFile', { path: '/a.md', drive: 'blog' })).toBe('Writing /a.md in blog')

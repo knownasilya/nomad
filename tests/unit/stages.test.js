@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { pickToolDrive, remoteStage, sameDrive, stageRules, tabSnapshot } from '../../app/bg/ai/stages.mjs'
 import { buildCatalog } from '../../app/bg/ai/search-execute.mjs'
+import { openTabUrl } from '../../app/bg/ai/open-tab.mjs'
 
 const BLOG = 'hyper://' + 'b'.repeat(64) + '/'
 const NOTES = 'hyper://' + 'c'.repeat(64) + '/'
@@ -76,5 +77,34 @@ describe('the catalog of a turn with a tab', () => {
     expect(find(list, 'readDriveFile').inputSchema.properties.drive).toBeTruthy()
     // Without a tab (the loopback MCP), a write may still use the current Drive.
     expect(find(caps({ personal: true }), 'writeDriveFile').inputSchema.required).toEqual(['path', 'content'])
+  })
+})
+
+describe('openTab', () => {
+  const caps = (opts) => buildCatalog({ allowWrite: true, ...opts }).capabilities
+  const find = (list, name) => list.find((c) => c.name === name)
+
+  it("is offered to the user's own AI on this Device only", () => {
+    expect(find(caps({ personal: true, tab: true }), 'openTab')).toBeTruthy()
+    expect(find(caps({ personal: true }), 'openTab')).toBeTruthy()
+    expect(find(caps({ personal: true, tab: true, remote: true }), 'openTab')).toBeUndefined()
+    expect(find(caps({}), 'openTab')).toBeUndefined()
+  })
+
+  it('opens web, hyper:// and nomad:// URLs, and a blank tab without one', () => {
+    expect(openTabUrl()).toBe(null)
+    expect(openTabUrl('')).toBe(null)
+    expect(openTabUrl('https://example.com')).toBe('https://example.com/')
+    expect(openTabUrl('hyper://blog/')).toBe('hyper://blog/')
+    expect(openTabUrl(BLOG + 'posts/')).toBe(BLOG + 'posts/')
+    expect(openTabUrl('nomad://reader/')).toBe('nomad://reader/')
+  })
+
+  it('refuses other schemes and things that are not URLs', () => {
+    expect(() => openTabUrl('javascript:alert(1)')).toThrow(/only/)
+    expect(() => openTabUrl('file:///etc/passwd')).toThrow(/only/)
+    expect(() => openTabUrl('data:text/html,hi')).toThrow(/only/)
+    expect(() => openTabUrl('example.com')).toThrow(/Not a URL/)
+    expect(() => openTabUrl(42)).toThrow(/string/)
   })
 })
