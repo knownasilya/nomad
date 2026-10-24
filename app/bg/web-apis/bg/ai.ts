@@ -1,4 +1,4 @@
-import { app, powerSaveBlocker, powerMonitor } from 'electron';
+import { app, BrowserWindow, powerSaveBlocker, powerMonitor } from 'electron';
 import EventEmitter from 'events';
 import emitStream from 'emit-stream';
 import http from 'http';
@@ -10,7 +10,7 @@ import * as settingsDb from '../../dbs/settings';
 import * as sitedata from '../../dbs/sitedata';
 import * as permissions from '../../ui/permissions';
 import { parseDriveUrl } from '../../../lib/urls';
-import { findTab } from '../../ui/tabs/manager';
+import * as tabManager from '../../ui/tabs/manager';
 import * as wcTrust from '../../wc-trust';
 import fsAPI from './fs';
 import * as modelContext from './model-context';
@@ -54,6 +54,7 @@ import { startLocalhostMcp } from '../../ai/localhost-mcp-host.mjs';
 import { streamAgent } from '../../ai/agent-cli.mjs';
 import { toolSummary } from '../../ai/tool-summary.mjs';
 import { pickToolDrive, remoteStage, stageRules, tabSnapshot } from '../../ai/stages.mjs';
+import { openTabGroup, openTabUrl } from '../../ai/open-tab.mjs';
 import {
   getActiveRuntime,
   listRuntimeCatalog,
@@ -647,7 +648,7 @@ async function resolveAiConfig(sender, driveUrl = null, { drive = true } = {}) {
   }
 
   // 2. Space default
-  const tab = findTab(sender);
+  const tab = tabManager.findTab(sender);
   const spaceId = tab?.spaceId;
   if (spaceId) {
     const spaceDefault = await settingsDb.getForSpace(spaceId, 'ai_space_default');
@@ -897,9 +898,47 @@ async function executeTool(name, args, sender, opts: any = {}) {
       }
       return { text: 'Screenshot captured (attached).', imageDataUrl: dataUrl };
     }
+    case 'openTab': {
+      // The user's own AI only, and only on this Device: a phone turn's tab is on the phone, and
+      // the catalog leaves openTab out there (renderer gate). Checked again here.
+      if (!catalog?.personal || remote) throw new Error('openTab is not available here');
+      const url = openTabUrl(args.url);
+      const groupName = openTabGroup(args.group);
+      // Next to the tab the user is on, in its window; the focused window when that tab is gone.
+      const win =
+        tabManager.findContainingWindow(sender) ||
+        BrowserWindow.getFocusedWindow() ||
+        BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
+      if (!win) throw new Error('No Nomad window is open');
+      const tabOpts = { setActive: args.background !== true, adjacentActive: true };
+      const group = groupName ? tabManager.findOrCreateTabGroup(win, groupName) : null;
+      const opened = group
+        ? tabManager.createInGroup(win, group.id, url, tabOpts)
+        : tabManager.create(win, url, tabOpts);
+      const pane = opened?.primaryPane;
+      if (!pane) throw new Error('Could not open a tab');
+      await waitForLoad(pane.webContents, signal);
+      return JSON.stringify({ url: pane.url || url, title: pane.title || null, group: group?.name || null });
+    }
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
+}
+
+// Wait for a new tab's page to finish loading, for at most 15 seconds. openTab returns either way.
+function waitForLoad(wc, signal) {
+  if (!wc || wc.isDestroyed?.() || !wc.isLoading?.()) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      wc.removeListener('did-stop-loading', done);
+      signal?.removeEventListener?.('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, 15_000);
+    wc.on('did-stop-loading', done);
+    signal?.addEventListener?.('abort', done);
+  });
 }
 
 // Resolve the current page's WebMCP tools after a one-time per-origin permission prompt.

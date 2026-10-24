@@ -455,10 +455,11 @@ class ShellWindowTabs extends LitElement {
 
   // group header drag handlers
 
-  onContextmenuGroup(e, groupId) {
+  async onContextmenuGroup(e, groupId) {
     e.preventDefault();
     e.stopPropagation();
-    bg.views.showGroupContextMenu(groupId);
+    const picked = await bg.views.showGroupContextMenu(groupId);
+    if (picked === 'rename') this.editingGroupId = groupId;
   }
 
   onDragstartGroup(e, groupId) {

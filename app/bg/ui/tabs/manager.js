@@ -1268,6 +1268,52 @@ export function reorder(win, oldIndex, newIndex) {
   emitReplaceState(win);
 }
 
+// Put a tab in a group, or take it out of its group (groupId null). The tab moves next to the
+// group's other tabs, since the top tab bar draws a group from its run of tabs. `before` is the tab
+// to put it in front of; without it, the tab goes after the last tab of the group it joins (or of
+// the group it leaves).
+export function moveTabToGroup(win, tab, groupId, before = null) {
+  win = getTopWindow(win);
+  var tabs = getAll(win);
+  var from = tabs.indexOf(tab);
+  if (from === -1 || tab.isPinned) return;
+  var leaving = tab.groupId;
+  tabs.splice(from, 1);
+  tab.groupId = groupId || null;
+  var at = before && before !== tab && !before.isPinned ? tabs.indexOf(before) : -1;
+  if (at === -1) {
+    var anchor = groupId || leaving;
+    var last = -1;
+    tabs.forEach((t, i) => {
+      if (anchor && t.groupId === anchor) last = i;
+    });
+    at = last === -1 ? Math.min(from, tabs.length) : last + 1;
+  }
+  tabs.splice(at, 0, tab);
+  emitReplaceState(win);
+}
+
+// Open a new tab at the end of a group, and show the group if it was hidden.
+export function createInGroup(win, groupId, url, opts = {}) {
+  var group = getTabGroups(win).find((g) => g.id === groupId);
+  if (!group) return null;
+  group.hidden = false;
+  var tab = create(win, url, opts);
+  if (tab) moveTabToGroup(win, tab, groupId);
+  return tab;
+}
+
+// A window's group by id or by name (any case), or a new group with that name.
+export function findOrCreateTabGroup(win, nameOrId) {
+  var key = String(nameOrId).trim();
+  var groups = getTabGroups(win);
+  return (
+    groups.find((g) => g.id === key) ||
+    groups.find((g) => g.name.toLowerCase() === key.toLowerCase()) ||
+    createTabGroup(win, key)
+  );
+}
+
 export function changeActiveBy(win, offset) {
   win = getTopWindow(win);
   var tabs = getAll(win);
@@ -1587,6 +1633,17 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     emitReplaceState(win);
   },
 
+  // Drag and drop in the sidebar: put the tab at `index` in a group (null to take it out), in front
+  // of the tab at `beforeIndex` when given.
+  async moveTabToGroup(index, groupId, beforeIndex = null) {
+    var win = getWindow(this.sender);
+    var tab = getByIndex(win, index);
+    if (!tab) return;
+    if (groupId && !getTabGroups(win).some((g) => g.id === groupId)) return;
+    var before = beforeIndex == null ? null : getByIndex(win, beforeIndex);
+    moveTabToGroup(win, tab, groupId, before);
+  },
+
   async removeTabFromGroup(index) {
     var win = getWindow(this.sender);
     var tab = getByIndex(win, index);
@@ -1611,11 +1668,26 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     emitReplaceState(win);
   },
 
+  // Resolves with what the caller draws itself: 'rename' (edit the name in place), 'new-tab' (show
+  // the group's tabs), or null.
   async showGroupContextMenu(groupId) {
     var win = getWindow(this.sender);
     var group = getTabGroups(win).find((g) => g.id === groupId);
-    if (!group) return;
+    if (!group) return null;
+    var resolve;
+    var picked = new Promise((r) => (resolve = r));
     var menu = Menu.buildFromTemplate([
+      {
+        label: 'New Tab in Group',
+        click: async () => {
+          const spaceId = getWindowActiveSpaceId(win);
+          const url = (await settingsDb.getForSpace(spaceId, 'new_tab')) || defaultUrl;
+          createInGroup(win, groupId, url, { setActive: true, focusLocationBar: true });
+          resolve('new-tab');
+        },
+      },
+      { label: 'Rename Group', click: () => resolve('rename') },
+      { type: 'separator' },
       {
         label: group.hidden ? 'Show Tabs' : 'Hide Tabs',
         click: () => {
@@ -1637,8 +1709,18 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
           emitReplaceState(win);
         },
       },
+      {
+        label: 'Delete Group',
+        click: () => {
+          // The tabs stay open, out of the group.
+          removeTabGroup(win, groupId);
+          emitReplaceState(win);
+        },
+      },
     ]);
-    menu.popup({ window: getTopWindow(win) });
+    // A click runs after the menu closes, so wait a moment before saying nothing was picked.
+    menu.popup({ window: getTopWindow(win), callback: () => setTimeout(() => resolve(null), 200) });
+    return picked;
   },
 
   async reorderTabGroup(groupId, beforeGroupId) {

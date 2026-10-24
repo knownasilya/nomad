@@ -19,6 +19,7 @@ export default {
   showGroupContextMenu: 'promise',
   createTabGroup: 'promise',
   addTabToGroup: 'promise',
+  moveTabToGroup: 'promise',
   removeTabFromGroup: 'promise',
   renameTabGroup: 'promise',
   setTabGroupColor: 'promise',

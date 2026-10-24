@@ -47,6 +47,8 @@ class ShellWindowSidebar extends LitElement {
     this.sidebarWidth = 220;
     this.collapsedGroups = new Set();
     this.editingGroupId = null;
+    // The index of the tab being dragged, while one is.
+    this.draggedTabIndex = null;
     this.faviconCache = {};
     this._resizing = false;
     this.spacesPopupOpen = false;
@@ -146,7 +148,14 @@ class ShellWindowSidebar extends LitElement {
             (g) => g.id,
             (g) => this._renderGroup(g)
           )}
-          <button class="new-tab-inline" title="New tab" @click=${this._onClickNew}>
+          <button
+            class="new-tab-inline"
+            title="New tab"
+            @click=${this._onClickNew}
+            @dragover=${(e) => this._onDragoverUngroup(e)}
+            @dragleave=${this._onDragleave}
+            @drop=${(e) => this._onDropUngroup(e)}
+          >
             <span class="new-tab-icon fas fa-plus"></span>
             <span class="new-tab-label">New tab</span>
           </button>
@@ -184,6 +193,9 @@ class ShellWindowSidebar extends LitElement {
           style=${styleMap({ '--group-color': group.color })}
           @click=${() => this.toggleGroup(group.id)}
           @contextmenu=${(e) => this._onContextmenuGroup(e, group.id)}
+          @dragover=${(e) => this._onDragoverGroup(e)}
+          @dragleave=${this._onDragleave}
+          @drop=${(e) => this._onDropGroup(e, group.id)}
         >
           <span class="group-dot"></span>
           ${isEditing
@@ -232,6 +244,12 @@ class ShellWindowSidebar extends LitElement {
         @click=${() => bg.views.setActiveTab(index)}
         @contextmenu=${(e) => this._onContextmenuTab(e, index)}
         @mousedown=${(e) => this._onMousedownTab(e, index)}
+        draggable=${tab.isPinned ? 'false' : 'true'}
+        @dragstart=${(e) => this._onDragstartTab(e, index)}
+        @dragend=${this._onDragendTab}
+        @dragover=${(e) => this._onDragoverTab(e, tab, index)}
+        @dragleave=${this._onDragleave}
+        @drop=${(e) => this._onDropTab(e, tab, index)}
       >
         <div class="tab-favicon">
           ${tab.isLoading
@@ -449,10 +467,84 @@ class ShellWindowSidebar extends LitElement {
     if (e.which === 2) bg.views.closeTab(index);
   }
 
-  _onContextmenuGroup(e, groupId) {
+  async _onContextmenuGroup(e, groupId) {
     e.preventDefault();
     e.stopPropagation();
-    bg.views.showGroupContextMenu(groupId);
+    const picked = await bg.views.showGroupContextMenu(groupId);
+    if (picked === 'rename') {
+      this.editingGroupId = groupId;
+    } else if (picked === 'new-tab' && this.collapsedGroups.has(groupId)) {
+      this.toggleGroup(groupId);
+    }
+  }
+
+  // Drag a tab onto a group's header to put it in that group, onto another tab to move it there
+  // (joining that tab's group, or leaving its own), or onto "New tab" to take it out of its group.
+  // Pinned tabs stay where they are.
+
+  _onDragstartTab(e, index) {
+    this.draggedTabIndex = index;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', this.tabs[index]?.url || '');
+  }
+
+  _onDragendTab() {
+    this.draggedTabIndex = null;
+    for (const el of this.shadowRoot.querySelectorAll('.drop-before, .drop-into')) {
+      el.classList.remove('drop-before', 'drop-into');
+    }
+  }
+
+  _acceptDrop(e, className) {
+    if (this.draggedTabIndex === null) return false;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    e.currentTarget.classList.add(className);
+    return true;
+  }
+
+  _onDragleave(e) {
+    e.currentTarget.classList.remove('drop-before', 'drop-into');
+  }
+
+  _onDragoverTab(e, tab, index) {
+    if (tab.isPinned || index === this.draggedTabIndex) return;
+    this._acceptDrop(e, 'drop-before');
+  }
+
+  _onDropTab(e, tab, index) {
+    const from = this.draggedTabIndex;
+    if (from === null || tab.isPinned || index === from) return;
+    e.preventDefault();
+    this._onDragendTab();
+    bg.views.moveTabToGroup(from, tab.groupId || null, index);
+  }
+
+  _onDragoverGroup(e) {
+    this._acceptDrop(e, 'drop-into');
+  }
+
+  _onDropGroup(e, groupId) {
+    const from = this.draggedTabIndex;
+    if (from === null) return;
+    e.preventDefault();
+    this._onDragendTab();
+    if (this.tabs[from]?.groupId === groupId) return;
+    bg.views.moveTabToGroup(from, groupId);
+    if (this.collapsedGroups.has(groupId)) this.toggleGroup(groupId);
+  }
+
+  _onDragoverUngroup(e) {
+    if (this.draggedTabIndex === null || !this.tabs[this.draggedTabIndex]?.groupId) return;
+    this._acceptDrop(e, 'drop-into');
+  }
+
+  _onDropUngroup(e) {
+    const from = this.draggedTabIndex;
+    if (from === null) return;
+    e.preventDefault();
+    this._onDragendTab();
+    if (this.tabs[from]?.groupId) bg.views.moveTabToGroup(from, null);
   }
 
   _onDblclickGroupName(e, groupId) {
@@ -660,6 +752,19 @@ ShellWindowSidebar.styles = css`
 
   .sidebar-tab.in-group {
     padding-left: 22px;
+  }
+
+  /* drag and drop: a line above the tab it will land in front of, a tint on the group it joins */
+  .sidebar-tab.drop-before {
+    box-shadow: inset 0 2px 0 var(--highlight-color--tab--current, #5b5ef4);
+  }
+
+  .group-header.drop-into {
+    background: color-mix(in srgb, var(--group-color, #5b5ef4) 22%, transparent);
+  }
+
+  .new-tab-inline.drop-into {
+    background: var(--bg-color--tab--hover);
   }
 
   .tab-favicon {
