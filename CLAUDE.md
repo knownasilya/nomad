@@ -41,7 +41,7 @@ See [docs/releasing.md](docs/releasing.md) for the CI jobs, Android signing/keys
 - `API_REFERENCE` is the guide corpus. `search` (`app/bg/ai/search-execute.mjs`) splits it on `##` headings into entities such as `guide:nomad.fs` and `guide:nomad.fs#draft-mode`, and returns a section when the model opens that entity. Stable ids for the current headings live in `GUIDE_IDS` in that file. A new `##` heading still appears; its id is slugged until you add a prefix there.
 
 **Whenever you add or change an API**, update all three:
-1. `nomad.dev/content/docs/api/apis/<api-name>.md` — the user-facing docs
+1. `nomad.dev/src/content/docs/docs/api/apis/<api-name>.md` — the user-facing docs
 2. `API_REFERENCE` in `app/bg/ai/api-reference.mjs` — the guide `search` serves. Edit `STANDING_PROMPT` in the same file when the every-turn instructions need to change.
 3. `app/userland/editor/js/types/nomad-dts.js` — the `nomad.*` TypeScript declarations that drive
    autocomplete/hover in the code editor (Monaco)
@@ -65,7 +65,7 @@ The host invokes it as `page_<name>` through `invokePageTool`, gated once per or
 `webmcpTools:<origin>` permission. **Local path only** — page tools are never sent over the AI Bridge.
 This is a web-platform API, so the sync triad above does not apply; the touchpoints are the
 `## Page-provided tools (WebMCP)` section of `API_REFERENCE` (guide id `webmcp`), a `Document`/`Navigator`
-block in `nomad-dts.js`, and `nomad.dev/content/docs/api/developers/webmcp.md`.
+block in `nomad-dts.js`, and `nomad.dev/src/content/docs/docs/api/developers/webmcp.md`.
 
 **Debugging:** `nomad://webmcp` (the WebMCP Inspector app — `app/userland/webmcp/`, backed by
 the internal `webmcp-devtools` API over `bg/model-context.ts`'s `listAll()` / `getInvokeLog()` /
@@ -98,7 +98,7 @@ walled.garden schemas are **content conventions** (Zod records identified by the
    gen script loads this module under Node `--experimental-strip-types`, which won't rewrite `.js`→`.ts`).
 3. Rerun `node scripts/build.js` (or `scripts/gen-schema-dts.mjs`) to regenerate the editor types. The gen
    script re-execs itself with the type-stripping flag, so no extra flags are needed.
-4. Document it in `nomad.dev/content/docs/api/developers/walled-garden-schemas.md`.
+4. Document it in `nomad.dev/src/content/docs/docs/api/developers/walled-garden-schemas.md`.
 
 ## `nomad.fs` is the ONE drive API (ADR-0010)
 
@@ -273,7 +273,7 @@ Every new or changed screen must work in light **and** dark, and look like its n
 ## Drive templates live in `nomad.dev`
 
 The "Create Drive From This Template" starter drives (forum, blog, microblog, …) live in the sibling
-**`nomad.dev`** repo (`static/templates/` + `content/docs/templates/`), not here. See `nomad.dev/CLAUDE.md`
+**`nomad.dev`** repo (`static/templates/` + `src/content/docs/docs/templates/`), not here. See `nomad.dev/CLAUDE.md`
 for how a template is structured and how to add one.
 
 ## Mobile: safe areas on Android

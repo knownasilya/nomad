@@ -267,7 +267,7 @@ const MAIN_WORLD_BOOTSTRAP = `
     bridge.register(host);
     notify();
 
-    // Debug inspector — see nomad.dev/content/docs/api/developers/webmcp.md
+    // Debug inspector — see nomad.dev/src/content/docs/docs/api/developers/webmcp.md
     try {
       window.__nomadWebmcp = {
         status: status,
