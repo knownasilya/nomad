@@ -39,6 +39,7 @@ export default async function main(params) {
   it('says what tab it opens', () => {
     expect(toolSummary('openTab', { url: 'https://example.com/' })).toBe('Opening https://example.com/ in a new tab')
     expect(toolSummary('openTab', {})).toBe('Opening a new tab')
+    expect(toolSummary('openTab', { group: 'Research' })).toBe('Opening a new tab in the group “Research”')
     expect(toolSummary('execute', { code: "nomad.openTab({ url: 'hyper://blog/' })" })).toBe('Running code to open a tab')
   })
 

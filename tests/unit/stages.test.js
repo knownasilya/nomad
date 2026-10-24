@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { pickToolDrive, remoteStage, sameDrive, stageRules, tabSnapshot } from '../../app/bg/ai/stages.mjs'
 import { buildCatalog } from '../../app/bg/ai/search-execute.mjs'
-import { openTabUrl } from '../../app/bg/ai/open-tab.mjs'
+import { openTabGroup, openTabUrl } from '../../app/bg/ai/open-tab.mjs'
 
 const BLOG = 'hyper://' + 'b'.repeat(64) + '/'
 const NOTES = 'hyper://' + 'c'.repeat(64) + '/'
@@ -106,5 +106,13 @@ describe('openTab', () => {
     expect(() => openTabUrl('data:text/html,hi')).toThrow(/only/)
     expect(() => openTabUrl('example.com')).toThrow(/Not a URL/)
     expect(() => openTabUrl(42)).toThrow(/string/)
+  })
+
+  it('takes a tab group by name', () => {
+    expect(openTabGroup(undefined)).toBe(null)
+    expect(openTabGroup('  ')).toBe(null)
+    expect(openTabGroup(' Research ')).toBe('Research')
+    expect(() => openTabGroup(3)).toThrow(/string/)
+    expect(() => openTabGroup('x'.repeat(61))).toThrow(/60/)
   })
 })

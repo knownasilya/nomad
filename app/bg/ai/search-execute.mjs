@@ -126,12 +126,14 @@ export const CAPABILITIES = [
     description:
       'Open a new tab in Nomad, next to the one the user is on. `url` is an http(s), hyper:// or nomad:// URL ' +
       "(hyper://<name>/ opens one of the user's names); without it, a blank new tab opens. The new tab becomes " +
-      "the user's current tab unless `background` is true. Returns { url, title } once the page has loaded.",
+      "the user's current tab unless `background` is true. With `group`, it opens at the end of that tab group, " +
+      'found by name and made when there is none. Returns { url, title, group } once the page has loaded.',
     inputSchema: {
       type: 'object',
       properties: {
         url: { type: 'string', description: 'Optional. The URL to open, e.g. https://example.com/ or hyper://blog/' },
         background: { type: 'boolean', description: "Optional. Open it without switching the user's tab" },
+        group: { type: 'string', description: 'Optional. The name of a tab group to open it in, e.g. Research' },
       },
       required: [],
     },

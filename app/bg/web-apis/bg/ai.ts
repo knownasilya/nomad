@@ -54,7 +54,7 @@ import { startLocalhostMcp } from '../../ai/localhost-mcp-host.mjs';
 import { streamAgent } from '../../ai/agent-cli.mjs';
 import { toolSummary } from '../../ai/tool-summary.mjs';
 import { pickToolDrive, remoteStage, stageRules, tabSnapshot } from '../../ai/stages.mjs';
-import { openTabUrl } from '../../ai/open-tab.mjs';
+import { openTabGroup, openTabUrl } from '../../ai/open-tab.mjs';
 import {
   getActiveRuntime,
   listRuntimeCatalog,
@@ -903,20 +903,22 @@ async function executeTool(name, args, sender, opts: any = {}) {
       // the catalog leaves openTab out there (renderer gate). Checked again here.
       if (!catalog?.personal || remote) throw new Error('openTab is not available here');
       const url = openTabUrl(args.url);
+      const groupName = openTabGroup(args.group);
       // Next to the tab the user is on, in its window; the focused window when that tab is gone.
       const win =
         tabManager.findContainingWindow(sender) ||
         BrowserWindow.getFocusedWindow() ||
         BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
       if (!win) throw new Error('No Nomad window is open');
-      const opened = tabManager.create(win, url, {
-        setActive: args.background !== true,
-        adjacentActive: true,
-      });
+      const tabOpts = { setActive: args.background !== true, adjacentActive: true };
+      const group = groupName ? tabManager.findOrCreateTabGroup(win, groupName) : null;
+      const opened = group
+        ? tabManager.createInGroup(win, group.id, url, tabOpts)
+        : tabManager.create(win, url, tabOpts);
       const pane = opened?.primaryPane;
       if (!pane) throw new Error('Could not open a tab');
       await waitForLoad(pane.webContents, signal);
-      return JSON.stringify({ url: pane.url || url, title: pane.title || null });
+      return JSON.stringify({ url: pane.url || url, title: pane.title || null, group: group?.name || null });
     }
     default:
       throw new Error(`Unknown tool: ${name}`);

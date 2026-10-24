@@ -55,8 +55,10 @@ export function toolSummary(name, args) {
       return 'Reading this page';
     case 'screenshotCurrentPage':
       return 'Taking a screenshot of this page';
-    case 'openTab':
-      return a.url ? `Opening ${a.url} in a new tab` : 'Opening a new tab';
+    case 'openTab': {
+      const where = a.group ? ` in the group ${quote(a.group)}` : '';
+      return a.url ? `Opening ${a.url} in a new tab${where}` : `Opening a new tab${where}`;
+    }
     case 'listNotes':
       return a.query ? `Looking in your Notes for ${quote(a.query)}` : 'Listing your Notes';
     case 'readNote':
