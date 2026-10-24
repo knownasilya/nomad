@@ -48,8 +48,14 @@ export function get() {
   return rootDrive;
 }
 
+// True for the Root Drive of ANY Space, not only the default one. Every Space's root is a private
+// drive (`hyper://private/` in that Space), and the serve path and the private-drive guard rely on
+// this to keep pages out of all of them.
 export function isRootUrl(url) {
-  return isSameOrigin(url, browsingProfile.url) || isSameOrigin(url, 'hyper://private/');
+  // browsingProfile is unset until setup(); the request filter in browser.js can ask before that.
+  if (isSameOrigin(url, 'hyper://private/')) return true;
+  if (browsingProfile?.url && isSameOrigin(url, browsingProfile.url)) return true;
+  return Object.values(spaceRootDrives).some((d) => d?.url && isSameOrigin(url, d.url));
 }
 
 export async function setup() {

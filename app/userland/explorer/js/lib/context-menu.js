@@ -158,12 +158,6 @@ export function constructItems(app) {
       disabled: !writable,
       click: () => app.onNewFolder(),
     });
-    items.push({
-      icon: 'fas fa-fw fa-long-arrow-alt-right custom-link-icon',
-      label: 'New mount',
-      disabled: !writable,
-      click: () => app.onNewMount(),
-    });
     items.push('-');
     items.push({
       icon: 'fas fa-fw fa-code-branch',

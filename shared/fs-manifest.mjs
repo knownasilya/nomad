@@ -34,8 +34,6 @@ export default {
   rename: 'promise',
   updateMetadata: 'promise',
   deleteMetadata: 'promise',
-  mount: 'promise',
-  unmount: 'promise',
   symlink: 'promise',
 
   // Bulk filesystem import/export

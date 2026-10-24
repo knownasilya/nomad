@@ -63,27 +63,8 @@ export async function diff(
       return diffFile(basePath, baseStat, targetPath, targetStat);
     }
     // both a dir
-    if (
-      baseStat.isDirectory() &&
-      !baseStat.mount &&
-      targetStat.isDirectory() &&
-      !targetStat.mount
-    ) {
+    if (baseStat.isDirectory() && targetStat.isDirectory()) {
       return walk(basePath, targetPath);
-    }
-    // both a mount
-    if (baseStat.mount && targetStat.mount) {
-      if (baseStat.mount.key !== targetStat.mount.key) {
-        changes.push({
-          change: 'mod',
-          type: 'mount',
-          basePath,
-          targetPath,
-          baseMountKey: baseStat.mount.key,
-          targetMountKey: targetStat.mount.key,
-        });
-      }
-      return;
     }
     // incongruous, remove all in left then add all in right
     await delRecursive(basePath, targetPath, true);
@@ -146,15 +127,7 @@ export async function diff(
     ) {
       checkForCycle(st, basePath);
     }
-    if (st.mount) {
-      changes.push({
-        change: 'add',
-        type: 'mount',
-        basePath,
-        targetPath,
-        baseMountKey: st.mount.key,
-      });
-    } else if (st.isFile()) {
+    if (st.isFile()) {
       changes.push({ change: 'add', type: 'file', basePath, targetPath });
     } else if (st.isDirectory()) {
       // add dir first
@@ -184,15 +157,7 @@ export async function diff(
     ) {
       checkForCycle(st, targetPath);
     }
-    if (st.mount) {
-      changes.push({
-        change: 'del',
-        type: 'mount',
-        basePath,
-        targetPath,
-        targetMountKey: st.mount.key,
-      });
-    } else if (st.isFile()) {
+    if (st.isFile()) {
       changes.push({ change: 'del', type: 'file', basePath, targetPath });
     } else if (st.isDirectory()) {
       // del children first
@@ -241,22 +206,9 @@ export async function applyRight(baseDrive, targetDrive, changes) {
       console.debug('copy', d.basePath, d.targetPath);
       promises.push(copy(baseDrive, d.basePath, targetDrive, d.targetPath));
     }
-    if (op === 'addmount') {
-      console.debug('mount', d.targetPath);
-      await targetDrive.mount(d.targetPath, d.baseMountKey);
-    }
-    if (op === 'modmount') {
-      console.debug('mount', d.targetPath);
-      await targetDrive.unmount(d.targetPath);
-      await targetDrive.mount(d.targetPath, d.baseMountKey);
-    }
     if (op === 'delfile') {
       console.debug('unlink', d.targetPath);
       await targetDrive.unlink(d.targetPath);
-    }
-    if (op === 'delmount') {
-      console.debug('unmount', d.targetPath);
-      await targetDrive.unmount(d.targetPath);
     }
   }
   return Promise.all(promises);
@@ -282,19 +234,6 @@ export async function applyLeft(baseDrive, targetDrive, changes) {
     if (op === 'addfile') {
       console.debug('unlink', d.basePath);
       await baseDrive.unlink(d.basePath);
-    }
-    if (op === 'addmount') {
-      console.debug('unmount', d.basePath);
-      await baseDrive.unmount(d.basePath);
-    }
-    if (op === 'modmount') {
-      console.debug('mount', d.basePath);
-      await baseDrive.unmount(d.basePath);
-      await baseDrive.mount(d.basePath, d.targetMountKey);
-    }
-    if (op === 'delmount') {
-      console.debug('mount', d.basePath);
-      await baseDrive.mount(d.basePath, d.targetMountKey);
     }
     if (op === 'modfile' || op === 'delfile') {
       console.debug('copy', d.path);

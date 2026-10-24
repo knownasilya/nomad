@@ -395,7 +395,7 @@ function handleAiPromptResult ({ reqId, allow }) {
 const NOMAD_UNSUPPORTED_METHODS = [
   'createInvite', 'claimInvite', 'requestAccess', 'approveRequest', 'denyRequest', 'removeWriter',
   'listWriters', 'listRequests', 'forkDrive', 'configure', 'updateMetadata', 'deleteMetadata',
-  'mount', 'unmount', 'symlink', 'importFromFilesystem', 'exportToFilesystem', 'exportToDrive',
+  'symlink', 'importFromFilesystem', 'exportToFilesystem', 'exportToDrive',
   'diff', 'loadDrive'
 ]
 

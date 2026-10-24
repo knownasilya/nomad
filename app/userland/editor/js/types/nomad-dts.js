@@ -22,8 +22,6 @@ declare namespace Nomad {
     mtime: Date;
     ctime: Date;
     metadata: Record<string, string>;
-    /** Present when the entry is a mount point. */
-    mount?: { key: string };
     /** Present when the entry is a symlink. */
     linkname?: string;
   }
@@ -49,14 +47,14 @@ declare namespace Nomad {
     path?: string | string[];
     drive?: string | string[];
     metadata?: Record<string, string>;
-    type?: 'file' | 'directory' | 'mount';
+    type?: 'file' | 'directory';
     sort?: 'name' | 'ctime' | 'mtime';
     reverse?: boolean;
     limit?: number;
     offset?: number;
   }
-  interface QueryResult { type: string; path: string; url: string; stat: Stat; drive: string; mount?: string; }
-  interface DiffEntry { change: 'add' | 'del' | 'mod'; type: 'file' | 'dir' | 'mount'; path: string; }
+  interface QueryResult { type: string; path: string; url: string; stat: Stat; drive: string; }
+  interface DiffEntry { change: 'add' | 'del' | 'mod'; type: 'file' | 'dir'; path: string; }
 
   /** A watcher returned by drive.watch(); an EventTarget that emits 'changed'. */
   interface DriveWatcher extends EventTarget {}
@@ -82,8 +80,6 @@ declare namespace Nomad {
     mkdir(path: string, opts?: object): Promise<void>;
     rmdir(path: string, opts?: { recursive?: boolean }): Promise<void>;
     symlink(path: string, linkname: string, opts?: object): Promise<void>;
-    mount(path: string, opts?: string | { url: string }): Promise<void>;
-    unmount(path: string, opts?: object): Promise<void>;
     query(opts: QueryOptions): Promise<QueryResult[]>;
     /** Watch for changes. Returns an EventTarget emitting 'changed'. */
     watch(pathSpec?: string | ((path: string) => void) | null, onChanged?: (path: string) => void): DriveWatcher;
@@ -118,8 +114,6 @@ declare namespace Nomad {
     mkdir(url: string, opts?: object): Promise<void>;
     rmdir(url: string, opts?: { recursive?: boolean }): Promise<void>;
     symlink(url: string, linkname: string, opts?: object): Promise<void>;
-    mount(url: string, opts?: string | { url: string }): Promise<void>;
-    unmount(url: string, opts?: object): Promise<void>;
     query(opts: QueryOptions): Promise<QueryResult[]>;
     watch(pathSpec?: string | ((path: string) => void) | null, onChanged?: (path: string) => void): DriveWatcher;
   }
@@ -352,8 +346,6 @@ declare namespace Nomad {
     forkDrive(opts?: object): Promise<FsDrive>;
     updateMetadata(path: string, metadata: object, opts?: object): Promise<void>;
     deleteMetadata(path: string, keys: string[], opts?: object): Promise<void>;
-    mount(path: string, key: string, opts?: object): Promise<void>;
-    unmount(path: string, opts?: object): Promise<void>;
     // collaborative-drive writer management (this drive)
     createInvite(opts?: object): Promise<string>;
     listRequests(): Promise<any[]>;
@@ -409,8 +401,6 @@ declare namespace Nomad {
     isCollaborativeDrive(url: string): Promise<boolean>;
     updateMetadata(url: string, metadata: object, opts?: object): Promise<void>;
     deleteMetadata(url: string, keys: string[], opts?: object): Promise<void>;
-    mount(url: string, key: string, opts?: object): Promise<void>;
-    unmount(url: string, opts?: object): Promise<void>;
     importFromFilesystem(opts?: object): Promise<any>;
     exportToFilesystem(opts?: object): Promise<any>;
     exportToDrive(opts?: object): Promise<any>;
