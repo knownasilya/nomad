@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.17.0](https://github.com/knownasilya/nomad/compare/v1.16.0...v1.17.0) (2026-10-24)
+
+
+### Features
+
+* **ai:** let the user's own AI open a new tab ([39369ff](https://github.com/knownasilya/nomad/commit/39369ff2179371e805b31a19b3256d97c005bdda))
+* **tabs:** drag tabs into sidebar groups, group menu, AI opens tabs in a group ([68098ed](https://github.com/knownasilya/nomad/commit/68098edd70cac09e80d70054dcbbb8aeff33aa98))
+
+
+### Bug Fixes
+
+* **capabilities:** record the page's real origin as the owner ([076a767](https://github.com/knownasilya/nomad/commit/076a7671f6a498bebb37352a13be26904b435c0f))
+* **fs:** deliver nomad.fs.watch events to pages ([4fbbe57](https://github.com/knownasilya/nomad/commit/4fbbe570e7c748701bb564629951553c30d75d8b))
+* **fs:** keep pages out of the private drive ([6c88302](https://github.com/knownasilya/nomad/commit/6c88302e6827f8145c31c0844828896aaf2d3a52))
+
 ## [1.16.0](https://github.com/knownasilya/nomad/compare/v1.15.0...v1.16.0) (2026-10-12)
 
 
