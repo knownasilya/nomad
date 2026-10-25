@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.17.1](https://github.com/knownasilya/nomad/compare/v1.17.0...v1.17.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* **release:** sign the Mac app with a self-signed certificate so updates install ([6d5421f](https://github.com/knownasilya/nomad/commit/6d5421f4003190b50748c81ee0e388e7346b828f))
+
 ## [1.17.0](https://github.com/knownasilya/nomad/compare/v1.16.0...v1.17.0) (2026-10-24)
 
 
