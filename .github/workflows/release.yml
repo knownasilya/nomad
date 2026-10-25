@@ -65,6 +65,34 @@ jobs:
           echo "=== Checking preload ==="
           test -f app/fg/webview-preload/index.build.js && echo "✓ preload bundle exists" || (echo "✗ preload bundle MISSING" && exit 1)
 
+      # A self-signed certificate (no Apple account) gives every build the same code signature, which
+      # is what Squirrel.Mac checks before it installs an update. Ad-hoc builds can never update.
+      # Make it with scripts/make-mac-signing-cert.sh; see docs/releasing.md.
+      - name: Import macOS self-signed certificate
+        if: runner.os == 'macOS'
+        env:
+          NOMAD_MAC_CERT: ${{ secrets.NOMAD_MAC_CERT }}
+          NOMAD_MAC_CERT_PASSWORD: ${{ secrets.NOMAD_MAC_CERT_PASSWORD }}
+        run: |
+          if [ -z "$NOMAD_MAC_CERT" ]; then
+            echo "::warning::NOMAD_MAC_CERT is not set: the macOS build is ad-hoc signed and cannot auto-update"
+            exit 0
+          fi
+          KC="$RUNNER_TEMP/nomad-signing.keychain-db"
+          KCPW="$(openssl rand -hex 16)"
+          security create-keychain -p "$KCPW" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KCPW" "$KC"
+          echo "$NOMAD_MAC_CERT" | base64 --decode > "$RUNNER_TEMP/nomad.p12"
+          security import "$RUNNER_TEMP/nomad.p12" -k "$KC" -P "$NOMAD_MAC_CERT_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/nomad.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KCPW" "$KC" > /dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          security find-certificate -c "Nomad Self-Signed" -p "$KC" > "$RUNNER_TEMP/nomad.pem"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/nomad.pem"
+          security find-identity -v -p codesigning "$KC"
+          echo "NOMAD_MAC_SIGN_IDENTITY=Nomad Self-Signed" >> "$GITHUB_ENV"
+
       - name: Package and upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

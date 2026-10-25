@@ -36,7 +36,7 @@ Pushing a tag matching `v*` (e.g. `v1.2.3`) triggers
 
 | Job | Runner | Output | Uploaded as |
 |-----|--------|--------|-------------|
-| Build macOS | `macos-latest` | Electron app (signed + notarized if secrets set) | electron-builder artifacts |
+| Build macOS | `macos-latest` | Electron app (self-signed, or Developer ID signed + notarized, if secrets set) | electron-builder artifacts |
 | Build Linux | `ubuntu-latest` | AppImage | electron-builder artifacts |
 | Build Android | `ubuntu-latest` | AAB + APK from `mobile/` | `nomad-<version>-android.aab` / `.apk` |
 
@@ -69,13 +69,41 @@ All secrets are **optional** — the workflow degrades rather than fails when th
 
 | Secret | Used by | If missing |
 |--------|---------|-----------|
-| `MAC_CERTS` | macOS | build is unsigned (`CSC_IDENTITY_AUTO_DISCOVERY=false`) |
+| `NOMAD_MAC_CERT` | macOS self-signed signing (below) | build is **ad-hoc** signed and can't auto-update (warning in the job log) |
+| `NOMAD_MAC_CERT_PASSWORD` | macOS | — |
+| `MAC_CERTS` | macOS (Apple Developer ID) | build is not Developer ID signed (`CSC_IDENTITY_AUTO_DISCOVERY=false`) |
 | `MAC_CERTS_PASSWORD` | macOS | — |
 | `APPLE_ID`, `APPLE_ID_PASSWORD`, `APPLE_TEAM_ID` | macOS notarization | not notarized |
 | `ANDROID_KEYSTORE` | Android | signed with the committed **debug** keystore (warning in the job log) |
 | `ANDROID_KEYSTORE_PASSWORD` | Android | — |
 | `ANDROID_KEY_ALIAS` | Android | — |
 | `ANDROID_KEY_PASSWORD` | Android | — |
+
+### Setting up the macOS self-signed certificate
+
+The Mac app isn't signed with an Apple Developer ID. It's signed with a free self-signed
+certificate instead, and that is what lets it auto-update. Squirrel.Mac (the Mac updater behind
+electron-updater) only installs a new build whose code signature satisfies the running app's
+designated requirement. An ad-hoc signature's requirement is that build's own hash, so an ad-hoc
+build fails every update with *"code failed to satisfy specified code requirement(s)"*. Builds
+signed with the same certificate share one requirement, so updates install. Gatekeeper still
+warns on first launch, as it does for an unsigned app (right-click → Open).
+
+Make the certificate once, on your Mac, with `gh` signed in:
+
+```
+sh scripts/make-mac-signing-cert.sh
+```
+
+It writes `~/.nomad-signing/nomad.p12` and its password, and sets the `NOMAD_MAC_CERT` and
+`NOMAD_MAC_CERT_PASSWORD` secrets. The release workflow imports it into a temporary keychain,
+trusts it for code signing, and `scripts/afterPackHook.js` signs with it
+(`NOMAD_MAC_SIGN_IDENTITY`).
+
+> **Back up `~/.nomad-signing`.** A build signed with a different certificate can't update an app
+> signed with this one, so a lost certificate means everyone reinstalls by hand. Rerunning the
+> script reuses the existing certificate. An app that was ad-hoc signed (1.17.0 and earlier) can't
+> update to a self-signed build either: install the first self-signed release from its dmg.
 
 ### Setting up the Android release keystore
 

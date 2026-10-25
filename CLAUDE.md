@@ -33,6 +33,11 @@ of truth for the shipped Android version.
 
 See [docs/releasing.md](docs/releasing.md) for the CI jobs, Android signing/keystore, and secrets.
 
+The Mac app is signed with a free **self-signed** certificate (`NOMAD_MAC_CERT`, made by
+`scripts/make-mac-signing-cert.sh`), not an Apple Developer ID. Don't drop back to ad-hoc signing:
+Squirrel.Mac rejects every update to an ad-hoc build ("code failed to satisfy specified code
+requirement(s)"), and a build signed with a different certificate can't update either.
+
 ## Keeping the built-in AI prompt in sync with docs
 
 `app/bg/ai/api-reference.mjs` is the hand-maintained summary of the public JavaScript APIs. It exports two strings:

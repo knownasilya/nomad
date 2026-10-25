@@ -14,6 +14,12 @@ const { execFileSync } = require('child_process');
 //
 // When a real signing identity IS configured, do nothing — electron-builder
 // signs (and afterSignHook notarizes) right after this hook.
+//
+// NOMAD_MAC_SIGN_IDENTITY names a self-signed certificate (set by the release
+// workflow). Squirrel.Mac only installs an update whose signature satisfies the
+// running app's designated requirement; an ad-hoc requirement is the build's own
+// cdhash, so ad-hoc builds can never auto-update. A self-signed identity gives
+// every build the same requirement, so updates install.
 module.exports = async function (context) {
   if (context.electronPlatformName !== 'darwin') return;
 
@@ -30,16 +36,23 @@ module.exports = async function (context) {
   const appPath = path.join(context.appOutDir, appName);
   const entitlements = path.join(__dirname, '../build/entitlements.plist');
 
+  const identity = process.env.NOMAD_MAC_SIGN_IDENTITY || '-';
+
   // The app will still trigger Gatekeeper on first launch when downloaded
   // (not notarized) — right-click → Open to bypass.
-  console.log(`afterPack: no certificate — ad-hoc signing ${appPath}`);
+  console.log(
+    identity === '-'
+      ? `afterPack: no certificate — ad-hoc signing ${appPath}`
+      : `afterPack: signing ${appPath} with "${identity}"`
+  );
   execFileSync(
     'codesign',
     [
       '--deep',
       '--force',
+      '--timestamp=none',
       '--sign',
-      '-',
+      identity,
       '--options',
       'runtime',
       '--entitlements',
@@ -48,5 +61,5 @@ module.exports = async function (context) {
     ],
     { stdio: 'inherit' }
   );
-  console.log('afterPack: ad-hoc signing complete');
+  console.log('afterPack: signing complete');
 };
