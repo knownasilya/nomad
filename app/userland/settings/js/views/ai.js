@@ -168,8 +168,33 @@ class AiSettingsView extends LitElement {
           </p>
           ${this.renderKeepAwake()}
         </div>
+        <div class="section">
+          <label>
+            <input
+              type="checkbox"
+              ?checked=${!!this.settings.ai_auto_names}
+              @change=${this.onAutoNamesChange}
+            />
+            Name sites I visit often
+          </label>
+          <p class="description">
+            After your third visit to a site (on different occasions), this device's
+            AI gives it a short name from its title and description, spelled from the
+            site's own address, like <code>gh</code> for github.com. Type the name in
+            the URL bar to go there. Names sync to your linked devices; edit or remove
+            them in My Library → Names. The AI runs in the background, on this device
+            only.
+          </p>
+        </div>
       </div>
     `;
+  }
+
+  onAutoNamesChange(e) {
+    const on = e.currentTarget.checked ? 1 : 0;
+    this.settings.ai_auto_names = on;
+    nomad.browser.setSetting('ai_auto_names', on);
+    toast.create(on ? 'The AI will name sites you visit often' : 'The AI won’t name sites any more');
   }
 
   renderTestStatus() {

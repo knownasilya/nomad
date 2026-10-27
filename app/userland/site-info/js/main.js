@@ -306,6 +306,7 @@ class SiteInfoApp extends LitElement {
           <code class="name-chip">hyper://${named.name}/</code>
           <button @click=${() => this.onStartName(named.name)}>Rename</button>
           <button @click=${() => this.onRemoveName(named.name)}>Remove</button>
+          ${named.auto ? html`<span class="name-hint">Named by the AI, as you visit often</span>` : ''}
         </div>
       `;
     }

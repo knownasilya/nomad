@@ -154,6 +154,19 @@ const cssStr = css`
     font-weight: 600;
   }
 
+  .auto-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 5px;
+    border: 1px solid var(--border-color--light);
+    border-radius: 4px;
+    color: var(--text-color--light);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 15px;
+    vertical-align: 1px;
+  }
+
   .meta {
     flex: 1;
     min-width: 0;

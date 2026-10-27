@@ -257,6 +257,32 @@ export const getMostVisited = async function (profileId, { offset, limit }, spac
 };
 
 /**
+ * How many times the user has visited a site: visits to any of its pages, counted once per hour,
+ * so reloads and clicking around in one sitting count as one. For auto-names (hyper/auto-names.js).
+ * @param {number} profileId
+ * @param {string} site - an origin or drive root ending in "/" (shared/names.mjs siteOf)
+ * @returns {Promise<number>}
+ */
+export const countSiteVisits = async function (profileId, site) {
+  if (!site || typeof site !== 'string') {
+    throw new BadParamError('site must be a string');
+  }
+  var release = await lock('history-db');
+  try {
+    const prefix = site.replace(/[\\%_]/g, '\\$&') + '%';
+    const row = await db.get(
+      `SELECT COUNT(DISTINCT CAST(ts / 3600000 AS INTEGER)) AS n
+        FROM visits
+        WHERE profileId = ? AND url LIKE ? ESCAPE '\\'`,
+      [profileId, prefix]
+    );
+    return (row && row.n) || 0;
+  } finally {
+    release();
+  }
+};
+
+/**
  * @param {string} q
  * @returns {Promise<Array<VisitSearchResult>>}
  */

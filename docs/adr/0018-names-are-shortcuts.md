@@ -51,3 +51,27 @@ goes to what it names, and the AI can look names up and read or write a named Dr
 - A solo Vault brings its names along when it joins another Vault (ADR-0017).
 - The phone's URL bar doesn't resolve names yet. Its AI panel uses them, because the Provider runs
   the turn with its own copy of the Vault.
+
+## Amendment: the AI names sites the user visits often (2026-10-27)
+
+When the user comes back to a site a third time (visits in different hours, so a reload or a
+click-around counts once), this Device's AI gives it a Name from its title, description and first
+heading. The site is an http(s) origin or a hyper:// drive's root (`siteOf` in `shared/names.mjs`);
+`nomad://` pages, `hyper://private/`, localhost, intranet hosts and IP addresses are left alone.
+`app/bg/hyper/auto-names.js` runs it after each visit is written to history.
+
+- **Spelled from the site's own address.** The name must start with the first letter of an anchor
+  word and use the anchors' letters in order (`autoNameError`): the host without `www` and its last
+  label for a web site (`gh` or `github` for github.com, `gdocs` for docs.google.com), the title for
+  a drive, whose key spells nothing. A page's title and description only steer the choice, so
+  `evil.example` can't name itself `gmail`.
+- **Never over a name.** A site that already has a name (any name pointing into it) is skipped, and
+  an AI name never replaces an existing one.
+- **Asked once per site.** The answer is kept in sitedata (`auto_name`), so a name the user removes
+  doesn't come back, and a site the AI had nothing for isn't asked again.
+- **Marked until the user keeps it.** The record has `auto: true`. My Library → Names and the
+  site-info panel show it; Keep, Edit or Rename saves it without the mark.
+- **This Device only, and only with a Vault.** It uses the local runtime (`completeText` in `ai.ts`),
+  never another Device's AI over the Bridge, and it skips a Device with no Vault rather than make one.
+- **Can be turned off.** Settings → AI → "Name sites I visit often" (`ai_auto_names`, on by default,
+  per Device).

@@ -77,19 +77,20 @@ export function forUrl(url) {
 }
 
 // Give `url` the name `name`. `previous` is the name being changed, when renaming. Refuses a name
-// that already points somewhere else.
-export async function set({ name, url, title, previous }) {
+// that already points somewhere else. `auto` marks a name the AI gave (auto-names.js); a save
+// without it makes the name the user's.
+export async function set({ name, url, title, previous, auto = false }) {
   const err = nameError(name);
   if (err) throw new Error(err);
   const existing = cache.get(name) || (await vault.readAppRecord(namePath(name)));
   if (existing && existing.url !== url && previous !== name) {
     throw new Error(`“${name}” already names ${existing.title || existing.url}`);
   }
-  const rec = makeNameRecord({ name, url, title }, existing);
+  const rec = makeNameRecord({ name, url, title, auto }, existing);
   await vault.putAppRecord(namePath(name), rec);
   if (previous && previous !== name && cache.has(previous)) await vault.delAppRecord(namePath(previous));
   await refresh();
-  logger.info('Set name', { name, url });
+  logger.info('Set name', { name, url, auto });
   return rec;
 }
 
