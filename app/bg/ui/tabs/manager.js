@@ -26,6 +26,7 @@ import {
   setAiSidebarWidth,
 } from '../windows';
 import { examineLocationInput } from '../../../lib/urls';
+import { resolveRoutedSpaceId } from '../../../lib/url-routing';
 import { findWebContentsParentWindow } from '../../lib/electron';
 import * as sitedataDb from '../../dbs/sitedata';
 import * as settingsDb from '../../dbs/settings';
@@ -814,13 +815,45 @@ export function create(
     windowActiveSpaceId[win.id] = spacesDb.getCachedActiveId();
   }
 
+  // Air Traffic Control: a URL-routing rule can send this tab to a specific Space, overriding
+  // the window's active one — but never for an explicit spaceId, a restored snapshot, or a blank
+  // new tab (there's no URL yet to route on).
+  const explicitSpaceId = opts.spaceId || opts.fromSnapshot?.spaceId;
+  let routedSpaceId;
+  if (!explicitSpaceId && url !== defaultUrl) {
+    const candidate = resolveRoutedSpaceId(url, settingsDb.getCached('url_routing_rules'));
+    if (candidate !== undefined && spacesDb.getCachedAll().some((s) => s.id === candidate)) {
+      routedSpaceId = candidate;
+    }
+  }
+
   // resolve space for this tab
-  const spaceId = opts.spaceId || opts.fromSnapshot?.spaceId || getWindowActiveSpaceId(win);
+  const spaceId = explicitSpaceId || routedSpaceId || getWindowActiveSpaceId(win);
   const space = spacesDb.getCachedAll().find((s) => s.id === spaceId);
   const partition =
     opts.fromSnapshot?.partition !== undefined
       ? opts.fromSnapshot.partition
       : (space?.partition ?? '');
+
+  // A matched rule switches this window into the routed Space (so the tab strip/sidebar and the
+  // new tab agree on what's showing) and persists it like a normal space switch, best-effort.
+  if (routedSpaceId !== undefined && routedSpaceId !== windowActiveSpaceId[win.id]) {
+    windowActiveSpaceId[win.id] = routedSpaceId;
+    spacesDb
+      .setActive(routedSpaceId)
+      .catch((err) => console.error('[spaces] setActive failed', err));
+    settingsDb
+      .getForSpace(routedSpaceId, 'new_tabs_in_foreground')
+      .then((v) => {
+        if (v !== undefined) settingsDb.setCachedValue('new_tabs_in_foreground', v);
+      })
+      .catch((err) => console.error('[spaces] getForSpace failed', err));
+    if (space) {
+      filesystem
+        .getOrSetupSpaceDrive(space)
+        .catch((err) => console.error('[spaces] getOrSetupSpaceDrive failed', err));
+    }
+  }
 
   var tab;
   var preloadedNewTab = preloadedNewTabs[win.id];
@@ -883,6 +916,8 @@ export function create(
   if (opts.setActiveBySettings) {
     shouldSetActive = Boolean(Number(settingsDb.getCached('new_tabs_in_foreground')));
   }
+  // a routed tab always surfaces — that's the point of sending it to another Space
+  if (routedSpaceId !== undefined) shouldSetActive = true;
   if (shouldSetActive || !getActive(win)) {
     setActive(win, tab);
   }

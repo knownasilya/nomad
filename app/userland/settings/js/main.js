@@ -6,6 +6,7 @@ import { classMap } from 'lit/directives/class-map.js';
 import * as QP from './lib/query-params.js';
 import css from '../css/main.css.js';
 import './views/general.js';
+import './views/url-routing.js';
 import './views/blocking.js';
 import './views/ai.js';
 import './views/security.js';
@@ -81,6 +82,7 @@ class SettingsApp extends LitElement {
     };
     return html`
       ${item('general', 'fas fa-cog', 'General')}
+      ${item('url-routing', 'fas fa-route', 'URL Routing')}
       ${item('blocking', 'fas fa-ban', 'Content Blocking')}
       ${item('ai', 'fas fa-brain', 'AI')}
       ${item('security', 'fas fa-shield-alt', 'Security')}
@@ -101,6 +103,8 @@ class SettingsApp extends LitElement {
     switch (this.currentSubview) {
       case 'general':
         return html`<general-settings-view loadable></general-settings-view>`;
+      case 'url-routing':
+        return html`<url-routing-settings-view loadable></url-routing-settings-view>`;
       case 'blocking':
         return html`<blocking-settings-view loadable></blocking-settings-view>`;
       case 'ai':
