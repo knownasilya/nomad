@@ -24,6 +24,8 @@ import * as filesystem from './bg/filesystem/index';
 import * as bookmarkPins from './bg/filesystem/pins';
 import * as syncedSettings from './bg/hyper/synced-settings';
 import * as names from './bg/hyper/names';
+import * as autoNames from './bg/hyper/auto-names';
+import { completeText } from './bg/web-apis/bg/ai';
 import * as crawlerHost from './bg/hyper/crawler-host';
 import * as webapis from './bg/web-apis/bg';
 
@@ -191,6 +193,8 @@ app.on('ready', async function () {
   syncedSettings.setup();
   // The user's names (hyper://<name>/ and the URL bar), from the Vault.
   names.setup();
+  // The AI names sites the user visits often (Settings → AI turns it off).
+  autoNames.setup({ complete: completeText });
   log.info('Starting the discovery crawler');
   crawlerHost.setup();
   log.info('Program setup complete');

@@ -427,6 +427,32 @@ export { runChat };
 // active tab's own webContents) standing in for "the page this call is about".
 export { routeChat };
 
+// One plain completion for Nomad's own background work (hyper/auto-names.js): no tools, no
+// standing prompt, no reasoning asked for. This Device's runtime only: it never borrows another
+// Device's AI over the Bridge. Resolves the reply text, or null when no runtime is reachable here.
+export async function completeText(messages, { maxTokens = 400, timeoutMs = 60e3 } = {}) {
+  if (!(await aiBridge.localRuntimeReachable())) return null;
+  const { runtime, model } = await getActiveRuntime();
+  if (!runtime || runtime.available === false || !model) return null;
+  const emitter = new EventEmitter();
+  emitter.on('error', () => {});
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const { textContent }: any =
+      runtime.kind === 'claude' || runtime.kind === 'cursor'
+        ? await streamAgent({ ...runtime, model }, messages, emitter, controller.signal)
+        : await streamCompletion(runtime.baseUrl, model, messages, null, emitter, controller.signal, {
+            think: false,
+            token: runtime.accessToken,
+            maxTokens,
+          });
+    return textContent || '';
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // =
 // Internal helpers
 // =

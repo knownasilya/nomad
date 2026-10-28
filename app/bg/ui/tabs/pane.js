@@ -9,6 +9,7 @@ import { toNiceUrl } from '../../../lib/strings';
 import { throttle, pick } from '../../../lib/async';
 import * as zoom from './zoom';
 import * as names from '../../hyper/names';
+import * as autoNames from '../../hyper/auto-names';
 import * as modals from '../subwindows/modals';
 import * as overlay from '../subwindows/overlay';
 import * as windowMenu from '../window-menu';
@@ -472,7 +473,13 @@ export class Pane extends EventEmitter {
     var url = this.url;
     var title = this.title;
     if (url && !url.startsWith('nomad://')) {
-      historyDb.addVisit(0, { url, title, spaceId: this.tab.spaceId || 1 });
+      const driveTitle = this.driveInfo?.title || '';
+      const webContents = this.webContents;
+      historyDb
+        .addVisit(0, { url, title, spaceId: this.tab.spaceId || 1 })
+        // A site visited often gets a name from the AI (hyper/auto-names.js).
+        .then(() => autoNames.onVisit({ url, title, driveTitle, webContents }))
+        .catch(() => {});
     }
   }
 

@@ -93,6 +93,8 @@ export class NamesView extends LitElement {
         Short names for your drives, apps and pages. Type a name in the URL bar, or open
         <code>hyper://name/</code>, to go there, and ask the AI to use it ("add a post to my blog").
         Names sync to your linked devices. You can also name a page from its site info.
+        The AI names sites you visit often; those are marked <span class="auto-badge">AI</span>
+        until you keep or edit them (turn it off in Settings → AI).
       </div>
       ${this.renderAdd()}
       ${rows.length === 0
@@ -136,10 +138,18 @@ export class NamesView extends LitElement {
         <div class="row-head">
           <span class="name-chip">${n.name}</span>
           <div class="meta">
-            <div class="title">${n.title || n.name}</div>
+            <div class="title">
+              ${n.title || n.name}
+              ${n.auto ? html`<span class="auto-badge" title="The AI named this site because you visit it often">AI</span>` : ''}
+            </div>
             <div class="target">${n.url}</div>
           </div>
           <div class="actions">
+            ${n.auto
+              ? html`<button class="icon" title="Keep this name" aria-label="Keep ${n.name}" @click=${() => this.onKeep(n)}>
+                  <span class="fas fa-fw fa-check"></span>
+                </button>`
+              : ''}
             <button class="icon" title="Open" aria-label="Open ${n.name}" @click=${() => this.onOpen(n)}>
               <span class="fas fa-fw fa-external-link-alt"></span>
             </button>
@@ -195,6 +205,17 @@ export class NamesView extends LitElement {
   onOpen(n) {
     // hyper://<name>/ goes through the tab's name lookup, like typing it.
     nomad.browser.openUrl(`hyper://${n.name}/`, { setActive: true });
+  }
+
+  // An AI name becomes the user's: saved again without the `auto` mark.
+  async onKeep(n) {
+    try {
+      await nomad.vault.setName({ name: n.name, url: n.url, title: n.title });
+      await this.load();
+      toast.create(`Kept hyper://${n.name}/`, 'success');
+    } catch (err) {
+      toast.create(err.message || String(err), 'error');
+    }
   }
 
   onEdit(n) {

@@ -185,9 +185,11 @@ export default {
     return names.forUrl(url);
   },
 
-  // ({ name, url, title, previous? }) -> record. `previous` renames.
+  // ({ name, url, title, previous? }) -> record. `previous` renames. A name saved here is the
+  // user's, so it drops the AI's `auto` mark.
   async setName(rec) {
-    return names.set(rec || {});
+    const { name, url, title, previous } = rec || {};
+    return names.set({ name, url, title, previous });
   },
 
   async removeName(name) {

@@ -4,7 +4,10 @@
 // a name in the URL bar, or opening hyper://<name>/ in a tab, goes to what it names; the AI can look
 // names up and read or write a named drive. One set per user, kept in the Vault so every Device has it:
 //
-//   /.vault/names/<name>.json   { name, url, title, createdAt, updatedAt }
+//   /.vault/names/<name>.json   { name, url, title, auto?, createdAt, updatedAt }
+//
+// `auto` marks a name the AI gave a site the user keeps coming back to (see "Auto-names" below).
+// Saving the name again from the UI drops it: the name is the user's from then on.
 //
 // hyper://<name>/ is a shortcut, not a second address: a tab that opens it lands on the real URL, so
 // a drive keeps one origin (its storage and permissions), and a web page can't probe your names by
@@ -60,7 +63,7 @@ export function namePath(name) {
   return NAMES_PREFIX + name + '.json';
 }
 
-export function makeNameRecord({ name, url, title }, prev = null, now = new Date().toISOString()) {
+export function makeNameRecord({ name, url, title, auto }, prev = null, now = new Date().toISOString()) {
   namePath(name); // validates
   const target = String(url || '').trim();
   if (!/^(hyper|https?|nomad):\/\//i.test(target)) throw new Error('A name points to a hyper://, http(s):// or nomad:// address');
@@ -68,6 +71,7 @@ export function makeNameRecord({ name, url, title }, prev = null, now = new Date
     name,
     url: target,
     title: String(title || '').trim().slice(0, 200),
+    ...(auto ? { auto: true } : {}),
     createdAt: (prev && prev.createdAt) || now,
     updatedAt: now,
   };
@@ -134,4 +138,119 @@ export function matchNames(query, records, limit = 5) {
   }
   scored.sort((a, b) => b.score - a.score || a.r.name.localeCompare(b.r.name));
   return scored.slice(0, limit).map((s) => s.r);
+}
+
+// Auto-names
+// =
+//
+// When the user keeps coming back to a site, the AI gives it a name from its title and description
+// (app/bg/hyper/auto-names.js). These are the rules it follows.
+
+// Visits, in different hours, before a site gets a name: "more than twice".
+export const AUTO_NAME_MIN_VISITS = 3;
+
+// The site a page belongs to: an http(s) origin, or a hyper:// drive's root. null for what isn't
+// a site to name: nomad:// pages, hyper://private/, localhost, an intranet host, an IP address.
+export function siteOf(url) {
+  const m = /^(https?|hyper):\/\/([^/?#]+)/i.exec(String(url || '').trim());
+  if (!m) return null;
+  const scheme = m[1].toLowerCase();
+  const host = m[2].toLowerCase().replace(/^[^@]*@/, '');
+  const hostname = host.replace(/:\d+$/, '');
+  if (!hostname || hostname === 'localhost' || hostname.startsWith('[')) return null;
+  if (/^\d+(\.\d+){3}$/.test(hostname)) return null;
+  if (scheme === 'hyper') {
+    if (hostname === 'private') return null;
+    if (!/^[0-9a-f]{64}$/.test(hostname) && !hostname.includes('.')) return null; // a name, not a drive
+    return `hyper://${hostname}/`;
+  }
+  if (!hostname.includes('.')) return null;
+  return `${scheme}://${host}/`;
+}
+
+const words = (s) =>
+  String(s || '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+
+// The words a site's auto-name must be made from. For a web site that's its own host, without
+// "www" and the last label (docs.google.com gives docs, google): a page can't take "gmail" by
+// putting it in its title, because its host doesn't spell it. A drive key spells nothing, so a
+// drive's anchor is its title.
+export function nameAnchors(site, title = '') {
+  const m = /^[a-z]+:\/\/([^/:]+)/i.exec(String(site || ''));
+  if (!m) return [];
+  const host = m[1].toLowerCase();
+  if (/^[0-9a-f]{64}$/.test(host)) return words(title).slice(0, 12);
+  const labels = host.split('.');
+  if (labels.length > 1) labels.pop();
+  return labels.filter((l) => l !== 'www').flatMap(words);
+}
+
+function isSubsequence(needle, hay) {
+  let i = 0;
+  for (const ch of hay) if (ch === needle[i]) i++;
+  return i === needle.length;
+}
+
+// Why `name` can't be a site's auto-name, or null when it can. On top of the usual rules: 2 to 24
+// characters, starting with the first letter of an anchor word, and spelled from the anchor words'
+// letters in order, read forwards or with the words reversed (gh from github, gdocs from
+// docs.google, hn from Hacker News).
+export function autoNameError(name, anchors) {
+  const err = nameError(name);
+  if (err) return err;
+  if (name.length < 2 || name.length > 24) return 'An auto-name is 2 to 24 characters';
+  const list = (anchors || []).filter(Boolean);
+  if (!list.length) return 'Nothing to make a name from';
+  const letters = name.replace(/-/g, '');
+  if (!list.some((w) => w[0] === letters[0])) return 'Doesn’t start like the site';
+  const fwd = list.join('');
+  const rev = [...list].reverse().join('');
+  if (!isSubsequence(letters, fwd) && !isSubsequence(letters, rev)) return 'Isn’t spelled from the site’s name';
+  return null;
+}
+
+// The chat messages that ask the AI for a site's name. `description` and `heading` come from the
+// page, so they are only hints: the reply is checked with autoNameError whatever it says.
+export function autoNameMessages({ site, title, description, heading, anchors }) {
+  const clip = (s, n) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
+  const system = [
+    'You give short names to web sites and drives the user visits often, like browser keywords.',
+    'Reply with one name and nothing else: lowercase letters and digits, optionally two short parts joined by a hyphen, 2 to 24 characters.',
+    'Spell the name only from letters of the given words, in order, starting with the first letter of one of them (gh from github, gdocs from docs google, hn from hacker news).',
+    'Prefer what people already call the site. If no short name fits, reply: none',
+  ].join('\n');
+  const user = [
+    `Site: ${site}`,
+    title ? `Title: ${clip(title, 200)}` : '',
+    heading ? `Heading: ${clip(heading, 200)}` : '',
+    description ? `Description: ${clip(description, 400)}` : '',
+    `Words: ${(anchors || []).join(' ')}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ];
+}
+
+// The name in the AI's reply, checked against the site's anchors; null when there isn't a usable
+// one. Tolerates a reasoning block, quotes, backticks, and "hyper://name/".
+export function pickAutoName(reply, anchors) {
+  const text = String(reply || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .trim();
+  const line = (text.split('\n').find((l) => l.trim()) || '')
+    .trim()
+    .replace(/^(name|answer)\s*:\s*/i, '')
+    .replace(/^hyper:\/\//i, '')
+    .replace(/[`"'*.]/g, ' ')
+    .replace(/\/+$/, '')
+    .trim();
+  if (!line || /^none\b/i.test(line)) return null;
+  const name = normalizeName(line);
+  return autoNameError(name, anchors) ? null : name;
 }

@@ -240,7 +240,11 @@ one of four permissions, `notesRead`, `notesWrite`, `readerRead`, `readerWrite` 
 on the Bridge, and the phone's prompt text is `VAULT_PROMPTS` in `mobile/app/index.tsx`. A new
 capability of this kind needs all of these, plus a line in `PERSONAL_PROMPT`.
 Names are managed in My Library → Names and the site-info panel; the URL bar suggests them
-(`fg/lib/location.js`).
+(`fg/lib/location.js`). The AI also names a site the user visits a third time
+(`app/bg/hyper/auto-names.js`, rules in `shared/names.mjs`: `siteOf`, `nameAnchors`, `autoNameError`).
+The name must be spelled from the site's host (or a drive's title), it runs on this Device's runtime
+only (`completeText` in `ai.ts`), and the `ai_auto_names` setting (Settings → AI) turns it off.
+Such a record has `auto: true` until the user keeps or edits it (ADR-0018 amendment).
 
 ### Highlights (ADR-0020)
 
