@@ -53,6 +53,32 @@ const cssStr = css`
     opacity: 0.55;
   }
 
+  .rule-row.dragging {
+    opacity: 0.4;
+  }
+
+  .rule-row.drop-before {
+    box-shadow: 0 -2px 0 0 var(--blue);
+  }
+
+  .rule-row.drop-after {
+    box-shadow: 0 2px 0 0 var(--blue);
+  }
+
+  .rule-row .drag-handle {
+    flex: 0 0 auto;
+    color: var(--text-color--pretty-light);
+    cursor: grab;
+  }
+
+  .rule-row .drag-handle:hover {
+    color: var(--text-color--default);
+  }
+
+  .rule-row .drag-handle:active {
+    cursor: grabbing;
+  }
+
   .rule-row input[type='text'] {
     flex: 1 1 auto;
     min-width: 0;

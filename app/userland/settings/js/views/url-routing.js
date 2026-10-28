@@ -21,6 +21,8 @@ class UrlRoutingSettingsView extends LitElement {
     this.spaces = undefined;
     this.newPattern = '';
     this.newSpaceId = undefined;
+    this.dragIndex = undefined; // the rule being dragged
+    this.dropIndex = undefined; // where it would land: 0..rules.length, before that rule
   }
 
   async load() {
@@ -81,9 +83,26 @@ class UrlRoutingSettingsView extends LitElement {
     return html`
       <div class="rules-list">
         ${this.rules.map((rule, i) => {
-          const cls = { 'rule-row': true, disabled: !rule.enabled };
+          const cls = {
+            'rule-row': true,
+            disabled: !rule.enabled,
+            dragging: i === this.dragIndex,
+            'drop-before': this.isDropTarget(i),
+            'drop-after': i === this.rules.length - 1 && this.isDropTarget(this.rules.length),
+          };
           return html`
-            <div class=${Object.keys(cls).filter((k) => cls[k]).join(' ')}>
+            <div
+              class=${Object.keys(cls).filter((k) => cls[k]).join(' ')}
+              @dragover=${(e) => this.onDragOverRule(e, i)}
+              @drop=${this.onDropRule}
+            >
+              <span
+                class="drag-handle fas fa-fw fa-grip-vertical"
+                title="Drag to reorder"
+                draggable="true"
+                @dragstart=${(e) => this.onDragStartRule(e, i)}
+                @dragend=${this.onDragEndRule}
+              ></span>
               <input
                 type="text"
                 placeholder="github.com or github.com/myorg/*"
@@ -160,8 +179,50 @@ class UrlRoutingSettingsView extends LitElement {
     `;
   }
 
+  // Would dropping at `index` move the dragged rule? (Dropping it next to itself wouldn't.)
+  isDropTarget(index) {
+    if (this.dragIndex === undefined || this.dropIndex !== index) return false;
+    return index !== this.dragIndex && index !== this.dragIndex + 1;
+  }
+
   // events
   // =
+
+  onDragStartRule(e, i) {
+    this.dragIndex = i;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(i));
+    const row = e.target.closest('.rule-row');
+    if (row) e.dataTransfer.setDragImage(row, e.offsetX, e.offsetY);
+    this.requestUpdate();
+  }
+
+  onDragOverRule(e, i) {
+    if (this.dragIndex === undefined) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = e.currentTarget.getBoundingClientRect();
+    const dropIndex = e.clientY < rect.top + rect.height / 2 ? i : i + 1;
+    if (dropIndex !== this.dropIndex) {
+      this.dropIndex = dropIndex;
+      this.requestUpdate();
+    }
+  }
+
+  onDropRule(e) {
+    e.preventDefault();
+    const from = this.dragIndex;
+    const to = this.dropIndex;
+    this.onDragEndRule();
+    if (from === undefined || to === undefined) return;
+    this.moveRule(from, to > from ? to - 1 : to);
+  }
+
+  onDragEndRule() {
+    this.dragIndex = undefined;
+    this.dropIndex = undefined;
+    this.requestUpdate();
+  }
 
   onChangePattern(i, value) {
     this.rules[i].pattern = value.trim();
@@ -180,10 +241,13 @@ class UrlRoutingSettingsView extends LitElement {
   }
 
   onMoveRule(i, delta) {
-    const j = i + delta;
-    if (j < 0 || j >= this.rules.length) return;
-    const [rule] = this.rules.splice(i, 1);
-    this.rules.splice(j, 0, rule);
+    this.moveRule(i, i + delta);
+  }
+
+  moveRule(from, to) {
+    if (from === to || to < 0 || to >= this.rules.length) return;
+    const [rule] = this.rules.splice(from, 1);
+    this.rules.splice(to, 0, rule);
     this.save();
   }
 

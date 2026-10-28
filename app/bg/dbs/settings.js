@@ -170,8 +170,11 @@ export const once = events.once.bind(events);
  * @returns {Promise<void>}
  */
 export async function set(key, value) {
+  // The cache keeps the decoded value (getCached callers expect what get() returns). The 'set'
+  // events still carry the stored string, which their listeners parse.
+  let stored = value;
   if (JSON_ENCODED_SETTINGS.includes(key)) {
-    value = JSON.stringify(value);
+    stored = JSON.stringify(value);
   }
   await setupPromise.then(() =>
     cbPromise((cb) => {
@@ -181,14 +184,14 @@ export async function set(key, value) {
         INTO settings (key, value, ts)
         VALUES (?, ?, ?)
     `,
-        [key, value, Date.now()],
+        [key, stored, Date.now()],
         cb
       );
     })
   );
   if (CACHED_VALUES.includes(key)) cachedValues[key] = value;
-  events.emit('set', key, value);
-  events.emit('set:' + key, value);
+  events.emit('set', key, stored);
+  events.emit('set:' + key, stored);
 }
 
 /**
