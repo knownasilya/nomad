@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.18.1](https://github.com/knownasilya/nomad/compare/v1.18.0...v1.18.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **spaces:** route cmd-clicked links, and reorder rules by drag ([10cde92](https://github.com/knownasilya/nomad/commit/10cde92459ed7fcb521aaa31026ea787830f24a3))
+
 ## [1.18.0](https://github.com/knownasilya/nomad/compare/v1.17.1...v1.18.0) (2026-10-28)
 
 
