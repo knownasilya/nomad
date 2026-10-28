@@ -6,7 +6,7 @@ import { setupSqliteDB } from '../lib/db';
 import { getEnvVar } from '../lib/env';
 import * as profileDb from './profile-data-db';
 
-const CACHED_VALUES = ['new_tabs_in_foreground'];
+const CACHED_VALUES = ['new_tabs_in_foreground', 'url_routing_rules'];
 const JSON_ENCODED_SETTINGS = [
   'search_engines',
   'adblock_lists',
@@ -14,6 +14,7 @@ const JSON_ENCODED_SETTINGS = [
   'cert_exceptions',
   'ai_servers',
   'ai_sidebar_prefs',
+  'url_routing_rules',
 ];
 
 // Settings that are always global (never per-space)
@@ -40,6 +41,7 @@ const GLOBAL_SETTINGS = new Set([
   'cert_exceptions',
   'crawler_enabled',
   'highlights_hidden',
+  'url_routing_rules',
 ]);
 
 // globals
@@ -112,6 +114,9 @@ export const setup = async function (opts) {
     crawler_enabled: 1,
     // View > Hide Highlights: no page draws the user's Highlights (bg/ui/highlights.js).
     highlights_hidden: 0,
+    // Air Traffic Control: ordered list of { id, pattern, spaceId, enabled } rules that send a
+    // new tab's URL to a specific Space instead of the window's active one (bg/ui/tabs/manager.js).
+    url_routing_rules: [],
 
     cert_exceptions: [],
     adblock_lists: [

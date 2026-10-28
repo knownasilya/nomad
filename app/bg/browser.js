@@ -26,6 +26,7 @@ const exec = require('util').promisify(require('child_process').exec);
 import * as logLib from './logger';
 import * as adblocker from './adblocker';
 import * as settingsDb from './dbs/settings';
+import * as spacesDb from './dbs/spaces';
 import { open as openUrl } from './open-url';
 import * as windows from './ui/windows';
 import {
@@ -265,6 +266,10 @@ export const WEBAPI = {
   async setSetting(key, value) {
     const spaceId = tabManager.findTab(this.sender)?.spaceId;
     return settingsDb.setForSpace(spaceId, key, value);
+  },
+  async getSpaces() {
+    const spaces = await spacesDb.list();
+    return spaces.map((s) => ({ id: s.id, name: s.name, icon: s.icon, color: s.color }));
   },
   updateAdblocker,
   updateSetupState,
