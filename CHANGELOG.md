@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.18.0](https://github.com/knownasilya/nomad/compare/v1.17.1...v1.18.0) (2026-10-28)
+
+
+### Features
+
+* **names:** the AI names sites you visit often ([a6eaeba](https://github.com/knownasilya/nomad/commit/a6eaeba4b51fb285f76df570840a63d8060267af))
+* **spaces:** add URL routing rules (Air Traffic Control) ([febdb79](https://github.com/knownasilya/nomad/commit/febdb7909ede0a29f155555ade2886b63d0a3294))
+
 ### [1.17.1](https://github.com/knownasilya/nomad/compare/v1.17.0...v1.17.1) (2026-10-25)
 
 
