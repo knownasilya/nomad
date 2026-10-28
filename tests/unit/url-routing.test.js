@@ -26,6 +26,13 @@ describe('matchesUrlPattern', () => {
     expect(matchesUrlPattern('https://GitHub.com/foo', 'github.com')).toBe(true);
   });
 
+  it('matches host globs with a path wildcard', () => {
+    expect(matchesUrlPattern('https://app.teamgantt.com/projects/1', '*.teamgantt.com/*')).toBe(true);
+    expect(matchesUrlPattern('http://app.teamgantt.local/x', '*teamgantt.local/*')).toBe(true);
+    expect(matchesUrlPattern('https://teamgantt.com/', 'teamgantt.com/*')).toBe(true);
+    expect(matchesUrlPattern('https://example.com/', '*.teamgantt.com/*')).toBe(false);
+  });
+
   it('returns false for invalid urls or empty inputs', () => {
     expect(matchesUrlPattern('not a url', 'github.com')).toBe(false);
     expect(matchesUrlPattern('', 'github.com')).toBe(false);

@@ -807,8 +807,6 @@ export function create(
     return; // dont create tabs for this
   }
   win = getTopWindow(win);
-  var tabs = (activeTabs[win.id] = activeTabs[win.id] || []);
-  tabGroups[win.id] = tabGroups[win.id] || [];
 
   // Eagerly capture the active space for this window on first tab creation
   if (windowActiveSpaceId[win.id] === undefined) {
@@ -826,6 +824,22 @@ export function create(
       routedSpaceId = candidate;
     }
   }
+
+  // If another window is already showing the routed Space, open the tab there and bring that
+  // window forward, leaving this window's Space alone.
+  if (routedSpaceId !== undefined && routedSpaceId !== windowActiveSpaceId[win.id]) {
+    const other = findWindowShowingSpace(routedSpaceId, win);
+    if (other) {
+      win = other;
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+      opts = { ...opts, tabIndex: undefined }; // an index into the other window's tabs
+    }
+  }
+
+  var tabs = (activeTabs[win.id] = activeTabs[win.id] || []);
+  tabGroups[win.id] = tabGroups[win.id] || [];
 
   // resolve space for this tab
   const spaceId = explicitSpaceId || routedSpaceId || getWindowActiveSpaceId(win);
@@ -939,6 +953,16 @@ export function create(
   }
 
   return tab;
+}
+
+// A shell window, other than `exclude`, whose active Space is `spaceId`.
+function findWindowShowingSpace(spaceId, exclude) {
+  for (const id in windowActiveSpaceId) {
+    if (windowActiveSpaceId[id] !== spaceId) continue;
+    const w = BrowserWindow.fromId(Number(id));
+    if (!w || w.isDestroyed() || w === exclude || !activeTabs[w.id]) continue;
+    return w;
+  }
 }
 
 export function createBg(url, opts = { fromSnapshot: undefined }) {

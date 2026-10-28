@@ -17,6 +17,22 @@ import './views/fs-audit-log.js';
 import './views/daemon-log.js';
 import './views/log.js';
 
+// [id, icon, label] for each sub-page; null draws a divider
+const SUBVIEWS = [
+  ['general', 'fas fa-cog', 'General'],
+  ['url-routing', 'fas fa-route', 'URL Routing'],
+  ['blocking', 'fas fa-ban', 'Content Blocking'],
+  ['ai', 'fas fa-brain', 'AI'],
+  ['security', 'fas fa-shield-alt', 'Security'],
+  ['devices', 'fas fa-laptop', 'Devices'],
+  null,
+  ['general-logs', 'fas fa-clipboard-list', 'General Logs'],
+  ['network', 'fas fa-share-alt', 'Network Stats'],
+  ['fs-audit-log', 'fas fa-clipboard-check', 'Filesystem Audit Log'],
+  ['info', 'fas fa-info-circle', 'Information'],
+  null,
+];
+
 class SettingsApp extends LitElement {
   static get properties() {
     return {
@@ -31,6 +47,13 @@ class SettingsApp extends LitElement {
   constructor() {
     super();
     this.currentSubview = QP.getParam('view') || 'general';
+    // back/forward between sub-pages
+    window.addEventListener('popstate', () => {
+      const view = QP.getParam('view') || 'general';
+      if (view === this.currentSubview) return;
+      this.currentSubview = view;
+      this.load();
+    });
   }
 
   firstUpdated() {
@@ -63,7 +86,8 @@ class SettingsApp extends LitElement {
   // =
 
   render() {
-    document.title = 'Settings';
+    const current = SUBVIEWS.find((v) => v && v[0] === this.currentSubview);
+    document.title = current ? `${current[2]} · Settings` : 'Settings';
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="subnav">${this.renderSubnav()}</div>
@@ -80,23 +104,7 @@ class SettingsApp extends LitElement {
         </div>
       `;
     };
-    return html`
-      ${item('general', 'fas fa-cog', 'General')}
-      ${item('url-routing', 'fas fa-route', 'URL Routing')}
-      ${item('blocking', 'fas fa-ban', 'Content Blocking')}
-      ${item('ai', 'fas fa-brain', 'AI')}
-      ${item('security', 'fas fa-shield-alt', 'Security')}
-      ${item('devices', 'fas fa-laptop', 'Devices')}
-      <hr />
-      ${item('general-logs', 'fas fa-clipboard-list', 'General Logs')}
-      ${item('network', 'fas fa-share-alt', 'Network Stats')}
-      ${item('fs-audit-log', 'fas fa-clipboard-check', 'Filesystem Audit Log')}
-      ${
-        '' /*DISABLEDitem('daemon-log', 'fas fa-clipboard-list', 'Daemon Log')*/
-      }
-      ${item('info', 'fas fa-info-circle', 'Information')}
-      <hr />
-    `;
+    return SUBVIEWS.map((v) => (v ? item(...v) : html`<hr />`));
   }
 
   renderSubview() {
