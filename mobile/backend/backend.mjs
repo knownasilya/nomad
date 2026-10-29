@@ -16,6 +16,7 @@ import { createAiBridge } from './lib/ai-bridge.mjs'
 import Protomux from 'protomux'
 import c from 'compact-encoding'
 import { createDevicePresence } from '../../shared/device-presence.mjs'
+import { createLogStore } from './lib/log-store.mjs'
 import {
   RPC_OPEN,
   RPC_CLOSE,
@@ -53,6 +54,8 @@ import {
   RPC_AI_EVENT,
   RPC_APPS,
   RPC_APPS_RESULT,
+  RPC_LOGS,
+  RPC_LOGS_RESULT,
   DRIVE_HYPERDRIVE,
   DRIVE_AUTOBASE
 } from '../rpc-commands.mjs'
@@ -61,9 +64,16 @@ const { IPC } = BareKit
 
 // Prefix every backend log line with [nomad] so the Bare worklet's logs land under the same
 // filterable tag as the React-Native side (see lib/log.ts) in adb logcat / Xcode console.
+// Every line also goes to the Logs page's store (created below, once the storage path is known).
+let logStore = null
 for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
   const orig = typeof console[level] === 'function' ? console[level].bind(console) : null
-  if (orig) console[level] = (...args) => orig('[nomad]', ...args)
+  if (orig) {
+    console[level] = (...args) => {
+      orig('[nomad]', ...args)
+      try { logStore?.add(level, args) } catch {}
+    }
+  }
 }
 
 // Resilience: a rejected BACKGROUND promise deep in the P2P stack (e.g. autobase catching up a Vault
@@ -82,6 +92,8 @@ try {
 // Bare.argv[0] is the app's document directory, passed in from the RN side.
 const storagePath = join(URL.fileURLToPath(Bare.argv[0]), 'hyper-browser')
 if (!fs.existsSync(storagePath)) fs.mkdirSync(storagePath, { recursive: true })
+// Next to the corestore, not inside it: that folder belongs to its storage engine.
+logStore = createLogStore({ fs, join, dir: join(URL.fileURLToPath(Bare.argv[0]), 'nomad-logs') })
 
 const store = new Corestore(storagePath)
 // Draft Mode (ADR-0012): the serve path resolves reads through this overlay when a Drive is being
@@ -271,7 +283,18 @@ const rpc = new RPC(IPC, (req) => {
   else if (req.command === RPC_AI_CANCEL) handleAiCancel(msg)
   else if (req.command === RPC_AI_PROMPT_RESULT) handleAiPromptResult(msg)
   else if (req.command === RPC_APPS) handleApps(msg)
+  else if (req.command === RPC_LOGS) handleLogs(msg)
 })
+
+// The Logs page: this session's lines after `since`, and the previous session's when asked (to read
+// what happened before a crash).
+function handleLogs ({ reqId, since = 0, previous = false }) {
+  try {
+    send(RPC_LOGS_RESULT, { reqId, ok: true, entries: logStore ? logStore.since(since) : [], ...(previous ? { previous: logStore ? logStore.previous() : [] } : {}) })
+  } catch (err) {
+    send(RPC_LOGS_RESULT, { reqId, ok: false, entries: [], message: err.message || String(err) })
+  }
+}
 
 // --- file-system ops on writable drives you own --------------------------
 // Each replies with a single RPC_FS_RESULT keyed by reqId. `key` is the drive

@@ -493,8 +493,10 @@ function DeviceSpaces ({ device, phoneKeys, colors, s }: { device: VaultDevice; 
 function syncSummary (status: VaultMsg): string {
   const sync = status.sync
   if (!sync) return 'Checking…'
-  if (sync.connections === 0) return 'No peers connected'
   const all = [sync.vault, ...sync.spaces]
+  const failed = all.filter((st) => st.error).length
+  if (failed) return `${failed} with an error`
+  if (sync.connections === 0) return 'No peers connected'
   const behind = all.filter((st) => st.loaded && (st.remoteLength || 0) > (st.length || 0)).length
   if (behind) return `Syncing ${behind}`
   const noPeers = all.filter((st) => st.loaded && !st.peers).length
@@ -571,6 +573,13 @@ function SyncRow ({ name, st, tags, s, t }: { name: string; st: DriveSync; tags:
             : null}
           {tags.map((tag) => <Text key={tag} style={[s.tag, s.tagWarn]}>{tag}</Text>)}
         </View>
+        {st.error
+          ? (
+            <Text style={s.syncError} selectable>
+              Error{st.errorAt ? ` at ${new Date(st.errorAt).toLocaleTimeString()}` : ''}: {st.error}
+            </Text>
+            )
+          : null}
       </View>
     </View>
   )
@@ -597,6 +606,7 @@ function makeStyles (t: Theme) {
     sectionTitle: { fontSize: 13, fontWeight: '600', color: t.textDim, marginBottom: space.sm },
     hint: { fontSize: 13, color: t.textMuted, lineHeight: 19, marginBottom: space.md },
     error: { color: t.danger, fontSize: 13, marginBottom: space.md },
+    syncError: { color: t.danger, fontSize: 12, lineHeight: 17, marginTop: space.xs },
     empty: {
       color: t.textMuted,
       fontSize: 14,

@@ -43,8 +43,11 @@ import {
   RPC_AI_PROMPT_RESULT,
   RPC_AI_EVENT,
   RPC_APPS,
-  RPC_APPS_RESULT
+  RPC_APPS_RESULT,
+  RPC_LOGS,
+  RPC_LOGS_RESULT
 } from '../rpc-commands.mjs'
+import type { LogEntry } from './log'
 
 export interface Bookmark { href: string; title: string; createdAt?: string }
 // `pins`: the space's pinned-shortcut hrefs (/nomad/pins.json), sent with every bookmarks reply.
@@ -88,6 +91,8 @@ export interface DriveSync {
   length?: number
   remoteLength?: number
   driveCount?: number | null
+  error?: string // the drive's last error this session; it closed and is opened again on the next read
+  errorAt?: number
 }
 export interface SyncStatus { connections: number; vault: DriveSync; spaces: DriveSync[] }
 export interface VaultMsg {
@@ -104,6 +109,9 @@ export interface VaultMsg {
   connectedDevices?: string[] // Vault writer keys of the Devices connected to this phone right now
   message?: string
 }
+
+// previous: the last session's lines, sent only when asked for.
+export interface LogsMsg { reqId?: string; ok: boolean; entries: LogEntry[]; previous?: LogEntry[]; message?: string }
 
 export interface BackendHandlers {
   onStatus: (msg: StatusMsg) => void
@@ -130,6 +138,8 @@ export interface Backend {
   bookmarkPin: (rootDriveKey: string, ns: string | undefined, href: string, title: string, addBookmark: boolean) => Promise<BookmarksMsg>
   bookmarkUnpin: (rootDriveKey: string, ns: string | undefined, href: string) => Promise<BookmarksMsg>
   hosting: (action: 'get' | 'set' | 'count' | 'settings', opts?: { driveType?: DriveType; key?: string; on?: boolean; dailyLimitMB?: number }) => Promise<HostingMsg>
+  // The backend's log lines with id > since (and the previous session's, with `previous`).
+  logs: (since?: number, previous?: boolean) => Promise<LogsMsg>
   fsList: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
   fsRead: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
   fsWrite: (driveType: DriveType, key: string, ns: string, path: string, base64: string) => Promise<FsResult>
@@ -224,7 +234,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
         // Streaming: many frames per reqId, so the sink stays registered until it sees done|error.
         aiStreams.current[msg.reqId]?.(msg)
       }
-      else if (req.command === RPC_CREATED || req.command === RPC_PAIRED || req.command === RPC_VAULT || req.command === RPC_FS_RESULT || req.command === RPC_SPACE_DRIVES_RESULT || req.command === RPC_BOOKMARKS_RESULT || req.command === RPC_HOSTING_RESULT || req.command === RPC_NOMAD_RESULT || req.command === RPC_APPS_RESULT) {
+      else if (req.command === RPC_CREATED || req.command === RPC_PAIRED || req.command === RPC_VAULT || req.command === RPC_FS_RESULT || req.command === RPC_SPACE_DRIVES_RESULT || req.command === RPC_BOOKMARKS_RESULT || req.command === RPC_HOSTING_RESULT || req.command === RPC_NOMAD_RESULT || req.command === RPC_APPS_RESULT || req.command === RPC_LOGS_RESULT) {
         pending.current[msg.reqId]?.(msg)
         delete pending.current[msg.reqId]
       }
@@ -358,6 +368,19 @@ export function useBackend (handlers: BackendHandlers): Backend {
 
   return {
     nomad: (payload) => nomadCall(payload),
+    logs (since = 0, previous = false) {
+      return new Promise<LogsMsg>((resolve) => {
+        const rpc = rpcRef.current
+        if (!rpc) return resolve({ ok: false, entries: [], message: 'backend not ready' })
+        const reqId = `lg_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
+        const timer = setTimeout(() => {
+          if (pending.current[reqId]) { delete pending.current[reqId]; resolve({ ok: false, entries: [], message: 'backend did not respond' }) }
+        }, 5000)
+        pending.current[reqId] = (msg: LogsMsg) => { clearTimeout(timer); resolve(msg) }
+        const req = rpc.request(RPC_LOGS)
+        req.send(b4a.from(JSON.stringify({ reqId, since, previous })))
+      })
+    },
     apps: (app, action, args) => appsCall(app, action, args),
     aiChat: (messages, opts, handlers) => aiChat(messages, opts, handlers),
     fsList: (driveType, key, ns, path) => fsCall(RPC_FS_LIST, { driveType, key, ns, path }),

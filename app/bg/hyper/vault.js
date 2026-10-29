@@ -379,11 +379,16 @@ export async function moveSpaceRoot(fromKey, toKey) {
   logger.info('Moved space root in vault', { fromKey, toKey });
 }
 
-// Make every Device in the Vault a Writer of a Root Drive this Device can write.
+// Make every other Device in the Vault a Writer of a Root Drive this Device can write. Not this
+// Device: it already writes the Root Drive, and its Device key is its Vault writer core, so adding
+// it would copy every Vault record (Notes, Reader, Names, Devices, …) into the Root Drive.
 async function _addDevicesAsWriters(rootDriveKey) {
   const root = await autobases.getOrLoadCollaborativeDrive(rootDriveKey);
   if (!root || !root.writable) return;
+  const sess = await getVault();
+  const own = sess?.base?.local?.key ? b4a.toString(sess.base.local.key, 'hex') : null;
   for (const device of await listDevices()) {
+    if (device.key === own) continue;
     try {
       await root.base.append({ addWriter: device.key });
     } catch (e) {

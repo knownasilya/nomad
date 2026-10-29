@@ -23,6 +23,9 @@ export const RPC_NOMAD = 40 // { reqId, api, method, url?, args } an in-page nom
 //           'feed' {url}
 //   notes:  'list' | 'save' {id?, body, baseUpdatedAt?} | 'delete' {id} | 'renameLinks' {id, from, to}
 export const RPC_APPS = 46 // { reqId, app: 'reader'|'notes', action, ...args }
+// The Logs page (Settings → Logs): the backend's console lines with id > since, plus the previous
+// session's when `previous` (to read what led up to a crash).
+export const RPC_LOGS = 48 // { reqId, since?, previous? }
 
 // UI -> backend: AI chat is STREAMING (nomad.ai.chat is a readable), so unlike RPC_NOMAD it can't
 // use the single-reply RPC_*_RESULT pattern. One RPC_AI_CHAT fans out many RPC_AI_EVENT frames
@@ -54,6 +57,7 @@ export const RPC_BOOKMARKS_RESULT = 32 // { reqId, ok, bookmarks?, message? } re
 export const RPC_HOSTING_RESULT = 33 // { reqId, ok, hosted?, count?, paused?, usageBytes?, dailyLimitMB?, message? } reply to RPC_HOSTING
 export const RPC_NOMAD_RESULT = 41 // { reqId, ok, value?, error? } reply to RPC_NOMAD
 export const RPC_APPS_RESULT = 47 // { reqId, ok, value?, noVault?, message? } reply to RPC_APPS
+export const RPC_LOGS_RESULT = 49 // { reqId, ok, entries: [{ id, t, level, msg }], previous?, message? } reply to RPC_LOGS
 export const RPC_AI_EVENT = 45 // { reqId, kind:'chunk'|'tool'|'prompt'|'done'|'error', text?, event?, permission?, message? } one streamed AI frame
 
 // Drive types understood by the backend resolver.

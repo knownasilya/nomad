@@ -17,6 +17,8 @@ import Notes from '../components/Notes'
 import BottomSheet from '../components/BottomSheet'
 import Devices from '../components/Devices'
 import SpaceSwitcher from '../components/SpaceSwitcher'
+import Settings from '../components/Settings'
+import Logs from '../components/Logs'
 import DevTools from '../components/DevTools'
 import AiPanel from '../components/AiPanel'
 import Shortcuts from '../components/Shortcuts'
@@ -841,6 +843,8 @@ export default function Browser () {
   const canHostActive = active.kind === 'hyper' && !!active.driveKey && !ownedActive
   const [activeHosted, setActiveHosted] = useState<boolean | null>(null)
   const [hostingSettingsOpen, setHostingSettingsOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [logsOpen, setLogsOpen] = useState(false)
   useEffect(() => {
     if (!menuOpen || !canHostActive || !active.driveKey) { setActiveHosted(null); return }
     backend.hosting('get', { driveType: active.driveType, key: active.driveKey }).then((r) => setActiveHosted(r.ok ? !!r.hosted : null))
@@ -970,9 +974,23 @@ export default function Browser () {
             ? { label: 'Remove from home shortcuts', onPress: () => persist.setPinned(active.url, '', false) }
             : { label: 'Add to home shortcuts', disabled: !active.url, onPress: () => persist.setPinned(active.url, active.title, true) },
           { label: activeHosted ? 'Stop hosting this drive' : 'Host this drive', disabled: !canHostActive, onPress: toggleHosting },
-          { label: 'Hosting settings', onPress: () => setHostingSettingsOpen(true) },
+          { label: 'Settings', onPress: () => setSettingsOpen(true) },
           { label: 'Reload', disabled: active.kind === 'home', onPress: reload }
         ]}
+      />
+
+      <Settings
+        visible={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onOpenDevices={() => openDevicesFrom(() => setSettingsOpen(false))}
+        onOpenHosting={() => { setSettingsOpen(false); setHostingSettingsOpen(true) }}
+        onOpenLogs={() => { setSettingsOpen(false); setLogsOpen(true) }}
+      />
+
+      <Logs
+        visible={logsOpen}
+        onClose={() => setLogsOpen(false)}
+        logs={backend.logs}
       />
 
       <HostingSettings
