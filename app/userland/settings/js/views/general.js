@@ -486,7 +486,8 @@ class GeneralSettingsView extends LitElement {
         <p>
           The search crawler finds drives that their owners listed, so you can
           search them at <code>nomad://search</code>. This setting applies to all
-          your devices.
+          your devices. To search other indexes too, add them as sources from
+          the sliders button on that page.
         </p>
 
         <div class="radio-item">
