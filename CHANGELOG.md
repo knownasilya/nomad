@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.20.0](https://github.com/knownasilya/nomad/compare/v1.19.0...v1.20.0) (2026-10-29)
+
+
+### Features
+
+* **names:** mark names with a tag icon instead of @ ([6ab6753](https://github.com/knownasilya/nomad/commit/6ab6753b968be5de18553ab46c5526f78f0704a5))
+* **names:** show the user's own name as [@name](https://github.com/name) in the location bar ([a1e7978](https://github.com/knownasilya/nomad/commit/a1e7978b68dfa7bb9cf8835a490dead406109d02))
+* **search:** named search sources, a subtle "found by" line, and a page that looks like the browser ([1d194aa](https://github.com/knownasilya/nomad/commit/1d194aa5f01307a6f5091557162647687a16f1e2))
+
+
+### Bug Fixes
+
+* **names:** put the green check on the @ of the location bar's [@name](https://github.com/name) ([b4b6ef4](https://github.com/knownasilya/nomad/commit/b4b6ef48c6ebf319401b9203b1d22556de06b1c9))
+* **search:** Search Nomad from the URL bar opens nomad://search with the query ([757b65c](https://github.com/knownasilya/nomad/commit/757b65c00632fcea11382cac91576ca704ba6690))
+* **sidebar:** show tabs and groups in tab order, so a new tab lands below the groups ([a0b5431](https://github.com/knownasilya/nomad/commit/a0b5431e8cff3e1b2fdfde39f08bd22e4364da82))
+
 ## [1.19.0](https://github.com/knownasilya/nomad/compare/v1.18.1...v1.19.0) (2026-10-29)
 
 
