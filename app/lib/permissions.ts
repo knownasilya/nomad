@@ -232,6 +232,23 @@ export const PERMS = {
     requiresRefresh: false,
     promptTrusted: true,
   },
+  // The AI's access to the user's Mods (ADR-0023). Changing them is dangerous: a Mod can run a
+  // script on every page of a site.
+  modsRead: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    promptTrusted: true,
+  },
+  modsWrite: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+    promptTrusted: true,
+  },
   // One file or folder of the user's private drive (hyper://private/), for a limited time. The
   // param is the path. Not persisted here: private-drive-guard.ts keeps the grant and ends it.
   privateRead: {
@@ -283,6 +300,8 @@ export const PERM_ICONS = {
   notesWrite: 'fas fa-sticky-note',
   readerRead: 'fas fa-rss',
   readerWrite: 'fas fa-rss',
+  modsRead: 'fas fa-magic',
+  modsWrite: 'fas fa-magic',
   privateRead: 'fas fa-lock',
   privateWrite: 'fas fa-lock',
 };
@@ -340,6 +359,10 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Let the AI assistant read your Reader feeds and posts';
     case 'readerWrite':
       return 'Let the AI assistant follow and unfollow feeds and mark posts read';
+    case 'modsRead':
+      return 'Let the AI assistant read your Mods (your styles and scripts for sites)';
+    case 'modsWrite':
+      return 'Let the AI assistant create and change your Mods, including scripts that run on those sites';
     case 'privateRead':
     case 'privateWrite': {
       const verb = permId === 'privateWrite' ? 'Read and change' : 'Read';

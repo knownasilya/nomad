@@ -36,6 +36,7 @@ import spacesRPCManifest from '../../rpc-manifests/spaces';
 import { registerForPartition } from '../../protocols/index';
 import hyper from '../../hyper/index';
 import * as drafts from '../../hyper/drafts';
+import * as mods from '../mods';
 import * as vault from '../../hyper/vault';
 
 const X_POSITION = 0;
@@ -698,6 +699,13 @@ export async function setup() {
       }
     }
   }
+  // The location bar's Mods button follows Mods changed here or on another Device.
+  mods.events.on('changed', () => {
+    iterateTabs((tab) => {
+      for (const pane of tab.panes) pane.emitUpdateState();
+    });
+  });
+
   hyper.drives.on('updated', ({ details }) => {
     iterateTabs((tab) => {
       if (tab.driveInfo && tab.driveInfo.url === details.url) {
@@ -1897,6 +1905,32 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     await pane.refreshState();
     pane.webContents.reload();
     return res;
+  },
+
+  // Mods (ADR-0023), for the location bar's Mods menu (fg/shell-menus/mods.js). Each acts
+  // on the page in the tab's primary pane.
+  async getMods(index) {
+    return mods.menuState(getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents);
+  },
+
+  async setModEnabled(index, id, enabled) {
+    const wc = getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents;
+    if (wc) await mods.setEnabled(wc, id, enabled);
+  },
+
+  async toggleModPreset(index, presetId) {
+    const wc = getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents;
+    if (wc) await mods.togglePreset(wc, presetId);
+  },
+
+  async pickModElements(index, id) {
+    const wc = getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents;
+    if (wc) await mods.startPicking(wc, id || null);
+  },
+
+  async editMods(index, opts) {
+    const wc = getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents;
+    if (wc) mods.openEditor(wc, opts || {});
   },
 
   async resetZoom(index) {

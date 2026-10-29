@@ -11,6 +11,8 @@ import * as pairing from '../../hyper/device-pairing';
 import * as devicePresence from '../../hyper/device-presence';
 import * as vaultApps from './vault-apps';
 import * as names from '../../hyper/names';
+import * as mods from '../../ui/mods';
+import { PRESETS } from '../../../../shared/mods.mjs';
 
 function thisPlatform() {
   return 'desktop';
@@ -201,5 +203,21 @@ export default {
 
   async removeName(name) {
     return names.remove(name);
+  },
+
+  // Mods (bg/ui/mods.js): My Library → Mods.
+  async listMods() {
+    return {
+      mods: mods.list(),
+      presets: PRESETS.map(({ id, label, description }) => ({ id, label, description })),
+    };
+  },
+
+  async saveMod(fields) {
+    return mods.save(fields || {});
+  },
+
+  async deleteMod(id) {
+    await mods.remove(id);
   },
 };

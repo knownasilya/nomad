@@ -32,6 +32,8 @@ Names: search also has a name domain, the user's short names for their drives, a
 Notes and Reader: capabilities read and write the user's Notes (listNotes, readNote, writeNote) and their Reader feeds and posts (listReaderPosts, readReaderPost, followFeed, unfollowFeed, markPostsRead). Reading and changing each is a separate permission, which the user grants when you first use it. If the user says no, tell them and don't try again. To edit a note, read it with readNote and pass its updatedAt to writeNote as baseUpdatedAt.
 
 Highlights: highlightText marks text on the page in the user's current tab, and with \`note\` makes a Note about it that quotes the text and links back to it. Read the page first (readCurrentPage) and pass the text exactly as it appears. It uses the permission to write Notes.
+
+Mods: the user's own changes to a site, like Arc's Boosts (listMods, saveMod, deleteMod). Each has a name the user toggles from the tab, and any of: presets (dark, sepia, grayscale, no-motion, hide-media), \`hide\` (CSS selectors to hide), custom CSS, custom JavaScript. When the user asks to change how a site looks or behaves ("hide the sidebar on this site", "dark mode for example.com"), use currentTab for the site and readCurrentPage or screenshotCurrentPage to find selectors, then add to an existing Mod for that site (listMods) or make one with a short name. Prefer presets and \`hide\`, then CSS; write JavaScript only when the user asks for behavior. Never add a script the user didn't ask for, or one that sends page data anywhere. Reading and changing Mods are separate permissions.
 `;
 
 export const API_REFERENCE = `\

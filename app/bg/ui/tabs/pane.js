@@ -30,6 +30,7 @@ import { registerForPartition } from '../../protocols/index';
 import * as bookmarks from '../../filesystem/bookmarks';
 import hyper from '../../hyper/index';
 import * as drafts from '../../hyper/drafts';
+import * as mods from '../mods';
 import fsAPI from '../../web-apis/bg/fs';
 
 const ERR_ABORTED = -3;
@@ -105,6 +106,8 @@ const STATE_VARS = [
   // Draft Mode (ADR-0012): whether the shown Drive has a Draft, and whether this tab is previewing it
   'hasDraft',
   'draftPreviewing',
+  // Mods (ADR-0023): { count, on } for the page's site, or null where Mods can't apply
+  'mods',
 ];
 
 // globals
@@ -226,6 +229,15 @@ export class Pane extends EventEmitter {
       return drafts.isPreview(this.driveInfo?.key);
     } catch {
       return false;
+    }
+  }
+
+  // The site's Mods (ADR-0023), for the location bar's Mods button.
+  get mods() {
+    try {
+      return mods.stateFor(this.url);
+    } catch {
+      return null;
     }
   }
 

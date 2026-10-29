@@ -5,6 +5,7 @@ import * as bg from './bg-process-rpc';
 import './background-tray';
 import './browser';
 import './bookmark';
+import './mods';
 import './donate';
 import './draft';
 import './peers';
@@ -113,6 +114,8 @@ class MenusWrapper extends LitElement {
         return html`<bookmark-menu active-menu></bookmark-menu>`;
       case 'bookmark-edit':
         return html`<bookmark-edit-menu active-menu></bookmark-edit-menu>`;
+      case 'mods':
+        return html`<mods-menu active-menu></mods-menu>`;
       case 'donate':
         return html`<donate-menu active-menu></donate-menu>`;
       case 'draft':

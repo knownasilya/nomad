@@ -39,6 +39,8 @@ class NavbarLocation extends LitElement {
       isBookmarked: { type: Boolean, attribute: 'is-bookmarked' },
       hasDraft: { type: Boolean, attribute: 'has-draft' },
       draftPreviewing: { type: Boolean, attribute: 'draft-previewing' },
+      mods: { type: Object },
+      isModsMenuOpen: { type: Boolean },
       aiOpen: { type: Boolean, attribute: 'ai-open' },
       isLocationFocused: { type: Boolean },
       hasExpanded: { type: Boolean },
@@ -69,6 +71,8 @@ class NavbarLocation extends LitElement {
     this.isBookmarked = false;
     this.hasDraft = false;
     this.draftPreviewing = false;
+    this.mods = null;
+    this.isModsMenuOpen = false;
     this.aiOpen = false;
     this.isLocationFocused = false;
     this.hasExpanded = false;
@@ -178,7 +182,8 @@ class NavbarLocation extends LitElement {
       >
       </shell-window-navbar-site-info>
       ${this.renderLocation()} ${this.renderZoom()} ${this.renderLiveReloadingBtn()}
-      ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderCopyUrlBtn()}
+      ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderModsBtn()}
+      ${this.renderCopyUrlBtn()}
       ${this.renderPeers()} ${this.renderDonateBtn()} ${'' /* DISABLED this.renderShareBtn()*/}
       ${this.renderBookmarkBtn()} ${this.renderAiBtn()} ${this.renderSiteBtn()}
     `;
@@ -359,6 +364,22 @@ class NavbarLocation extends LitElement {
           : 'This Drive has a Draft (unpublished changes). Click to preview it — visible only to you.'}
       >
         <span class="fas fa-pen-nib" style=${this.draftPreviewing ? 'color: #2864dc' : ''}></span>
+      </button>
+    `;
+  }
+
+  // Mods (ADR-0023): on any page Mods can change. Blue while one of the site's Mods is on;
+  // opens the Mods menu (fg/shell-menus/mods.js) to switch them, add styles, or pick elements to hide.
+  renderModsBtn() {
+    if (!this.mods) return '';
+    const { count, on } = this.mods;
+    var cls = classMap({ mods: true, pressed: this.isModsMenuOpen, active: on > 0 });
+    const title = count
+      ? `Mods: ${on} of ${count} on for this site`
+      : 'Add a Mod for this site: hide parts of it, restyle it, or run your own script';
+    return html`
+      <button class=${cls} @click=${this.onClickModsMenu} title=${title}>
+        <span class="fas fa-magic"></span>
       </button>
     `;
   }
@@ -605,6 +626,20 @@ class NavbarLocation extends LitElement {
     });
   }
 
+  async onClickModsMenu() {
+    if (Date.now() - (this.lastModsMenuClick || 0) < 100) {
+      return;
+    }
+    this.isModsMenuOpen = true;
+    var rect = this.shadowRoot.querySelector('.mods').getClientRects()[0];
+    await bg.views.toggleMenu('mods', {
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0, top: (rect.bottom | 0) + 2 },
+      params: { url: this.url },
+    });
+    this.isModsMenuOpen = false;
+    this.lastModsMenuClick = Date.now();
+  }
+
   onClickAiSidebar() {
     bg.views.toggleAiSidebarOpen(this.activeTabIndex);
   }
@@ -737,6 +772,10 @@ NavbarLocation.styles = [
 
     button.bookmark .fas.fa-star {
       color: var(--text-color--location-bookmark--pressed);
+    }
+
+    button.mods.active .fa-magic {
+      color: #2864dc;
     }
 
     button.copy-url .fa-link {

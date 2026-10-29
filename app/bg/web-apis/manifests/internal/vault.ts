@@ -36,4 +36,9 @@ export default {
   namesForUrl: 'promise', // (url) -> the names that point to that page
   setName: 'promise', // ({ name, url, title, previous? }) -> record
   removeName: 'promise',
+
+  // Mods (bg/ui/mods.js, ADR-0023)
+  listMods: 'promise', // -> { mods, presets: [{ id, label, description }] }
+  saveMod: 'promise', // ({ id?, name?, site?, enabled?, presets?, hide?, css?, js? }) -> record
+  deleteMod: 'promise',
 };

@@ -1,14 +1,15 @@
-// The AI's Notes and Reader capabilities (search-execute.mjs CAPABILITIES, gate `personal`): the
+// The AI's Notes, Reader and Mods capabilities (search-execute.mjs CAPABILITIES, gate `personal`): the
 // pure parts, finding and shaping what the model gets. bg/web-apis/bg/ai-vault.ts does the Vault and
 // Drive reads and writes, after the user's permission.
 //
 // Only a personal turn (the user's own AI: the AI Sidebar, the phone's AI panel, the loopback MCP)
-// sees these, and each asks its own permission: reading and writing Notes, and reading and changing
-// Reader, are four grants (ADR-0019).
+// sees these, and each asks its own permission: reading and writing Notes, reading and changing
+// Reader (ADR-0019), and reading and changing Mods (ADR-0023) are six grants.
 //
 // No Electron imports.
 
 import { noteTitle, noteSnippet, sortNotes, makeResolver, findLinks, driveRoot } from '../../../shared/vault-apps.mjs'
+import { PRESETS, normalizeSite, describeMod } from '../../../shared/mods.mjs'
 
 // Capability -> the permission it asks for.
 export const VAULT_TOOL_PERMS = {
@@ -21,9 +22,12 @@ export const VAULT_TOOL_PERMS = {
   followFeed: 'readerWrite',
   unfollowFeed: 'readerWrite',
   markPostsRead: 'readerWrite',
+  listMods: 'modsRead',
+  saveMod: 'modsWrite',
+  deleteMod: 'modsWrite',
 }
 
-export const VAULT_PERMS = ['notesRead', 'notesWrite', 'readerRead', 'readerWrite']
+export const VAULT_PERMS = ['notesRead', 'notesWrite', 'readerRead', 'readerWrite', 'modsRead', 'modsWrite']
 
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 100
@@ -203,4 +207,41 @@ export function htmlToText(html) {
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+// Mods
+// =
+
+// The Mods that match, by site then oldest first, whole (their code cut at MAX_TEXT), with the
+// preset ids saveMod takes. `site` keeps the Mods for that site and the sites around it: a
+// Mod for example.com applies on docs.example.com, and one for docs.example.com is about it.
+/**
+ * @param {any[]} mods
+ * @param {{ site?: string, query?: string }} [opts]
+ */
+export function findMods(mods, { site, query } = {}) {
+  let host = null
+  if (site) host = normalizeSite(site)
+  const near = (b) => !host || b.site === host || host.endsWith('.' + b.site) || b.site.endsWith('.' + host)
+  return {
+    mods: mods
+      .filter((b) => near(b) && matches(query, [b.name, b.site, b.css, b.js, ...(b.hide || [])]))
+      .map(modForModel),
+    presets: PRESETS.map((p) => ({ id: p.id, label: p.label, description: p.description })),
+  }
+}
+
+export function modForModel(b) {
+  return {
+    id: b.id,
+    name: b.name,
+    site: b.site,
+    enabled: b.enabled,
+    summary: describeMod(b).join(', ') || 'empty',
+    presets: b.presets,
+    hide: b.hide,
+    css: clip(b.css),
+    js: clip(b.js),
+    updatedAt: b.updatedAt,
+  }
 }
