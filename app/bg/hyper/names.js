@@ -19,6 +19,7 @@ import {
   nameError,
   nameTarget,
   resolveNamedUrl,
+  approvedNameFor,
 } from '../../../shared/names.mjs';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'names' });
@@ -74,6 +75,12 @@ export function get(name) {
 export function forUrl(url) {
   const target = nameTarget(url);
   return list().filter((r) => r.url === target || r.url === url);
+}
+
+// The user's own name for the hyper:// page at `url` (not one the AI gave and the user hasn't kept),
+// or null. The location bar shows it in place of the drive key.
+export function approvedFor(url) {
+  return approvedNameFor(url, list());
 }
 
 // Give `url` the name `name`. `previous` is the name being changed, when renaming. Refuses a name

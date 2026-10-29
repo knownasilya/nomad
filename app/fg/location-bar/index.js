@@ -157,7 +157,7 @@ class LocationBar extends LitElement {
     }
     if (r.isName) {
       return html`
-        <div class="icon"><i class="fas fa-at"></i></div>
+        <div class="icon"><i class="fas fa-tag"></i></div>
         <div class="title">${r.name}</div>
         <div class="spacer">&mdash;</div>
         <div class="provenance">${r.title} · ${toNiceUrl(r.target)}</div>

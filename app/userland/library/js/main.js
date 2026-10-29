@@ -126,7 +126,7 @@ export class LibraryApp extends LitElement {
             )}
             ${pageNav(
               'names',
-              html`<span class="fas fa-fw fa-at"></span>
+              html`<span class="fas fa-fw fa-tag"></span>
                 <span class="label">Names</span>`
             )}
             ${pageNav(

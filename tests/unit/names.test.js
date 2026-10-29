@@ -10,6 +10,7 @@ import {
   joinTarget,
   resolveNamedUrl,
   matchNames,
+  approvedNameFor,
 } from '../../shared/names.mjs';
 
 const KEY = 'a'.repeat(64);
@@ -86,5 +87,26 @@ describe('names', () => {
     expect(matchNames('blog', recs).map((r) => r.name)).toEqual(['blog', 'blogroll', 'notes']);
     expect(matchNames('hyper://blog/', recs)[0].name).toBe('blog');
     expect(matchNames('', recs)).toEqual([]);
+  });
+  it('finds the name the user gave the drive or app a page is in', () => {
+    const OTHER = 'b'.repeat(64);
+    const recs = [
+      { name: 'blog', url: `hyper://${KEY}/` },
+      { name: 'todo', url: 'hyper://private/apps/todo/' },
+      { name: 'apps', url: 'hyper://private/apps/' },
+      { name: 'suggested', url: `hyper://${OTHER}/`, auto: true },
+      { name: 'news', url: 'https://example.com/' },
+    ];
+    expect(approvedNameFor(`hyper://${KEY}/posts/2024-01-01-hi/`, recs).name).toBe('blog');
+    expect(approvedNameFor(`hyper://${KEY.toUpperCase()}+12/index.html`, recs).name).toBe('blog');
+    // The deepest named folder wins.
+    expect(approvedNameFor('hyper://private/apps/todo/index.html', recs).name).toBe('todo');
+    expect(approvedNameFor('hyper://private/apps/todo-old/', recs).name).toBe('apps');
+    expect(approvedNameFor('hyper://private/', recs)).toBe(null);
+    // An AI-given name isn't shown until the user keeps it.
+    expect(approvedNameFor(`hyper://${OTHER}/`, recs)).toBe(null);
+    expect(approvedNameFor(`hyper://${OTHER}/`, [{ name: 'kept', url: `hyper://${OTHER}/` }]).name).toBe('kept');
+    // Web pages keep their host.
+    expect(approvedNameFor('https://example.com/', recs)).toBe(null);
   });
 });

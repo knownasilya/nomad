@@ -21,6 +21,7 @@ class NavbarLocation extends LitElement {
       title: { type: String },
       siteTitle: { type: String },
       siteSubtitle: { type: String },
+      siteName: { type: String },
       siteIcon: { type: String },
       siteTrust: { type: String },
       driveDomain: { type: String },
@@ -54,6 +55,7 @@ class NavbarLocation extends LitElement {
     this.title = '';
     this.siteTitle = '';
     this.siteSubtitle = '';
+    this.siteName = '';
     this.siteIcon = '';
     this.siteTrust = '';
     this.driveDomain = '';
@@ -170,6 +172,7 @@ class NavbarLocation extends LitElement {
         url=${this.url}
         siteTitle=${this.siteTitle}
         siteSubtitle="${this.siteSubtitle}"
+        siteName=${this.siteName}
         siteIcon=${this.siteIcon}
         siteTrust=${this.siteTrust}
         driveDomain=${this.driveDomain}

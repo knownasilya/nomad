@@ -10,6 +10,7 @@ class NavbarSiteInfo extends LitElement {
       url: { type: String },
       siteTitle: { type: String },
       siteSubtitle: { type: String },
+      siteName: { type: String },
       siteIcon: { type: String },
       siteTrust: { type: String },
       driveDomain: { type: String },
@@ -26,6 +27,7 @@ class NavbarSiteInfo extends LitElement {
     this.url = '';
     this.siteTitle = '';
     this.siteSubtitle = '';
+    this.siteName = '';
     this.siteIcon = '';
     this.siteTrust = '';
     this.driveDomain = '';
@@ -75,7 +77,7 @@ class NavbarSiteInfo extends LitElement {
               </svg>
             `
           : html` <span class="${this.siteIcon} ${this.siteTrust}"></span> `}
-        <span class="label">${this.siteTitle}</span>
+        ${this.renderLabel()}
         ${this.siteSubtitle ? html`<span class="label sublabel">${this.siteSubtitle}</span>` : ''}
       `;
     }
@@ -98,6 +100,23 @@ class NavbarSiteInfo extends LitElement {
         ${innerHTML} ${this.renderHyperCtrls()}
       </button>
     `;
+  }
+
+  // A drive or app the user named (ADR-0018) shows a green tag with a check, and its name, in place
+  // of its key. Focusing the location bar hides it, and the input shows the real URL.
+  // A name the AI gave isn't shown until the user keeps it (bg/ui/tabs/pane.js siteName).
+  renderLabel() {
+    if (this.siteName && this.isHyperdrive) {
+      return html`
+        <span class="label site-name" title="Your name for this site: hyper://${this.siteName}/"
+          ><svg class="name-icon" viewBox="0 0 15 13" aria-hidden="true">
+            <path class="tag" d="M0.6 6.5 4.6 1.9A1.4 1.4 0 0 1 5.7 1.4H13a1.5 1.5 0 0 1 1.5 1.5v7.2A1.5 1.5 0 0 1 13 11.6H5.7a1.4 1.4 0 0 1-1.1-.5z" />
+            <path class="check" d="M6.6 6.6l1.7 1.7 3.4-3.6" /></svg
+          >${this.siteName}</span
+        >
+      `;
+    }
+    return html`<span class="label">${this.siteTitle}</span>`;
   }
 
   renderHyperCtrls() {
@@ -240,6 +259,47 @@ NavbarSiteInfo.styles = [
       padding: 0 5px;
       background: var(--bg-color--cert-sublabel);
       color: var(--text-color--cert-sublabel);
+    }
+
+    /* The name of a drive the user named: a green tag with a check cut into it. The check is drawn in
+       the button's own background, so it reads as a hole in the tag. */
+    button {
+      --site-info-bg: var(--bg-color--cert--default);
+      --site-info-name-check: #2ea44f;
+    }
+    button:not(:disabled):hover {
+      --site-info-bg: var(--bg-color--cert--default--hover);
+    }
+    button.trusted {
+      --site-info-bg: var(--bg-color--cert--trusted);
+    }
+    button.trusted:not(:disabled):hover {
+      --site-info-bg: var(--bg-color--cert--trusted--hover);
+    }
+    @media (prefers-color-scheme: dark) {
+      button {
+        --site-info-name-check: #3fb950;
+      }
+    }
+
+    .name-icon {
+      display: inline-block;
+      width: 15px;
+      height: 13px;
+      vertical-align: -2px;
+      margin-right: 4px;
+    }
+
+    .name-icon .tag {
+      fill: var(--site-info-name-check);
+    }
+
+    .name-icon .check {
+      fill: none;
+      stroke: var(--site-info-bg);
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
     .notrust {
