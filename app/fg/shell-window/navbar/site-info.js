@@ -288,30 +288,30 @@ NavbarSiteInfo.styles = [
       font-size: 11px;
       line-height: 1;
       vertical-align: -1px;
-      margin-right: 7px;
+      margin-right: 6px;
     }
 
     .name-check {
       position: absolute;
-      top: -5px;
-      right: -6px;
-      width: 9px;
-      height: 9px;
+      top: -4px;
+      right: -5px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
       background: var(--site-info-name-check);
-      box-shadow: 0 0 0 1.5px var(--site-info-bg);
+      box-shadow: 0 0 0 1px var(--site-info-bg);
     }
 
     .name-check svg {
       display: block;
-      width: 9px;
-      height: 9px;
+      width: 7px;
+      height: 7px;
     }
 
     .name-check path {
       fill: none;
       stroke: #fff;
-      stroke-width: 1.6;
+      stroke-width: 1.8;
       stroke-linecap: round;
       stroke-linejoin: round;
     }
