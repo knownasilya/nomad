@@ -276,8 +276,9 @@ a **synchronous** `nomad-mods:page` IPC as the page starts (styles before first 
 `webFrame.insertCSS` swapped in place on `nomad-mods:changed`, scripts once per load in the main
 world, and a reload when a script that ran is turned off or edited. Keep the data in the preload's
 isolated world; the page must not be able to read it. The element picker (pick elements to hide) runs in
-the preload too, started through `window.__nomadMods` in world 999. The tab UI is the magic-wand
-button in `fg/shell-window/navbar/location.js` (pane state `mods`) and the `mods` shell menu;
+the preload too, started through `window.__nomadMods` in world 999. The tab UI is the Mods item
+in the location bar's site menu (`fg/shell-menus/site.js`, pane state `mods`; the arrow turns blue
+while a Mod is on), which swaps in the `mods` shell menu (`shellMenus.switchMenu`);
 editing is My Library → Mods (`nomad.vault.listMods`/`saveMod`/`deleteMod`). The AI gets
 `listMods`, `saveMod`, `deleteMod` as personal capabilities (so the sidebar, the phone and
 the loopback MCP all have them), behind the `modsRead` / `modsWrite` permissions.

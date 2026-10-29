@@ -7,7 +7,7 @@ import * as bg from '../bg-process-rpc';
 import buttonResetCSS from './button-reset.css';
 import tooltipCSS from './tooltip.css';
 import './site-info';
-import { isHyperUrl } from '../../../lib/urls';
+import { isHyperUrl, isHyperOrPearUrl } from '../../../lib/urls';
 import { writeToClipboard } from '../../lib/event-handlers';
 
 const isHyperHashRegex = /^[a-z0-9]{64}/i;
@@ -41,8 +41,6 @@ class NavbarLocation extends LitElement {
       hasDraft: { type: Boolean, attribute: 'has-draft' },
       draftPreviewing: { type: Boolean, attribute: 'draft-previewing' },
       mods: { type: Object },
-      isModsMenuOpen: { type: Boolean },
-      aiOpen: { type: Boolean, attribute: 'ai-open' },
       isLocationFocused: { type: Boolean },
       hasExpanded: { type: Boolean },
     };
@@ -74,8 +72,6 @@ class NavbarLocation extends LitElement {
     this.hasDraft = false;
     this.draftPreviewing = false;
     this.mods = null;
-    this.isModsMenuOpen = false;
-    this.aiOpen = false;
     this.isLocationFocused = false;
     this.hasExpanded = false;
     this.shouldSelectAllOnFocus = false;
@@ -185,10 +181,9 @@ class NavbarLocation extends LitElement {
       >
       </shell-window-navbar-site-info>
       ${this.renderLocation()} ${this.renderZoom()} ${this.renderLiveReloadingBtn()}
-      ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderModsBtn()}
-      ${this.renderCopyUrlBtn()}
+      ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderCopyUrlBtn()}
       ${this.renderPeers()} ${this.renderDonateBtn()} ${'' /* DISABLED this.renderShareBtn()*/}
-      ${this.renderBookmarkBtn()} ${this.renderAiBtn()} ${this.renderSiteBtn()}
+      ${this.renderBookmarkBtn()} ${this.renderSiteBtn()}
     `;
   }
 
@@ -371,22 +366,6 @@ class NavbarLocation extends LitElement {
     `;
   }
 
-  // Mods (ADR-0023): on any page Mods can change. Blue while one of the site's Mods is on;
-  // opens the Mods menu (fg/shell-menus/mods.js) to switch them, add styles, or pick elements to hide.
-  renderModsBtn() {
-    if (!this.mods) return '';
-    const { count, on } = this.mods;
-    var cls = classMap({ mods: true, pressed: this.isModsMenuOpen, active: on > 0 });
-    const title = count
-      ? `Mods: ${on} of ${count} on for this site`
-      : 'Add a Mod for this site: hide parts of it, restyle it, or run your own script';
-    return html`
-      <button class=${cls} @click=${this.onClickModsMenu} title=${title}>
-        <span class="fas fa-magic"></span>
-      </button>
-    `;
-  }
-
   renderShareBtn() {
     var cls = classMap({ share: true, pressed: this.isShareMenuOpen });
     return html`
@@ -396,26 +375,20 @@ class NavbarLocation extends LitElement {
     `;
   }
 
-  renderSiteBtn() {
-    var cls = classMap({ site: true, pressed: this.isSiteMenuOpen });
-    return html`
-      <button class="${cls}" @click=${this.onClickSiteMenu}>
-        <i class="fas fa-angle-down"></i>
-      </button>
-    `;
+  // The site menu (fg/shell-menus/site.js) holds the Mods item and, on a Drive, the Drive items.
+  // Hidden when it would be empty. Blue while one of the site's Mods is on (ADR-0023).
+  get hasSiteMenuItems() {
+    return !!this.mods || isHyperOrPearUrl(this.url);
   }
 
-  // Toggles the shell-level AI sidebar (app/fg/shell-window/ai-sidebar.js) — available on every
-  // page, unlike the Draft button above which only appears for a Drive with a Draft.
-  renderAiBtn() {
-    var cls = classMap({ ai: true, pressed: this.aiOpen });
+  renderSiteBtn() {
+    if (!this.hasSiteMenuItems) return '';
+    const modsOn = this.mods?.on || 0;
+    var cls = classMap({ site: true, pressed: this.isSiteMenuOpen, active: modsOn > 0 });
+    const title = modsOn ? `Site menu (Mods: ${modsOn} of ${this.mods.count} on)` : 'Site menu';
     return html`
-      <button
-        class=${cls}
-        @click=${this.onClickAiSidebar}
-        title=${this.aiOpen ? 'Hide AI sidebar' : 'Show AI sidebar'}
-      >
-        <span class="fas fa-robot" style=${this.aiOpen ? 'color: #2864dc' : ''}></span>
+      <button class="${cls}" @click=${this.onClickSiteMenu} title=${title}>
+        <i class="fas fa-angle-down"></i>
       </button>
     `;
   }
@@ -629,24 +602,6 @@ class NavbarLocation extends LitElement {
     });
   }
 
-  async onClickModsMenu() {
-    if (Date.now() - (this.lastModsMenuClick || 0) < 100) {
-      return;
-    }
-    this.isModsMenuOpen = true;
-    var rect = this.shadowRoot.querySelector('.mods').getClientRects()[0];
-    await bg.views.toggleMenu('mods', {
-      bounds: { rightOffset: (window.innerWidth - rect.right) | 0, top: (rect.bottom | 0) + 2 },
-      params: { url: this.url },
-    });
-    this.isModsMenuOpen = false;
-    this.lastModsMenuClick = Date.now();
-  }
-
-  onClickAiSidebar() {
-    bg.views.toggleAiSidebarOpen(this.activeTabIndex);
-  }
-
   async onClickPeersMenu() {
     if (Date.now() - (this.lastPeersMenuClick || 0) < 100) {
       return;
@@ -675,6 +630,7 @@ class NavbarLocation extends LitElement {
       bounds: { rightOffset: (window.innerWidth - rect.right) | 0, top: (rect.bottom | 0) + 2 },
       params: {
         url: this.url,
+        mods: this.mods,
       },
     });
     this.isSiteMenuOpen = false;
@@ -777,7 +733,7 @@ NavbarLocation.styles = [
       color: var(--text-color--location-bookmark--pressed);
     }
 
-    button.mods.active .fa-magic {
+    button.site.active .fa-angle-down {
       color: #2864dc;
     }
 

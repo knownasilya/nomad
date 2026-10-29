@@ -1,5 +1,6 @@
 export default {
   close: 'promise',
+  switchMenu: 'promise',
   createWindow: 'promise',
   createTab: 'promise',
   createModal: 'promise',

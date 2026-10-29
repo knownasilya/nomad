@@ -213,6 +213,21 @@ rpc.exportAPI('background-process-shell-menus', shellMenusRPCManifest, {
     hide(findWebContentsParentWindow(this.sender));
   },
 
+  // Swap the open menu for another in the same spot (the site menu's Mods item opens the Mods menu).
+  // The opener's toggle() keeps waiting until this one hides.
+  async switchMenu(menuId, params) {
+    var win = findWebContentsParentWindow(this.sender);
+    var view = win ? views[win.id] : undefined;
+    if (!view || !view.isVisible || !IS_RIGHT_ALIGNED.includes(menuId)) return;
+    view.webContents.executeJavaScript(`reset('${view.menuId}'); undefined`);
+    view.menuId = menuId;
+    view.currentDimensions = null;
+    reposition(win);
+    await view.webContents.executeJavaScript(
+      `openMenu('${menuId}', ${JSON.stringify(params || {})}); undefined`
+    );
+  },
+
   async createWindow(opts) {
     createShellWindow(opts);
   },

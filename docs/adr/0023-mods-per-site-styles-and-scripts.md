@@ -45,8 +45,9 @@ have several ("Dark", "Distraction-free", "Auto-expand comments"). The rules are
    modules, CSS-in-JS hashes, long numbers) and state classes (`active`, `is-open`) are skipped.
    Picks go to the Mod the user picked from, or the site's first Mod that is on, made when the
    site has none.
-6. **The tab.** A magic-wand button in the location bar on every page Mods can change, blue
-   while one of the site's Mods is on. Its menu lists the site's Mods with a switch each, quick
+6. **The tab.** A Mods item in the location bar's site menu (the arrow at its right end) on every
+   page Mods can change; the arrow is blue while one of the site's Mods is on. (Amended: this was
+   a magic-wand button in the location bar.) The Mods menu lists the site's Mods with a switch each, quick
    style chips (a preset goes on in the site's first Mod, and off in every Mod that has it), the
    element picker, and links to **My Library → Mods**, where a Mod's name, site, presets, selectors, CSS
    and JavaScript are written.

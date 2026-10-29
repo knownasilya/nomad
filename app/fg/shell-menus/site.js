@@ -16,11 +16,13 @@ class SiteMenu extends LitElement {
   reset() {
     this.submenu = '';
     this.url = undefined;
+    this.mods = null;
     this.driveInfo = undefined;
   }
 
   async init(params) {
     this.url = params.url;
+    this.mods = params.mods || null;
     this.requestUpdate();
 
     if (isHyperOrPearUrl(this.url)) {
@@ -37,6 +39,7 @@ class SiteMenu extends LitElement {
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
+        ${this.mods ? this.renderModsItem() : ''}
         ${this.driveInfo
           ? html`
               <div class="section">
@@ -71,6 +74,25 @@ class SiteMenu extends LitElement {
     `;
   }
 
+  // Mods (ADR-0023): opens the Mods menu in this menu's place.
+  renderModsItem() {
+    const { count, on } = this.mods;
+    return html`
+      <div class="section">
+        <div
+          class="menu-item"
+          @click=${this.onOpenMods}
+          title="Hide parts of this site, restyle it, or run your own script"
+        >
+          <i class="fas fa-magic ${on > 0 ? 'active' : ''}"></i>
+          <span class="label">Mods</span>
+          ${count ? html`<span class="detail">${on} of ${count} on</span>` : ''}
+          <i class="fas fa-angle-right more"></i>
+        </div>
+      </div>
+    `;
+  }
+
   // events
   // =
 
@@ -84,6 +106,10 @@ class SiteMenu extends LitElement {
   onOpenPage(e, url) {
     bg.shellMenus.createTab(url);
     bg.shellMenus.close();
+  }
+
+  onOpenMods() {
+    bg.shellMenus.switchMenu('mods', { url: this.url });
   }
 
   onCopyDriveKey() {
@@ -118,6 +144,22 @@ SiteMenu.styles = [
 
     .menu-item {
       height: 40px;
+    }
+
+    .menu-item i.active {
+      color: #2864dc;
+    }
+
+    .menu-item .detail {
+      margin-left: auto;
+      padding-left: 8px;
+      font-size: 12px;
+      color: var(--text-color--menu-item-icon--light);
+    }
+
+    .menu-item .detail + i.more {
+      margin-left: 0;
+      width: 20px;
     }
   `,
 ];
