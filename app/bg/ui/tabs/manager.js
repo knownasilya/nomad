@@ -1660,6 +1660,9 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
       });
     }
 
+    // Mods (ADR-0023) for the tab's site: make one, or turn its Mods on and off.
+    var modMenuItems = mods.tabMenuItems(tab.primaryPane?.webContents);
+
     var menu = Menu.buildFromTemplate([
       {
         label: tab.isPinned ? 'Unpin Tab' : 'Pin Tab',
@@ -1677,6 +1680,7 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
       { label: 'Minimize to Background', click: () => minimizeToBg(win, tab) },
       { type: 'separator' },
       ...groupMenuItems,
+      ...(modMenuItems.length ? [{ type: 'separator' }, ...modMenuItems] : []),
       { type: 'separator' },
       { label: 'Close Tab', click: () => remove(win, tab) },
       { label: 'Close Other Tabs', click: () => removeAllExcept(win, tab) },
