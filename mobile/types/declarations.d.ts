@@ -25,3 +25,8 @@ declare module '*/rpc-commands.mjs' {
   export const DRIVE_HYPERDRIVE: 'hyperdrive'
   export const DRIVE_AUTOBASE: 'autobase'
 }
+
+// console-style line formatting from the backend's log store (plain .mjs, shared with lib/log.ts).
+declare module '*/log-store.mjs' {
+  export function format (args: ArrayLike<unknown>): string
+}
