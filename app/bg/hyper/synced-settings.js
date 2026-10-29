@@ -14,7 +14,7 @@ import * as vault from './vault';
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'synced-settings' });
 
 // Each key here must also be in settingsDb's GLOBAL_SETTINGS: a synced setting can't be per-Space.
-export const SYNCED_SETTINGS = ['crawler_enabled'];
+export const SYNCED_SETTINGS = ['crawler_enabled', 'search_sources'];
 
 const POLL_MS = 60_000; // until the Vault exists (pairing can happen later), check again this often
 
@@ -24,11 +24,22 @@ let pullTimer = null;
 
 export function setup() {
   for (const key of SYNCED_SETTINGS) {
-    settingsDb.on('set:' + key, (value) => {
+    settingsDb.on('set:' + key, (stored) => {
       if (applying) return;
+      // A JSON setting's event carries its stored text; the Vault keeps the value itself.
+      let value = stored;
+      if (settingsDb.isJsonEncoded(key)) {
+        try {
+          value = JSON.parse(stored);
+        } catch {
+          return;
+        }
+      }
       vault
         .putSyncedSetting(key, value)
-        .catch((err) => logger.warn('Could not sync setting to the Vault', { key, error: err?.message }));
+        .catch((err) =>
+          logger.warn('Could not sync setting to the Vault', { key, error: err?.message })
+        );
     });
   }
   pull();
@@ -82,6 +93,8 @@ function watch(sess) {
 
 // settingsDb stores values as text, so 1, '1' and true are the same setting.
 function sameValue(a, b) {
+  if (typeof a === 'object' || typeof b === 'object')
+    return JSON.stringify(a) === JSON.stringify(b);
   return String(normalize(a)) === String(normalize(b));
 }
 function normalize(v) {

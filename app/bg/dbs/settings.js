@@ -15,6 +15,7 @@ const JSON_ENCODED_SETTINGS = [
   'ai_servers',
   'ai_sidebar_prefs',
   'url_routing_rules',
+  'search_sources',
 ];
 
 // Settings that are always global (never per-space)
@@ -40,6 +41,7 @@ const GLOBAL_SETTINGS = new Set([
   'ai_sidebar_width',
   'cert_exceptions',
   'crawler_enabled',
+  'search_sources',
   'highlights_hidden',
   'url_routing_rules',
 ]);
@@ -118,6 +120,9 @@ export const setup = async function (opts) {
     // Run the discovery crawler that nomad://search queries (bg/hyper/crawler-host.js). Synced to
     // the user's other Devices through the Vault (bg/hyper/synced-settings.js).
     crawler_enabled: 1,
+    // Other indexes nomad://search asks besides the built-in crawler: [{ id, name, url, enabled }].
+    // Synced like crawler_enabled.
+    search_sources: [],
     // View > Hide Highlights: no page draws the user's Highlights (bg/ui/highlights.js).
     highlights_hidden: 0,
     // Air Traffic Control: ordered list of { id, pattern, spaceId, enabled } rules that send a
@@ -198,6 +203,11 @@ export async function set(key, value) {
   if (CACHED_VALUES.includes(key)) cachedValues[key] = value;
   events.emit('set', key, stored);
   events.emit('set:' + key, stored);
+}
+
+// Whether `key` is stored as JSON text. Its 'set' events carry that text, not the value.
+export function isJsonEncoded(key) {
+  return JSON_ENCODED_SETTINGS.includes(key);
 }
 
 /**
