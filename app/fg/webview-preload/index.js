@@ -2,7 +2,7 @@ import { ipcRenderer } from 'electron';
 import { setup as setupWebAPIs } from '../../bg/web-apis/fg';
 import { setupModelContext } from './model-context';
 import { setupHighlights } from './highlights';
-import { setupBoosts } from './boosts';
+import { setupMods } from './mods';
 import { setup as setupPrompt } from './prompt';
 import { setup as setupExecuteJavascript } from './execute-javascript';
 import setupExitFullScreenHackfix from './exit-full-screen-hackfix';
@@ -16,8 +16,8 @@ setupExitFullScreenHackfix();
 windowOpenCloseHackfix();
 resizeHackfix();
 
-// First, so a Boost's styles are in before the page paints.
-setupBoosts();
+// First, so a Mod's styles are in before the page paints.
+setupMods();
 setupWebAPIs();
 setupModelContext();
 setupHighlights();

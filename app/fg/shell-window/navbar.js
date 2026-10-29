@@ -100,7 +100,7 @@ class ShellWindowNavbar extends LitElement {
         ?is-bookmarked=${this.activeTab?.isBookmarked ?? false}
         ?has-draft=${this.activeTab?.hasDraft ?? false}
         ?draft-previewing=${this.activeTab?.draftPreviewing ?? false}
-        .boosts=${this.activeTab?.boosts ?? null}
+        .mods=${this.activeTab?.mods ?? null}
         ?ai-open=${this.aiOpen}
       ></shell-window-navbar-location>
       <shell-window-navbar-inpage-find

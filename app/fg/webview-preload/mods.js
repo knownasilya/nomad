@@ -1,20 +1,20 @@
 /*
-Boosts (webview preload, isolated world). ADR-0023.
+Mods (webview preload, isolated world). ADR-0023.
 
-Applies the user's Boosts for this site. bg/ui/boosts.js keeps them in the Vault and answers
-'nomad-boosts:page' with this page's { css, scripts }. The CSS (presets, hidden elements, the
+Applies the user's Mods for this site. bg/ui/mods.js keeps them in the Vault and answers
+'nomad-mods:page' with this page's { css, scripts }. The CSS (presets, hidden elements, the
 user's own) goes in with webFrame.insertCSS as the page starts, before it paints, and is swapped in
-place when a Boost changes ('nomad-boosts:changed'). Each script runs once in the page's main world
+place when a Mod changes ('nomad-mods:changed'). Each script runs once in the page's main world
 when the DOM is ready, like a bookmarklet; a script that is turned off or edited can't be taken
 back, so the page reloads (when it is next shown).
 
-The zapper picks elements to hide: bg starts it through `window.__nomadBoosts.startZap()` (the
-page's scripts can't see it), from the Boosts menu or the page's context menu. It draws in a closed
-shadow root and saves each pick with 'nomad-boosts:zap'. Main frame of http(s) and hyper pages only.
+The element picker picks elements to hide: bg starts it through `window.__nomadMods.startPicking()` (the
+page's scripts can't see it), from the Mods menu or the page's context menu. It draws in a closed
+shadow root and saves each pick with 'nomad-mods:hide'. Main frame of http(s) and hyper pages only.
 */
 
 import { ipcRenderer, webFrame } from 'electron';
-import { selectorFor, similarSelectorFor, hideCss } from '../../../shared/boosts.mjs';
+import { selectorFor, similarSelectorFor, hideCss } from '../../../shared/mods.mjs';
 
 function isEligible() {
   const { protocol, hostname } = window.location;
@@ -23,12 +23,12 @@ function isEligible() {
   return protocol === 'http:' || protocol === 'https:';
 }
 
-export function setupBoosts() {
+export function setupMods() {
   if (!isEligible()) return;
 
   let cssKey = null;
   let cssText = '';
-  const ran = new Map(); // boost id -> rev of the script this page ran
+  const ran = new Map(); // mod id -> rev of the script this page ran
   let reloadWhenShown = false;
 
   function applyCss(css) {
@@ -38,7 +38,7 @@ export function setupBoosts() {
       cssKey = css ? webFrame.insertCSS(css) : null;
       cssText = css;
     } catch (err) {
-      console.warn('[boosts] Could not apply styles', err);
+      console.warn('[mods] Could not apply styles', err);
     }
   }
 
@@ -46,7 +46,7 @@ export function setupBoosts() {
     ran.set(script.id, script.rev);
     // Main world: the script sees the page as the page's own scripts do.
     webFrame.executeJavaScript(script.code).catch((err) => {
-      console.warn(`[boosts] “${script.name}” didn’t run:`, err);
+      console.warn(`[mods] “${script.name}” didn’t run:`, err);
     });
   }
 
@@ -73,31 +73,31 @@ export function setupBoosts() {
 
   // Before the page paints: a synchronous answer from memory in bg.
   try {
-    apply(ipcRenderer.sendSync('nomad-boosts:page'));
+    apply(ipcRenderer.sendSync('nomad-mods:page'));
   } catch {}
 
-  ipcRenderer.on('nomad-boosts:changed', async () => {
+  ipcRenderer.on('nomad-mods:changed', async () => {
     try {
-      apply(await ipcRenderer.invoke('nomad-boosts:page-async'));
+      apply(await ipcRenderer.invoke('nomad-mods:page-async'));
     } catch {}
   });
   document.addEventListener('visibilitychange', () => {
     if (reloadWhenShown && document.visibilityState === 'visible') location.reload();
   });
 
-  const zapper = makeZapper();
-  Object.defineProperty(window, '__nomadBoosts', {
+  const picker = makePicker();
+  Object.defineProperty(window, '__nomadMods', {
     value: Object.freeze({
-      startZap: (opts) => zapper.start(opts || {}),
-      stopZap: () => zapper.stop(),
+      startPicking: (opts) => picker.start(opts || {}),
+      stopPicking: () => picker.stop(),
     }),
   });
 }
 
-// The zapper
+// The element picker
 // =
 
-const ZAP_BLOCKED = [
+const PICK_BLOCKED = [
   'click',
   'dblclick',
   'auxclick',
@@ -109,7 +109,7 @@ const ZAP_BLOCKED = [
   'submit',
 ];
 
-function makeZapper() {
+function makePicker() {
   let active = false;
   let host = null;
   let root = null;
@@ -121,9 +121,9 @@ function makeZapper() {
   let below = []; // elements under `target` that ArrowUp climbed from, for ArrowDown
   let shift = false;
   let mouse = null; // last pointer position
-  let boostId = null;
-  let boostName = null;
-  let history = []; // [{ boostId, selector }] picks this session, for Undo
+  let modId = null;
+  let modName = null;
+  let history = []; // [{ modId, selector }] picks this session, for Undo
   let pendingKey = null; // the picks, hidden here at once while bg saves them
   let frame = 0;
   let msgTimer = null;
@@ -136,14 +136,14 @@ function makeZapper() {
     }
   };
 
-  function start({ boostId: id = null, name = null, at = null }) {
-    boostId = id;
-    boostName = name;
+  function start({ modId: id = null, name = null, at = null }) {
+    modId = id;
+    modName = name;
     history = [];
     if (!active) {
       active = true;
       build();
-      for (const type of ZAP_BLOCKED) window.addEventListener(type, onBlocked, true);
+      for (const type of PICK_BLOCKED) window.addEventListener(type, onBlocked, true);
       window.addEventListener('mousemove', onMove, true);
       window.addEventListener('keydown', onKey, true);
       window.addEventListener('keyup', onKeyUp, true);
@@ -160,7 +160,7 @@ function makeZapper() {
   function stop() {
     if (!active) return;
     active = false;
-    for (const type of ZAP_BLOCKED) window.removeEventListener(type, onBlocked, true);
+    for (const type of PICK_BLOCKED) window.removeEventListener(type, onBlocked, true);
     window.removeEventListener('mousemove', onMove, true);
     window.removeEventListener('keydown', onKey, true);
     window.removeEventListener('keyup', onKeyUp, true);
@@ -170,7 +170,7 @@ function makeZapper() {
     host = root = box = label = status = msg = null;
     target = null;
     below = [];
-    // The saved Boost's styles have these by now; until they arrive, keep the picks hidden.
+    // The saved Mod's styles have these by now; until they arrive, keep the picks hidden.
     const key = pendingKey;
     pendingKey = null;
     if (key) setTimeout(() => webFrame.removeInsertedCSS(key), 1500);
@@ -180,7 +180,7 @@ function makeZapper() {
   // -
 
   function build() {
-    host = document.createElement('nomad-boost-zapper');
+    host = document.createElement('nomad-element-picker');
     host.style.cssText =
       'all: initial !important; position: fixed !important; inset: 0 !important; display: block !important;' +
       ' pointer-events: none !important; z-index: 2147483647 !important;';
@@ -188,7 +188,7 @@ function makeZapper() {
     try {
       // A constructed sheet, because a page's CSP may refuse a <style> element.
       const sheet = new CSSStyleSheet();
-      sheet.replaceSync(ZAPPER_CSS);
+      sheet.replaceSync(PICKER_CSS);
       root.adoptedStyleSheets = [sheet];
     } catch {}
     box = div('box');
@@ -230,7 +230,7 @@ function makeZapper() {
   function updateStatus() {
     if (!status) return;
     const n = history.length;
-    const into = boostName ? ` in “${boostName}”` : '';
+    const into = modName ? ` in “${modName}”` : '';
     status.textContent = n ? `${n} hidden${into}` : `Pick something on the page to hide${into}`;
     const undo = root.querySelector('.undo');
     if (undo) undo.disabled = !n;
@@ -306,7 +306,7 @@ function makeZapper() {
     if (e.target === host) return; // the bar's own buttons
     e.preventDefault();
     e.stopImmediatePropagation();
-    if (e.type === 'click' && e.isTrusted && e.button === 0) zap(e.shiftKey);
+    if (e.type === 'click' && e.isTrusted && e.button === 0) hidePick(e.shiftKey);
   }
 
   function onKey(e) {
@@ -355,7 +355,7 @@ function makeZapper() {
     } catch {}
   }
 
-  async function zap(similar) {
+  async function hidePick(similar) {
     if (!target) return;
     shift = similar;
     const selector = selectorToHide(target);
@@ -366,7 +366,7 @@ function makeZapper() {
       );
       return;
     }
-    const pick = { boostId, selector };
+    const pick = { modId, selector };
     history.push(pick);
     showPending();
     updateStatus();
@@ -375,7 +375,7 @@ function makeZapper() {
     draw();
     let res = null;
     try {
-      res = await ipcRenderer.invoke('nomad-boosts:zap', { boostId, selector });
+      res = await ipcRenderer.invoke('nomad-mods:hide', { modId, selector });
     } catch (err) {
       res = { error: err?.message || String(err) };
     }
@@ -386,9 +386,9 @@ function makeZapper() {
       say('Not saved: ' + (res?.error || 'unknown error'));
       return;
     }
-    // The first pick may have made the Boost; the rest go to the same one.
-    pick.boostId = boostId = res.boostId;
-    boostName = res.name || boostName;
+    // The first pick may have made the Mod; the rest go to the same one.
+    pick.modId = modId = res.modId;
+    modName = res.name || modName;
     updateStatus();
     if (mouse) setTarget(pickAt(mouse.x, mouse.y));
   }
@@ -399,7 +399,7 @@ function makeZapper() {
     showPending();
     updateStatus();
     try {
-      const res = await ipcRenderer.invoke('nomad-boosts:unzap', pick);
+      const res = await ipcRenderer.invoke('nomad-mods:unhide', pick);
       if (res?.error) say('Not undone: ' + res.error);
     } catch {}
   }
@@ -407,7 +407,7 @@ function makeZapper() {
   return { start, stop };
 }
 
-const ZAPPER_CSS = `
+const PICKER_CSS = `
 .box {
   position: absolute; top: 0; left: 0; box-sizing: border-box;
   border: 2px solid #e5484d; border-radius: 3px;

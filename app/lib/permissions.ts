@@ -232,16 +232,16 @@ export const PERMS = {
     requiresRefresh: false,
     promptTrusted: true,
   },
-  // The AI's access to the user's Boosts (ADR-0023). Changing them is dangerous: a Boost can run a
+  // The AI's access to the user's Mods (ADR-0023). Changing them is dangerous: a Mod can run a
   // script on every page of a site.
-  boostsRead: {
+  modsRead: {
     persist: 'allow', // dont persist 'deny'
     idempotent: true,
     alwaysDisallow: false,
     requiresRefresh: false,
     promptTrusted: true,
   },
-  boostsWrite: {
+  modsWrite: {
     persist: 'allow', // dont persist 'deny'
     idempotent: true,
     alwaysDisallow: false,
@@ -300,8 +300,8 @@ export const PERM_ICONS = {
   notesWrite: 'fas fa-sticky-note',
   readerRead: 'fas fa-rss',
   readerWrite: 'fas fa-rss',
-  boostsRead: 'fas fa-magic',
-  boostsWrite: 'fas fa-magic',
+  modsRead: 'fas fa-magic',
+  modsWrite: 'fas fa-magic',
   privateRead: 'fas fa-lock',
   privateWrite: 'fas fa-lock',
 };
@@ -359,10 +359,10 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Let the AI assistant read your Reader feeds and posts';
     case 'readerWrite':
       return 'Let the AI assistant follow and unfollow feeds and mark posts read';
-    case 'boostsRead':
-      return 'Let the AI assistant read your Boosts (your styles and scripts for sites)';
-    case 'boostsWrite':
-      return 'Let the AI assistant create and change your Boosts, including scripts that run on those sites';
+    case 'modsRead':
+      return 'Let the AI assistant read your Mods (your styles and scripts for sites)';
+    case 'modsWrite':
+      return 'Let the AI assistant create and change your Mods, including scripts that run on those sites';
     case 'privateRead':
     case 'privateWrite': {
       const verb = permId === 'privateWrite' ? 'Read and change' : 'Read';

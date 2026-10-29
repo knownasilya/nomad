@@ -265,22 +265,22 @@ asks `notesWrite`, and only after `assertCanHighlight` passes. It needs the page
 gives every page an empty list. A Note is an ordinary Note; `?write` on
 `nomad://notes/<id>` puts the cursor at its end.
 
-### Boosts (ADR-0023)
+### Mods (ADR-0023)
 
-A Boost is the user's own change to a site, like Arc's: a name, an on/off switch, preset styles
+A Mod is the user's own change to a site, like Arc's: a name, an on/off switch, preset styles
 (dark, sepia, …), CSS selectors to hide, custom CSS and custom JavaScript. Records are Vault
-records (`/.vault/boosts/<id>.json`, rules and presets in `shared/boosts.mjs`), kept in memory by
-`app/bg/ui/boosts.js`. A Boost for `example.com` covers every host under it, on http(s) and
-hyper://, never nomad:// or `hyper://private/`. `app/fg/webview-preload/boosts.js` applies them:
-a **synchronous** `nomad-boosts:page` IPC as the page starts (styles before first paint), CSS via
-`webFrame.insertCSS` swapped in place on `nomad-boosts:changed`, scripts once per load in the main
+records (`/.vault/mods/<id>.json`, rules and presets in `shared/mods.mjs`), kept in memory by
+`app/bg/ui/mods.js`. A Mod for `example.com` covers every host under it, on http(s) and
+hyper://, never nomad:// or `hyper://private/`. `app/fg/webview-preload/mods.js` applies them:
+a **synchronous** `nomad-mods:page` IPC as the page starts (styles before first paint), CSS via
+`webFrame.insertCSS` swapped in place on `nomad-mods:changed`, scripts once per load in the main
 world, and a reload when a script that ran is turned off or edited. Keep the data in the preload's
-isolated world; the page must not be able to read it. The zapper (pick elements to hide) runs in
-the preload too, started through `window.__nomadBoosts` in world 999. The tab UI is the magic-wand
-button in `fg/shell-window/navbar/location.js` (pane state `boosts`) and the `boosts` shell menu;
-editing is My Library → Boosts (`nomad.vault.listBoosts`/`saveBoost`/`deleteBoost`). The AI gets
-`listBoosts`, `saveBoost`, `deleteBoost` as personal capabilities (so the sidebar, the phone and
-the loopback MCP all have them), behind the `boostsRead` / `boostsWrite` permissions.
+isolated world; the page must not be able to read it. The element picker (pick elements to hide) runs in
+the preload too, started through `window.__nomadMods` in world 999. The tab UI is the magic-wand
+button in `fg/shell-window/navbar/location.js` (pane state `mods`) and the `mods` shell menu;
+editing is My Library → Mods (`nomad.vault.listMods`/`saveMod`/`deleteMod`). The AI gets
+`listMods`, `saveMod`, `deleteMod` as personal capabilities (so the sidebar, the phone and
+the loopback MCP all have them), behind the `modsRead` / `modsWrite` permissions.
 
 ## Look and feel: every UI supports dark mode and matches the rest
 

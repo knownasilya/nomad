@@ -3,10 +3,10 @@ import { repeat } from 'lit/directives/repeat.js';
 import * as bg from './bg-process-rpc';
 import commonCSS from './common.css';
 
-// Boosts menu (ADR-0023), opened from the magic-wand button in the location bar. Lists the site's
-// Boosts with a switch each, quick preset styles, and the zapper. Acts on the ACTIVE tab's page
-// through bg.views (bg/ui/boosts.js); edits happen in My Library → Boosts.
-class BoostsMenu extends LitElement {
+// Mods menu (ADR-0023), opened from the magic-wand button in the location bar. Lists the site's
+// Mods with a switch each, quick preset styles, and the element picker. Acts on the ACTIVE tab's page
+// through bg.views (bg/ui/mods.js); edits happen in My Library → Mods.
+class ModsMenu extends LitElement {
   static get properties() {
     return {
       state: { type: Object },
@@ -20,7 +20,7 @@ class BoostsMenu extends LitElement {
   }
 
   reset() {
-    this.state = { site: null, boosts: [], presets: [] };
+    this.state = { site: null, mods: [], presets: [] };
     this.busy = false;
   }
 
@@ -30,7 +30,7 @@ class BoostsMenu extends LitElement {
 
   async load() {
     try {
-      this.state = await bg.views.getBoosts('active');
+      this.state = await bg.views.getMods('active');
     } catch (e) {
       console.debug(e);
     }
@@ -49,26 +49,26 @@ class BoostsMenu extends LitElement {
   }
 
   render() {
-    const { site, boosts, presets } = this.state || {};
+    const { site, mods, presets } = this.state || {};
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
         <div class="section heading">
-          <span class="title"><i class="fas fa-magic"></i> Boosts</span>
+          <span class="title"><i class="fas fa-magic"></i> Mods</span>
           <span class="site">${site || ''}</span>
         </div>
         ${site
           ? html`
               <div class="section">
-                ${boosts.length
+                ${mods.length
                   ? repeat(
-                      boosts,
+                      mods,
                       (b) => b.id,
-                      (b) => this.renderBoost(b)
+                      (b) => this.renderMod(b)
                     )
                   : html`<div class="empty">
                       Change how ${site} looks: hide parts of it, restyle it, or run your own
-                      script. Boosts sync to your devices.
+                      script. Mods sync to your devices.
                     </div>`}
               </div>
               <div class="section">
@@ -80,7 +80,7 @@ class BoostsMenu extends LitElement {
                         class="chip ${p.on ? 'on' : ''}"
                         title=${p.description}
                         aria-pressed=${p.on ? 'true' : 'false'}
-                        @click=${() => this.act(() => bg.views.toggleBoostPreset('active', p.id))}
+                        @click=${() => this.act(() => bg.views.toggleModPreset('active', p.id))}
                       >
                         ${p.label}
                       </button>
@@ -89,37 +89,37 @@ class BoostsMenu extends LitElement {
                 </div>
               </div>
               <div class="section">
-                <div class="menu-item" @click=${() => this.onZap(null)}>
+                <div class="menu-item" @click=${() => this.onPick(null)}>
                   <i class="fas fa-crosshairs"></i>
                   <span class="label">Hide elements…</span>
                 </div>
                 <div class="menu-item" @click=${() => this.onEdit({ site, isNew: true })}>
                   <i class="fas fa-plus"></i>
-                  <span class="label">New Boost with CSS or JavaScript…</span>
+                  <span class="label">New Mod with CSS or JavaScript…</span>
                 </div>
                 <div class="menu-item" @click=${() => this.onEdit({ site })}>
                   <i class="fas fa-sliders-h"></i>
-                  <span class="label">Manage Boosts…</span>
+                  <span class="label">Manage Mods…</span>
                 </div>
               </div>
             `
           : html`<div class="section">
-              <div class="empty">Boosts work on web and hyper:// pages.</div>
+              <div class="empty">Mods work on web and hyper:// pages.</div>
             </div>`}
       </div>
     `;
   }
 
-  renderBoost(b) {
+  renderMod(b) {
     return html`
-      <div class="boost">
+      <div class="mod">
         <label class="switch" title=${b.enabled ? 'Turn off' : 'Turn on'}>
           <input
             type="checkbox"
             .checked=${b.enabled}
             aria-label="${b.name}"
             @change=${(e) =>
-              this.act(() => bg.views.setBoostEnabled('active', b.id, e.target.checked))}
+              this.act(() => bg.views.setModEnabled('active', b.id, e.target.checked))}
           />
           <span class="track"></span>
         </label>
@@ -135,7 +135,7 @@ class BoostsMenu extends LitElement {
               : ''}
           </div>
         </div>
-        <button class="icon" title="Hide elements with this Boost" @click=${() => this.onZap(b.id)}>
+        <button class="icon" title="Hide elements with this Mod" @click=${() => this.onPick(b.id)}>
           <i class="fas fa-crosshairs"></i>
         </button>
       </div>
@@ -147,19 +147,19 @@ class BoostsMenu extends LitElement {
     if (el) bg.shellMenus.resizeSelf({ width: el.clientWidth | 0, height: el.clientHeight | 0 });
   }
 
-  // The menu closes first, so the page has focus for the zapper's keys.
-  async onZap(id) {
+  // The menu closes first, so the page has focus for the element picker's keys.
+  async onPick(id) {
     await bg.shellMenus.close();
-    bg.views.zapBoost('active', id);
+    bg.views.pickModElements('active', id);
   }
 
   async onEdit(opts) {
     await bg.shellMenus.close();
-    bg.views.editBoosts('active', opts);
+    bg.views.editMods('active', opts);
   }
 }
 
-BoostsMenu.styles = [
+ModsMenu.styles = [
   commonCSS,
   css`
     .wrapper {
@@ -198,27 +198,27 @@ BoostsMenu.styles = [
       font-size: 11px;
       color: var(--text-color--light, #99a);
     }
-    .boost {
+    .mod {
       display: flex;
       align-items: center;
       gap: 10px;
       padding: 5px 8px 5px 14px;
     }
-    .boost:hover {
+    .mod:hover {
       background: var(--bg-color--menu-item--hover);
     }
-    .boost .info {
+    .mod .info {
       flex: 1;
       min-width: 0;
       cursor: default;
     }
-    .boost .name {
+    .mod .name {
       font-size: 12.5px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .boost .summary {
+    .mod .summary {
       font-size: 11px;
       color: var(--text-color--light, #99a);
       white-space: nowrap;
@@ -310,4 +310,4 @@ BoostsMenu.styles = [
   `,
 ];
 
-customElements.define('boosts-menu', BoostsMenu);
+customElements.define('mods-menu', ModsMenu);

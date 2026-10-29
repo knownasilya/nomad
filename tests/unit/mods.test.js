@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  BOOSTS_PREFIX,
+  MODS_PREFIX,
   pageHost,
   siteOf,
   normalizeSite,
@@ -10,29 +10,29 @@ import {
   isStableName,
   selectorFor,
   similarSelectorFor,
-  newBoostId,
-  isBoostId,
-  boostPath,
+  newModId,
+  isModId,
+  modPath,
   cleanHideList,
-  makeBoost,
-  isBoost,
-  boostsFor,
-  describeBoost,
+  makeMod,
+  isMod,
+  modsFor,
+  describeMod,
   hideCss,
   pageCss,
-  boostScript,
+  modScript,
   codeRev,
   pagePayload,
-} from '../../shared/boosts.mjs';
+} from '../../shared/mods.mjs';
 
 const KEY = 'a'.repeat(64);
 const NOW = '2026-10-29T12:00:00.000Z';
 const LATER = '2026-10-29T13:00:00.000Z';
 
-const boost = (fields, now = NOW) => makeBoost({ id: newBoostId(), ...fields }, null, now);
+const mod = (fields, now = NOW) => makeMod({ id: newModId(), ...fields }, null, now);
 
-describe('boosts: sites', () => {
-  it('knows the pages a Boost can change', () => {
+describe('mods: sites', () => {
+  it('knows the pages a Mod can change', () => {
     expect(pageHost('https://WWW.Example.com:8080/a?b#c')).toBe('www.example.com');
     expect(pageHost('http://localhost:3000/')).toBe('localhost');
     expect(pageHost(`hyper://${KEY}/index.html`)).toBe(KEY);
@@ -41,7 +41,7 @@ describe('boosts: sites', () => {
     expect(pageHost('file:///tmp/x.html')).toBe(null);
     expect(pageHost('not a url')).toBe(null);
   });
-  it('gives a new Boost the host without www', () => {
+  it('gives a new Mod the host without www', () => {
     expect(siteOf('https://www.example.com/x')).toBe('example.com');
     expect(siteOf('https://docs.example.com/x')).toBe('docs.example.com');
     expect(siteOf('nomad://settings/')).toBe(null);
@@ -68,7 +68,7 @@ describe('boosts: sites', () => {
   });
 });
 
-describe('boosts: selectors', () => {
+describe('mods: selectors', () => {
   it('takes selectors that keep to their own rule', () => {
     expect(isHideSelector('.ad, #sidebar > div:nth-of-type(2)')).toBe(true);
     expect(isHideSelector('a[href*="promo"]')).toBe(true);
@@ -151,13 +151,13 @@ describe('boosts: selectors', () => {
   });
 });
 
-describe('boosts: records', () => {
+describe('mods: records', () => {
   it('makes ids and paths', () => {
-    const id = newBoostId(Date.parse(NOW), () => 0.5);
-    expect(isBoostId(id)).toBe(true);
-    expect(boostPath(id)).toBe(`${BOOSTS_PREFIX}${id}.json`);
-    expect(() => boostPath('../x')).toThrow();
-    expect(newBoostId(1) < newBoostId(2)).toBe(true);
+    const id = newModId(Date.parse(NOW), () => 0.5);
+    expect(isModId(id)).toBe(true);
+    expect(modPath(id)).toBe(`${MODS_PREFIX}${id}.json`);
+    expect(() => modPath('../x')).toThrow();
+    expect(newModId(1) < newModId(2)).toBe(true);
   });
   it('cleans the hide list', () => {
     expect(cleanHideList([' .a ', '.a', '', '.b'])).toEqual(['.a', '.b']);
@@ -165,13 +165,13 @@ describe('boosts: records', () => {
     expect(cleanHideList(undefined)).toEqual([]);
   });
   it('makes a record, defaulting the name and keeping preset order', () => {
-    const b = makeBoost(
+    const b = makeMod(
       { id: 'b1', site: 'https://www.example.com/', presets: ['no-motion', 'dark', 'nope'], hide: ['.ad'] },
       null,
       NOW
     );
     expect(b).toEqual({
-      type: 'nomad/boost',
+      type: 'nomad/mod',
       id: 'b1',
       name: 'example.com',
       site: 'example.com',
@@ -183,74 +183,74 @@ describe('boosts: records', () => {
       createdAt: NOW,
       updatedAt: NOW,
     });
-    expect(isBoost(b)).toBe(true);
+    expect(isMod(b)).toBe(true);
   });
   it('keeps what an update leaves out', () => {
-    const b = makeBoost({ id: 'b1', site: 'example.com', name: 'Clean', css: 'a{}', hide: ['.ad'] }, null, NOW);
-    const off = makeBoost({ id: 'b1', enabled: false }, b, LATER);
+    const b = makeMod({ id: 'b1', site: 'example.com', name: 'Clean', css: 'a{}', hide: ['.ad'] }, null, NOW);
+    const off = makeMod({ id: 'b1', enabled: false }, b, LATER);
     expect(off).toMatchObject({ name: 'Clean', css: 'a{}', hide: ['.ad'], enabled: false, createdAt: NOW, updatedAt: LATER });
   });
   it('refuses what it can’t store', () => {
-    expect(() => makeBoost({ id: '../x', site: 'example.com' })).toThrow(/boost id/);
-    expect(() => makeBoost({ id: 'b1', site: '' })).toThrow(/needs a site/);
-    expect(() => makeBoost({ id: 'b1', site: 'example.com', css: 'x'.repeat(200001) })).toThrow(/too long/);
-    expect(isBoost({ type: 'nomad/boost', id: 'b1', site: 'bad site' })).toBe(false);
+    expect(() => makeMod({ id: '../x', site: 'example.com' })).toThrow(/mod id/);
+    expect(() => makeMod({ id: 'b1', site: '' })).toThrow(/needs a site/);
+    expect(() => makeMod({ id: 'b1', site: 'example.com', css: 'x'.repeat(200001) })).toThrow(/too long/);
+    expect(isMod({ type: 'nomad/mod', id: 'b1', site: 'bad site' })).toBe(false);
   });
-  it('lists a page’s Boosts oldest first', () => {
-    const later = boost({ site: 'example.com', name: 'Later' }, LATER);
-    const first = boost({ site: 'www.example.com', name: 'First' }, NOW);
-    const other = boost({ site: 'other.org' });
-    expect(boostsFor('https://news.example.com/', [later, other, first]).map((b) => b.name)).toEqual([
+  it('lists a page’s Mods oldest first', () => {
+    const later = mod({ site: 'example.com', name: 'Later' }, LATER);
+    const first = mod({ site: 'www.example.com', name: 'First' }, NOW);
+    const other = mod({ site: 'other.org' });
+    expect(modsFor('https://news.example.com/', [later, other, first]).map((b) => b.name)).toEqual([
       'First',
       'Later',
     ]);
   });
-  it('describes a Boost in a few words', () => {
-    const b = boost({ site: 'example.com', presets: ['dark'], hide: ['.a', '.b'], css: 'a{}', js: ' ' });
-    expect(describeBoost(b)).toEqual(['Dark mode', '2 hidden', 'CSS']);
+  it('describes a Mod in a few words', () => {
+    const b = mod({ site: 'example.com', presets: ['dark'], hide: ['.a', '.b'], css: 'a{}', js: ' ' });
+    expect(describeMod(b)).toEqual(['Dark mode', '2 hidden', 'CSS']);
   });
 });
 
-describe('boosts: applying', () => {
+describe('mods: applying', () => {
   it('hides each selector with a rule of its own', () => {
     expect(hideCss(['.a', '#b > p', '.bad { x'])).toBe(
       '.a { display: none !important; }\n#b > p { display: none !important; }'
     );
   });
-  it('mixes preset filters on the root, once each, and skips Boosts that are off', () => {
-    const a = boost({ site: 'example.com', presets: ['dark', 'sepia'], css: 'body { color: red }' });
-    const b = boost({ site: 'example.com', presets: ['dark'], hide: ['.ad'] }, LATER);
-    const off = boost({ site: 'example.com', enabled: false, css: '.never {}' });
+  it('mixes preset filters on the root, once each, and skips Mods that are off', () => {
+    const a = mod({ site: 'example.com', presets: ['dark', 'sepia'], css: 'body { color: red }' });
+    const b = mod({ site: 'example.com', presets: ['dark'], hide: ['.ad'] }, LATER);
+    const off = mod({ site: 'example.com', enabled: false, css: '.never {}' });
     const css = pageCss([a, b, off]);
     const dark = PRESETS.find((p) => p.id === 'dark');
     expect(css.startsWith('html { filter: invert(1) hue-rotate(180deg) sepia(0.45) brightness(0.97) !important; }')).toBe(true);
-    expect(css.split(dark.css).length).toBe(2); // once, though two Boosts ask for it
+    expect(css.split(dark.css).length).toBe(2); // once, though two Mods ask for it
     expect(css).toContain('body { color: red }');
     expect(css).toContain('.ad { display: none !important; }');
     expect(css).not.toContain('.never');
     expect(css.indexOf('color: red')).toBeLessThan(css.indexOf('.ad {'));
     expect(pageCss([off])).toBe('');
   });
-  it('keeps a Boost’s name from ending a CSS comment', () => {
-    const b = boost({ site: 'example.com', name: 'x */ body { display:none } /*', css: 'p{}' });
+  it('keeps a Mod’s name from ending a CSS comment', () => {
+    const b = mod({ site: 'example.com', name: 'x */ body { display:none } /*', css: 'p{}' });
     expect(pageCss([b])).toContain('/* x * / body { display:none } /* */\np{}');
   });
   it('wraps a script so await works and errors carry its name', () => {
-    const b = boost({ site: 'example.com', name: 'Auto "expand"', js: 'await 1; document.title = "x"' });
-    const src = boostScript(b);
+    const b = mod({ site: 'example.com', name: 'Auto "expand"', js: 'await 1; document.title = "x"' });
+    const src = modScript(b);
     expect(src).toContain('(async () => {\nawait 1; document.title = "x"\n})()');
-    expect(src).toContain(JSON.stringify('Boost “Auto "expand"” failed:'));
-    expect(src).toContain(`//# sourceURL=nomad-boost:///${b.id}.js`);
+    expect(src).toContain(JSON.stringify('Mod “Auto "expand"” failed:'));
+    expect(src).toContain(`//# sourceURL=nomad-mod:///${b.id}.js`);
   });
   it('gives the page its CSS and scripts, with a rev that follows the code only', () => {
-    const b = boost({ site: 'example.com', name: 'S', js: 'console.log(1)', hide: ['.a'] });
+    const b = mod({ site: 'example.com', name: 'S', js: 'console.log(1)', hide: ['.a'] });
     const p = pagePayload('https://example.com/', [b]);
     expect(p.css).toContain('.a {');
-    expect(p.scripts).toEqual([{ id: b.id, name: 'S', rev: codeRev('console.log(1)'), code: boostScript(b) }]);
-    const zapped = makeBoost({ id: b.id, hide: ['.a', '.b'] }, b, LATER);
-    expect(pagePayload('https://example.com/', [zapped]).scripts[0].rev).toBe(p.scripts[0].rev);
+    expect(p.scripts).toEqual([{ id: b.id, name: 'S', rev: codeRev('console.log(1)'), code: modScript(b) }]);
+    const picked = makeMod({ id: b.id, hide: ['.a', '.b'] }, b, LATER);
+    expect(pagePayload('https://example.com/', [picked]).scripts[0].rev).toBe(p.scripts[0].rev);
     expect(pagePayload('https://elsewhere.com/', [b])).toEqual({ css: '', scripts: [] });
-    expect(pagePayload('https://example.com/', [makeBoost({ id: b.id, enabled: false }, b)])).toEqual({
+    expect(pagePayload('https://example.com/', [makeMod({ id: b.id, enabled: false }, b)])).toEqual({
       css: '',
       scripts: [],
     });

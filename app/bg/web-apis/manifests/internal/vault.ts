@@ -37,8 +37,8 @@ export default {
   setName: 'promise', // ({ name, url, title, previous? }) -> record
   removeName: 'promise',
 
-  // Boosts (bg/ui/boosts.js, ADR-0023)
-  listBoosts: 'promise', // -> { boosts, presets: [{ id, label, description }] }
-  saveBoost: 'promise', // ({ id?, name?, site?, enabled?, presets?, hide?, css?, js? }) -> record
-  deleteBoost: 'promise',
+  // Mods (bg/ui/mods.js, ADR-0023)
+  listMods: 'promise', // -> { mods, presets: [{ id, label, description }] }
+  saveMod: 'promise', // ({ id?, name?, site?, enabled?, presets?, hide?, css?, js? }) -> record
+  deleteMod: 'promise',
 };

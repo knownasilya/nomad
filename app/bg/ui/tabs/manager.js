@@ -36,7 +36,7 @@ import spacesRPCManifest from '../../rpc-manifests/spaces';
 import { registerForPartition } from '../../protocols/index';
 import hyper from '../../hyper/index';
 import * as drafts from '../../hyper/drafts';
-import * as boosts from '../boosts';
+import * as mods from '../mods';
 
 const X_POSITION = 0;
 const Y_POSITION = 75;
@@ -698,8 +698,8 @@ export async function setup() {
       }
     }
   }
-  // The location bar's Boosts button follows Boosts changed here or on another Device.
-  boosts.events.on('changed', () => {
+  // The location bar's Mods button follows Mods changed here or on another Device.
+  mods.events.on('changed', () => {
     iterateTabs((tab) => {
       for (const pane of tab.panes) pane.emitUpdateState();
     });
@@ -1906,30 +1906,30 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     return res;
   },
 
-  // Boosts (ADR-0023), for the location bar's Boosts menu (fg/shell-menus/boosts.js). Each acts
+  // Mods (ADR-0023), for the location bar's Mods menu (fg/shell-menus/mods.js). Each acts
   // on the page in the tab's primary pane.
-  async getBoosts(index) {
-    return boosts.menuState(getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents);
+  async getMods(index) {
+    return mods.menuState(getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents);
   },
 
-  async setBoostEnabled(index, id, enabled) {
+  async setModEnabled(index, id, enabled) {
     const wc = getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents;
-    if (wc) await boosts.setEnabled(wc, id, enabled);
+    if (wc) await mods.setEnabled(wc, id, enabled);
   },
 
-  async toggleBoostPreset(index, presetId) {
+  async toggleModPreset(index, presetId) {
     const wc = getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents;
-    if (wc) await boosts.togglePreset(wc, presetId);
+    if (wc) await mods.togglePreset(wc, presetId);
   },
 
-  async zapBoost(index, id) {
+  async pickModElements(index, id) {
     const wc = getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents;
-    if (wc) await boosts.startZap(wc, id || null);
+    if (wc) await mods.startPicking(wc, id || null);
   },
 
-  async editBoosts(index, opts) {
+  async editMods(index, opts) {
     const wc = getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents;
-    if (wc) boosts.openEditor(wc, opts || {});
+    if (wc) mods.openEditor(wc, opts || {});
   },
 
   async resetZoom(index) {

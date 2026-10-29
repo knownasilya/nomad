@@ -4,36 +4,36 @@ import {
 } from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
 import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
 import * as toast from 'nomad://app-stdlib/js/com/toast.js';
-import boostsCSS from '../../css/views/boosts.css.js';
+import modsCSS from '../../css/views/mods.css.js';
 
-// The user's Boosts (bg/ui/boosts.js, ADR-0023): their own changes to a site, like Arc's. Each has
+// The user's Mods (bg/ui/mods.js, ADR-0023): their own changes to a site, like Arc's. Each has
 // a name, an on/off switch, preset styles, elements to hide, custom CSS and custom JavaScript. One
 // set per user in the Vault, so they sync to linked Devices. The magic-wand button in the location
-// bar switches a site's Boosts and zaps elements; this is where they're written.
+// bar switches a site's Mods and picks elements to hide; this is where they're written.
 //
-// ?site=<host> shows that site's Boosts, ?id=<id> opens one, and ?new=1 starts a new one for the
-// site. The rules (sites, selectors, sizes) live in shared/boosts.mjs; bg checks them on save.
+// ?site=<host> shows that site's Mods, ?id=<id> opens one, and ?new=1 starts a new one for the
+// site. The rules (sites, selectors, sizes) live in shared/mods.mjs; bg checks them on save.
 
 const blank = (site = '') => ({ id: null, name: '', site, enabled: true, presets: [], hide: [], css: '', js: '' });
 
-export class BoostsView extends LitElement {
+export class ModsView extends LitElement {
   static get properties() {
     return {
-      boosts: { type: Array },
+      mods: { type: Array },
       presets: { type: Array },
       filter: { type: String },
       site: { type: String }, // from ?site=
-      editing: { type: Object }, // a draft: blank() or a copy of a Boost, plus { newSelector, error }
+      editing: { type: Object }, // a draft: blank() or a copy of a Mod, plus { newSelector, error }
     };
   }
 
   static get styles() {
-    return boostsCSS;
+    return modsCSS;
   }
 
   constructor() {
     super();
-    this.boosts = undefined; // undefined = loading
+    this.mods = undefined; // undefined = loading
     this.presets = [];
     this.filter = undefined;
     const q = new URLSearchParams(location.search);
@@ -41,7 +41,7 @@ export class BoostsView extends LitElement {
     this.openId = q.get('id') || null;
     this.editing = q.get('new') ? { ...blank(this.site), newSelector: '', error: '' } : null;
     this.load();
-    // Boosts change on other Devices, from the location bar, and from the AI.
+    // Mods change on other Devices, from the location bar, and from the AI.
     try {
       nomad.vault.watchAppData().addEventListener('changed', () => this.load());
     } catch {}
@@ -49,14 +49,14 @@ export class BoostsView extends LitElement {
 
   async load() {
     try {
-      const res = await nomad.vault.listBoosts();
-      this.boosts = res.boosts;
+      const res = await nomad.vault.listMods();
+      this.mods = res.mods;
       this.presets = res.presets;
     } catch {
-      this.boosts = [];
+      this.mods = [];
     }
     if (this.openId) {
-      const b = this.boosts.find((x) => x.id === this.openId);
+      const b = this.mods.find((x) => x.id === this.openId);
       if (b) this.edit(b);
       this.openId = null;
     }
@@ -64,13 +64,13 @@ export class BoostsView extends LitElement {
 
   filtered() {
     const f = (this.filter || '').toLowerCase();
-    return (this.boosts || []).filter((b) => {
+    return (this.mods || []).filter((b) => {
       if (this.site && !(b.site === this.site || this.site.endsWith('.' + b.site))) return false;
       return !f || b.name.toLowerCase().includes(f) || b.site.includes(f);
     });
   }
 
-  // A site and the Boosts for it, A to Z by site.
+  // A site and the Mods for it, A to Z by site.
   grouped(rows) {
     const out = new Map();
     for (const b of rows) {
@@ -81,17 +81,17 @@ export class BoostsView extends LitElement {
   }
 
   render() {
-    if (typeof this.boosts === 'undefined') return html`<div class="empty">Loading…</div>`;
+    if (typeof this.mods === 'undefined') return html`<div class="empty">Loading…</div>`;
     const rows = this.filtered();
     const e = this.editing;
     return html`
       <link rel="stylesheet" href="nomad://app-stdlib/css/fontawesome.css" />
       <div class="intro">
-        Boosts change how a site looks and works, just for you: dark mode and other quick styles,
-        parts of the page to hide, your own CSS, and your own JavaScript. A Boost for
+        Mods change how a site looks and works, just for you: dark mode and other quick styles,
+        parts of the page to hide, your own CSS, and your own JavaScript. A Mod for
         <code>example.com</code> also applies to <code>www.</code> and <code>docs.example.com</code>.
         Switch them from the <span class="fas fa-magic"></span> button in the location bar, where
-        you can also pick elements to hide. The AI can make them too. Boosts sync to your linked
+        you can also pick elements to hide. The AI can make them too. Mods sync to your linked
         devices.
       </div>
       <div class="toolbar">
@@ -101,12 +101,12 @@ export class BoostsView extends LitElement {
               <button class="link" @click=${this.onShowAll}>Show all</button>
             </span>`
           : html`<span></span>`}
-        ${e && !e.id ? '' : html`<button class="primary" @click=${this.onNew}>New Boost</button>`}
+        ${e && !e.id ? '' : html`<button class="primary" @click=${this.onNew}>New Mod</button>`}
       </div>
       ${e && !e.id ? html`<div class="card editing">${this.renderEditor(e)}</div>` : ''}
       ${rows.length === 0
         ? html`<div class="empty">
-            ${this.boosts.length ? 'No Boosts match.' : 'No Boosts yet. Open a site and click the magic wand to start one.'}
+            ${this.mods.length ? 'No Mods match.' : 'No Mods yet. Open a site and click the magic wand to start one.'}
           </div>`
         : this.grouped(rows).map(
             ([site, list]) => html`
@@ -117,14 +117,14 @@ export class BoostsView extends LitElement {
                     <span class="fas fa-fw fa-external-link-alt"></span>
                   </button>
                 </div>
-                ${repeat(list, (b) => b.id, (b) => this.renderBoost(b))}
+                ${repeat(list, (b) => b.id, (b) => this.renderMod(b))}
               </div>
             `
           )}
     `;
   }
 
-  renderBoost(b) {
+  renderMod(b) {
     const e = this.editing && this.editing.id === b.id ? this.editing : null;
     return html`
       <div class="card ${e ? 'editing' : ''}">
@@ -194,7 +194,7 @@ export class BoostsView extends LitElement {
         </div>
 
         <div class="block">
-          <div class="label">Hidden elements <span class="hint">CSS selectors, one each. The zapper in the location bar adds them for you.</span></div>
+          <div class="label">Hidden elements <span class="hint">CSS selectors, one each. The element picker in the location bar adds them for you.</span></div>
           ${e.hide.length
             ? html`<ul class="selectors">
                 ${e.hide.map(
@@ -236,7 +236,7 @@ export class BoostsView extends LitElement {
 
         ${e.error ? html`<div class="error">${e.error}</div>` : ''}
         <div class="buttons">
-          <button type="submit" class="primary">${e.id ? 'Save' : 'Create Boost'}</button>
+          <button type="submit" class="primary">${e.id ? 'Save' : 'Create Mod'}</button>
           <button type="button" @click=${() => (this.editing = null)}>Cancel</button>
         </div>
       </form>
@@ -256,7 +256,7 @@ export class BoostsView extends LitElement {
 
   onShowAll() {
     this.site = '';
-    history.replaceState({}, '', '/boosts');
+    history.replaceState({}, '', '/mods');
   }
 
   onOpenSite(site) {
@@ -278,7 +278,7 @@ export class BoostsView extends LitElement {
     const e = this.editing;
     const pending = String(e.newSelector || '').trim();
     try {
-      const rec = await nomad.vault.saveBoost({
+      const rec = await nomad.vault.saveMod({
         id: e.id || undefined,
         name: e.name,
         site: e.site,
@@ -298,7 +298,7 @@ export class BoostsView extends LitElement {
 
   async onToggle(b, enabled) {
     try {
-      await nomad.vault.saveBoost({ id: b.id, enabled });
+      await nomad.vault.saveMod({ id: b.id, enabled });
       await this.load();
     } catch (err) {
       toast.create(cleanError(err), 'error');
@@ -306,9 +306,9 @@ export class BoostsView extends LitElement {
   }
 
   async onDelete(b) {
-    if (!confirm(`Delete the Boost “${b.name}” for ${b.site}?`)) return;
+    if (!confirm(`Delete the Mod “${b.name}” for ${b.site}?`)) return;
     try {
-      await nomad.vault.deleteBoost(b.id);
+      await nomad.vault.deleteMod(b.id);
       if (this.editing?.id === b.id) this.editing = null;
       await this.load();
     } catch (err) {
@@ -322,4 +322,4 @@ function cleanError(err) {
   return String(err?.message || err).replace(/^.*?Error: /, '');
 }
 
-customElements.define('boosts-view', BoostsView);
+customElements.define('mods-view', ModsView);

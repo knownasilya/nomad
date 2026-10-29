@@ -9,7 +9,7 @@ import * as settingsDb from '../dbs/settings';
 import { runDrivePropertiesFlow } from './util';
 import { isHyperOrPearUrl } from '../../lib/urls';
 import * as highlights from './highlights';
-import * as boosts from './boosts';
+import * as mods from './mods';
 
 // NOTE
 // subtle but important!!
@@ -330,10 +330,10 @@ export default function registerContextMenu() {
       }
       menuItems.push(createMenuItem('close-pane', { webContents, tab: targetTab }));
       menuItems.push({ type: 'separator' });
-      // boosts (./boosts.js): pick elements to hide on this site, starting from the click
-      const boostItems = boosts.menuItems(webContents, props);
-      if (boostItems.length) {
-        menuItems.push(...boostItems);
+      // mods (./mods.js): pick elements to hide on this site, starting from the click
+      const modItems = mods.menuItems(webContents, props);
+      if (modItems.length) {
+        menuItems.push(...modItems);
         menuItems.push({ type: 'separator' });
       }
       menuItems.push({

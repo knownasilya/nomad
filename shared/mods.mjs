@@ -1,19 +1,19 @@
-// nomad/shared/boosts.mjs
+// nomad/shared/mods.mjs
 //
-// Boosts: the user's own changes to a site, like Arc's (ADR-0023). A Boost belongs to a site and
+// Mods: the user's own changes to a site, like Arc's (ADR-0023). A Mod belongs to a site and
 // holds any of: preset styles (dark mode, sepia, …), elements to hide (CSS selectors, picked with
-// the zapper or typed), custom CSS, and custom JavaScript. Each has a name and can be turned on and
+// the element picker or typed), custom CSS, and custom JavaScript. Each has a name and can be turned on and
 // off from the tab. One set per user, kept in the Vault so every linked Device has them:
 //
-//   /.vault/boosts/<id>.json   { type, id, name, site, enabled, presets, hide, css, js, createdAt, updatedAt }
+//   /.vault/mods/<id>.json   { type, id, name, site, enabled, presets, hide, css, js, createdAt, updatedAt }
 //
-// `site` is a host without "www." (example.com). A Boost applies to that host and every host under
+// `site` is a host without "www." (example.com). A Mod applies to that host and every host under
 // it (www.example.com, docs.example.com), over http, https and hyper://.
 //
-// Pure: no imports. Used by app/bg/ui/boosts.js, the webview preload, and the shell menu.
+// Pure: no imports. Used by app/bg/ui/mods.js, the webview preload, and the shell menu.
 
-export const BOOSTS_PREFIX = '/.vault/boosts/';
-export const BOOST_TYPE = 'nomad/boost';
+export const MODS_PREFIX = '/.vault/mods/';
+export const MOD_TYPE = 'nomad/mod';
 
 const PAGE_SCHEMES = ['http:', 'https:', 'hyper:'];
 const MAX_NAME = 80;
@@ -26,7 +26,7 @@ const MAX_HIDE = 1000;
 
 const HOSTNAME = /^[a-z0-9_-]+(\.[a-z0-9_-]+)*$/;
 
-// The host of a page Boosts can change, lowercased, without a trailing dot. Null for any other
+// The host of a page Mods can change, lowercased, without a trailing dot. Null for any other
 // page: nomad://, file://, the private drive, a frame-less error page.
 export function pageHost(url) {
   let u;
@@ -41,7 +41,7 @@ export function pageHost(url) {
   return host;
 }
 
-// The site a new Boost for this page gets: its host without "www.".
+// The site a new Mod for this page gets: its host without "www.".
 export function siteOf(url) {
   const host = pageHost(url);
   return host ? host.replace(/^www\./, '') : null;
@@ -54,7 +54,7 @@ export function normalizeSite(input) {
     .trim()
     .toLowerCase()
     .replace(/^\*\./, '');
-  if (!s) throw new Error('A Boost needs a site, like example.com');
+  if (!s) throw new Error('A Mod needs a site, like example.com');
   if (!/^[a-z][a-z0-9+.-]*:\/\//.test(s)) s = 'https://' + s;
   let host = '';
   try {
@@ -67,7 +67,7 @@ export function normalizeSite(input) {
   return host;
 }
 
-// Does a Boost for `site` apply to the page at `url`? The site itself and every host under it.
+// Does a Mod for `site` apply to the page at `url`? The site itself and every host under it.
 export function matchesSite(site, url) {
   const host = pageHost(url);
   if (!host || !site) return false;
@@ -79,9 +79,9 @@ export function matchesSite(site, url) {
 
 // Each preset adds to the page's filter, its own CSS, or both. Filters from every preset turned
 // on for a page go in one `filter` on the root element, so dark mode and sepia mix.
-// Nomad's own layers on the page (the zapper, Highlights' note buttons) are turned back too.
+// Nomad's own layers on the page (the element picker, Highlights' note buttons) are turned back too.
 const MEDIA =
-  'img, video, canvas, iframe, embed, object, [style*="background-image"], nomad-boost-zapper, nomad-highlights';
+  'img, video, canvas, iframe, embed, object, [style*="background-image"], nomad-element-picker, nomad-highlights';
 export const PRESETS = [
   {
     id: 'dark',
@@ -212,20 +212,20 @@ export function similarSelectorFor(el) {
 // =
 
 // Sorts by creation time, and is safe to use as a path segment.
-export function newBoostId(now = Date.now(), rand = Math.random) {
+export function newModId(now = Date.now(), rand = Math.random) {
   const tail = Math.floor(rand() * 36 ** 6)
     .toString(36)
     .padStart(6, '0');
   return now.toString(36).padStart(9, '0') + '-' + tail;
 }
 
-export function isBoostId(id) {
+export function isModId(id) {
   return typeof id === 'string' && /^[a-z0-9-]{1,40}$/.test(id);
 }
 
-export function boostPath(id) {
-  if (!isBoostId(id)) throw new Error('Not a boost id: ' + id);
-  return BOOSTS_PREFIX + id + '.json';
+export function modPath(id) {
+  if (!isModId(id)) throw new Error('Not a mod id: ' + id);
+  return MODS_PREFIX + id + '.json';
 }
 
 const oneLine = (s) =>
@@ -251,27 +251,27 @@ export function cleanHideList(list) {
     if (!out.includes(s)) out.push(s);
   }
   if (out.length > MAX_HIDE)
-    throw new Error(`A Boost can hide at most ${MAX_HIDE} kinds of element`);
+    throw new Error(`A Mod can hide at most ${MAX_HIDE} kinds of element`);
   return out;
 }
 
-// The Boost record to store. `prev` is the stored Boost with that id, if any; fields left out
+// The Mod record to store. `prev` is the stored Mod with that id, if any; fields left out
 // keep its values.
 /**
  * @param {{ id: string, name?: string, site?: string, enabled?: boolean, presets?: string[], hide?: string[], css?: string, js?: string }} fields
  * @param {any} [prev]
  */
-export function makeBoost(fields, prev = null, now = new Date().toISOString()) {
+export function makeMod(fields, prev = null, now = new Date().toISOString()) {
   const f = {
     ...prev,
     ...Object.fromEntries(Object.entries(fields || {}).filter(([, v]) => v !== undefined)),
   };
-  if (!isBoostId(f.id)) throw new Error('Not a boost id: ' + f.id);
+  if (!isModId(f.id)) throw new Error('Not a mod id: ' + f.id);
   const site = normalizeSite(f.site);
   const name = oneLine(f.name).slice(0, MAX_NAME) || site;
   const presets = PRESET_IDS.filter((id) => Array.isArray(f.presets) && f.presets.includes(id));
   return {
-    type: BOOST_TYPE,
+    type: MOD_TYPE,
     id: f.id,
     name,
     site,
@@ -285,30 +285,30 @@ export function makeBoost(fields, prev = null, now = new Date().toISOString()) {
   };
 }
 
-export function isBoost(rec) {
+export function isMod(rec) {
   return (
     !!rec &&
-    rec.type === BOOST_TYPE &&
-    isBoostId(rec.id) &&
+    rec.type === MOD_TYPE &&
+    isModId(rec.id) &&
     typeof rec.site === 'string' &&
     HOSTNAME.test(rec.site)
   );
 }
 
-// Oldest first, the order they were made: the order their CSS applies in, so a later Boost wins.
-export function sortBoosts(list) {
+// Oldest first, the order they were made: the order their CSS applies in, so a later Mod wins.
+export function sortMods(list) {
   return [...(list || [])].sort((a, b) =>
     a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1
   );
 }
 
-// The Boosts for the page at `url`, on or off, oldest first.
-export function boostsFor(url, list) {
-  return sortBoosts((list || []).filter((b) => isBoost(b) && matchesSite(b.site, url)));
+// The Mods for the page at `url`, on or off, oldest first.
+export function modsFor(url, list) {
+  return sortMods((list || []).filter((b) => isMod(b) && matchesSite(b.site, url)));
 }
 
-// What a Boost does, in a few words, for a menu: ["Dark mode", "3 hidden", "CSS", "JS"].
-export function describeBoost(b) {
+// What a Mod does, in a few words, for a menu: ["Dark mode", "3 hidden", "CSS", "JS"].
+export function describeMod(b) {
   const out = (b.presets || []).map((id) => presetById(id)?.label).filter(Boolean);
   if (b.hide && b.hide.length) out.push(`${b.hide.length} hidden`);
   if (b.css && b.css.trim()) out.push('CSS');
@@ -319,7 +319,7 @@ export function describeBoost(b) {
 // Applying
 // =
 
-// The CSS that hides the Boost's elements: one rule per selector.
+// The CSS that hides the Mod's elements: one rule per selector.
 export function hideCss(hide) {
   return (hide || [])
     .filter(isHideSelector)
@@ -327,11 +327,11 @@ export function hideCss(hide) {
     .join('\n');
 }
 
-// The stylesheet for a page from its Boosts that are on, in order: the presets once each (one
-// root filter for all of them), then each Boost's hidden elements and its own CSS. Empty when no
-// Boost styles the page.
-export function pageCss(boosts) {
-  const on = (boosts || []).filter((b) => b && b.enabled !== false);
+// The stylesheet for a page from its Mods that are on, in order: the presets once each (one
+// root filter for all of them), then each Mod's hidden elements and its own CSS. Empty when no
+// Mod styles the page.
+export function pageCss(mods) {
+  const on = (mods || []).filter((b) => b && b.enabled !== false);
   const presets = PRESETS.filter((p) => on.some((b) => (b.presets || []).includes(p.id)));
   const chunks = [];
   const filter = presets
@@ -350,14 +350,14 @@ export function pageCss(boosts) {
 
 const commentSafe = (s) => oneLine(s).replace(/\*\//g, '* /');
 
-// The script that runs a Boost's JavaScript in the page: inside an async function (so `await`
-// works and its names stay its own), with errors logged under the Boost's name. The sourceURL
+// The script that runs a Mod's JavaScript in the page: inside an async function (so `await`
+// works and its names stay its own), with errors logged under the Mod's name. The sourceURL
 // names it in the page's devtools.
-export function boostScript(b) {
-  const label = JSON.stringify(`Boost “${oneLine(b.name)}” failed:`);
+export function modScript(b) {
+  const label = JSON.stringify(`Mod “${oneLine(b.name)}” failed:`);
   return (
     `(async () => {\n${b.js}\n})().catch((e) => console.error(${label}, e));\n` +
-    `//# sourceURL=nomad-boost:///${b.id}.js`
+    `//# sourceURL=nomad-mod:///${b.id}.js`
   );
 }
 
@@ -377,14 +377,14 @@ export function codeRev(text) {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16).padStart(14, '0');
 }
 
-// What the page gets: its stylesheet and the scripts to run, from the Boosts that are on. A
+// What the page gets: its stylesheet and the scripts to run, from the Mods that are on. A
 // script's `rev` changes only when its code does.
 export function pagePayload(url, list) {
-  const boosts = boostsFor(url, list).filter((b) => b.enabled !== false);
+  const mods = modsFor(url, list).filter((b) => b.enabled !== false);
   return {
-    css: pageCss(boosts),
-    scripts: boosts
+    css: pageCss(mods),
+    scripts: mods
       .filter((b) => b.js && b.js.trim())
-      .map((b) => ({ id: b.id, name: b.name, rev: codeRev(b.js), code: boostScript(b) })),
+      .map((b) => ({ id: b.id, name: b.name, rev: codeRev(b.js), code: modScript(b) })),
   };
 }

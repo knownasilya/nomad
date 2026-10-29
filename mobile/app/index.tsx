@@ -140,8 +140,8 @@ const VAULT_PROMPTS: Record<string, { title: string; message: string }> = {
   notesWrite: { title: 'Allow AI to edit your Notes?', message: 'The AI running on your other device wants to create or change your Notes.' },
   readerRead: { title: 'Allow AI to read your Reader?', message: 'The AI running on your other device wants to read the feeds you follow and their posts.' },
   readerWrite: { title: 'Allow AI to change your Reader?', message: 'The AI running on your other device wants to follow or unfollow feeds, or mark posts read.' },
-  boostsRead: { title: 'Allow AI to read your Boosts?', message: 'The AI running on your other device wants to read your Boosts: your own styles and scripts for sites.' },
-  boostsWrite: { title: 'Allow AI to change your Boosts?', message: 'The AI running on your other device wants to create or change your Boosts. A Boost can run a script on every page of its site.' }
+  modsRead: { title: 'Allow AI to read your Mods?', message: 'The AI running on your other device wants to read your Mods: your own styles and scripts for sites.' },
+  modsWrite: { title: 'Allow AI to change your Mods?', message: 'The AI running on your other device wants to create or change your Mods. A Mod can run a script on every page of its site.' }
 }
 
 function confirmAiPermission (permission: string, drive?: { name: string; url: string }): Promise<boolean> {

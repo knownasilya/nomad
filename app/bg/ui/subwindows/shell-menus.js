@@ -25,7 +25,7 @@ import { findWebContentsParentWindow } from '../../lib/electron';
 
 const IS_OSX = process.platform === 'darwin';
 const MARGIN_SIZE = 10;
-const IS_RIGHT_ALIGNED = ['browser', 'bookmark', 'peers', 'share', 'site', 'donate', 'spaces', 'draft', 'boosts'];
+const IS_RIGHT_ALIGNED = ['browser', 'bookmark', 'peers', 'share', 'site', 'donate', 'spaces', 'draft', 'mods'];
 var events = new Events();
 var views = {}; // map of {[parentWindow.id] => BrowserView}
 
@@ -132,7 +132,7 @@ export function reposition(parentWindow) {
         width: 280,
         height: 260,
       });
-    } else if (view.menuId === 'boosts') {
+    } else if (view.menuId === 'mods') {
       setBounds({
         x: view.boundsOpt.rightOffset,
         y: view.boundsOpt.top ?? 72,

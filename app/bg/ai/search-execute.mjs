@@ -268,37 +268,37 @@ export const CAPABILITIES = [
     },
     gates: { personal: true },
   },
-  // The user's Boosts (ADR-0023): their own styles and scripts for sites, like Arc's. Reading and
+  // The user's Mods (ADR-0023): their own styles and scripts for sites, like Arc's. Reading and
   // changing them are two more permissions (vault-tools.mjs).
   {
-    name: 'listBoosts',
+    name: 'listMods',
     description:
-      "List the user's Boosts: per-site changes, each with a name, an on/off switch, preset styles, CSS " +
+      "List the user's Mods: per-site changes, each with a name, an on/off switch, preset styles, CSS " +
       'selectors of elements it hides, custom CSS and custom JavaScript. Pass `site` (a host or URL) for the ' +
-      'Boosts that apply there. Also gives the preset ids. Asks permission to read Boosts.',
+      'Mods that apply there. Also gives the preset ids. Asks permission to read Mods.',
     inputSchema: {
       type: 'object',
       properties: {
         site: { type: 'string', description: 'Optional. A host or URL, e.g. example.com' },
-        query: { type: 'string', description: 'Optional. Words that must all be in the Boost' },
+        query: { type: 'string', description: 'Optional. Words that must all be in the Mod' },
       },
       required: [],
     },
     gates: { personal: true },
   },
   {
-    name: 'saveBoost',
+    name: 'saveMod',
     description:
-      'Create a Boost (no `id`; `site` required) or change one (`id`; fields you leave out stay as they are). ' +
-      'A Boost applies to its site and every host under it (example.com covers www. and docs.example.com) and ' +
+      'Create a Mod (no `id`; `site` required) or change one (`id`; fields you leave out stay as they are). ' +
+      'A Mod applies to its site and every host under it (example.com covers www. and docs.example.com) and ' +
       'takes effect at once in open tabs; its JavaScript runs in the page on each load, like a bookmarklet, ' +
       '`await` allowed. Prefer `presets` and `hide` over CSS, and CSS over JavaScript. `hide` replaces the whole ' +
-      'list, so pass the old selectors too. Asks permission to change Boosts.',
+      'list, so pass the old selectors too. Asks permission to change Mods.',
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'Optional. The Boost to change, from listBoosts' },
-        site: { type: 'string', description: 'Required for a new Boost: a host or URL, e.g. example.com' },
+        id: { type: 'string', description: 'Optional. The Mod to change, from listMods' },
+        site: { type: 'string', description: 'Required for a new Mod: a host or URL, e.g. example.com' },
         name: { type: 'string', description: 'Optional. A short name the user sees in the tab, e.g. "Clean reading"' },
         enabled: { type: 'boolean', description: 'Optional. On (default) or off' },
         presets: {
@@ -319,11 +319,11 @@ export const CAPABILITIES = [
     gates: { personal: true },
   },
   {
-    name: 'deleteBoost',
-    description: 'Delete one of the user\'s Boosts. Asks permission to change Boosts.',
+    name: 'deleteMod',
+    description: 'Delete one of the user\'s Mods. Asks permission to change Mods.',
     inputSchema: {
       type: 'object',
-      properties: { id: { type: 'string', description: 'The Boost id, from listBoosts' } },
+      properties: { id: { type: 'string', description: 'The Mod id, from listMods' } },
       required: ['id'],
     },
     gates: { personal: true },

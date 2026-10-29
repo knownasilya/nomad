@@ -1,4 +1,4 @@
-// The AI's Notes, Highlights, Reader and Boosts capabilities (search-execute.mjs CAPABILITIES,
+// The AI's Notes, Highlights, Reader and Mods capabilities (search-execute.mjs CAPABILITIES,
 // ADR-0019, ADR-0023): the
 // Vault and Drive reads and writes behind them. ai.ts executeTool calls runVaultTool on a personal turn only
 // (the user's own AI); each capability first asks its permission (vault-tools.mjs VAULT_TOOL_PERMS).
@@ -9,7 +9,7 @@
 import * as apps from '../../../../shared/vault-apps.mjs';
 import * as vaultApps from './vault-apps';
 import { highlightForAi, assertCanHighlight } from '../../ui/highlights';
-import * as boosts from '../../ui/boosts';
+import * as mods from '../../ui/mods';
 import fsAPI from './fs';
 import {
   VAULT_TOOL_PERMS,
@@ -22,8 +22,8 @@ import {
   POST_BODY_FILES,
   htmlToText,
   clip,
-  findBoosts,
-  boostForModel,
+  findMods,
+  modForModel,
 } from '../../ai/vault-tools.mjs';
 
 // A feed that doesn't answer in this time is listed with an error, so one offline peer can't stall
@@ -128,26 +128,26 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
       return `Marked ${urls.length} post${urls.length === 1 ? '' : 's'} read`;
     }
 
-    case 'listBoosts':
-      return json(findBoosts(boosts.list(), args));
+    case 'listMods':
+      return json(findMods(mods.list(), args));
 
-    // A new Boost (no id; `site` required) or changes to one. Fields left out keep their values.
-    case 'saveBoost': {
+    // A new Mod (no id; `site` required) or changes to one. Fields left out keep their values.
+    case 'saveMod': {
       const { id, name, site, enabled, presets, hide, css, js } = args;
-      if (id && !boosts.get(id)) throw new Error('No Boost with that id. Use listBoosts to find it.');
-      if (!id && !site) throw new Error('A new Boost needs `site`, like example.com');
+      if (id && !mods.get(id)) throw new Error('No Mod with that id. Use listMods to find it.');
+      if (!id && !site) throw new Error('A new Mod needs `site`, like example.com');
       for (const [key, v] of Object.entries({ presets, hide })) {
         if (v !== undefined && !Array.isArray(v)) throw new Error(`\`${key}\` must be an array of strings`);
       }
-      const rec = await boosts.save({ id, name, site, enabled, presets, hide, css, js });
-      return json({ ...boostForModel(rec), created: !id });
+      const rec = await mods.save({ id, name, site, enabled, presets, hide, css, js });
+      return json({ ...modForModel(rec), created: !id });
     }
 
-    case 'deleteBoost': {
-      const b = boosts.get(args.id);
-      if (!b) throw new Error('No Boost with that id. Use listBoosts to find it.');
-      await boosts.remove(b.id);
-      return `Deleted the Boost “${b.name}” for ${b.site}`;
+    case 'deleteMod': {
+      const b = mods.get(args.id);
+      if (!b) throw new Error('No Mod with that id. Use listMods to find it.');
+      await mods.remove(b.id);
+      return `Deleted the Mod “${b.name}” for ${b.site}`;
     }
   }
   throw new Error(`Unknown capability ${name}`);

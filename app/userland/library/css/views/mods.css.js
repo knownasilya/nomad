@@ -6,15 +6,15 @@ const cssStr = css`
   :host {
     display: block;
     padding: 6px 4px 40px;
-    --boosts-fill: #4f46e5; /* white text reads on it in both modes */
-    --boosts-accent: var(--lib-nav-active-text, #4f46e5);
-    --boosts-accent-soft: var(--lib-nav-active-bg, #eef2ff);
-    --boosts-err: #dc2626;
+    --mods-fill: #4f46e5; /* white text reads on it in both modes */
+    --mods-accent: var(--lib-nav-active-text, #4f46e5);
+    --mods-accent-soft: var(--lib-nav-active-bg, #eef2ff);
+    --mods-err: #dc2626;
   }
 
   @media (prefers-color-scheme: dark) {
     :host {
-      --boosts-err: #f87171;
+      --mods-err: #f87171;
     }
   }
 
@@ -142,7 +142,7 @@ const cssStr = css`
   }
 
   .switch input:checked + .track {
-    background: var(--boosts-fill);
+    background: var(--mods-fill);
   }
 
   .switch input:checked + .track::after {
@@ -150,7 +150,7 @@ const cssStr = css`
   }
 
   .switch input:focus-visible + .track {
-    box-shadow: 0 0 0 3px var(--boosts-accent-soft);
+    box-shadow: 0 0 0 3px var(--mods-accent-soft);
   }
 
   .editor {
@@ -217,8 +217,8 @@ const cssStr = css`
 
   input:focus,
   textarea:focus {
-    border-color: var(--boosts-accent);
-    box-shadow: 0 0 0 3px var(--boosts-accent-soft);
+    border-color: var(--mods-accent);
+    box-shadow: 0 0 0 3px var(--mods-accent-soft);
   }
 
   input.name {
@@ -252,8 +252,8 @@ const cssStr = css`
   }
 
   .chip.on {
-    border-color: var(--boosts-fill);
-    background: var(--boosts-fill);
+    border-color: var(--mods-fill);
+    background: var(--mods-fill);
     color: #fff;
   }
 
@@ -310,8 +310,8 @@ const cssStr = css`
   }
 
   button.primary {
-    border-color: var(--boosts-fill);
-    background: var(--boosts-fill);
+    border-color: var(--mods-fill);
+    background: var(--mods-fill);
     color: #fff;
   }
 
@@ -324,7 +324,7 @@ const cssStr = css`
     padding: 0 4px;
     border: 0;
     background: none;
-    color: var(--boosts-accent);
+    color: var(--mods-accent);
   }
 
   button.icon {
@@ -346,7 +346,7 @@ const cssStr = css`
   }
 
   button.icon.danger:hover {
-    color: var(--boosts-err);
+    color: var(--mods-err);
   }
 
   .buttons {
@@ -356,7 +356,7 @@ const cssStr = css`
 
   .error {
     font-size: 12px;
-    color: var(--boosts-err);
+    color: var(--mods-err);
   }
 
   .empty {

@@ -15,10 +15,10 @@ import {
   htmlToText,
   clip,
   clampLimit,
-  findBoosts,
-  boostForModel,
+  findMods,
+  modForModel,
 } from '../../app/bg/ai/vault-tools.mjs';
-import { makeBoost } from '../../shared/boosts.mjs';
+import { makeMod } from '../../shared/mods.mjs';
 import { CAPABILITIES } from '../../app/bg/ai/search-execute.mjs';
 
 const note = (id, body, updatedAt) => ({ type: 'nomad/note', id, body, createdAt: updatedAt, updatedAt });
@@ -29,7 +29,7 @@ const NOTES = [
 ];
 
 describe('vault tools: permissions', () => {
-  it('gives every Notes, Reader and Boosts capability one of its permissions', () => {
+  it('gives every Notes, Reader and Mods capability one of its permissions', () => {
     // openTab is the user's own AI's too, but opens a tab: no Vault data, no Vault permission.
     const gated = CAPABILITIES.filter(
       (c) => c.gates?.personal && !c.gates?.tab && !c.namedDescription && c.name !== 'openTab'
@@ -42,9 +42,9 @@ describe('vault tools: permissions', () => {
     expect(VAULT_TOOL_PERMS.highlightText).toBe('notesWrite');
     expect(VAULT_TOOL_PERMS.readReaderPost).toBe('readerRead');
     expect(VAULT_TOOL_PERMS.markPostsRead).toBe('readerWrite');
-    expect(VAULT_TOOL_PERMS.listBoosts).toBe('boostsRead');
-    expect(VAULT_TOOL_PERMS.saveBoost).toBe('boostsWrite');
-    expect(VAULT_TOOL_PERMS.deleteBoost).toBe('boostsWrite');
+    expect(VAULT_TOOL_PERMS.listMods).toBe('modsRead');
+    expect(VAULT_TOOL_PERMS.saveMod).toBe('modsWrite');
+    expect(VAULT_TOOL_PERMS.deleteMod).toBe('modsWrite');
   });
 
   it('asks once per turn for a Vault permission, and every time for any other', async () => {
@@ -182,25 +182,25 @@ describe('vault tools: limits', () => {
   });
 });
 
-describe('vault tools: boosts', () => {
+describe('vault tools: mods', () => {
   const NOW = '2026-10-29T12:00:00.000Z';
   const all = [
-    makeBoost({ id: 'b1', site: 'example.com', name: 'Dark', presets: ['dark'] }, null, NOW),
-    makeBoost({ id: 'b2', site: 'docs.example.com', name: 'Docs', hide: ['.ad'], js: 'x'.repeat(30000) }, null, NOW),
-    makeBoost({ id: 'b3', site: 'other.org', name: 'Other', css: 'body { color: red }' }, null, NOW),
+    makeMod({ id: 'b1', site: 'example.com', name: 'Dark', presets: ['dark'] }, null, NOW),
+    makeMod({ id: 'b2', site: 'docs.example.com', name: 'Docs', hide: ['.ad'], js: 'x'.repeat(30000) }, null, NOW),
+    makeMod({ id: 'b3', site: 'other.org', name: 'Other', css: 'body { color: red }' }, null, NOW),
   ];
 
-  it('finds the Boosts for a site and the sites around it, with the preset ids', () => {
-    const res = findBoosts(all, { site: 'https://docs.example.com/page' });
-    expect(res.boosts.map((b) => b.id)).toEqual(['b1', 'b2']);
-    expect(findBoosts(all, { site: 'example.com' }).boosts.map((b) => b.id)).toEqual(['b1', 'b2']);
-    expect(findBoosts(all, {}).boosts).toHaveLength(3);
-    expect(findBoosts(all, { query: 'color red' }).boosts.map((b) => b.id)).toEqual(['b3']);
+  it('finds the Mods for a site and the sites around it, with the preset ids', () => {
+    const res = findMods(all, { site: 'https://docs.example.com/page' });
+    expect(res.mods.map((b) => b.id)).toEqual(['b1', 'b2']);
+    expect(findMods(all, { site: 'example.com' }).mods.map((b) => b.id)).toEqual(['b1', 'b2']);
+    expect(findMods(all, {}).mods).toHaveLength(3);
+    expect(findMods(all, { query: 'color red' }).mods.map((b) => b.id)).toEqual(['b3']);
     expect(res.presets.map((p) => p.id)).toContain('dark');
   });
 
-  it('gives the model a whole Boost, its code cut', () => {
-    const b = boostForModel(all[1]);
+  it('gives the model a whole Mod, its code cut', () => {
+    const b = modForModel(all[1]);
     expect(b).toMatchObject({ id: 'b2', site: 'docs.example.com', enabled: true, hide: ['.ad'], summary: '1 hidden, JS' });
     expect(b.js.length).toBeLessThan(30000);
     expect(b.js).toContain('[Cut at');
