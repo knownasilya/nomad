@@ -75,7 +75,13 @@ export default class DriveManager {
     // re-opens — a drive stays cached until the tab leaves it (release) — so
     // navigating between files in one drive never rejoins or reconnects.
     const cached = this.drives.get(ck)
-    if (cached) return cached
+    if (cached && !cached.drive.closing) return cached
+    // An Autobase closes itself after an error (see openAutobaseDrive): leave its swarm topic and
+    // open it again rather than reading a closed base.
+    if (cached) {
+      this.drives.delete(ck)
+      safe(() => cached.discovery && cached.discovery.destroy())
+    }
 
     // A cold open can take many seconds (swarm join + replication). Callers that arrive meanwhile
     // (a space switch reads the registry and bookmarks at once, then retries) share this open.
@@ -872,12 +878,21 @@ async function listFromKeys (keys, folder) {
 // byte-for-byte identical to the desktop app — the Autobase indexer signs the
 // linearised view, so a divergent apply would fail signature verification and
 // surface as a "decoding error". Do not inline a second copy here.
+//
+// Autobase throws an internal failure (in apply or while catching up a writer) as an uncaught
+// exception when nothing listens for 'error', and an uncaught exception ends the Bare worklet and
+// the app with it. So every base gets a listener: the base still closes itself, and the caller's
+// next open starts a fresh one.
 export function openAutobaseDrive (store, key) {
-  return new Autobase(store, key, {
+  const base = new Autobase(store, key, {
     ...AUTOBASE_OPTS,
     open: _fsOpen,
     apply: _fsApply
   })
+  base.on('error', (err) => {
+    console.error('[autobase] closed after an error', key ? b4a.toString(key, 'hex').slice(0, 8) : 'new', (err && (err.stack || err.message)) || err)
+  })
+  return base
 }
 
 // Is this opened drive writable? Hyperdrive exposes it on its metadata core;
