@@ -265,6 +265,36 @@ export function menuItems(wc, props) {
   ];
 }
 
+// The tab context menu: a new Mod for the tab's site, and its Mods to turn on or off, any
+// number at once. Empty on a page Mods can't change.
+export function tabMenuItems(wc) {
+  const url = wc && !wc.isDestroyed() ? wc.getURL() : '';
+  const site = bst.siteOf(url);
+  if (!site) return [];
+  const all = forUrl(url);
+  return [
+    {
+      label: `New Mod for ${site}…`,
+      click: () => openEditor(wc, { site, isNew: true }),
+    },
+    {
+      label: 'Mods',
+      submenu: [
+        ...(all.length
+          ? all.map((b) => ({
+              label: b.site === site ? b.name : `${b.name} (${b.site})`,
+              type: 'checkbox',
+              checked: b.enabled,
+              click: (item) => setEnabled(wc, b.id, item.checked),
+            }))
+          : [{ label: `No Mods for ${site}`, enabled: false }]),
+        { type: 'separator' },
+        { label: 'Manage Mods…', click: () => openEditor(wc, { site }) },
+      ],
+    },
+  ];
+}
+
 // The page's address, when the IPC came from a top frame.
 function senderUrl(e) {
   const frame = e.senderFrame;
