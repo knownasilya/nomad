@@ -102,15 +102,15 @@ class NavbarSiteInfo extends LitElement {
     `;
   }
 
-  // A drive or app the user named (ADR-0018) shows @name, with a green check on the @, in place of its
-  // key. Focusing the location bar hides it, and the input shows the real URL.
+  // A drive or app the user named (ADR-0018) shows a tag and its name, with a green check on the tag,
+  // in place of its key. Focusing the location bar hides it, and the input shows the real URL.
   // A name the AI gave isn't shown until the user keeps it (bg/ui/tabs/pane.js siteName).
   renderLabel() {
     if (this.siteName && this.isHyperdrive) {
       return html`
         <span class="label site-name" title="Your name for this site: hyper://${this.siteName}/"
-          ><span class="at"
-            >@<span class="name-check"
+          ><span class="name-icon fas fa-tag"
+            ><span class="name-check"
               ><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.6 5.2l1.6 1.6 3.2-3.4" /></svg></span></span
           >${this.siteName}</span
         >
@@ -261,7 +261,7 @@ NavbarSiteInfo.styles = [
       color: var(--text-color--cert-sublabel);
     }
 
-    /* @name for a drive the user named: a small green check sits on the @'s top-right corner like a
+    /* The name of a drive the user named: a small green check sits on the tag's top-right corner like a
        notification dot, ringed in the button's own background so it reads as a badge. */
     button {
       --site-info-bg: var(--bg-color--cert--default);
@@ -282,16 +282,19 @@ NavbarSiteInfo.styles = [
       }
     }
 
-    .site-name .at {
+    .site-name .name-icon {
       position: relative;
       display: inline-block;
-      margin-right: 3px;
+      font-size: 11px;
+      line-height: 1;
+      vertical-align: -1px;
+      margin-right: 7px;
     }
 
     .name-check {
       position: absolute;
-      top: 3px;
-      right: -4px;
+      top: -5px;
+      right: -6px;
       width: 9px;
       height: 9px;
       border-radius: 50%;

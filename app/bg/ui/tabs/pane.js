@@ -79,7 +79,7 @@ const STATE_VARS = [
   'title',
   'siteTitle',
   'siteSubtitle',
-  // Names (ADR-0018): the user's own name for the shown drive or app, shown as @name in the location bar
+  // Names (ADR-0018): the user's own name for the shown drive or app, shown with a tag in the location bar
   'siteName',
   'siteIcon',
   'siteTrust',

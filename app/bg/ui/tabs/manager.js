@@ -706,7 +706,7 @@ export async function setup() {
       for (const pane of tab.panes) pane.emitUpdateState();
     });
   });
-  // The location bar's @name follows names kept, renamed or removed here or on another Device.
+  // The location bar's name follows names kept, renamed or removed here or on another Device.
   names.events.on('changed', () => {
     iterateTabs((tab) => {
       for (const pane of tab.panes) pane.emitUpdateState();
