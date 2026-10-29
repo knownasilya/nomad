@@ -97,7 +97,7 @@ class LocationBar extends LitElement {
               : html`Search for <strong>${this.query}</strong> with:`}
           </div>
           <div class="list">
-            ${searchLink('Nomad', `nomad://desktop/?q=${encodeURIComponent(this.query)}`)}
+            ${searchLink('Nomad', `nomad://search/?q=${encodeURIComponent(this.query)}`)}
             ${searchLink(
               'Startpage',
               `https://startpage.com/do/dsearch?query=${encodeURIComponent(this.query)}`
@@ -121,9 +121,6 @@ class LocationBar extends LitElement {
               `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(this.query)}`
             )}
             ${searchLink('Reddit', `https://reddit.com/search?q=${encodeURIComponent(this.query)}`)}
-            ${
-              '' /* TODO restore at some point searchLink('Nomad', `nomad://search/?q=${encodeURIComponent(this.query)}`) */
-            }
           </div>
         </div>
       </div>
