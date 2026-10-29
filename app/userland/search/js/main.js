@@ -6,18 +6,22 @@
 // A result that is a Feed gets a "Subscribe in Reader" action; every result can be opened directly.
 //
 // The default endpoint is the crawler the browser runs itself (bg/hyper/crawler-host.js, the
-// `crawler_enabled` setting). The index address and its status sit behind the cog in the header.
+// `crawler_enabled` setting). It is usually on port 8787, but when another program holds that port
+// the crawler takes a free one, so the page asks bg for the address (nomad.browser.getCrawlerEndpoint).
+// The index address and its status sit behind the cog in the header.
 //
 // Vanilla JS (served as-is, no bundle) like nomad://reader. Reaches the endpoint over fetch(), which
 // the search page's dedicated CSP (bg/protocols/nomad.js SEARCH_CSP) permits via connect-src. Styled
 // with the app-stdlib tokens, like My Library.
 
 const ENDPOINT_KEY = 'nomad.search.endpoint';
-const DEFAULT_ENDPOINT = 'http://localhost:8787'; // bg/hyper/crawler-host.js CRAWLER_PORT
+// bg/hyper/crawler-host.js CRAWLER_PORT; used until bg says where the built-in crawler is.
+const FALLBACK_ENDPOINT = 'http://localhost:8787';
 const FEED_TYPE = 'walled.garden/feed';
 
 const state = {
-  endpoint: localStorage.getItem(ENDPOINT_KEY) || DEFAULT_ENDPOINT,
+  builtInEndpoint: FALLBACK_ENDPOINT,
+  customEndpoint: localStorage.getItem(ENDPOINT_KEY) || '', // another index the user chose, or ''
   query: '',
   topic: '',
   topics: [],
@@ -31,8 +35,12 @@ const state = {
 // index API
 // =
 
+function endpoint() {
+  return state.customEndpoint || state.builtInEndpoint;
+}
+
 async function api(pathAndQuery) {
-  const base = state.endpoint.replace(/\/$/, '');
+  const base = endpoint().replace(/\/$/, '');
   const res = await fetch(base + pathAndQuery, { headers: { accept: 'application/json' } });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
@@ -79,16 +87,31 @@ async function runSearch() {
   renderMain();
 }
 
-function refreshAll() {
+// Ask bg where the built-in crawler serves. It answers null when the crawler is off; keep the
+// fallback then, so the page says to turn it on.
+async function loadBuiltInEndpoint() {
+  try {
+    const url = await window.nomad?.browser?.getCrawlerEndpoint?.();
+    if (url) state.builtInEndpoint = url;
+  } catch {}
+}
+
+async function refreshAll() {
+  if (!state.customEndpoint) {
+    state.status = 'loading';
+    renderMain();
+    await loadBuiltInEndpoint();
+  }
   loadTopics();
   loadStats();
   runSearch();
 }
 
 function setEndpoint(url) {
-  state.endpoint = url.trim() || DEFAULT_ENDPOINT;
-  if (state.endpoint === DEFAULT_ENDPOINT) localStorage.removeItem(ENDPOINT_KEY);
-  else localStorage.setItem(ENDPOINT_KEY, state.endpoint);
+  url = url.trim();
+  state.customEndpoint = url === state.builtInEndpoint ? '' : url;
+  if (!state.customEndpoint) localStorage.removeItem(ENDPOINT_KEY);
+  else localStorage.setItem(ENDPOINT_KEY, state.customEndpoint);
   refreshAll();
 }
 
@@ -221,7 +244,7 @@ function renderPanel() {
   panelEl.textContent = '';
   if (!state.panelOpen) return;
 
-  const builtIn = state.endpoint === DEFAULT_ENDPOINT;
+  const builtIn = !state.customEndpoint;
   const s = state.stats;
   const status = s
     ? el('div', { class: 'index-status ok' }, [
@@ -232,7 +255,7 @@ function renderPanel() {
 
   const endpointInput = el('input', {
     type: 'url',
-    value: state.endpoint,
+    value: endpoint(),
     'aria-label': 'Index address',
     onkeydown: (e) => {
       if (e.key === 'Enter') setEndpoint(endpointInput.value);
@@ -246,7 +269,7 @@ function renderPanel() {
     el('div', { class: 'endpoint' }, [
       endpointInput,
       el('button', { class: 'btn primary', onclick: () => setEndpoint(endpointInput.value) }, ['Use']),
-      builtIn ? null : el('button', { class: 'btn', onclick: () => setEndpoint(DEFAULT_ENDPOINT) }, ['Reset']),
+      builtIn ? null : el('button', { class: 'btn', onclick: () => setEndpoint('') }, ['Reset']),
     ]),
     el('p', { class: 'hint' }, [
       'Nomad runs its own crawler while ',
@@ -287,9 +310,9 @@ function renderMain() {
         el('div', { class: 'notice-icon' }, [icon('plug')]),
         el('h2', {}, ['Can’t reach the search index']),
         el('p', {}, [
-          state.endpoint === DEFAULT_ENDPOINT
+          !state.customEndpoint
             ? 'Is the search crawler on? It runs while “Run the search crawler” is on in Settings.'
-            : `Nothing answered at ${state.endpoint}.`,
+            : `Nothing answered at ${state.customEndpoint}.`,
         ]),
         el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); setPanelOpen(true); } }, [
           icon('cog'),

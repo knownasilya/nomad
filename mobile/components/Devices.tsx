@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
-import type { Backend, DriveSync, VaultMsg } from '../lib/useBackend'
+import type { Backend, DeviceSpace, DriveSync, VaultDevice, VaultMsg } from '../lib/useBackend'
 import type { Space } from '../lib/useSpaces'
 
 const DEVICE_NAME_KEY = 'hb:deviceName'
@@ -39,10 +39,13 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
 
-  // Every status read sends this phone's Space keys, so the backend reports their sync state too.
-  const spaceKeysRef = useRef<string[]>([])
-  spaceKeysRef.current = spaces.map((sp) => sp.rootDriveKey).filter(Boolean) as string[]
-  const vaultStatus = () => vaultStatusFor(spaceKeysRef.current)
+  // Every status read sends this phone's Spaces, so the backend reports their sync state and keeps
+  // this phone's own Device record listing them (what the user's other Devices show for it).
+  const ownSpacesRef = useRef<DeviceSpace[]>([])
+  ownSpacesRef.current = spaces
+    .filter((sp) => sp.rootDriveKey)
+    .map((sp) => ({ rootDriveKey: sp.rootDriveKey as string, name: sp.name }))
+  const vaultStatus = () => vaultStatusFor(ownSpacesRef.current.map((sp) => sp.rootDriveKey), ownSpacesRef.current)
 
   const [status, setStatus] = useState<VaultMsg | null>(null)
   const [loading, setLoading] = useState(true)
@@ -54,6 +57,8 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null)
   const [removingKey, setRemovingKey] = useState<string | null>(null)
   const [confirmingSelf, setConfirmingSelf] = useState(false)
+  // Sync details are for debugging a Space that won't sync, so they start collapsed.
+  const [showSyncDetails, setShowSyncDetails] = useState(false)
   // Stable handle for the "unlink this phone" action — works even when this device's own row is
   // absent (e.g. it was removed on another device), in which case thisDeviceKey may be missing.
   const selfKey = status?.thisDeviceKey || '__self__'
@@ -209,6 +214,15 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
     }
   }
 
+  const otherDevices = (status?.devices || []).filter((d) => d.key !== status?.thisDeviceKey)
+  const connectedKeys = new Set(status?.connectedDevices || [])
+  const phoneKeys = new Set(spaces.map((sp) => sp.rootDriveKey).filter(Boolean) as string[])
+  const vaultKeys = new Set((status?.spaces || []).filter((vs) => !vs.movedTo).map((vs) => vs.rootDriveKey))
+  // A Device record carries Space names only; borrow the color from this phone or the Vault index.
+  const spaceColors = new Map<string, string>()
+  for (const vs of status?.spaces || []) if (vs.color) spaceColors.set(vs.rootDriveKey, vs.color)
+  for (const sp of spaces) if (sp.rootDriveKey) spaceColors.set(sp.rootDriveKey, sp.color)
+
   return (
     <Modal visible={visible} animationType='slide' onRequestClose={onClose} presentationStyle='fullScreen'>
       <SafeAreaView style={s.root} edges={['top', 'bottom']}>
@@ -252,6 +266,18 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
                         <Text style={s.thisTag}>This device</Text>
                       </View>
                       <Text style={s.rowMeta}>mobile</Text>
+                      <SpaceChips
+                        list={spaces.map((sp) => ({
+                          key: sp.rootDriveKey || sp.id,
+                          name: sp.name,
+                          color: sp.color,
+                          // Paired, but this Space isn't in the Vault, so no other Device gets it.
+                          warn: status?.hasVault && !status.opening && sp.rootDriveKey && !vaultKeys.has(sp.rootDriveKey)
+                            ? 'Not shared'
+                            : ''
+                        }))}
+                        s={s}
+                      />
                     </View>
                     <TouchableOpacity onPress={startEditThis} hitSlop={8}>
                       <Text style={s.link}>Rename</Text>
@@ -266,15 +292,15 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
             {status?.hasVault ? (
               <>
                 <Text style={s.sectionTitle}>Other devices</Text>
-                {status.opening && (status.devices || []).filter((d) => d.key !== status.thisDeviceKey).length === 0 ? (
+                {status.opening && otherDevices.length === 0 ? (
                   <Text style={s.empty}>Syncing… connecting to your other device.</Text>
-                ) : (status.devices || []).filter((d) => d.key !== status.thisDeviceKey).length === 0 ? (
+                ) : otherDevices.length === 0 ? (
                   <Text style={s.empty}>No other devices yet.</Text>
                 ) : (
                   <View style={s.list}>
-                    {(status.devices || []).filter((d) => d.key !== status.thisDeviceKey).map((d) => {
-                      const isSelf = false // self is rendered above as the dedicated "This device" row
+                    {otherDevices.map((d) => {
                       const removing = removingKey === d.key
+                      const connected = connectedKeys.has(d.key)
                       return (
                         <View key={d.key} style={s.row}>
                           <Text style={s.rowIcon}>{d.platform === 'mobile' ? '▢' : '▭'}</Text>
@@ -295,13 +321,11 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
                           ) : confirmingKey === d.key ? (
                             <View style={s.confirmBody}>
                               <Text style={s.confirmText}>
-                                {isSelf
-                                  ? 'Unlink this phone from your identity? It stops syncing and reverts to local-only spaces. Data already synced stays on the devices that have it.'
-                                  : `Remove “${d.name}”? It loses write access from now on. It keeps anything it already synced — this can’t un-share that.`}
+                                {`Remove “${d.name}”? It loses write access from now on. It keeps anything it already synced — this can’t un-share that.`}
                               </Text>
                               <View style={s.confirmActions}>
-                                <TouchableOpacity onPress={() => submitRemove(d.key, isSelf)} disabled={removing} hitSlop={8}>
-                                  <Text style={[s.link, s.danger]}>{removing ? 'Removing…' : isSelf ? 'Unlink' : 'Remove'}</Text>
+                                <TouchableOpacity onPress={() => submitRemove(d.key, false)} disabled={removing} hitSlop={8}>
+                                  <Text style={[s.link, s.danger]}>{removing ? 'Removing…' : 'Remove'}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity onPress={() => setConfirmingKey(null)} disabled={removing} hitSlop={8}>
                                   <Text style={s.link}>Cancel</Text>
@@ -309,24 +333,26 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
                               </View>
                             </View>
                           ) : (
-                            <>
-                              <View style={s.rowBody}>
-                                <View style={s.nameRow}>
+                            <View style={s.rowBody}>
+                              <View style={s.rowTop}>
+                                <View style={s.rowBody}>
                                   <Text style={s.rowName}>{d.name}</Text>
-                                  {isSelf ? <Text style={s.thisTag}>This device</Text> : null}
+                                  <View style={s.statusRow}>
+                                    <View style={[s.dot, { backgroundColor: connected ? t.secure : t.textMuted }]} />
+                                    <Text style={[s.rowMeta, s.statusText, connected && { color: t.secure }]}>
+                                      {connected ? 'Connected' : 'Not connected'} · {d.platform}
+                                    </Text>
+                                  </View>
                                 </View>
-                                <Text style={s.rowMeta}>{d.platform}</Text>
-                              </View>
-                              <TouchableOpacity onPress={() => { setEditingKey(d.key); setEditName(d.name) }} hitSlop={8}>
-                                <Text style={s.link}>Rename</Text>
-                              </TouchableOpacity>
-                              {/* Self-unlink lives in the footer (works even when this row is gone). */}
-                              {!isSelf ? (
+                                <TouchableOpacity onPress={() => { setEditingKey(d.key); setEditName(d.name) }} hitSlop={8}>
+                                  <Text style={s.link}>Rename</Text>
+                                </TouchableOpacity>
                                 <TouchableOpacity onPress={() => setConfirmingKey(d.key)} hitSlop={8}>
                                   <Text style={[s.link, s.danger]}>Remove</Text>
                                 </TouchableOpacity>
-                              ) : null}
-                            </>
+                              </View>
+                              <DeviceSpaces device={d} phoneKeys={phoneKeys} colors={spaceColors} s={s} />
+                            </View>
                           )}
                         </View>
                       )
@@ -334,8 +360,19 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
                   </View>
                 )}
 
-                <Text style={[s.sectionTitle, { marginTop: space.xl }]}>Sync status</Text>
-                <SyncStatusList status={status} spaces={spaces} s={s} t={t} />
+                {/* Debugging detail for a Space that won't sync: collapsed until asked for. */}
+                <TouchableOpacity
+                  style={s.detailsToggle}
+                  onPress={() => setShowSyncDetails((v) => !v)}
+                  hitSlop={8}
+                  accessibilityRole='button'
+                  accessibilityState={{ expanded: showSyncDetails }}
+                >
+                  <Text style={s.detailsChevron}>{showSyncDetails ? '▾' : '▸'}</Text>
+                  <Text style={s.detailsTitle}>Sync details</Text>
+                  <Text style={s.detailsSummary}>{syncSummary(status)}</Text>
+                </TouchableOpacity>
+                {showSyncDetails ? <SyncStatusList status={status} spaces={spaces} s={s} t={t} /> : null}
 
                 {/* Always-available escape hatch: leave the Vault on this phone. Works even if this
                     device's own row is gone (e.g. it was removed on another device while the app was
@@ -414,6 +451,56 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
 }
 
 type Styles = ReturnType<typeof makeStyles>
+
+interface Chip { key: string; name: string; color?: string; warn?: string }
+
+// A wrap of Space chips: a color dot, the name, and a warning when the Space is out of step.
+function SpaceChips ({ list, s }: { list: Chip[]; s: Styles }) {
+  if (!list.length) return <Text style={s.spacesNote}>No spaces</Text>
+  return (
+    <View style={s.chipRow}>
+      {list.map((chip) => (
+        <View key={chip.key} style={[s.chip, chip.warn ? s.chipWarn : null]}>
+          <View style={[s.chipDot, { backgroundColor: chip.color || '#6c6cff' }]} />
+          <Text style={s.chipText} numberOfLines={1}>{chip.name}</Text>
+          {chip.warn ? <Text style={s.chipWarnText}>{chip.warn}</Text> : null}
+        </View>
+      ))}
+    </View>
+  )
+}
+
+// The Spaces another Device has, as it last recorded them in the Vault. One that isn't on this phone
+// is flagged: that is the Space to look for in Sync details.
+function DeviceSpaces ({ device, phoneKeys, colors, s }: { device: VaultDevice; phoneKeys: Set<string>; colors: Map<string, string>; s: Styles }) {
+  if (!Array.isArray(device.spaces)) {
+    return <Text style={s.spacesNote}>Update Nomad on this device to see its spaces.</Text>
+  }
+  return (
+    <SpaceChips
+      list={device.spaces.map((sp) => ({
+        key: sp.rootDriveKey,
+        name: sp.name || 'Space',
+        color: colors.get(sp.rootDriveKey),
+        warn: phoneKeys.has(sp.rootDriveKey) ? '' : 'Not on this phone'
+      }))}
+      s={s}
+    />
+  )
+}
+
+// One line for the collapsed Sync details header: the worst thing it would show.
+function syncSummary (status: VaultMsg): string {
+  const sync = status.sync
+  if (!sync) return 'Checking…'
+  if (sync.connections === 0) return 'No peers connected'
+  const all = [sync.vault, ...sync.spaces]
+  const behind = all.filter((st) => st.loaded && (st.remoteLength || 0) > (st.length || 0)).length
+  if (behind) return `Syncing ${behind}`
+  const noPeers = all.filter((st) => st.loaded && !st.peers).length
+  if (noPeers) return `${noPeers} without peers`
+  return 'All synced'
+}
 
 // Connection and replication state of the Vault and each Space. A Space that is on only one side
 // (this phone vs the Vault index), or under a different key, is the usual reason a Space looks empty.
@@ -545,7 +632,32 @@ function makeStyles (t: Theme) {
     leaveBtn: { alignSelf: 'flex-start', paddingVertical: space.xs },
     leaveConfirm: { gap: space.sm },
     link: { color: t.accent, fontSize: 14, fontWeight: '500', paddingHorizontal: space.xs },
-    dot: { width: 12, height: 12, borderRadius: radius.pill },
+    dot: { width: 8, height: 8, borderRadius: radius.pill },
+    rowTop: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+    statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+    statusText: { marginTop: 0 },
+    spacesNote: { fontSize: 12, color: t.textMuted, marginTop: space.sm },
+    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.sm },
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      maxWidth: '100%',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: t.border,
+      backgroundColor: t.surfaceAlt,
+      borderRadius: radius.pill,
+      paddingHorizontal: space.sm,
+      paddingVertical: 3
+    },
+    chipWarn: { borderColor: '#b9770e' },
+    chipDot: { width: 8, height: 8, borderRadius: radius.pill },
+    chipText: { fontSize: 12, color: t.text, flexShrink: 1 },
+    chipWarnText: { fontSize: 11, color: '#b9770e' },
+    detailsToggle: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.xl, marginBottom: space.sm, paddingVertical: space.xs },
+    detailsChevron: { fontSize: 12, color: t.textDim, width: 12 },
+    detailsTitle: { fontSize: 13, fontWeight: '600', color: t.textDim },
+    detailsSummary: { flex: 1, textAlign: 'right', fontSize: 12, color: t.textMuted },
     keyText: { fontSize: 11, color: t.textMuted, fontFamily: 'monospace' },
     tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.xs },
     tag: { fontSize: 11, color: t.textDim, backgroundColor: t.surfaceAlt, borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 1, overflow: 'hidden' },

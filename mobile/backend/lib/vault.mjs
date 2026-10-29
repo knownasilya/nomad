@@ -134,6 +134,24 @@ export async function addSpaceToVault (base, { rootDriveKey, name, icon, color }
   await base.update()
 }
 
+// Record this phone's Spaces on its own Device record (`spaces: [{ rootDriveKey, name }]`), like
+// desktop's publishOwnSpaces (app/bg/hyper/vault.js), so the user's other Devices can show what each
+// Device has. Writes only when the list changed. Returns true when it wrote.
+export async function publishOwnSpaces (base, deviceKey, spaces) {
+  if (!base || !deviceKey || !base.writable) return false
+  const path = `${DEVICES_PREFIX}${deviceKey}.json`
+  const node = await base.view.get(path)
+  const rec = node && decodeInlineJson(node.value, b4a)
+  if (!rec) return false
+  const next = (spaces || [])
+    .filter((sp) => sp && sp.rootDriveKey)
+    .map((sp) => ({ rootDriveKey: sp.rootDriveKey, name: sp.name || 'Space' }))
+  if (JSON.stringify(rec.spaces || null) === JSON.stringify(next)) return false
+  await base.append(inlineOp(path, { ...rec, spaces: next, spacesUpdatedAt: new Date().toISOString() }))
+  await boundedUpdate(base)
+  return true
+}
+
 export async function readVaultIndex (base) {
   await boundedUpdate(base)
   return {

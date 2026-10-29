@@ -1,5 +1,10 @@
+import { EventEmitter } from 'events';
 import * as db from './profile-data-db';
 import * as settingsDb from './settings';
+
+// Emits 'changed' after a Space is created, updated or removed, so the Vault can republish this
+// Device's Space list (hyper/vault.js publishOwnSpaces).
+export const events = new EventEmitter();
 
 // globals
 // =
@@ -33,6 +38,7 @@ export async function backfillDefaultSpaceDrive(rootDriveUrl) {
     // refresh cache entry
     const cached = spacesCache.find((s) => s.id === 1);
     if (cached) cached.root_drive_url = rootDriveUrl;
+    events.emit('changed');
     return space.root_drive_url || null;
   }
   return null;
@@ -85,6 +91,7 @@ export async function create({ name, icon = 'circle', color = '#6c6cff' }) {
   await db.run('UPDATE spaces SET partition = ? WHERE id = ?', [`persist:space-${id}`, id]);
   const space = await get(id);
   spacesCache = await db.all('SELECT * FROM spaces ORDER BY sort_order ASC, id ASC');
+  events.emit('changed');
   return space;
 }
 
@@ -114,6 +121,7 @@ export async function update(id, { name, icon, color, rootDriveUrl }) {
   // update cache
   const idx = spacesCache.findIndex((s) => s.id === id);
   if (idx !== -1) spacesCache[idx] = space;
+  events.emit('changed');
   return space;
 }
 
@@ -124,4 +132,5 @@ export async function remove(id) {
   if (activeSpaceId === id) {
     await setActive(1);
   }
+  events.emit('changed');
 }

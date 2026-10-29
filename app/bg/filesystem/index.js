@@ -13,6 +13,7 @@ import { isSameOrigin } from '../../lib/urls';
 import { HYPERDRIVE_HASH_REGEX } from '../../lib/const';
 import * as autobases from '../hyper/autobases';
 import * as vault from '../hyper/vault';
+import * as devicePresence from '../hyper/device-presence';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'filesystem' });
 
@@ -181,12 +182,17 @@ export async function setup() {
   // reaching this Device's other Devices. Without this the Vault loaded only lazily (when Settings →
   // Devices opened), so the Device sat off the topic and unreachable by its own phone until then.
   // Background + guarded: getVault() is a no-op (null) when this Device has no Vault yet.
+  vault.watchOwnSpaces();
   vault
     .getVault()
     .then((sess) => {
       if (sess) {
         logger.info('Loaded Vault at startup (joined swarm topic)');
-        vault.registerOwnDevice({ platform: 'desktop' }).catch(() => {});
+        vault
+          .registerOwnDevice({ platform: 'desktop' })
+          .then(() => vault.publishOwnSpaces())
+          .catch(() => {});
+        devicePresence.install();
       }
     })
     .catch((e) => logger.warn('Vault startup load failed', { error: e.toString() }));
@@ -321,8 +327,13 @@ export async function getOrSetupSpaceDrive(space) {
 
   const drive = await _createRootDrive();
   logger.info('Created root drive for space', { spaceId: space.id, url: drive.url });
-  await spacesDb.update(space.id, { rootDriveUrl: drive.url });
+  const updated = await spacesDb.update(space.id, { rootDriveUrl: drive.url });
   spaceRootDrives[space.id] = drive;
+  // Now that the Space has a Root Drive, index it in the Vault so it shows up on the user's other
+  // Devices. Does nothing on a Device that isn't paired.
+  vault
+    .publishSpace(updated)
+    .catch((e) => logger.warn('Could not publish space to the Vault', { spaceId: space.id, error: e.toString() }));
   return drive;
 }
 

@@ -9,10 +9,13 @@ import goodbye from 'graceful-goodbye'
 import DriveManager from './lib/drive-manager.mjs'
 import { HttpGateway } from './lib/http-gateway.mjs'
 import { parseHyperUrl } from './lib/hyper-url.mjs'
-import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault } from './lib/vault.mjs'
+import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault, publishOwnSpaces } from './lib/vault.mjs'
 import * as drafts from './lib/drafts.mjs'
 import * as vaultApps from './lib/vault-apps.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
+import Protomux from 'protomux'
+import c from 'compact-encoding'
+import { createDevicePresence } from '../../shared/device-presence.mjs'
 import {
   RPC_OPEN,
   RPC_CLOSE,
@@ -103,6 +106,16 @@ let vault = null // the opened Vault Autobase, once paired
 // Vault only once paired, which is exactly when the Bridge can key its channel and sign the auth
 // challenge. install() is re-run after the Vault opens (below) to catch already-open connections.
 const aiBridge = createAiBridge({ swarm: manager.swarm, getVault: () => vault })
+// Which of the user's other Devices are connected right now (shared/device-presence.mjs), for the
+// Devices screen. Late-bound to the Vault like the Bridge; install() again once the Vault opens.
+const presence = createDevicePresence({
+  swarm: manager.swarm,
+  Protomux,
+  c,
+  b4a,
+  getVaultKey: () => (vault && vault.key ? b4a.toString(vault.key, 'hex') : null),
+  getDeviceKey: () => (vault && vault.local?.key ? b4a.toString(vault.local.key, 'hex') : null)
+})
 // Set once we've seen THIS device's own record in the Vault index. If it later disappears while the
 // index still holds other records, this device was removed on another device — see handleVaultStatus.
 let ownDeviceSeen = false
@@ -226,6 +239,7 @@ manager.onHostingBytes = (n) => {
       // peersockets/autobase-control pattern (both sides open on connection). Safe: openOnConn is
       // fully guarded so it can never throw into the swarm emitter.
       aiBridge.install()
+      presence.install()
     } catch (err) {
       // leave vault null; the UI will show an unpaired state and can retry
     }
@@ -558,6 +572,7 @@ async function handleRemoveDevice ({ reqId, deviceKey, self = false }) {
       const base = vault
       vault = null
       ownDeviceSeen = false
+      presence.reset()
       try { if (fs.existsSync(vaultKeyPath)) fs.unlinkSync(vaultKeyPath) } catch {}
       if (base) {
         removeDevice(base, deviceKey).catch(() => {}).then(() => base.close().catch(() => {}))
@@ -668,13 +683,15 @@ async function handlePairSubmit ({ reqId, code, name = 'Mobile device' }) {
     // the UI — it only needs to know pairing succeeded. The Vault opens in the background;
     // vaultStatus() reflects it once ready.
     send(RPC_PAIRED, { reqId, ok: true, vaultKey, deviceKey })
-    openVault(store, manager.swarm, vaultKey).then((b) => { vault = b; aiBridge.install() }).catch(() => {})
+    openVault(store, manager.swarm, vaultKey).then((b) => { vault = b; aiBridge.install(); presence.install() }).catch(() => {})
   } catch (err) {
     send(RPC_PAIRED, { reqId, ok: false, message: err.message || String(err) })
   }
 }
 
-async function handleVaultStatus ({ reqId, spaceKeys = [] }) {
+// `ownSpaces` ({ rootDriveKey, name }[]) is this phone's Space list. When it's sent, the phone's own
+// Device record is brought up to date with it, so the user's other Devices see what the phone has.
+async function handleVaultStatus ({ reqId, spaceKeys = [], ownSpaces = null }) {
   try {
     if (!vault) {
       // Paired but the base hasn't finished opening yet (right after pairing, or during startup):
@@ -701,6 +718,7 @@ async function handleVaultStatus ({ reqId, spaceKeys = [] }) {
       const base = vault
       vault = null
       ownDeviceSeen = false
+      presence.reset()
       try { if (fs.existsSync(vaultKeyPath)) fs.unlinkSync(vaultKeyPath) } catch {}
       if (base) base.close().catch(() => {})
       send(RPC_VAULT, { reqId, hasVault: false, removed: true })
@@ -712,7 +730,24 @@ async function handleVaultStatus ({ reqId, spaceKeys = [] }) {
       'localExists', !!vault.local,
       'deviceKeys', devices.map((d) => (d.key || '').slice(0, 8)).join(','),
       'peers', manager.peers)
-    send(RPC_VAULT, { reqId, hasVault: true, vaultKey: loadVaultKey(), thisDeviceKey, ...index, sync: await syncStatus(index, spaceKeys) })
+    if (present && Array.isArray(ownSpaces) && index.writable) {
+      try {
+        if (await publishOwnSpaces(vault, thisDeviceKey, ownSpaces)) Object.assign(index, await readVaultIndex(vault))
+      } catch (err) {
+        console.log('[vault] publishOwnSpaces failed', err && err.message)
+      }
+    }
+    // Make sure the presence channel is up on live connections (cheap re-scan; no-op when it is).
+    presence.install()
+    send(RPC_VAULT, {
+      reqId,
+      hasVault: true,
+      vaultKey: loadVaultKey(),
+      thisDeviceKey,
+      ...index,
+      connectedDevices: [...presence.connectedDevices()],
+      sync: await syncStatus(index, spaceKeys)
+    })
   } catch (err) {
     send(RPC_VAULT, { reqId, hasVault: false, message: err.message || String(err) })
   }

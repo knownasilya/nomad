@@ -310,6 +310,34 @@ export async function registerSpace(space, rootDriveKey) {
   logger.info('Registered space in vault', { spaceId: space.id, rootDriveKey });
 }
 
+// Publish one local Space to the Vault index, so the user's other Devices pick it up. A new record
+// also makes the Vault's Devices Writers of the Space's Root Drive: addDevice only fanned out to the
+// Root Drives indexed when each Device paired. An existing record gets the Space's current name,
+// icon and color. Does nothing without a writable Vault: an unpaired Device keeps its Spaces local,
+// and making a Space must not make a Vault. Returns true when it wrote to the Vault.
+export async function publishSpace(space) {
+  if (!space?.root_drive_url) return false;
+  const sess = await getVault();
+  if (!sess || !sess.writable) return false;
+  const rootDriveKey = drives.fromURLToKey(space.root_drive_url);
+  if (!rootDriveKey) return false;
+  const path = `${SPACES_PREFIX}${rootDriveKey}.json`;
+  const existing = await _readRecord(sess, path);
+  if (existing?.movedTo) return false;
+  if (existing) {
+    if (existing.name === space.name && existing.icon === space.icon && existing.color === space.color) return false;
+    await _putRecord(sess, path, { ...existing, name: space.name, icon: space.icon, color: space.color });
+    logger.info('Updated space in vault', { spaceId: space.id, rootDriveKey });
+    return true;
+  }
+  await registerSpace(space, rootDriveKey);
+  // Background, like addDevice: the record is what other Devices need first.
+  _addDevicesAsWriters(rootDriveKey).catch((e) =>
+    logger.warn('addWriter fan-out to new space failed', { rootDriveKey, error: e.toString() })
+  );
+  return true;
+}
+
 // Queue a Root Drive move and try it now. The queue (a "<fromKey>:<toKey>" setting) outlives a failed
 // attempt: setup updates the local space record first, so once that is saved, nothing else on this
 // Device remembers the old key.
@@ -347,18 +375,22 @@ export async function moveSpaceRoot(fromKey, toKey) {
   for (const { path, value } of await _readPrefixEntries(sess, readerFrom)) {
     await _carryRecord(sess, `${READER_PREFIX}${toKey}/${path.slice(readerFrom.length)}`, value);
   }
-  const root = await autobases.getOrLoadCollaborativeDrive(toKey);
-  if (root) {
-    for (const device of await listDevices()) {
-      try {
-        await root.base.append({ addWriter: device.key });
-      } catch (e) {
-        logger.warn('addWriter on moved root failed', { deviceKey: device.key, error: e.toString() });
-      }
-    }
-    await root.base.update();
-  }
+  await _addDevicesAsWriters(toKey);
   logger.info('Moved space root in vault', { fromKey, toKey });
+}
+
+// Make every Device in the Vault a Writer of a Root Drive this Device can write.
+async function _addDevicesAsWriters(rootDriveKey) {
+  const root = await autobases.getOrLoadCollaborativeDrive(rootDriveKey);
+  if (!root || !root.writable) return;
+  for (const device of await listDevices()) {
+    try {
+      await root.base.append({ addWriter: device.key });
+    } catch (e) {
+      logger.warn('addWriter on space root failed', { rootDriveKey, deviceKey: device.key, error: e.toString() });
+    }
+  }
+  await root.base.update();
 }
 
 // Add a Device: make its key a Writer of the Vault AND of every indexed Root Drive (fan-out),
@@ -411,6 +443,44 @@ export async function registerOwnDevice({ name, platform } = {}) {
   });
   _ownDeviceRegistered = true;
   logger.info('Registered own device in vault', { key });
+}
+
+// Record the Spaces this Device has on its own Device record (`spaces: [{ rootDriveKey, name }]`),
+// so the user's other Devices can show what each Device holds — a Space that is on one Device and
+// missing on another is how a sync gap shows up. Writes only when the list changed, and only with a
+// writable Vault; a Device that can't write yet publishes on a later change or status poll.
+export async function publishOwnSpaces() {
+  const sess = await getVault();
+  if (!sess || !sess.writable) return false;
+  const localKey = sess.base?.local?.key;
+  if (!localKey) return false;
+  const path = `${DEVICES_PREFIX}${b4a.toString(localKey, 'hex')}.json`;
+  const rec = await _readRecord(sess, path);
+  if (!rec) return false; // registerOwnDevice writes it first
+  const spaces = [];
+  for (const space of await spacesDb.list()) {
+    const rootDriveKey = space.root_drive_url ? drives.fromURLToKey(space.root_drive_url) : null;
+    if (rootDriveKey) spaces.push({ rootDriveKey, name: space.name });
+  }
+  if (JSON.stringify(rec.spaces || null) === JSON.stringify(spaces)) return false;
+  await _putRecord(sess, path, { ...rec, spaces, spacesUpdatedAt: new Date().toISOString() });
+  logger.info('Published own spaces to vault', { count: spaces.length });
+  return true;
+}
+
+// Republish this Device's Space list whenever a Space is created, renamed or removed. Debounced:
+// creating a Space fires once for the row and again when its Root Drive URL lands.
+let _publishTimer = null;
+let _watchingSpaces = false;
+export function watchOwnSpaces() {
+  if (_watchingSpaces) return;
+  _watchingSpaces = true;
+  spacesDb.events.on('changed', () => {
+    clearTimeout(_publishTimer);
+    _publishTimer = setTimeout(() => {
+      publishOwnSpaces().catch((e) => logger.warn('publishOwnSpaces failed', { error: e.toString() }));
+    }, 1000);
+  });
 }
 
 // Rename a Device. Any writer can update the record (it's a plain put into the Vault); the change
@@ -519,10 +589,11 @@ export async function syncSpacesFromVault() {
 }
 
 // Owner side: publish this Device's local Spaces into the Vault index so they replicate to the
-// user's other Devices — the symmetric counterpart of syncSpacesFromVault. registerSpace is never
-// called at space-creation time, so without this backfill a paired Device sees the Devices index
-// but zero Spaces. Idempotent: skips Spaces already indexed in the Vault (matched by Root Drive
-// key) so repeated opens of the Devices page don't append redundant ops to the Autobase.
+// user's other Devices — the symmetric counterpart of syncSpacesFromVault. A new Space is published
+// once its Root Drive exists (filesystem getOrSetupSpaceDrive); this backfills the ones that weren't,
+// such as Spaces made before a Vault existed or by a version that didn't publish them. Runs at
+// startup and from the Devices page. Idempotent: skips Spaces already indexed in the Vault (matched
+// by Root Drive key) so repeated runs don't append redundant ops to the Autobase.
 export async function syncSpacesToVault() {
   const sess = await getVault();
   if (!sess) return { registered: 0 };
@@ -532,8 +603,7 @@ export async function syncSpacesToVault() {
   for (const space of local) {
     const rootDriveKey = space.root_drive_url ? drives.fromURLToKey(space.root_drive_url) : null;
     if (!rootDriveKey || indexed.has(rootDriveKey)) continue;
-    await registerSpace(space, rootDriveKey);
-    registered++;
+    if (await publishSpace(space)) registered++;
   }
   if (registered) logger.info('Synced spaces to vault', { registered });
   return { registered };
