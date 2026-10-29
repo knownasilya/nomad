@@ -302,7 +302,7 @@ class SiteInfoApp extends LitElement {
     if (named) {
       return html`
         <div class="name-row">
-          <span class="fas fa-fw fa-at"></span>
+          <span class="fas fa-fw fa-tag"></span>
           <code class="name-chip">hyper://${named.name}/</code>
           <button @click=${() => this.onStartName(named.name)}>Rename</button>
           <button @click=${() => this.onRemoveName(named.name)}>Remove</button>
@@ -313,7 +313,7 @@ class SiteInfoApp extends LitElement {
     return html`
       <div class="name-row">
         <button @click=${() => this.onStartName('')}>
-          <span class="fas fa-fw fa-at"></span> Give it a name
+          <span class="fas fa-fw fa-tag"></span> Give it a name
         </button>
         <span class="name-hint">Then type the name in the URL bar, or ask the AI to use it.</span>
       </div>
