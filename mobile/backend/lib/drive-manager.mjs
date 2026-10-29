@@ -462,10 +462,10 @@ export default class DriveManager {
   async autobaseStatus (keyHex, base = null) {
     if (!base) {
       const entry = this.drives.get(this.cacheKey(DRIVE_AUTOBASE, keyHex))
-      if (!entry) return { key: keyHex, loaded: false }
+      if (!entry) return { key: keyHex, loaded: false, ...lastError(keyHex) }
       base = entry.drive
     }
-    const out = { key: keyHex, loaded: true, writable: isWritable(base), peers: 0, length: 0, remoteLength: 0, driveCount: null }
+    const out = { key: keyHex, loaded: true, writable: isWritable(base), peers: 0, length: 0, remoteLength: 0, driveCount: null, ...lastError(keyHex) }
     const core = this.store.get({ key: base.key })
     try {
       await core.ready()
@@ -783,6 +783,12 @@ export default class DriveManager {
   }
 }
 
+// The last Autobase error for a drive, as status fields ({} when there was none).
+function lastError (keyHex) {
+  const e = autobaseErrors.get(keyHex)
+  return e ? { error: e.message, errorAt: e.at } : {}
+}
+
 // --- readers ---------------------------------------------------------------
 // A reader normalises file access across the two drive types:
 //   read(path)  -> Buffer | null
@@ -883,6 +889,7 @@ async function listFromKeys (keys, folder) {
 // exception when nothing listens for 'error', and an uncaught exception ends the Bare worklet and
 // the app with it. So every base gets a listener: the base still closes itself, and the caller's
 // next open starts a fresh one.
+// The last error is kept per drive key, so the Devices screen's Sync details can show it.
 export function openAutobaseDrive (store, key) {
   const base = new Autobase(store, key, {
     ...AUTOBASE_OPTS,
@@ -890,10 +897,16 @@ export function openAutobaseDrive (store, key) {
     apply: _fsApply
   })
   base.on('error', (err) => {
-    console.error('[autobase] closed after an error', key ? b4a.toString(key, 'hex').slice(0, 8) : 'new', (err && (err.stack || err.message)) || err)
+    const keyHex = base.key ? b4a.toString(base.key, 'hex') : key ? b4a.toString(key, 'hex') : null
+    const message = (err && (err.message || String(err))) || 'Unknown error'
+    if (keyHex) autobaseErrors.set(keyHex, { message, at: Date.now() })
+    console.error('[autobase] closed after an error', keyHex ? keyHex.slice(0, 8) : 'new', (err && (err.stack || err.message)) || err)
   })
   return base
 }
+
+// keyHex -> { message, at } for the last Autobase error this session (see openAutobaseDrive).
+const autobaseErrors = new Map()
 
 // Is this opened drive writable? Hyperdrive exposes it on its metadata core;
 // Autobase exposes it once our writer key has linearised.
