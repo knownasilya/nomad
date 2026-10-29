@@ -15,7 +15,10 @@ import {
   htmlToText,
   clip,
   clampLimit,
+  findBoosts,
+  boostForModel,
 } from '../../app/bg/ai/vault-tools.mjs';
+import { makeBoost } from '../../shared/boosts.mjs';
 import { CAPABILITIES } from '../../app/bg/ai/search-execute.mjs';
 
 const note = (id, body, updatedAt) => ({ type: 'nomad/note', id, body, createdAt: updatedAt, updatedAt });
@@ -26,8 +29,11 @@ const NOTES = [
 ];
 
 describe('vault tools: permissions', () => {
-  it('gives every Notes and Reader capability one of the four permissions', () => {
-    const gated = CAPABILITIES.filter((c) => c.gates?.personal && !c.gates?.tab && !c.namedDescription).map((c) => c.name);
+  it('gives every Notes, Reader and Boosts capability one of its permissions', () => {
+    // openTab is the user's own AI's too, but opens a tab: no Vault data, no Vault permission.
+    const gated = CAPABILITIES.filter(
+      (c) => c.gates?.personal && !c.gates?.tab && !c.namedDescription && c.name !== 'openTab'
+    ).map((c) => c.name);
     expect(gated.sort()).toEqual(Object.keys(VAULT_TOOL_PERMS).sort());
     expect([...new Set(Object.values(VAULT_TOOL_PERMS))].sort()).toEqual([...VAULT_PERMS].sort());
     // Reading and writing are separate grants for both.
@@ -36,6 +42,9 @@ describe('vault tools: permissions', () => {
     expect(VAULT_TOOL_PERMS.highlightText).toBe('notesWrite');
     expect(VAULT_TOOL_PERMS.readReaderPost).toBe('readerRead');
     expect(VAULT_TOOL_PERMS.markPostsRead).toBe('readerWrite');
+    expect(VAULT_TOOL_PERMS.listBoosts).toBe('boostsRead');
+    expect(VAULT_TOOL_PERMS.saveBoost).toBe('boostsWrite');
+    expect(VAULT_TOOL_PERMS.deleteBoost).toBe('boostsWrite');
   });
 
   it('asks once per turn for a Vault permission, and every time for any other', async () => {
@@ -170,5 +179,30 @@ describe('vault tools: limits', () => {
     expect(clampLimit(500)).toBe(100);
     expect(clampLimit(-1)).toBe(20);
     expect(clampLimit('5')).toBe(5);
+  });
+});
+
+describe('vault tools: boosts', () => {
+  const NOW = '2026-10-29T12:00:00.000Z';
+  const all = [
+    makeBoost({ id: 'b1', site: 'example.com', name: 'Dark', presets: ['dark'] }, null, NOW),
+    makeBoost({ id: 'b2', site: 'docs.example.com', name: 'Docs', hide: ['.ad'], js: 'x'.repeat(30000) }, null, NOW),
+    makeBoost({ id: 'b3', site: 'other.org', name: 'Other', css: 'body { color: red }' }, null, NOW),
+  ];
+
+  it('finds the Boosts for a site and the sites around it, with the preset ids', () => {
+    const res = findBoosts(all, { site: 'https://docs.example.com/page' });
+    expect(res.boosts.map((b) => b.id)).toEqual(['b1', 'b2']);
+    expect(findBoosts(all, { site: 'example.com' }).boosts.map((b) => b.id)).toEqual(['b1', 'b2']);
+    expect(findBoosts(all, {}).boosts).toHaveLength(3);
+    expect(findBoosts(all, { query: 'color red' }).boosts.map((b) => b.id)).toEqual(['b3']);
+    expect(res.presets.map((p) => p.id)).toContain('dark');
+  });
+
+  it('gives the model a whole Boost, its code cut', () => {
+    const b = boostForModel(all[1]);
+    expect(b).toMatchObject({ id: 'b2', site: 'docs.example.com', enabled: true, hide: ['.ad'], summary: '1 hidden, JS' });
+    expect(b.js.length).toBeLessThan(30000);
+    expect(b.js).toContain('[Cut at');
   });
 });

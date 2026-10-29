@@ -10,6 +10,7 @@ import mainCSS from '../css/main.css.js';
 import './views/drives.js';
 import './views/listings.js';
 import './views/names.js';
+import './views/boosts.js';
 import './views/bookmarks.js';
 import './views/contacts.js';
 import './views/history.js';
@@ -129,6 +130,11 @@ export class LibraryApp extends LitElement {
                 <span class="label">Names</span>`
             )}
             ${pageNav(
+              'boosts',
+              html`<span class="fas fa-fw fa-magic"></span>
+                <span class="label">Boosts</span>`
+            )}
+            ${pageNav(
               'bookmarks',
               html`<span class="far fa-fw fa-star"></span>
                 <span class="label">Bookmarks</span>`
@@ -166,6 +172,9 @@ export class LibraryApp extends LitElement {
             : ''}
           ${this.view === 'names'
             ? html`<names-view class="full-size" .filter=${this.filter}></names-view>`
+            : ''}
+          ${this.view === 'boosts'
+            ? html`<boosts-view class="full-size" .filter=${this.filter}></boosts-view>`
             : ''}
           ${this.view === 'bookmarks'
             ? html`

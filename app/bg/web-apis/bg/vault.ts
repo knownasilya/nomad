@@ -10,6 +10,8 @@ import * as vault from '../../hyper/vault';
 import * as pairing from '../../hyper/device-pairing';
 import * as vaultApps from './vault-apps';
 import * as names from '../../hyper/names';
+import * as boosts from '../../ui/boosts';
+import { PRESETS } from '../../../../shared/boosts.mjs';
 
 function thisPlatform() {
   return 'desktop';
@@ -194,5 +196,21 @@ export default {
 
   async removeName(name) {
     return names.remove(name);
+  },
+
+  // Boosts (bg/ui/boosts.js): My Library → Boosts.
+  async listBoosts() {
+    return {
+      boosts: boosts.list(),
+      presets: PRESETS.map(({ id, label, description }) => ({ id, label, description })),
+    };
+  },
+
+  async saveBoost(fields) {
+    return boosts.save(fields || {});
+  },
+
+  async deleteBoost(id) {
+    await boosts.remove(id);
   },
 };

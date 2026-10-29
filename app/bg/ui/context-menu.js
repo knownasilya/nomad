@@ -9,6 +9,7 @@ import * as settingsDb from '../dbs/settings';
 import { runDrivePropertiesFlow } from './util';
 import { isHyperOrPearUrl } from '../../lib/urls';
 import * as highlights from './highlights';
+import * as boosts from './boosts';
 
 // NOTE
 // subtle but important!!
@@ -329,6 +330,12 @@ export default function registerContextMenu() {
       }
       menuItems.push(createMenuItem('close-pane', { webContents, tab: targetTab }));
       menuItems.push({ type: 'separator' });
+      // boosts (./boosts.js): pick elements to hide on this site, starting from the click
+      const boostItems = boosts.menuItems(webContents, props);
+      if (boostItems.length) {
+        menuItems.push(...boostItems);
+        menuItems.push({ type: 'separator' });
+      }
       menuItems.push({
         label: 'Export Page As...',
         click: downloadPrompt('pageURL', '.html'),

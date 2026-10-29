@@ -36,6 +36,7 @@ import spacesRPCManifest from '../../rpc-manifests/spaces';
 import { registerForPartition } from '../../protocols/index';
 import hyper from '../../hyper/index';
 import * as drafts from '../../hyper/drafts';
+import * as boosts from '../boosts';
 
 const X_POSITION = 0;
 const Y_POSITION = 75;
@@ -697,6 +698,13 @@ export async function setup() {
       }
     }
   }
+  // The location bar's Boosts button follows Boosts changed here or on another Device.
+  boosts.events.on('changed', () => {
+    iterateTabs((tab) => {
+      for (const pane of tab.panes) pane.emitUpdateState();
+    });
+  });
+
   hyper.drives.on('updated', ({ details }) => {
     iterateTabs((tab) => {
       if (tab.driveInfo && tab.driveInfo.url === details.url) {
@@ -1896,6 +1904,32 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     await pane.refreshState();
     pane.webContents.reload();
     return res;
+  },
+
+  // Boosts (ADR-0023), for the location bar's Boosts menu (fg/shell-menus/boosts.js). Each acts
+  // on the page in the tab's primary pane.
+  async getBoosts(index) {
+    return boosts.menuState(getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents);
+  },
+
+  async setBoostEnabled(index, id, enabled) {
+    const wc = getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents;
+    if (wc) await boosts.setEnabled(wc, id, enabled);
+  },
+
+  async toggleBoostPreset(index, presetId) {
+    const wc = getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents;
+    if (wc) await boosts.togglePreset(wc, presetId);
+  },
+
+  async zapBoost(index, id) {
+    const wc = getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents;
+    if (wc) await boosts.startZap(wc, id || null);
+  },
+
+  async editBoosts(index, opts) {
+    const wc = getByIndex(getWindow(this.sender), index)?.primaryPane?.webContents;
+    if (wc) boosts.openEditor(wc, opts || {});
   },
 
   async resetZoom(index) {

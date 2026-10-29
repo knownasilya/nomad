@@ -268,6 +268,66 @@ export const CAPABILITIES = [
     },
     gates: { personal: true },
   },
+  // The user's Boosts (ADR-0023): their own styles and scripts for sites, like Arc's. Reading and
+  // changing them are two more permissions (vault-tools.mjs).
+  {
+    name: 'listBoosts',
+    description:
+      "List the user's Boosts: per-site changes, each with a name, an on/off switch, preset styles, CSS " +
+      'selectors of elements it hides, custom CSS and custom JavaScript. Pass `site` (a host or URL) for the ' +
+      'Boosts that apply there. Also gives the preset ids. Asks permission to read Boosts.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        site: { type: 'string', description: 'Optional. A host or URL, e.g. example.com' },
+        query: { type: 'string', description: 'Optional. Words that must all be in the Boost' },
+      },
+      required: [],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'saveBoost',
+    description:
+      'Create a Boost (no `id`; `site` required) or change one (`id`; fields you leave out stay as they are). ' +
+      'A Boost applies to its site and every host under it (example.com covers www. and docs.example.com) and ' +
+      'takes effect at once in open tabs; its JavaScript runs in the page on each load, like a bookmarklet, ' +
+      '`await` allowed. Prefer `presets` and `hide` over CSS, and CSS over JavaScript. `hide` replaces the whole ' +
+      'list, so pass the old selectors too. Asks permission to change Boosts.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Optional. The Boost to change, from listBoosts' },
+        site: { type: 'string', description: 'Required for a new Boost: a host or URL, e.g. example.com' },
+        name: { type: 'string', description: 'Optional. A short name the user sees in the tab, e.g. "Clean reading"' },
+        enabled: { type: 'boolean', description: 'Optional. On (default) or off' },
+        presets: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional. Preset ids: dark, sepia, grayscale, no-motion, hide-media',
+        },
+        hide: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional. CSS selectors of elements to hide, e.g. ".sidebar", "#cookie-banner"',
+        },
+        css: { type: 'string', description: 'Optional. Custom CSS for the site' },
+        js: { type: 'string', description: 'Optional. Custom JavaScript, run in the page when its DOM is ready' },
+      },
+      required: [],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'deleteBoost',
+    description: 'Delete one of the user\'s Boosts. Asks permission to change Boosts.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'The Boost id, from listBoosts' } },
+      required: ['id'],
+    },
+    gates: { personal: true },
+  },
 ]
 
 const RUNTIME_IMPORT = /^import\s+\{\s*nomad\s*\}\s+from\s+['"]nomad:runtime['"]\s*;?/

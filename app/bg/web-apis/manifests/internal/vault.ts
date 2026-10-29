@@ -36,4 +36,9 @@ export default {
   namesForUrl: 'promise', // (url) -> the names that point to that page
   setName: 'promise', // ({ name, url, title, previous? }) -> record
   removeName: 'promise',
+
+  // Boosts (bg/ui/boosts.js, ADR-0023)
+  listBoosts: 'promise', // -> { boosts, presets: [{ id, label, description }] }
+  saveBoost: 'promise', // ({ id?, name?, site?, enabled?, presets?, hide?, css?, js? }) -> record
+  deleteBoost: 'promise',
 };

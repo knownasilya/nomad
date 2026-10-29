@@ -35,6 +35,7 @@ import * as windows from './bg/ui/windows';
 import * as windowMenu from './bg/ui/window-menu';
 import registerContextMenu from './bg/ui/context-menu';
 import * as highlights from './bg/ui/highlights';
+import * as boosts from './bg/ui/boosts';
 import * as trayIcon from './bg/ui/tray-icon';
 import * as downloads from './bg/ui/downloads';
 import * as permissions from './bg/ui/permissions';
@@ -181,6 +182,8 @@ app.on('ready', async function () {
   log.info('Initializing context menus');
   registerContextMenu();
   await highlights.setup();
+  // The user's Boosts (custom styles and scripts per site), from the Vault.
+  boosts.setup();
   log.info('Initializing tray icon');
   trayIcon.setup();
   log.info('Initializing browser windows');

@@ -39,6 +39,8 @@ class NavbarLocation extends LitElement {
       isBookmarked: { type: Boolean, attribute: 'is-bookmarked' },
       hasDraft: { type: Boolean, attribute: 'has-draft' },
       draftPreviewing: { type: Boolean, attribute: 'draft-previewing' },
+      boosts: { type: Object },
+      isBoostsMenuOpen: { type: Boolean },
       aiOpen: { type: Boolean, attribute: 'ai-open' },
       isLocationFocused: { type: Boolean },
       hasExpanded: { type: Boolean },
@@ -69,6 +71,8 @@ class NavbarLocation extends LitElement {
     this.isBookmarked = false;
     this.hasDraft = false;
     this.draftPreviewing = false;
+    this.boosts = null;
+    this.isBoostsMenuOpen = false;
     this.aiOpen = false;
     this.isLocationFocused = false;
     this.hasExpanded = false;
@@ -178,7 +182,8 @@ class NavbarLocation extends LitElement {
       >
       </shell-window-navbar-site-info>
       ${this.renderLocation()} ${this.renderZoom()} ${this.renderLiveReloadingBtn()}
-      ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderCopyUrlBtn()}
+      ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderBoostsBtn()}
+      ${this.renderCopyUrlBtn()}
       ${this.renderPeers()} ${this.renderDonateBtn()} ${'' /* DISABLED this.renderShareBtn()*/}
       ${this.renderBookmarkBtn()} ${this.renderAiBtn()} ${this.renderSiteBtn()}
     `;
@@ -359,6 +364,22 @@ class NavbarLocation extends LitElement {
           : 'This Drive has a Draft (unpublished changes). Click to preview it — visible only to you.'}
       >
         <span class="fas fa-pen-nib" style=${this.draftPreviewing ? 'color: #2864dc' : ''}></span>
+      </button>
+    `;
+  }
+
+  // Boosts (ADR-0023): on any page Boosts can change. Blue while one of the site's Boosts is on;
+  // opens the Boosts menu (fg/shell-menus/boosts.js) to switch them, add styles, or zap elements.
+  renderBoostsBtn() {
+    if (!this.boosts) return '';
+    const { count, on } = this.boosts;
+    var cls = classMap({ boosts: true, pressed: this.isBoostsMenuOpen, active: on > 0 });
+    const title = count
+      ? `Boosts: ${on} of ${count} on for this site`
+      : 'Boost this site: hide parts of it, restyle it, or run your own script';
+    return html`
+      <button class=${cls} @click=${this.onClickBoostsMenu} title=${title}>
+        <span class="fas fa-magic"></span>
       </button>
     `;
   }
@@ -605,6 +626,20 @@ class NavbarLocation extends LitElement {
     });
   }
 
+  async onClickBoostsMenu() {
+    if (Date.now() - (this.lastBoostsMenuClick || 0) < 100) {
+      return;
+    }
+    this.isBoostsMenuOpen = true;
+    var rect = this.shadowRoot.querySelector('.boosts').getClientRects()[0];
+    await bg.views.toggleMenu('boosts', {
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0, top: (rect.bottom | 0) + 2 },
+      params: { url: this.url },
+    });
+    this.isBoostsMenuOpen = false;
+    this.lastBoostsMenuClick = Date.now();
+  }
+
   onClickAiSidebar() {
     bg.views.toggleAiSidebarOpen(this.activeTabIndex);
   }
@@ -737,6 +772,10 @@ NavbarLocation.styles = [
 
     button.bookmark .fas.fa-star {
       color: var(--text-color--location-bookmark--pressed);
+    }
+
+    button.boosts.active .fa-magic {
+      color: #2864dc;
     }
 
     button.copy-url .fa-link {
