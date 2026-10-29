@@ -28,6 +28,7 @@ export default {
   reconnectHyperdriveDaemon: 'promise',
 
   getAiKeepAwakeStatus: 'promise',
+  getCrawlerEndpoint: 'promise',
 
   fetchBody: 'promise',
   downloadURL: 'promise',
