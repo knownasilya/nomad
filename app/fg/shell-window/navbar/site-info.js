@@ -102,16 +102,16 @@ class NavbarSiteInfo extends LitElement {
     `;
   }
 
-  // A drive or app the user named (ADR-0018) shows a tag and its name, with a green check on the tag,
-  // in place of its key. Focusing the location bar hides it, and the input shows the real URL.
+  // A drive or app the user named (ADR-0018) shows a green tag with a check, and its name, in place
+  // of its key. Focusing the location bar hides it, and the input shows the real URL.
   // A name the AI gave isn't shown until the user keeps it (bg/ui/tabs/pane.js siteName).
   renderLabel() {
     if (this.siteName && this.isHyperdrive) {
       return html`
         <span class="label site-name" title="Your name for this site: hyper://${this.siteName}/"
-          ><span class="name-icon fas fa-tag"
-            ><span class="name-check"
-              ><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.6 5.2l1.6 1.6 3.2-3.4" /></svg></span></span
+          ><svg class="name-icon" viewBox="0 0 15 13" aria-hidden="true">
+            <path class="tag" d="M0.6 6.5 4.6 1.9A1.4 1.4 0 0 1 5.7 1.4H13a1.5 1.5 0 0 1 1.5 1.5v7.2A1.5 1.5 0 0 1 13 11.6H5.7a1.4 1.4 0 0 1-1.1-.5z" />
+            <path class="check" d="M6.6 6.6l1.7 1.7 3.4-3.6" /></svg
           >${this.siteName}</span
         >
       `;
@@ -261,8 +261,8 @@ NavbarSiteInfo.styles = [
       color: var(--text-color--cert-sublabel);
     }
 
-    /* The name of a drive the user named: a small green check sits on the tag's top-right corner like a
-       notification dot, ringed in the button's own background so it reads as a badge. */
+    /* The name of a drive the user named: a green tag with a check cut into it. The check is drawn in
+       the button's own background, so it reads as a hole in the tag. */
     button {
       --site-info-bg: var(--bg-color--cert--default);
       --site-info-name-check: #2ea44f;
@@ -282,36 +282,22 @@ NavbarSiteInfo.styles = [
       }
     }
 
-    .site-name .name-icon {
-      position: relative;
+    .name-icon {
       display: inline-block;
-      font-size: 11px;
-      line-height: 1;
-      vertical-align: -1px;
-      margin-right: 6px;
+      width: 15px;
+      height: 13px;
+      vertical-align: -2px;
+      margin-right: 4px;
     }
 
-    .name-check {
-      position: absolute;
-      top: -4px;
-      right: -5px;
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--site-info-name-check);
-      box-shadow: 0 0 0 1px var(--site-info-bg);
+    .name-icon .tag {
+      fill: var(--site-info-name-check);
     }
 
-    .name-check svg {
-      display: block;
-      width: 7px;
-      height: 7px;
-    }
-
-    .name-check path {
+    .name-icon .check {
       fill: none;
-      stroke: #fff;
-      stroke-width: 1.8;
+      stroke: var(--site-info-bg);
+      stroke-width: 1.6;
       stroke-linecap: round;
       stroke-linejoin: round;
     }
