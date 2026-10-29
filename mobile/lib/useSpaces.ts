@@ -146,6 +146,20 @@ export function useSpaces (backend: Backend): Spaces {
     return () => timers.forEach(clearTimeout)
   }, [syncFromVault])
 
+  // Keep this phone's own Device record listing its Spaces, so the user's other Devices can show
+  // what the phone has. The backend writes only when the list changed, and only once paired.
+  const ownSpacesSig = JSON.stringify(spaces.filter((s) => s.rootDriveKey).map((s) => [s.rootDriveKey, s.name]))
+  useEffect(() => {
+    if (!ready) return
+    const own = (JSON.parse(ownSpacesSig) as [string, string][]).map(([rootDriveKey, name]) => ({ rootDriveKey, name }))
+    const timer = setTimeout(() => {
+      backendRef.current.vaultStatus([], own)
+        .then((v) => { if (v.removed) leaveVaultRef.current() })
+        .catch(() => {})
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [ownSpacesSig, ready])
+
   const setActive = useCallback((id: string) => {
     setActiveSpaceId(id)
     AsyncStorage.setItem(ACTIVE_KEY, id)

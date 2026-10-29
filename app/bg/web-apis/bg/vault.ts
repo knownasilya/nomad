@@ -8,6 +8,7 @@ import b4a from 'b4a';
 import { EventEmitter } from 'events';
 import * as vault from '../../hyper/vault';
 import * as pairing from '../../hyper/device-pairing';
+import * as devicePresence from '../../hyper/device-presence';
 import * as vaultApps from './vault-apps';
 import * as names from '../../hyper/names';
 
@@ -47,6 +48,12 @@ export default {
       try {
         await vault.syncSpacesToVault();
       } catch {}
+      // This Device's own Space list, so the phone can show which Spaces each Device has.
+      try {
+        await vault.publishOwnSpaces();
+      } catch {}
+      // A Vault made after startup (first invite) needs the presence channel on live connections.
+      devicePresence.install();
     }
     const devices = sess ? await vault.listDevices() : [];
     return {
@@ -74,7 +81,7 @@ export default {
 
   // Replication state of the Vault and each Space, for the Devices page's sync panel.
   async getSyncStatus() {
-    return vault.getSyncStatus();
+    return { ...(await vault.getSyncStatus()), connectedDevices: devicePresence.connectedDevices() };
   },
 
   // Member side: ensure a Vault exists, then mint an invite code.

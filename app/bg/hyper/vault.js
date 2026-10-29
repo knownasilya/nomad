@@ -405,6 +405,44 @@ export async function registerOwnDevice({ name, platform } = {}) {
   logger.info('Registered own device in vault', { key });
 }
 
+// Record the Spaces this Device has on its own Device record (`spaces: [{ rootDriveKey, name }]`),
+// so the user's other Devices can show what each Device holds — a Space that is on one Device and
+// missing on another is how a sync gap shows up. Writes only when the list changed, and only with a
+// writable Vault; a Device that can't write yet publishes on a later change or status poll.
+export async function publishOwnSpaces() {
+  const sess = await getVault();
+  if (!sess || !sess.writable) return false;
+  const localKey = sess.base?.local?.key;
+  if (!localKey) return false;
+  const path = `${DEVICES_PREFIX}${b4a.toString(localKey, 'hex')}.json`;
+  const rec = await _readRecord(sess, path);
+  if (!rec) return false; // registerOwnDevice writes it first
+  const spaces = [];
+  for (const space of await spacesDb.list()) {
+    const rootDriveKey = space.root_drive_url ? drives.fromURLToKey(space.root_drive_url) : null;
+    if (rootDriveKey) spaces.push({ rootDriveKey, name: space.name });
+  }
+  if (JSON.stringify(rec.spaces || null) === JSON.stringify(spaces)) return false;
+  await _putRecord(sess, path, { ...rec, spaces, spacesUpdatedAt: new Date().toISOString() });
+  logger.info('Published own spaces to vault', { count: spaces.length });
+  return true;
+}
+
+// Republish this Device's Space list whenever a Space is created, renamed or removed. Debounced:
+// creating a Space fires once for the row and again when its Root Drive URL lands.
+let _publishTimer = null;
+let _watchingSpaces = false;
+export function watchOwnSpaces() {
+  if (_watchingSpaces) return;
+  _watchingSpaces = true;
+  spacesDb.events.on('changed', () => {
+    clearTimeout(_publishTimer);
+    _publishTimer = setTimeout(() => {
+      publishOwnSpaces().catch((e) => logger.warn('publishOwnSpaces failed', { error: e.toString() }));
+    }, 1000);
+  });
+}
+
 // Rename a Device. Any writer can update the record (it's a plain put into the Vault); the change
 // replicates to all Devices. The name is cosmetic.
 export async function renameDevice(deviceKey, name) {

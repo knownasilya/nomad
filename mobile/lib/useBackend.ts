@@ -73,7 +73,9 @@ export interface PairedMsg {
   message?: string
 }
 
-export interface VaultDevice { key: string; name: string; platform: string; addedAt?: string }
+// spaces: the Spaces that Device says it has (it writes this itself); missing on an older Nomad.
+export interface DeviceSpace { rootDriveKey: string; name: string }
+export interface VaultDevice { key: string; name: string; platform: string; addedAt?: string; spaces?: DeviceSpace[] }
 // movedTo: the Space's Root Drive got a new key; this record only points at it.
 export interface VaultSpace { rootDriveKey: string; name: string; icon?: string; color?: string; movedTo?: string }
 // Replication state of one Autobase (the Vault, or a Space Root Drive). `loaded: false` means
@@ -99,6 +101,7 @@ export interface VaultMsg {
   spaces?: VaultSpace[]
   writable?: boolean
   sync?: SyncStatus
+  connectedDevices?: string[] // Vault writer keys of the Devices connected to this phone right now
   message?: string
 }
 
@@ -113,7 +116,8 @@ export interface Backend {
   close: (driveType: DriveType, key?: string) => void
   create: (type: DriveType, title: string, description?: string) => Promise<CreatedMsg>
   pair: (code: string, name?: string) => Promise<PairedMsg>
-  vaultStatus: (spaceKeys?: string[]) => Promise<VaultMsg>
+  // ownSpaces: this phone's Spaces, written to its own Device record when they changed.
+  vaultStatus: (spaceKeys?: string[], ownSpaces?: DeviceSpace[]) => Promise<VaultMsg>
   renameDevice: (deviceKey: string, name: string) => Promise<VaultMsg>
   removeDevice: (deviceKey: string, self?: boolean) => Promise<VaultMsg>
   addVaultSpace: (space: { rootDriveKey: string; name: string; icon?: string; color?: string }) => Promise<VaultMsg>
@@ -438,7 +442,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
         req.send(b4a.from(JSON.stringify({ reqId, code, name })))
       })
     },
-    vaultStatus (spaceKeys = []) {
+    vaultStatus (spaceKeys = [], ownSpaces) {
       return new Promise<VaultMsg>((resolve) => {
         const rpc = rpcRef.current
         if (!rpc) return resolve({ reqId: '', hasVault: false, message: 'backend not ready' })
@@ -453,7 +457,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
         }, 10000)
         pending.current[reqId] = (msg: VaultMsg) => { clearTimeout(timer); resolve(msg) }
         const req = rpc.request(RPC_VAULT_STATUS)
-        req.send(b4a.from(JSON.stringify({ reqId, spaceKeys })))
+        req.send(b4a.from(JSON.stringify({ reqId, spaceKeys, ownSpaces })))
       })
     },
     renameDevice (deviceKey, name) {
