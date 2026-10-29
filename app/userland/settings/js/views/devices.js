@@ -274,6 +274,22 @@ class DevicesView extends LitElement {
     `;
   }
 
+  // Whether this Device has a live channel to `d` right now (hyper/device-presence.js).
+  renderConnected(d) {
+    const connected = this.sync?.connectedDevices;
+    if (!connected) return '';
+    return connected.includes(d.key)
+      ? html`<span class="tag ok">Connected</span>`
+      : html`<span class="tag">Not connected</span>`;
+  }
+
+  // The Spaces a Device says it has (its record's `spaces`, written by that Device itself).
+  renderDeviceSpaces(d) {
+    if (!Array.isArray(d.spaces)) return '';
+    if (!d.spaces.length) return html`<div class="meta">No spaces</div>`;
+    return html`<div class="meta">Spaces: ${d.spaces.map((sp) => sp.name || 'Space').join(', ')}</div>`;
+  }
+
   renderDeviceList() {
     if (!this.devices || this.devices.length === 0) {
       return html`<div class="empty-state">
@@ -309,7 +325,9 @@ class DevicesView extends LitElement {
                       </div>
                       <div class="meta">
                         Added ${this._formatDate(d.addedAt)} · <span class="tag">${d.platform}</span>
+                        ${d.key && d.key === thisKey ? '' : this.renderConnected(d)}
                       </div>
+                      ${this.renderDeviceSpaces(d)}
                     </div>
                     ${this.confirmingKey === d.key
                       ? html`<div class="actions">
