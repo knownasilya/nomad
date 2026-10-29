@@ -30,7 +30,10 @@ Environment: `NOMAD_CRAWLER_PORT` is an alternative to `--port`.
    | `GET /topics` | the emergent topic directory with counts |
    | `GET /stats` | `{ drives, topics }` |
 
-The built-in `nomad://search` app points at this API (configurable endpoint). This is the v1
+The built-in `nomad://search` app points at this API (configurable endpoint). When the browser runs
+the crawler itself and another program already holds port 8787, it serves on a free port instead,
+and `nomad://search` asks the browser for that address (`nomad.browser.getCrawlerEndpoint()`). Run
+from the command line, a taken port leaves the crawler indexing without an API. This is the v1
 "torrent-search-site" stance: the *index* is central, the *content* stays P2P. ADR-0014 §6 sketches
 the endgame — publishing the inverted index itself as a Hyperbee so the index has no privileged host.
 

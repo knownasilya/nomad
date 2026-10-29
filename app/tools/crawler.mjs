@@ -47,11 +47,19 @@ const REFRESH_SLOW_MS = 3 * 60_000;
 // Start a crawler: join INDEX_TOPIC, index the listings that arrive, serve the search API on
 // `port`. Resolves to { close, applyLocalListings } once the corestore is open;
 // applyLocalListings(frames) takes the full set of this machine's own listings (see
-// createLocalFeed). If the port is taken (another crawler is
-// running), the index still runs and the search page uses the one already on that port. `host`
-// limits who can query it: the browser passes 127.0.0.1; the CLI default serves the network, so a
-// crawler can act as a shared super-peer.
-export async function startCrawler({ port = DEFAULT_PORT, host, storage } = {}) {
+// createLocalFeed). `host` limits who can query it: the browser passes 127.0.0.1; the CLI default
+// serves the network, so a crawler can act as a shared super-peer.
+//
+// If the port is taken, the CLI keeps indexing without an API. The browser passes `fallbackPort`:
+// any program can hold 8787, so it serves on a free port instead, and `onListening(port)` reports
+// the port it got so nomad://search can follow it.
+export async function startCrawler({
+  port = DEFAULT_PORT,
+  host,
+  storage,
+  fallbackPort,
+  onListening,
+} = {}) {
   const idx = createIndex();
   const store = new Corestore(storage || path.join(os.tmpdir(), 'nomad-crawler-store'));
   await store.ready();
@@ -63,7 +71,7 @@ export async function startCrawler({ port = DEFAULT_PORT, host, storage } = {}) 
   });
 
   // Serve immediately — don't block the API on swarm discovery (flush can take ~10s).
-  const server = startHttp(port, host, idx);
+  const server = startHttp(port, host, idx, { fallbackPort, onListening });
 
   const discovery = swarm.join(INDEX_TOPIC, { server: false, client: true }); // look up listed Drives
   log(`joining INDEX_TOPIC (${b4a.toString(INDEX_TOPIC, 'hex').slice(0, 12)}…) as crawler…`);
@@ -126,10 +134,10 @@ function openListingChannel(conn, idx) {
   }
 }
 
-function startHttp(PORT, HOST, idx) {
+function startHttp(PORT, HOST, idx, { fallbackPort, onListening } = {}) {
   const server = http
     .createServer((req, res) => {
-      const url = new URL(req.url, `http://localhost:${PORT}`);
+      const url = new URL(req.url, 'http://localhost');
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       if (url.pathname === '/search') {
@@ -142,16 +150,23 @@ function startHttp(PORT, HOST, idx) {
       res.statusCode = 404;
       res.end(JSON.stringify({ error: 'not found' }));
     });
-  server.on('listening', () =>
-    log(`search API on http://localhost:${PORT}  (GET /search?q=&topic=  ·  /topics  ·  /stats)`)
-  );
-  server.on('error', (err) =>
-    log(
-      err?.code === 'EADDRINUSE'
-        ? `port ${PORT} is taken (another crawler?) — indexing anyway, not serving the API`
-        : `search API error: ${err?.message || err}`
-    )
-  );
+  let retried = false;
+  server.on('listening', () => {
+    const port = server.address().port;
+    log(`search API on http://localhost:${port}  (GET /search?q=&topic=  ·  /topics  ·  /stats)`);
+    onListening?.(port);
+  });
+  server.on('error', (err) => {
+    if (err?.code === 'EADDRINUSE' && fallbackPort && !retried) {
+      retried = true;
+      log(`port ${PORT} is taken — serving the API on a free port instead`);
+      server.listen(0, HOST); // the OS picks a free port
+    } else if (err?.code === 'EADDRINUSE') {
+      log(`port ${PORT} is taken (another crawler?) — indexing anyway, not serving the API`);
+    } else {
+      log(`search API error: ${err?.message || err}`);
+    }
+  });
   server.listen(PORT, HOST);
   return server;
 }

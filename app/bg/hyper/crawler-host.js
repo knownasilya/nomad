@@ -12,6 +12,9 @@
 // a DHT lookup: a lookup only finds what was announced at that moment, so a Drive listed just after
 // the crawler started could stay missing from your own search for minutes. The full set is sent on
 // each change, so unlisting takes the Drive out at once too.
+//
+// Another program can already hold CRAWLER_PORT (a dev server on 8787, say). The crawler then
+// serves on a free port and reports it; nomad://search asks getEndpoint() for the address.
 
 import { app, utilityProcess } from 'electron';
 import path from 'path';
@@ -22,10 +25,13 @@ import * as discovery from './discovery';
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'crawler' });
 
 export const CRAWLER_SETTING = 'crawler_enabled';
-export const CRAWLER_PORT = 8787; // keep in step with DEFAULT_ENDPOINT in userland/search/js/main.js
+export const CRAWLER_PORT = 8787; // keep in step with FALLBACK_ENDPOINT in userland/search/js/main.js
 const STOP_GRACE_MS = 3000;
+const ENDPOINT_WAIT_MS = 10_000; // how long getEndpoint() waits for a starting crawler's port
 
 let child = null;
+let port = null; // the port the running crawler's search API is on, once it says
+let portWaiters = [];
 
 export function setup() {
   settingsDb.on('set:' + CRAWLER_SETTING, () => sync());
@@ -36,6 +42,29 @@ export function setup() {
 
 export function isRunning() {
   return !!child;
+}
+
+// The address of the built-in crawler's search API, or null when the crawler is off or has no API.
+// While the crawler is starting, waits a little for it to report its port.
+export async function getEndpoint() {
+  if (!child) return null;
+  if (!port) {
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, ENDPOINT_WAIT_MS);
+      portWaiters.push(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+  }
+  return port ? `http://127.0.0.1:${port}` : null;
+}
+
+function setPort(value) {
+  port = value;
+  const waiters = portWaiters;
+  portWaiters = [];
+  for (const w of waiters) w();
 }
 
 async function sync() {
@@ -71,8 +100,17 @@ function start() {
   proc.once('spawn', () => sendLocalListings());
   proc.stdout?.on('data', (d) => logger.info(String(d).trim()));
   proc.stderr?.on('data', (d) => logger.warn(String(d).trim()));
+  proc.on('message', (msg) => {
+    if (child === proc && msg?.type === 'listening' && Number.isInteger(msg.port)) {
+      logger.info('Crawler search API listening', { port: msg.port });
+      setPort(msg.port);
+    }
+  });
   proc.on('exit', (code) => {
-    if (child === proc) child = null;
+    if (child === proc) {
+      child = null;
+      setPort(null);
+    }
     logger.info('Crawler exited', { code });
   });
 }
@@ -91,6 +129,7 @@ function stop() {
   if (!child) return;
   const proc = child;
   child = null;
+  setPort(null);
   try {
     proc.postMessage('stop');
   } catch {}

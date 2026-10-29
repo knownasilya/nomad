@@ -40,6 +40,7 @@ import * as siteInfo from './ui/subwindows/site-info';
 import { findWebContentsParentWindow, spawnAndExecuteJs } from './lib/electron';
 import * as hyperDaemon from './hyper/daemon';
 import * as aiAwake from './ai/awake';
+import * as crawlerHost from './hyper/crawler-host';
 import * as bookmarks from './filesystem/bookmarks';
 import { getDriveIdentFull, isRootUrl } from './filesystem/index';
 import { isSameOrigin } from '../lib/urls';
@@ -251,6 +252,8 @@ export const WEBAPI = {
   getDaemonStatus,
   getDaemonNetworkStatus,
   getAiKeepAwakeStatus,
+  // nomad://search: where the built-in crawler serves its search API (bg/hyper/crawler-host.js).
+  getCrawlerEndpoint: () => crawlerHost.getEndpoint(),
   checkForUpdates,
   restartBrowser,
   setRunOnStartup,

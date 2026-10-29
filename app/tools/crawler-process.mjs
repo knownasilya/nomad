@@ -9,6 +9,8 @@
 // Messages from the parent:
 //   'stop'                          close the crawler and exit
 //   { type: 'listings', frames }    this browser's own listed Drives (LISTING frames, full set)
+// Messages to the parent:
+//   { type: 'listening', port }     the port the search API is on (a free one when --port is taken)
 
 import { startCrawler } from './crawler.mjs';
 
@@ -40,6 +42,8 @@ startCrawler({
   port: Number(args.port) || undefined,
   host: args.host || undefined,
   storage: args.storage || undefined,
+  fallbackPort: true,
+  onListening: (port) => process.parentPort?.postMessage({ type: 'listening', port }),
 })
   .then((c) => {
     crawler = c;
