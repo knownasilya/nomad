@@ -44,6 +44,12 @@ const GLOBAL_SETTINGS = new Set([
   'url_routing_rules',
 ]);
 
+// The built-in search page (userland/search), which runs the ?q= it opens with.
+const NOMAD_SEARCH_URL = 'nomad://search/?q=';
+// Older versions pointed the Nomad engine at the desktop, which drops the query. Saved engine lists
+// still have it, so upgradeValue() swaps it on read.
+const OLD_NOMAD_SEARCH_URL = 'nomad://desktop/?q=';
+
 // globals
 // =
 
@@ -91,7 +97,7 @@ export const setup = async function (opts) {
         name: 'DuckDuckGo',
         url: 'https://www.duckduckgo.com/?q=',
       },
-      { name: 'Nomad', url: 'nomad://desktop/?q=' },
+      { name: 'Nomad', url: NOMAD_SEARCH_URL },
       { name: 'Google', url: 'https://www.google.com/search?q=' },
     ],
     tab_layout: 'top-bar',
@@ -223,7 +229,7 @@ export const get = function (key) {
           row = row.value;
           if (JSON_ENCODED_SETTINGS.includes(key)) {
             try {
-              row = JSON.parse(row);
+              row = upgradeValue(key, JSON.parse(row));
             } catch (e) {
               row = defaultSettings[key];
             }
@@ -253,7 +259,7 @@ export const getAll = function () {
           // parse non-string values
           if (JSON_ENCODED_SETTINGS.includes(row.key)) {
             try {
-              row.value = JSON.parse(row.value);
+              row.value = upgradeValue(row.key, JSON.parse(row.value));
             } catch (e) {
               row.value = defaultSettings[row.key];
             }
@@ -287,7 +293,7 @@ export async function getForSpace(spaceId, key) {
     let val = row.value;
     if (JSON_ENCODED_SETTINGS.includes(key)) {
       try {
-        val = JSON.parse(val);
+        val = upgradeValue(key, JSON.parse(val));
       } catch (e) {
         val = defaultSettings[key];
       }
@@ -324,7 +330,7 @@ export async function getAllForSpace(spaceId) {
     let val = row.value;
     if (JSON_ENCODED_SETTINGS.includes(row.key)) {
       try {
-        val = JSON.parse(val);
+        val = upgradeValue(row.key, JSON.parse(val));
       } catch (e) {
         continue;
       }
@@ -358,6 +364,20 @@ export async function setForSpace(spaceId, key, value) {
 
 // internal methods
 // =
+
+/**
+ * Fix a stored value that an older version saved in a shape this one no longer uses.
+ * @param {string} key
+ * @param {any} value
+ */
+function upgradeValue(key, value) {
+  if (key === 'search_engines' && Array.isArray(value)) {
+    return value.map((se) =>
+      se && se.url === OLD_NOMAD_SEARCH_URL ? { ...se, url: NOMAD_SEARCH_URL } : se
+    );
+  }
+  return value;
+}
 
 migrations = [
   // version 1

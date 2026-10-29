@@ -19,11 +19,15 @@ const ENDPOINT_KEY = 'nomad.search.endpoint';
 const FALLBACK_ENDPOINT = 'http://localhost:8787';
 const FEED_TYPE = 'walled.garden/feed';
 
+// nomad://search/?q=…&topic=… opens with that search run: the URL bar's "Search Nomad" entry links
+// here (bg/dbs/settings.js search_engines, fg/location-bar).
+const params = new URLSearchParams(location.search);
+
 const state = {
   builtInEndpoint: FALLBACK_ENDPOINT,
   customEndpoint: localStorage.getItem(ENDPOINT_KEY) || '', // another index the user chose, or ''
-  query: '',
-  topic: '',
+  query: params.get('q') || '',
+  topic: params.get('topic') || '',
   topics: [],
   results: [],
   status: 'idle', // idle | loading | ok | error
@@ -68,6 +72,7 @@ async function loadStats() {
 let searchSeq = 0;
 async function runSearch() {
   const seq = ++searchSeq;
+  syncUrl();
   state.status = 'loading';
   state.error = '';
   renderMain();
@@ -85,6 +90,15 @@ async function runSearch() {
     state.results = [];
   }
   renderMain();
+}
+
+// Keep the current search in the URL, so a reload or a copied link runs it again.
+function syncUrl() {
+  const qs = new URLSearchParams();
+  if (state.query) qs.set('q', state.query);
+  if (state.topic) qs.set('topic', state.topic);
+  const search = qs.toString() ? '?' + qs : '';
+  if (search !== location.search) history.replaceState(null, '', location.pathname + search);
 }
 
 // Ask bg where the built-in crawler serves. It answers null when the crawler is off; keep the
@@ -191,6 +205,7 @@ function renderShell() {
     placeholder: 'Search listed drives',
     'aria-label': 'Search listed drives',
     autofocus: true,
+    value: state.query || null,
     oninput: (e) => {
       state.query = e.target.value;
       clearTimeout(timer);
