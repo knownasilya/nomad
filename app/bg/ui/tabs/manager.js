@@ -36,6 +36,7 @@ import spacesRPCManifest from '../../rpc-manifests/spaces';
 import { registerForPartition } from '../../protocols/index';
 import hyper from '../../hyper/index';
 import * as drafts from '../../hyper/drafts';
+import * as vault from '../../hyper/vault';
 
 const X_POSITION = 0;
 const Y_POSITION = 75;
@@ -2037,7 +2038,10 @@ rpc.exportAPI('background-process-spaces', spacesRPCManifest, {
   },
 
   async update(id, opts) {
-    return spacesDb.update(id, opts);
+    const space = await spacesDb.update(id, opts);
+    // Keep the Vault's copy (name, icon, color) in step for the user's other Devices.
+    vault.publishSpace(space).catch(() => {});
+    return space;
   },
 
   async remove(id) {
