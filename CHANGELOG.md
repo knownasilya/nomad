@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.21.0](https://github.com/knownasilya/nomad/compare/v1.20.0...v1.21.0) (2026-10-29)
+
+
+### Features
+
+* **devices:** show a drive's last error in the phone's Sync details ([708842a](https://github.com/knownasilya/nomad/commit/708842a50c413814c79f25df5dd27d0b6e4ba671))
+* **mobile:** a Settings screen and a Logs page like desktop's ([9a98d46](https://github.com/knownasilya/nomad/commit/9a98d462487e2c832ab29d0ecf08d1f8c0202bf4))
+* **mods:** new Mod and a Mods on/off submenu in the tab context menu ([f47490d](https://github.com/knownasilya/nomad/commit/f47490d337c4a22e11b8b750a163e9ed8ef8e7ce))
+* **navbar:** move Mods into the site menu, hide its empty arrow, move AI button ([4ad39cc](https://github.com/knownasilya/nomad/commit/4ad39cc3e6a982f2539d8c39d128aeb5a7680633))
+
+
+### Bug Fixes
+
+* **spaces:** don't crash the phone when a synced space's drive fails ([1d64f98](https://github.com/knownasilya/nomad/commit/1d64f9872bf0fd08d201576ab7e84230ac86d10e)), closes [#57](https://github.com/knownasilya/nomad/issues/57)
+
 ## [1.20.0](https://github.com/knownasilya/nomad/compare/v1.19.0...v1.20.0) (2026-10-29)
 
 
