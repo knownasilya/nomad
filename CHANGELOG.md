@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.19.0](https://github.com/knownasilya/nomad/compare/v1.18.1...v1.19.0) (2026-10-29)
+
+
+### Features
+
+* **boosts:** Arc-style per-site Boosts with zapper, tab toggles and AI tools ([19f2ad1](https://github.com/knownasilya/nomad/commit/19f2ad12f8a6f4310a20104cf3677efc1476fe15))
+* **devices:** show each device's spaces and whether it's connected ([610e5b9](https://github.com/knownasilya/nomad/commit/610e5b93a9f84ae497fa06aec89b562ccf2672c3))
+
+
+### Bug Fixes
+
+* **search:** serve the crawler on a free port when 8787 is taken ([8136d85](https://github.com/knownasilya/nomad/commit/8136d85b3803652b2abf73dcad434207b0b67706))
+* **spaces:** publish a new Space to the Vault so paired Devices see it ([4942850](https://github.com/knownasilya/nomad/commit/494285014f86b15482ad623d2d4e9f6219c3e61d))
+
 ### [1.18.1](https://github.com/knownasilya/nomad/compare/v1.18.0...v1.18.1) (2026-10-28)
 
 
