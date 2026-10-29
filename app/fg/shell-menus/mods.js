@@ -3,7 +3,7 @@ import { repeat } from 'lit/directives/repeat.js';
 import * as bg from './bg-process-rpc';
 import commonCSS from './common.css';
 
-// Mods menu (ADR-0023), opened from the magic-wand button in the location bar. Lists the site's
+// Mods menu (ADR-0023), opened from the Mods item in the site menu (the location bar's arrow). Lists the site's
 // Mods with a switch each, quick preset styles, and the element picker. Acts on the ACTIVE tab's page
 // through bg.views (bg/ui/mods.js); edits happen in My Library → Mods.
 class ModsMenu extends LitElement {

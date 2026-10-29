@@ -102,7 +102,6 @@ class ShellWindowNavbar extends LitElement {
         ?has-draft=${this.activeTab?.hasDraft ?? false}
         ?draft-previewing=${this.activeTab?.draftPreviewing ?? false}
         .mods=${this.activeTab?.mods ?? null}
-        ?ai-open=${this.aiOpen}
       ></shell-window-navbar-location>
       <shell-window-navbar-inpage-find
         .activeTabIndex="${this.activeTabIndex}"
@@ -112,7 +111,7 @@ class ShellWindowNavbar extends LitElement {
         num-matches="${this.activeTab?.currentInpageFindResults?.matches ?? '0'}"
       ></shell-window-navbar-inpage-find>
       <div class="buttons">
-        ${this.watchlistBtn} ${this.daemonInactiveBtn} ${this.browserMenuBtn}
+        ${this.watchlistBtn} ${this.daemonInactiveBtn} ${this.aiBtn} ${this.browserMenuBtn}
       </div>
     `;
   }
@@ -284,6 +283,21 @@ class ShellWindowNavbar extends LitElement {
     `;
   }
 
+  // Toggles the shell-level AI sidebar (app/fg/shell-window/ai-sidebar.js), on every page.
+  get aiBtn() {
+    const cls = classMap({ 'ai-btn': true, pressed: this.aiOpen });
+    return html`
+      <button
+        class=${cls}
+        @click=${this.onClickAiSidebar}
+        style="margin: 0px 2px"
+        title=${this.aiOpen ? 'Hide AI sidebar' : 'Show AI sidebar'}
+      >
+        <span class="fas fa-robot" style=${this.aiOpen ? 'color: #2864dc' : ''}></span>
+      </button>
+    `;
+  }
+
   get browserMenuBtn() {
     const cls = classMap({
       'browser-menu-btn': true,
@@ -336,6 +350,10 @@ class ShellWindowNavbar extends LitElement {
     } catch (e) {
       // ignore
     }
+  }
+
+  onClickAiSidebar() {
+    bg.views.toggleAiSidebarOpen(this.activeTabIndex);
   }
 
   onClickWatchlistBtn(e) {
