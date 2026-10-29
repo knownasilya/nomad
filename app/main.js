@@ -23,6 +23,7 @@ import hyper from './bg/hyper/index';
 import * as filesystem from './bg/filesystem/index';
 import * as bookmarkPins from './bg/filesystem/pins';
 import * as syncedSettings from './bg/hyper/synced-settings';
+import * as vault from './bg/hyper/vault';
 import * as names from './bg/hyper/names';
 import * as autoNames from './bg/hyper/auto-names';
 import { completeText } from './bg/web-apis/bg/ai';
@@ -191,6 +192,9 @@ app.on('ready', async function () {
   permissions.setup();
   // Synced settings first, so a Device that turned the crawler off elsewhere stops it here soon.
   syncedSettings.setup();
+  // Index any Space the Vault doesn't have yet (one made before Spaces were published on creation,
+  // or while the Vault wasn't writable), so the user's other Devices see it.
+  vault.syncSpacesToVault().catch((e) => log.warn('Could not sync spaces to the Vault', { error: e.toString() }));
   // The user's names (hyper://<name>/ and the URL bar), from the Vault.
   names.setup();
   // The AI names sites the user visits often (Settings → AI turns it off).

@@ -43,8 +43,8 @@ export default {
       try {
         await vault.registerOwnDevice({ name: defaultDeviceName(), platform: thisPlatform() });
       } catch {}
-      // Backfill local Spaces into the Vault so they replicate to paired Devices. registerSpace is
-      // never called on space creation, so without this a paired Device sees Devices but no Spaces.
+      // Backfill local Spaces into the Vault so they replicate to paired Devices (any a Space's
+      // creation didn't publish, e.g. one made before this Device had a Vault).
       try {
         await vault.syncSpacesToVault();
       } catch {}

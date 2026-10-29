@@ -327,8 +327,13 @@ export async function getOrSetupSpaceDrive(space) {
 
   const drive = await _createRootDrive();
   logger.info('Created root drive for space', { spaceId: space.id, url: drive.url });
-  await spacesDb.update(space.id, { rootDriveUrl: drive.url });
+  const updated = await spacesDb.update(space.id, { rootDriveUrl: drive.url });
   spaceRootDrives[space.id] = drive;
+  // Now that the Space has a Root Drive, index it in the Vault so it shows up on the user's other
+  // Devices. Does nothing on a Device that isn't paired.
+  vault
+    .publishSpace(updated)
+    .catch((e) => logger.warn('Could not publish space to the Vault', { spaceId: space.id, error: e.toString() }));
   return drive;
 }
 
