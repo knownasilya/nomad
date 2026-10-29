@@ -36,6 +36,7 @@ import spacesRPCManifest from '../../rpc-manifests/spaces';
 import { registerForPartition } from '../../protocols/index';
 import hyper from '../../hyper/index';
 import * as drafts from '../../hyper/drafts';
+import * as names from '../../hyper/names';
 import * as mods from '../mods';
 import * as vault from '../../hyper/vault';
 
@@ -701,6 +702,12 @@ export async function setup() {
   }
   // The location bar's Mods button follows Mods changed here or on another Device.
   mods.events.on('changed', () => {
+    iterateTabs((tab) => {
+      for (const pane of tab.panes) pane.emitUpdateState();
+    });
+  });
+  // The location bar's @name follows names kept, renamed or removed here or on another Device.
+  names.events.on('changed', () => {
     iterateTabs((tab) => {
       for (const pane of tab.panes) pane.emitUpdateState();
     });

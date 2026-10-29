@@ -86,6 +86,7 @@ class ShellWindowNavbar extends LitElement {
         title="${this.activeTab?.title ?? ''}"
         siteTitle="${this.activeTab?.siteTitle ?? ''}"
         siteSubtitle="${this.activeTab?.siteSubtitle ?? ''}"
+        siteName="${this.activeTab?.siteName ?? ''}"
         siteIcon="${this.activeTab?.siteIcon ?? ''}"
         siteTrust="${this.activeTab?.siteTrust ?? ''}"
         driveDomain="${this.activeTab?.driveDomain ?? ''}"

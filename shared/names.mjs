@@ -120,6 +120,25 @@ export function resolveNamedUrl(url, lookup) {
   return joinTarget(rec.url, m[2] || '/', m[3] || '', m[4] || '');
 }
 
+// The user's own name for the hyper:// page at `url`, for the location bar to show in place of the
+// drive key: the record whose folder holds the page (the deepest one, when an app folder in a drive
+// is named too). A name the AI gave (`auto`) doesn't count until the user keeps it. A version
+// (hyper://<key>+12/) is the same drive. Null for other URLs, or when nothing the user named covers it.
+export function approvedNameFor(url, records) {
+  const m = /^hyper:\/\/([^/?#]+)/i.exec(String(url || '').trim());
+  if (!m) return null;
+  const page = nameTarget(String(url).trim().replace(m[0], 'hyper://' + m[1].replace(/\+[^/]*$/, '')));
+  let best = null;
+  for (const r of records || []) {
+    if (!isNameRecord(r) || r.auto || !/^hyper:\/\//i.test(r.url)) continue;
+    const target = nameTarget(r.url.replace(/[?#].*$/, ''));
+    if (!page.startsWith(target)) continue;
+    const longer = !best || target.length > best.target.length;
+    if (longer || (target.length === best.target.length && r.name < best.r.name)) best = { r, target };
+  }
+  return best ? best.r : null;
+}
+
 // The names that match what's typed in the URL bar, best first: the exact name, then names that
 // start with it, then names or titles that contain it. "hyper://blog/" counts as "blog".
 export function matchNames(query, records, limit = 5) {

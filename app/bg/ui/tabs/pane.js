@@ -79,6 +79,8 @@ const STATE_VARS = [
   'title',
   'siteTitle',
   'siteSubtitle',
+  // Names (ADR-0018): the user's own name for the shown drive or app, shown as @name in the location bar
+  'siteName',
   'siteIcon',
   'siteTrust',
   'driveDomain',
@@ -301,6 +303,16 @@ export class Pane extends EventEmitter {
       return [forkLabel, version].filter(Boolean).join(' ');
     }
     return '';
+  }
+
+  // The name the user gave this hyper:// drive or app folder (hyper/names.js), or '' when there is
+  // none or the AI gave it and the user hasn't kept it.
+  get siteName() {
+    try {
+      return names.approvedFor(this.loadingURL || this.url)?.name || '';
+    } catch {
+      return '';
+    }
   }
 
   get siteIcon() {

@@ -10,6 +10,7 @@ class NavbarSiteInfo extends LitElement {
       url: { type: String },
       siteTitle: { type: String },
       siteSubtitle: { type: String },
+      siteName: { type: String },
       siteIcon: { type: String },
       siteTrust: { type: String },
       driveDomain: { type: String },
@@ -26,6 +27,7 @@ class NavbarSiteInfo extends LitElement {
     this.url = '';
     this.siteTitle = '';
     this.siteSubtitle = '';
+    this.siteName = '';
     this.siteIcon = '';
     this.siteTrust = '';
     this.driveDomain = '';
@@ -75,7 +77,7 @@ class NavbarSiteInfo extends LitElement {
               </svg>
             `
           : html` <span class="${this.siteIcon} ${this.siteTrust}"></span> `}
-        <span class="label">${this.siteTitle}</span>
+        ${this.renderLabel()}
         ${this.siteSubtitle ? html`<span class="label sublabel">${this.siteSubtitle}</span>` : ''}
       `;
     }
@@ -98,6 +100,21 @@ class NavbarSiteInfo extends LitElement {
         ${innerHTML} ${this.renderHyperCtrls()}
       </button>
     `;
+  }
+
+  // A drive or app the user named (ADR-0018) shows @name, with a green check, in place of its key.
+  // A name the AI gave isn't shown until the user keeps it (bg/ui/tabs/pane.js siteName).
+  renderLabel() {
+    if (this.siteName && this.isHyperdrive) {
+      return html`
+        <span class="label site-name" title="Your name for this site: hyper://${this.siteName}/">
+          @${this.siteName}<span class="name-check"
+            ><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.6 5.2l1.6 1.6 3.2-3.4" /></svg
+          ></span>
+        </span>
+      `;
+    }
+    return html`<span class="label">${this.siteTitle}</span>`;
   }
 
   renderHyperCtrls() {
@@ -240,6 +257,58 @@ NavbarSiteInfo.styles = [
       padding: 0 5px;
       background: var(--bg-color--cert-sublabel);
       color: var(--text-color--cert-sublabel);
+    }
+
+    /* @name for a drive the user named: a small green check sits on its top-right corner like a
+       notification dot, ringed in the button's own background so it reads as a badge. */
+    button {
+      --site-info-bg: var(--bg-color--cert--default);
+      --site-info-name-check: #2ea44f;
+    }
+    button:not(:disabled):hover {
+      --site-info-bg: var(--bg-color--cert--default--hover);
+    }
+    button.trusted {
+      --site-info-bg: var(--bg-color--cert--trusted);
+    }
+    button.trusted:not(:disabled):hover {
+      --site-info-bg: var(--bg-color--cert--trusted--hover);
+    }
+    @media (prefers-color-scheme: dark) {
+      button {
+        --site-info-name-check: #3fb950;
+      }
+    }
+
+    .label.site-name {
+      position: relative;
+      display: inline-block;
+      margin-right: 8px;
+    }
+
+    .name-check {
+      position: absolute;
+      top: 3px;
+      right: -9px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--site-info-name-check);
+      box-shadow: 0 0 0 1.5px var(--site-info-bg);
+    }
+
+    .name-check svg {
+      display: block;
+      width: 9px;
+      height: 9px;
+    }
+
+    .name-check path {
+      fill: none;
+      stroke: #fff;
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
     .notrust {
