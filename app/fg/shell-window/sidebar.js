@@ -142,11 +142,11 @@ class ShellWindowSidebar extends LitElement {
                 <div class="tab-separator"></div>
               `
             : ''}
-          ${this._renderUngroupedTabs()}
           ${repeat(
-            this.groups || [],
-            (g) => g.id,
-            (g) => this._renderGroup(g)
+            this._buildItems(),
+            (item) => (item.group ? `grp:${item.group.id}` : `tab:${item.index}`),
+            (item) =>
+              item.group ? this._renderGroup(item.group) : this._renderTab(item.tab, item.index)
           )}
           <button
             class="new-tab-inline"
@@ -168,16 +168,26 @@ class ShellWindowSidebar extends LitElement {
     `;
   }
 
-  _renderUngroupedTabs() {
-    const ungrouped = this.tabs
-      .map((tab, index) => ({ tab, index }))
-      .filter(({ tab }) => !tab.groupId && !tab.isPinned);
-    if (!ungrouped.length) return '';
-    return repeat(
-      ungrouped,
-      ({ index }) => `tab:${index}`,
-      ({ tab, index }) => this._renderTab(tab, index)
-    );
+  // Ungrouped tabs and groups in tab order, so a new tab (added at the end) shows below the groups
+  // above it. A group sits where its first tab is; a group with no tabs goes at the end.
+  _buildItems() {
+    const groups = this.groups || [];
+    const items = [];
+    const placed = new Set();
+    this.tabs.forEach((tab, index) => {
+      if (tab.isPinned) return;
+      const group = tab.groupId && groups.find((g) => g.id === tab.groupId);
+      if (!group) {
+        items.push({ tab, index });
+      } else if (!placed.has(group.id)) {
+        placed.add(group.id);
+        items.push({ group });
+      }
+    });
+    for (const group of groups) {
+      if (!placed.has(group.id)) items.push({ group });
+    }
+    return items;
   }
 
   _renderGroup(group) {
