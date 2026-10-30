@@ -16,6 +16,7 @@ interface Props {
   visible: boolean
   onClose: () => void
   apps: Backend['apps']
+  onVaultChange: Backend['onVaultChange']
   onOpenDevices: () => void
   onOpenUrl: (url: string) => void
 }
@@ -32,8 +33,8 @@ const TOOLS: [string, string][] = [['heading', 'H'], ['bold', 'B'], ['italic', '
 // editor is desktop's, bundled into a page (lib/noteEditorHtml.ts, from app/userland/notes/js/mobile.js)
 // and run in a WebView. Edits save a moment after typing stops. An edit that crosses another Device's
 // becomes a conflict copy. A new note left empty is never stored; an emptied one is deleted when you
-// leave it. Retitling a note updates the links to it.
-export default function Notes ({ visible, onClose, apps, onOpenDevices, onOpenUrl }: Props) {
+// leave it. Retitling a note updates the links to it. Another Device's edits show while this is open.
+export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDevices, onOpenUrl }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const insets = useSafeAreaInsets()
@@ -83,6 +84,28 @@ export default function Notes ({ visible, onClose, apps, onOpenDevices, onOpenUr
   }, [call, send])
 
   useEffect(() => { if (visible) load() }, [visible, load])
+
+  // Another Device added, edited or deleted a note (our own saves land here too, and change
+  // nothing). The open note takes the new text unless there are edits here not saved yet: those
+  // win, and saving them makes a conflict copy if the note changed (planNoteSave).
+  useEffect(() => {
+    if (!visible) return
+    return onVaultChange(async () => {
+      await load()
+      const d = draft.current
+      if (!d || !d.id || dirty.current || saving.current) return
+      const fresh = notesRef.current.find((n) => n.id === d.id)
+      if (!fresh) {
+        // Deleted on another Device.
+        draft.current = null
+        ready.current = false
+        setEditorOpen(false)
+      } else if (fresh.updatedAt !== d.base) {
+        Object.assign(d, { body: fresh.body, title: fresh.title, base: fresh.updatedAt, openedTitle: fresh.title })
+        send({ type: 'setText', body: fresh.body })
+      }
+    })
+  }, [visible, onVaultChange, load, send])
 
   const showDraft = useCallback((focus: boolean) => {
     const d = draft.current

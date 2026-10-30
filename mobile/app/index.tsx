@@ -1139,6 +1139,7 @@ export default function Browser () {
         visible={readerOpen}
         onClose={() => setReaderOpen(false)}
         apps={backend.apps}
+        onVaultChange={backend.onVaultChange}
         space={spacesApi.activeSpace.rootDriveKey}
         onOpenPost={openFromReader}
         onOpenDevices={() => openDevicesFrom(() => setReaderOpen(false))}
@@ -1148,6 +1149,7 @@ export default function Browser () {
         visible={notesOpen}
         onClose={() => setNotesOpen(false)}
         apps={backend.apps}
+        onVaultChange={backend.onVaultChange}
         onOpenDevices={() => openDevicesFrom(() => setNotesOpen(false))}
         onOpenUrl={openFromNotes}
       />
