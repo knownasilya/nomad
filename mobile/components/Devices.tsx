@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
 import type { Backend, DeviceSpace, DriveSync, VaultDevice, VaultMsg } from '../lib/useBackend'
 import type { Space } from '../lib/useSpaces'
+import { currentVersion } from '../lib/updater'
 
 const DEVICE_NAME_KEY = 'hb:deviceName'
 const DEFAULT_DEVICE_NAME = 'My phone'
@@ -215,6 +216,10 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
   }
 
   const otherDevices = (status?.devices || []).filter((d) => d.key !== status?.thisDeviceKey)
+  // Each Device writes the version it runs on its own record; flag the ones not on this phone's.
+  const myVersion = currentVersion()
+  const mismatch = (d: VaultDevice) => !!myVersion && !!d.version && d.version !== myVersion
+  const mismatched = otherDevices.filter(mismatch)
   const connectedKeys = new Set(status?.connectedDevices || [])
   const phoneKeys = new Set(spaces.map((sp) => sp.rootDriveKey).filter(Boolean) as string[])
   const vaultKeys = new Set((status?.spaces || []).filter((vs) => !vs.movedTo).map((vs) => vs.rootDriveKey))
@@ -265,7 +270,7 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
                         <Text style={s.rowName}>{thisName}</Text>
                         <Text style={s.thisTag}>This device</Text>
                       </View>
-                      <Text style={s.rowMeta}>mobile</Text>
+                      <Text style={s.rowMeta}>mobile{myVersion ? ` · v${myVersion}` : ''}</Text>
                       <SpaceChips
                         list={spaces.map((sp) => ({
                           key: sp.rootDriveKey || sp.id,
@@ -292,6 +297,11 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
             {status?.hasVault ? (
               <>
                 <Text style={s.sectionTitle}>Other devices</Text>
+                {mismatched.length ? (
+                  <Text style={s.versionWarn}>
+                    {`${mismatched.map((d) => d.name).join(', ')} ${mismatched.length === 1 ? 'runs' : 'run'} a different version of Nomad than this phone (v${myVersion}). Update your devices to the same version so they sync the same way.`}
+                  </Text>
+                ) : null}
                 {status.opening && otherDevices.length === 0 ? (
                   <Text style={s.empty}>Syncing… connecting to your other device.</Text>
                 ) : otherDevices.length === 0 ? (
@@ -342,6 +352,11 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
                                     <Text style={[s.rowMeta, s.statusText, connected && { color: t.secure }]}>
                                       {connected ? 'Connected' : 'Not connected'} · {d.platform}
                                     </Text>
+                                  </View>
+                                  <View style={s.tagRow}>
+                                    {d.version
+                                      ? <Text style={[s.tag, mismatch(d) && s.tagWarn]}>v{d.version}{mismatch(d) ? ' · different version' : ''}</Text>
+                                      : <Text style={s.tag}>Version unknown</Text>}
                                   </View>
                                 </View>
                                 <TouchableOpacity onPress={() => { setEditingKey(d.key); setEditName(d.name) }} hitSlop={8}>
@@ -647,6 +662,7 @@ function makeStyles (t: Theme) {
     statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
     statusText: { marginTop: 0 },
     spacesNote: { fontSize: 12, color: t.textMuted, marginTop: space.sm },
+    versionWarn: { fontSize: 13, lineHeight: 18, color: '#b9770e', marginBottom: space.sm },
     chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.sm },
     chip: {
       flexDirection: 'row',

@@ -57,6 +57,12 @@ const cssStr = css`
     background: #fdecea;
     color: #8d2b20;
   }
+  @media (prefers-color-scheme: dark) {
+    .message.warning {
+      background: #3a3215;
+      color: #f0dc9a;
+    }
+  }
 
   /* device + request rows */
   .list {

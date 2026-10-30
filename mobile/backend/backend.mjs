@@ -9,7 +9,7 @@ import goodbye from 'graceful-goodbye'
 import DriveManager from './lib/drive-manager.mjs'
 import { HttpGateway } from './lib/http-gateway.mjs'
 import { parseHyperUrl } from './lib/hyper-url.mjs'
-import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault, publishOwnSpaces } from './lib/vault.mjs'
+import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault, publishOwnSpaces, publishOwnVersion } from './lib/vault.mjs'
 import * as drafts from './lib/drafts.mjs'
 import * as vaultApps from './lib/vault-apps.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
@@ -720,7 +720,8 @@ async function handlePairSubmit ({ reqId, code, name = 'Mobile device' }) {
 
 // `ownSpaces` ({ rootDriveKey, name }[]) is this phone's Space list. When it's sent, the phone's own
 // Device record is brought up to date with it, so the user's other Devices see what the phone has.
-async function handleVaultStatus ({ reqId, spaceKeys = [], ownSpaces = null }) {
+// `ownVersion` is the app version the phone runs, recorded the same way.
+async function handleVaultStatus ({ reqId, spaceKeys = [], ownSpaces = null, ownVersion = null }) {
   try {
     if (!vault) {
       // Paired but the base hasn't finished opening yet (right after pairing, or during startup):
@@ -764,6 +765,13 @@ async function handleVaultStatus ({ reqId, spaceKeys = [], ownSpaces = null }) {
         if (await publishOwnSpaces(vault, thisDeviceKey, ownSpaces)) Object.assign(index, await readVaultIndex(vault))
       } catch (err) {
         console.log('[vault] publishOwnSpaces failed', err && err.message)
+      }
+    }
+    if (present && ownVersion && index.writable) {
+      try {
+        if (await publishOwnVersion(vault, thisDeviceKey, ownVersion)) Object.assign(index, await readVaultIndex(vault))
+      } catch (err) {
+        console.log('[vault] publishOwnVersion failed', err && err.message)
       }
     }
     // Make sure the presence channel is up on live connections (cheap re-scan; no-op when it is).

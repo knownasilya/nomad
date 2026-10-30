@@ -4,6 +4,7 @@
 // hyper/device-pairing.js (the blind-pairing handshake). See docs/multi-device-protocol.md.
 
 import os from 'os';
+import { app } from 'electron';
 import b4a from 'b4a';
 import { EventEmitter } from 'events';
 import * as vault from '../../hyper/vault';
@@ -32,7 +33,7 @@ function defaultDeviceName() {
 async function getThisDeviceInfo() {
   const sess = await vault.getVault();
   const key = sess?.base?.local?.key ? b4a.toString(sess.base.local.key, 'hex') : null;
-  return { key, name: defaultDeviceName(), platform: thisPlatform() };
+  return { key, name: defaultDeviceName(), platform: thisPlatform(), version: app.getVersion() };
 }
 
 export default {
@@ -53,6 +54,10 @@ export default {
       // This Device's own Space list, so the phone can show which Spaces each Device has.
       try {
         await vault.publishOwnSpaces();
+      } catch {}
+      // And the version it runs, so the other Devices can flag one that's out of date.
+      try {
+        await vault.publishOwnVersion(app.getVersion());
       } catch {}
       // A Vault made after startup (first invite) needs the presence channel on live connections.
       devicePresence.install();

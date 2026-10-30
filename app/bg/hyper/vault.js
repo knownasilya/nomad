@@ -473,6 +473,24 @@ export async function publishOwnSpaces() {
   return true;
 }
 
+// Record the Nomad version this Device runs on its own Device record (`version`), so Settings →
+// Devices on the user's other Devices can show it and flag Devices that run a different one.
+// Writes only when it changed (after an update), and only with a writable Vault.
+export async function publishOwnVersion(version) {
+  if (!version) return false;
+  const sess = await getVault();
+  if (!sess || !sess.writable) return false;
+  const localKey = sess.base?.local?.key;
+  if (!localKey) return false;
+  const path = `${DEVICES_PREFIX}${b4a.toString(localKey, 'hex')}.json`;
+  const rec = await _readRecord(sess, path);
+  if (!rec) return false; // registerOwnDevice writes it first
+  if (rec.version === version) return false;
+  await _putRecord(sess, path, { ...rec, version });
+  logger.info('Published own version to vault', { version });
+  return true;
+}
+
 // Republish this Device's Space list whenever a Space is created, renamed or removed. Debounced:
 // creating a Space fires once for the row and again when its Root Drive URL lands.
 let _publishTimer = null;
