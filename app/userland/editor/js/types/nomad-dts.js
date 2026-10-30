@@ -208,7 +208,7 @@ declare namespace Nomad {
     /** Reasoning effort ('low' | 'medium' | 'high'); sent as reasoning_effort when think !== false. */
     effort?: 'low' | 'medium' | 'high';
     /**
-     * Fires for each tool call the agent makes. `phase` is 'start' ({ id, parentId?, name, summary }),
+     * Fires for each tool call the agent makes. \`phase\` is 'start' ({ id, parentId?, name, summary }),
      * 'end' ({ id, error? }; same id as its start), 'write' ({ drive, path, priorContent, draft }),
      * 'screenshot' ({ imageDataUrl }) or 'note' ({ summary }).
      */
