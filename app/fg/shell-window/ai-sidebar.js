@@ -715,7 +715,7 @@ class ShellWindowAiSidebar extends LitElement {
     .msg-actions {
       display: flex;
       gap: 2px;
-      margin-top: -6px;
+      margin: -8px 0 -4px;
       opacity: 0;
       transition: opacity 0.12s;
     }
