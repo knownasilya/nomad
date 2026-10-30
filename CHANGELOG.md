@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.25.0](https://github.com/knownasilya/nomad/compare/v1.24.0...v1.25.0) (2026-10-30)
+
+
+### Features
+
+* **ai-sidebar:** polish the desktop AI sidebar's design ([66abfda](https://github.com/knownasilya/nomad/commit/66abfda0279f99e221cf61c6f6d8a8efcb7c2183))
+* **ai:** copy a prompt or an answer in the AI panel and sidebar ([b619149](https://github.com/knownasilya/nomad/commit/b619149dbd6e5fe8bd29ad706824fd5ea61850af))
+
+
+### Bug Fixes
+
+* **ai-sidebar:** tighten the space the Copy row takes under each message ([e854d50](https://github.com/knownasilya/nomad/commit/e854d5097c2a7ae06967f1d8f8bab408b1bd5880))
+* **ai:** the AI reads back its own Draft edits and asks once per drive ([a713308](https://github.com/knownasilya/nomad/commit/a7133086416b67b1758c236aa47227322b8a6a5f))
+
 ## [1.24.0](https://github.com/knownasilya/nomad/compare/v1.23.0...v1.24.0) (2026-10-30)
 
 
