@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image, Alert, Keyboard, Platform, StyleSheet } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, ActivityIndicator, Image, Alert, Keyboard, Platform, StyleSheet } from 'react-native'
+import * as Clipboard from 'expo-clipboard'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { AiChatHandlers, AiChatHandle } from '../lib/useBackend'
@@ -8,6 +9,7 @@ import Markdown from './Markdown'
 import ScreenHeader from './ScreenHeader'
 import IconButton from './IconButton'
 import Icon from './Icon'
+import ActionSheet from './ActionSheet'
 
 // `images` are data:image URLs — nomad.ai.chat's short form, which the Provider expands into
 // image_url parts (app/bg/ai/chat-messages.mjs).
@@ -145,6 +147,13 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
   const [drafts, setDrafts] = useState<Record<string, string[]>>({})
   const [draftBusy, setDraftBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Copying a message: the long-press sheet's message, kept apart from `copyOpen` so the sheet keeps
+  // its title while it slides away, and the answer whose copy button just copied (shows a check).
+  const [copyTarget, setCopyTarget] = useState<{ text: string; role: ChatMsg['role'] } | null>(null)
+  const [copyOpen, setCopyOpen] = useState(false)
+  const [copied, setCopied] = useState<number | null>(null)
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current) }, [])
   const handleRef = useRef<AiChatHandle | null>(null)
   const scrollRef = useRef<ScrollView | null>(null)
   const driveUrl = url && url.startsWith('hyper://') ? url : null
@@ -220,6 +229,16 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
   }
 
   const stop = () => { handleRef.current?.cancel(); endTurn() }
+
+  // An answer is copied as the Markdown it arrived in, a prompt as typed.
+  const copy = (text: string, index?: number) => {
+    Clipboard.setStringAsync(text).catch((err) => setError(err?.message || String(err)))
+    if (index === undefined) return
+    setCopied(index)
+    if (copiedTimer.current) clearTimeout(copiedTimer.current)
+    copiedTimer.current = setTimeout(() => setCopied(null), 1500)
+  }
+  const openCopy = (text: string, role: ChatMsg['role']) => { setCopyTarget({ text, role }); setCopyOpen(true) }
 
   const attach = (source: 'camera' | 'library') => {
     setAttaching(true)
@@ -337,7 +356,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
             <View style={s.emptyWrap}>
               <View style={s.emptyIcon}><Icon name='robot' size={22} color={t.trustText} /></View>
               <Text style={s.empty}>
-                Ask anything. The AI runs on your desktop device and streams answers here. It can see the tab you're on, and it can read your drives and, with your approval, edit them.
+                Ask anything. The AI runs on your desktop device and streams answers here. It can see the tab you're on, and it can read your drives and, with your approval, edit them. Long-press a message to copy it.
               </Text>
             </View>
           ) : (
@@ -349,8 +368,25 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
               if (m.role === 'assistant' && !shown) return null
               if (m.role === 'assistant') {
                 return (
-                  <View key={i} style={[s.bubble, s.aiBubble]}>
-                    <Markdown text={shown} />
+                  <View key={i} style={s.aiMsg}>
+                    <Pressable
+                      style={[s.bubble, s.aiBubble, s.fullBubble]}
+                      onLongPress={() => openCopy(shown, 'assistant')}
+                      accessibilityHint='Long-press to copy the answer'
+                    >
+                      <Markdown text={shown} />
+                    </Pressable>
+                    {!streaming && (
+                      <IconButton
+                        icon={copied === i ? 'check' : 'copy'}
+                        regular={copied !== i}
+                        label={copied === i ? 'Copied' : 'Copy the answer'}
+                        size={14}
+                        color={copied === i ? t.secure : t.textMuted}
+                        onPress={() => copy(shown, i)}
+                        style={s.copyBtn}
+                      />
+                    )}
                   </View>
                 )
               }
@@ -362,9 +398,13 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
                     </View>
                   )}
                   {!!m.content && (
-                    <View style={[s.bubble, s.userBubble]}>
+                    <Pressable
+                      style={[s.bubble, s.userBubble]}
+                      onLongPress={() => openCopy(m.content, 'user')}
+                      accessibilityHint='Long-press to copy your message'
+                    >
                       <Text style={s.userText}>{m.content}</Text>
-                    </View>
+                    </Pressable>
                   )}
                 </View>
               )
@@ -459,6 +499,14 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
           </View>
         </View>
       </View>
+
+      <ActionSheet
+        visible={copyOpen}
+        onClose={() => setCopyOpen(false)}
+        title={copyTarget?.role === 'user' ? 'Your message' : 'AI answer'}
+        subtitle={copyTarget?.text.replace(/\s+/g, ' ').trim()}
+        groups={[[{ label: 'Copy text', icon: 'copy', regular: true, onPress: () => { if (copyTarget) copy(copyTarget.text) } }]]}
+      />
     </View>
   )
 }
@@ -498,6 +546,11 @@ function makeStyles (t: Theme) {
     bubble: { maxWidth: '88%', paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.lg + 4 },
     userBubble: { alignSelf: 'flex-end', backgroundColor: t.trustBg },
     userMsg: { alignSelf: 'flex-end', alignItems: 'flex-end', maxWidth: '88%', gap: 6 },
+    // An answer and its copy button, under it on the left.
+    aiMsg: { alignSelf: 'flex-start', alignItems: 'flex-start', maxWidth: '88%' },
+    // A bubble inside a message column takes the column's width limit, not 88% of it again.
+    fullBubble: { maxWidth: '100%' },
+    copyBtn: { width: 40, height: 40, marginLeft: 2, marginBottom: -6 },
     userImages: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 },
     userImage: { width: 120, height: 120, borderRadius: radius.md, backgroundColor: t.surfaceAlt },
     aiBubble: { alignSelf: 'flex-start', backgroundColor: t.surface },

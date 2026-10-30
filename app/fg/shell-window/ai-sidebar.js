@@ -79,6 +79,23 @@ function mdToHtml(text) {
   return parts.join('') || `<p>${inline(esc(text))}</p>`;
 }
 
+// Puts text on the clipboard. Falls back to a selected textarea + execCommand('copy') if the
+// async Clipboard API is refused (as app-stdlib/js/clipboard.js does).
+async function writeClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }
+}
+
 const MIN_WIDTH = 280;
 const MAX_WIDTH = 640;
 
@@ -102,6 +119,7 @@ class ShellWindowAiSidebar extends LitElement {
       _toolsOpen: { state: true },
       _sessions: { state: true },
       _sessionsOpen: { state: true },
+      _copied: { state: true },
     };
   }
 
@@ -522,6 +540,47 @@ class ShellWindowAiSidebar extends LitElement {
       background: #fff;
       border-radius: 2px;
       flex: none;
+    }
+    /* Copy, under each message: shown on hover, and always under the latest answer. */
+    .msg-actions {
+      display: flex;
+      margin-top: -6px;
+      opacity: 0;
+      transition: opacity 0.1s;
+    }
+    .msg-actions.user {
+      align-self: flex-end;
+    }
+    .msg-actions.assistant,
+    .msg-actions.error {
+      align-self: flex-start;
+    }
+    .msg:hover + .msg-actions,
+    .msg-actions:hover,
+    .msg-actions:focus-within,
+    .msg-actions.latest,
+    .msg-actions.copied {
+      opacity: 1;
+    }
+    .msg-action {
+      background: transparent;
+      border: 0;
+      color: inherit;
+      opacity: 0.6;
+      cursor: pointer;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    .msg-action:hover,
+    .msg-actions.copied .msg-action {
+      opacity: 1;
+    }
+    .msg-action:hover {
+      background: var(--bg-color--tab--hover);
+    }
+    .msg-action .fa-check {
+      color: #7bb07b;
     }
   `;
 
@@ -1044,8 +1103,34 @@ class ShellWindowAiSidebar extends LitElement {
           </div>`
         : ''}
       <div class="msg ${m.role}${streamingLast ? ' streaming' : ''}">${body}</div>
+      ${!streamingLast && (m.content || '').trim()
+        ? html`<div class="msg-actions ${m.role}${this._isLatestAnswer(i) ? ' latest' : ''}${this._copied === i ? ' copied' : ''}">
+            <button
+              class="msg-action"
+              title=${m.role === 'user' ? 'Copy your message' : 'Copy the answer as Markdown'}
+              @click=${() => this._copyMessage(m, i)}
+            >
+              ${this._copied === i
+                ? html`<span class="fas fa-fw fa-check"></span> Copied`
+                : html`<span class="far fa-fw fa-copy"></span> Copy`}
+            </button>
+          </div>`
+        : ''}
       ${m.files && m.files.length ? this._renderCheckpoint(m, i) : ''}
     `;
+  }
+
+  // The last message, when it is a finished answer: its Copy shows without a hover.
+  _isLatestAnswer(i) {
+    return i === this.messages.length - 1 && !this.streaming && this.messages[i].role === 'assistant';
+  }
+
+  // A prompt is copied as typed, an answer as the Markdown it arrived in.
+  async _copyMessage(m, i) {
+    await writeClipboard((m.content || '').trim());
+    this._copied = i;
+    clearTimeout(this._copiedTimer);
+    this._copiedTimer = setTimeout(() => (this._copied = null), 1500);
   }
 
   _renderActivity() {
