@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.22.0](https://github.com/knownasilya/nomad/compare/v1.21.0...v1.22.0) (2026-10-30)
+
+
+### Features
+
+* **mobile:** make the Android app feel native, and match desktop's dark mode ([ba689e8](https://github.com/knownasilya/nomad/commit/ba689e841412be2047d78674740885e9cc23dd1c))
+* **mobile:** the Android app updates itself from GitHub Releases ([4a5038c](https://github.com/knownasilya/nomad/commit/4a5038c8b2690c9445038a7d0ed1b7decbbb753e))
+* **mobile:** use your names on the phone ([a47c70c](https://github.com/knownasilya/nomad/commit/a47c70c0581c0aece6cdd4633b40d92aa0952ff6))
+* **notes:** add a canvas view of notes and their links ([0e254c1](https://github.com/knownasilya/nomad/commit/0e254c1fa687d6f5ec6396720159f8ff7178b86d))
+* opt into beta releases on desktop and mobile ([e418705](https://github.com/knownasilya/nomad/commit/e418705cf5cfca8271b04581873321dc2e20bc61))
+* show each device's Nomad version in Devices and flag a mismatch ([5c0c8c5](https://github.com/knownasilya/nomad/commit/5c0c8c52a64629c09e111e9e64875b68ff7e99fb))
+* **tabs:** see the tabs open on your other devices, by space ([d7ef707](https://github.com/knownasilya/nomad/commit/d7ef707b115bf364cdda246568806bf69f09ece5))
+
 ## [1.21.0](https://github.com/knownasilya/nomad/compare/v1.20.0...v1.21.0) (2026-10-29)
 
 
