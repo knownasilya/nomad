@@ -19,9 +19,12 @@ we use only the parser and prompt generator and draw the components ourselves.
    chunk, so the UI fills in as it arrives.
 2. **Our own component library**, `app/lib/genui/library.mjs`: layout (Stack, Card, CardHeader,
    Tabs, Separator), content (TextContent, Callout, Tag, TagBlock, Steps, Stat, Progress), Table,
-   charts (Bar, HorizontalBar, Line, Area, Pie, Scatter), Map and Buttons. Names and argument order
-   follow OpenUI's chat library where it has the component; Stat, Progress and Map are ours. The
-   prompt section is generated from it (`genuiPrompt()`, about 2,000 tokens) and added to every
+   charts (Bar, HorizontalBar, Line, Area, Pie, Scatter), Map, Buttons, and cards for a purpose
+   (EntityCard, LinkCard, ProductCard, EventCard, QuoteCard, ProsCons, Timeline, in a CardGrid).
+   Names and argument order follow OpenUI's chat library where it has the component; Stat,
+   Progress, Map and the purpose cards are ours. A card is one call, so a list of results streams in
+   card by card, and a card's url opens like `@OpenUrl` (below). The
+   prompt section is generated from it (`genuiPrompt()`, about 2,700 tokens) and added to every
    sidebar turn, local or over the AI Bridge, with `genUi: true` (`ai-shell.ts`). Pages'
    `nomad.ai.chat()` and the phone don't get it: they don't render it.
 3. **The shell window bundles the parser, not the library.** It parses against the library's JSON

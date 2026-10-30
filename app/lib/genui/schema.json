@@ -83,6 +83,36 @@
     "MapMarker": {
       "$ref": "#/$defs/MapMarker"
     },
+    "EntityCard": {
+      "$ref": "#/$defs/EntityCard"
+    },
+    "Field": {
+      "$ref": "#/$defs/Field"
+    },
+    "LinkCard": {
+      "$ref": "#/$defs/LinkCard"
+    },
+    "ProductCard": {
+      "$ref": "#/$defs/ProductCard"
+    },
+    "EventCard": {
+      "$ref": "#/$defs/EventCard"
+    },
+    "QuoteCard": {
+      "$ref": "#/$defs/QuoteCard"
+    },
+    "ProsCons": {
+      "$ref": "#/$defs/ProsCons"
+    },
+    "Timeline": {
+      "$ref": "#/$defs/Timeline"
+    },
+    "TimelineItem": {
+      "$ref": "#/$defs/TimelineItem"
+    },
+    "CardGrid": {
+      "$ref": "#/$defs/CardGrid"
+    },
     "Button": {
       "$ref": "#/$defs/Button"
     },
@@ -118,6 +148,16 @@
     "Point",
     "Map",
     "MapMarker",
+    "EntityCard",
+    "Field",
+    "LinkCard",
+    "ProductCard",
+    "EventCard",
+    "QuoteCard",
+    "ProsCons",
+    "Timeline",
+    "TimelineItem",
+    "CardGrid",
     "Button",
     "Buttons"
   ],
@@ -636,23 +676,124 @@
       "additionalProperties": false,
       "description": "A place on a Map, in decimal degrees"
     },
-    "Button": {
+    "EntityCard": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Field"
+          }
+        },
+        "description": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "icon": {
+          "type": "string",
+          "enum": [
+            "user",
+            "users",
+            "building",
+            "map-marker-alt",
+            "box",
+            "book",
+            "code",
+            "file-alt",
+            "folder",
+            "globe",
+            "calendar-alt",
+            "music",
+            "film",
+            "utensils",
+            "plane",
+            "star"
+          ]
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": ["title"],
+      "additionalProperties": false,
+      "description": "A person, place, project, package or other thing: its name, facts and tags"
+    },
+    "Field": {
       "type": "object",
       "properties": {
         "label": {
           "type": "string"
         },
-        "action": {
-          "$ref": "#/$defs/ActionExpression"
-        },
-        "variant": {
-          "type": "string",
-          "enum": ["primary", "secondary", "tertiary"]
+        "value": {
+          "type": "string"
         }
       },
-      "required": ["label"],
+      "required": ["label", "value"],
       "additionalProperties": false,
-      "description": "A button. Without an action it sends its label to you"
+      "description": "One label and value on an EntityCard"
+    },
+    "LinkCard": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": ["title", "url"],
+      "additionalProperties": false,
+      "description": "A page to open: a search result, a source, a file in a drive (hyper://). The whole card is the link"
+    },
+    "ProductCard": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "price": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "rating": {
+          "type": "number"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "badge": {
+          "type": "string"
+        },
+        "action": {
+          "$ref": "#/$defs/ActionExpression"
+        }
+      },
+      "required": ["title"],
+      "additionalProperties": false,
+      "description": "Something to buy or choose: price, a 0-5 rating, tags, a badge like \"Best value\""
     },
     "ActionExpression": {
       "anyOf": [
@@ -702,6 +843,137 @@
           "additionalProperties": false
         }
       ]
+    },
+    "EventCard": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": ["title", "date"],
+      "additionalProperties": false,
+      "description": "Something that happens on a date. date is YYYY-MM-DD when you know it"
+    },
+    "QuoteCard": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": ["text"],
+      "additionalProperties": false,
+      "description": "A quotation, with who said it or where it is from"
+    },
+    "ProsCons": {
+      "type": "object",
+      "properties": {
+        "pros": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": ["pros", "cons"],
+      "additionalProperties": false,
+      "description": "Two lists side by side, for and against"
+    },
+    "Timeline": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TimelineItem"
+          }
+        }
+      },
+      "required": ["items"],
+      "additionalProperties": false,
+      "description": "Dated events in order: history, a changelog, a schedule"
+    },
+    "TimelineItem": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["neutral", "info", "success", "warning", "danger"]
+        }
+      },
+      "required": ["date", "title"],
+      "additionalProperties": false,
+      "description": "One dated entry on a Timeline"
+    },
+    "CardGrid": {
+      "type": "object",
+      "properties": {
+        "cards": {
+          "type": "array",
+          "items": {}
+        }
+      },
+      "required": ["cards"],
+      "additionalProperties": false,
+      "description": "Cards in as many columns as fit (one in a narrow sidebar)"
+    },
+    "Button": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "action": {
+          "$ref": "#/$defs/ActionExpression"
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["primary", "secondary", "tertiary"]
+        }
+      },
+      "required": ["label"],
+      "additionalProperties": false,
+      "description": "A button. Without an action it sends its label to you"
     },
     "Buttons": {
       "type": "object",

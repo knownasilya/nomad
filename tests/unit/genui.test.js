@@ -3,6 +3,7 @@ import { genuiPrompt, genuiSchema, GENUI_FENCE } from '../../app/lib/genui/libra
 import { splitGenUi, hasGenUi } from '../../app/lib/genui/segments.mjs';
 import { parseGenUi as parse } from '../../app/lib/genui/parse.mjs';
 import schemaJson from '../../app/lib/genui/schema.json';
+import { linkOf, dateParts } from '../../app/fg/shell-window/genui/cards.js';
 import {
   niceTicks,
   valueDomain,
@@ -56,6 +57,29 @@ btns = Buttons([Button("More", @ToAssistant("Tell me more")), Button("Map", @Ope
     ]);
   });
 
+  it('parses the cards for a purpose', () => {
+    const { root, meta } = parse(`root = Stack([grid, product, event, quote, pc, tl])
+grid = CardGrid([e1, l1])
+e1 = EntityCard("Hypercore", "Append-only log", [Field("License", "MIT")], null, ["p2p"], "code", "https://github.com/holepunchto/hypercore")
+l1 = LinkCard("Nomad docs", "hyper://nomad.dev/docs/", "How drives work")
+product = ProductCard("Widget Pro", "$29", "Quiet", 4.5, ["USB-C"], "Best value", @ToAssistant("Tell me about Widget Pro"))
+event = EventCard("Launch", "2026-11-04", "18:00", "Lisbon")
+quote = QuoteCard("Simple things should be simple.", "Alan Kay")
+pc = ProsCons(["Fast"], ["Pricey"], "Widget Pro")
+tl = Timeline([TimelineItem("2024", "1.0", null, "success"), TimelineItem("2026", "2.0")])`);
+    expect(meta.errors).toEqual([]);
+    const [grid, product, event, quote, pc, tl] = root.props.children;
+    expect(grid.props.cards[0].props).toMatchObject({ title: 'Hypercore', icon: 'code' });
+    expect(grid.props.cards[0].props.fields[0].props).toEqual({ label: 'License', value: 'MIT' });
+    expect(grid.props.cards[1].props.url).toBe('hyper://nomad.dev/docs/');
+    expect(product.props).toMatchObject({ price: '$29', rating: 4.5, badge: 'Best value' });
+    expect(product.props.action.steps[0].type).toBe('continue_conversation');
+    expect(event.props).toMatchObject({ date: '2026-11-04', location: 'Lisbon' });
+    expect(quote.props.source).toBe('Alan Kay');
+    expect(pc.props.cons).toEqual(['Pricey']);
+    expect(tl.props.items[0].props.variant).toBe('success');
+  });
+
   it('renders what has arrived of a program that is still streaming', () => {
     const { root, meta } = parse(`root = Stack([title, chart])
 title = TextContent("Rainfall", "large-heavy")
@@ -101,6 +125,24 @@ describe('splitGenUi', () => {
   it('is plain Markdown when there is no fence', () => {
     expect(splitGenUi('Just **text**.')).toEqual([{ type: 'md', text: 'Just **text**.' }]);
     expect(splitGenUi('')).toEqual([]);
+  });
+});
+
+describe('cards', () => {
+  it('opens only web and hyper:// urls, and labels them short', () => {
+    expect(linkOf('https://www.example.com/a?b')).toMatchObject({ label: 'example.com' });
+    expect(linkOf('hyper://' + 'a'.repeat(64) + '/notes.md').label).toBe(
+      'hyper://aaaaaa…/notes.md'
+    );
+    expect(linkOf('javascript:alert(1)')).toBe(null);
+    expect(linkOf('file:///etc/passwd')).toBe(null);
+    expect(linkOf('not a url')).toBe(null);
+  });
+
+  it('reads a YYYY-MM-DD date, and nothing else', () => {
+    expect(dateParts('2026-11-04')).toMatchObject({ day: '4' });
+    expect(dateParts('2026-02-30')).toBe(null);
+    expect(dateParts('next Tuesday')).toBe(null);
   });
 });
 

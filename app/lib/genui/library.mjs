@@ -169,6 +169,104 @@ const MapView = def(
   }
 );
 
+// — Cards for a purpose —
+// Each is one call, so a list of search results or products streams in card by card. A card with
+// a url opens it in a new tab on a click; none of them shows an image.
+
+export const CARD_ICONS = [
+  'user',
+  'users',
+  'building',
+  'map-marker-alt',
+  'box',
+  'book',
+  'code',
+  'file-alt',
+  'folder',
+  'globe',
+  'calendar-alt',
+  'music',
+  'film',
+  'utensils',
+  'plane',
+  'star',
+];
+
+const Field = def('Field', 'One label and value on an EntityCard', {
+  label: z.string(),
+  value: z.string(),
+});
+const EntityCard = def(
+  'EntityCard',
+  'A person, place, project, package or other thing: its name, facts and tags',
+  {
+    title: z.string(),
+    subtitle: z.string().optional(),
+    fields: z.array(Field.ref).optional(),
+    description: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+    icon: z.enum(CARD_ICONS).optional(),
+    url: z.string().optional(),
+  }
+);
+const LinkCard = def(
+  'LinkCard',
+  'A page to open: a search result, a source, a file in a drive (hyper://). The whole card is the link',
+  {
+    title: z.string(),
+    url: z.string(),
+    description: z.string().optional(),
+    source: z.string().optional(),
+  }
+);
+const ProductCard = def(
+  'ProductCard',
+  'Something to buy or choose: price, a 0-5 rating, tags, a badge like "Best value"',
+  {
+    title: z.string(),
+    price: z.string().optional(),
+    description: z.string().optional(),
+    rating: z.number().optional(),
+    tags: z.array(z.string()).optional(),
+    badge: z.string().optional(),
+    action: action().optional(),
+  }
+);
+const EventCard = def(
+  'EventCard',
+  'Something that happens on a date. date is YYYY-MM-DD when you know it',
+  {
+    title: z.string(),
+    date: z.string(),
+    time: z.string().optional(),
+    location: z.string().optional(),
+    details: z.string().optional(),
+    url: z.string().optional(),
+  }
+);
+const QuoteCard = def('QuoteCard', 'A quotation, with who said it or where it is from', {
+  text: z.string(),
+  source: z.string().optional(),
+  url: z.string().optional(),
+});
+const ProsCons = def('ProsCons', 'Two lists side by side, for and against', {
+  pros: z.array(z.string()),
+  cons: z.array(z.string()),
+  title: z.string().optional(),
+});
+const TimelineItem = def('TimelineItem', 'One dated entry on a Timeline', {
+  date: z.string(),
+  title: z.string(),
+  details: z.string().optional(),
+  variant: z.enum(['neutral', 'info', 'success', 'warning', 'danger']).optional(),
+});
+const Timeline = def('Timeline', 'Dated events in order: history, a changelog, a schedule', {
+  items: z.array(TimelineItem.ref),
+});
+const CardGrid = def('CardGrid', 'Cards in as many columns as fit (one in a narrow sidebar)', {
+  cards: z.array(z.any()),
+});
+
 // — Buttons —
 
 const Button = def('Button', 'A button. Without an action it sends its label to you', {
@@ -211,6 +309,16 @@ export const genuiLibrary = createLibrary({
     Point,
     MapView,
     MapMarker,
+    EntityCard,
+    Field,
+    LinkCard,
+    ProductCard,
+    EventCard,
+    QuoteCard,
+    ProsCons,
+    Timeline,
+    TimelineItem,
+    CardGrid,
     Button,
     Buttons,
   ],
@@ -272,6 +380,27 @@ export const genuiLibrary = createLibrary({
       ],
     },
     {
+      name: 'Cards',
+      components: [
+        'EntityCard',
+        'Field',
+        'LinkCard',
+        'ProductCard',
+        'EventCard',
+        'QuoteCard',
+        'ProsCons',
+        'Timeline',
+        'TimelineItem',
+        'CardGrid',
+      ],
+      notes: [
+        '- Several results of one kind: CardGrid([LinkCard(...), LinkCard(...)]). Give every card in a grid the same fields.',
+        '- EntityCard("Hypercore", "Append-only log", [Field("License", "MIT"), Field("Language", "JavaScript")], null, ["p2p"], "code")',
+        '- ProductCard("Widget Pro", "$29", "Fast and quiet", 4.5, ["USB-C"], "Best value", @ToAssistant("Tell me about Widget Pro"))',
+        '- Only give a url you got from the page, a tool or the user.',
+      ],
+    },
+    {
       name: 'Buttons',
       components: ['Button', 'Buttons'],
       notes: [
@@ -292,7 +421,7 @@ card = Card([CardHeader("Visits this week"), chart])
 chart = LineChart(["Mon", "Tue", "Wed"], [Series("Visits", [120, 98, 143])])
 \`\`\`
 
-Use UI only when it helps; most answers are plain Markdown. Show real data: the user's files, the page, what a tool returned, or facts you know well. Never make up numbers. You can't style it or add images. The rest of this section is the language.`;
+Use UI only when it helps; most answers are plain Markdown. For a list of things (results, places, products, people, events), a card per thing reads better than a table. Show real data: the user's files, the page, what a tool returned, or facts you know well. Never make up numbers. You can't style it or add images. The rest of this section is the language.`;
 
 const RULES = [
   'Write a sentence or two of Markdown before the fence, and keep commentary outside it.',

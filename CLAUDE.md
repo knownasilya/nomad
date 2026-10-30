@@ -236,7 +236,8 @@ per model.
 
 ### Generated UI in the AI Sidebar (ADR-0027)
 
-The sidebar's assistant can answer with charts, maps, tables, stats and buttons. It writes
+The sidebar's assistant can answer with charts, maps, tables, stats, buttons and cards for a purpose
+(entity, link, product, event, quote, pros/cons, timeline; `genui/cards.js`). It writes
 [OpenUI Lang](https://github.com/thesysdev/openui) in an ```` ```openui-lang ```` fence inside its
 Markdown answer; `<nomad-genui>` (`app/fg/shell-window/genui/`) draws it, with our own SVG charts
 and a Leaflet map on OpenStreetMap tiles. The component library and the prompt section are

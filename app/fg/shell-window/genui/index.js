@@ -12,6 +12,7 @@ import { parseGenUi } from '../../../lib/genui/parse.mjs';
 import styles from './styles.js';
 import './charts.js';
 import './map.js';
+import * as cards from './cards.js';
 
 const GAPS = { none: 0, xs: 4, s: 8, m: 12, l: 16, xl: 24 };
 const CALLOUT_ICONS = {
@@ -29,6 +30,17 @@ const CHARTS = new Set([
   'PieChart',
   'ScatterChart',
 ]);
+
+const CARDS = {
+  EntityCard: cards.entityCard,
+  LinkCard: cards.linkCard,
+  ProductCard: cards.productCard,
+  EventCard: cards.eventCard,
+  QuoteCard: cards.quoteCard,
+  ProsCons: cards.prosCons,
+  Timeline: cards.timeline,
+  CardGrid: cards.cardGrid,
+};
 
 const isEl = (v) => v && typeof v === 'object' && v.type === 'element';
 const list = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
@@ -207,6 +219,8 @@ class GenUi extends LitElement {
             .map((b) => this._button(b.props || {}))}
         </div>`;
     }
+    const card = CARDS[n.typeName];
+    if (card) return card(this, p, path);
     if (CHARTS.has(n.typeName)) {
       return html`<nomad-genui-chart .kind=${n.typeName} .props=${p}></nomad-genui-chart>`;
     }
