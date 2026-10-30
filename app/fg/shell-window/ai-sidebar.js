@@ -96,6 +96,22 @@ async function writeClipboard(text) {
   }
 }
 
+// "3:41 PM" today, "Yesterday", "Monday" this week, then "Oct 12" (or "Oct 12, 2025").
+function formatTime(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const startOfDay = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOfDay(now) - startOfDay(d)) / 864e5);
+  if (days <= 0) return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return d.toLocaleDateString(undefined, { weekday: 'long' });
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+  });
+}
+
 const MIN_WIDTH = 280;
 const MAX_WIDTH = 640;
 
@@ -104,6 +120,8 @@ class ShellWindowAiSidebar extends LitElement {
     return {
       activeTab: { type: Object },
       width: { type: Number },
+      // Room to leave on the header's right for the in-app window controls (Windows), in px.
+      headerInset: { type: Number },
       messages: { type: Array },
       draft: { type: String },
       streaming: { type: Boolean },
@@ -124,7 +142,24 @@ class ShellWindowAiSidebar extends LitElement {
   }
 
   static styles = css`
+    /* Colors come from the shell's tokens (assets/css/design-tokens.css). The few the shell has no
+       token for are --ai-* variables here, with their dark values below. */
     :host {
+      --ai-text: var(--text-color--input);
+      --ai-text-muted: #6e6e78;
+      --ai-accent: #2864dc;
+      --ai-accent--hover: #1f55c0;
+      --ai-surface: var(--bg-color--foreground);
+      --ai-border: #e2e2e8;
+      --ai-hover: rgba(0, 0, 0, 0.05);
+      --ai-code-bg: rgba(0, 0, 0, 0.045);
+      --ai-inline-code-bg: rgba(0, 0, 0, 0.065);
+      --ai-success: #2f9a4c;
+      --ai-warning: #9a6700;
+      --ai-error-bg: #fdeeee;
+      --ai-error-border: #f1c6c6;
+      --ai-error-text: #a12121;
+
       display: flex;
       flex-direction: column;
       position: fixed;
@@ -132,83 +167,170 @@ class ShellWindowAiSidebar extends LitElement {
       right: 0;
       bottom: 0;
       z-index: 10;
+      box-sizing: border-box;
       background: var(--bg-color--background);
-      border-left: 1px solid var(--border-color--tab);
-      /* The shell's tokens (assets/css/design-tokens.css) have no --text-color--default; the
-         input text color is its body text in both schemes. */
-      color: var(--text-color--default, var(--text-color--input));
+      border-left: 1px solid var(--border-color--navbar);
+      color: var(--ai-text);
+      font-family:
+        system-ui,
+        -apple-system,
+        sans-serif;
       font-size: 13px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :host {
+        --ai-text-muted: #9d9da6;
+        --ai-accent: #3f7bf0;
+        --ai-accent--hover: #5a8ff5;
+        --ai-border: #3a3a3a;
+        --ai-hover: rgba(255, 255, 255, 0.07);
+        --ai-code-bg: rgba(255, 255, 255, 0.05);
+        --ai-inline-code-bg: rgba(255, 255, 255, 0.1);
+        --ai-success: #67bf6b;
+        --ai-warning: #e0a94a;
+        --ai-error-bg: #352121;
+        --ai-error-border: #5e2a2a;
+        --ai-error-text: #ffb4b4;
+      }
+    }
+
+    button {
+      font: inherit;
+      color: inherit;
     }
 
     .resize-handle {
       position: absolute;
-      left: 0;
+      left: -2px;
       top: 0;
       bottom: 0;
-      width: 4px;
+      width: 5px;
       cursor: ew-resize;
-      z-index: 1;
+      z-index: 2;
+      transition: background 0.15s;
     }
-
     .resize-handle:hover,
     .resize-handle:active {
-      background: var(--highlight-color--tab--current, #5b5ef4);
-      opacity: 0.3;
+      background: var(--highlight-color--tab--current, #005aff);
+      opacity: 0.35;
     }
+
+    /* Thin scrollbars in the chrome's colors, like the tab sidebar's. */
+    .messages,
+    .sessions,
+    .tools-panel,
+    .input {
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    }
+
+    /* — header: the navbar's height and colors, so the two read as one bar — */
 
     .header {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 8px 6px 8px 12px;
-      border-bottom: 1px solid var(--border-color--tab);
+      gap: 8px;
+      box-sizing: border-box;
+      height: 41px;
+      padding: 0 6px 0 14px;
+      background: var(--bg-color--foreground);
+      border-bottom: 1px solid var(--border-color--navbar);
       flex-shrink: 0;
+      -webkit-app-region: drag;
     }
     .title {
-      font-weight: 600;
-      font-size: 12px;
+      flex: 1;
+      min-width: 0;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .header-actions button {
-      background: transparent;
+    .title .fas {
+      color: var(--ai-accent);
+      font-size: 14px;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      -webkit-app-region: no-drag;
+    }
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
       border: 0;
-      color: var(--text-color--default, var(--text-color--input));
-      opacity: 0.7;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-color--navbar-btn);
+      font-size: 13px;
       cursor: pointer;
-      padding: 4px 6px;
+      opacity: 0.75;
+      transition:
+        background 0.12s,
+        opacity 0.12s;
     }
-    .header-actions button:hover:not(:disabled) {
+    .icon-btn:hover:not(:disabled) {
       opacity: 1;
+      background: var(--ai-hover);
     }
-    .header-actions button.pressed {
+    .icon-btn.pressed {
       opacity: 1;
-      color: var(--color--blue, #5c5cff);
+      color: var(--ai-accent);
+      background: var(--ai-hover);
     }
-    .header-actions button:disabled {
+    .icon-btn:disabled {
       opacity: 0.3;
       cursor: default;
     }
+    button:focus-visible,
+    .select:focus-visible,
+    .chip:has(input:focus-visible) {
+      outline: 2px solid var(--ai-accent);
+      outline-offset: 1px;
+    }
+
+    /* — chat history — */
 
     .sessions {
       flex: 1;
       overflow-y: auto;
-      padding: 6px;
+      padding: 8px;
+    }
+    .sessions-heading {
+      padding: 6px 8px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--ai-text-muted);
     }
     .session-row {
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 7px 8px;
+      gap: 10px;
+      padding: 8px 6px 8px 10px;
       border-radius: 6px;
       cursor: pointer;
     }
     .session-row:hover {
-      background: var(--bg-color--tab--hover);
+      background: var(--ai-hover);
     }
     .session-row.current {
       background: var(--bg-color--tab--current);
+      box-shadow: inset 2px 0 0 var(--highlight-color--tab--current, #005aff);
+    }
+    .session-row > .fas {
+      color: var(--ai-text-muted);
+      font-size: 12px;
     }
     .session-row .info {
       flex: 1;
@@ -220,333 +342,382 @@ class ShellWindowAiSidebar extends LitElement {
       text-overflow: ellipsis;
     }
     .session-row .session-time {
+      margin-top: 1px;
       font-size: 11px;
-      opacity: 0.6;
+      color: var(--ai-text-muted);
     }
-    .session-row .delete-btn {
-      background: transparent;
-      border: 0;
-      color: inherit;
-      opacity: 0.5;
-      cursor: pointer;
-      padding: 4px;
-    }
-    .session-row .delete-btn:hover {
-      opacity: 1;
-    }
-    .sessions-empty {
-      padding: 20px 10px;
-      text-align: center;
-      opacity: 0.6;
+    .session-row .icon-btn {
+      opacity: 0;
+      width: 26px;
+      height: 26px;
       font-size: 12px;
     }
-
-    .note {
-      font-size: 11px;
-      color: #eec98a;
-      background: rgba(255, 200, 120, 0.08);
-      padding: 6px 10px;
-      border-bottom: 1px solid var(--border-color--tab);
+    .session-row:hover .icon-btn {
+      opacity: 0.6;
     }
+    .session-row .icon-btn:hover {
+      opacity: 1;
+    }
+
+    /* — empty states — */
+
     .empty {
       flex: 1;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: 6px;
+      padding: 24px 28px;
       text-align: center;
-      padding: 24px;
-      opacity: 0.6;
+      color: var(--ai-text-muted);
       font-size: 12px;
-      font-style: italic;
+      line-height: 1.5;
     }
+    .empty-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      margin-bottom: 6px;
+      border-radius: 50%;
+      background: var(--ai-surface);
+      border: 1px solid var(--ai-border);
+      color: var(--ai-accent);
+      font-size: 18px;
+    }
+    .empty-title {
+      color: var(--ai-text);
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .empty-text {
+      max-width: 260px;
+    }
+    .suggestions {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+      width: 100%;
+      max-width: 260px;
+      margin-top: 14px;
+    }
+    .suggestion {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: 1px solid var(--ai-border);
+      border-radius: 8px;
+      background: var(--ai-surface);
+      color: var(--ai-text);
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.12s;
+    }
+    .suggestion:hover {
+      border-color: var(--ai-accent);
+    }
+    .suggestion .fas {
+      color: var(--ai-text-muted);
+      width: 14px;
+      text-align: center;
+    }
+
+    /* — the conversation — */
+
     .messages {
       flex: 1;
       overflow-y: auto;
-      padding: 10px;
+      padding: 16px 14px 20px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
     }
-    .activity {
-      align-self: flex-start;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      padding: 2px 2px 4px;
-      font-size: 12px;
-    }
-    .activity-item {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      opacity: 0.7;
-    }
-    .activity-item.active {
-      opacity: 1;
-    }
-    .activity-item .fa-check {
-      color: #7bb07b;
+    .messages > * {
+      flex-shrink: 0;
     }
     .msg {
-      max-width: 90%;
-      line-height: 1.45;
-      padding: 8px 12px;
-      border-radius: 12px;
+      line-height: 1.55;
       word-break: break-word;
       white-space: normal;
     }
     .msg.user {
-      background: var(--color--blue, #5c5cff);
-      color: #fff;
       align-self: flex-end;
-      border-bottom-right-radius: 4px;
+      max-width: 85%;
+      margin-top: 6px;
+      padding: 8px 12px;
+      border-radius: 14px 14px 4px 14px;
+      background: var(--ai-accent);
+      color: #fff;
       white-space: pre-wrap;
     }
+    .msg.user:first-child {
+      margin-top: 0;
+    }
+    /* The assistant's replies are plain text across the full width, which reads better than a
+       bubble in a narrow sidebar. */
     .msg.assistant {
-      background: var(--bg-color--tab--hover);
-      align-self: flex-start;
-      border-bottom-left-radius: 4px;
+      align-self: stretch;
+      padding: 0 2px;
     }
     .msg.error {
-      background: rgba(200, 60, 60, 0.12);
-      border: 1px solid rgba(200, 60, 60, 0.4);
-      align-self: flex-start;
-      border-bottom-left-radius: 4px;
+      display: flex;
+      gap: 8px;
+      align-self: stretch;
+      padding: 9px 12px;
+      border-radius: 8px;
+      background: var(--ai-error-bg);
+      border: 1px solid var(--ai-error-border);
+      color: var(--ai-error-text);
     }
-    .msg.streaming::after {
-      content: '▋';
-      opacity: 0.6;
-      margin-left: 1px;
+    .msg.error .fas {
+      margin-top: 3px;
     }
+    .msg.streaming > :last-child::after {
+      content: '';
+      display: inline-block;
+      width: 7px;
+      height: 14px;
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      border-radius: 1px;
+      background: var(--ai-accent);
+      animation: blink 1s steps(2, start) infinite;
+    }
+    @keyframes blink {
+      to {
+        visibility: hidden;
+      }
+    }
+
     .msg.assistant p,
     .msg.assistant ul,
-    .msg.assistant pre,
+    .msg.assistant pre {
+      margin: 0 0 10px;
+    }
+    .msg.assistant ul {
+      padding-left: 20px;
+    }
+    .msg.assistant li {
+      margin: 2px 0;
+    }
+    .msg.assistant li::marker {
+      color: var(--ai-text-muted);
+    }
     .msg.assistant h1,
     .msg.assistant h2,
     .msg.assistant h3 {
-      margin: 0 0 6px 0;
+      margin: 14px 0 6px;
+      line-height: 1.3;
+      font-weight: 600;
+    }
+    .msg.assistant h1 {
+      font-size: 16px;
+    }
+    .msg.assistant h2 {
+      font-size: 15px;
+    }
+    .msg.assistant h3 {
+      font-size: 14px;
+    }
+    .msg.assistant > *:first-child {
+      margin-top: 0;
     }
     .msg.assistant > *:last-child {
       margin-bottom: 0;
     }
-    .msg.assistant code {
-      background: rgba(127, 127, 127, 0.2);
-      border-radius: 3px;
-      padding: 1px 4px;
+    .msg code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 12px;
     }
+    .msg.assistant code {
+      background: var(--ai-inline-code-bg);
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
     .msg.assistant pre {
-      background: rgba(127, 127, 127, 0.15);
-      border-radius: 6px;
-      padding: 8px 10px;
+      background: var(--ai-code-bg);
+      border: 1px solid var(--ai-border);
+      border-radius: 8px;
+      padding: 10px 12px;
       overflow-x: auto;
+      line-height: 1.45;
     }
     .msg.assistant pre code {
       background: none;
       padding: 0;
     }
-    .checkpoint {
-      align-self: flex-start;
-      max-width: 90%;
-      margin: -2px 0 2px;
-      padding: 6px 8px;
-      border: 1px solid var(--border-color--tab);
-      border-radius: 8px;
-      font-size: 11px;
+
+    /* Tool calls while the reply hasn't started yet. */
+    .activity {
+      align-self: stretch;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 2px;
+      font-size: 12px;
+      color: var(--ai-text-muted);
     }
-    .checkpoint.reverted {
-      opacity: 0.55;
+    .activity-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
-    .checkpoint-file {
-      padding: 1px 0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    .activity-item.active {
+      color: var(--ai-text);
     }
-    .checkpoint-drive {
-      opacity: 0.65;
+    .activity-item .fa-spinner {
+      color: var(--ai-accent);
     }
-    .revert-btn {
-      margin-top: 4px;
-      background: transparent;
-      border: 1px solid var(--border-color--tab);
-      color: inherit;
+    .activity-item .fa-check {
+      color: var(--ai-success);
+    }
+
+    .reasoning {
+      align-self: stretch;
+      font-size: 12px;
+      color: var(--ai-text-muted);
+    }
+    .reasoning summary {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px 3px 6px;
       border-radius: 6px;
-      padding: 3px 8px;
       cursor: pointer;
-      font-size: 11px;
+      user-select: none;
+      list-style: none;
     }
-    .revert-btn:hover:not(:disabled) {
-      background: var(--bg-color--tab--hover);
+    .reasoning summary::-webkit-details-marker {
+      display: none;
     }
-    .reverted-label {
-      opacity: 0.6;
-      font-style: italic;
+    .reasoning summary:hover {
+      background: var(--ai-hover);
+      color: var(--ai-text);
     }
+    .reasoning summary .fa-chevron-right {
+      font-size: 9px;
+      transition: transform 0.15s;
+    }
+    .reasoning[open] summary .fa-chevron-right {
+      transform: rotate(90deg);
+    }
+    .reasoning .body {
+      white-space: pre-wrap;
+      margin: 6px 0 2px 10px;
+      padding-left: 10px;
+      border-left: 2px solid var(--ai-border);
+      line-height: 1.5;
+    }
+
     .screenshots {
       align-self: flex-start;
       max-width: 90%;
       display: flex;
       flex-direction: column;
       gap: 6px;
-      margin-bottom: 4px;
     }
     .screenshot {
       display: block;
       max-width: 100%;
       border-radius: 8px;
-      border: 1px solid var(--border-color--tab);
+      border: 1px solid var(--ai-border);
       cursor: zoom-in;
     }
 
-    .reasoning {
-      margin: 0 0 6px;
+    /* A turn's edits, with Revert. */
+    .checkpoint {
+      align-self: stretch;
+      border: 1px solid var(--ai-border);
+      border-radius: 8px;
+      background: var(--ai-surface);
       font-size: 12px;
-      opacity: 0.65;
-      align-self: flex-start;
-      max-width: 90%;
+      overflow: hidden;
     }
-    .reasoning summary {
-      cursor: pointer;
-      user-select: none;
+    .checkpoint.reverted {
+      opacity: 0.6;
     }
-    .reasoning .body {
-      white-space: pre-wrap;
-      margin-top: 4px;
-      padding-left: 8px;
-      border-left: 2px solid var(--border-color--tab);
-    }
-
-    .controls {
+    .checkpoint-header {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 5px 8px;
-      border-top: 1px solid var(--border-color--tab);
-      font-size: 12px;
-      opacity: 0.85;
-      flex-wrap: wrap;
+      padding: 6px 6px 6px 10px;
+      border-bottom: 1px solid var(--ai-border);
+      color: var(--ai-text-muted);
     }
-    .controls select {
-      background: var(--bg-color--input, var(--bg-color--background));
-      color: inherit;
-      border: 1px solid var(--border-color--tab);
-      border-radius: 6px;
-      font: inherit;
-      font-size: 12px;
-      max-width: 150px;
-      padding: 2px 4px;
-    }
-    .controls label {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      cursor: pointer;
-      user-select: none;
-    }
-    .controls .link-btn {
-      background: none;
-      border: 0;
-      color: inherit;
-      cursor: pointer;
-      font: inherit;
-      font-size: 12px;
-      padding: 0;
-      margin-left: auto;
-      text-decoration: underline;
-    }
-    .tools-panel {
-      padding: 6px 10px;
-      border-top: 1px solid var(--border-color--tab);
-      font-size: 12px;
-      max-height: 170px;
-      overflow-y: auto;
-    }
-    .tools-panel h4 {
-      margin: 8px 0 3px;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      opacity: 0.6;
-    }
-    .tools-panel h4:first-child {
-      margin-top: 0;
-    }
-    .tools-panel .tool code {
+    .checkpoint-header .label {
+      flex: 1;
       font-weight: 600;
     }
-    .tools-panel .tool .d {
-      opacity: 0.6;
+    .checkpoint-files {
+      padding: 4px 0;
     }
-    .tools-panel .note {
-      color: #e0a94a;
-      background: none;
-      border: 0;
-      padding: 4px 0 0;
-      margin-top: 4px;
-    }
-    .tools-panel a {
-      color: var(--color--blue, #5c5cff);
-    }
-
-    .input-row {
+    .checkpoint-file {
       display: flex;
+      align-items: baseline;
       gap: 6px;
-      padding: 8px;
-      border-top: 1px solid var(--border-color--tab);
-      flex-shrink: 0;
+      padding: 3px 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .input {
-      flex: 1;
-      resize: none;
-      height: 52px;
-      background: var(--bg-color--input, var(--bg-color--background));
-      color: inherit;
-      border: 1px solid var(--border-color--tab);
-      border-radius: 8px;
-      padding: 7px 9px;
-      font-family: inherit;
-      font-size: 13px;
-      outline: none;
+    .checkpoint-file .fas {
+      flex: none;
+      font-size: 10px;
     }
-    .input:focus {
-      border-color: var(--color--blue, #5c5cff);
+    .checkpoint-file .fa-plus {
+      color: var(--ai-success);
     }
-    .send-btn {
-      flex-shrink: 0;
-      align-self: stretch;
-      background: var(--color--blue, #5c5cff);
-      color: #fff;
-      border: 0;
-      border-radius: 8px;
-      padding: 0 14px;
+    .checkpoint-file .fa-pen {
+      color: var(--ai-warning);
+    }
+    .checkpoint-file .path {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .checkpoint-drive {
+      color: var(--ai-text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .revert-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: transparent;
+      border: 1px solid var(--ai-border);
+      border-radius: 6px;
+      padding: 3px 8px;
       cursor: pointer;
-      font-size: 13px;
-      font-weight: 500;
+      font-size: 11px;
+      color: var(--ai-text);
     }
-    .send-btn:disabled {
+    .revert-btn:hover:not(:disabled) {
+      background: var(--ai-hover);
+    }
+    .revert-btn:disabled {
       opacity: 0.5;
       cursor: default;
     }
-    .send-btn.stop-btn {
-      background: #333;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
+    .reverted-label {
+      font-style: italic;
+      padding-right: 4px;
     }
-    .stop-icon {
-      width: 9px;
-      height: 9px;
-      background: #fff;
-      border-radius: 2px;
-      flex: none;
-    }
-    /* Copy, under each message: shown on hover, and always under the latest answer. */
+
+    /* Per-message actions (Copy) under a message: quiet until the message is hovered, except on
+       the latest answer and right after a click. */
     .msg-actions {
       display: flex;
+      gap: 2px;
       margin-top: -6px;
       opacity: 0;
-      transition: opacity 0.1s;
+      transition: opacity 0.12s;
     }
     .msg-actions.user {
       align-self: flex-end;
@@ -554,6 +725,7 @@ class ShellWindowAiSidebar extends LitElement {
     .msg-actions.assistant,
     .msg-actions.error {
       align-self: flex-start;
+      margin-left: -4px;
     }
     .msg:hover + .msg-actions,
     .msg-actions:hover,
@@ -563,24 +735,220 @@ class ShellWindowAiSidebar extends LitElement {
       opacity: 1;
     }
     .msg-action {
-      background: transparent;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      height: 24px;
+      min-width: 24px;
+      padding: 0 7px;
       border: 0;
-      color: inherit;
-      opacity: 0.6;
-      cursor: pointer;
-      padding: 2px 5px;
-      border-radius: 4px;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--ai-text-muted);
       font-size: 11px;
-    }
-    .msg-action:hover,
-    .msg-actions.copied .msg-action {
-      opacity: 1;
+      cursor: pointer;
     }
     .msg-action:hover {
-      background: var(--bg-color--tab--hover);
+      background: var(--ai-hover);
+      color: var(--ai-text);
     }
-    .msg-action .fa-check {
-      color: #7bb07b;
+    .msg-actions.copied .msg-action {
+      color: var(--ai-success);
+    }
+
+    /* — tools — */
+
+    .tools-panel {
+      margin: 8px 10px;
+      padding: 10px 12px;
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid var(--ai-border);
+      border-radius: 10px;
+      background: var(--ai-surface);
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .tools-panel h4 {
+      margin: 10px 0 4px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--ai-text-muted);
+    }
+    .tools-panel h4:first-child {
+      margin-top: 0;
+    }
+    .tools-panel .tool {
+      padding: 2px 0;
+      line-height: 1.4;
+    }
+    .tools-panel .tool code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .tools-panel .tool .d {
+      color: var(--ai-text-muted);
+    }
+    .tools-panel .note {
+      margin-top: 6px;
+      color: var(--ai-warning);
+    }
+    .tools-panel a {
+      display: inline-block;
+      margin-top: 6px;
+      color: var(--ai-accent);
+      text-decoration: none;
+    }
+    .tools-panel a:hover {
+      text-decoration: underline;
+    }
+
+    /* — composer: one card holding the input, its options and Send — */
+
+    .composer {
+      margin: 0 10px 10px;
+      border: 1px solid var(--border-color--input);
+      border-radius: 12px;
+      background: var(--bg-color--input);
+      flex-shrink: 0;
+      transition:
+        border-color 0.12s,
+        box-shadow 0.12s;
+    }
+    .composer:focus-within {
+      border-color: var(--border-color--input--focused);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--border-color--input--focused) 18%, transparent);
+    }
+    .input {
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+      min-height: 44px;
+      max-height: 200px;
+      resize: none;
+      background: transparent;
+      color: var(--ai-text);
+      border: 0;
+      padding: 11px 12px 4px;
+      font-family: inherit;
+      font-size: 13px;
+      line-height: 1.45;
+      outline: none;
+    }
+    .input::placeholder {
+      color: var(--ai-text-muted);
+    }
+    .input:disabled {
+      opacity: 0.6;
+    }
+    .composer-bar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 6px 6px 6px;
+    }
+    .options {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex-wrap: wrap;
+    }
+    .select {
+      appearance: none;
+      max-width: 140px;
+      height: 26px;
+      padding: 0 20px 0 8px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23888'/%3E%3C/svg%3E")
+        no-repeat right 7px center;
+      color: var(--ai-text-muted);
+      font: inherit;
+      font-size: 12px;
+      text-overflow: ellipsis;
+      cursor: pointer;
+    }
+    .select:hover:not(:disabled) {
+      background-color: var(--ai-hover);
+      color: var(--ai-text);
+    }
+    .select option {
+      background: var(--bg-color--input);
+      color: var(--ai-text);
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 26px;
+      padding: 0 8px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--ai-text-muted);
+      font-size: 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .chip input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .chip:hover {
+      background: var(--ai-hover);
+      color: var(--ai-text);
+    }
+    .chip.on,
+    .chip:has(input:checked) {
+      color: var(--ai-accent);
+    }
+    .chip:has(input:disabled),
+    .select:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    .send-btn {
+      flex: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: var(--ai-accent);
+      color: #fff;
+      font-size: 13px;
+      cursor: pointer;
+      transition:
+        background 0.12s,
+        opacity 0.12s;
+    }
+    .send-btn:hover:not(:disabled) {
+      background: var(--ai-accent--hover);
+    }
+    .send-btn:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+    .send-btn.stop-btn {
+      background: var(--ai-text);
+      color: var(--bg-color--input);
+    }
+    .stop-icon {
+      width: 10px;
+      height: 10px;
+      background: currentColor;
+      border-radius: 2px;
     }
   `;
 
@@ -588,6 +956,7 @@ class ShellWindowAiSidebar extends LitElement {
     super();
     this.activeTab = null;
     this.width = 380;
+    this.headerInset = 0;
     this.messages = [];
     this.draft = '';
     this.streaming = false;
@@ -647,6 +1016,7 @@ class ShellWindowAiSidebar extends LitElement {
     if (changedProperties.has('messages') || changedProperties.has('streaming')) {
       this._scrollToBottom();
     }
+    if (changedProperties.has('draft')) this._autosize();
   }
 
   // Resolves _driveUrl/_driveWritable for the active tab. A plain hyper:// tab resolves locally;
@@ -917,20 +1287,33 @@ class ShellWindowAiSidebar extends LitElement {
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="resize-handle" @mousedown=${this._onResizeMousedown}></div>
-      <div class="header">
-        <span class="title"><span class="fas fa-fw fa-robot"></span> AI</span>
+      <div class="header" style=${this.headerInset ? `padding-right: ${this.headerInset}px` : ''}>
+        <span class="title">
+          ${this._sessionsOpen
+            ? html`<span class="fas fa-fw fa-history"></span> Chat history`
+            : html`<span class="fas fa-fw fa-robot"></span> AI`}
+        </span>
         <span class="header-actions">
           <button
-            class="${this._sessionsOpen ? 'pressed' : ''}"
+            class="icon-btn ${this._sessionsOpen ? 'pressed' : ''}"
             title="Chat history"
             @click=${this._toggleSessions}
           >
             <span class="fas fa-fw fa-history"></span>
           </button>
-          <button title="New session" @click=${this._newSession} ?disabled=${this.streaming}>
+          <button
+            class="icon-btn"
+            title="New chat"
+            @click=${this._newSession}
+            ?disabled=${this.streaming}
+          >
             <span class="fas fa-fw fa-plus"></span>
           </button>
-          <button title="Close" @click=${() => bg.views.toggleAiSidebarOpen('active')}>
+          <button
+            class="icon-btn"
+            title="Close"
+            @click=${() => bg.views.toggleAiSidebarOpen('active')}
+          >
             <span class="fas fa-fw fa-times"></span>
           </button>
         </span>
@@ -945,7 +1328,11 @@ class ShellWindowAiSidebar extends LitElement {
 
   _renderSessions() {
     if (!this._sessions.length) {
-      return html`<div class="sessions"><div class="sessions-empty">No past chats yet.</div></div>`;
+      return html`<div class="empty">
+        <div class="empty-icon"><span class="fas fa-history"></span></div>
+        <div class="empty-title">No past chats yet</div>
+        <div class="empty-text">Your conversations with the assistant show up here.</div>
+      </div>`;
     }
     return html`
       <div class="sessions">
@@ -955,11 +1342,12 @@ class ShellWindowAiSidebar extends LitElement {
               class="session-row ${s.id === this.sessionId ? 'current' : ''}"
               @click=${() => this._switchToSession(s.id)}
             >
+              <span class="fas fa-fw fa-comment-alt"></span>
               <div class="info">
                 <div class="session-title">${s.title || 'New chat'}</div>
-                <div class="session-time">${s.updatedAt ? new Date(s.updatedAt).toLocaleString() : ''}</div>
+                <div class="session-time">${s.updatedAt ? formatTime(s.updatedAt) : ''}</div>
               </div>
-              <button class="delete-btn" title="Delete" @click=${(e) => this._deleteSession(e, s.id)}>
+              <button class="icon-btn" title="Delete" @click=${(e) => this._deleteSession(e, s.id)}>
                 <span class="fas fa-fw fa-trash-alt"></span>
               </button>
             </div>
@@ -970,12 +1358,10 @@ class ShellWindowAiSidebar extends LitElement {
   }
 
   _renderChat() {
+    const canThink = this._think && this._reasoningModel !== false;
     return html`
       ${this.messages.length === 0
-        ? html`<div class="empty">
-            Ask the assistant anything. It can see the tab you're on, and it can work with any drive you
-            name. Use Revert to undo a turn's edits.
-          </div>`
+        ? this._renderEmpty()
         : html`<div class="messages">
             ${this.messages.map((m, i) => this._renderMessage(m, i))}
             ${this.streaming && !(this.messages[this.messages.length - 1]?.content || '').trim()
@@ -983,92 +1369,153 @@ class ShellWindowAiSidebar extends LitElement {
               : ''}
           </div>`}
       ${this._toolsOpen ? this._renderTools() : ''}
-      <div class="controls">
-        <select title="Model" .value=${this._model} @change=${this._onModelChange} ?disabled=${this.streaming}>
-          <option value="">Default</option>
-          ${[...new Set([...(this._models || []), ...(this._model ? [this._model] : [])])].map(
-            (m) => html`<option value=${m} ?selected=${m === this._model}>${this._modelLabels?.[m] || m}</option>`
-          )}
-        </select>
-        <label title="Let the model show its reasoning; uncheck to ask it to skip thinking">
-          <input type="checkbox" .checked=${this._think} @change=${this._onThinkChange} ?disabled=${this.streaming} />
-          Thinking
-        </label>
-        ${this._think && this._reasoningModel !== false
-          ? html`<select title="Reasoning effort" .value=${this._effort} @change=${this._onEffortChange} ?disabled=${this.streaming}>
-              <option value="">Effort</option>
-              <option value="low" ?selected=${this._effort === 'low'}>Low</option>
-              <option value="medium" ?selected=${this._effort === 'medium'}>Medium</option>
-              <option value="high" ?selected=${this._effort === 'high'}>High</option>
-            </select>`
-          : ''}
-        <label
-          title="Offer the screenshot tool for this model. Auto-detected on servers that support it (Ollama); switch on by hand elsewhere if your model supports image input."
-        >
-          <input
-            type="checkbox"
-            .checked=${this._visionModel === true}
-            @change=${this._onVisionChange}
-            ?disabled=${this.streaming}
-          />
-          Vision
-        </label>
-        <button class="link-btn" @click=${this._toggleTools}>${this._toolsOpen ? 'Hide tools' : 'Tools'}</button>
-      </div>
-      <div class="input-row">
+      <div class="composer">
         <textarea
           class="input"
+          rows="1"
           .value=${this.draft}
-          placeholder="Ask something…"
-          @input=${(e) => (this.draft = e.target.value)}
+          placeholder=${this.streaming ? 'Working…' : 'Ask about this tab, or anything…'}
+          @input=${this._onInput}
           @keydown=${this._onKeydown}
           ?disabled=${this.streaming}
         ></textarea>
-        ${this.streaming
-          ? html`<button class="send-btn stop-btn" @click=${this._stop} title="Stop">
-              <span class="stop-icon"></span>Stop
-            </button>`
-          : html`<button class="send-btn" @click=${this._send} ?disabled=${!this.draft.trim()}>Send</button>`}
+        <div class="composer-bar">
+          <div class="options">
+            <select
+              class="select"
+              title="Model"
+              .value=${this._model}
+              @change=${this._onModelChange}
+              ?disabled=${this.streaming}
+            >
+              <option value="">Default model</option>
+              ${[...new Set([...(this._models || []), ...(this._model ? [this._model] : [])])].map(
+                (m) =>
+                  html`<option value=${m} ?selected=${m === this._model}>
+                    ${this._modelLabels?.[m] || m}
+                  </option>`
+              )}
+            </select>
+            <label
+              class="chip"
+              title="Let the model show its reasoning; turn off to ask it to skip thinking"
+            >
+              <input
+                type="checkbox"
+                .checked=${this._think}
+                @change=${this._onThinkChange}
+                ?disabled=${this.streaming}
+              />
+              <span class="fas fa-fw fa-lightbulb"></span>
+              ${canThink ? '' : 'Think'}
+            </label>
+            ${canThink
+              ? html`<select
+                  class="select"
+                  title="Reasoning effort"
+                  .value=${this._effort}
+                  @change=${this._onEffortChange}
+                  ?disabled=${this.streaming}
+                >
+                  <option value="">Effort</option>
+                  <option value="low" ?selected=${this._effort === 'low'}>Low</option>
+                  <option value="medium" ?selected=${this._effort === 'medium'}>Medium</option>
+                  <option value="high" ?selected=${this._effort === 'high'}>High</option>
+                </select>`
+              : ''}
+            <label
+              class="chip"
+              title="Vision: offer the screenshot tool for this model. Auto-detected on servers that support it (Ollama); switch on by hand elsewhere if your model supports image input."
+            >
+              <input
+                type="checkbox"
+                .checked=${this._visionModel === true}
+                @change=${this._onVisionChange}
+                ?disabled=${this.streaming}
+              />
+              <span class="fas fa-fw fa-eye"></span>
+            </label>
+            <button
+              class="chip ${this._toolsOpen ? 'on' : ''}"
+              title=${this._toolsOpen ? 'Hide tools' : 'Show the tools the assistant can use'}
+              @click=${this._toggleTools}
+            >
+              <span class="fas fa-fw fa-wrench"></span>
+            </button>
+          </div>
+          ${this.streaming
+            ? html`<button class="send-btn stop-btn" @click=${this._stop} title="Stop">
+                <span class="stop-icon"></span>
+              </button>`
+            : html`<button
+                class="send-btn"
+                title="Send (Enter)"
+                @click=${this._send}
+                ?disabled=${!this.draft.trim()}
+              >
+                <span class="fas fa-arrow-up"></span>
+              </button>`}
+        </div>
       </div>
     `;
+  }
+
+  _renderEmpty() {
+    const suggestions = [
+      ['fa-align-left', 'Summarize this page'],
+      ['fa-question', 'What can you do?'],
+      ['fa-pen', 'Help me edit this drive'],
+    ];
+    return html`<div class="empty">
+      <div class="empty-icon"><span class="fas fa-robot"></span></div>
+      <div class="empty-title">How can I help?</div>
+      <div class="empty-text">
+        The assistant can see the tab you're on and work with any drive you name. Use Revert to undo
+        a turn's edits.
+      </div>
+      <div class="suggestions">
+        ${suggestions.map(
+          ([icon, text]) => html`<button
+            class="suggestion"
+            @click=${() => this._useSuggestion(text)}
+          >
+            <span class="fas ${icon}"></span>${text}
+          </button>`
+        )}
+      </div>
+    </div>`;
   }
 
   _renderTools() {
     const t = this._tools;
     if (!t) return html`<div class="tools-panel">Loading…</div>`;
+    const tool = (x) =>
+      html`<div class="tool"><code>${x.name}</code> <span class="d">${x.description}</span></div>`;
     return html`
       <div class="tools-panel">
-              <h4>Built-in</h4>
-              ${(t.builtin || []).map(
-                (x) => html`<div class="tool"><code>${x.name}</code> <span class="d">${x.description}</span></div>`
-              )}
-              ${t.capabilities && t.capabilities.length
-                ? html`
-                    <h4>Capabilities</h4>
-                    ${t.capabilities.map(
-                      (x) => html`<div class="tool"><code>${x.name}</code> <span class="d">${x.description}</span></div>`
-                    )}
-                  `
-                : ''}
+        <h4>Built-in</h4>
+        ${(t.builtin || []).map(tool)}
+        ${t.capabilities && t.capabilities.length
+          ? html`
+              <h4>Capabilities</h4>
+              ${t.capabilities.map(tool)}
+            `
+          : ''}
         ${t.page && t.page.length
           ? html`
               <h4>From this page (${t.page.length})</h4>
-              ${t.page.map(
-                (x) => html`<div class="tool"><code>${x.name}</code> <span class="d">${x.description}</span></div>`
-              )}
+              ${t.page.map(tool)}
               ${t.pageGranted !== 1
                 ? html`<div class="note">The assistant will ask before using these.</div>`
                 : ''}
-              <div style="margin-top:6px">
-                <a
-                  href="#"
-                  @click=${(e) => {
-                    e.preventDefault();
-                    this._openInspector();
-                  }}
-                  >Open in WebMCP Inspector →</a
-                >
-              </div>
+              <a
+                href="#"
+                @click=${(e) => {
+                  e.preventDefault();
+                  this._openInspector();
+                }}
+                >Open in WebMCP Inspector →</a
+              >
             `
           : ''}
       </div>
@@ -1080,11 +1527,14 @@ class ShellWindowAiSidebar extends LitElement {
     const body =
       m.role === 'assistant'
         ? unsafeHTML(mdToHtml((m.content || '').trim()))
-        : (m.content || '').trim();
+        : m.role === 'error'
+          ? html`<span class="fas fa-exclamation-circle"></span
+              ><span>${(m.content || '').trim()}</span>`
+          : (m.content || '').trim();
     const reasoning =
       m.role === 'assistant' && m.reasoning && m.reasoning.trim()
         ? html`<details class="reasoning" ?open=${streamingLast && !m.content}>
-            <summary>Thoughts</summary>
+            <summary><span class="fas fa-chevron-right"></span> Thoughts</summary>
             <div class="body">${m.reasoning.trim()}</div>
           </details>`
         : '';
@@ -1102,9 +1552,16 @@ class ShellWindowAiSidebar extends LitElement {
             )}
           </div>`
         : ''}
-      <div class="msg ${m.role}${streamingLast ? ' streaming' : ''}">${body}</div>
+      ${m.role === 'assistant' && !(m.content || '').trim()
+        ? ''
+        : html`<div class="msg ${m.role}${streamingLast ? ' streaming' : ''}">${body}</div>`}
       ${!streamingLast && (m.content || '').trim()
-        ? html`<div class="msg-actions ${m.role}${this._isLatestAnswer(i) ? ' latest' : ''}${this._copied === i ? ' copied' : ''}">
+        ? html`<div
+            class="msg-actions ${m.role}${this._isLatestAnswer(i) ? ' latest' : ''}${this
+              ._copied === i
+              ? ' copied'
+              : ''}"
+          >
             <button
               class="msg-action"
               title=${m.role === 'user' ? 'Copy your message' : 'Copy the answer as Markdown'}
@@ -1122,7 +1579,9 @@ class ShellWindowAiSidebar extends LitElement {
 
   // The last message, when it is a finished answer: its Copy shows without a hover.
   _isLatestAnswer(i) {
-    return i === this.messages.length - 1 && !this.streaming && this.messages[i].role === 'assistant';
+    return (
+      i === this.messages.length - 1 && !this.streaming && this.messages[i].role === 'assistant'
+    );
   }
 
   // A prompt is copied as typed, an answer as the Markdown it arrived in.
@@ -1138,10 +1597,14 @@ class ShellWindowAiSidebar extends LitElement {
     return html`
       <div class="activity">
         ${items.length === 0
-          ? html`<div class="activity-item active"><span class="fas fa-fw fa-spinner fa-spin"></span> Thinking…</div>`
+          ? html`<div class="activity-item active">
+              <span class="fas fa-fw fa-spinner fa-spin"></span> Thinking…
+            </div>`
           : items.map(
               (a, i) => html`<div class="activity-item ${i === items.length - 1 ? 'active' : ''}">
-                <span class="fas fa-fw ${i === items.length - 1 ? 'fa-spinner fa-spin' : 'fa-check'}"></span>
+                <span
+                  class="fas fa-fw ${i === items.length - 1 ? 'fa-spinner fa-spin' : 'fa-check'}"
+                ></span>
                 ${a.summary}
               </div>`
             )}
@@ -1150,26 +1613,65 @@ class ShellWindowAiSidebar extends LitElement {
   }
 
   _renderCheckpoint(m, i) {
+    const n = m.files.length;
     return html`
       <div class="checkpoint ${m.reverted ? 'reverted' : ''}">
-        ${m.files.map(
-          (f) => html`<div class="checkpoint-file" title=${f.drive ? f.drive + f.path : f.path}>
-            <span class="fas fa-fw fa-${f.priorContent === null ? 'plus' : 'pen'}"></span> ${f.path}
-            ${f.drive && f.drive !== this._driveBase
-              ? html`<span class="checkpoint-drive">in ${f.drive.replace(/^hyper:\/\/([0-9a-f]{6})[0-9a-f]{58}$/i, 'hyper://$1…')}</span>`
-              : ''}
-          </div>`
-        )}
-        ${m.reverted
-          ? html`<span class="reverted-label">Reverted</span>`
-          : html`<button class="revert-btn" @click=${() => this._revertTurn(i)} ?disabled=${this.streaming}>
-              <span class="fas fa-fw fa-undo"></span> Revert this turn
-            </button>`}
+        <div class="checkpoint-header">
+          <span class="fas fa-fw fa-file-alt"></span>
+          <span class="label">${n === 1 ? '1 file changed' : `${n} files changed`}</span>
+          ${m.reverted
+            ? html`<span class="reverted-label">Reverted</span>`
+            : html`<button
+                class="revert-btn"
+                @click=${() => this._revertTurn(i)}
+                ?disabled=${this.streaming}
+              >
+                <span class="fas fa-undo"></span> Revert
+              </button>`}
+        </div>
+        <div class="checkpoint-files">
+          ${m.files.map(
+            (f) => html`<div class="checkpoint-file" title=${f.drive ? f.drive + f.path : f.path}>
+              <span class="fas fa-fw fa-${f.priorContent === null ? 'plus' : 'pen'}"></span>
+              <span class="path">${f.path}</span>
+              ${f.drive && f.drive !== this._driveBase
+                ? html`<span class="checkpoint-drive"
+                    >in
+                    ${f.drive.replace(
+                      /^hyper:\/\/([0-9a-f]{6})[0-9a-f]{58}$/i,
+                      'hyper://$1…'
+                    )}</span
+                  >`
+                : ''}
+            </div>`
+          )}
+        </div>
       </div>
     `;
   }
 
   // — events —
+
+  _onInput(e) {
+    this.draft = e.target.value;
+    this._autosize();
+  }
+
+  // The input grows with its text, up to its CSS max-height, then scrolls.
+  _autosize() {
+    const el = this.renderRoot?.querySelector('.input');
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }
+
+  async _useSuggestion(text) {
+    this.draft = text;
+    await this.updateComplete;
+    const el = this.renderRoot.querySelector('.input');
+    el?.focus();
+    el?.setSelectionRange(text.length, text.length);
+  }
 
   _onKeydown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
