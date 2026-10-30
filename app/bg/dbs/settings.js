@@ -44,6 +44,7 @@ const GLOBAL_SETTINGS = new Set([
   'search_sources',
   'highlights_hidden',
   'url_routing_rules',
+  'sync_open_tabs',
 ]);
 
 // The built-in search page (userland/search), which runs the ?q= it opens with.
@@ -128,6 +129,9 @@ export const setup = async function (opts) {
     // Air Traffic Control: ordered list of { id, pattern, spaceId, enabled } rules that send a
     // new tab's URL to a specific Space instead of the window's active one (bg/ui/tabs/manager.js).
     url_routing_rules: [],
+    // Share this Device's open tabs with the user's other Devices through the Vault
+    // (bg/ui/open-tabs.js). Settings → Devices turns it off; off also removes them from the Vault.
+    sync_open_tabs: 1,
 
     cert_exceptions: [],
     adblock_lists: [

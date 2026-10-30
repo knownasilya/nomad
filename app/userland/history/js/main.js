@@ -30,12 +30,22 @@ export class HistoryApp extends LitElement {
     this.isAtEnd = false;
     this.query = '';
     this.closedTabs = false;
+    // 'devices' shows the open tabs on the user's other Devices (nomad://history/#devices).
+    this.view = location.hash === '#devices' ? 'devices' : 'all';
+    this.deviceTabs = null; // { devices, linked, sharing, currentSpace } once loaded
     this.currentPeriodFilter = 'all';
     this.lastRenderedDate = undefined;
     this.isFetching = false;
 
-    this.fillPage();
+    if (this.view === 'devices') this.loadDeviceTabs();
+    else this.fillPage();
     this.addEventListener('scroll', this.onScroll.bind(this));
+    // Another Device's tabs change while this page is open.
+    try {
+      nomad.vault.watchAppData().addEventListener('changed', () => {
+        if (this.view === 'devices') this.loadDeviceTabs();
+      });
+    } catch {}
 
     this.addEventListener('click', (e) => {
       // route navigations to the attached pane if present
@@ -111,19 +121,35 @@ export class HistoryApp extends LitElement {
     this.isFetching = false;
   }
 
-  setClosedTabs(v) {
-    this.closedTabs = v;
+  setView(view) {
+    this.view = view;
+    history.replaceState(null, '', view === 'devices' ? '#devices' : location.pathname);
+    if (view === 'devices') {
+      this.loadDeviceTabs();
+      this.requestUpdate();
+      return;
+    }
+    this.closedTabs = view === 'closed';
     this.fillPage();
+  }
+
+  async loadDeviceTabs() {
+    try {
+      this.deviceTabs = await nomad.vault.listDeviceTabs();
+      this.deviceTabsError = null;
+    } catch (err) {
+      this.deviceTabsError = err?.message || String(err);
+    }
+    this.requestUpdate();
   }
 
   // rendering
   // =
 
   render() {
-    const navItem = (closedTabs, label) => html`
-      <a
-        class=${this.closedTabs === closedTabs ? 'current' : ''}
-        @click=${(e) => this.setClosedTabs(closedTabs)}
+    const current = this.view === 'devices' ? 'devices' : this.closedTabs ? 'closed' : 'all';
+    const navItem = (view, label) => html`
+      <a class=${current === view ? 'current' : ''} @click=${(e) => this.setView(view)}
         >${label}</a
       >
     `;
@@ -131,13 +157,89 @@ export class HistoryApp extends LitElement {
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <header>
         <nav>
-          ${navItem(false, 'All')} ${navItem(true, 'Recently Closed Tabs')}
+          ${navItem('all', 'All')} ${navItem('closed', 'Recently Closed Tabs')}
+          ${navItem('devices', 'Tabs From Other Devices')}
         </nav>
-        ${this.renderSubheader()}
+        ${this.view === 'devices' ? '' : this.renderSubheader()}
       </header>
       <main>
-        <div class="rows">${this.renderRows()}</div>
+        ${this.view === 'devices'
+          ? this.renderDeviceTabs()
+          : html`<div class="rows">${this.renderRows()}</div>`}
       </main>
+    `;
+  }
+
+  // The open tabs on the user's other Devices, grouped by Device and then Space, this Space first.
+  renderDeviceTabs() {
+    if (this.deviceTabsError) {
+      return html`<p class="empty">Couldn't load your other devices' tabs: ${this.deviceTabsError}</p>`;
+    }
+    const dt = this.deviceTabs;
+    if (!dt) return html`<p class="empty">Loading...</p>`;
+    const notSharing = dt.sharing
+      ? ''
+      : html`<p class="note">
+          This device isn't sharing its own tabs. Turn it on in
+          <a href="nomad://settings/?view=devices">Settings → Devices</a>.
+        </p>`;
+    if (!dt.linked) {
+      return html`<p class="empty">
+        Link another device in <a href="nomad://settings/?view=devices">Settings → Devices</a> to see
+        the tabs it has open here.
+      </p>`;
+    }
+    if (!dt.devices.length) {
+      return html`${notSharing}
+        <p class="empty">
+          Your other devices don't have any tabs open. Tabs show up here a few seconds after a
+          device opens them, once it has synced.
+        </p>`;
+    }
+    return html`
+      ${notSharing}
+      ${dt.devices.map(
+        (d) => html`
+          <div class="device">
+            <div class="device-heading">
+              <i class="fas fa-fw ${d.platform === 'mobile' ? 'fa-mobile-alt' : 'fa-laptop'}"></i>
+              <span class="device-name">${d.name}</span>
+              <span class="device-when">
+                ${d.connected
+                  ? 'Connected'
+                  : d.updatedAt
+                    ? `Updated ${moment(d.updatedAt).fromNow()}`
+                    : ''}
+              </span>
+            </div>
+            ${d.spaces.map(
+              (sp) => html`
+                <div class="space-name">
+                  ${sp.name}${sp.rootDriveKey === dt.currentSpace
+                    ? html` <span class="this-space">This space</span>`
+                    : ''}
+                </div>
+                ${sp.tabs.map((tab) => this.renderDeviceTab(tab))}
+              `
+            )}
+          </div>
+        `
+      )}
+    `;
+  }
+
+  renderDeviceTab(tab) {
+    return html`
+      <div class="row">
+        <a class="link" href=${tab.url} title=${tab.title || tab.url}>
+          <img class="favicon" src=${'asset:favicon:' + tab.url} />
+          <span class="title">${tab.title || getHostname(tab.url)}</span>
+          <span class="url">${getHostname(tab.url)}</span>
+        </a>
+        ${tab.pinned
+          ? html`<i class="fas fa-thumbtack pinned" title="Pinned on that device"></i>`
+          : ''}
+      </div>
     `;
   }
 

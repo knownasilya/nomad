@@ -39,6 +39,17 @@ const cssStr = css`
     margin: 8px 0 0;
   }
 
+  .hint a {
+    color: var(--blue);
+  }
+
+  label.check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+
   .message {
     display: flex;
     gap: 8px;

@@ -151,8 +151,8 @@ export interface Backend {
   aiChat: (messages: unknown[], opts: Record<string, unknown>, handlers: AiChatHandlers) => AiChatHandle
 }
 
-// The phone's Reader and Notes (ADR-0017). `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'reader' | 'notes'
+// The phone's Reader and Notes (ADR-0017), and open tabs (shared/open-tabs.mjs). `noVault`: this phone isn't linked, so there's no data.
+export type AppName = 'reader' | 'notes' | 'tabs'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).

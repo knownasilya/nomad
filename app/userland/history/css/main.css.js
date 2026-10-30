@@ -191,5 +191,60 @@ const cssStr = css`
   .row:hover .actions {
     opacity: 1;
   }
+
+  .row .pinned {
+    margin-left: auto;
+    color: var(--text-color--light);
+    font-size: 11px;
+  }
+
+  .note {
+    margin: 0 0 12px;
+    color: var(--text-color--light);
+  }
+
+  .empty a,
+  .note a {
+    color: var(--blue);
+  }
+
+  .device {
+    margin-bottom: 28px;
+  }
+
+  .device-heading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 0;
+    font-weight: 500;
+  }
+
+  .device-heading .device-when {
+    margin-left: auto;
+    color: var(--text-color--light);
+    font-weight: 400;
+    font-size: 12px;
+  }
+
+  .space-name {
+    padding: 5px 15px;
+    border: 1px solid var(--border-color--light);
+    background: var(--bg-color--light);
+    color: var(--text-color--light);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15px;
+  }
+
+  .row + .space-name {
+    border-top: 0;
+  }
+
+  .space-name .this-space {
+    margin-left: 6px;
+    text-transform: none;
+    color: var(--blue);
+  }
 `;
 export default cssStr;

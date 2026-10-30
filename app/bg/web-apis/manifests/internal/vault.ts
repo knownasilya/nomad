@@ -41,4 +41,7 @@ export default {
   listMods: 'promise', // -> { mods, presets: [{ id, label, description }] }
   saveMod: 'promise', // ({ id?, name?, site?, enabled?, presets?, hide?, css?, js? }) -> record
   deleteMod: 'promise',
+
+  // Open tabs on the user's other Devices (bg/ui/open-tabs.js)
+  listDeviceTabs: 'promise', // -> { devices: [{ deviceKey, name, platform, connected, updatedAt, spaces }], linked, sharing, currentSpace }
 };

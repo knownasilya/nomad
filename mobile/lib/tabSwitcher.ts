@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import type { DeviceTabsList } from './openTabs'
 
 // The tab grid (app/tabs.tsx) is its own stack route, but the tabs live in the browser screen's
 // state (app/index.tsx), which stays mounted under it. This store carries what the grid shows across
@@ -32,6 +33,8 @@ export interface TabActions {
   close: (id: string) => void
   open: () => void
   closeAll: () => void
+  openUrl: (url: string) => void // in a new tab, from another Device's tabs
+  deviceTabs: () => Promise<DeviceTabsList | null> // null when this phone isn't linked
 }
 
 let snapshot: TabSnapshot = { tabs: [], activeId: '', spaceName: '', spaceColor: '' }

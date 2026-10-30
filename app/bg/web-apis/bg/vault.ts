@@ -12,6 +12,7 @@ import * as devicePresence from '../../hyper/device-presence';
 import * as vaultApps from './vault-apps';
 import * as names from '../../hyper/names';
 import * as mods from '../../ui/mods';
+import * as openTabs from '../../ui/open-tabs';
 import { PRESETS } from '../../../../shared/mods.mjs';
 
 function thisPlatform() {
@@ -219,5 +220,14 @@ export default {
 
   async deleteMod(id) {
     await mods.remove(id);
+  },
+
+  // Open tabs on the user's other Devices, the calling page's Space first (nomad://history).
+  async listDeviceTabs() {
+    let currentSpace = null;
+    try {
+      currentSpace = await vaultApps.spaceKey(this);
+    } catch {}
+    return { ...(await openTabs.listOtherDevices(currentSpace)), currentSpace };
   },
 };

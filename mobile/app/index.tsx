@@ -34,6 +34,7 @@ import { resolveAddress, isHyperUrl, shortKey, hyperKeyOf, type DriveType } from
 import { useTheme, radius, type Theme } from '../lib/theme'
 import { CONSOLE_SHIM, FAVICON_JS, VIEW_SOURCE_JS, type ContentMsg, type StatusMsg, type ErrorMsg, type LogEntry } from '../lib/types'
 import { publishTabs, setTabActions, type TabThumb } from '../lib/tabSwitcher'
+import { useShareOpenTabs, type DeviceTabsList, type SyncedSpace } from '../lib/openTabs'
 
 // Thumbnails for the tab grid are scaled to this width; a grid card is about half a phone wide.
 const THUMB_WIDTH = 360
@@ -701,6 +702,42 @@ export default function Browser () {
   const addressRef = useRef<TextInput>(null)
   const focusAddressOnReturn = useRef(false)
 
+  // A URL from another Device's tabs (the tab grid) opens in a new tab here. navTo reads tabsRef,
+  // so the new tab goes in there first; its setTabs update runs after the one that adds the tab.
+  const openInNewTab = useCallback((url: string) => {
+    const tb = blankTab()
+    tabsRef.current = [...tabsRef.current, tb]
+    setTabs((prev) => [...prev, tb])
+    setActiveId(tb.id)
+    navigate(tb.id, url)
+  }, [navigate])
+
+  // Share this phone's open tabs, per Space, with the user's other Devices (shared/open-tabs.mjs).
+  // A Space this phone hasn't switched to since launch has no tabs here, so it isn't listed. The
+  // backend writes only when something changed, only once linked; turning sharing off deletes them.
+  const [shareTabs, setShareTabs] = useShareOpenTabs()
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const spaces: SyncedSpace[] = []
+      for (const sp of spacesApi.spaces) {
+        if (!sp.rootDriveKey) continue
+        const saved = sp.id === spacesApi.activeSpaceId
+          ? { tabs, activeId }
+          : tabsBySpace.current[sp.id]
+        if (!saved) continue
+        spaces.push({
+          rootDriveKey: sp.rootDriveKey,
+          name: sp.name,
+          tabs: saved.tabs
+            .filter((tb) => tb.kind !== 'home' && tb.url)
+            .map((tb) => ({ url: tb.url, title: tb.title, active: tb.id === saved.activeId }))
+        })
+      }
+      backend.apps('tabs', 'publish', { spaces, off: !shareTabs })
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [backend, tabs, activeId, spacesApi.spaces, spacesApi.activeSpaceId, shareTabs])
+
   // Feed the tab grid route: what it shows, and what its buttons do.
   useEffect(() => {
     publishTabs({
@@ -718,10 +755,15 @@ export default function Browser () {
       close: closeTab,
       // A new tab from the grid comes back ready to type into, as in Chrome.
       open: () => { openTab(); focusAddressOnReturn.current = true },
-      closeAll: closeAllTabs
+      closeAll: closeAllTabs,
+      openUrl: openInNewTab,
+      deviceTabs: async () => {
+        const res = await backend.apps<DeviceTabsList>('tabs', 'list', { space: spacesApi.activeSpace.rootDriveKey })
+        return res.ok && res.value ? res.value : null
+      }
     })
     return () => setTabActions(null)
-  }, [closeTab, openTab, closeAllTabs])
+  }, [closeTab, openTab, closeAllTabs, openInNewTab, backend, spacesApi.activeSpace.rootDriveKey])
 
   useFocusEffect(
     useCallback(() => {
@@ -985,6 +1027,8 @@ export default function Browser () {
         onOpenDevices={() => openDevicesFrom(() => setSettingsOpen(false))}
         onOpenHosting={() => { setSettingsOpen(false); setHostingSettingsOpen(true) }}
         onOpenLogs={() => { setSettingsOpen(false); setLogsOpen(true) }}
+        shareTabs={shareTabs}
+        onShareTabs={setShareTabs}
       />
 
       <Logs

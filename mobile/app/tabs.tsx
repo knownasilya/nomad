@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, TouchableOpacity, ScrollView, Image, ActivityIndicator, Animated, PanResponder, LayoutAnimation, Alert,
   StyleSheet, useWindowDimensions
@@ -8,6 +8,7 @@ import { Redirect, router } from 'expo-router'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import { useTabSnapshot, tabActions, type TabCard } from '../lib/tabSwitcher'
 import SiteIcon from '../components/SiteIcon'
+import { ago, type DeviceTabsList } from '../lib/openTabs'
 
 const GAP = 12
 // Card body shape (width / height), close to a phone page so a thumbnail reads at a glance.
@@ -74,6 +75,7 @@ export default function TabGrid () {
             }}
           />
         ))}
+        <OtherDevices onOpen={(url) => { tabActions()?.openUrl(url); leave() }} />
       </ScrollView>
 
       <View style={s.bottomBar}>
@@ -157,6 +159,60 @@ function Card ({ tab, active, width, swipeDistance, onSelect, onClose, onActiveL
   )
 }
 
+// The tabs open on the user's other Devices, by Device and then Space (this Space first), under
+// the grid. Tap one to open it here in a new tab. Nothing shows until this phone is linked.
+function OtherDevices ({ onOpen }: { onOpen: (url: string) => void }) {
+  const t = useTheme()
+  const s = useMemo(() => makeStyles(t), [t])
+  const [list, setList] = useState<DeviceTabsList | null>(null)
+
+  useEffect(() => {
+    let live = true
+    tabActions()?.deviceTabs().then((v) => { if (live) setList(v) }).catch(() => {})
+    return () => { live = false }
+  }, [])
+
+  if (!list || !list.linked) return null
+  return (
+    <View style={s.others}>
+      <Text style={s.othersTitle}>On your other devices</Text>
+      {!list.devices.length && (
+        <Text style={s.othersEmpty}>Your other devices don't have any tabs open.</Text>
+      )}
+      {list.devices.map((d) => (
+        <View key={d.deviceKey} style={s.deviceCard}>
+          <View style={s.deviceHead}>
+            <Text style={s.deviceName} numberOfLines={1}>{d.name}</Text>
+            <Text style={s.deviceWhen}>{d.connected ? 'Connected' : ago(d.updatedAt)}</Text>
+          </View>
+          {d.spaces.map((sp) => (
+            <View key={sp.rootDriveKey}>
+              <Text style={s.spaceLabel} numberOfLines={1}>
+                {sp.name}{sp.rootDriveKey === list.currentSpace ? '  ·  This space' : ''}
+              </Text>
+              {sp.tabs.map((tab) => (
+                <TouchableOpacity
+                  key={tab.url}
+                  style={s.remoteRow}
+                  onPress={() => onOpen(tab.url)}
+                  accessibilityLabel={`Open ${tab.title || tab.url}`}
+                >
+                  <Text style={s.remoteTitle} numberOfLines={1}>{tab.title || hostOf(tab.url)}</Text>
+                  <Text style={s.remoteHost} numberOfLines={1}>{hostOf(tab.url)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  )
+}
+
+function hostOf (url: string) {
+  return url.replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0]
+}
+
 // Shown until the tab has been on screen once, which is when its thumbnail is taken.
 function Placeholder ({ tab }: { tab: TabCard }) {
   const t = useTheme()
@@ -222,6 +278,36 @@ function makeStyles (t: Theme) {
     barText: { color: t.accent, fontSize: 16 },
     barDone: { fontWeight: '600' },
     newBtn: { width: 48, height: 48, borderRadius: radius.pill, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center' },
-    newBtnText: { color: t.onAccent, fontSize: 26, lineHeight: 30 }
+    newBtnText: { color: t.onAccent, fontSize: 26, lineHeight: 30 },
+    others: { width: '100%', marginTop: 12, gap: 10 },
+    othersTitle: { color: t.textDim, fontSize: 13, fontWeight: '600' },
+    othersEmpty: { color: t.textMuted, fontSize: 13 },
+    deviceCard: {
+      backgroundColor: t.surface,
+      borderRadius: radius.md,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: t.border,
+      overflow: 'hidden'
+    },
+    deviceHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, height: 40 },
+    deviceName: { flex: 1, color: t.text, fontSize: 14, fontWeight: '600' },
+    deviceWhen: { color: t.textMuted, fontSize: 12 },
+    spaceLabel: {
+      color: t.textMuted,
+      fontSize: 11,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      backgroundColor: t.surfaceAlt
+    },
+    remoteRow: {
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: t.border
+    },
+    remoteTitle: { color: t.text, fontSize: 14 },
+    remoteHost: { color: t.textMuted, fontSize: 12, marginTop: 1 }
   })
 }

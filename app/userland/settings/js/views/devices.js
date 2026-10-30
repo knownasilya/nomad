@@ -23,6 +23,7 @@ class DevicesView extends LitElement {
       editName: { type: String },
       confirmingKey: { type: String },
       sync: { type: Object },
+      shareTabs: { type: Boolean },
     };
   }
 
@@ -47,6 +48,7 @@ class DevicesView extends LitElement {
     this.editName = '';
     this.confirmingKey = '';
     this.sync = null; // nomad.vault.getSyncStatus(): { connections, vault, spaces }
+    this.shareTabs = true; // the sync_open_tabs setting (bg/ui/open-tabs.js)
     this._pendingStream = null;
     this._pollTimer = null;
   }
@@ -59,6 +61,7 @@ class DevicesView extends LitElement {
       this.hasVault = status.hasVault;
       this.canJoin = status.canJoin !== false;
       this.thisDevice = status.thisDevice;
+      this.shareTabs = Number(await nomad.browser.getSetting('sync_open_tabs')) !== 0;
       if (this.hasVault) {
         await this._refresh();
         this._watchPending();
@@ -176,6 +179,20 @@ class DevicesView extends LitElement {
       </div>
 
       <div class="section">
+        <h2>Open tabs</h2>
+        <label class="check">
+          <input type="checkbox" .checked=${this.shareTabs} @change=${this.onShareTabsChange} />
+          Share this device's open tabs with your other devices
+        </label>
+        <p class="hint">
+          Your other devices list them in
+          <a href="nomad://history/#devices">History → Tabs From Other Devices</a>, grouped by
+          space. Closing a tab here never closes it anywhere else. Turning this off removes this
+          device's tabs from them.
+        </p>
+      </div>
+
+      <div class="section">
         <h2>Sync status</h2>
         ${this.renderSync()}
       </div>
@@ -213,6 +230,13 @@ class DevicesView extends LitElement {
           </div>`
         : ''}
     `;
+  }
+
+  onShareTabsChange(e) {
+    const on = e.currentTarget.checked;
+    this.shareTabs = on;
+    nomad.browser.setSetting('sync_open_tabs', on ? 1 : 0);
+    toast.create(on ? 'Sharing this device’s open tabs' : 'This device’s open tabs are no longer shared');
   }
 
   // Connection and replication state of the Vault and each Space. A Space listed on only one side
