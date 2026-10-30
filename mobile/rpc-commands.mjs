@@ -60,6 +60,9 @@ export const RPC_NOMAD_RESULT = 41 // { reqId, ok, value?, error? } reply to RPC
 export const RPC_APPS_RESULT = 47 // { reqId, ok, value?, noVault?, message? } reply to RPC_APPS
 export const RPC_LOGS_RESULT = 49 // { reqId, ok, entries: [{ id, t, level, msg }], previous?, message? } reply to RPC_LOGS
 export const RPC_AI_EVENT = 45 // { reqId, kind:'chunk'|'tool'|'prompt'|'done'|'error', text?, event?, permission?, message? } one streamed AI frame
+// The Vault changed, on this phone or another Device, or this phone linked or unlinked one. Not a
+// reply: an open Reader or Notes screen reloads on it, like desktop's nomad.vault.watchAppData().
+export const RPC_VAULT_CHANGED = 50 // {}
 
 // Drive types understood by the backend resolver.
 export const DRIVE_HYPERDRIVE = 'hyperdrive'
