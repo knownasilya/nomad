@@ -1,8 +1,8 @@
 # Shared Spaces: a Space's own library, shared with other people
 
 **Status: Proposed.** 2026-10-30. Builds on ADR-0006 (the Vault), ADR-0017 (Reader and Notes in the
-Vault), ADR-0018 (Names) and ADR-0026 (per-drive writer keys and Writer grants). Spike S1 must pass
-before *Accepted*.
+Vault), ADR-0018 (Names) and ADR-0026 (per-drive writer keys and Writer grants). Spike S1 passed
+(below); S2 is still open.
 
 The user wants a Space to have its own library: its own Drives, Contacts, Bookmarks, Reader feeds,
 Notes and Names, next to the ones that belong to the user in every Space. Then they want to share a
@@ -244,10 +244,22 @@ with a code. Sharing from the phone (being an owner Device that approves) comes 
 
 ## Spikes before *Accepted*
 
-- **S1: desktop writes a Drive it didn't create.** Desktop opens a Drive it didn't create in its own
-  namespace (`autobase:<keyHex>`), the rule ADR-0026 §1 sets for the phone, with the Vault open: a
-  granted key turns writable without reopening, writes replicate, nothing deadlocks. The owner's
-  other Devices and every member Device depend on it to write the Space Library.
+- **S1: desktop writes a Drive it didn't create. Passed** on the pinned autobase 7.28.1, corestore
+  7.10.1 and hypercore 11.33.1 (`app/scripts/spike-per-drive-writer.mjs`). With the Vault open on the
+  root store, a Drive opened in `autobase:<keyHex>` readies, has its own writer key, turns writable
+  when the owner appends `addWriter`, and its writes reach the owner; two such Drives work at once;
+  and a key minted before the Space Library's key is known opens the Library writable once granted.
+  What it found:
+  - **The first open decides.** A Drive's bootstrap core remembers its writer key
+    (`autobase/local`), and every later open, in any namespace, uses it. So the rule is: if this
+    Device has opened the Drive before, open it as before; if not, open it in `autobase:<keyHex>`
+    (or, for a Space Library joined by invite, in the namespace its key was minted in).
+  - **Drives already opened on the root store stay read-only.** Their remembered key is the root
+    `local` core, which a joined Device's Vault holds, so they still wait on that lock. Moving them
+    with `base.setLocal()` opens them but the next apply fails an assertion ('has block'). Those
+    Drives need a fix before a member can write them; new ones, the Space Library included, don't.
+  - **The Vault itself must keep opening on the root store** on a Device that joined by pairing,
+    since its approved key is the root `local` core.
 - **S2: two pairing members on one swarm.** One `BlindPairing` instance serves the Vault's invites
   and several Space Libraries' invites at once, each candidate reaching the right one.
 
@@ -256,7 +268,8 @@ with a code. Sharing from the phone (being an owner Device that approves) comes 
 1. **Space-only Notes and Names.** The `space-lib` Vault records, the two sections in My Library →
    Names and in Notes, and moving an item. Desktop first; the phone lists and edits only the
    user's own until its follow-up.
-2. **Desktop per-drive writer keys.** S1, then ADR-0026's Writer grants on desktop.
+2. **Desktop per-drive writer keys.** The first-open rule from S1 in `autobases.js`, then
+   ADR-0026's Writer grants on desktop.
 3. **Share a Space.** The Space Library, `spaceLibrary(space)`, the move, invites and approval, and
    the share dialog (members, roles, pending requests) from the Space menu.
 4. **Join a Shared Space.** Joining with a code, a member's other Devices, editor Drive grants.
