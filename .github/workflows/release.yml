@@ -187,6 +187,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          # The phone's auto-updater (mobile/lib/updateRelease.ts) installs the asset ending in
+          # -android.apk from the latest published release, so keep this name.
           cp android/app/build/outputs/bundle/release/app-release.aab "nomad-$VERSION-android.aab"
           cp android/app/build/outputs/apk/release/app-release.apk "nomad-$VERSION-android.apk"
           # electron-builder publishes the desktop artifacts to a draft release

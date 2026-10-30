@@ -53,6 +53,14 @@ releases — another reason to use `npm run release-version`.
 The AAB is what the Play Store accepts; the APK is what users can sideload directly from the
 GitHub release (AABs are not installable).
 
+**Publishing the draft is what ships the phone update.** The Android app checks GitHub's
+`releases/latest` (which skips drafts) on launch and hourly, and installs the
+`nomad-<version>-android.apk` asset when its version is newer than its own (see
+[`mobile/README.md`](../mobile/README.md#updates)). So keep that asset name, and keep the
+`versionName`/`versionCode` derived from the tag: Android refuses an update whose `versionCode` is
+lower than the installed one. Updates only install over a build signed with the same key, which is
+why the release keystore below must never change.
+
 ## Versioning (Android)
 
 The Android job derives versions from the tag:
