@@ -25,19 +25,7 @@ All notable changes to this project will be documented in this file. See [standa
 
 ## [1.26.0](https://github.com/knownasilya/nomad/compare/v1.25.0...v1.26.0) (2026-10-30)
 
-
-### Features
-
-* **ai-sidebar:** cards for a purpose in generated UI ([91565a7](https://github.com/knownasilya/nomad/commit/91565a7b48a4da0b05b9c22a5c8201a0d5bd382c))
-* **ai-sidebar:** draw charts, maps and other UI the assistant writes in OpenUI Lang ([fef61ed](https://github.com/knownasilya/nomad/commit/fef61ed15be07ffdebef0a29dd539f9612d5204e))
-* **ai:** AI Jobs that run a prompt on a schedule and notify the phone ([fc79413](https://github.com/knownasilya/nomad/commit/fc794133a7ace02aae8ae430765954ed1d5e761e))
-* **ai:** give tool events ids and an end, and send reasoning over the AI Bridge ([8289509](https://github.com/knownasilya/nomad/commit/8289509d884f74c93bb5484bf47c6254b1269bad))
-* **ai:** more flexible AI Job schedules ([5550ca2](https://github.com/knownasilya/nomad/commit/5550ca2f48cf35fa51431313343c30452f06f592))
-* **ai:** run an AI Job from a drive's job.md prompt and job.js module ([b43810a](https://github.com/knownasilya/nomad/commit/b43810a068c3800dc5d2f5d5742a45907bb2ecb8))
-* **drives:** desktop per-drive writer keys and Writer grants (ADR-0029 step 2) ([97c2f30](https://github.com/knownasilya/nomad/commit/97c2f30d2a6adebf6d50f2026e70e961a6f90aad))
-* **mobile:** Space-only Notes and Names on the phone (ADR-0029) ([11b233a](https://github.com/knownasilya/nomad/commit/11b233a23b16226783b01e74afba811248038bb5))
-* share a Space with other people (ADR-0029 steps 3 to 7) ([20b7168](https://github.com/knownasilya/nomad/commit/20b716806d180d0fd2f43821377a0230cdfec5e3))
-* **spaces:** Notes and Names that belong to one Space ([9466c7f](https://github.com/knownasilya/nomad/commit/9466c7f579b1ce2141c1943336d2b937fad708b8))
+Not released: the desktop build failed. Its changes ship in 1.26.1.
 
 ## [1.25.0](https://github.com/knownasilya/nomad/compare/v1.24.0...v1.25.0) (2026-10-30)
 
