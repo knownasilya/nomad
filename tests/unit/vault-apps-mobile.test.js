@@ -13,6 +13,7 @@ import os from 'os'
 import fs from 'fs'
 import { createFsCore, makeMetadata, AUTOBASE_OPTS } from '../../shared/fs-core.mjs'
 import * as apps from '../../shared/vault-apps.mjs'
+import * as names from '../../shared/names.mjs'
 import * as phone from '../../mobile/backend/lib/vault-apps.mjs'
 
 let Autobase, Hyperbee, Corestore, b4a
@@ -160,6 +161,65 @@ describe('phone Reader and Notes over a shared Vault (ADR-0017)', () => {
       expect(await phone.renameNoteLinks(base, { id: renamed.id, from: 'Seed order', to: 'Seeds 2027' })).toBe(1)
       const plan = (await phone.listNotes(base)).notes.find((n) => n.title === 'Plan')
       expect(plan.body).toBe('Plan\nSee [[Seeds 2027]]')
+    })
+  }, 30000)
+})
+
+describe('phone Names over a shared Vault (ADR-0018)', () => {
+  const DRIVE = `hyper://${'b'.repeat(64)}/`
+
+  it('reads, resolves and shows the names the computer kept', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      await computer.append(putJson(names.namePath('blog'), names.makeNameRecord({ name: 'blog', url: DRIVE, title: 'My blog' })))
+      await computer.append(putJson(names.namePath('bg'), names.makeNameRecord({ name: 'bg', url: DRIVE, title: 'My blog', auto: true })))
+      await computer.append(putJson(names.namePath('news'), names.makeNameRecord({ name: 'news', url: 'https://news.example.com/', title: 'News' })))
+      await computer.update()
+      await until(async () => (await phone.listNames(base)).names.length === 3)
+
+      expect((await phone.listNames(base)).names.map((r) => r.name)).toEqual(['bg', 'blog', 'news'])
+      expect(await phone.resolveName(base, 'blog')).toBe(DRIVE)
+      expect(await phone.resolveName(base, 'Blog/')).toBe(DRIVE)
+      expect(await phone.resolveName(base, 'hyper://blog/posts/1/?x=1#top')).toBe(DRIVE + 'posts/1/?x=1#top')
+      expect(await phone.resolveName(base, 'news')).toBe('https://news.example.com/')
+      expect(await phone.resolveName(base, 'weather')).toBe(null)
+      expect(await phone.resolveName(base, DRIVE)).toBe(null)
+      expect(await phone.resolveName(base, 'hyper://private/')).toBe(null)
+
+      // The AI's name works when typed, but the address bar shows only the user's own.
+      expect(await phone.resolveName(base, 'bg')).toBe(DRIVE)
+      expect((await phone.namesForUrl(base, DRIVE + 'posts/1/')).approved).toMatchObject({ name: 'blog' })
+      expect((await phone.namesForUrl(base, DRIVE + 'posts/1/')).named).toEqual([]) // names the drive, not this folder
+      const info = await phone.namesForUrl(base, DRIVE + 'index.html', 'My blog')
+      expect(info.approved).toMatchObject({ name: 'blog' })
+      expect(info.named.map((r) => r.name)).toEqual(['bg', 'blog'])
+      expect(info.suggested).toBe('my-blog')
+      expect((await phone.matchNames(base, 'b')).map((r) => r.name)).toEqual(['bg', 'blog'])
+    })
+  }, 30000)
+
+  it('names, keeps, renames and removes from the phone, and the computer sees it', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      await computer.append(putJson(names.namePath('bg'), names.makeNameRecord({ name: 'bg', url: DRIVE, title: 'My blog', auto: true })))
+      await computer.update()
+      await until(async () => (await phone.listNames(base)).names.length === 1)
+      expect((await phone.namesForUrl(base, DRIVE)).approved).toBe(null)
+
+      // Saving the AI's name keeps it.
+      const kept = await phone.setName(base, { name: 'bg', url: DRIVE + 'index.html', title: 'My blog', previous: 'bg' })
+      expect(kept).not.toHaveProperty('auto')
+      expect(kept.url).toBe(DRIVE)
+      expect((await phone.namesForUrl(base, DRIVE)).approved).toMatchObject({ name: 'bg' })
+
+      await phone.setName(base, { name: 'My Blog', url: DRIVE, title: 'My blog', previous: 'bg' })
+      await until(async () => !(await readJson(computer, names.namePath('bg'))))
+      expect(await readJson(computer, names.namePath('my-blog'))).toMatchObject({ name: 'my-blog', url: DRIVE })
+
+      await expect(phone.setName(base, { name: 'my-blog', url: 'https://other.example/' })).rejects.toThrow(/already names/)
+      await expect(phone.setName(base, { name: 'private', url: DRIVE })).rejects.toThrow(/reserved/)
+
+      await phone.removeName(base, 'my-blog')
+      await until(async () => !(await readJson(computer, names.namePath('my-blog'))))
+      expect((await phone.listNames(base)).names).toEqual([])
     })
   }, 30000)
 })

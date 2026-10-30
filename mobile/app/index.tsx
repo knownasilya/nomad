@@ -30,6 +30,8 @@ import HostingSettings from '../components/HostingSettings'
 import { usePersistence, type SavedSite, type SavedDrive } from '../lib/usePersistence'
 import { useSpaces, PERSONAL_ID } from '../lib/useSpaces'
 import { useFavicons } from '../lib/useFavicons'
+import { useNames, useNamesForUrl, useNameMatches, mayBeName } from '../lib/useNames'
+import NameSheet from '../components/NameSheet'
 import { resolveAddress, isHyperUrl, shortKey, hyperKeyOf, type DriveType } from '../lib/hyperUrl'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import { CONSOLE_SHIM, FAVICON_JS, VIEW_SOURCE_JS, type ContentMsg, type StatusMsg, type ErrorMsg, type LogEntry } from '../lib/types'
@@ -209,6 +211,7 @@ export default function Browser () {
   const [notesOpen, setNotesOpen] = useState(false)
   const [spacesOpen, setSpacesOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [nameSheetOpen, setNameSheetOpen] = useState(false)
   const [devtoolsOpen, setDevtoolsOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [explorerDrive, setExplorerDrive] = useState<ExplorerDrive | null>(null)
@@ -275,6 +278,9 @@ export default function Browser () {
     onError: (message) => Alert.alert('Couldn’t save', message)
   })
   const favicons = useFavicons()
+  const names = useNames(backend.apps)
+  // The user's own name for the drive in the active tab: the address bar shows it in a green tag.
+  const activeNames = useNamesForUrl(names, active.url, active.kind !== 'home')
   persistRef.current = persist
   activeSpaceIdRef.current = spacesApi.activeSpaceId
 
@@ -362,26 +368,38 @@ export default function Browser () {
     [backend]
   )
 
+  // A name the user gave a drive or URL (ADR-0018) goes where it points: typed ("blog" or
+  // hyper://blog/posts/) or followed from a link in a page. The tab lands on the real address, so a
+  // drive keeps one origin, as on desktop.
   const navigate = useCallback(
     (id: string, rawInput: string) => {
-      const tab = tabsRef.current.find((tb) => tb.id === id)
-      if (!tab) return
-      const r = resolveAddress(rawInput)
-      // A drive's type is fixed at creation. If we already know it (library /
-      // owned), use it directly; otherwise auto-detect by trying both.
-      const known = persist.driveTypeFor(r.url)
-      const entry: NavEntry = r.kind === 'hyper'
-        ? { kind: 'hyper', url: r.url, driveType: known ?? 'hyperdrive', ns: persist.driveNsFor(r.url), detect: !known }
-        : { kind: 'web', url: r.url }
-      navTo(id, entry, true)
+      const go = (input: string) => {
+        const tab = tabsRef.current.find((tb) => tb.id === id)
+        if (!tab) return
+        const r = resolveAddress(input)
+        // A drive's type is fixed at creation. If we already know it (library /
+        // owned), use it directly; otherwise auto-detect by trying both.
+        const known = persist.driveTypeFor(r.url)
+        const entry: NavEntry = r.kind === 'hyper'
+          ? { kind: 'hyper', url: r.url, driveType: known ?? 'hyperdrive', ns: persist.driveNsFor(r.url), detect: !known }
+          : { kind: 'web', url: r.url }
+        navTo(id, entry, true)
+      }
+      if (!mayBeName(rawInput)) return go(rawInput)
+      names.resolve(rawInput).then(go)
     },
-    [navTo, persist]
+    [navTo, persist, names.resolve]
   )
 
   // URL-bar autocomplete. The address bar selects-all on focus, so treat the input as an empty query
   // (show most-recent) until it diverges from the committed URL, then filter by what's typed.
+  // The user's names that match come first, the exact one at the top, as on desktop.
   const suggestQuery = active.input.trim() === active.url.trim() ? '' : active.input
-  const suggestions = useMemo(() => persist.suggest(suggestQuery, 10), [persist.suggest, suggestQuery])
+  const nameMatches = useNameMatches(names, suggestQuery)
+  const suggestions = useMemo(() => {
+    const named = nameMatches.map((r) => ({ url: `hyper://${r.name}/`, title: r.title || r.url, ts: 0, name: r.name }))
+    return [...named, ...persist.suggest(suggestQuery, 10)].slice(0, 10)
+  }, [persist.suggest, suggestQuery, nameMatches])
   const showSuggestions = urlFocused && suggestions.length > 0
 
   const onUrlFocus = useCallback(() => {
@@ -893,6 +911,7 @@ export default function Browser () {
         hasDraft={!!active.hasDraft}
         draftPreviewing={!!active.draftPreviewing}
         onToggleDraft={onToggleDraftPreview}
+        siteName={!urlFocused && activeNames?.approved ? activeNames.approved.name : ''}
         inputRef={addressRef}
       />
 
@@ -970,6 +989,7 @@ export default function Browser () {
           { label: 'Devices', onPress: () => setDevicesOpen(true) },
           { label: 'Developer tools', onPress: () => { viewSource(); setDevtoolsOpen(true) } },
           { label: 'Copy link', disabled: !active.url, onPress: copyLink },
+          { label: activeNames?.named.length ? 'Rename this site' : 'Name this site', disabled: !active.url, onPress: () => setNameSheetOpen(true) },
           persist.isPinned(active.url)
             ? { label: 'Remove from home shortcuts', onPress: () => persist.setPinned(active.url, '', false) }
             : { label: 'Add to home shortcuts', disabled: !active.url, onPress: () => persist.setPinned(active.url, active.title, true) },
@@ -977,6 +997,15 @@ export default function Browser () {
           { label: 'Settings', onPress: () => setSettingsOpen(true) },
           { label: 'Reload', disabled: active.kind === 'home', onPress: reload }
         ]}
+      />
+
+      <NameSheet
+        visible={nameSheetOpen}
+        onClose={() => setNameSheetOpen(false)}
+        names={names}
+        url={active.url}
+        title={active.title}
+        onOpenDevices={() => openDevicesFrom(() => setNameSheetOpen(false))}
       />
 
       <Settings

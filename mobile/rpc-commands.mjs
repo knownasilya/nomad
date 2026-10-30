@@ -22,7 +22,7 @@ export const RPC_NOMAD = 40 // { reqId, api, method, url?, args } an in-page nom
 //   reader: 'state' | 'follow' {url} | 'unfollow' {url} | 'saveRead' {add, loaded} — each with {space}
 //           'feed' {url}
 //   notes:  'list' | 'save' {id?, body, baseUpdatedAt?} | 'delete' {id} | 'renameLinks' {id, from, to}
-export const RPC_APPS = 46 // { reqId, app: 'reader'|'notes', action, ...args }
+export const RPC_APPS = 46 // { reqId, app: 'reader'|'notes'|'names', action, ...args }
 // The Logs page (Settings → Logs): the backend's console lines with id > since, plus the previous
 // session's when `previous` (to read what led up to a crash).
 export const RPC_LOGS = 48 // { reqId, since?, previous? }

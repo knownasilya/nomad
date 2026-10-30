@@ -533,8 +533,8 @@ async function dispatchNomad (api, method, url, args) {
   throw new Error(`Unsupported nomad call: ${api}.${method}`)
 }
 
-// --- Reader and Notes (ADR-0017) -----------------------------------------
-// Both live in the Vault, so they need this phone to be linked. Reading a Feed doesn't, but the
+// --- Reader, Notes and Names (ADR-0017, ADR-0018) ------------------------
+// All live in the Vault, so they need this phone to be linked. Reading a Feed doesn't, but the
 // Reader only reads the Feeds the Vault lists. Replies with one RPC_APPS_RESULT keyed by reqId.
 async function handleApps ({ reqId, app, action, ...args }) {
   try {
@@ -543,7 +543,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
       return
     }
     if (!vault) {
-      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: 'Link this phone to use Reader and Notes' })
+      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : 'Link this phone to use Reader and Notes' })
       return
     }
     let value
@@ -556,6 +556,12 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'notes' && action === 'save') value = await vaultApps.saveNote(vault, { id: args.id, body: args.body, baseUpdatedAt: args.baseUpdatedAt })
     else if (app === 'notes' && action === 'delete') value = await vaultApps.deleteNote(vault, args.id)
     else if (app === 'notes' && action === 'renameLinks') value = await vaultApps.renameNoteLinks(vault, { id: args.id, from: args.from, to: args.to })
+    else if (app === 'names' && action === 'list') value = await vaultApps.listNames(vault)
+    else if (app === 'names' && action === 'resolve') value = await vaultApps.resolveName(vault, args.input)
+    else if (app === 'names' && action === 'forUrl') value = await vaultApps.namesForUrl(vault, args.url, args.title)
+    else if (app === 'names' && action === 'match') value = await vaultApps.matchNames(vault, args.query, args.limit)
+    else if (app === 'names' && action === 'set') value = await vaultApps.setName(vault, { name: args.name, url: args.url, title: args.title, previous: args.previous })
+    else if (app === 'names' && action === 'remove') value = await vaultApps.removeName(vault, args.name)
     else throw new Error(`Unknown ${app} action: ${action}`)
     send(RPC_APPS_RESULT, { reqId, ok: true, value })
   } catch (err) {
