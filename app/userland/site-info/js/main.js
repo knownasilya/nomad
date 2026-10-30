@@ -28,7 +28,7 @@ class SiteInfoApp extends LitElement {
       requestedPerms: { type: Object },
       forks: { type: Array },
       names: { type: Array }, // the user's names for this page (nomad.vault.namesForUrl)
-      naming: { type: Object }, // { value, previous, error } while the name field is open
+      naming: { type: Object }, // { value, previous, inSpace, error } while the name field is open
     };
   }
 
@@ -304,9 +304,10 @@ class SiteInfoApp extends LitElement {
         <div class="name-row">
           <span class="fas fa-fw fa-tag"></span>
           <code class="name-chip">hyper://${named.name}/</code>
-          <button @click=${() => this.onStartName(named.name)}>Rename</button>
-          <button @click=${() => this.onRemoveName(named.name)}>Remove</button>
+          <button @click=${() => this.onStartName(named.name, !!named.space)}>Rename</button>
+          <button @click=${() => this.onRemoveName(named.name, !!named.space)}>Remove</button>
           ${named.auto ? html`<span class="name-hint">Named by the AI, as you visit often</span>` : ''}
+          ${named.space ? html`<span class="name-hint">Only in this Space</span>` : ''}
         </div>
       `;
     }
@@ -320,8 +321,9 @@ class SiteInfoApp extends LitElement {
     `;
   }
 
-  onStartName(previous) {
-    this.naming = { value: previous || suggestName(this.info?.title), previous, error: '' };
+  // `inSpace`: the name being renamed is kept only in this Space, and stays there.
+  onStartName(previous, inSpace = false) {
+    this.naming = { value: previous || suggestName(this.info?.title), previous, inSpace, error: '' };
     this.updateComplete.then(() => this.shadowRoot.querySelector('.name-input')?.focus());
   }
 
@@ -339,6 +341,8 @@ class SiteInfoApp extends LitElement {
         url: nameTarget(this.url),
         title: this.info?.title || this.hostname,
         previous: this.naming.previous || undefined,
+        inSpace: !!this.naming.inSpace,
+        previousInSpace: !!this.naming.inSpace,
       });
       this.naming = null;
       this.names = await nomad.vault.namesForUrl(this.url);
@@ -348,9 +352,9 @@ class SiteInfoApp extends LitElement {
     }
   }
 
-  async onRemoveName(name) {
+  async onRemoveName(name, inSpace = false) {
     try {
-      await nomad.vault.removeName(name);
+      await nomad.vault.removeName(name, { inSpace });
       this.names = await nomad.vault.namesForUrl(this.url);
     } catch (err) {
       toast.create(err.message || String(err), 'error');

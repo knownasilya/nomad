@@ -37,12 +37,14 @@ const DEVICES_PREFIX = '/.vault/devices/';
 const SETTINGS_PREFIX = '/.vault/settings/';
 // The user's own data a solo Vault brings along when this Device joins another Vault: Reader
 // subscriptions, Notes (ADR-0017), names (shared/names.mjs), Highlights (ADR-0020), Mods
-// (ADR-0023), and Drafts (ADR-0012). The rest (meta, Spaces, Devices, settings) belongs to the Vault being joined.
+// (ADR-0023), each Space's own Notes and Names (ADR-0029), and Drafts (ADR-0012). The rest (meta, Spaces, Devices, settings) belongs to the Vault being joined.
 const READER_PREFIX = '/.vault/reader/';
 const NOTES_PREFIX = '/.vault/notes/';
 const NAMES_PREFIX = '/.vault/names/';
 const HIGHLIGHTS_PREFIX = '/.vault/highlights/';
 const MODS_PREFIX = '/.vault/mods/';
+// Each Space's own Notes and Names (ADR-0029), keyed by its Root Drive key like the Reader's.
+const SPACE_LIB_PREFIX = '/.vault/space-lib/';
 const DRAFTS_PREFIX = '/.drafts/';
 // Each Device's open tabs (shared/open-tabs.mjs). Not carried: they belong to the Device.
 const OPEN_TABS_PREFIX = '/.vault/tabs/';
@@ -52,6 +54,7 @@ const CARRY_PREFIXES = [
   NAMES_PREFIX,
   HIGHLIGHTS_PREFIX,
   MODS_PREFIX,
+  SPACE_LIB_PREFIX,
   DRAFTS_PREFIX,
 ];
 
@@ -199,7 +202,8 @@ async function _carry() {
 async function _carryRecord(sess, path, value) {
   const have = await autobases.readJson(sess, path);
   if (have) {
-    if (path.startsWith(NOTES_PREFIX) && value?.updatedAt > have.updatedAt) {
+    const isNote = path.startsWith(NOTES_PREFIX) || (path.startsWith(SPACE_LIB_PREFIX) && path.includes('/notes/'));
+    if (isNote && value?.updatedAt > have.updatedAt) {
       await _putRecord(sess, path, value);
       return true;
     }
@@ -398,10 +402,13 @@ export async function moveSpaceRoot(fromKey, toKey) {
   }
   await _putRecord(sess, `${SPACES_PREFIX}${toKey}.json`, { ...old, rootDriveKey: toKey });
   await _putRecord(sess, `${SPACES_PREFIX}${fromKey}.json`, { rootDriveKey: fromKey, movedTo: toKey });
-  // The Space's Reader subscriptions are keyed by its Root Drive key (ADR-0017): move them too.
-  const readerFrom = `${READER_PREFIX}${fromKey}/`;
-  for (const { path, value } of await _readPrefixEntries(sess, readerFrom)) {
-    await _carryRecord(sess, `${READER_PREFIX}${toKey}/${path.slice(readerFrom.length)}`, value);
+  // The Space's Reader subscriptions (ADR-0017) and its own Notes and Names (ADR-0029) are keyed by
+  // its Root Drive key: move them too.
+  for (const prefix of [READER_PREFIX, SPACE_LIB_PREFIX]) {
+    const from = `${prefix}${fromKey}/`;
+    for (const { path, value } of await _readPrefixEntries(sess, from)) {
+      await _carryRecord(sess, `${prefix}${toKey}/${path.slice(from.length)}`, value);
+    }
   }
   await _addDevicesAsWriters(toKey);
   logger.info('Moved space root in vault', { fromKey, toKey });

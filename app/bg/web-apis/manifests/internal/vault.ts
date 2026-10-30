@@ -25,17 +25,19 @@ export default {
   readerFollow: 'promise',
   readerUnfollow: 'promise',
   readerSaveRead: 'promise',
-  listNotes: 'promise', // -> { notes, writable, linked }
-  saveNote: 'promise', // ({ id?, body, baseUpdatedAt? }) -> note (a conflict copy on a conflict)
+  listNotes: 'promise', // -> { notes, space, spaceName, writable, linked }; each note has `space` (key or null)
+  saveNote: 'promise', // ({ id?, body, baseUpdatedAt?, inSpace? }) -> note (a conflict copy on a conflict)
+  moveNote: 'promise', // ({ id, inSpace }) -> note, moved into the caller's Space or out to every Space
   deleteNote: 'promise',
   renameNoteLinks: 'promise', // ({ id, from, to }) -> number of notes changed
   watchAppData: 'readable', // 'changed' when the Vault changes
 
   // Names (bg/hyper/names.js)
-  listNames: 'promise', // -> [{ name, url, title, createdAt, updatedAt }]
+  listNames: 'promise', // -> [{ name, url, title, space, hidden?, createdAt, updatedAt }]
+  getNamesSpace: 'promise', // -> { space, spaceName } of the caller
   namesForUrl: 'promise', // (url) -> the names that point to that page
-  setName: 'promise', // ({ name, url, title, previous? }) -> record
-  removeName: 'promise',
+  setName: 'promise', // ({ name, url, title, inSpace?, previous?, previousInSpace? }) -> record
+  removeName: 'promise', // (name, { inSpace? })
 
   // Mods (bg/ui/mods.js, ADR-0023)
   listMods: 'promise', // -> { mods, presets: [{ id, label, description }] }

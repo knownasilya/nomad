@@ -62,7 +62,7 @@ export function onVisit({ url, title, driveTitle, webContents }) {
 async function consider({ site, title, driveTitle, webContents }) {
   if (!(await settingsDb.get(SETTING))) return;
   if (!(await vault.hasVault())) return;
-  if (names.list().some((r) => siteOf(r.url) === site)) return;
+  if (names.listAll().some((r) => siteOf(r.url) === site)) return;
   if (await sitedata.get(site, ASKED_KEY, { dontExtractOrigin: true })) return;
   if ((await historyDb.countSiteVisits(0, site)) < AUTO_NAME_MIN_VISITS) return;
 

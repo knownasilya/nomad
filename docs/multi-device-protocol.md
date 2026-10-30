@@ -70,6 +70,7 @@ like §1.1. `<space>` is a Space's Root Drive key: subscriptions are per Space, 
 | `/.vault/reader/<space>/read.json` | `{ read: [postUrl] }` — posts marked read, sorted |
 | `/.vault/reader/<space>/imported.json` | `{ importedAt }` — the Space's old Reader file was copied in |
 | `/.vault/notes/<id>.json` | `{ type: 'nomad/note', id, body, createdAt, updatedAt, conflictOf? }` |
+| `/.vault/space-lib/<space>/notes/<id>.json` | the same Note, kept only in that Space (ADR-0029) |
 
 - A Note's body is Markdown; its title is its first line with text, and is never stored. Notes link
   with `[[Title]]`, `[[Title#Heading|text]]`, or `[text](Title.md)`, resolved by title (ignoring
@@ -80,8 +81,9 @@ like §1.1. `<space>` is a Space's Root Drive key: subscriptions are per Space, 
 - `read.json` is one record, so a writer reads it, merges (`mergeReadState`), and writes it back.
 - Joining (§2): a Device whose own Vault is **solo** (created here, no other Device) may adopt
   another Vault. It records the old key in its `vault_carry_from` setting and copies
-  `/.vault/reader/`, `/.vault/notes/`, `/.vault/names/` (§1.3), `/.vault/highlights/` (§1.4), and
-  `/.drafts/` across once the new Vault is writable.
+  `/.vault/reader/`, `/.vault/notes/`, `/.vault/names/` (§1.3), `/.vault/highlights/` (§1.4),
+  `/.vault/space-lib/`, and `/.drafts/` across once the new Vault is writable. A Space's Root Drive
+  moving to a new key moves its `/.vault/reader/<space>/` and `/.vault/space-lib/<space>/` with it.
   Desktop only; the phone never makes a Vault of its own.
 
 ### 1.3 Names (ADR-0018)
@@ -92,6 +94,7 @@ The user's short names for Drives, app folders and URLs, one set per user. Rules
 | Path | Payload (JSON, stored inline) |
 |------|--------------|
 | `/.vault/names/<name>.json` | `{ name, url, title, createdAt, updatedAt }` |
+| `/.vault/space-lib/<space>/names/<name>.json` | the same record, a name that works only in that Space's tabs (ADR-0029) |
 
 A name is a lowercase DNS label that isn't a Drive key, a number (`123`, `0x1f`) or reserved, and has
 no dot (dots are kept for later; a Device skips a record whose name it can't use). `url` is a `hyper://`, `http(s)://`

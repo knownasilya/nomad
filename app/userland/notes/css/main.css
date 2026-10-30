@@ -342,6 +342,22 @@ nav .notes {
   text-overflow: ellipsis;
 }
 
+nav .list-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 17px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-color--light);
+}
+
+nav .list-section:first-child {
+  margin-top: 4px;
+}
+
 nav .list-msg {
   padding: 18px 17px;
   font-size: 12px;
@@ -399,6 +415,13 @@ main {
 
 .toolbar .saved {
   margin-right: 6px;
+}
+
+.toolbar .scope {
+  height: 26px;
+  padding: 0 9px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .toolbar .saved.err {

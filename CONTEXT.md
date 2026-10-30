@@ -161,11 +161,11 @@ Subscribing to a Feed by recording its URL on the user's own side (outbound-only
 _Avoid_: followers list, subscriber list, friend
 
 **Note**:
-A private Markdown note the user writes in the built-in Notes app (`nomad://notes`, and Notes on the phone). Its first line is its title. Notes link to each other by title, the way Obsidian does (`[[Title]]`); a link to a missing Note creates it. Notes live in the Vault, so they follow the user to every linked Device (ADR-0017). A Note is not a Post: it is never published or replicated to anyone else.
+A private Markdown note the user writes in the built-in Notes app (`nomad://notes`, and Notes on the phone). Its first line is its title. Notes link to each other by title, the way Obsidian does (`[[Title]]`); a link to a missing Note creates it. Notes live in the Vault, so they follow the user to every linked Device (ADR-0017). A Note shows in every Space, or only in one Space when the user keeps it there (ADR-0029). A Note is not a Post: it is never published.
 _Avoid_: memo, document, page, post
 
 **Name**:
-A short word the user gives a Drive, an app folder inside a private drive, or any URL ("blog", "gh"). Typing it in the URL bar, or opening `hyper://<name>/`, goes to what it names; the AI can look names up and work in a named Drive. One set per user, kept in the Vault. `hyper://<name>/` is a shortcut the user's own navigation follows, not a second address: the page loads at its real URL (ADR-0018).
+A short word the user gives a Drive, an app folder inside a private drive, or any URL ("blog", "gh"). Typing it in the URL bar, or opening `hyper://<name>/`, goes to what it names; the AI can look names up and work in a named Drive. Kept in the Vault: the user's own work in every Space, and a Space's own only in that Space's tabs, where the user's own name wins on a clash (ADR-0029). `hyper://<name>/` is a shortcut the user's own navigation follows, not a second address: the page loads at its real URL (ADR-0018).
 _Avoid_: alias, nickname, petname, bookmark, keyword
 
 **Conflict copy**:

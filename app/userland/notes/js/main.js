@@ -11,6 +11,10 @@
 // is never lost: the later one is saved as a conflict copy. A note left empty is never stored, and
 // an emptied one is deleted when you leave it. Retitling a note updates the links to it.
 //
+// A note is the user's, in every Space, or kept only in this Space (ADR-0029). The list shows the
+// Space's notes first, under the Space's name, then All Spaces; the toolbar's scope button moves the
+// open note between them. A new note is the user's.
+//
 // Each note has its own address, nomad://notes/<id>, so back and forward move between notes.
 // The header's List / Canvas switch swaps the list and the editor for a canvas of every note and
 // the links between them (./graph-view.js); ?view=canvas in the address keeps it across back and
@@ -30,10 +34,13 @@ const state = {
   loaded: false,
   writable: true, // false while a Device that just joined waits for the Vault
   linked: false, // another Device shares the Vault
+  space: null, // this page's Space key, or null
+  spaceName: null,
 };
 
-// The note in the editor: { id: string | null, body, base, openedTitle, conflictOf }. id is null
-// until the first save; base is the updatedAt of the version the editor started from.
+// The note in the editor: { id: string | null, body, base, openedTitle, conflictOf, inSpace }. id
+// is null until the first save; base is the updatedAt of the version the editor started from;
+// inSpace says the note is kept only in this Space.
 let draft = null;
 let dirty = false; // the editor has text that isn't saved
 let saving = null; // the save in flight
@@ -136,6 +143,8 @@ async function loadNotes() {
   state.notes = res.notes || [];
   state.writable = res.writable !== false;
   state.linked = !!res.linked;
+  state.space = res.space || null;
+  state.spaceName = res.space ? res.spaceName || 'This Space' : null;
   editor?.setNotes(state.notes);
 }
 
@@ -188,7 +197,12 @@ async function save() {
 
   setSaveMsg('saving', 'Saving…');
   const wasId = target.id;
-  saving = nomad.vault.saveNote({ id: target.id || undefined, body: target.body, baseUpdatedAt: target.base || undefined });
+  saving = nomad.vault.saveNote({
+    id: target.id || undefined,
+    body: target.body,
+    baseUpdatedAt: target.base || undefined,
+    inSpace: !!target.inSpace,
+  });
   try {
     const note = await saving;
     upsert(note);
@@ -230,7 +244,7 @@ function upsert(note) {
 async function newNote(body = '') {
   await leaveNote();
   view = 'list';
-  draft = { id: null, body, base: null, openedTitle: null, conflictOf: null };
+  draft = { id: null, body, base: null, openedTitle: null, conflictOf: null, inSpace: false };
   dirty = !!body;
   banner = null;
   setUrl(null, true);
@@ -251,7 +265,14 @@ async function openNote(id, { push = true, heading = '' } = {}) {
     renderAll();
     return;
   }
-  draft = { id: note.id, body: note.body, base: note.updatedAt, openedTitle: noteTitle(note.body), conflictOf: note.conflictOf || null };
+  draft = {
+    id: note.id,
+    body: note.body,
+    base: note.updatedAt,
+    openedTitle: noteTitle(note.body),
+    conflictOf: note.conflictOf || null,
+    inSpace: !!note.space,
+  };
   dirty = false;
   banner = null;
   setUrl(note.id, push);
@@ -463,10 +484,17 @@ function renderList() {
   const items = [];
   // A new note shows at the top until it's saved.
   if (draft && !draft.id) items.push(noteItem({ id: null, body: draft.body, updatedAt: null }));
-  for (const n of visibleNotes()) {
-    // The open note shows what's typed, not the last saved text.
-    items.push(noteItem(draft && draft.id === n.id ? { ...n, body: draft.body } : n));
+  // The open note shows what's typed, not the last saved text.
+  const item = (n) => noteItem(draft && draft.id === n.id ? { ...n, body: draft.body } : n);
+  const notes = visibleNotes();
+  const inSpace = notes.filter((n) => n.space);
+  const everywhere = notes.filter((n) => !n.space);
+  // Under headings only when this Space has notes of its own.
+  if (state.spaceName && inSpace.length) {
+    items.push(el('div', { class: 'list-section' }, [icon('thumbtack'), state.spaceName]), ...inSpace.map(item));
+    if (everywhere.length) items.push(el('div', { class: 'list-section' }, [icon('globe'), 'All Spaces']));
   }
+  items.push(...everywhere.map(item));
   if (!items.length) {
     items.push(el('div', { class: 'list-msg' }, [state.query ? 'No notes match.' : 'No notes yet.']));
   }
@@ -513,6 +541,7 @@ function renderEditor() {
       ...toolbarButtons(),
       el('span', { class: 'spacer' }),
       savedEl,
+      scopeButton(),
       el(
         'button',
         { class: 'icon-btn danger', title: 'Delete note', 'aria-label': 'Delete note', disabled: !state.writable, onclick: deleteCurrent },
@@ -539,6 +568,47 @@ function renderEditor() {
   if (!draft.id) editor.focus();
   renderAround();
   renderSaveMsg();
+}
+
+// Where the open note is: in every Space, or only in this one. A click moves it.
+function scopeButton() {
+  if (!state.spaceName || !draft) return null;
+  const label = draft.inSpace ? `Only in ${state.spaceName}` : 'All Spaces';
+  const title = draft.inSpace ? 'Kept only in this Space. Click to show it in every Space' : `Shown in every Space. Click to keep it only in ${state.spaceName}`;
+  return el(
+    'button',
+    { class: 'btn scope', title, 'aria-label': title, disabled: !state.writable, onclick: toggleScope },
+    [icon(draft.inSpace ? 'thumbtack' : 'globe'), label]
+  );
+}
+
+async function toggleScope() {
+  const target = draft;
+  if (!target) return;
+  const inSpace = !target.inSpace;
+  if (!target.id) {
+    target.inSpace = inSpace; // saved there when it's first saved
+    renderEditorToolbar();
+    return;
+  }
+  await save();
+  try {
+    const note = await nomad.vault.moveNote({ id: target.id, inSpace });
+    target.inSpace = !!note.space;
+    upsert(note);
+  } catch (e) {
+    setSaveMsg('error', 'Not moved: ' + (e.message || e));
+    return;
+  }
+  renderList();
+  renderEditorToolbar();
+}
+
+// Redraw the scope button after the note moved, keeping the editor.
+function renderEditorToolbar() {
+  const old = mainEl.querySelector('.toolbar .scope');
+  const next = scopeButton();
+  if (old && next) old.replaceWith(next);
 }
 
 const TOOLS = [

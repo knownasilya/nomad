@@ -254,7 +254,8 @@ with a code. Sharing from the phone (being an owner Device that approves) comes 
 ## Rollout
 
 1. **Space-only Notes and Names.** The `space-lib` Vault records, the two sections in My Library →
-   Names and in Notes, and moving an item. Desktop and phone.
+   Names and in Notes, and moving an item. Desktop first; the phone lists and edits only the
+   user's own until its follow-up.
 2. **Desktop per-drive writer keys.** S1, then ADR-0026's Writer grants on desktop.
 3. **Share a Space.** The Space Library, `spaceLibrary(space)`, the move, invites and approval, and
    the share dialog (members, roles, pending requests) from the Space menu.

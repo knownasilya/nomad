@@ -13,9 +13,12 @@ import { EventEmitter } from 'events';
 import * as vault from '../../hyper/vault';
 import * as filesystem from '../../filesystem/index';
 import * as drives from '../../hyper/drives';
+import * as spacesDb from '../../dbs/spaces';
 import * as logLib from '../../logger';
 import fsAPI from './fs';
 import * as apps from '../../../../shared/vault-apps.mjs';
+import { findWebContentsParentWindow } from '../../lib/electron';
+import * as tabManager from '../../ui/tabs/manager';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'vault-apps' });
 
@@ -23,8 +26,14 @@ const logger = logLib.get().child({ category: 'hyper', subcategory: 'vault-apps'
 const LEGACY_FOLLOWS = 'hyper://private/.data/walled.garden/follows.json';
 const LEGACY_READ = 'hyper://private/.data/reader/read-state.json';
 
+// The caller's Space, by its Root Drive key. A page in a tab names its tab's Space; the shell window
+// (its URL bar, the AI Sidebar) names the Space its window shows.
 export async function spaceKey(ctx): Promise<string> {
-  const spaceId = ctx?.sender ? filesystem.getSpaceIdForWebContents(ctx.sender.id) : null;
+  let spaceId = ctx?.sender ? filesystem.getSpaceIdForWebContents(ctx.sender.id) : null;
+  if (!spaceId && ctx?.sender) {
+    const win = findWebContentsParentWindow(ctx.sender);
+    if (win) spaceId = tabManager.getWindowActiveSpaceId(win);
+  }
   const url = spaceId ? filesystem.getSpaceRootDriveUrl(spaceId) : null;
   const key = url ? await drives.fromURLToKey(url, true) : null;
   if (!apps.isSpaceKey(key)) throw new Error('This page has no Space');
@@ -136,39 +145,101 @@ export async function saveReadIn(space, add = [], loaded = {}) {
 
 // Notes
 // =
+// A Note is the user's (every Space) or one Space's (ADR-0029). Each Note we hand out carries
+// `space`: the Space's key, or null for the user's. It isn't stored: the path says where it is.
 
-export async function allNotes() {
-  return apps.sortNotes((await vault.listAppRecords(apps.NOTES_PREFIX)).filter(apps.isNote));
+const withSpace = (space) => (note) => ({ ...note, space: space || null });
+const stored = ({ space, ...note }: any) => note;
+
+async function notesIn(space = null) {
+  return (await vault.listAppRecords(apps.notesPrefix(space))).filter(apps.isNote).map(withSpace(space));
 }
 
-// { notes: [note], writable, linked }, newest first.
-export async function listNotes() {
-  return { notes: await allNotes(), ...(await vaultInfo()) };
+// The Notes a Space sees, newest first: the user's, and the Space's own when `space` is given.
+export async function allNotes(space = null) {
+  return apps.sortNotes([...(await notesIn(null)), ...(space ? await notesIn(space) : [])]);
+}
+
+// The caller's Space key, or null when it has none (a page outside any tab).
+async function spaceOrNull(ctx) {
+  return spaceKey(ctx).catch(() => null);
+}
+
+// Where the Note `id` is stored: { space, prev }, looking in the user's Notes, then the Space's.
+async function findStored(id, space) {
+  const own = await vault.readAppRecord(apps.notePath(id));
+  if (own) return { space: null, prev: own };
+  if (space) {
+    const theirs = await vault.readAppRecord(apps.notePath(id, space));
+    if (theirs) return { space, prev: theirs };
+  }
+  return { space: null, prev: null };
+}
+
+// { notes: [note], space, spaceName, writable, linked }, newest first. `space` is the caller's
+// Space key (null outside a Space), and `spaceName` its name, for the Notes page's sections.
+export async function listNotes(ctx = null) {
+  const space = await spaceOrNull(ctx);
+  return { notes: await allNotes(space), space, spaceName: spaceNameOf(space), ...(await vaultInfo()) };
+}
+
+export function spaceNameOf(space) {
+  if (!space) return null;
+  const s = spacesDb.getCachedAll().find((sp) => {
+    try {
+      return sp.root_drive_url && drives.fromURLToKey(sp.root_drive_url) === space;
+    } catch {
+      return false;
+    }
+  });
+  return s?.name || null;
 }
 
 // Create (no id) or update a Note, and return the stored Note. `baseUpdatedAt` is the updatedAt of
 // the version the editor started from. If another Device saved the Note since then, this edit is
 // kept as a new Note, a conflict copy, and that copy is returned (its id differs, conflictOf names
-// the original).
-export async function saveNote(_ctx, { id, body, baseUpdatedAt }: { id?: string; body?: string; baseUpdatedAt?: string } = {}) {
-  const prev = id ? await vault.readAppRecord(apps.notePath(id)) : null;
-  const { note, write } = apps.planNoteSave({ id, body, baseUpdatedAt }, prev);
-  if (write) await vault.putAppRecord(apps.notePath(note.id), note);
+// the original). A new Note is the caller's Space's when `inSpace` is true, else the user's; an
+// existing one stays where it is, and so does its conflict copy. `space` names the Space for a
+// caller with no page (the AI on another Device's turn).
+export async function saveNote(
+  ctx,
+  { id, body, baseUpdatedAt, inSpace = false, space = undefined }: { id?: string; body?: string; baseUpdatedAt?: string; inSpace?: boolean; space?: string | null } = {}
+) {
+  const callerSpace = space === undefined ? await spaceOrNull(ctx) : apps.isSpaceKey(space) ? space : null;
+  const found = id ? await findStored(id, callerSpace) : { space: null, prev: null };
+  const where = found.prev ? found.space : inSpace && callerSpace ? callerSpace : null;
+  const { note, write } = apps.planNoteSave({ id, body, baseUpdatedAt }, found.prev);
+  if (write) await vault.putAppRecord(apps.notePath(note.id, where), note);
   if (note.conflictOf && note.conflictOf === id) logger.info('Saved a note conflict copy', { id, copy: note.id });
-  return note;
+  return withSpace(where)(note);
 }
 
-export async function deleteNote(_ctx, id) {
-  await vault.delAppRecord(apps.notePath(id)); // notePath validates the id
+export async function deleteNote(ctx, id) {
+  const { space, prev } = await findStored(id, await spaceOrNull(ctx)); // notePath validates the id
+  if (prev) await vault.delAppRecord(apps.notePath(id, space));
+}
+
+// Move a Note into the caller's Space (`inSpace` true) or out to the user's Notes. Returns it.
+export async function moveNote(ctx, { id, inSpace }: { id?: string; inSpace?: boolean } = {}) {
+  const callerSpace = await spaceOrNull(ctx);
+  const { space, prev } = await findStored(id, callerSpace);
+  if (!prev) throw new Error('No note with that id');
+  const to = inSpace ? callerSpace : null;
+  if (inSpace && !to) throw new Error('This page has no Space');
+  if (to === space) return withSpace(space)(prev);
+  await vault.putAppRecord(apps.notePath(id, to), prev);
+  await vault.delAppRecord(apps.notePath(id, space));
+  logger.info('Moved a note', { id, toSpace: !!to });
+  return withSpace(to)(prev);
 }
 
 // A Note's title changed from `from` to `to` (the editor tells us when the user leaves the Note).
 // Point every other Note's links at the new title, as Obsidian does on a rename. Returns how many
-// Notes changed.
-export async function renameNoteLinks(_ctx, { id, from, to }: { id?: string; from?: string; to?: string } = {}) {
-  const changes = apps.linkRenames(await allNotes(), id, from, to);
+// Notes changed. Covers the Notes the caller's Space sees: the user's and the Space's.
+export async function renameNoteLinks(ctx, { id, from, to }: { id?: string; from?: string; to?: string } = {}) {
+  const changes = apps.linkRenames(await allNotes(await spaceOrNull(ctx)), id, from, to);
   for (const { note, body } of changes) {
-    await vault.putAppRecord(apps.notePath(note.id), apps.makeNote({ id: note.id, body }, note));
+    await vault.putAppRecord(apps.notePath(note.id, note.space), apps.makeNote({ id: note.id, body }, stored(note)));
   }
   if (changes.length) logger.info('Renamed note links', { id, notes: changes.length });
   return changes.length;
