@@ -156,6 +156,11 @@ known Devices at creation time.
 > opens without deadlock; making it fully writable + updating pairing/fan-out on both apps is a follow-up
 > protocol change that needs live-runtime verification. Until then, mobile's `nomad.fs` writes correctly
 > reject on paired-into drives rather than hang.
+>
+> **Proposed fix for the phone (ADR-0026):** a phone already opens a drive it didn't create in a
+> per-drive namespace with its own `local` core. It asks for that key with a Vault record
+> (`/.vault/drive-writers/<driveKey>/<writerKey>.json`), and any of the user's Devices that can write
+> the drive appends `addWriter` for it. Grants are on demand, per drive, not fanned out at pairing.
 
 ## 4. Profile Drives — aggregation, not Autobase (ADR-0007)
 

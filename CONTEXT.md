@@ -30,6 +30,13 @@ pairing/invites); they are not inferred from replication. A Drive's writer set (
 the security boundary.
 _Avoid_: author, contributor, collaborator
 
+**Writer grant**:
+A Vault record (`/.vault/drive-writers/<driveKey>/<writerKey>.json`) in which one of the user's
+Devices asks for its own per-drive writer key to be added to a Drive. Any of the user's Devices that
+can write that Drive adds it without a prompt, since only the user's Devices write the Vault
+(ADR-0026, proposed).
+_Avoid_: invite, access request (those are for other people)
+
 ### Drafts
 
 **Draft**:
