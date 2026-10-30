@@ -8,6 +8,7 @@ import * as drives from '../../hyper/drives';
 import * as daemon from '../../hyper/daemon';
 import * as autobases from '../../hyper/autobases';
 import { PermissionsError } from 'beaker-error-constants';
+import { makeWriterProof, decodeWriterProof, verifyWriterProof } from '../../hyper/writer-proof';
 
 const PROTOCOL = 'nomad/peersocket';
 
@@ -25,7 +26,7 @@ export default {
 
     const id = _roomId(drive.key, topic);
     const idHex = b4a.toString(id, 'hex');
-    if (!rooms.has(idHex)) rooms.set(idHex, new Room(id));
+    if (!rooms.has(idHex)) rooms.set(idHex, new Room(id, drive));
     const room = rooms.get(idHex);
 
     // Open channels on all existing connections immediately
@@ -47,6 +48,12 @@ export default {
     stream.objectMode = true;
 
     room.joinStreams.add(stream);
+    // A page joining a room that's already open (another tab of the same Drive) learns its peers.
+    for (const [peerId, peer] of room.channels) {
+      if (!peer.channel.opened) continue;
+      stream.push(['join', { peerId }]);
+      if (peer.writerKey) stream.push(['writer', { peerId, writerKey: peer.writerKey }]);
+    }
     stream.on('close', () => {
       room.joinStreams.delete(stream);
       room._maybeCleanup();
@@ -87,19 +94,55 @@ export default {
 // internal
 // =
 
+// A room's join streams get 'message' { peerId, message, writerKey } plus, for peers in this
+// room (not every swarm connection, as watch() reports), 'join' { peerId }, 'leave' { peerId }
+// and 'writer' { peerId, writerKey } once a peer proves it is a current Writer of the Drive
+// (ADR-0025 §5). writerKey stays null for a peer that hasn't proved it.
 class Room {
   id: any;
   idHex: string;
+  drive: any;
   joinStreams: Set<any>;
   watchStreams: Set<any>;
   channels: Map<any, any>;
 
-  constructor(id) {
+  constructor(id, drive) {
     this.id = id;
     this.idHex = b4a.toString(id, 'hex');
+    this.drive = drive; // an Autobase session (has .base) or a Hyperdrive (no Writer proofs)
     this.joinStreams = new Set();
     this.watchStreams = new Set();
-    this.channels = new Map(); // peerKeyHex -> { channel, msg }
+    this.channels = new Map(); // peerKeyHex -> { channel, msg, proof, conn, writerKey, proofSent }
+  }
+
+  _push(event, detail) {
+    for (const s of this.joinStreams) s.push([event, detail]);
+  }
+
+  // Send this Device's Writer proof once per channel, as soon as it has one. Called on open and
+  // before every send, so a Device that becomes a Writer later still proves it.
+  _sendProof(peer) {
+    if (peer.proofSent || !this.drive?.base) return;
+    const proof = makeWriterProof(this.drive.base, this.id, peer.conn.handshakeHash);
+    if (!proof) return;
+    peer.proofSent = true;
+    peer.proof.send(b4a.from(JSON.stringify(proof)));
+  }
+
+  async _onProof(peerId, data) {
+    const peer = this.channels.get(peerId);
+    const base = this.drive?.base;
+    if (!peer || !base) return;
+    const writerKey = await verifyWriterProof({
+      base,
+      store: daemon.getCorestore(),
+      roomId: this.id,
+      handshakeHash: peer.conn.handshakeHash,
+      proof: decodeWriterProof(data),
+    });
+    if (!writerKey || this.channels.get(peerId) !== peer) return;
+    peer.writerKey = writerKey;
+    this._push('writer', { peerId, writerKey });
   }
 
   openOnConn(conn) {
@@ -121,31 +164,50 @@ class Room {
         {
           encoding: c.buffer,
           onmessage(data) {
-            for (const s of room.joinStreams) {
-              s.push(['message', { peerId, message: data }]);
-            }
+            const writerKey = room.channels.get(peerId)?.writerKey || null;
+            room._push('message', { peerId, message: data, writerKey });
+          },
+        },
+        {
+          // A Writer proof (ADR-0025). A peer on an older build never sends one.
+          encoding: c.buffer,
+          onmessage(data) {
+            room._onProof(peerId, data);
           },
         },
       ],
       onopen() {
         for (const ws of room.watchStreams) ws.push(['join', { peerId }]);
+        room._push('join', { peerId });
+        const peer = room.channels.get(peerId);
+        if (peer) room._sendProof(peer);
       },
       onclose() {
         room.channels.delete(peerId);
         for (const ws of room.watchStreams) ws.push(['leave', { peerId }]);
+        room._push('leave', { peerId });
         room._maybeCleanup();
       },
     });
 
     if (!channel) return; // already exists on this mux
 
-    this.channels.set(peerId, { channel, msg: channel.messages[0] });
+    this.channels.set(peerId, {
+      channel,
+      msg: channel.messages[0],
+      proof: channel.messages[1],
+      conn,
+      writerKey: null,
+      proofSent: false,
+    });
     channel.open();
   }
 
   sendTo(peerId, msg) {
     const peer = this.channels.get(peerId);
-    if (peer?.msg) peer.msg.send(msg);
+    if (!peer?.msg) return;
+    this._sendProof(peer);
+    peer.msg.send(msg);
   }
 
   _maybeCleanup() {

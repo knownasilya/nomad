@@ -4,6 +4,7 @@ import commonCSS from './common.css';
 import inputsCSS from './inputs.css';
 import buttonsCSS from './buttons2.css';
 import spinnerCSS from './spinner.css';
+import { DRIVE_TEMPLATES } from '../../lib/drive-templates';
 
 class CreateDriveModal extends LitElement {
   static get properties() {
@@ -17,6 +18,7 @@ class CreateDriveModal extends LitElement {
       fromGit: { type: Boolean },
       gitUrl: { type: String },
       isCollaborative: { type: Boolean },
+      template: { type: String },
     };
   }
 
@@ -51,6 +53,57 @@ class CreateDriveModal extends LitElement {
 
         .form-actions button:nth-child(3) {
           margin-left: auto;
+        }
+
+        .templates {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          margin-bottom: 12px;
+        }
+
+        .template {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          padding: 10px 12px;
+          border: 1px solid var(--m-border);
+          border-radius: var(--m-radius);
+          background: none;
+          color: var(--m-text-default);
+          font: inherit;
+          text-align: left;
+          cursor: pointer;
+        }
+
+        .template:hover {
+          border-color: var(--m-border-strong);
+        }
+
+        .template.selected {
+          border-color: var(--m-blue);
+          box-shadow: 0 0 0 3px var(--m-focus-ring);
+        }
+
+        .template .fa-fw {
+          margin-top: 2px;
+          color: var(--m-text-light);
+        }
+
+        .template.selected .fa-fw {
+          color: var(--m-blue);
+        }
+
+        .template-title {
+          display: block;
+          font-weight: 600;
+        }
+
+        .template-desc {
+          display: block;
+          margin-top: 2px;
+          font-size: 11px;
+          color: var(--m-text-light);
         }
 
         .git-repo {
@@ -90,6 +143,7 @@ class CreateDriveModal extends LitElement {
     // requests" (a policy lock). Default LOCKED / single-writer — the safer default; the drive can
     // be unlocked later without changing its URL (or automatically when you invite a writer).
     this.isCollaborative = false;
+    this.template = 'blank';
     this.errors = {};
   }
 
@@ -104,6 +158,9 @@ class CreateDriveModal extends LitElement {
       : '';
     this.author = undefined; // this.author = params.author
     if (params.collaborative) this.isCollaborative = true;
+    if (params.template && DRIVE_TEMPLATES.some((t) => t.id === params.template)) {
+      this.selectTemplate(params.template, !!params.collaborative);
+    }
     await this.requestUpdate();
   }
 
@@ -127,6 +184,27 @@ class CreateDriveModal extends LitElement {
           ${this.isCollaborative ? 'Create Collaborative Drive' : 'Create New Drive'}
         </h1>
         <form @submit=${this.onSubmit}>
+          <div class="templates" role="radiogroup" aria-label="Start with">
+            ${DRIVE_TEMPLATES.map(
+              (t) => html`
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked=${this.template === t.id ? 'true' : 'false'}
+                  class="template ${this.template === t.id ? 'selected' : ''}"
+                  tabindex="1"
+                  ?disabled=${this.isProcessing}
+                  @click=${() => this.selectTemplate(t.id)}
+                >
+                  <span class="${t.icon} fa-fw"></span>
+                  <span>
+                    <span class="template-title">${t.title}</span>
+                    <span class="template-desc">${t.description}</span>
+                  </span>
+                </button>
+              `
+            )}
+          </div>
           <div>
             <input
               autofocus
@@ -176,7 +254,7 @@ class CreateDriveModal extends LitElement {
               type="button"
               @click=${this.onClickFromFolder}
               tabindex="8"
-              ?disabled=${this.isProcessing || this.fromGit}
+              ?disabled=${this.isProcessing || this.fromGit || this.template !== 'blank'}
               title=${this.fromFolderPath || 'Choose a folder to sync'}
             >
               ${this.fromFolderPath ? this.folderName() : 'From Folder'}
@@ -185,7 +263,7 @@ class CreateDriveModal extends LitElement {
               type="button"
               @click=${this.onClickFromGit}
               tabindex="7"
-              ?disabled=${this.isProcessing || !!this.fromFolderPath}
+              ?disabled=${this.isProcessing || !!this.fromFolderPath || this.template !== 'blank'}
             >
               From Git Repo ${this.fromGit ? html`<span class="fas fa-times"></span>` : ''}
             </button>
@@ -284,6 +362,7 @@ class CreateDriveModal extends LitElement {
         tags: this.tags.split(' '),
         author: this.author,
         fromGitUrl: this.fromGit ? this.gitUrl : undefined,
+        template: this.template,
         prompt: false,
       });
       if (this.fromFolderPath) {
@@ -316,6 +395,19 @@ class CreateDriveModal extends LitElement {
   folderName() {
     const parts = String(this.fromFolderPath).split(/[/\\]/);
     return parts[parts.length - 1] || this.fromFolderPath;
+  }
+
+  // A template brings its own default for accepting writers (a Document is for several editors);
+  // the files it copies in don't mix with a folder sync or a git import.
+  selectTemplate(id, keepCollaborative = false) {
+    const t = DRIVE_TEMPLATES.find((x) => x.id === id);
+    if (!t) return;
+    this.template = id;
+    if (!keepCollaborative) this.isCollaborative = !!t.collaborative;
+    if (id !== 'blank') {
+      this.fromFolderPath = undefined;
+      this.fromGit = false;
+    }
   }
 
   onToggleCollaborative() {
