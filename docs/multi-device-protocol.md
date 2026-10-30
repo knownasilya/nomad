@@ -42,6 +42,7 @@ Written via ordinary `{ op: 'put' }` ops **as inline control records** (small JS
 | `/.vault/meta.json` | `{ version: 1, createdAt, profileUrl? }` |
 | `/.vault/spaces/<rootDriveKey>.json` | `{ rootDriveKey, name, icon, color, sortOrder, originId?, personal?, createdAt }` |
 | `/.vault/devices/<hexDeviceKey>.json` | `{ key, name, platform: 'desktop'\|'mobile', addedAt, lastSeen? }` |
+| `/.vault/drive-writers/<driveKey>/<writerKey>.json` | Writer grant (ADR-0026 §2): `{ type: 'nomad/drive-writer', drive, writerKey, device, name, requestedAt, grantedBy?, grantedAt? }`. Rules in `shared/drive-writers.mjs` |
 
 Space records are keyed by `rootDriveKey` (the hex key of the now-Autobase-backed Root Drive), which
 is globally stable — **not** by the local space id, which is a per-Device autoincrement and would
@@ -159,6 +160,14 @@ known Devices at creation time.
 > opens without deadlock; making it fully writable + updating pairing/fan-out on both apps is a follow-up
 > protocol change that needs live-runtime verification. Until then, mobile's `nomad.fs` writes correctly
 > reject on paired-into drives rather than hang.
+>
+> **Desktop (ADR-0029 step 2):** a drive this desktop has never opened opens in `autobase:<key>`
+> (`_storeFor` in `app/bg/hyper/autobases.js`), with a `local` core for that drive alone. The Vault
+> stays on the root store. Autobase remembers the writer key of a drive's first open, so a drive
+> this desktop created or opened before keeps opening on the root store; such a drive can't be
+> granted to a joined desktop yet. The desktop asks for its key with a Writer grant (below): on its
+> own for each Space Root Drive it has open, and from **Edit on this device** in the site-info panel
+> for any other drive. `app/bg/hyper/drive-writers.js` grants, and revokes the keys of removed Devices.
 >
 > **Proposed fix for the phone (ADR-0026):** a phone already opens a drive it didn't create in a
 > per-drive namespace with its own `local` core. It asks for that key with a Vault record

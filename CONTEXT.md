@@ -34,7 +34,7 @@ _Avoid_: author, contributor, collaborator
 A Vault record (`/.vault/drive-writers/<driveKey>/<writerKey>.json`) in which one of the user's
 Devices asks for its own per-drive writer key to be added to a Drive. Any of the user's Devices that
 can write that Drive adds it without a prompt, since only the user's Devices write the Vault
-(ADR-0026, proposed).
+(ADR-0026; on desktop since ADR-0029 step 2, where each Space Root Drive is asked for on its own).
 _Avoid_: invite, access request (those are for other people)
 
 ### Drafts

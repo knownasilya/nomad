@@ -20,6 +20,10 @@ export default {
   renameDevice: 'promise',
   removeDevice: 'promise',
 
+  // Editing a Drive another of the user's Devices can write (bg/hyper/drive-writers.js)
+  driveEditStatus: 'promise', // (url) -> { writable, canAsk, legacy, linked, request: { pending, granted } | null }
+  requestDriveEdit: 'promise', // (url) -> the same, after asking the user's other Devices
+
   // Reader and Notes data (bg/vault-apps.ts)
   readerState: 'promise', // -> { follows, read, writable, linked } for the caller's Space
   readerFollow: 'promise',

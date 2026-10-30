@@ -28,6 +28,9 @@ const PENDING_ROOT_MOVE_SETTING = 'vault_pending_root_move';
 // The solo Vault this Device left to join another one, until its data is copied across.
 const CARRY_FROM_SETTING = 'vault_carry_from';
 const VAULT_VERSION = 1;
+// The Vault opens on the root store: a Device that joined by pairing was approved with its root
+// `local` core as its writer key (device-pairing.js submitInvite), and the first open must use it.
+const VAULT_OPEN = { root: true };
 
 const META_PATH = '/.vault/meta.json';
 const SPACES_PREFIX = '/.vault/spaces/';
@@ -78,7 +81,7 @@ export function hasVault() {
 // Idempotent: a second caller during creation reuses the persisted key.
 export async function ensureVault({ profileUrl } = {}) {
   const existing = await getVaultKey();
-  if (existing) return autobases.getOrLoadCollaborativeDrive(existing);
+  if (existing) return autobases.getOrLoadCollaborativeDrive(existing, VAULT_OPEN);
   return createVault({ profileUrl });
 }
 
@@ -87,7 +90,7 @@ let _carryWatched = false;
 export async function getVault() {
   const key = await getVaultKey();
   if (!key) return null;
-  const sess = await autobases.getOrLoadCollaborativeDrive(key);
+  const sess = await autobases.getOrLoadCollaborativeDrive(key, VAULT_OPEN);
   // A copy from a left Vault that a restart cut short: finish it once the Vault is writable.
   if (!_carryWatched && sess) {
     _carryWatched = true;
@@ -147,7 +150,7 @@ export async function adoptVault(vaultKey) {
     logger.info('Leaving a solo vault to join another', { from: existing, to: vaultKey });
   }
   await settingsDb.set(VAULT_KEY_SETTING, vaultKey);
-  const sess = await autobases.loadCollaborativeDrive(vaultKey);
+  const sess = await autobases.loadCollaborativeDrive(vaultKey, VAULT_OPEN);
   logger.info('Adopted vault', { key: vaultKey, writable: sess?.writable });
   if (leaving) {
     events.emit('changed', { key: vaultKey });

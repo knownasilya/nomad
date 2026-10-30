@@ -12,12 +12,19 @@ import * as pairing from '../../hyper/device-pairing';
 import * as devicePresence from '../../hyper/device-presence';
 import * as vaultApps from './vault-apps';
 import * as names from '../../hyper/names';
+import * as driveWriters from '../../hyper/drive-writers';
 
 // The caller's Space key, or null.
 const callerSpace = (ctx) => vaultApps.spaceKey(ctx).catch(() => null);
 import * as mods from '../../ui/mods';
 import * as openTabs from '../../ui/open-tabs';
 import { PRESETS } from '../../../../shared/mods.mjs';
+
+// The Drive key of a hyper://<key>/ URL, or null.
+function driveKeyOf(url) {
+  const m = /^hyper:\/\/([0-9a-f]{64})(?:[/?#]|$)/i.exec(String(url || ''));
+  return m ? m[1].toLowerCase() : null;
+}
 
 function thisPlatform() {
   return 'desktop';
@@ -144,6 +151,7 @@ export default {
     try {
       await vault.syncSpacesFromVault();
     } catch {}
+    driveWriters.watch();
     return res;
   },
 
@@ -152,7 +160,18 @@ export default {
   },
 
   async removeDevice(deviceKey) {
-    return vault.removeDevice(deviceKey);
+    await vault.removeDevice(deviceKey);
+    // Take its writer keys off the Drives this Device writes (bg/hyper/drive-writers.js).
+    driveWriters.sync().catch(() => {});
+  },
+
+  // Editing a Drive one of the user's other Devices can write (ADR-0026 §2, ADR-0029 step 2).
+  async driveEditStatus(url) {
+    return driveWriters.status(driveKeyOf(url));
+  },
+
+  async requestDriveEdit(url) {
+    return driveWriters.request(driveKeyOf(url));
   },
 
   // Reader and Notes data (vault-apps.ts), in the Vault. `this` is the RPC event, which carries the

@@ -269,7 +269,10 @@ with a code. Sharing from the phone (being an owner Device that approves) comes 
    Names and in Notes, and moving an item. Desktop first; the phone lists and edits only the
    user's own until its follow-up.
 2. **Desktop per-drive writer keys.** The first-open rule from S1 in `autobases.js`, then
-   ADR-0026's Writer grants on desktop.
+   ADR-0026's Writer grants on desktop. *Landed:* `_storeFor` in `autobases.js` (the Vault opens
+   on the root store, `VAULT_OPEN`), `shared/drive-writers.mjs`, `app/bg/hyper/drive-writers.js`
+   (ask, grant, revoke, and Space Root Drives asked for on their own), and **Edit on this device**
+   in the site-info panel.
 3. **Share a Space.** The Space Library, `spaceLibrary(space)`, the move, invites and approval, and
    the share dialog (members, roles, pending requests) from the Space menu.
 4. **Join a Shared Space.** Joining with a code, a member's other Devices, editor Drive grants.
