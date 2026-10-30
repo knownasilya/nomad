@@ -75,9 +75,9 @@ describe('createAgentReducer', () => {
       delta('Let me check.'),
       assistant({ type: 'text', text: 'Let me check.' }),
       event('content_block_start'),
-      assistant({ type: 'tool_use', name: 'mcp__nomad__execute', input: { code: 'nomad.listNotes()' } }),
+      assistant({ type: 'tool_use', id: 'toolu_1', name: 'mcp__nomad__execute', input: { code: 'nomad.listNotes()' } }),
       event('message_stop'),
-      JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', content: 'hi' }] } }),
+      JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'hi' }] } }),
       event('message_start'),
       event('content_block_start'),
       delta('The command printed h'),
@@ -86,10 +86,22 @@ describe('createAgentReducer', () => {
       event('message_stop'),
       JSON.stringify({ type: 'result', result: 'The command printed hi.' }),
     ])
-    expect(events.filter((e) => e.type === 'tool')).toEqual([
-      { type: 'tool', name: 'mcp__nomad__execute', input: { code: 'nomad.listNotes()' } },
+    expect(events.filter((e) => e.type === 'tool' || e.type === 'toolEnd')).toEqual([
+      { type: 'tool', id: 'toolu_1', name: 'mcp__nomad__execute', input: { code: 'nomad.listNotes()' } },
+      { type: 'toolEnd', id: 'toolu_1', error: false },
     ])
     expect(events.filter((e) => e.type === 'text').map((e) => e.text).join('')).toBe('Let me check.The command printed hi.')
+  })
+
+  it('ends a claude tool call that failed', () => {
+    const events = collect([
+      JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_2', is_error: true, content: 'boom' }] } }),
+    ])
+    expect(events).toEqual([{ type: 'toolEnd', id: 'toolu_2', error: true }])
+  })
+
+  it('takes no tool end from a user line without a tool_result', () => {
+    expect(collect([JSON.stringify({ type: 'user', message: { content: [{ type: 'text', text: 'hi' }] } })])).toEqual([])
   })
 
   it('keeps a claude delta that repeats the text before it', () => {

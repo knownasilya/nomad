@@ -207,7 +207,11 @@ declare namespace Nomad {
     maxTokens?: number;
     /** Reasoning effort ('low' | 'medium' | 'high'); sent as reasoning_effort when think !== false. */
     effort?: 'low' | 'medium' | 'high';
-    /** Fires per state-reporting tool call — currently writeDriveFile: { path, priorContent }. */
+    /**
+     * Fires for each tool call the agent makes. `phase` is 'start' ({ id, parentId?, name, summary }),
+     * 'end' ({ id, error? }; same id as its start), 'write' ({ drive, path, priorContent, draft }),
+     * 'screenshot' ({ imageDataUrl }) or 'note' ({ summary }).
+     */
     onToolEvent?: (e: any) => void;
     /** Fires per reasoning-stream chunk (only when think !== false and the model emits one). */
     onReasoning?: (text: string) => void;

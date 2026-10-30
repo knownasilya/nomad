@@ -413,6 +413,7 @@ async function handleAiChat ({ reqId, messages, opts = {} }) {
       signal,
       onChunk: (text) => send(RPC_AI_EVENT, { reqId, kind: 'chunk', text }),
       onTool: (event) => send(RPC_AI_EVENT, { reqId, kind: 'tool', event }),
+      onReasoning: (text) => send(RPC_AI_EVENT, { reqId, kind: 'reasoning', text }),
       // Provider keepalive during model load / slow first token — resets the UI idle timeout.
       onHeartbeat: () => send(RPC_AI_EVENT, { reqId, kind: 'heartbeat' }),
       // Relayed modifyDrive consent — the human is on THIS phone. Surface it to the RN UI and wait.

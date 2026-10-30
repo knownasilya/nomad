@@ -160,7 +160,8 @@ export function createSession({ requestPermission, stopTurn }) {
     return t;
   }
 
-  function begin(wc, emitter, name, summary) {
+  // `step` is the sidebar's step for this call: its emitter and the call's id.
+  function begin(wc, step, name, summary) {
     if (!touched.has(wc)) {
       touched.add(wc);
       // A new page load draws nothing until told to: show the bar again on it.
@@ -172,7 +173,14 @@ export function createSession({ requestPermission, stopTurn }) {
     }
     shownIn.set(wc.id, session);
     call(wc, 'show()');
-    if (emitter && summary) emitter.emit('tool', { phase: 'detail', name, summary });
+    if (step.emitter && summary) {
+      step.emitter.emit('tool', {
+        phase: 'detail',
+        ...(step.id ? { id: step.id } : {}),
+        name,
+        summary,
+      });
+    }
   }
 
   async function click(wc, x, y) {
@@ -244,9 +252,9 @@ export function createSession({ requestPermission, stopTurn }) {
     /**
      * @param {string} name
      * @param {Record<string, any>} args
-     * @param {{ tab?: any, emitter?: any }} [ctx]
+     * @param {{ tab?: any, emitter?: any, id?: string }} [ctx]
      */
-    async run(name, args, { tab, emitter } = {}) {
+    async run(name, args, { tab, emitter, id } = {}) {
       if (stopped) throw new Error('The user stopped you. Stop, and tell them what you did.');
       if (tookOver) {
         throw new Error(
@@ -256,6 +264,7 @@ export function createSession({ requestPermission, stopTurn }) {
       }
       const a = args || {};
       const wc = pick(tab);
+      const step = { emitter, id };
 
       if (name === 'snapshotPage') {
         const snap = await snapshot(wc);
@@ -275,7 +284,7 @@ export function createSession({ requestPermission, stopTurn }) {
           const t = await targetOf(wc, ref);
           await checkRisk(wc, t.control);
           const did = `Clicked ${describeControl(t.control)}`;
-          begin(wc, emitter, name, `Clicking ${describeControl(t.control)}`);
+          begin(wc, step, name, `Clicking ${describeControl(t.control)}`);
           await click(wc, t.x, t.y);
           return after(wc, did, before);
         }
@@ -289,7 +298,7 @@ export function createSession({ requestPermission, stopTurn }) {
             );
           }
           if (a.submit) await checkSubmit(wc, ref);
-          begin(wc, emitter, name, `Typing in ${describeControl(t.control)}`);
+          begin(wc, step, name, `Typing in ${describeControl(t.control)}`);
           await click(wc, t.x, t.y);
           const sel = await call(
             wc,
@@ -319,7 +328,7 @@ export function createSession({ requestPermission, stopTurn }) {
             if (focus.role === 'button' || focus.role === 'link') await checkRisk(wc, focus);
             else await checkSubmit(wc, focus.ref);
           }
-          begin(wc, emitter, name, `Pressing ${a.key}`);
+          begin(wc, step, name, `Pressing ${a.key}`);
           await key(wc, k);
           return after(wc, `Pressed ${a.key}`, before);
         }
@@ -330,7 +339,7 @@ export function createSession({ requestPermission, stopTurn }) {
           const t = await targetOf(wc, ref);
           begin(
             wc,
-            emitter,
+            step,
             name,
             `Choosing “${String(a.value).slice(0, 40)}” in ${describeControl(t.control)}`
           );
@@ -359,7 +368,7 @@ export function createSession({ requestPermission, stopTurn }) {
               'The page changed since your last snapshot. Call snapshotPage again for fresh refs.'
             );
           }
-          begin(wc, emitter, name, `Scrolling ${direction}`);
+          begin(wc, step, name, `Scrolling ${direction}`);
           const res = await call(wc, `scroll(${ref}, ${JSON.stringify(direction)})`);
           if (!res) throw new Error("Nomad can't scroll this page right now.");
           if (res.error)
@@ -385,7 +394,7 @@ export function createSession({ requestPermission, stopTurn }) {
           const what = control
             ? describeControl(control)
             : `the page at ${Math.round(a.x)}, ${Math.round(a.y)}`;
-          begin(wc, emitter, name, `Clicking ${what}`);
+          begin(wc, step, name, `Clicking ${what}`);
           await click(wc, p.x, p.y);
           return after(wc, `Clicked ${what}`, before);
         }
