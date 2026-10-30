@@ -234,6 +234,18 @@ Revert and the phone's Draft banner work per drive. The sidebar's sessions live 
 `hyper://private/.ai-chat/sessions/`; its model choice is the `ai_sidebar_prefs` setting, with vision
 per model.
 
+### Generated UI in the AI Sidebar (ADR-0027)
+
+The sidebar's assistant can answer with charts, maps, tables, stats and buttons. It writes
+[OpenUI Lang](https://github.com/thesysdev/openui) in an ```` ```openui-lang ```` fence inside its
+Markdown answer; `<nomad-genui>` (`app/fg/shell-window/genui/`) draws it, with our own SVG charts
+and a Leaflet map on OpenStreetMap tiles. The component library and the prompt section are
+`app/lib/genui/library.mjs` (`genuiPrompt()`, added on a turn with `genUi: true`, which only
+`ai-shell.ts` sets). The shell window parses against `app/lib/genui/schema.json`: after changing the
+library, run `node scripts/gen-genui-schema.mjs` (`tests/unit/genui.test.js` fails until you do).
+Keep it to components that load nothing by themselves (no Image), draw model text only as text,
+and run actions (`@ToAssistant`, `@OpenUrl`) only on a click.
+
 ### The AI and the user's Notes and Reader (ADR-0019)
 
 A personal turn also gets capabilities for Notes (`listNotes`, `readNote`, `writeNote`), Highlights

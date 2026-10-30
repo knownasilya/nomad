@@ -112,6 +112,8 @@ export default {
         effort: opts.effort,
         allowVision: opts.allowVision,
         stage: 'sidebar',
+        // The sidebar renders charts, maps and other UI the model writes in openui-lang.
+        genUi: true,
         currentTab: () => currentTabOf(shell),
         context,
         signal,
