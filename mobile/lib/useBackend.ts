@@ -83,7 +83,11 @@ export interface DeviceSpace { rootDriveKey: string; name: string }
 // version: the Nomad version the Device runs, written by that Device (absent on older versions).
 export interface VaultDevice { key: string; name: string; platform: string; addedAt?: string; spaces?: DeviceSpace[]; version?: string }
 // movedTo: the Space's Root Drive got a new key; this record only points at it.
-export interface VaultSpace { rootDriveKey: string; name: string; icon?: string; color?: string; movedTo?: string }
+// library: a shared Space's Space Library (ADR-0029), with this person's role in it.
+export interface VaultSpace { rootDriveKey: string; name: string; icon?: string; color?: string; movedTo?: string; library?: string; role?: 'owner' | 'editor' | 'viewer'; memberId?: string; removed?: boolean }
+// A shared Space as the phone sees it (spaces/status), and what joining one gives back.
+export interface SpaceShare { shared: boolean; role?: 'owner' | 'editor' | 'viewer'; writable?: boolean; members?: Array<{ memberId: string; name: string; role: string; you: boolean }> }
+export interface SpaceJoin { library: string; memberId: string; index: { name?: string; icon?: string; color?: string } }
 // Replication state of one Autobase (the Vault, or a Space Root Drive). `loaded: false` means
 // this phone hasn't opened it yet, so the rest is unknown.
 export interface DriveSync {
@@ -159,13 +163,14 @@ export interface Backend {
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'reader' | 'notes' | 'names' | 'tabs'
+export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
 // space: the Space's key when the note is kept only in that Space (ADR-0029), else null.
 export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string; space?: string | null }
-export interface ReaderState { follows: string[]; read: string[]; writable: boolean }
+// shared: the Space is shared (ADR-0029); canFollow is false for someone who can only view it.
+export interface ReaderState { follows: string[]; read: string[]; writable: boolean; shared?: boolean; canFollow?: boolean }
 export interface FeedPost { title: string; summary: string; tags: string[]; createdAt: string; url: string; feedUrl: string; feedTitle: string }
 export interface Feed { url: string; title: string; posts: FeedPost[] }
 // A short name the user gave a drive or URL (shared/names.mjs). auto: the AI gave it and the user

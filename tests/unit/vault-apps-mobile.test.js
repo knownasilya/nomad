@@ -76,7 +76,7 @@ async function withDevices (fn) {
   await until(async () => { await phoneBase.update(); return phoneBase.writable })
 
   try {
-    return await fn({ computer, phone: phoneBase })
+    return await fn({ computer, phone: phoneBase, storeA, storeB })
   } finally {
     await phoneBase.close(); await computer.close()
     sa.destroy(); sb.destroy()
@@ -260,7 +260,7 @@ describe('phone Space-only Notes and Names over a shared Vault (ADR-0029)', () =
       const out = await phone.moveNote(base, { id: saved.id, inSpace: false, space: SPACE })
       expect(out.space).toBe(null)
       await until(async () => !!(await readJson(computer, apps.notePath(saved.id))))
-      expect(await readJson(computer, apps.notePath(saved.id, SPACE))).toBe(null)
+      await until(async () => !(await readJson(computer, apps.notePath(saved.id, SPACE))))
 
       await phone.moveNote(base, { id: saved.id, inSpace: true, space: SPACE })
       await phone.deleteNote(base, saved.id, SPACE)
@@ -318,6 +318,83 @@ describe('phone Space-only Notes and Names over a shared Vault (ADR-0029)', () =
       await phone.removeName(base, 'docs', { inSpace: true, space: SPACE })
       await until(async () => !(await readJson(computer, names.namePath('docs', SPACE))))
       await expect(phone.setName(base, { name: 'x', url: DRIVE, inSpace: true })).rejects.toThrow(/isn’t ready/)
+    })
+  }, 30000)
+})
+
+// A shared Space (ADR-0029): its feeds, Notes and Names are in its Space Library, another Autobase
+// the computer owns. The phone opens it by key and reaches it through useSpaceLibraries, as
+// backend.mjs does with lib/space-library.mjs libraryFor.
+describe('phone in a shared Space (ADR-0029)', () => {
+  const SPACE = 'e'.repeat(64)
+
+  async function withLibrary ({ storeA, storeB }, { editor }, fn) {
+    const owner = new Autobase(storeA.namespace('library'), null, { open, apply, ...AUTOBASE_OPTS })
+    await owner.ready()
+    const lib = new Autobase(storeB.namespace('library'), owner.key, { open, apply, ...AUTOBASE_OPTS })
+    await lib.ready()
+    if (editor) {
+      await owner.append({ addWriter: b4a.toString(lib.local.key, 'hex') })
+      await owner.update()
+      await until(async () => { await lib.update(); return lib.writable })
+    }
+    phone.useSpaceLibraries(async (space) => (space === SPACE ? { base: lib } : null))
+    try {
+      return await fn({ owner, lib })
+    } finally {
+      phone.useSpaceLibraries(null)
+      await lib.close(); await owner.close()
+    }
+  }
+
+  it('reads the Space’s feeds, notes and names from its Library, not the Vault', async () => {
+    await withDevices(async (devices) => {
+      const base = devices.phone
+      await withLibrary(devices, { editor: false }, async ({ owner, lib }) => {
+        const note = apps.makeNote({ id: apps.newNoteId(), body: 'Team plan' })
+        await owner.append(putJson('/notes/' + note.id + '.json', note))
+        await owner.append(putJson('/reader/follows/' + KEY + '.json', apps.followRecord(FEED)))
+        await owner.append(putJson('/names/wiki.json', names.makeNameRecord({ name: 'wiki', url: FEED, title: 'Wiki' })))
+        await owner.update()
+        await until(async () => (await phone.listNotes(base, SPACE)).notes.length === 1)
+
+        const listed = await phone.listNotes(base, SPACE)
+        expect(listed).toMatchObject({ shared: true, canWriteSpace: false })
+        expect(listed.notes[0]).toMatchObject({ id: note.id, space: SPACE })
+        expect(await phone.readerState(base, SPACE)).toMatchObject({ follows: [FEED], shared: true, canFollow: false })
+        expect(await phone.resolveName(base, 'wiki', SPACE)).toBe(FEED)
+
+        // Someone who can only view the Space can't change it, but keeps their own notes.
+        await expect(phone.saveNote(base, { body: 'mine', inSpace: true, space: SPACE })).rejects.toThrow(/can view this Space/)
+        await expect(phone.follow(base, SPACE, `hyper://${'b'.repeat(64)}/`)).rejects.toThrow(/can view this Space/)
+        const own = await phone.saveNote(base, { body: 'Just mine', space: SPACE })
+        expect(own.space).toBe(null)
+        expect(await readJson(lib, '/notes/' + own.id + '.json')).toBe(null)
+      })
+    })
+  }, 30000)
+
+  it('writes a Space note, feed and name into the Library when this person can edit', async () => {
+    await withDevices(async (devices) => {
+      const base = devices.phone
+      await withLibrary(devices, { editor: true }, async ({ owner }) => {
+        const note = await phone.saveNote(base, { body: 'Agenda', inSpace: true, space: SPACE })
+        expect(note.space).toBe(SPACE)
+        await phone.follow(base, SPACE, FEED)
+        await phone.setName(base, { name: 'agenda', url: FEED, inSpace: true, space: SPACE })
+
+        await until(async () => !!(await readJson(owner, '/notes/' + note.id + '.json')))
+        await until(async () => !!(await readJson(owner, '/names/agenda.json')))
+        expect(await readJson(owner, '/reader/follows/' + KEY + '.json')).toMatchObject({ url: FEED })
+        // Nothing of the Space's went to the Vault.
+        expect(await readJson(devices.computer, apps.notePath(note.id, SPACE))).toBe(null)
+        expect(await readJson(devices.computer, apps.followPath(SPACE, FEED))).toBe(null)
+
+        // Moving it out makes it the user's own again, in the Vault.
+        await phone.moveNote(base, { id: note.id, inSpace: false, space: SPACE })
+        await until(async () => !(await readJson(owner, '/notes/' + note.id + '.json')))
+        await until(async () => !!(await readJson(devices.computer, apps.notePath(note.id))))
+      })
     })
   }, 30000)
 })

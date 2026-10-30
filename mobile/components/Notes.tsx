@@ -64,6 +64,11 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
   const [banner, setBanner] = useState<string | null>(null)
   const [listLoaded, setListLoaded] = useState(false) // since Notes last opened
   const [inSpace, setInSpace] = useState(false) // the open note's place, for the pin
+  // A shared Space (ADR-0029): its Notes are its members'. canWriteSpace is false for a viewer.
+  const [shared, setShared] = useState(false)
+  const [canWriteSpace, setCanWriteSpace] = useState(true)
+  // The open note can be changed: the Vault writes, and a Space note needs the Space to, too.
+  const editable = writable && (!inSpace || canWriteSpace)
 
   const notesRef = useRef<Note[]>([])
   const draft = useRef<Draft | null>(null)
@@ -88,12 +93,14 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
 
   const load = useCallback(async () => {
     setError('')
-    const res = await call<{ notes: Note[]; writable: boolean }>('notes', 'list')
+    const res = await call<{ notes: Note[]; writable: boolean; shared?: boolean; canWriteSpace?: boolean }>('notes', 'list')
     if (res.noVault) { setNoVault(true); setNotes(null); return }
     setNoVault(false)
     if (!res.ok || !res.value) { setError(res.message || 'Couldn’t load your notes'); return }
     keepNotes(res.value.notes)
     setWritable(res.value.writable)
+    setShared(!!res.value.shared)
+    setCanWriteSpace(res.value.canWriteSpace !== false)
     setListLoaded(true)
     if (ready.current) send({ type: 'notes', notes: res.value.notes })
   }, [call, send])
@@ -126,9 +133,9 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
   const showDraft = useCallback((focus: boolean) => {
     const d = draft.current
     if (!d) return
-    send({ type: 'load', theme: t, id: d.id, body: d.body, notes: notesRef.current, readOnly: !writable, focus, heading: pendingHeading.current })
+    send({ type: 'load', theme: t, id: d.id, body: d.body, notes: notesRef.current, readOnly: !writable || (d.inSpace && !canWriteSpace), focus, heading: pendingHeading.current })
     pendingHeading.current = ''
-  }, [send, t, writable])
+  }, [send, t, writable, canWriteSpace])
 
   const save = useCallback(async (): Promise<void> => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null }
@@ -191,7 +198,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
   const openEditor = (note: Note | null, { body = '', heading = '' } = {}) => {
     draft.current = note
       ? { id: note.id, body: note.body, title: note.title, base: note.updatedAt, openedTitle: note.title, conflictOf: note.conflictOf || null, inSpace: !!note.space }
-      : { id: null, body, title: '', base: null, openedTitle: null, conflictOf: null, inSpace: false }
+      : { id: null, body, title: '', base: null, openedTitle: null, conflictOf: null, inSpace: !!space && shared && canWriteSpace }
     setInSpace(draft.current.inSpace)
     dirty.current = !note && !!body
     pendingHeading.current = heading
@@ -301,7 +308,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
     target.inSpace = !!note.space
     setInSpace(target.inSpace)
     keepNotes(notesRef.current.map((n) => (n.id === note.id ? { ...n, space: note.space } : n)))
-    setStatus(note.space ? `Only in ${spaceName || 'this Space'}` : 'In every Space')
+    setStatus(note.space ? (shared ? `Shared in ${spaceName || 'this Space'}` : `Only in ${spaceName || 'this Space'}`) : shared ? 'Only yours' : 'In every Space')
   }
 
   const deleteNote = () => {
@@ -340,8 +347,8 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
   const sections: { title: string | null; notes: Note[] }[] =
     space && shown.some((n) => n.space)
       ? [
-          { title: `Only in ${spaceName || 'this Space'}`, notes: shown.filter((n) => n.space) },
-          { title: 'All Spaces', notes: shown.filter((n) => !n.space) }
+          { title: shared ? `Shared in ${spaceName || 'this Space'}` : `Only in ${spaceName || 'this Space'}`, notes: shown.filter((n) => n.space) },
+          { title: shared ? 'Only yours' : 'All Spaces', notes: shown.filter((n) => !n.space) }
         ].filter((sec) => sec.notes.length)
       : [{ title: null, notes: shown }]
   const conflictOf = draft.current?.conflictOf
@@ -354,18 +361,29 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
           <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <View style={s.header}>
               <IconButton icon='arrow-left' label='Back' onPress={backFromEditor} color={t.text} />
-              <Text numberOfLines={1} style={s.status}>{writable ? status : 'Read only for now'}</Text>
+              <Text numberOfLines={1} style={s.status}>{editable ? status : writable ? 'You can view this Space’s notes' : 'Read only for now'}</Text>
               {space ? (
-                <IconButton
-                  icon={inSpace ? 'thumbtack' : 'globe'}
-                  label={inSpace ? `Only in ${spaceName || 'this Space'}. Show it in every Space` : `In every Space. Keep it only in ${spaceName || 'this Space'}`}
-                  onPress={toggleScope}
-                  disabled={!writable}
-                  active={inSpace}
-                  size={17}
-                />
+                shared ? (
+                  <IconButton
+                    icon={inSpace ? 'user-friends' : 'lock'}
+                    label={inSpace ? `Shared in ${spaceName || 'this Space'}. Keep it to yourself` : `Only yours. Share it in ${spaceName || 'this Space'}`}
+                    onPress={toggleScope}
+                    disabled={!writable || !canWriteSpace}
+                    active={inSpace}
+                    size={17}
+                  />
+                ) : (
+                  <IconButton
+                    icon={inSpace ? 'thumbtack' : 'globe'}
+                    label={inSpace ? `Only in ${spaceName || 'this Space'}. Show it in every Space` : `In every Space. Keep it only in ${spaceName || 'this Space'}`}
+                    onPress={toggleScope}
+                    disabled={!writable}
+                    active={inSpace}
+                    size={17}
+                  />
+                )
               ) : null}
-              <IconButton icon='trash-alt' label='Delete note' onPress={deleteNote} disabled={!writable} color={t.danger} />
+              <IconButton icon='trash-alt' label='Delete note' onPress={deleteNote} disabled={!editable} color={t.danger} />
             </View>
             {(banner || conflictOf) && (
               <View style={s.banner}>
@@ -381,8 +399,8 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
             )}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tools} contentContainerStyle={s.toolsContent} keyboardShouldPersistTaps='always'>
               {TOOLS.map(([cmd, label]) => (
-                <TouchableOpacity key={cmd} style={s.tool} disabled={!writable} onPress={() => send({ type: 'command', name: cmd })}>
-                  <Text style={[s.toolText, cmd === 'bold' && s.bold, cmd === 'italic' && s.italic, cmd === 'strike' && s.strike, !writable && { color: t.textMuted }]}>{label}</Text>
+                <TouchableOpacity key={cmd} style={s.tool} disabled={!editable} onPress={() => send({ type: 'command', name: cmd })}>
+                  <Text style={[s.toolText, cmd === 'bold' && s.bold, cmd === 'italic' && s.italic, cmd === 'strike' && s.strike, !editable && { color: t.textMuted }]}>{label}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>

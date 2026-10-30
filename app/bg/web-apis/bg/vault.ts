@@ -13,6 +13,12 @@ import * as devicePresence from '../../hyper/device-presence';
 import * as vaultApps from './vault-apps';
 import * as names from '../../hyper/names';
 import * as driveWriters from '../../hyper/drive-writers';
+import * as spaceLibrary from '../../hyper/space-library';
+import * as filesystem from '../../filesystem/index';
+import * as spacesDb from '../../dbs/spaces';
+import { BrowserWindow } from 'electron';
+import { findWebContentsParentWindow } from '../../lib/electron';
+import * as tabManager from '../../ui/tabs/manager';
 
 // The caller's Space key, or null.
 const callerSpace = (ctx) => vaultApps.spaceKey(ctx).catch(() => null);
@@ -26,8 +32,28 @@ function driveKeyOf(url) {
   return m ? m[1].toLowerCase() : null;
 }
 
+// The caller's local Space id: its tab's Space, or the Space its window shows.
+function spaceIdOf(ctx) {
+  let id = ctx?.sender ? filesystem.getSpaceIdForWebContents(ctx.sender.id) : null;
+  if (!id && ctx?.sender) {
+    const win = findWebContentsParentWindow(ctx.sender);
+    if (win) id = tabManager.getWindowActiveSpaceId(win);
+  }
+  return Number(id) || 1;
+}
+
 function thisPlatform() {
   return 'desktop';
+}
+
+// The name a person goes by in a Space they share or join, until they type another.
+function defaultOwnName() {
+  try {
+    const u = os.userInfo().username || '';
+    return u ? u.charAt(0).toUpperCase() + u.slice(1) : 'Me';
+  } catch {
+    return 'Me';
+  }
 }
 
 function defaultDeviceName() {
@@ -170,8 +196,83 @@ export default {
     return driveWriters.status(driveKeyOf(url));
   },
 
-  async requestDriveEdit(url) {
-    return driveWriters.request(driveKeyOf(url));
+  async requestDriveEdit(url, opts: any = {}) {
+    return driveWriters.request(driveKeyOf(url), { note: typeof opts?.note === 'string' ? opts.note : '' });
+  },
+
+  // Shared Spaces (bg/hyper/space-library.js, ADR-0029). Each acts on the caller's Space.
+  async getSpaceShare() {
+    const spaceId = spaceIdOf(this);
+    const space = await spacesDb.get(spaceId);
+    const base = { spaceId, name: space?.name || 'Space', personal: spaceId === 1 };
+    if (spaceId === 1) return { ...base, shared: false };
+    const key = await vaultApps.spaceKey(this).catch(() => null);
+    const st = key ? await spaceLibrary.status(key) : { shared: false };
+    if (st.shared) return { ...base, ...st };
+    const preview = await filesystem.shareSpacePreview(spaceId).catch(() => null);
+    return { ...base, ...st, preview: preview?.summary || null, ownName: defaultOwnName() };
+  },
+
+  async shareSpace(opts: any = {}) {
+    const spaceId = spaceIdOf(this);
+    return filesystem.shareSpace(spaceId, { name: String(opts?.name || defaultOwnName()).slice(0, 100) });
+  },
+
+  async createSpaceInvite(role) {
+    return spaceLibrary.createInvite(await vaultApps.spaceKey(this), role);
+  },
+
+  async approveSpaceJoin(memberId) {
+    return spaceLibrary.approveJoin(await vaultApps.spaceKey(this), memberId);
+  },
+
+  async denySpaceJoin(memberId) {
+    return spaceLibrary.denyJoin(await vaultApps.spaceKey(this), memberId);
+  },
+
+  async setSpaceRole(memberId, role) {
+    return spaceLibrary.setRole(await vaultApps.spaceKey(this), memberId, role);
+  },
+
+  async removeSpaceMember(memberId) {
+    return spaceLibrary.removeMember(await vaultApps.spaceKey(this), memberId);
+  },
+
+  async answerSpaceRequest(opts: any = {}) {
+    return spaceLibrary.answerRequest(await vaultApps.spaceKey(this), opts.drive, opts.writerKey, !!opts.approve);
+  },
+
+  // Leave the caller's shared Space: close its tabs, drop it here and from the Vault.
+  async leaveSpace() {
+    const spaceId = spaceIdOf(this);
+    if (spaceId === 1) throw new Error('You can’t leave your Personal Space');
+    await filesystem.leaveSpace(spaceId);
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (tabManager.getWindowActiveSpaceId(win) === spaceId) await tabManager.setActiveSpace(win, 1).catch(() => {});
+      for (const tab of tabManager.getAll(win).filter((t) => t.spaceId === spaceId)) await tabManager.remove(win, tab);
+    }
+    await spacesDb.remove(spaceId);
+    vault.events.emit('spaces-synced', { removed: 1 });
+  },
+
+  // Join a shared Space with a code. Resolves once an owner approves; switches the caller's window
+  // to the new Space.
+  async joinSpace(code, opts: any = {}) {
+    const space = await filesystem.joinSpace(code, { name: String(opts?.name || defaultOwnName()).slice(0, 100) });
+    const win = this?.sender ? findWebContentsParentWindow(this.sender) : null;
+    if (win) await tabManager.setActiveSpace(win, space.id).catch(() => {});
+    return { spaceId: space.id, name: space.name };
+  },
+
+  // 'changed' when a shared Space's members, requests or library change.
+  watchSpaceShare() {
+    const emitter: any = new EventEmitter();
+    const onChange = () => emitter.emit('changed', {});
+    for (const ev of ['changed', 'join-request', 'join-resolved', 'removed']) spaceLibrary.events.on(ev, onChange);
+    emitter.close = () => {
+      for (const ev of ['changed', 'join-request', 'join-resolved', 'removed']) spaceLibrary.events.removeListener(ev, onChange);
+    };
+    return emitter;
   },
 
   // Reader and Notes data (vault-apps.ts), in the Vault. `this` is the RPC event, which carries the

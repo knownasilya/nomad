@@ -28,11 +28,11 @@ import AiPanel from '../components/AiPanel'
 import Shortcuts from '../components/Shortcuts'
 import FileExplorer, { type ExplorerDrive } from '../components/FileExplorer'
 import type { HyperRender } from '../components/HyperView'
-import { useBackend } from '../lib/useBackend'
+import { useBackend, type SpaceJoin } from '../lib/useBackend'
 import { syncHostingService } from '../lib/hostingService'
 import HostingSettings from '../components/HostingSettings'
 import { usePersistence, type SavedSite, type SavedDrive } from '../lib/usePersistence'
-import { useSpaces, PERSONAL_ID } from '../lib/useSpaces'
+import { useSpaces, PERSONAL_ID, SPACE_COLORS } from '../lib/useSpaces'
 import { useFavicons } from '../lib/useFavicons'
 import { useNames, useNamesForUrl, useNameMatches, mayBeName } from '../lib/useNames'
 import NameSheet from '../components/NameSheet'
@@ -338,7 +338,23 @@ export default function Browser () {
     if (sp) tabsBySpace.current[sp.id] = { tabs: [fresh], activeId: fresh.id }
     setTabs([fresh])
     setActiveId(fresh.id)
+    return sp
   }, [spacesApi])
+
+  // Join a shared Space (ADR-0029) with a code from its owner. Once they approve, the phone makes a
+  // Space for it (its own Root Drive, as desktop does) and marks it in the Vault as that Space's
+  // Library, so the user's other Devices get it too. Throws with why not.
+  const onJoinSpace = useCallback(async ({ code, name }: { code: string; name: string }) => {
+    const res = await backend.apps<SpaceJoin>('spaces', 'join', { code, name: name || 'Someone' })
+    if (!res.ok || !res.value) throw new Error(res.message || 'Couldn’t join that Space')
+    const { library, memberId, index } = res.value
+    const created = await onCreateSpace({ name: index.name || 'Shared space', color: index.color || SPACE_COLORS[0] })
+    const rootDriveKey = created?.rootDriveKey
+    if (!rootDriveKey) throw new Error('Joined, but this phone couldn’t make the Space. Try again from your computer.')
+    const attached = await backend.apps('spaces', 'attach', { rootDriveKey, name: index.name, icon: index.icon, color: index.color, library, memberId })
+    if (!attached.ok) throw new Error(attached.message || 'Joined, but couldn’t save it to your Vault')
+    spacesApi.syncFromVault()
+  }, [backend, onCreateSpace, spacesApi])
 
   // After unlinking this phone from the Vault: drop the shared markers, then ask whether to also
   // remove the spaces that only existed here because of the Vault (keep = local-only copies).
@@ -1190,8 +1206,10 @@ export default function Browser () {
         spaces={spacesApi.spaces}
         activeSpaceId={spacesApi.activeSpaceId}
         vaultKeys={spacesApi.vaultKeys}
+        peopleKeys={spacesApi.peopleKeys}
         onSwitch={switchSpace}
         onCreate={onCreateSpace}
+        onJoin={onJoinSpace}
       />
 
       <FileExplorer
