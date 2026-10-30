@@ -685,7 +685,7 @@ export async function getDaemonNetworkStatus() {
   ];
 }
 
-export function checkForUpdates(opts = {}) {
+export async function checkForUpdates(opts = {}) {
   // dont overlap
   if (updaterState != UPDATER_STATUS_IDLE) {
     return;
@@ -695,14 +695,19 @@ export function checkForUpdates(opts = {}) {
   logger.info('[AUTO-UPDATE] Checking for a new version.');
   updaterError = undefined;
   setUpdaterState(UPDATER_STATUS_CHECKING);
-  if (opts.prerelease) {
-    logger.info('[AUTO-UPDATE] Jumping to pre-releases.');
-    autoUpdater.allowPrerelease = true;
+  // Beta releases are GitHub prereleases. With allowPrerelease, electron-updater takes the newest
+  // published release of either kind; without it, only GitHub's "latest" (never a prerelease).
+  // Set on every check, so turning the setting off takes effect on the next one.
+  const prerelease =
+    !!opts.prerelease ||
+    +(await settingsDb.get('auto_update_prerelease').catch(() => 0)) === 1;
+  if (prerelease) {
+    logger.info('[AUTO-UPDATE] Including beta releases.');
   }
+  autoUpdater.allowPrerelease = prerelease;
   autoUpdater.checkForUpdates();
 
-  // just return a resolve; results will be emitted
-  return Promise.resolve();
+  // results will be emitted
 }
 
 export function restartBrowser() {

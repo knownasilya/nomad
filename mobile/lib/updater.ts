@@ -2,14 +2,15 @@ import { useSyncExternalStore } from 'react'
 import { Platform, ToastAndroid } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import native from '../modules/nomad-updater'
-import { LATEST_RELEASE_URL, isNewer, pickRelease, type Release } from './updateRelease'
+import { LATEST_RELEASE_URL, RECENT_RELEASES_URL, isNewer, pickNewestRelease, pickRelease, type Release } from './updateRelease'
 
 // The phone updates itself from GitHub Releases, the way pearbell's Android app does: on launch and
 // whenever the app comes back to the front (at most once an hour) it asks GitHub for the latest
 // published release, and if that is newer it downloads the APK and installs it over this one
 // (modules/nomad-updater). Android asks the user to confirm the first update; from Android 12 on,
 // the ones after that install without a prompt. Settings → Updates turns automatic installs off
-// and checks by hand. Android only; on iOS this does nothing.
+// and checks by hand, and its Beta releases switch lets prereleases in too. Android only; on iOS
+// this does nothing.
 
 export type { Release }
 
@@ -21,12 +22,14 @@ export type UpdateState =
   | { kind: 'failed'; release: Release | null; error: string }
 
 const AUTO_KEY = 'hb:updates-auto'
+const BETA_KEY = 'hb:updates-beta'
 const CHECK_EVERY = 60 * 60 * 1000
 
 const supported = Platform.OS === 'android' && !!native
 
 let state: UpdateState = { kind: 'idle' }
 let auto = true
+let beta = false
 let lastCheck = 0
 let checking = false
 let dismissed: string | null = null // a version the user closed the banner for, this run
@@ -37,8 +40,13 @@ function set (next: UpdateState) {
   for (const listener of listeners) listener()
 }
 
-const autoLoaded = AsyncStorage.getItem(AUTO_KEY)
-  .then((v) => { if (v === 'false') auto = false; for (const l of listeners) l() })
+const prefsLoaded = AsyncStorage.multiGet([AUTO_KEY, BETA_KEY])
+  .then((pairs) => {
+    const prefs = Object.fromEntries(pairs)
+    if (prefs[AUTO_KEY] === 'false') auto = false
+    if (prefs[BETA_KEY] === 'true') beta = true
+    for (const l of listeners) l()
+  })
   .catch(() => {})
 
 if (supported && native) {
@@ -80,9 +88,11 @@ export async function checkForUpdate ({ force = false } = {}): Promise<void> {
   lastCheck = now
   checking = true
   try {
-    const res = await fetch(LATEST_RELEASE_URL, { headers: { Accept: 'application/vnd.github+json' } })
+    await prefsLoaded
+    const res = await fetch(beta ? RECENT_RELEASES_URL : LATEST_RELEASE_URL, { headers: { Accept: 'application/vnd.github+json' } })
     if (!res.ok) throw new Error(`GitHub answered ${res.status}`)
-    const release = pickRelease(await res.json())
+    const json = await res.json()
+    const release = beta ? pickNewestRelease(json) : pickRelease(json)
     const current = currentVersion() ?? '0'
     if (!release || !isNewer(release.version, current)) {
       if (state.kind === 'available' || force) set({ kind: 'idle' })
@@ -91,7 +101,6 @@ export async function checkForUpdate ({ force = false } = {}): Promise<void> {
     }
     if (!force && dismissed === release.version) return
     set({ kind: 'available', release })
-    await autoLoaded
     if (auto && native.canInstallSilently()) await installUpdate(release)
   } catch (err) {
     console.warn('update check failed', err)
@@ -135,6 +144,16 @@ export function setAutoInstall (on: boolean) {
   AsyncStorage.setItem(AUTO_KEY, on ? 'true' : 'false').catch(() => {})
 }
 
+// Turning it on checks right away. Turning it off doesn't take a phone back off a beta: the next
+// release newer than it installs as usual.
+export function setBetaUpdates (on: boolean) {
+  beta = on
+  for (const l of listeners) l()
+  AsyncStorage.setItem(BETA_KEY, on ? 'true' : 'false').catch(() => {})
+  if (on) checkForUpdate({ force: true }).catch(() => {})
+  else if (state.kind === 'available' && state.release.version.includes('-')) set({ kind: 'idle' })
+}
+
 function subscribe (listener: () => void) {
   listeners.add(listener)
   return () => { listeners.delete(listener) }
@@ -146,6 +165,10 @@ export function useUpdateState (): UpdateState {
 
 export function useAutoInstall (): boolean {
   return useSyncExternalStore(subscribe, () => auto)
+}
+
+export function useBetaUpdates (): boolean {
+  return useSyncExternalStore(subscribe, () => beta)
 }
 
 export const updatesSupported = supported

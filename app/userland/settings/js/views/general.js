@@ -27,6 +27,10 @@ class GeneralSettingsView extends LitElement {
     return this.settings && +this.settings.auto_update_enabled === 1;
   }
 
+  get isPrereleaseUpdateEnabled() {
+    return this.settings && +this.settings.auto_update_prerelease === 1;
+  }
+
   async load() {
     // wire up events
     this.browserEvents = nomad.browser.createEventsStream();
@@ -165,13 +169,7 @@ class GeneralSettingsView extends LitElement {
             </p>
 
             <p>${this.renderAutoUpdateCheckbox()}</p>
-
-            <div class="prereleases">
-              <h3>Advanced</h3>
-              <button class="btn" @click=${this.onClickCheckPrereleases}>
-                Check for beta releases
-              </button>
-            </div>
+            <p>${this.renderPrereleaseCheckbox()}</p>
           </div>
         </div>`;
 
@@ -189,13 +187,7 @@ class GeneralSettingsView extends LitElement {
             </p>
 
             <p>${this.renderAutoUpdateCheckbox()}</p>
-
-            <div class="prereleases">
-              <h3>Advanced</h3>
-              <button class="btn" @click=${this.onClickCheckPrereleases}>
-                Check for beta releases
-              </button>
-            </div>
+            <p>${this.renderPrereleaseCheckbox()}</p>
           </div>
         </div>`;
 
@@ -212,6 +204,7 @@ class GeneralSettingsView extends LitElement {
               </span>
             </p>
             <p>${this.renderAutoUpdateCheckbox()}</p>
+            <p>${this.renderPrereleaseCheckbox()}</p>
           </div>
         </div>`;
 
@@ -231,6 +224,7 @@ class GeneralSettingsView extends LitElement {
               </span>
             </p>
             <p>${this.renderAutoUpdateCheckbox()}</p>
+            <p>${this.renderPrereleaseCheckbox()}</p>
           </div>
         </div>`;
     }
@@ -244,6 +238,18 @@ class GeneralSettingsView extends LitElement {
         @click=${this.onToggleAutoUpdate}
       />
       Check for updates automatically
+    </label>`;
+  }
+
+  renderPrereleaseCheckbox() {
+    return html`<label>
+      <input
+        type="checkbox"
+        ?checked=${this.isPrereleaseUpdateEnabled}
+        @click=${this.onTogglePrereleaseUpdate}
+      />
+      Get beta releases
+      <span class="hint">Test builds, before everyone else gets them. They can have bugs.</span>
     </label>`;
   }
 
@@ -673,13 +679,23 @@ class GeneralSettingsView extends LitElement {
     nomad.browser.checkForUpdates();
   }
 
-  onClickCheckPrereleases(e) {
-    e.preventDefault();
-    nomad.browser.checkForUpdates({ prerelease: true });
-  }
-
   onClickRestart() {
     nomad.browser.restartBrowser();
+  }
+
+  onTogglePrereleaseUpdate() {
+    this.settings.auto_update_prerelease = this.isPrereleaseUpdateEnabled
+      ? 0
+      : 1;
+    this.requestUpdate();
+    nomad.browser.setSetting(
+      'auto_update_prerelease',
+      this.settings.auto_update_prerelease
+    );
+    toast.create('Setting updated');
+    if (this.settings.auto_update_prerelease) {
+      nomad.browser.checkForUpdates();
+    }
   }
 
   onToggleAutoUpdate() {

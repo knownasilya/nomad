@@ -114,6 +114,15 @@ jobs:
           fi
           npx electron-builder --publish always
 
+      # A beta tag (v1.22.0-beta.0) makes a GitHub prerelease. electron-builder only makes drafts, so
+      # flag the draft here; it stays a draft until it's published by hand. Apps with Beta releases on
+      # update to a published prerelease; the rest only see GitHub's "latest", which skips them.
+      - name: Mark a beta as a prerelease
+        if: contains(github.ref_name, '-')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$GITHUB_REF_NAME" --prerelease
+
   build-android:
     runs-on: ubuntu-latest
     name: Build Android
@@ -187,16 +196,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          # A beta tag (v1.22.0-beta.0) is a GitHub prerelease, like the desktop job marks it.
+          PRERELEASE=""
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then PRERELEASE="--prerelease"; fi
           # The phone's auto-updater (mobile/lib/updateRelease.ts) installs the asset ending in
-          # -android.apk from the latest published release, so keep this name.
+          # -android.apk from the latest published release (or prerelease, for Beta releases), so
+          # keep this name.
           cp android/app/build/outputs/bundle/release/app-release.aab "nomad-$VERSION-android.aab"
           cp android/app/build/outputs/apk/release/app-release.apk "nomad-$VERSION-android.apk"
           # electron-builder publishes the desktop artifacts to a draft release
           # for this tag; reuse it if it already exists, otherwise create it.
           gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" \
+            || gh release create "$GITHUB_REF_NAME" --draft $PRERELEASE --title "$GITHUB_REF_NAME" \
             || true
           gh release upload "$GITHUB_REF_NAME" \
             "nomad-$VERSION-android.aab" \
             "nomad-$VERSION-android.apk" \
             --clobber
+          if [ -n "$PRERELEASE" ]; then gh release edit "$GITHUB_REF_NAME" --prerelease; fi

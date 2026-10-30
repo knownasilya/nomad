@@ -148,6 +148,13 @@ ${spinnerCSS}
     margin: 0 4px 0 6px;
   }
 
+  .auto-updater .hint {
+    display: block;
+    margin: 2px 0 0 22px;
+    font-size: 12px;
+    color: var(--text-color--light);
+  }
+
   .search-settings-list {
     margin-bottom: 10px;
   }

@@ -17,6 +17,10 @@ In one step this bumps **both** `package.json` **and** `app/package.json` (per `
 git push --follow-tags origin main
 ```
 
+For a beta, add `--prerelease beta` (`1.22.0-beta.0`). The workflow marks a tag with a `-` as a
+GitHub prerelease, which only apps with **Beta releases** turned on update to (desktop
+`auto_update_prerelease`, mobile `hb:updates-beta`). See docs/releasing.md, "Cutting a beta release".
+
 Pushing the tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml), which
 builds desktop (macOS + Linux via electron-builder) **and** the mobile Android AAB/APK, attaching
 all of them to one **draft** GitHub release — sanity-check and **publish it manually**.

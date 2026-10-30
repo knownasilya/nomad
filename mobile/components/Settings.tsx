@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Modal, Platform, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { radius, useTheme, type Theme } from '../lib/theme'
-import { checkForUpdate, currentVersion, installUpdate, setAutoInstall, updatesSupported, useAutoInstall, useUpdateState } from '../lib/updater'
+import { checkForUpdate, currentVersion, installUpdate, setAutoInstall, setBetaUpdates, updatesSupported, useAutoInstall, useBetaUpdates, useUpdateState } from '../lib/updater'
 
 interface Props {
   visible: boolean
@@ -19,6 +19,7 @@ export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosti
   const s = useMemo(() => makeStyles(t), [t])
   const update = useUpdateState()
   const auto = useAutoInstall()
+  const beta = useBetaUpdates()
   const version = currentVersion()
 
   const rows: { title: string; sub: string; onPress: () => void }[][] = [
@@ -70,6 +71,18 @@ export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosti
                   <Switch
                     value={auto}
                     onValueChange={setAutoInstall}
+                    trackColor={{ false: t.border, true: t.accent }}
+                    thumbColor={t.surface}
+                  />
+                </View>
+                <View style={[s.row, s.rowDivider]}>
+                  <View style={s.rowText}>
+                    <Text style={s.rowTitle}>Beta releases</Text>
+                    <Text style={s.rowSub}>Get test builds before they are released to everyone. They can have bugs.</Text>
+                  </View>
+                  <Switch
+                    value={beta}
+                    onValueChange={setBetaUpdates}
                     trackColor={{ false: t.border, true: t.accent }}
                     thumbColor={t.surface}
                   />
