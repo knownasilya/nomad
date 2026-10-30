@@ -1726,6 +1726,13 @@ class ShellWindowAiSidebar extends LitElement {
     const onToolEvent = (e) => {
       if (e.phase === 'start') {
         if (isCurrent()) this._activity = [...this._activity, { name: e.name, summary: e.summary }];
+      } else if (e.phase === 'detail' && e.summary) {
+        // A page action names the control once it has found it ("Clicking button “Sign in”"):
+        // it replaces the step's first words.
+        const last = this._activity[this._activity.length - 1];
+        if (isCurrent() && last && last.name === e.name) {
+          this._activity = [...this._activity.slice(0, -1), { ...last, summary: e.summary }];
+        }
       } else if (e.phase === 'write' && e.path) {
         // Each file keeps its drive: the assistant can write to any drive the user names.
         const msg = turnMessages[assistantIdx];

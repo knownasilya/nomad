@@ -249,6 +249,26 @@ export const PERMS = {
     dangerous: true,
     promptTrusted: true,
   },
+  // The AI Sidebar clicking and typing on this site (ADR-0027). Not persisted by the prompt:
+  // bg/ui/page-control.js stores a yes as the time it ends, 30 days on. The site-info panel's
+  // Allow (1) and Deny (0) don't end.
+  aiPageControl: {
+    persist: false,
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+    promptTrusted: true,
+  },
+  // One click the AI makes that buys, sends, posts or deletes. Asked each time; the param numbers it.
+  aiPageAction: {
+    persist: false,
+    idempotent: false,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+    promptTrusted: true,
+  },
   // One file or folder of the user's private drive (hyper://private/), for a limited time. The
   // param is the path. Not persisted here: private-drive-guard.ts keeps the grant and ends it.
   privateRead: {
@@ -304,6 +324,8 @@ export const PERM_ICONS = {
   modsWrite: 'fas fa-magic',
   privateRead: 'fas fa-lock',
   privateWrite: 'fas fa-lock',
+  aiPageControl: 'fas fa-mouse-pointer',
+  aiPageAction: 'fas fa-mouse-pointer',
 };
 
 export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
@@ -363,6 +385,10 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Let the AI assistant read your Mods (your styles and scripts for sites)';
     case 'modsWrite':
       return 'Let the AI assistant create and change your Mods, including scripts that run on those sites';
+    case 'aiPageControl':
+      return 'Let the AI assistant click, type and scroll on this site for 30 days';
+    case 'aiPageAction':
+      return `Let the AI assistant ${permOpts?.action || 'do this'}`;
     case 'privateRead':
     case 'privateWrite': {
       const verb = permId === 'privateWrite' ? 'Read and change' : 'Read';

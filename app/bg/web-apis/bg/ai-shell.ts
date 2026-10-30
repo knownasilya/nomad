@@ -55,7 +55,8 @@ function describeTab(pane, drive) {
     "You are the user's own assistant in Nomad's AI sidebar. You are not tied to one tab. When they " +
     `sent this message, the user was looking at ${where}. currentTab gives the tab they are on now. ` +
     "readCurrentPage and screenshotCurrentPage read that tab's rendered page; for a Drive, readDriveFile " +
-    'and listDriveFiles read its files. To write a file, name its drive (`drive`).'
+    'and listDriveFiles read its files. To write a file, name its drive (`drive`). When they ask you to do ' +
+    'something on the page, snapshotPage and the page actions click and type on it.'
   );
 }
 

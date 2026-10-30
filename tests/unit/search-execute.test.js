@@ -317,6 +317,33 @@ describe('search: a personal turn (the user\'s own AI)', () => {
     expect(() => assertCallAllowed('highlightText', 'highlightText', remote)).toThrow(/not available/);
   });
 
+  it('offers page control to the AI Sidebar only (ADR-0027)', () => {
+    const ACTIONS = ['snapshotPage', 'clickElement', 'typeText', 'pressKey', 'selectOption', 'scrollPage'];
+    const names = (c) => c.capabilities.map((x) => x.name);
+    // The sidebar: the user's own AI, with a tab, on this computer.
+    const sidebar = personal({ tab: true });
+    expect(names(sidebar)).toEqual(expect.arrayContaining([...ACTIONS, 'clickAt']));
+    for (const n of ACTIONS) expect(() => assertCallAllowed(n, n, sidebar)).not.toThrow();
+    // clickAt clicks a point in a screenshot, so it needs a model that sees images.
+    expect(names(personal({ tab: true, allowVision: false }))).not.toContain('clickAt');
+    expect(names(personal({ tab: true, allowVision: false }))).toContain('clickElement');
+    // A page's own chat, another program over the loopback MCP (no tab), and the phone (remote).
+    for (const other of [catalog(), personal(), personal({ tab: true, remote: true })]) {
+      for (const n of [...ACTIONS, 'clickAt']) {
+        expect(names(other)).not.toContain(n);
+        expect(() => assertCallAllowed(n, n, other)).toThrow(/not available/);
+      }
+    }
+  });
+
+  it('finds the page actions and their guide by plain words', () => {
+    const sidebar = personal({ tab: true });
+    const top = (q) => search({ query: q, domain: 'capability' }, sidebar).hits.slice(0, 3).map((h) => h.entity);
+    expect(top('click a button on the page')).toContain('capability:clickElement');
+    expect(top('type into a text field')).toContain('capability:typeText');
+    expect(search({ entity: 'guide:page-control' }, sidebar).details[0].markdown).toMatch(/snapshotPage/);
+  });
+
   it('finds the Notes and Reader capabilities by plain words', () => {
     const top = (q) => search({ query: q, domain: 'capability' }, personal()).hits.slice(0, 3).map((h) => h.entity);
     expect(top('notes')).toContain('capability:listNotes');

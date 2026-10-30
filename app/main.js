@@ -37,6 +37,7 @@ import * as windowMenu from './bg/ui/window-menu';
 import registerContextMenu from './bg/ui/context-menu';
 import * as highlights from './bg/ui/highlights';
 import * as mods from './bg/ui/mods';
+import * as pageControl from './bg/ui/page-control';
 import * as openTabs from './bg/ui/open-tabs';
 import * as trayIcon from './bg/ui/tray-icon';
 import * as downloads from './bg/ui/downloads';
@@ -186,6 +187,8 @@ app.on('ready', async function () {
   await highlights.setup();
   // The user's Mods (custom styles and scripts per site), from the Vault.
   mods.setup();
+  // The AI Sidebar's cursor on a page: the bar's Stop, and the user taking over.
+  pageControl.setup();
   // This Device's open tabs, published to the Vault for the user's other Devices.
   openTabs.setup();
   log.info('Initializing tray icon');
