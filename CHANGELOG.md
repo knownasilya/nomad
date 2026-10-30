@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.24.0](https://github.com/knownasilya/nomad/compare/v1.22.0...v1.24.0) (2026-10-30)
+
+
+### Features
+
+* **drives:** built-in drive templates and a live Document drive ([fd488a5](https://github.com/knownasilya/nomad/commit/fd488a5331f09054be348d7c6d40b4657fc6d5e0))
+* **mobile:** show Reader and Notes changes from other devices while open ([0606bb5](https://github.com/knownasilya/nomad/commit/0606bb5a97985be924134798217de5587dc8dd2d))
+* **mobile:** stacked navigation, so back returns where you came from ([65f26fc](https://github.com/knownasilya/nomad/commit/65f26fc7ca72668e40f4b31072b06ea346c6cefe))
+* **spaces:** refresh the phone's spaces when the Vault changes ([568ac1d](https://github.com/knownasilya/nomad/commit/568ac1d1e8113dcf35d7d07ecba12e215130b63b))
+* **spaces:** share one set of spaces between the phone and desktop ([42d679a](https://github.com/knownasilya/nomad/commit/42d679aa933682f8dd03f89bfbdeeec26a2e4564))
+* **tabs:** load restored tabs at startup without a spinner on each ([aa773e8](https://github.com/knownasilya/nomad/commit/aa773e8ca677686785a8856dae2b45762adb22ee))
+
 ## [1.23.0](https://github.com/knownasilya/nomad/compare/v1.22.0...v1.23.0) (2026-10-30)
 
 
