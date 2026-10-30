@@ -44,6 +44,8 @@ const NAMES_PREFIX = '/.vault/names/';
 const HIGHLIGHTS_PREFIX = '/.vault/highlights/';
 const MODS_PREFIX = '/.vault/mods/';
 const DRAFTS_PREFIX = '/.drafts/';
+// Each Device's open tabs (shared/open-tabs.mjs). Not carried: they belong to the Device.
+const OPEN_TABS_PREFIX = '/.vault/tabs/';
 const CARRY_PREFIXES = [
   READER_PREFIX,
   NOTES_PREFIX,
@@ -510,6 +512,10 @@ export async function removeDevice(deviceKey) {
   await sess.base.append({ removeWriter: deviceKey });
   await sess.base.update();
   await _delRecord(sess, `${DEVICES_PREFIX}${deviceKey}.json`);
+  // Its open tabs (bg/ui/open-tabs.js): readers already skip a Device that isn't listed.
+  if (await _readRecord(sess, `${OPEN_TABS_PREFIX}${deviceKey}.json`)) {
+    await _delRecord(sess, `${OPEN_TABS_PREFIX}${deviceKey}.json`);
+  }
   logger.info('Removed device from vault', { deviceKey });
   // Background — see addDevice.
   fanOutRemoveWriter(deviceKey).catch((e) =>

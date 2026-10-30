@@ -2,6 +2,7 @@ import b4a from 'b4a'
 import { decodeInlineJson } from '../../../shared/fs-core.mjs'
 import * as apps from '../../../shared/vault-apps.mjs'
 import * as names from '../../../shared/names.mjs'
+import * as ot from '../../../shared/open-tabs.mjs'
 import { inlineOp, boundedUpdate } from './vault.mjs'
 import { parseHyperUrl } from './hyper-url.mjs'
 import { DRIVE_AUTOBASE, DRIVE_HYPERDRIVE } from '../../rpc-commands.mjs'
@@ -242,4 +243,50 @@ export async function setName (base, { name, url, title, previous } = {}) {
 
 export async function removeName (base, name) {
   await delRecord(base, names.namePath(name))
+}
+
+// Open tabs (shared/open-tabs.mjs)
+// =
+
+function ownKey (base) {
+  return base.local?.key ? b4a.toString(base.local.key, 'hex') : null
+}
+
+// Write this phone's open tabs ([{ rootDriveKey, name, tabs }]) to its own record, or delete the
+// record when `off`. Like desktop's bg/ui/open-tabs.js: only with a writable Vault, only once another
+// Device is in it, and never a write that changes nothing. Returns true when it wrote.
+export async function publishTabs (base, spaces, off = false) {
+  const key = ownKey(base)
+  if (!key || !base.writable) return false
+  await boundedUpdate(base)
+  const path = ot.recordPath(key)
+  const existing = await readRecord(base, path)
+  if (off) {
+    if (!existing) return false
+    await delRecord(base, path)
+    return true
+  }
+  if (!existing) {
+    const others = (await readPrefix(base, '/.vault/devices/')).filter((d) => d.key && d.key !== key)
+    if (!others.length) return false
+  }
+  if (ot.sameTabs(existing, spaces)) return false
+  await putRecord(base, path, ot.buildRecord(key, spaces))
+  return true
+}
+
+// The other Devices' open tabs, `space` (a Root Drive key) first. `connected` is a Set of keys.
+export async function listDeviceTabs (base, space, connected) {
+  await boundedUpdate(base)
+  const devices = await readPrefix(base, '/.vault/devices/')
+  return {
+    devices: ot.otherDevicesTabs(await readPrefix(base, ot.OPEN_TABS_PREFIX), {
+      ownKey: ownKey(base),
+      devices,
+      connected,
+      currentSpace: space || null
+    }),
+    linked: devices.length > 1,
+    currentSpace: space || null
+  }
 }

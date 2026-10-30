@@ -10,11 +10,13 @@ interface Props {
   onOpenDevices: () => void
   onOpenHosting: () => void
   onOpenLogs: () => void
+  shareTabs: boolean
+  onShareTabs: (on: boolean) => void
 }
 
 // The phone's browser settings, like desktop's nomad://settings: one list of the places to change
 // how Nomad works on this phone, plus the logs for when something goes wrong.
-export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosting, onOpenLogs }: Props) {
+export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosting, onOpenLogs, shareTabs, onShareTabs }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const update = useUpdateState()
@@ -54,6 +56,22 @@ export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosti
               ))}
             </View>
           ))}
+          <Text style={s.sectionTitle}>Open tabs</Text>
+          <View style={s.card}>
+            <View style={s.row}>
+              <View style={s.rowText}>
+                <Text style={s.rowTitle}>Share this phone's open tabs</Text>
+                <Text style={s.rowSub}>Your other devices list them by space. Turning this off removes them there.</Text>
+              </View>
+              <Switch
+                value={shareTabs}
+                onValueChange={onShareTabs}
+                trackColor={{ false: t.border, true: t.accent }}
+                thumbColor={t.surface}
+                accessibilityLabel="Share this phone's open tabs"
+              />
+            </View>
+          </View>
           {updatesSupported ? (
             <>
               <Text style={s.sectionTitle}>Updates</Text>

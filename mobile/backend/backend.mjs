@@ -555,6 +555,8 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'notes' && action === 'list') value = await vaultApps.listNotes(vault)
     else if (app === 'notes' && action === 'save') value = await vaultApps.saveNote(vault, { id: args.id, body: args.body, baseUpdatedAt: args.baseUpdatedAt })
     else if (app === 'notes' && action === 'delete') value = await vaultApps.deleteNote(vault, args.id)
+    else if (app === 'tabs' && action === 'publish') value = await vaultApps.publishTabs(vault, args.spaces, !!args.off)
+    else if (app === 'tabs' && action === 'list') value = await vaultApps.listDeviceTabs(vault, space, presence.connectedDevices())
     else if (app === 'notes' && action === 'renameLinks') value = await vaultApps.renameNoteLinks(vault, { id: args.id, from: args.from, to: args.to })
     else if (app === 'names' && action === 'list') value = await vaultApps.listNames(vault)
     else if (app === 'names' && action === 'resolve') value = await vaultApps.resolveName(vault, args.input)

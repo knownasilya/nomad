@@ -285,6 +285,16 @@ editing is My Library → Mods (`nomad.vault.listMods`/`saveMod`/`deleteMod`). T
 `listMods`, `saveMod`, `deleteMod` as personal capabilities (so the sidebar, the phone and
 the loopback MCP all have them), behind the `modsRead` / `modsWrite` permissions.
 
+### Open tabs on other Devices (ADR-0024)
+
+Each Device writes the tabs it has open, grouped by Space (Root Drive key), to its own Vault record
+`/.vault/tabs/<deviceKey>.json` (rules in `shared/open-tabs.mjs`). Other Devices only read them: no
+Device ever opens or closes tabs on another. Desktop publishes from `app/bg/ui/open-tabs.js` (5 s
+after `custom-pages-updated`, only on a change, only once another Device joined) and lists them in
+nomad://history → Tabs From Other Devices (`nomad.vault.listDeviceTabs`). The phone publishes from
+`mobile/app/index.tsx` over `RPC_APPS` `tabs` and lists them under the tab grid. `sync_open_tabs`
+(Settings → Devices) and the phone's Settings switch turn it off per Device and delete the record.
+
 ## Look and feel: every UI supports dark mode and matches the rest
 
 Every new or changed screen must work in light **and** dark, and look like its neighbours.
