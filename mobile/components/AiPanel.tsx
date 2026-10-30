@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { AiChatHandlers, AiChatHandle } from '../lib/useBackend'
 import { pickImages } from '../lib/pickImages'
+import { applyToolEvent, finishSteps as finishedSteps, type Step } from '../lib/aiSteps'
 import Markdown from './Markdown'
 import ScreenHeader from './ScreenHeader'
 import IconButton from './IconButton'
@@ -13,7 +14,8 @@ import ActionSheet from './ActionSheet'
 
 // `images` are data:image URLs — nomad.ai.chat's short form, which the Provider expands into
 // image_url parts (app/bg/ai/chat-messages.mjs).
-interface ChatMsg { role: 'user' | 'assistant'; content: string; images?: string[] }
+// `reasoning` is what the model thought before it answered (shown as Thoughts, never sent back).
+interface ChatMsg { role: 'user' | 'assistant'; content: string; images?: string[]; reasoning?: string }
 
 const MAX_IMAGES = 4
 // The Bridge sends the whole transcript every turn, as one frame. Past this many data-URL
@@ -73,7 +75,9 @@ function unwrapReply (text: string, partial = false): string {
 function fitImages (history: ChatMsg[]): ChatMsg[] {
   const size = (m: ChatMsg) => (m.images || []).reduce((n, url) => n + url.length, 0)
   let total = history.reduce((n, m) => n + size(m), 0)
-  return history.map((m) => {
+  return history.map((msg) => {
+    // Thoughts stay in the panel: the Provider gets only what was said.
+    const m: ChatMsg = msg.images ? { role: msg.role, content: msg.content, images: msg.images } : { role: msg.role, content: msg.content }
     if (total <= IMAGE_BUDGET || !m.images?.length) return m
     total -= size(m)
     const note = `[${m.images.length} earlier photo${m.images.length > 1 ? 's' : ''} not sent again]`
@@ -81,18 +85,10 @@ function fitImages (history: ChatMsg[]): ChatMsg[] {
   })
 }
 
-// One step of the running turn: a search, an execute, or a capability the code called. The
-// Provider writes the label in plain words (app/bg/ai/tool-summary.mjs).
-interface Step { label: string; done: boolean }
-// The step list shows the latest few; the rest collapse into one line.
+// The step list shows the latest few; the rest collapse into one line. A step is a search, an
+// execute, or a capability the code called, labelled in plain words by the Provider
+// (app/bg/ai/tool-summary.mjs).
 const MAX_STEPS_SHOWN = 5
-
-// The label for a tool event from runChat, or null when the event is not a step. A 'write' event
-// follows the 'start' event of the same write, and a screenshot is only for the transcript.
-function stepLabel (e: any): string | null {
-  if (!e || (e.phase !== 'start' && e.phase !== 'note')) return null
-  return e.summary || e.name || 'Working…'
-}
 
 interface Props {
   visible: boolean
@@ -138,9 +134,11 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
   const [attaching, setAttaching] = useState(false)
   const [busy, setBusy] = useState(false)
   // What the agent did and is doing in this turn, so a long tool phase (drive I/O + model
-  // round-trips, no streamed text) doesn't look frozen. The last step runs until the next step
-  // or the next text arrives.
+  // round-trips, no streamed text) doesn't look frozen. A step runs until its tool ends or the
+  // next text arrives (mobile/lib/aiSteps.ts).
   const [steps, setSteps] = useState<Step[]>([])
+  // Which answers' Thoughts the user opened or closed, by message index.
+  const [openThoughts, setOpenThoughts] = useState<Record<number, boolean>>({})
   // Paths the AI has staged into each Drive's Draft, by drive (hyper://<key>) — drives the review
   // banner for the open tab's Drive. Publishing/discarding runs on the desktop Provider (it can
   // write the Drive); preview is local.
@@ -176,6 +174,13 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
       return copy
     })
 
+  const appendReasoning = (chunk: string) =>
+    setMessages((prev) => {
+      const last = prev[prev.length - 1]
+      if (!last || last.role !== 'assistant') return prev
+      return [...prev.slice(0, -1), { ...last, reasoning: (last.reasoning || '') + chunk }]
+    })
+
   // Store the reply without a JSON wrapper, so the next turn's history doesn't teach the model to
   // keep wrapping.
   const settleLast = () =>
@@ -188,7 +193,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
 
   const canSend = !busy && !attaching && (!!input.trim() || attachments.length > 0)
 
-  const finishSteps = () => setSteps((prev) => prev.every((x) => x.done) ? prev : prev.map((x) => ({ ...x, done: true })))
+  const finishSteps = () => setSteps(finishedSteps)
   const endTurn = () => { settleLast(); setBusy(false); setSteps([]); handleRef.current = null }
 
   const send = () => {
@@ -210,9 +215,9 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
     const tab = url ? { url, title: title || '' } : null
     handleRef.current = aiChat(fitImages(history), { context: describeContext(url, title), personal: true, space, tab }, {
       onChunk: (chunk) => { finishSteps(); appendToLast(chunk) },
+      onReasoning: appendReasoning,
       onTool: (event: any) => {
-        const label = stepLabel(event)
-        if (label) setSteps((prev) => [...prev.map((x) => ({ ...x, done: true })), { label, done: event.phase === 'note' }])
+        setSteps((prev) => applyToolEvent(prev, event))
         // A staged write → track it for its Drive's draft review banner.
         const drive = driveOf(event?.drive) || sendDrive
         if (event && event.phase === 'write' && event.path && event.draft !== false && drive) {
@@ -272,8 +277,8 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
     })
   }
 
-  // The turn's progress, under the answer as it streams in: done steps with a check, the running
-  // one with a spinner. Before any step or text, it says the AI is thinking.
+  // The turn's progress, under the answer as it streams in: done steps with a check (or a warning
+  // sign when the tool failed), running ones with a spinner. Before any step or text, it says the AI is thinking.
   const renderSteps = () => {
     const last = messages[messages.length - 1]
     const answering = last?.role === 'assistant' && !!unwrapReply(last.content, true)
@@ -293,13 +298,22 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
         {steps.slice(hidden).map((step, i) => (
           <View key={hidden + i} style={s.stepRow}>
             <View style={s.stepIcon}>
-              {step.done
-                ? <Icon name='check' size={12} color={t.secure} />
-                : <ActivityIndicator size='small' color={t.accent} />}
+              {!step.done
+                ? <ActivityIndicator size='small' color={t.accent} />
+                : step.error
+                  ? <Icon name='exclamation-circle' size={12} color={t.danger} />
+                  : <Icon name='check' size={12} color={t.secure} />}
             </View>
             <Text style={[s.stepText, step.done && s.stepDoneText]} numberOfLines={2}>{step.label}</Text>
           </View>
         ))}
+        {!answering && steps.every((x) => x.done) && (
+          // Every tool ended: the model is working out what to do next.
+          <View style={s.stepRow}>
+            <View style={s.stepIcon}><ActivityIndicator size='small' color={t.accent} /></View>
+            <Text style={s.stepText}>Thinking…</Text>
+          </View>
+        )}
       </View>
     )
   }
@@ -335,7 +349,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
         title='AI'
         onBack={onClose}
         backLabel='Close the AI'
-        actions={messages.length > 0 ? [{ icon: 'broom', label: 'Clear the conversation', onPress: () => { stop(); setMessages([]); setError(null) } }] : undefined}
+        actions={messages.length > 0 ? [{ icon: 'broom', label: 'Clear the conversation', onPress: () => { stop(); setMessages([]); setOpenThoughts({}); setError(null) } }] : undefined}
       />
       {url ? (
         // The page the AI sees as the current tab. The mark is green for a Drive.
@@ -365,18 +379,36 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
               const shown = m.role === 'assistant' ? unwrapReply(m.content, streaming) : m.content
               // The trailing empty assistant message is the response slot. renderSteps() below
               // stands in for it until the first words land.
-              if (m.role === 'assistant' && !shown) return null
+              const thoughts = m.role === 'assistant' ? (m.reasoning || '').trim() : ''
+              if (m.role === 'assistant' && !shown && !thoughts) return null
               if (m.role === 'assistant') {
+                // Thoughts are open while the model is still thinking, then fold away.
+                const thoughtsOpen = openThoughts[i] ?? (streaming && !shown)
                 return (
                   <View key={i} style={s.aiMsg}>
-                    <Pressable
+                    {!!thoughts && (
+                      <View style={s.thoughts}>
+                        <Pressable
+                          style={s.thoughtsHead}
+                          onPress={() => setOpenThoughts((prev) => ({ ...prev, [i]: !thoughtsOpen }))}
+                          accessibilityRole='button'
+                          accessibilityState={{ expanded: thoughtsOpen }}
+                          hitSlop={8}
+                        >
+                          <Icon name={thoughtsOpen ? 'chevron-down' : 'chevron-right'} size={10} color={t.textMuted} />
+                          <Text style={s.thoughtsLabel}>Thoughts</Text>
+                        </Pressable>
+                        {thoughtsOpen && <Text style={s.thoughtsBody} selectable>{thoughts}</Text>}
+                      </View>
+                    )}
+                    {!!shown && <Pressable
                       style={[s.bubble, s.aiBubble, s.fullBubble]}
                       onLongPress={() => openCopy(shown, 'assistant')}
                       accessibilityHint='Long-press to copy the answer'
                     >
                       <Markdown text={shown} />
-                    </Pressable>
-                    {!streaming && (
+                    </Pressable>}
+                    {!streaming && !!shown && (
                       <IconButton
                         icon={copied === i ? 'check' : 'copy'}
                         regular={copied !== i}
@@ -548,6 +580,10 @@ function makeStyles (t: Theme) {
     userMsg: { alignSelf: 'flex-end', alignItems: 'flex-end', maxWidth: '88%', gap: 6 },
     // An answer and its copy button, under it on the left.
     aiMsg: { alignSelf: 'flex-start', alignItems: 'flex-start', maxWidth: '88%' },
+    thoughts: { marginBottom: 6 },
+    thoughtsHead: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 28 },
+    thoughtsLabel: { color: t.textMuted, fontSize: 13 },
+    thoughtsBody: { color: t.textMuted, fontSize: 13, lineHeight: 19, marginTop: 4, marginLeft: 4, paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: t.border },
     // A bubble inside a message column takes the column's width limit, not 88% of it again.
     fullBubble: { maxWidth: '100%' },
     copyBtn: { width: 40, height: 40, marginLeft: 2, marginBottom: -6 },

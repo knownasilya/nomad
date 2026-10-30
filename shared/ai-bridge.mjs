@@ -19,7 +19,9 @@
 //   Client → AUTH { deviceKey, signature }      (signature over the nonce by the Vault writer key)
 //   Provider → READY { model } | DENIED { reason }
 //   Client → REQUEST { id, messages, opts }     (id-multiplexed; several may be in flight)
-//   Provider → CHUNK { id, text } | TOOL { id, event }
+//   Provider → CHUNK { id, text } | TOOL { id, event } | REASONING { id, text }
+//                                             (an older Client drops REASONING, like any frame it
+//                                             doesn't know; an older Provider never sends it)
 //   Provider → PROMPT { id, permission } ↔ Client → PROMPT_RESULT { id, allow }   (reverse consent)
 //   Provider → DONE { id } | ERROR { id, message }   (terminal for that id)
 //   Client → CANCEL { id }                      (abort an in-flight turn)
@@ -39,6 +41,7 @@ export const FRAME = Object.freeze({
   REQUEST: 'request',
   CHUNK: 'chunk',
   TOOL: 'tool',
+  REASONING: 'reasoning', // the model's reasoning text, streamed like CHUNK (AG-UI's REASONING_MESSAGE_CONTENT)
   PROMPT: 'prompt',
   PROMPT_RESULT: 'promptResult',
   DONE: 'done',

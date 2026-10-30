@@ -148,6 +148,7 @@ for await (const chunk of nomad.ai.chat(messages, {
   maxTokens: 1600,      // optional: cap the completion (sent as max_tokens, max 8192)
   effort: 'medium',     // optional: 'low' | 'medium' | 'high' reasoning_effort (when think !== false)
   onReasoning: (t) => {},// optional: reasoning-stream chunks (when think !== false)
+  onToolEvent: (e) => {},// optional: tool calls; e.phase is 'start' { id, name, summary } then 'end' { id, error? }, or 'write' { drive, path }
 })) {
   process(chunk) // string chunk streamed from the model
 }

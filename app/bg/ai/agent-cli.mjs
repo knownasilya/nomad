@@ -104,8 +104,15 @@ export function streamAgent(runtime, messages, emitter, signal, mcp = {}) {
         } else if (event.type === 'tool') {
           emitter.emit('tool', {
             phase: 'start',
+            ...(event.id ? { id: event.id } : {}),
             name: event.name,
             summary: toolSummary(event.name, event.input),
+          });
+        } else if (event.type === 'toolEnd') {
+          emitter.emit('tool', {
+            phase: 'end',
+            id: event.id,
+            ...(event.error ? { error: 'The tool failed.' } : {}),
           });
         } else if (event.type === 'error') {
           try { child?.kill('SIGTERM'); } catch { /* already gone */ }

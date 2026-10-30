@@ -576,6 +576,9 @@ class ShellWindowAiSidebar extends LitElement {
     .activity-item .fa-check {
       color: var(--ai-success);
     }
+    .activity-item .fa-exclamation-circle {
+      color: var(--ai-error-text);
+    }
 
     .reasoning {
       align-self: stretch;
@@ -1600,14 +1603,29 @@ class ShellWindowAiSidebar extends LitElement {
           ? html`<div class="activity-item active">
               <span class="fas fa-fw fa-spinner fa-spin"></span> Thinking…
             </div>`
-          : items.map(
-              (a, i) => html`<div class="activity-item ${i === items.length - 1 ? 'active' : ''}">
-                <span
-                  class="fas fa-fw ${i === items.length - 1 ? 'fa-spinner fa-spin' : 'fa-check'}"
-                ></span>
+          : items.map((a, i) => {
+              // A step with an id runs until its `end` event. One without (from an older
+              // Provider over the AI Bridge) runs until the next step starts.
+              const running = a.id ? !a.done : i === items.length - 1;
+              const icon = running
+                ? 'fa-spinner fa-spin'
+                : a.error
+                  ? 'fa-exclamation-circle'
+                  : 'fa-check';
+              return html`<div
+                class="activity-item ${running ? 'active' : ''}"
+                title=${a.error || ''}
+              >
+                <span class="fas fa-fw ${icon}"></span>
                 ${a.summary}
-              </div>`
-            )}
+              </div>`;
+            })}
+        ${items.length && items.every((a) => a.id && a.done)
+          ? // Every tool ended: the model is working out what to do next.
+            html`<div class="activity-item active">
+              <span class="fas fa-fw fa-spinner fa-spin"></span> Thinking…
+            </div>`
+          : ''}
       </div>
     `;
   }
@@ -1725,7 +1743,17 @@ class ShellWindowAiSidebar extends LitElement {
 
     const onToolEvent = (e) => {
       if (e.phase === 'start') {
-        if (isCurrent()) this._activity = [...this._activity, { name: e.name, summary: e.summary }];
+        if (isCurrent()) {
+          this._activity = [...this._activity, { id: e.id, name: e.name, summary: e.summary }];
+        }
+      } else if (e.phase === 'end' && e.id) {
+        // The call with this id finished (AG-UI's TOOL_CALL_END). A call made inside `execute`
+        // ends before `execute` does, so several steps can run at once.
+        if (isCurrent()) {
+          this._activity = this._activity.map((a) =>
+            a.id === e.id ? { ...a, done: true, error: e.error || null } : a
+          );
+        }
       } else if (e.phase === 'write' && e.path) {
         // Each file keeps its drive: the assistant can write to any drive the user names.
         const msg = turnMessages[assistantIdx];
