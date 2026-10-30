@@ -1,7 +1,9 @@
 # Live Docs: a Yjs document stored as per-writer update files in its Drive
 
-**Status: Proposed.** 2026-10-30. Nothing is built yet; the spikes under *Open questions* gate
-acceptance.
+**Status: Proposed.** 2026-10-30. The four spikes ran the same day (`app/scripts/spike-live-doc.mjs`,
+all checks pass) and the design holds; their results are under *Spike results* and are folded into
+the decision below. Remaining before *Accepted*: one run between two real machines over Hyperswarm,
+and Phase 1.
 
 The user wants document-style Drives that several people, and the same person's Devices, edit at
 the same time, the way Slack canvases and Notion pages work: you see the other person's cursor, text
@@ -34,14 +36,17 @@ Drafts in the Vault instead of a base of their own.
    ```
    <doc>/doc.json                                   { type: 'walled.garden/live-doc', id, format: 'yjs/1',
                                                       schema: 'prosemirror' | 'text', title, createdAt }
-   <doc>/updates/<writerKey>/<ms>-<rand>.yupdate    a Yjs update, written only by that Writer
-   <doc>/snapshots/<writerKey>-<ms>.ystate          Y.mergeUpdates of everything it replaced
+   <doc>/updates/<writerKey>/<ms>-<rand>.yupdate    a Yjs update, written only by that Writer (inline)
+   <doc>/snapshots/<writerKey>-<ms>.ystate          the state of everything it replaced (a blob)
    <doc>/content.md                                 derived export for readers, search and the AI
    ```
 
-   The document's state is `Y.mergeUpdates(all snapshots + all update files)`. Merging is
-   idempotent and order-free, so the Autobase order doesn't matter, a duplicate does no harm, and a
-   reorg changes nothing a reader sees.
+   The document's state is the merge of all snapshots and all update files. Merging is idempotent
+   and order-free, so the Autobase order doesn't matter, a duplicate does no harm, and a reorg
+   changes nothing a reader sees. A reader merges in a tree of 64-file chunks (`Y.mergeUpdates` on
+   each chunk, then on the results) and applies the result once. Files come back in path order, one
+   Writer after another, not in causal order, and applying them one by one parks most of them in
+   Yjs's pending queue: 16 s for 10,000 files, against about 80 ms for the tree.
 
 2. **Each Writer appends only under its own key.** No two Writers ever write the same update or
    snapshot path, so the last-writer-wins rule never fires on document content. This uses
@@ -50,15 +55,18 @@ Drafts in the Vault instead of a base of their own.
    `doc.json` (metadata, last write is fine) and `content.md` (derived, and any Writer can rebuild it).
 
 3. **Two paths: a durable one and a live one.**
-   - *Durable:* the page batches its own local Yjs updates and writes one update file after about a
-     second of idle, and on blur, hide and close. Peers pick them up with `nomad.fs.watch` on
-     `<doc>/`. This path is the source of truth and works offline: edits made on a plane append to
-     the local oplog and merge when the Device reconnects.
+   - *Durable:* the page batches its own local Yjs updates and writes one update file after 2 s of
+     idle, at most every 10 s while typing goes on, and on blur, hide and close. Peers pick them up
+     with `nomad.fs.watch` on `<doc>/`. This path is the source of truth and works offline: edits
+     made on a plane append to the local oplog and merge when the Device reconnects. The batch is
+     that long because the live room already carries keystrokes, and each file costs about 1.1 KB
+     of Drive storage for about 65 bytes of Yjs: a 1 s batch is about 8 MB per hour of two people
+     typing nonstop, a 10 s cap about 1 MB with compaction. A crash loses at most the unsaved batch.
    - *Live:* a `nomad.peersockets` room per Live Doc (topic `live-doc:<doc path>`, already scoped to
-     the Drive) carries the y-protocols sync messages, so keystrokes arrive in tens of milliseconds
-     instead of waiting for the next file. It never writes anything. Each Writer persists only
-     updates whose origin is local, so an update that arrived over the wire is saved by its author,
-     not by everyone who saw it.
+     the Drive) carries the y-protocols sync messages, so a keystroke arrives in one one-way trip
+     instead of the durable path's five or six (75 ms instead of about 400 ms at 75 ms one-way). It
+     never writes anything. Each Writer persists only updates whose origin is local, so an update
+     that arrived over the wire is saved by its author, not by everyone who saw it.
 
 4. **Presence rides the live room and is never stored.** y-protocols awareness carries cursor,
    selection, name and color (name and avatar from the Writer's Profile Drive). It times out on its
@@ -67,17 +75,26 @@ Drafts in the Vault instead of a base of their own.
 5. **Editors are the Drive's Writers.** The durable path needs nothing new: only Writers can append.
    The live path does: today a peersocket peer is a swarm connection key, not a Writer. Peers in a
    live room prove a current Writer key with a signed challenge, the way the AI Bridge proves a Vault
-   Writer (ADR-0013). A page applies a document update from the live room only from a proven Writer;
-   anyone else may only send awareness. There are no per-document permissions inside a Drive: the
-   sharing boundary is the Drive, so a page shared with different people goes in a different Drive
+   Writer (ADR-0013). The bg process signs `nonce ‖ handshakeHash` (the Noise handshake hash both
+   ends of the connection share, so a proof can't be relayed onto another connection) with the
+   Drive's writer keypair, `base.local.keyPair`; pages never hold keys. The verifier takes the
+   claimed writer key, opens that writer core and checks the signature against its manifest signer:
+   in hypercore 11 a writer key is a manifest hash, not the signing key (as `getWriterSignerKey` in
+   `app/bg/hyper/ai-bridge.js` already does). The key is a Writer if it is the Drive's bootstrap key
+   or `base.system.get(key)` is present and not removed. A page applies a document update from the
+   live room only from a proven Writer; anyone else may only send awareness. There are no
+   per-document permissions inside a Drive: the sharing boundary is the Drive, so a page shared
+   with different people goes in a different Drive
    (Notion's teamspace). Writers stay fully trusted, as for every other file in a Drive: a Writer can
    delete another Writer's update files, and compaction relies on that.
 
-6. **Compaction keeps opening fast; it does not reclaim disk.** When a Live Doc has more than about
-   256 update files or 1 MB of them, the next Writer to open it writes one snapshot (the merge of the
-   files it read) and deletes those files and the snapshots it merged, in **one append batch, snapshot
-   first**. A reader that sees the snapshot but not yet the deletes has duplicates, which merge away;
-   it can never see the deletes without the snapshot. Two Writers compacting at once each write a
+6. **Compaction keeps opening fast; it does not reclaim disk.** When a Live Doc has more than 256
+   update files, the next Writer to open it writes one snapshot (`Y.encodeStateAsUpdate` of a doc
+   built from the files it read, as a blob) and deletes those files and the snapshots it merged, in
+   **one append batch, snapshot first**. Small batches matter here: compacting 10,000 files in one
+   batch took about 5 s and added 5 MB of deletes; 256 take a fraction of a second. A reader that
+   sees the snapshot but not yet the deletes has duplicates, which merge away; it can never see the
+   deletes without the snapshot. Two Writers compacting at once each write a
    snapshot of what they read; both stay valid. Compaction builds only from files, never from the
    in-memory document, so nothing that arrived over the live room enters storage through it. Because
    Hypercores are append-only, the bytes of deleted files stay in the oplog. Yjs keeps garbage
@@ -85,7 +102,8 @@ Drafts in the Vault instead of a base of their own.
    version history is a snapshot the user names (`snapshots/…` with a `label` in `doc.json`), not
    time travel.
 
-7. **The code is a library, not a new API.** `nomad://app-stdlib/js/live-doc.js` is a Yjs provider
+7. **The code is a library, not a `nomad.live` API.** It needs only the two small API changes under
+   *Consequences*. `nomad://app-stdlib/js/live-doc.js` is a Yjs provider
    over `nomad.fs` (durable) and `nomad.peersockets` (live and presence): `openLiveDoc(drive, path)`
    returns `{ ydoc, awareness, whenSynced, destroy }`. Yjs is vendored in app-stdlib. Pages bring
    their own editor binding: y-prosemirror (TipTap, BlockNote) for Notion-style pages, y-codemirror.next
@@ -121,8 +139,10 @@ Drafts in the Vault instead of a base of their own.
 - **Per-writer document cores outside the oplog** (like file blobs; the design of Ink & Switch's
   hypermerge). The cheapest per keystroke, and a core can be cleared to reclaim disk. But readers must
   enforce the Writer set and removal cut-offs themselves, and it adds a core per Writer per document.
-  Deferred: this is the upgrade path if Q1 shows update files are too slow or too big. The folder
-  layout above can point at such cores later without changing the merge.
+  Deferred. The spike shows each file costs about 1.1 KB of view and system core around 65 bytes of
+  Yjs, which raw cores would mostly avoid; with the §3 batching that is a few MB per session, so
+  not yet worth the extra machinery. This stays the upgrade path if real use shows docs growing too
+  fast. The folder layout above can point at such cores later without changing the merge.
 - **A separate Autobase per document** (a Keet room per page). A second Writer set to manage per page,
   and a Device can't write a second base it was paired into until per-drive device writer keys exist
   (§3). Rejected, as in ADR-0012.
@@ -144,11 +164,13 @@ Drafts in the Vault instead of a base of their own.
 - **No wire-format change.** Live Docs are files under a convention; the reducer, golden vectors and
   mobile parity are untouched. The new pieces are a library, a schema, a template, and one platform
   change to peersockets.
-- **`nomad.peersockets` gains proven Writer identity** (a peer event carries `writerKey` once proven).
-  That is a public API change, so it needs the nomad.dev page, `API_REFERENCE` and `nomad-dts.js`
-  updated together.
-- **Storage grows with editing.** Each batch is an oplog entry plus a file; deletes don't shrink
-  Hypercores. Batching keeps it to about one entry per second of active typing. Measured in Q1.
+- **Two public API changes,** each needing the nomad.dev page, `API_REFERENCE` and `nomad-dts.js`
+  together: `nomad.peersockets` peer events carry `writerKey` once proven, and `nomad.fs.writeFile`
+  takes `{ inline: true }` for files up to 4 KB (`shared/fs-manifest.mjs` is unchanged; the mobile
+  dispatcher passes the option through).
+- **Storage grows with editing.** Each file is about 1.1 KB of oplog, view and system core, and a
+  delete costs about half that again; nothing shrinks a Hypercore. With the §3 batching, a long
+  session by two people is a few MB.
 - **The phone reads Live Docs** through `nomad.fs` (durable path only, since the phone has no
   `nomad.peersockets` yet). Phone writes wait for the mobile writable bridge and §3, like every other
   phone write to a Drive.
@@ -157,21 +179,59 @@ Drafts in the Vault instead of a base of their own.
 - **Removing a Writer** stops their future edits; their past update files stay part of the document,
   as their past files do in any Drive.
 
-## Open questions (spikes that gate acceptance)
+## Spike results (2026-10-30)
 
-- **Q1: durable-path latency and size.** Two Writers on a LAN and across the internet: time from
-  write to the peer's `watch` event, and oplog plus view bytes after an hour of typing with one-second
-  batches. Decides the batch interval and whether per-writer cores (above) are needed.
-- **Q2: open cost.** Time to open a Live Doc with 10,000 update files against one with a snapshot,
-  to set the compaction threshold.
-- **Q3: the Writer proof.** Which keypair signs the challenge (the base's `local` writer core,
-  per-drive namespace key), and how a Device that has several Writer keys for one Drive shows up.
-- **Q4: small files.** Whether update files should be stored inline (`buildPutInlineOp`) rather than
-  as blobs, which `nomad.fs.writeFile` can't choose today.
+`app/scripts/spike-live-doc.mjs`: two Writers in one process on the real `shared/fs-core.mjs`
+reducer and the app's pinned autobase 7.28.1 / corestore 7.10.1 / hyperbee / hyperblobs, with
+yjs 13.6. They replicate over a corestore stream pair that can delay every chunk one way, standing
+in for the network. The typing model is about 3.5 characters a second (40 wpm) with one in ten a
+backspace and an occasional cursor jump, both people typing at once and each applying the other's
+updates live. Numbers are from a Linux container; treat them as orders of magnitude.
+
+**Q1: latency.** Time from B starting a write to A's view holding the file (p50 of 60):
+
+| one-way delay | durable, inline file | durable, blob file | live room message |
+| ------------- | -------------------- | ------------------ | ----------------- |
+| 0 ms          | 9 ms                 | 11 ms              | <1 ms             |
+| 25 ms         | 139 ms               | 191 ms             | 26 ms             |
+| 75 ms         | 389 ms               | 542 ms             | 76 ms             |
+
+The durable path costs about 5.5 one-way trips (Autobase and Hypercore round trips), a blob two
+more to fetch the bytes from the blobs core. That is fine for edits arriving from someone who isn't
+in the room, and too slow to feel live, so the live room stays.
+
+**Q1: size.** 10,000 update files (two people typing nonstop for 83 minutes, 1 s batches; a
+27,800-character document) carry 660 KB of Yjs but take 11.1 MB inline: oplogs 4.3 MB, view 4.5 MB,
+Autobase system core 2.3 MB. That is about 1.1 KB per file whatever it holds, so the cost is per
+file and the fix is fewer files (the 10 s cap in §3), not per-writer cores. RocksDB on disk was
+about 5× the logical size before its own compaction.
+
+**Q2: open cost.** Reading and merging 10,000 inline update files takes about 230 ms warm and
+1.3 s cold, 0.56 s of which is reopening the Drive. As blobs it is 1.6 s warm, one blob read per
+file. After one compaction the same document reads in about 20 ms. At the 256-file threshold the
+files add well under 10 ms on top of the snapshot (linear from the 10,000-file number). The first
+reader applied files one by one and took 16 to 20 s at 10,000; that is the pending-queue trap in §1.
+
+**Q2: compaction.** Two Writers compacting at once while partitioned, with a new edit landing during
+it, converge on the same text with nothing lost and leave exactly two snapshots and the late update.
+A snapshot of the 10,000 files is about 230 KB. Deletes cost storage too: compacting all 10,000
+took about 5 s and added about 5 MB, which is why compaction runs at 256 files, not once a day.
+
+**Q3: the Writer proof.** Works as written in §5: both ends see the same `handshakeHash`;
+`base.local.keyPair` signs; the writer key is not the signing key, and the manifest signer is; a
+signature over another connection's hash fails; a reader that was never added and a removed Writer
+both fail membership. A Device with several Writer keys for one Drive shows each as its own peer,
+which is what presence wants anyway (one cursor per open copy).
+
+**Q4: inline vs blob.** Inline update files are faster to see (two fewer trips) and about 20% smaller
+in total (11.1 MB against 13.6 MB). Update files go inline; snapshots, which run to hundreds of KB,
+stay blobs so their bytes stay out of the oplog. `nomad.fs.writeFile` can't choose today, so it gains
+`{ inline: true }`, refused above 4 KB.
 
 ## Implementation touchpoints (non-binding)
 
-`app/userland/app-stdlib/js/live-doc.js` and a vendored Yjs, y-protocols and lib0;
+`app/userland/app-stdlib/js/live-doc.js` and a vendored Yjs, y-protocols and lib0; `{ inline }` on
+`writeFile` in `app/bg/web-apis/bg/autobase.ts` (`buildPutInlineOp`) and the mobile dispatcher;
 `app/bg/web-apis/bg/peersockets.ts` (Writer proof, `writerKey` on peer events) plus its docs triad;
 `app/lib/schemas/walled.garden/live-doc.ts` and `docs.ts` registered per *Adding a walled.garden
 schema*; the Live Doc skip in `app/bg/hyper/drafts.js`; and in nomad.dev a `docs` template
@@ -180,8 +240,8 @@ the WebMCP tools.
 
 ## Rollout
 
-- **Phase 0:** the Q1/Q2 spike (`app/scripts/spike-live-doc.mjs`): two in-process Writers on real
-  `nomad.fs`, the merge, compaction under concurrency, and the numbers.
+- **Phase 0 (done):** `app/scripts/spike-live-doc.mjs` answers Q1 to Q4 in process. Still to do:
+  the same two Writers on two machines over Hyperswarm, to confirm the trip counts on a real network.
 - **Phase 1:** `live-doc.js` on the durable path only, and a plain-text Live Doc page to try it.
 - **Phase 2:** the Writer proof in peersockets, then the live room and presence.
 - **Phase 3:** the docs template (rich text, page tree, `content.md`, WebMCP tools), the schemas and
