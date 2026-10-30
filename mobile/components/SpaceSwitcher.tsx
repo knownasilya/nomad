@@ -20,17 +20,29 @@ interface Props {
   spaces: Space[]
   activeSpaceId: string
   vaultKeys: string[]
+  peopleKeys?: string[] // Spaces shared with other people (ADR-0029)
   onSwitch: (id: string) => void
   onCreate: (opts: { name: string; color: string }) => Promise<unknown> | unknown
+  // Join a shared Space with a code from its owner. Resolves once they approve; rejects with why not.
+  onJoin?: (opts: { code: string; name: string }) => Promise<unknown>
 }
 
 // Space switcher — a bottom sheet listing spaces (color dot + name + active check) with a create
 // form, mirroring nomad desktop's spaces menu (app/fg/shell-menus/spaces.js).
-export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId, vaultKeys, onSwitch, onCreate }: Props) {
+export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId, vaultKeys, peopleKeys = [], onSwitch, onCreate, onJoin }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const shared = new Set(vaultKeys)
-  const anyShared = spaces.some((sp) => sp.rootDriveKey && shared.has(sp.rootDriveKey))
+  const withPeople = new Set(peopleKeys)
+  const anyShared = spaces.some((sp) => sp.rootDriveKey && shared.has(sp.rootDriveKey) && !withPeople.has(sp.rootDriveKey))
+  const anyPeople = spaces.some((sp) => sp.rootDriveKey && withPeople.has(sp.rootDriveKey))
+
+  // Joining a shared Space: a code, the name the others see, then a wait for an owner to approve.
+  const [joining, setJoining] = useState(false)
+  const [code, setCode] = useState('')
+  const [ownName, setOwnName] = useState('')
+  const [waiting, setWaiting] = useState(false)
+  const [joinError, setJoinError] = useState('')
 
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -38,6 +50,10 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
   const [busy, setBusy] = useState(false)
 
   const reset = () => {
+    setJoining(false)
+    setCode('')
+    setWaiting(false)
+    setJoinError('')
     setCreating(false)
     setName('')
     setColor(SPACE_COLORS[0])
@@ -62,6 +78,20 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
     }
   }
 
+  const join = async () => {
+    if (!onJoin || !code.trim()) return
+    setWaiting(true)
+    setJoinError('')
+    try {
+      await onJoin({ code: code.trim(), name: ownName.trim() })
+      reset()
+      onClose()
+    } catch (err) {
+      setJoinError((err as Error)?.message || String(err))
+      setWaiting(false)
+    }
+  }
+
   return (
     <BottomSheet visible={visible} onClose={close} style={s.sheet}>
       <Text style={s.title}>Spaces</Text>
@@ -78,9 +108,11 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
           >
             <View style={[s.dot, { backgroundColor: sp.color }]} />
             <Text style={[s.rowName, sp.id === activeSpaceId && s.rowNameActive]} numberOfLines={1}>{sp.name}</Text>
-            {sp.rootDriveKey && shared.has(sp.rootDriveKey)
-              ? <Icon name='sync-alt' size={13} color={t.secure} style={s.shared} />
-              : null}
+            {sp.rootDriveKey && withPeople.has(sp.rootDriveKey)
+              ? <Icon name='user-friends' size={13} color={t.accent} style={s.shared} />
+              : sp.rootDriveKey && shared.has(sp.rootDriveKey)
+                ? <Icon name='sync-alt' size={13} color={t.secure} style={s.shared} />
+                : null}
             {sp.id === activeSpaceId ? <Icon name='check' size={15} color={t.accent} /> : null}
           </Pressable>
         ))}
@@ -91,8 +123,56 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
           <Text style={s.legend}>Shared across your devices</Text>
         </View>
       ) : null}
+      {anyPeople ? (
+        <View style={s.legendRow}>
+          <Icon name='user-friends' size={11} color={t.accent} />
+          <Text style={s.legend}>Shared with other people</Text>
+        </View>
+      ) : null}
 
-      {creating ? (
+      {joining ? (
+        <View style={s.form}>
+          {waiting ? (
+            <View style={s.waitRow}>
+              <ActivityIndicator color={t.accent} />
+              <Text style={s.waitText}>Waiting for an owner to approve you…</Text>
+            </View>
+          ) : (
+            <>
+              <TextInput
+                style={s.input}
+                placeholder='Code'
+                placeholderTextColor={t.textMuted}
+                value={code}
+                onChangeText={(v) => { setCode(v); setJoinError('') }}
+                autoCapitalize='none'
+                autoCorrect={false}
+                spellCheck={false}
+                autoFocus
+              />
+              <TextInput
+                style={s.input}
+                placeholder='Your name, as the others see it'
+                placeholderTextColor={t.textMuted}
+                value={ownName}
+                onChangeText={setOwnName}
+                onSubmitEditing={join}
+              />
+            </>
+          )}
+          {joinError ? <Text style={s.error}>{joinError}</Text> : null}
+          <View style={s.formActions}>
+            <TouchableOpacity style={s.btnGhost} onPress={reset}>
+              <Text style={s.btnGhostText}>Cancel</Text>
+            </TouchableOpacity>
+            {waiting ? null : (
+              <TouchableOpacity style={[s.btn, !code.trim() && s.btnDisabled]} onPress={join} disabled={!code.trim()}>
+                <Text style={s.btnText}>Join</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      ) : creating ? (
         <View style={s.form}>
           <TextInput
             style={s.input}
@@ -128,6 +208,12 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
           <Text style={s.newBtnText}>New space</Text>
         </Pressable>
       )}
+      {onJoin && !creating && !joining ? (
+        <Pressable style={s.newBtn} onPress={() => setJoining(true)} android_ripple={{ color: t.ripple }} accessibilityRole='button'>
+          <View style={s.newIcon}><Icon name='sign-in-alt' size={13} color={t.accent} /></View>
+          <Text style={s.newBtnText}>Join a shared space</Text>
+        </Pressable>
+      ) : null}
     </BottomSheet>
   )
 }
@@ -172,6 +258,9 @@ function makeStyles (t: Theme) {
     btnGhostText: { color: t.textDim, fontSize: 15, fontWeight: '500' },
     btn: { backgroundColor: t.accent, borderRadius: radius.pill, minHeight: 40, justifyContent: 'center', paddingHorizontal: space.xl, alignItems: 'center', minWidth: 88 },
     btnDisabled: { opacity: 0.5 },
-    btnText: { color: t.onAccent, fontSize: 15, fontWeight: '600' }
+    btnText: { color: t.onAccent, fontSize: 15, fontWeight: '600' },
+    waitRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 48 },
+    waitText: { color: t.textDim, fontSize: 14 },
+    error: { color: t.danger, fontSize: 13 }
   })
 }

@@ -12,6 +12,7 @@ import { parseHyperUrl } from './lib/hyper-url.mjs'
 import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault, publishOwnSpaces, publishOwnVersion } from './lib/vault.mjs'
 import * as drafts from './lib/drafts.mjs'
 import * as vaultApps from './lib/vault-apps.mjs'
+import * as spaceLib from './lib/space-library.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
 import Protomux from 'protomux'
 import c from 'compact-encoding'
@@ -130,6 +131,43 @@ function setVault (base) {
   vault = base
   if (vault) vault.on('update', vaultChanged)
   vaultChanged()
+}
+
+// Shared Spaces (ADR-0029, lib/space-library.mjs). A shared Space's feeds, Notes, Names and drive
+// list are in its Space Library. Each Library this phone opens tells the UI when it changes, as the
+// Vault does, and keeps this phone's writer key asked for (or listed) while this person can edit.
+// `space-libraries.json` keeps the namespace of each Library this phone joined itself.
+const joinedNsPath = join(storagePath, 'space-libraries.json')
+try {
+  const saved = fs.existsSync(joinedNsPath) ? JSON.parse(b4a.toString(fs.readFileSync(joinedNsPath))) : {}
+  for (const [key, ns] of Object.entries(saved)) manager.joinedNs.set(key, ns)
+} catch {}
+function rememberJoined (library, ns) {
+  try { fs.writeFileSync(joinedNsPath, b4a.from(JSON.stringify(Object.fromEntries(manager.joinedNs)))) } catch {}
+}
+const watchedLibraries = new Set()
+const keptAt = new Map() // library -> last keepWriter time
+async function libraryOf (space) {
+  const lib = await spaceLib.libraryFor({ vault, manager }, space)
+  if (!lib) return null
+  if (!watchedLibraries.has(lib.library)) {
+    watchedLibraries.add(lib.library)
+    lib.base.on('update', vaultChanged)
+  }
+  if (Date.now() - (keptAt.get(lib.library) || 0) > 60000) {
+    keptAt.set(lib.library, Date.now())
+    spaceLib.keepWriter({ vault }, lib).catch((err) => console.log('[space-library] keepWriter', err && err.message))
+  }
+  return lib
+}
+vaultApps.useSpaceLibraries(libraryOf)
+
+// Open every shared Space's Library in the background, so a Space switch or a name lookup finds it
+// warm instead of waiting on the swarm.
+async function warmLibraries (spaces) {
+  for (const sp of spaces || []) {
+    if (sp && sp.library && !sp.movedTo) libraryOf(sp.rootDriveKey).catch(() => {})
+  }
 }
 
 // AI Bridge (ADR-0013): this phone is the AI Client. `getVault` is late-bound — it returns the
@@ -562,12 +600,19 @@ async function handleApps ({ reqId, app, action, ...args }) {
       return
     }
     if (!vault) {
-      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : 'Link this phone to use Reader and Notes' })
+      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : 'Link this phone to use Reader and Notes' })
       return
     }
     let value
     const { space } = args // the active Space (its Root Drive key)
-    if (app === 'reader' && action === 'state') value = await vaultApps.readerState(vault, space)
+    // Shared Spaces (ADR-0029): join one with a code, then mark the Space the UI made for it.
+    if (app === 'spaces' && action === 'join') value = await spaceLib.join({ store, manager }, args.code, { name: args.name }, rememberJoined)
+    else if (app === 'spaces' && action === 'attach') {
+      await spaceLib.attach({ vault }, args)
+      value = await spaceLib.status({ vault, manager }, args.rootDriveKey)
+      vaultChanged()
+    } else if (app === 'spaces' && action === 'status') value = await spaceLib.status({ vault, manager }, space)
+    else if (app === 'reader' && action === 'state') value = await vaultApps.readerState(vault, space)
     else if (app === 'reader' && action === 'follow') value = await vaultApps.follow(vault, space, args.url)
     else if (app === 'reader' && action === 'unfollow') value = await vaultApps.unfollow(vault, space, args.url)
     else if (app === 'reader' && action === 'saveRead') value = await vaultApps.saveRead(vault, space, args.add, args.loaded)
@@ -652,7 +697,11 @@ async function handleAddVaultSpace ({ reqId, rootDriveKey, name, icon, color }) 
 // only shows a pin that has one; the UI decides, since it knows the bookmark hrefs.
 async function handleBookmarks ({ reqId, action, rootDriveKey, ns = null, href, title, addBookmark = false }) {
   try {
-    const key = b4a.from(rootDriveKey, 'hex')
+    // A shared Space keeps its bookmarks in its Space Library (ADR-0029).
+    const lib = await libraryOf(rootDriveKey).catch(() => null)
+    if (lib && action !== 'list' && !lib.writable) throw new Error('You can view this Space, but not change it')
+    if (lib) ns = null
+    const key = lib ? spaceLib.registryKey(lib) : b4a.from(rootDriveKey, 'hex')
     if (action === 'add') await manager.addBookmark(key, ns, { href, title })
     else if (action === 'remove') await manager.removeBookmark(key, ns, href)
     else if (action === 'pin') {
@@ -669,7 +718,11 @@ async function handleBookmarks ({ reqId, action, rootDriveKey, ns = null, href, 
 async function handleSpaceDrives ({ reqId, rootDriveKey, ns = null }) {
   console.log('[registry] handleSpaceDrives', rootDriveKey && rootDriveKey.slice(0, 8), 'ns', !!ns)
   try {
-    const drives = await manager.readDriveRegistry(b4a.from(rootDriveKey, 'hex'), ns)
+    // A shared Space lists its drives in its Space Library (ADR-0029).
+    const lib = await libraryOf(rootDriveKey).catch(() => null)
+    const drives = lib
+      ? await manager.readDriveRegistry(spaceLib.registryKey(lib), null)
+      : await manager.readDriveRegistry(b4a.from(rootDriveKey, 'hex'), ns)
     send(RPC_SPACE_DRIVES_RESULT, { reqId, ok: true, drives })
   } catch (err) {
     console.log('[registry] handleSpaceDrives error', err && err.message)
@@ -679,7 +732,11 @@ async function handleSpaceDrives ({ reqId, rootDriveKey, ns = null }) {
 
 async function handleSpaceAddDrive ({ reqId, rootDriveKey, ns = null, key, type }) {
   try {
-    const drives = await manager.addDriveToRegistry(b4a.from(rootDriveKey, 'hex'), ns, { key, type })
+    const lib = await libraryOf(rootDriveKey).catch(() => null)
+    if (lib && !lib.writable) throw new Error('You can view this Space, but not change it')
+    const drives = lib
+      ? await manager.addDriveToRegistry(spaceLib.registryKey(lib), null, { key, type })
+      : await manager.addDriveToRegistry(b4a.from(rootDriveKey, 'hex'), ns, { key, type })
     send(RPC_SPACE_DRIVES_RESULT, { reqId, ok: true, drives })
   } catch (err) {
     send(RPC_SPACE_DRIVES_RESULT, { reqId, ok: false, drives: [], message: err.message || String(err) })
@@ -776,6 +833,7 @@ async function handleVaultStatus ({ reqId, spaceKeys = [], ownSpaces = null, own
       send(RPC_VAULT, { reqId, hasVault: false, removed: true })
       return
     }
+    warmLibraries(index.spaces)
     console.log('[vault] status devices', devices.length, 'spaces', (index.spaces || []).length,
       'writable', index.writable, 'ownPresent', present,
       'thisKey', thisDeviceKey ? thisDeviceKey.slice(0, 8) : null,

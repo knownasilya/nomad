@@ -302,6 +302,29 @@ export async function delAppRecord(path) {
   await _delRecord(await _writableVault(), path);
 }
 
+// The paths of the records under `prefix`, for deleting them.
+export async function listAppRecordPaths(prefix) {
+  const sess = await getVault();
+  if (!sess) return [];
+  return (await _readPrefixEntries(sess, prefix)).map((r) => r.path);
+}
+
+// Set a Space's sharing fields on its Vault record (ADR-0029): `library`, `role`, `memberId`,
+// `confirmed`, `removed`. The user's other Devices read the Space's library from there.
+export async function putSpaceShare(rootDriveKey, fields) {
+  const sess = await _writableVault();
+  const path = `${SPACES_PREFIX}${rootDriveKey}.json`;
+  const existing = await _readRecord(sess, path);
+  if (!existing || existing.movedTo) throw new Error('This Space isn’t in your Vault');
+  await _putRecord(sess, path, { ...existing, ...fields });
+}
+
+// Forget a Space the user left: drop its record so their other Devices stop showing it.
+export async function removeSpace(rootDriveKey) {
+  const sess = await _writableVault();
+  await _delRecord(sess, `${SPACES_PREFIX}${rootDriveKey}.json`);
+}
+
 async function _writableVault() {
   const sess = await ensureVault();
   if (!sess.writable) {

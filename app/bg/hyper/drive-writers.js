@@ -14,6 +14,7 @@ import b4a from 'b4a';
 import * as logLib from '../logger';
 import * as autobases from './autobases';
 import * as vault from './vault';
+import * as spaceLibrary from './space-library';
 import {
   DRIVE_WRITERS_PREFIX,
   grantPath,
@@ -40,11 +41,13 @@ async function listGrants() {
 }
 
 // What this Device can do about editing the Drive `key`:
-// { writable, canAsk, legacy, linked, request: { pending, granted, requestedAt } | null }.
-// `canAsk` needs a Vault shared with another Device, and a writer key of this Drive's own.
+// { writable, canAsk, legacy, linked, request: { pending, granted, requestedAt } | null, space }.
+// `canAsk` needs a Vault shared with another Device, or a shared Space the Drive is in, and a writer
+// key of this Drive's own. `space` is set for a Drive of a shared Space (ADR-0029):
+// { space, role, ask: 'editor' | 'request', state }.
 export async function status(key) {
   if (!isKey(key) || !(await autobases.isKnownAutobase(key))) {
-    return { writable: false, canAsk: false, legacy: false, linked: false, request: null };
+    return { writable: false, canAsk: false, legacy: false, linked: false, request: null, space: null };
   }
   const sess = await autobases.getOrLoadCollaborativeDrive(key);
   const writerKey = hex(sess?.base?.local?.key);
@@ -53,24 +56,30 @@ export async function status(key) {
   const legacy = !!writerKey && writerKey === device;
   const request = writerKey ? requestState(await listGrants(), { drive: key, writerKey }) : null;
   const writable = !!sess?.writable;
-  return { writable, canAsk: !writable && linked && !legacy && !!device, legacy, linked, request };
+  const space = !writable && writerKey && !legacy ? await spaceLibrary.driveStatus(key, writerKey).catch(() => null) : null;
+  return { writable, canAsk: !writable && (linked || !!space) && !legacy && !!writerKey, legacy, linked, request, space };
 }
 
 // Ask the user's other Devices to let this one edit the Drive `key`. Returns status().
-export async function request(key) {
+export async function request(key, { note = '' } = {}) {
   const st = await status(key);
   if (st.writable) return st;
   if (st.legacy) {
     throw new Error('This drive was opened on this device before each drive had its own key, so it can’t be edited here yet');
   }
-  if (!st.linked) throw new Error('Link another device first. A device that can edit this drive allows this one.');
+  if (!st.linked && !st.space) throw new Error('Link another device first. A device that can edit this drive allows this one.');
   const sess = await autobases.getOrLoadCollaborativeDrive(key);
   const writerKey = hex(sess.base.local.key);
   const device = await ownDevice();
-  const own = (await vault.listDevices()).find((d) => d.key === device);
-  const rec = makeGrantRequest({ drive: key, writerKey, device, name: own?.name });
-  await vault.putAppRecord(grantPath(key, writerKey), rec);
-  logger.info('Asked to edit a drive', { drive: key, writerKey });
+  // The user's own Devices grant with no prompt (one of them may write the Drive), and a shared
+  // Space's members do as its rules say (ADR-0029 §6, §7). Ask both; whoever writes the Drive answers.
+  if (st.linked && device) {
+    const own = (await vault.listDevices()).find((d) => d.key === device);
+    const rec = makeGrantRequest({ drive: key, writerKey, device, name: own?.name });
+    await vault.putAppRecord(grantPath(key, writerKey), rec);
+  }
+  if (st.space) await spaceLibrary.askForDrive(key, writerKey, { device, note });
+  logger.info('Asked to edit a drive', { drive: key, writerKey, space: !!st.space });
   return status(key);
 }
 
@@ -141,8 +150,15 @@ async function _sync() {
 // Only Root Drives already open here. Returns how many it asked for.
 async function askForSpaceRoots(records, self) {
   let asked = 0;
+  // Each Space's Root Drive, and the Space Library of a shared Space this person can edit (ADR-0029
+  // §5): the member's Device that writes the Library grants their other Devices.
+  const keys = [];
   for (const space of await vault.listSpaces()) {
-    const key = space?.rootDriveKey;
+    if (space?.movedTo) continue;
+    keys.push(space?.rootDriveKey);
+    if (isKey(space?.library) && (space.role === 'owner' || space.role === 'editor') && !space.removed) keys.push(space.library);
+  }
+  for (const key of keys) {
     const drive = isKey(key) ? autobases.getCollaborativeDrive(key) : null;
     const writerKey = hex(drive?.base?.local?.key);
     if (!drive || drive.writable || !writerKey || writerKey === self) continue;
@@ -152,7 +168,7 @@ async function askForSpaceRoots(records, self) {
       const rec = makeGrantRequest({ drive: key, writerKey, device: self, name: own?.name });
       await vault.putAppRecord(grantPath(key, writerKey), rec);
       asked++;
-      logger.info('Asked to edit a Space Root Drive', { drive: key, writerKey });
+      logger.info('Asked to edit a Space’s drive', { drive: key, writerKey });
     } catch (e) {
       logger.warn('Could not ask to edit a Space Root Drive', { drive: key, error: e.toString() });
     }

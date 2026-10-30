@@ -3,6 +3,7 @@ import { decodeInlineJson } from '../../../shared/fs-core.mjs'
 import * as apps from '../../../shared/vault-apps.mjs'
 import * as names from '../../../shared/names.mjs'
 import * as ot from '../../../shared/open-tabs.mjs'
+import * as sl from '../../../shared/space-library.mjs'
 import { inlineOp, boundedUpdate } from './vault.mjs'
 import { parseHyperUrl } from './hyper-url.mjs'
 import { DRIVE_AUTOBASE, DRIVE_HYPERDRIVE } from '../../rpc-commands.mjs'
@@ -47,26 +48,78 @@ async function delRecord (base, path) {
   await base.update()
 }
 
+// Shared Spaces (ADR-0029)
+// =
+//
+// A shared Space's feeds, Notes and Names are in its Space Library, not the Vault. backend.mjs
+// hands in `libraryOf(space)` (lib/space-library.mjs libraryFor), which gives the open Library of a
+// shared Space, or null. With none set, everything is in the Vault.
+
+let libraryOf = async () => null
+export function useSpaceLibraries (fn) {
+  libraryOf = fn || (async () => null)
+}
+
+const KINDS = {
+  notes: { vault: apps.notesPrefix, lib: sl.LIB_NOTES },
+  names: { vault: names.namesPrefix, lib: sl.LIB_NAMES },
+  follows: { vault: apps.followsPrefix, lib: sl.LIB_FOLLOWS }
+}
+
+// Where a Space's own records of `kind` are: its Space Library once shared, else the Vault. `at`
+// turns the record's Vault path into its path there. The user's own (`space` null) are in the Vault.
+async function placeOf (base, space, kind) {
+  const vaultPrefix = KINDS[kind].vault(space)
+  const lib = space ? await libraryOf(space).catch(() => null) : null
+  if (!lib) return { base, prefix: vaultPrefix, at: (p) => p, shared: false, writable: !!base.writable }
+  return {
+    base: lib.base,
+    prefix: KINDS[kind].lib,
+    at: (p) => KINDS[kind].lib + p.slice(vaultPrefix.length),
+    shared: true,
+    writable: !!lib.base.writable
+  }
+}
+
+const readAt = (place, path) => readRecord(place.base, place.at(path))
+
+async function putAt (place, path, obj) {
+  if (place.shared && !place.writable) throw new Error('You can view this Space, but not change it')
+  await putRecord(place.base, place.at(path), obj)
+}
+
+async function delAt (place, path) {
+  if (place.shared && !place.writable) throw new Error('You can view this Space, but not change it')
+  await delRecord(place.base, place.at(path))
+}
+
 // Reader
 // =
 
+// `canFollow` is false in a shared Space this person can only view. Read marks are always theirs.
 export async function readerState (base, space) {
   await boundedUpdate(base)
+  const place = await placeOf(base, space, 'follows')
+  if (place.shared) await boundedUpdate(place.base, 2000)
   return {
-    follows: apps.followUrls(await readPrefix(base, apps.followsPrefix(space))),
+    follows: apps.followUrls(await readPrefix(place.base, place.prefix)),
     read: (await readRecord(base, apps.readPath(space)))?.read || [],
-    writable: !!base.writable
+    writable: !!base.writable,
+    shared: place.shared,
+    canFollow: place.writable
   }
 }
 
 export async function follow (base, space, url) {
   const path = apps.followPath(space, url) // throws for a non-hyper address
-  if (!(await readRecord(base, path))) await putRecord(base, path, apps.followRecord(url))
+  const place = await placeOf(base, space, 'follows')
+  if (!(await readAt(place, path))) await putAt(place, path, apps.followRecord(url))
   return readerState(base, space)
 }
 
 export async function unfollow (base, space, url) {
-  await delRecord(base, apps.followPath(space, url))
+  const place = await placeOf(base, space, 'follows')
+  await delAt(place, apps.followPath(space, url))
   return readerState(base, space)
 }
 
@@ -148,7 +201,21 @@ const withSpace = (space) => (note) => ({ ...note, space: space || null })
 const stored = ({ space, title, snippet, ...note }) => note
 
 async function notesIn (base, space = null) {
-  return (await readPrefix(base, apps.notesPrefix(space))).filter(apps.isNote).map(withSpace(space))
+  const place = await placeOf(base, space, 'notes')
+  return (await readPrefix(place.base, place.prefix)).filter(apps.isNote).map(withSpace(space))
+}
+
+// A Note's record, wherever its Space keeps it (`space` null: the user's own).
+async function getNote (base, id, space) {
+  return readAt(await placeOf(base, space, 'notes'), apps.notePath(id, space))
+}
+
+async function putNote (base, id, space, note) {
+  await putAt(await placeOf(base, space, 'notes'), apps.notePath(id, space), note)
+}
+
+async function delNote (base, id, space) {
+  await delAt(await placeOf(base, space, 'notes'), apps.notePath(id, space))
 }
 
 // The Notes a Space sees, newest first: the user's, and the Space's own.
@@ -163,15 +230,25 @@ async function findStored (base, id, space) {
   if (own) return { space: null, prev: own }
   space = spaceOrNull(space)
   if (space) {
-    const theirs = await readRecord(base, apps.notePath(id, space))
+    const theirs = await getNote(base, id, space)
     if (theirs) return { space, prev: theirs }
   }
   return { space: null, prev: null }
 }
 
+// In a shared Space, `shared` is true and `canWriteSpace` says whether this person can write its Notes.
 export async function listNotes (base, space = null) {
   await boundedUpdate(base)
-  return { notes: (await allNotes(base, space)).map(withPreview), space: spaceOrNull(space), writable: !!base.writable }
+  space = spaceOrNull(space)
+  const place = space ? await placeOf(base, space, 'notes') : null
+  if (place?.shared) await boundedUpdate(place.base, 2000)
+  return {
+    notes: (await allNotes(base, space)).map(withPreview),
+    space,
+    writable: !!base.writable,
+    shared: !!place?.shared,
+    canWriteSpace: place ? place.writable : !!base.writable
+  }
 }
 
 // Create (no id) or update a Note, and return the stored Note. `baseUpdatedAt` is the updatedAt of
@@ -183,13 +260,13 @@ export async function saveNote (base, { id, body, baseUpdatedAt, inSpace = false
   const found = id ? await findStored(base, id, space) : { space: null, prev: null }
   const where = found.prev ? found.space : inSpace && space ? space : null
   const { note, write } = apps.planNoteSave({ id, body, baseUpdatedAt }, found.prev)
-  if (write) await putRecord(base, apps.notePath(note.id, where), note)
+  if (write) await putNote(base, note.id, where, note)
   return withPreview(withSpace(where)(note))
 }
 
 export async function deleteNote (base, id, space = null) {
   const found = await findStored(base, id, space) // notePath validates the id
-  if (found.prev) await delRecord(base, apps.notePath(id, found.space))
+  if (found.prev) await delNote(base, id, found.space)
 }
 
 // Move a Note into the Space (`inSpace` true) or out to the user's Notes. Returns it.
@@ -200,8 +277,8 @@ export async function moveNote (base, { id, inSpace = false, space = null } = {}
   const to = inSpace ? space : null
   if (inSpace && !to) throw new Error('This Space isn’t ready yet')
   if (to === found.space) return withPreview(withSpace(to)(found.prev))
-  await putRecord(base, apps.notePath(id, to), found.prev)
-  await delRecord(base, apps.notePath(id, found.space))
+  await putNote(base, id, to, found.prev)
+  await delNote(base, id, found.space)
   return withPreview(withSpace(to)(found.prev))
 }
 
@@ -210,7 +287,7 @@ export async function moveNote (base, { id, inSpace = false, space = null } = {}
 export async function renameNoteLinks (base, { id, from, to, space = null } = {}) {
   const changes = apps.linkRenames(await allNotes(base, space), id, from, to)
   for (const { note, body } of changes) {
-    await putRecord(base, apps.notePath(note.id, note.space), apps.makeNote({ id: note.id, body }, stored(note)))
+    await putNote(base, note.id, note.space, apps.makeNote({ id: note.id, body }, stored(note)))
   }
   return changes.length
 }
@@ -226,7 +303,8 @@ export async function renameNoteLinks (base, { id, from, to, space = null } = {}
 // the view as it is, without waiting on an update, so a navigation never stalls.
 
 async function namesIn (base, space = null) {
-  return (await readPrefix(base, names.namesPrefix(space))).filter(names.isNameRecord)
+  const place = await placeOf(base, space, 'names')
+  return (await readPrefix(place.base, place.prefix)).filter(names.isNameRecord)
 }
 
 // Every name the Space sees, with `space` on each, and `hidden` on a Space name the user's own hides.
@@ -241,13 +319,21 @@ async function visibleNames (base, space) {
 
 async function readName (base, name, space = null) {
   if (names.nameError(name)) return null
-  const rec = await readRecord(base, names.namePath(name, space))
+  const rec = await readAt(await placeOf(base, space, 'names'), names.namePath(name, space))
   return names.isNameRecord(rec) ? rec : null
 }
 
 export async function listNames (base, space = null) {
   await boundedUpdate(base)
-  return { names: await allNames(base, space), space: spaceOrNull(space), writable: !!base.writable }
+  space = spaceOrNull(space)
+  const place = space ? await placeOf(base, space, 'names') : null
+  return {
+    names: await allNames(base, space),
+    space,
+    writable: !!base.writable,
+    shared: !!place?.shared,
+    canWriteSpace: place ? place.writable : !!base.writable
+  }
 }
 
 // Where the address bar entry `input` goes, or null when it isn't a name. "blog", "hyper://blog/"
@@ -302,15 +388,17 @@ export async function setName (base, { name, url, title, previous, inSpace = fal
     throw new Error(`“${clean}” already names ${existing.title || existing.url}`)
   }
   const rec = names.makeNameRecord({ name: clean, url: target, title }, existing)
-  await putRecord(base, names.namePath(clean, where), rec)
-  if (previous && !same && (await readName(base, previous, from))) await delRecord(base, names.namePath(previous, from))
+  await putAt(await placeOf(base, where, 'names'), names.namePath(clean, where), rec)
+  if (previous && !same && (await readName(base, previous, from))) {
+    await delAt(await placeOf(base, from, 'names'), names.namePath(previous, from))
+  }
   return { ...rec, space: where }
 }
 
 export async function removeName (base, name, { inSpace = false, space = null } = {}) {
   const where = inSpace ? spaceOrNull(space) : null
   if (inSpace && !where) throw new Error('This Space isn’t ready yet')
-  await delRecord(base, names.namePath(name, where))
+  await delAt(await placeOf(base, where, 'names'), names.namePath(name, where))
 }
 
 // Open tabs (shared/open-tabs.mjs)

@@ -15,6 +15,7 @@ import * as logLib from '../logger';
 import * as vault from './vault';
 import * as drives from './drives';
 import * as spacesDb from '../dbs/spaces';
+import * as spaceLibrary from './space-library';
 import {
   namesPrefix,
   namePath,
@@ -44,6 +45,7 @@ export function setup() {
   vault.events.on('changed', () => refresh());
   // A Space added here or synced from another Device: read its names too.
   spacesDb.events.on('changed', () => scheduleRefresh());
+  spaceLibrary.events.on('changed', () => scheduleRefresh());
 }
 
 function scheduleRefresh() {
@@ -90,7 +92,8 @@ export async function refresh() {
   const nextSpaces = new Map();
   if (sess) {
     for (const key of spaceKeys()) {
-      const m = toMap(await vault.listAppRecords(namesPrefix(key)));
+      // A shared Space's names are in its Space Library (ADR-0029).
+      const m = toMap(await (await spaceLibrary.records(key, 'names')).list().catch(() => []));
       if (m.size) nextSpaces.set(key, m);
     }
   }
@@ -149,15 +152,15 @@ export function approvedFor(url, space = null) {
 export async function set({ name, url, title, previous, previousSpace = null, space = null, auto = false }) {
   const err = nameError(name);
   if (err) throw new Error(err);
-  const existing = lookup(name, space) || (await vault.readAppRecord(namePath(name, space)));
+  const existing = lookup(name, space) || (await getRecord(name, space));
   const same = previous === name && (previousSpace || null) === (space || null);
   if (existing && existing.url !== url && !same) {
     throw new Error(`“${name}” already names ${existing.title || existing.url}`);
   }
   const rec = makeNameRecord({ name, url, title, auto }, existing);
-  await vault.putAppRecord(namePath(name, space), rec);
+  await putRecord(name, space, rec);
   if (previous && !same && lookup(previous, previousSpace)) {
-    await vault.delAppRecord(namePath(previous, previousSpace));
+    await delRecord(previous, previousSpace);
   }
   await refresh();
   logger.info('Set name', { name, url, auto, space: !!space });
@@ -165,8 +168,26 @@ export async function set({ name, url, title, previous, previousSpace = null, sp
 }
 
 export async function remove(name, space = null) {
-  await vault.delAppRecord(namePath(name, space));
+  await delRecord(name, space);
   await refresh();
+}
+
+// The user's own names are in the Vault; a Space's in the Vault or, shared, its Space Library.
+const nameFile = (name) => namePath(name).slice(namesPrefix().length);
+
+async function getRecord(name, space) {
+  if (!space) return vault.readAppRecord(namePath(name));
+  return (await spaceLibrary.records(space, 'names')).get(nameFile(name));
+}
+
+async function putRecord(name, space, rec) {
+  if (!space) return vault.putAppRecord(namePath(name), rec);
+  return (await spaceLibrary.records(space, 'names')).put(nameFile(name), rec);
+}
+
+async function delRecord(name, space) {
+  if (!space) return vault.delAppRecord(namePath(name));
+  return (await spaceLibrary.records(space, 'names')).del(nameFile(name));
 }
 
 // Where a tab in `space` that opens `url` should go instead, or null when `url` isn't

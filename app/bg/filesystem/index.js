@@ -15,6 +15,7 @@ import * as autobases from '../hyper/autobases';
 import * as vault from '../hyper/vault';
 import * as devicePresence from '../hyper/device-presence';
 import * as driveWriters from '../hyper/drive-writers';
+import * as spaceLibrary from '../hyper/space-library';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'filesystem' });
 
@@ -198,6 +199,8 @@ export async function setup() {
       }
       // Writer grants between this user's Devices (ADR-0026 §2): grants follow the Vault.
       driveWriters.watch();
+      // Shared Spaces (ADR-0029): open their Space Libraries so they replicate.
+      if (sess) spaceLibrary.watchAll().catch(() => {});
     })
     .catch((e) => logger.warn('Vault startup load failed', { error: e.toString() }));
 
@@ -370,13 +373,85 @@ export function getSpaceIdForWebContents(wcId) {
 
 var spaceDrivesMap = {};
 
+// The drive a Space keeps its Drive Registry (/drives.json) in: its Space Library when the Space is
+// shared (ADR-0029), else its Root Drive. `shared` is true for a Space Library, which is read even
+// while this Device can't write it (a viewer's).
+async function _registryDrive(space) {
+  if (space.root_drive_url) {
+    const rootKey = await hyper.drives.fromURLToKey(space.root_drive_url, true);
+    const lib = await spaceLibrary.forSpace(rootKey).catch(() => null);
+    if (lib) return { drive: lib.sess, shared: true };
+  }
+  return { drive: await getOrSetupSpaceDrive(space), shared: false };
+}
+
+// A Space Library changed: read its Drive Registry again next time.
+spaceLibrary.events.on('changed', ({ space }) => {
+  for (const s of spacesDb.getCachedAll() || []) {
+    try {
+      if (s.root_drive_url && hyper.drives.fromURLToKey(s.root_drive_url) === space) delete spaceDrivesMap[s.id];
+    } catch {}
+  }
+});
+
+// What sharing the Space would move into its Space Library ("4 drives, 12 notes").
+export async function shareSpacePreview(spaceId) {
+  const space = await spacesDb.get(spaceId);
+  if (!space || spaceId === 1) throw new Error('Your Personal Space can’t be shared. Share another Space');
+  const root = await getOrSetupSpaceDrive(space);
+  return spaceLibrary.preview(await hyper.drives.fromURLToKey(space.root_drive_url, true), root);
+}
+
+// Share a Space (ADR-0029 §2). Not the Personal Space, which holds the user's own things.
+export async function shareSpace(spaceId, { name } = {}) {
+  const space = await spacesDb.get(spaceId);
+  if (!space || spaceId === 1) throw new Error('Your Personal Space can’t be shared. Share another Space');
+  const root = await getOrSetupSpaceDrive(space);
+  await vault.ensureVault();
+  await vault.publishSpace(space);
+  const rootKey = await hyper.drives.fromURLToKey(space.root_drive_url, true);
+  const res = await spaceLibrary.share({ space: rootKey, root, meta: space, name });
+  delete spaceDrivesMap[spaceId];
+  return res;
+}
+
+// Join a shared Space with a code: ask, wait for an owner to approve, then make the Space here with
+// its own new Root Drive, pointed at the Space Library. Returns the new local Space.
+export async function joinSpace(code, { name } = {}) {
+  await vault.ensureVault();
+  const { library, memberId, index } = await spaceLibrary.join(code, { name });
+  const existing = (await vault.listSpaces()).find((s) => s.library === library && !s.movedTo);
+  if (existing) throw new Error('You’re already in this Space');
+  let space = await spacesDb.create({ name: index.name, icon: index.icon, color: index.color });
+  await getOrSetupSpaceDrive(space);
+  space = await spacesDb.get(space.id);
+  await vault.publishSpace(space);
+  const rootKey = await hyper.drives.fromURLToKey(space.root_drive_url, true);
+  await vault.putSpaceShare(rootKey, { library, memberId, role: 'viewer' });
+  spaceLibrary.sync(library).catch(() => {});
+  vault.events.emit('spaces-synced', { created: 1 });
+  return space;
+}
+
+// Leave a shared Space: the Library forgets this person (when they can write it), the Vault forgets
+// the Space, and the Space goes from this Device. The caller closes its tabs first.
+export async function leaveSpace(spaceId) {
+  const space = await spacesDb.get(spaceId);
+  if (!space?.root_drive_url) return;
+  const rootKey = await hyper.drives.fromURLToKey(space.root_drive_url, true);
+  await spaceLibrary.leave(rootKey);
+  await vault.removeSpace(rootKey).catch(() => {});
+  delete spaceDrivesMap[spaceId];
+}
+
 export async function configDriveForSpace(url, opts = {}, spaceId = 1) {
   if (spaceId === 1) return configDrive(url, opts);
   const space = await spacesDb.get(spaceId);
   if (!space) return configDrive(url, opts);
-  const spaceDrive = await getOrSetupSpaceDrive(space);
+  const { drive: spaceDrive } = await _registryDrive(space);
   if (!spaceDrive?.writable) {
-    // Space drive is read-only — fall back to the global drives list.
+    // Space drive is read-only (or a Space this person can only view) — fall back to the global
+    // drives list.
     return configDrive(url, opts);
   }
 
@@ -426,8 +501,8 @@ export async function listDrivesForSpace(spaceId, { includeSystem } = {}) {
   if (!spaceDrivesMap[spaceId]) {
     const space = await spacesDb.get(spaceId);
     if (space) {
-      const spaceDrive = await getOrSetupSpaceDrive(space);
-      if (!spaceDrive?.writable) {
+      const { drive: spaceDrive, shared } = await _registryDrive(space);
+      if (!shared && !spaceDrive?.writable) {
         // Non-writable space drive — can't reliably fetch /drives.json without waiting for peers.
         spaceDrivesMap[spaceId] = null; // sentinel: skip future checks
         return listDrives({ includeSystem });
@@ -596,7 +671,7 @@ export async function removeDriveForSpace(url, spaceId = 1) {
   if (!spaceId || spaceId === 1) return removeDrive(url);
   const space = await spacesDb.get(spaceId);
   if (!space) return removeDrive(url);
-  const spaceDrive = await getOrSetupSpaceDrive(space);
+  const { drive: spaceDrive } = await _registryDrive(space);
 
   var release = await lock(`filesystem:drives:space-${spaceId}`);
   try {

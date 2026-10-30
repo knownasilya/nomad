@@ -71,6 +71,9 @@ function applyState(s) {
   state.follows = s.follows || []
   state.writable = s.writable !== false
   state.linked = !!s.linked
+  // A shared Space's feeds are its members' (ADR-0029); a person who can only view it can't change them.
+  state.shared = !!s.shared
+  state.canFollow = s.canFollow !== false
   // Keep marks made here that aren't saved yet.
   state.readSet = new Set([...(s.read || []), ...pendingRead])
   if (state.filter !== 'all' && !state.follows.includes(state.filter)) state.filter = 'all'
@@ -264,7 +267,7 @@ function renderSidebar() {
         current: state.filter === f.url,
         err: !f.ok,
         onclick: () => setFilter(f.url),
-        onremove: () => removeFeed(f.url),
+        onremove: state.canFollow ? () => removeFeed(f.url) : null,
       })
     )
   }
@@ -314,6 +317,11 @@ function setFilter(f) {
 }
 
 function renderAddFeed() {
+  if (!state.canFollow) {
+    return el('div', { class: 'add-feed' }, [
+      el('p', { class: 'sync-note' }, [icon('user-friends'), 'This Space is shared, and you can view it. People who can edit it choose its feeds.']),
+    ])
+  }
   const input = el('input', {
     type: 'text',
     placeholder: 'hyper://… add a feed',
@@ -342,6 +350,9 @@ function renderAddFeed() {
 function syncNote() {
   if (!state.writable) {
     return el('p', { class: 'sync-note' }, [icon('clock'), 'Waiting for your other device. Changes save once this device can write to your Vault.'])
+  }
+  if (state.shared) {
+    return el('p', { class: 'sync-note' }, [icon('user-friends'), 'This Space is shared. Its members see the same feeds.'])
   }
   if (state.linked) {
     return el('p', { class: 'sync-note' }, [icon('sync-alt'), 'Synced with your linked devices.'])

@@ -314,6 +314,20 @@ nomad://history → Tabs From Other Devices (`nomad.vault.listDeviceTabs`). The 
 `mobile/app/index.tsx` over `RPC_APPS` `tabs` and lists them under the tab grid. `sync_open_tabs`
 (Settings → Devices) and the phone's Settings switch turn it off per Device and delete the record.
 
+### Shared Spaces (ADR-0029)
+
+A Space (not Personal) can be shared with other people as **Can view** or **Can edit**. Its library
+(Drive Registry, bookmarks, Reader feeds, Space-only Notes and Names) moves into a **Space Library**,
+its own Autobase; the Vault's space record gains `library`, `role`, `memberId`. Rules and paths are
+`shared/space-library.mjs`; desktop I/O is `app/bg/hyper/space-library.js` (share, invites over the
+shared `BlindPairing` instance, members, Space Writer grants, the `nomad/space-control` channel for a
+viewer's ask); the phone's is `mobile/backend/lib/space-library.mjs` (open, join, attach). Code that
+reads a Space's records must go through `spaceLibrary.records(space, kind)` (desktop) or
+`placeOf(base, space, kind)` (phone `vault-apps.mjs`), and the Drive Registry through
+`_registryDrive(space)` in `bg/filesystem/index.js`, never straight to the Vault or Root Drive, or a
+shared Space reads stale data. UI: My Library → Sharing (`library/js/views/sharing.js`), **Ask to
+edit** in site-info, **Join a shared space** in the phone's Space switcher.
+
 ## Look and feel: every UI supports dark mode and matches the rest
 
 Every new or changed screen must work in light **and** dark, and look like its neighbours.

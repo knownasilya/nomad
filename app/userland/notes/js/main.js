@@ -36,6 +36,9 @@ const state = {
   linked: false, // another Device shares the Vault
   space: null, // this page's Space key, or null
   spaceName: null,
+  shared: false, // this Space is shared with other people (ADR-0029)
+  canWriteSpace: true, // false for a person who can only view the shared Space
+  members: 0,
 };
 
 // The note in the editor: { id: string | null, body, base, openedTitle, conflictOf, inSpace }. id
@@ -145,6 +148,10 @@ async function loadNotes() {
   state.linked = !!res.linked;
   state.space = res.space || null;
   state.spaceName = res.space ? res.spaceName || 'This Space' : null;
+  // A shared Space (ADR-0029): its notes are seen by its members, and a new note goes there.
+  state.shared = !!res.shared;
+  state.canWriteSpace = res.canWriteSpace !== false;
+  state.members = res.members || 0;
   editor?.setNotes(state.notes);
 }
 
@@ -244,7 +251,7 @@ function upsert(note) {
 async function newNote(body = '') {
   await leaveNote();
   view = 'list';
-  draft = { id: null, body, base: null, openedTitle: null, conflictOf: null, inSpace: false };
+  draft = { id: null, body, base: null, openedTitle: null, conflictOf: null, inSpace: !!(state.shared && state.canWriteSpace) };
   dirty = !!body;
   banner = null;
   setUrl(null, true);
@@ -491,7 +498,8 @@ function renderList() {
   const everywhere = notes.filter((n) => !n.space);
   // Under headings only when this Space has notes of its own.
   if (state.spaceName && inSpace.length) {
-    items.push(el('div', { class: 'list-section' }, [icon('thumbtack'), state.spaceName]), ...inSpace.map(item));
+    const head = state.shared ? `${state.spaceName} · ${sharedWith()}` : state.spaceName;
+    items.push(el('div', { class: 'list-section' }, [icon(state.shared ? 'user-friends' : 'thumbtack'), head]), ...inSpace.map(item));
     if (everywhere.length) items.push(el('div', { class: 'list-section' }, [icon('globe'), 'All Spaces']));
   }
   items.push(...everywhere.map(item));
@@ -573,6 +581,18 @@ function renderEditor() {
 // Where the open note is: in every Space, or only in this one. A click moves it.
 function scopeButton() {
   if (!state.spaceName || !draft) return null;
+  if (state.shared) {
+    // A shared Space: the note is seen by its members, or kept private (the user's own).
+    const label = draft.inSpace ? sharedWith() : 'Private';
+    const title = draft.inSpace
+      ? `Seen by everyone in ${state.spaceName}. Click to keep it private`
+      : `Only you see this note. Click to share it with ${state.spaceName}`;
+    return el(
+      'button',
+      { class: 'btn scope', title, 'aria-label': title, disabled: !state.writable || !state.canWriteSpace, onclick: toggleScope },
+      [icon(draft.inSpace ? 'user-friends' : 'lock'), label]
+    );
+  }
   const label = draft.inSpace ? `Only in ${state.spaceName}` : 'All Spaces';
   const title = draft.inSpace ? 'Kept only in this Space. Click to show it in every Space' : `Shown in every Space. Click to keep it only in ${state.spaceName}`;
   return el(
@@ -580,6 +600,12 @@ function scopeButton() {
     { class: 'btn scope', title, 'aria-label': title, disabled: !state.writable, onclick: toggleScope },
     [icon(draft.inSpace ? 'thumbtack' : 'globe'), label]
   );
+}
+
+// "Shared with 2 people": the Space's other members.
+function sharedWith() {
+  const others = Math.max(0, (state.members || 1) - 1);
+  return others ? `Shared with ${others} ${others === 1 ? 'person' : 'people'}` : 'Shared';
 }
 
 async function toggleScope() {
