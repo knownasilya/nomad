@@ -1,4 +1,4 @@
-// The rules behind the AI Sidebar's page control (ADR-0027): what it may touch, which clicks wait
+// The rules behind the AI Sidebar's page control (ADR-0028): what it may touch, which clicks wait
 // for the user, how long a site's yes lasts, and the keys pressKey knows. bg/ui/page-control.js
 // runs the actions; this is the part with no Electron.
 

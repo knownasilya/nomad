@@ -317,7 +317,7 @@ describe('search: a personal turn (the user\'s own AI)', () => {
     expect(() => assertCallAllowed('highlightText', 'highlightText', remote)).toThrow(/not available/);
   });
 
-  it('offers page control to the AI Sidebar only (ADR-0027)', () => {
+  it('offers page control to the AI Sidebar only (ADR-0028)', () => {
     const ACTIONS = ['snapshotPage', 'clickElement', 'typeText', 'pressKey', 'selectOption', 'scrollPage'];
     const names = (c) => c.capabilities.map((x) => x.name);
     // The sidebar: the user's own AI, with a tab, on this computer.

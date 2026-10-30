@@ -142,7 +142,7 @@ export const CAPABILITIES = [
     },
     gates: { personal: true, renderer: true },
   },
-  // Page control (ADR-0027): click, type and scroll on the page in the user's tab, as the user's
+  // Page control (ADR-0028): click, type and scroll on the page in the user's tab, as the user's
   // own mouse and keyboard would. The AI Sidebar only: `tab` leaves out the loopback MCP's other
   // programs, and `renderer` the phone. The first action on a site asks the user, and their yes
   // lasts 30 days for that site.

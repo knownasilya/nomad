@@ -1,5 +1,5 @@
 /*
-Page control (webview preload, isolated world). ADR-0027.
+Page control (webview preload, isolated world). ADR-0028.
 
 The AI Sidebar can click, type and scroll on the page in the user's tab. bg/ui/page-control.js runs
 each action; this world does the parts that need the page: it lists the page's controls with a

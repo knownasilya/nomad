@@ -32,6 +32,7 @@ import {
   DRAFT_PROMPT,
   PAGE_CONTROL_PROMPT,
 } from '../../ai/api-reference.mjs';
+import { genuiPrompt } from '../../../lib/genui/library.mjs';
 import { askOncePerTurn } from '../../ai/vault-tools.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
 import { completionStreamError } from '../../ai/stream-error.mjs';
@@ -267,7 +268,10 @@ async function routeChat(messages, sender, emitter, opts) {
     opts: {
       driveUrl: opts.driveUrl,
       allowWrite: opts.allowWrite,
-      context: opts.context,
+      // The other Device's runtime answers; this window draws the UI, so the prompt for it goes too.
+      context: opts.genUi
+        ? [genuiPrompt(), opts.context].filter(Boolean).join('\n\n---\n\n')
+        : opts.context,
       model: opts.model,
       think: opts.think,
       effort: opts.effort,
@@ -528,7 +532,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   const cli = runtime.kind === 'claude' || runtime.kind === 'cursor';
   const offerTools = opts.tools !== false && runtime.kind !== 'cursor';
   const tools = offerTools && !cli ? MODEL_TOOLS : null;
-  // The AI Sidebar can click and type on the page in the user's tab (ADR-0027). The catalog says
+  // The AI Sidebar can click and type on the page in the user's tab (ADR-0028). The catalog says
   // whether this turn can: not a page's own turn, the phone, or another program on this machine.
   const canControlPage = catalog.capabilities.some((c) => isPageAction(c.name));
 
@@ -543,6 +547,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     // A remote turn's writes stage into a Draft. Without this the model reads back the published
     // file, doubts its own edit and tells the user the phone can't edit.
     offerTools && opts.draft ? DRAFT_PROMPT : '',
+    // The AI Sidebar draws OpenUI Lang fenced in an answer (ADR-0027).
+    opts.genUi ? genuiPrompt() : '',
     opts.context,
   ]
     .filter(Boolean)
@@ -784,7 +790,7 @@ async function executeTool(name, args, sender, opts: any = {}) {
     return runVaultTool(name, args || {}, { ctx, space, permit });
   }
 
-  // Clicking and typing on the page in the user's tab (ADR-0027): the AI Sidebar's turn only. The
+  // Clicking and typing on the page in the user's tab (ADR-0028): the AI Sidebar's turn only. The
   // catalog leaves these out everywhere else; checked again here.
   if (isPageAction(name)) {
     if (!pageSession || !catalog?.personal || remote || !currentTab) {

@@ -249,7 +249,7 @@ export const PERMS = {
     dangerous: true,
     promptTrusted: true,
   },
-  // The AI Sidebar clicking and typing on this site (ADR-0027). Not persisted by the prompt:
+  // The AI Sidebar clicking and typing on this site (ADR-0028). Not persisted by the prompt:
   // bg/ui/page-control.js stores a yes as the time it ends, 30 days on. The site-info panel's
   // Allow (1) and Deny (0) don't end.
   aiPageControl: {

@@ -1,4 +1,4 @@
-// Page control: the AI Sidebar clicks, types and scrolls on the page in the user's tab (ADR-0027).
+// Page control: the AI Sidebar clicks, types and scrolls on the page in the user's tab (ADR-0028).
 // These are the rules that need no Electron: which pages and fields are off limits, which clicks
 // wait for the user's OK, how long "allow on this site" lasts, the keys pressKey knows, and what the
 // model sees of a control. bg/ui/page-control.js runs the actions. Unit tests load this file.

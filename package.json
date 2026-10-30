@@ -8,7 +8,7 @@
     "test": "tests"
   },
   "scripts": {
-    "postinstall": "patch-package && electron-builder install-app-deps && cd app && npm install",
+    "postinstall": "patch-package && electron-builder install-app-deps && cd app && OPENUI_TELEMETRY_DISABLED=1 npm install",
     "test": "node_modules/.bin/vitest run",
     "typecheck": "tsc --project tsconfig.json",
     "lint": "oxlint app shared",
@@ -58,6 +58,7 @@
     "electron-builder": "^23.0.2",
     "electron-notarize": "^0.3.0",
     "fs-jetpack": "^1.2.0",
+    "leaflet": "^1.9.4",
     "lib0": "^0.2.119",
     "oxfmt": "^0.57.0",
     "oxlint": "^1.72.0",

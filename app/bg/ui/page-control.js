@@ -1,4 +1,4 @@
-// Page control: the AI Sidebar clicks, types and scrolls on the page in the user's tab (ADR-0027).
+// Page control: the AI Sidebar clicks, types and scrolls on the page in the user's tab (ADR-0028).
 //
 // Each turn of the sidebar has one session (createSession, made in runChat). Its first page action
 // pins the tab the user is on; later actions go to that tab only, so a tab switch in the middle of a

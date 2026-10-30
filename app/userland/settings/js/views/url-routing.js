@@ -128,22 +128,6 @@ class UrlRoutingSettingsView extends LitElement {
                   />
                 </label>
               </div>
-              <div class="reorder-btns">
-                <a
-                  class=${i === 0 ? 'disabled' : ''}
-                  title="Move up"
-                  @click=${() => this.onMoveRule(i, -1)}
-                >
-                  <span class="fas fa-fw fa-chevron-up"></span>
-                </a>
-                <a
-                  class=${i === this.rules.length - 1 ? 'disabled' : ''}
-                  title="Move down"
-                  @click=${() => this.onMoveRule(i, 1)}
-                >
-                  <span class="fas fa-fw fa-chevron-down"></span>
-                </a>
-              </div>
               <a class="remove-btn" title="Remove rule" @click=${() => this.onRemoveRule(i)}>
                 <span class="fas fa-fw fa-times"></span>
               </a>
@@ -240,12 +224,8 @@ class UrlRoutingSettingsView extends LitElement {
     this.save();
   }
 
-  onMoveRule(i, delta) {
-    this.moveRule(i, i + delta);
-  }
-
   moveRule(from, to) {
-    if (from === to || to < 0 || to >= this.rules.length) return;
+    if (from === to) return;
     const [rule] = this.rules.splice(from, 1);
     this.rules.splice(to, 0, rule);
     this.save();
