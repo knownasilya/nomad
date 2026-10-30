@@ -73,6 +73,7 @@ class Tab extends EventEmitter {
       isHidden: false,
       initialPanes: undefined,
       fromSnapshot: undefined,
+      quietLoad: false,
       spaceId: undefined,
       partition: undefined,
     }
@@ -115,7 +116,7 @@ class Tab extends EventEmitter {
     this.activePaneResize = undefined; // used to track pane resizing
 
     if (opts.fromSnapshot) {
-      this.loadSnapshot(opts.fromSnapshot);
+      this.loadSnapshot(opts.fromSnapshot, { quiet: opts.quietLoad });
     } else if (opts.initialPanes) {
       for (let pane of opts.initialPanes) {
         this.attachPane(pane);
@@ -158,7 +159,7 @@ class Tab extends EventEmitter {
     };
   }
 
-  loadSnapshot(snapshot) {
+  loadSnapshot(snapshot, { quiet = false } = {}) {
     if (snapshot.spaceId) this.spaceId = snapshot.spaceId;
     if (snapshot.partition !== undefined) this.partition = snapshot.partition;
     if (snapshot.groupId) this.groupId = snapshot.groupId;
@@ -192,7 +193,7 @@ class Tab extends EventEmitter {
           stack = this.layout.stacks[this.layout.stacks.length - 1];
         }
 
-        pane.loadURL(paneSnapshot.url);
+        pane.loadURL(paneSnapshot.url, quiet ? { quiet } : undefined);
       }
     }
     if (this.panes[0]) this.setActivePane(this.panes[0]);
@@ -814,6 +815,7 @@ export function create(
     tabIndex: undefined,
     initialPanes: undefined,
     fromSnapshot: undefined,
+    quietLoad: false,
     addedPaneUrls: undefined,
     spaceId: undefined,
   }
@@ -906,6 +908,7 @@ export function create(
       isPinned: opts.isPinned,
       initialPanes: opts.initialPanes,
       fromSnapshot: opts.fromSnapshot,
+      quietLoad: opts.quietLoad,
       spaceId,
       partition,
     });
@@ -1181,9 +1184,11 @@ export function initializeWindowFromSnapshot(win, snapshot) {
         create(win, page);
         continue;
       }
+      // Restored tabs load in the background without a spinner each (Pane.loadURL `quiet`).
       const tab = create(win, null, {
         isPinned: page.isPinned,
         fromSnapshot: page,
+        quietLoad: true,
       });
       if (!tab) continue;
       if (page.isSpaceActive && tab.spaceId) {
