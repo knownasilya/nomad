@@ -28,7 +28,8 @@ class SiteInfoApp extends LitElement {
       requestedPerms: { type: Object },
       forks: { type: Array },
       names: { type: Array }, // the user's names for this page (nomad.vault.namesForUrl)
-      naming: { type: Object }, // { value, previous, error } while the name field is open
+      naming: { type: Object }, // { value, previous, inSpace, error } while the name field is open
+      edit: { type: Object }, // nomad.vault.driveEditStatus for a Drive this Device can't write
     };
   }
 
@@ -130,6 +131,7 @@ class SiteInfoApp extends LitElement {
     this.driveCfg = undefined;
     this.requestedPerms = undefined;
     this.forks = undefined;
+    this.edit = undefined;
     contextMenu.destroy();
   }
 
@@ -160,6 +162,12 @@ class SiteInfoApp extends LitElement {
 
       // The user's names for this page (bg/hyper/names.js). nomad:// pages can be named too.
       this.names = await nomad.vault.namesForUrl(this.url).catch(() => []);
+
+      // Can one of the user's other Devices let this one edit the Drive (bg/hyper/drive-writers.js)?
+      this.edit =
+        this.isDrive && !this.info?.writable
+          ? await nomad.vault.driveEditStatus(this.url).catch(() => null)
+          : null;
 
       // all sites: get cert and requested perms
       var perms;
@@ -270,7 +278,7 @@ class SiteInfoApp extends LitElement {
                 `
               : ''}
           </p>
-          ${this.renderName()}
+          ${this.renderName()} ${this.renderEdit()}
         </div>
       </div>
     `;
@@ -304,9 +312,10 @@ class SiteInfoApp extends LitElement {
         <div class="name-row">
           <span class="fas fa-fw fa-tag"></span>
           <code class="name-chip">hyper://${named.name}/</code>
-          <button @click=${() => this.onStartName(named.name)}>Rename</button>
-          <button @click=${() => this.onRemoveName(named.name)}>Remove</button>
+          <button @click=${() => this.onStartName(named.name, !!named.space)}>Rename</button>
+          <button @click=${() => this.onRemoveName(named.name, !!named.space)}>Remove</button>
           ${named.auto ? html`<span class="name-hint">Named by the AI, as you visit often</span>` : ''}
+          ${named.space ? html`<span class="name-hint">Only in this Space</span>` : ''}
         </div>
       `;
     }
@@ -320,8 +329,60 @@ class SiteInfoApp extends LitElement {
     `;
   }
 
-  onStartName(previous) {
-    this.naming = { value: previous || suggestName(this.info?.title), previous, error: '' };
+  // Editing a Drive one of the user's other Devices can write: ask them to add this Device's key.
+  renderEdit() {
+    const st = this.edit;
+    if (!st || st.writable || this.info?.writable) return '';
+    if (st.request?.granted) {
+      return html`
+        <div class="name-row">
+          <span class="fas fa-fw fa-check"></span>
+          <span class="name-hint">Allowed. You can edit once the drive syncs from your other device.</span>
+        </div>
+      `;
+    }
+    if (st.request?.pending) {
+      return html`
+        <div class="name-row">
+          <span class="fas fa-fw fa-hourglass-half"></span>
+          <span class="name-hint">
+            Asked your other devices. One that can edit this drive allows it when it's on.
+          </span>
+        </div>
+      `;
+    }
+    if (st.legacy && st.linked) {
+      return html`
+        <div class="name-row">
+          <span class="fas fa-fw fa-lock"></span>
+          <span class="name-hint">
+            This device opened the drive before each drive had its own key, so it can't edit it yet.
+          </span>
+        </div>
+      `;
+    }
+    if (!st.canAsk) return '';
+    return html`
+      <div class="name-row">
+        <button @click=${this.onRequestEdit}>
+          <span class="fas fa-fw fa-pen"></span> Edit on this device
+        </button>
+        <span class="name-hint">Your other devices allow it if one of them can edit this drive.</span>
+      </div>
+    `;
+  }
+
+  async onRequestEdit() {
+    try {
+      this.edit = await nomad.vault.requestDriveEdit(this.url);
+    } catch (err) {
+      toast.create(err.message || String(err), 'error');
+    }
+  }
+
+  // `inSpace`: the name being renamed is kept only in this Space, and stays there.
+  onStartName(previous, inSpace = false) {
+    this.naming = { value: previous || suggestName(this.info?.title), previous, inSpace, error: '' };
     this.updateComplete.then(() => this.shadowRoot.querySelector('.name-input')?.focus());
   }
 
@@ -339,6 +400,8 @@ class SiteInfoApp extends LitElement {
         url: nameTarget(this.url),
         title: this.info?.title || this.hostname,
         previous: this.naming.previous || undefined,
+        inSpace: !!this.naming.inSpace,
+        previousInSpace: !!this.naming.inSpace,
       });
       this.naming = null;
       this.names = await nomad.vault.namesForUrl(this.url);
@@ -348,9 +411,9 @@ class SiteInfoApp extends LitElement {
     }
   }
 
-  async onRemoveName(name) {
+  async onRemoveName(name, inSpace = false) {
     try {
-      await nomad.vault.removeName(name);
+      await nomad.vault.removeName(name, { inSpace });
       this.names = await nomad.vault.namesForUrl(this.url);
     } catch (err) {
       toast.create(err.message || String(err), 'error');

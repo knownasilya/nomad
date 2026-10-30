@@ -147,6 +147,7 @@ export const CAPABILITIES = [
     name: 'listNotes',
     description:
       "Find the user's Notes (nomad://notes): id, title and a short preview, newest first. " +
+      'Notes kept only in the current Space are marked `inSpace`. ' +
       'Pass `query` to search their text. Asks permission to read Notes.',
     inputSchema: {
       type: 'object',

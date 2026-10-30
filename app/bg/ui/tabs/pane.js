@@ -308,11 +308,16 @@ export class Pane extends EventEmitter {
     return '';
   }
 
+  // This tab's Space, by its Root Drive key: its names work here too (ADR-0029).
+  get spaceKey() {
+    return names.spaceKeyForId(this.tab?.spaceId || 1);
+  }
+
   // The name the user gave this hyper:// drive or app folder (hyper/names.js), or '' when there is
   // none or the AI gave it and the user hasn't kept it.
   get siteName() {
     try {
-      return names.approvedFor(this.loadingURL || this.url)?.name || '';
+      return names.approvedFor(this.loadingURL || this.url, this.spaceKey)?.name || '';
     } catch {
       return '';
     }
@@ -424,7 +429,7 @@ export class Pane extends EventEmitter {
     this.isQuietLoading = Boolean(quiet);
     // hyper://<name>/ is a shortcut to what the user named (hyper/names.js): the tab goes to the
     // real address, so the drive keeps one origin and no page can resolve a name for itself.
-    this.webContents.loadURL(names.resolveUrl(url) || url, opts ? loadOpts : undefined);
+    this.webContents.loadURL(names.resolveUrl(url, this.spaceKey) || url, opts ? loadOpts : undefined);
   }
 
   reload() {
@@ -804,7 +809,7 @@ export class Pane extends EventEmitter {
 
   async onWillNavigate(e, url) {
     // A link to hyper://<name>/ in a page: go to the real address instead (see loadURL).
-    const named = names.resolveUrl(url);
+    const named = names.resolveUrl(url, this.spaceKey);
     if (named) {
       e.preventDefault();
       this.loadURL(named);

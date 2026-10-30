@@ -42,6 +42,7 @@ Written via ordinary `{ op: 'put' }` ops **as inline control records** (small JS
 | `/.vault/meta.json` | `{ version: 1, createdAt, profileUrl? }` |
 | `/.vault/spaces/<rootDriveKey>.json` | `{ rootDriveKey, name, icon, color, sortOrder, originId?, personal?, createdAt }` |
 | `/.vault/devices/<hexDeviceKey>.json` | `{ key, name, platform: 'desktop'\|'mobile', addedAt, lastSeen? }` |
+| `/.vault/drive-writers/<driveKey>/<writerKey>.json` | Writer grant (ADR-0026 §2): `{ type: 'nomad/drive-writer', drive, writerKey, device, name, requestedAt, grantedBy?, grantedAt? }`. Rules in `shared/drive-writers.mjs` |
 
 Space records are keyed by `rootDriveKey` (the hex key of the now-Autobase-backed Root Drive), which
 is globally stable — **not** by the local space id, which is a per-Device autoincrement and would
@@ -70,6 +71,7 @@ like §1.1. `<space>` is a Space's Root Drive key: subscriptions are per Space, 
 | `/.vault/reader/<space>/read.json` | `{ read: [postUrl] }` — posts marked read, sorted |
 | `/.vault/reader/<space>/imported.json` | `{ importedAt }` — the Space's old Reader file was copied in |
 | `/.vault/notes/<id>.json` | `{ type: 'nomad/note', id, body, createdAt, updatedAt, conflictOf? }` |
+| `/.vault/space-lib/<space>/notes/<id>.json` | the same Note, kept only in that Space (ADR-0029) |
 
 - A Note's body is Markdown; its title is its first line with text, and is never stored. Notes link
   with `[[Title]]`, `[[Title#Heading|text]]`, or `[text](Title.md)`, resolved by title (ignoring
@@ -80,8 +82,9 @@ like §1.1. `<space>` is a Space's Root Drive key: subscriptions are per Space, 
 - `read.json` is one record, so a writer reads it, merges (`mergeReadState`), and writes it back.
 - Joining (§2): a Device whose own Vault is **solo** (created here, no other Device) may adopt
   another Vault. It records the old key in its `vault_carry_from` setting and copies
-  `/.vault/reader/`, `/.vault/notes/`, `/.vault/names/` (§1.3), `/.vault/highlights/` (§1.4), and
-  `/.drafts/` across once the new Vault is writable.
+  `/.vault/reader/`, `/.vault/notes/`, `/.vault/names/` (§1.3), `/.vault/highlights/` (§1.4),
+  `/.vault/space-lib/`, and `/.drafts/` across once the new Vault is writable. A Space's Root Drive
+  moving to a new key moves its `/.vault/reader/<space>/` and `/.vault/space-lib/<space>/` with it.
   Desktop only; the phone never makes a Vault of its own.
 
 ### 1.3 Names (ADR-0018)
@@ -92,6 +95,7 @@ The user's short names for Drives, app folders and URLs, one set per user. Rules
 | Path | Payload (JSON, stored inline) |
 |------|--------------|
 | `/.vault/names/<name>.json` | `{ name, url, title, createdAt, updatedAt }` |
+| `/.vault/space-lib/<space>/names/<name>.json` | the same record, a name that works only in that Space's tabs (ADR-0029) |
 
 A name is a lowercase DNS label that isn't a Drive key, a number (`123`, `0x1f`) or reserved, and has
 no dot (dots are kept for later; a Device skips a record whose name it can't use). `url` is a `hyper://`, `http(s)://`
@@ -156,6 +160,14 @@ known Devices at creation time.
 > opens without deadlock; making it fully writable + updating pairing/fan-out on both apps is a follow-up
 > protocol change that needs live-runtime verification. Until then, mobile's `nomad.fs` writes correctly
 > reject on paired-into drives rather than hang.
+>
+> **Desktop (ADR-0029 step 2):** a drive this desktop has never opened opens in `autobase:<key>`
+> (`_storeFor` in `app/bg/hyper/autobases.js`), with a `local` core for that drive alone. The Vault
+> stays on the root store. Autobase remembers the writer key of a drive's first open, so a drive
+> this desktop created or opened before keeps opening on the root store; such a drive can't be
+> granted to a joined desktop yet. The desktop asks for its key with a Writer grant (below): on its
+> own for each Space Root Drive it has open, and from **Edit on this device** in the site-info panel
+> for any other drive. `app/bg/hyper/drive-writers.js` grants, and revokes the keys of removed Devices.
 >
 > **Proposed fix for the phone (ADR-0026):** a phone already opens a drive it didn't create in a
 > per-drive namespace with its own `local` core. It asks for that key with a Vault record

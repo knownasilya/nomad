@@ -12,12 +12,22 @@ import * as pairing from '../../hyper/device-pairing';
 import * as devicePresence from '../../hyper/device-presence';
 import * as vaultApps from './vault-apps';
 import * as names from '../../hyper/names';
+import * as driveWriters from '../../hyper/drive-writers';
+
+// The caller's Space key, or null.
+const callerSpace = (ctx) => vaultApps.spaceKey(ctx).catch(() => null);
 import * as mods from '../../ui/mods';
 import * as openTabs from '../../ui/open-tabs';
 import * as jobs from '../../ai/jobs';
 import { readJobSource } from './job-source';
 import { PRESETS } from '../../../../shared/mods.mjs';
 import { describeSchedule, nextRunAt, normalizeSchedule } from '../../../../shared/jobs.mjs';
+
+// The Drive key of a hyper://<key>/ URL, or null.
+function driveKeyOf(url) {
+  const m = /^hyper:\/\/([0-9a-f]{64})(?:[/?#]|$)/i.exec(String(url || ''));
+  return m ? m[1].toLowerCase() : null;
+}
 
 function thisPlatform() {
   return 'desktop';
@@ -144,6 +154,7 @@ export default {
     try {
       await vault.syncSpacesFromVault();
     } catch {}
+    driveWriters.watch();
     return res;
   },
 
@@ -152,7 +163,18 @@ export default {
   },
 
   async removeDevice(deviceKey) {
-    return vault.removeDevice(deviceKey);
+    await vault.removeDevice(deviceKey);
+    // Take its writer keys off the Drives this Device writes (bg/hyper/drive-writers.js).
+    driveWriters.sync().catch(() => {});
+  },
+
+  // Editing a Drive one of the user's other Devices can write (ADR-0026 §2, ADR-0029 step 2).
+  async driveEditStatus(url) {
+    return driveWriters.status(driveKeyOf(url));
+  },
+
+  async requestDriveEdit(url) {
+    return driveWriters.request(driveKeyOf(url));
   },
 
   // Reader and Notes data (vault-apps.ts), in the Vault. `this` is the RPC event, which carries the
@@ -174,11 +196,17 @@ export default {
   },
 
   async listNotes() {
-    return vaultApps.listNotes();
+    return vaultApps.listNotes(this);
   },
 
+  // ({ id?, body, baseUpdatedAt?, inSpace? }). `space` is only for the AI's turns from other Devices.
   async saveNote(note) {
-    return vaultApps.saveNote(this, note);
+    const { space, ...rest } = note || {};
+    return vaultApps.saveNote(this, rest);
+  },
+
+  async moveNote(change) {
+    return vaultApps.moveNote(this, change);
   },
 
   async deleteNote(id) {
@@ -193,25 +221,43 @@ export default {
     return vaultApps.watch();
   },
 
-  // Names (hyper/names.js): short words for drives, apps in a private drive, and any URL.
+  // Names (hyper/names.js): short words for drives, apps in a private drive, and any URL. The
+  // caller's Space's names come with the user's own; each record has `space` (a key, or null).
   async listNames() {
-    return names.list();
+    return names.list(await callerSpace(this));
+  },
+
+  // { space, spaceName }: the caller's Space, for My Library → Names' sections.
+  async getNamesSpace() {
+    const space = await callerSpace(this);
+    return { space, spaceName: space ? vaultApps.spaceNameOf(space) : null };
   },
 
   // The names that point to the page at `url`.
   async namesForUrl(url) {
-    return names.forUrl(url);
+    return names.forUrl(url, await callerSpace(this));
   },
 
-  // ({ name, url, title, previous? }) -> record. `previous` renames. A name saved here is the
-  // user's, so it drops the AI's `auto` mark.
+  // ({ name, url, title, inSpace?, previous?, previousInSpace? }) -> record. `previous` renames;
+  // `inSpace` keeps the name only in the caller's Space (ADR-0029), and `previousInSpace` says where
+  // the renamed or moved one was. A name saved here is the user's, so it drops the AI's `auto` mark.
   async setName(rec) {
-    const { name, url, title, previous } = rec || {};
-    return names.set({ name, url, title, previous });
+    const { name, url, title, previous, inSpace, previousInSpace } = rec || {};
+    const space = await callerSpace(this);
+    if ((inSpace || previousInSpace) && !space) throw new Error('This page has no Space');
+    return names.set({
+      name,
+      url,
+      title,
+      previous,
+      space: inSpace ? space : null,
+      previousSpace: previousInSpace ? space : null,
+    });
   },
 
-  async removeName(name) {
-    return names.remove(name);
+  // (name, { inSpace? }): remove the user's own name, or with inSpace, the caller's Space's.
+  async removeName(name, { inSpace = false } = {}) {
+    return names.remove(name, inSpace ? await callerSpace(this) : null);
   },
 
   // Mods (bg/ui/mods.js): My Library → Mods.

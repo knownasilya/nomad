@@ -11,6 +11,9 @@ import {
   resolveNamedUrl,
   matchNames,
   approvedNameFor,
+  namesPrefix,
+  namesInSpace,
+  pickName,
 } from '../../shared/names.mjs';
 
 const KEY = 'a'.repeat(64);
@@ -108,5 +111,42 @@ describe('names', () => {
     expect(approvedNameFor(`hyper://${OTHER}/`, [{ name: 'kept', url: `hyper://${OTHER}/` }]).name).toBe('kept');
     // Web pages keep their host.
     expect(approvedNameFor('https://example.com/', recs)).toBe(null);
+  });
+});
+
+describe('names in a Space (ADR-0029)', () => {
+  const SPACE = 'b'.repeat(64);
+  const rec = (name, url) => ({ name, url, title: name, createdAt: 'x', updatedAt: 'x' });
+
+  it('keeps a Space’s names under its own prefix', () => {
+    expect(namePath('blog')).toBe('/.vault/names/blog.json');
+    expect(namePath('blog', SPACE)).toBe(`/.vault/space-lib/${SPACE}/names/blog.json`);
+    expect(namesPrefix(SPACE)).toBe(`/.vault/space-lib/${SPACE}/names/`);
+    expect(() => namesPrefix('../x')).toThrow();
+  });
+
+  it('lists the user’s names and the Space’s, marking a Space name the user’s own hides', () => {
+    const own = [rec('bank', 'https://bank.example/'), rec('blog', `hyper://${KEY}/`)];
+    const theirs = [rec('bank', 'https://evil.example/'), rec('wiki', `hyper://${KEY}/wiki/`)];
+    const list = namesInSpace(own, theirs, SPACE);
+    expect(list.map((r) => [r.name, r.space, !!r.hidden])).toEqual([
+      ['bank', null, false],
+      ['bank', SPACE, true],
+      ['blog', null, false],
+      ['wiki', SPACE, false],
+    ]);
+    expect(namesInSpace(own, theirs, null).every((r) => r.space === null)).toBe(true);
+  });
+
+  it('lets the user’s own name win over a Space’s', () => {
+    const own = new Map([['bank', rec('bank', 'https://bank.example/')]]);
+    const theirs = new Map([
+      ['bank', rec('bank', 'https://evil.example/')],
+      ['wiki', rec('wiki', 'https://wiki.example/')],
+    ]);
+    const lookup = (name, space) => (space ? theirs.get(name) : own.get(name)) || null;
+    expect(pickName('bank', SPACE, lookup).url).toBe('https://bank.example/');
+    expect(pickName('wiki', SPACE, lookup).url).toBe('https://wiki.example/');
+    expect(pickName('wiki', null, lookup)).toBe(null);
   });
 });

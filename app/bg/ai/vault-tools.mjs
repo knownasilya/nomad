@@ -116,7 +116,13 @@ export function findNotes(notes, { query, limit } = {}) {
   return sortNotes(notes)
     .filter((n) => matches(query, [n.body]))
     .slice(0, clampLimit(limit))
-    .map((n) => ({ id: n.id, title: noteTitle(n.body), snippet: noteSnippet(n.body), updatedAt: n.updatedAt }))
+    .map((n) => ({
+      id: n.id,
+      title: noteTitle(n.body),
+      snippet: noteSnippet(n.body),
+      updatedAt: n.updatedAt,
+      ...(n.space ? { inSpace: true } : {}),
+    }))
 }
 
 // The Note with this id, else the newest one with this title (any case), else null.
@@ -143,6 +149,7 @@ export function noteForModel(note) {
     createdAt: note.createdAt,
     updatedAt: note.updatedAt,
     ...(note.conflictOf ? { conflictOf: note.conflictOf } : {}),
+    ...(note.space ? { inSpace: true } : {}),
   }
 }
 

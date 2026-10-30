@@ -131,6 +131,35 @@ const cssStr = css`
     color: var(--names-err);
   }
 
+  select {
+    height: 30px;
+    padding: 0 6px;
+    border: 1px solid var(--border-color--light);
+    border-radius: 6px;
+    background: var(--bg-color--secondary);
+    color: var(--text-color--default);
+    font-size: 12px;
+  }
+
+  .section-title {
+    margin: 18px 6px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-color--light);
+  }
+
+  .hidden-note {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-color--light);
+  }
+
+  .hidden-note code {
+    font-family: var(--code-font);
+  }
+
   .rows {
     display: flex;
     flex-direction: column;
