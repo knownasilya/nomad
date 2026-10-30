@@ -268,6 +268,7 @@ class ShellWindowUI extends LitElement {
                   <shell-window-ai-sidebar
                     .activeTab=${this.activeTab}
                     .width=${this.aiSidebarWidth}
+                    .headerInset=${controlsSide === 'right' && !this.isFullscreen ? CONTROLS_W : 0}
                   ></shell-window-ai-sidebar>
                 `
               : ''}
