@@ -46,6 +46,7 @@ export default {
   listJobs: 'promise', // -> { jobs: [{ ...job, lastRun, nextRunAt, running, here, deviceName }] }
   listJobRuns: 'promise', // (id) -> runs, newest first
   saveJob: 'promise', // ({ id?, title?, prompt?, source?, schedule?, notify?, enabled?, runHere? }) -> record
+  previewSchedule: 'promise', // (schedule) -> { schedule, when, next: [ISO, …] }: checked, with its next times
   checkJobSource: 'promise', // (id) -> { url, live, module, prompt, title, hash }: the source's drive now
   deleteJob: 'promise',
   runJob: 'promise', // (id) runs it now, on this Device

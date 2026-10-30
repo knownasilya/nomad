@@ -20,6 +20,14 @@ import jobsCSS from '../../css/views/jobs.css.js';
 // them on save.
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const KINDS = [
+  { id: 'manual', label: 'Only when I run it' },
+  { id: 'interval', label: 'Every…' },
+  { id: 'daily', label: 'At times of day' },
+  { id: 'monthly', label: 'On days of the month' },
+  { id: 'once', label: 'Once, at…' },
+  { id: 'text', label: 'Type it (words or cron)' },
+];
 const NOTIFY = [
   { id: 'always', label: 'Every run' },
   { id: 'auto', label: 'When the AI finds something' },
@@ -31,11 +39,18 @@ const blank = () => ({
   title: '',
   prompt: '',
   source: '', // a drive URL or name; '' for none
-  kind: 'manual', // 'manual' | 'interval' | 'daily'
+  kind: 'manual', // 'manual' | 'interval' | 'daily' | 'monthly' | 'once' | 'text'
   every: 1,
   unit: 'hours',
-  time: '08:00',
+  windowed: false, // an interval only between `from` and `to`
+  from: '09:00',
+  to: '17:00',
+  times: ['08:00'],
   days: [],
+  dates: '1', // a monthly schedule's days of the month: "1, 15, last"
+  at: '', // a one-time schedule's datetime-local value
+  text: '', // a typed schedule: a phrase or cron
+  preview: null, // { when, next } or { error } from bg previewSchedule
   notify: 'always',
   enabled: true,
   error: '',
@@ -259,7 +274,10 @@ export class JobsView extends LitElement {
   }
 
   renderEditor(e) {
-    const set = (patch) => (this.editing = { ...this.editing, ...patch, error: '' });
+    const set = (patch) => {
+      this.editing = { ...this.editing, ...patch, error: '' };
+      this.checkSchedule();
+    };
     return html`
       <form class="editor" @submit=${this.onSave}>
         <div class="fields">
@@ -284,25 +302,45 @@ export class JobsView extends LitElement {
         <div class="block">
           <div class="label">When</div>
           <div class="when">
-            <select .value=${e.kind} @change=${(ev) => set({ kind: ev.target.value })}>
-              <option value="manual" ?selected=${e.kind === 'manual'}>Only when I run it</option>
-              <option value="interval" ?selected=${e.kind === 'interval'}>Every…</option>
-              <option value="daily" ?selected=${e.kind === 'daily'}>At a time of day</option>
+            <select @change=${(ev) => set({ kind: ev.target.value })}>
+              ${KINDS.map((k) => html`<option value=${k.id} ?selected=${e.kind === k.id}>${k.label}</option>`)}
             </select>
             ${e.kind === 'interval'
               ? html`
                   <input class="num" type="number" min="1" .value=${String(e.every)} @input=${(ev) => set({ every: ev.target.value })} />
-                  <select .value=${e.unit} @change=${(ev) => set({ unit: ev.target.value })}>
+                  <select @change=${(ev) => set({ unit: ev.target.value })}>
                     <option value="minutes" ?selected=${e.unit === 'minutes'}>minutes</option>
                     <option value="hours" ?selected=${e.unit === 'hours'}>hours</option>
                   </select>
                 `
               : ''}
-            ${e.kind === 'daily'
-              ? html`<input class="time" type="time" .value=${e.time} @input=${(ev) => set({ time: ev.target.value })} />`
+            ${e.kind === 'once'
+              ? html`<input class="at" type="datetime-local" .value=${e.at} @input=${(ev) => set({ at: ev.target.value })} />`
+              : ''}
+            ${e.kind === 'text'
+              ? html`<input class="text" placeholder="weekdays 9:00 and 17:00 · 1st and 15th at 9am · 0 8 * * 1-5" .value=${e.text} @input=${(ev) => set({ text: ev.target.value })} />`
               : ''}
           </div>
-          ${e.kind === 'daily'
+          ${e.kind === 'interval'
+            ? html`<div class="when sub">
+                <label class="check">
+                  <input type="checkbox" .checked=${e.windowed} @change=${(ev) => set({ windowed: ev.target.checked })} />
+                  Only between
+                </label>
+                <input class="time" type="time" ?disabled=${!e.windowed} .value=${e.from} @input=${(ev) => set({ from: ev.target.value })} />
+                and
+                <input class="time" type="time" ?disabled=${!e.windowed} .value=${e.to} @input=${(ev) => set({ to: ev.target.value })} />
+              </div>`
+            : ''}
+          ${e.kind === 'daily' || e.kind === 'monthly' ? this.renderTimes(e, set) : ''}
+          ${e.kind === 'monthly'
+            ? html`<div class="when sub">
+                <span>On days</span>
+                <input class="dates" placeholder="1, 15, last" .value=${e.dates} @input=${(ev) => set({ dates: ev.target.value })} />
+                <span class="hint">of the month; “last” is the last day</span>
+              </div>`
+            : ''}
+          ${e.kind === 'daily' || e.kind === 'interval'
             ? html`<div class="presets days">
                 ${DAYS.map(
                   (d, i) => html`
@@ -318,6 +356,18 @@ export class JobsView extends LitElement {
                 )}
                 <span class="hint">${e.days.length ? '' : 'Every day'}</span>
               </div>`
+            : ''}
+          ${e.kind === 'text'
+            ? html`<div class="hint-row">Words like “every 2 hours”, “Mondays and Fridays 6pm”, “last day of the month 18:00”, “tomorrow 9:00”, or a cron expression (minute hour day month weekday).</div>`
+            : ''}
+          ${e.kind !== 'manual' && e.preview
+            ? e.preview.error
+              ? html`<div class="preview err">${e.preview.error}</div>`
+              : html`<div class="preview">
+                  <span class="fas fa-fw fa-calendar-alt"></span> ${e.preview.when}${e.preview.next.length
+                    ? html` · next ${e.preview.next.map((t) => when(t)).join(', ')}`
+                    : ' · no more runs'}
+                </div>`
             : ''}
         </div>
 
@@ -340,6 +390,27 @@ export class JobsView extends LitElement {
     `;
   }
 
+  renderTimes(e, set) {
+    const times = e.times.length ? e.times : ['08:00'];
+    const put = (i, v) => set({ times: times.map((t, k) => (k === i ? v : t)) });
+    return html`<div class="when sub times">
+      <span>At</span>
+      ${times.map(
+        (t, i) => html`<span class="time-item">
+          <input class="time" type="time" .value=${t} @input=${(ev) => put(i, ev.target.value)} />
+          ${times.length > 1
+            ? html`<button type="button" class="icon" title="Remove this time" aria-label="Remove ${t}" @click=${() => set({ times: times.filter((_, k) => k !== i) })}>
+                <span class="fas fa-fw fa-times"></span>
+              </button>`
+            : ''}
+        </span>`
+      )}
+      <button type="button" class="link" @click=${() => set({ times: [...times, nextHour(times[times.length - 1])] })}>
+        <span class="fas fa-plus"></span> Add a time
+      </button>
+    </div>`;
+  }
+
   edit(j) {
     const s = j.schedule;
     const form = {
@@ -353,27 +424,85 @@ export class JobsView extends LitElement {
     };
     if (s?.kind === 'interval') {
       const hours = s.minutes % 60 === 0;
-      Object.assign(form, { kind: 'interval', every: hours ? s.minutes / 60 : s.minutes, unit: hours ? 'hours' : 'minutes' });
+      Object.assign(form, {
+        kind: 'interval',
+        every: hours ? s.minutes / 60 : s.minutes,
+        unit: hours ? 'hours' : 'minutes',
+        windowed: !!s.from,
+        from: s.from || form.from,
+        to: s.to || form.to,
+        days: s.days || [],
+      });
     } else if (s?.kind === 'daily') {
-      Object.assign(form, { kind: 'daily', time: s.time, days: s.days || [] });
+      Object.assign(form, { kind: 'daily', times: s.times || [s.time], days: s.days || [] });
+    } else if (s?.kind === 'monthly') {
+      Object.assign(form, {
+        kind: 'monthly',
+        times: s.times,
+        dates: s.dates.map((d) => (d === -1 ? 'last' : d)).join(', '),
+      });
+    } else if (s?.kind === 'once') {
+      Object.assign(form, { kind: 'once', at: localInput(new Date(s.at)) });
+    } else if (s?.kind === 'cron') {
+      Object.assign(form, { kind: 'text', text: s.expr });
     }
     this.editing = form;
+    this.checkSchedule();
   }
 
   schedule(e) {
-    if (e.kind === 'interval') {
-      const n = Number(e.every);
-      return { kind: 'interval', minutes: e.unit === 'hours' ? n * 60 : n };
+    const days = e.days.length ? e.days : null;
+    switch (e.kind) {
+      case 'interval': {
+        const n = Number(e.every);
+        return {
+          kind: 'interval',
+          minutes: e.unit === 'hours' ? n * 60 : n,
+          ...(e.windowed ? { from: e.from, to: e.to } : {}),
+          days,
+        };
+      }
+      case 'daily':
+        return { kind: 'daily', times: e.times, days };
+      case 'monthly':
+        return {
+          kind: 'monthly',
+          times: e.times,
+          dates: e.dates
+            .split(/[\s,]+/)
+            .filter(Boolean)
+            .map((d) => (/^last$/i.test(d) ? -1 : Number(d.replace(/(st|nd|rd|th)$/i, '')))),
+        };
+      case 'once':
+        return { kind: 'once', at: e.at ? new Date(e.at).toISOString() : null };
+      case 'text':
+        return e.text.trim() || null;
     }
-    if (e.kind === 'daily') return { kind: 'daily', time: e.time, days: e.days.length ? e.days : null };
     return null;
+  }
+
+  // Checks the form's schedule in bg as it changes, and shows it in words with its next runs.
+  checkSchedule() {
+    clearTimeout(this.previewTimer);
+    this.previewTimer = setTimeout(async () => {
+      const e = this.editing;
+      if (!e || e.kind === 'manual') return;
+      let preview;
+      try {
+        const res = await nomad.vault.previewSchedule(this.schedule(e));
+        preview = res.schedule ? res : { error: 'Type a schedule' };
+      } catch (err) {
+        preview = { error: cleanError(err) };
+      }
+      if (this.editing === e) this.editing = { ...e, preview };
+    }, 250);
   }
 
   // events
   // =
 
   onNew() {
-    this.editing = blank();
+    this.editing = { ...blank(), at: localInput(new Date(Date.now() + 3600e3)) };
   }
 
   async onOpen(j) {
@@ -471,6 +600,29 @@ export class JobsView extends LitElement {
       toast.create(cleanError(err), 'error');
     }
   }
+}
+
+// A Date as a datetime-local input's value, in local time.
+function localInput(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// The hour after an HH:MM, for a new time in the list.
+function nextHour(t) {
+  const h = (Number(String(t || '08:00').split(':')[0]) + 1) % 24;
+  return `${String(h).padStart(2, '0')}:00`;
+}
+
+// "today 17:00", "Mon 09:00", or a date, for the schedule preview.
+function when(iso) {
+  const at = new Date(iso);
+  const time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const days = Math.round((new Date(at).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 864e5);
+  if (days === 0) return `today ${time}`;
+  if (days === 1) return `tomorrow ${time}`;
+  if (days < 7) return `${at.toLocaleDateString([], { weekday: 'short' })} ${time}`;
+  return `${at.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
 }
 
 // "5 minutes ago", "yesterday", or a date.

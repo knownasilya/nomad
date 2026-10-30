@@ -372,9 +372,14 @@ export const CAPABILITIES = [
         },
         schedule: {
           description:
-            'Optional. null to run only by hand (the default); { "kind": "interval", "minutes": 120 } (15 or more); or ' +
-            '{ "kind": "daily", "time": "08:00", "days": [1,2,3,4,5] } (24-hour local time; days 0 = Sunday, leave out for every day). ' +
-            'A phrase works too: "daily 08:00", "weekdays 09:00", "every 2 hours".',
+            'Optional. null to run only by hand (the default), or a phrase: "daily 08:00", "weekdays 9:00 and 17:00", ' +
+            '"Mondays and Fridays 6pm", "every 2 hours", "every 30 minutes from 9:00 to 17:00 on weekdays", "monthly on ' +
+            'the 1st and 15th at 9am", "last day of the month 18:00", "tomorrow 9:00", "in 2 hours", "2026-11-02 09:00", ' +
+            'or a five-field cron expression ("0 8 * * 1-5"). Or an object: { "kind": "interval", "minutes": 120, ' +
+            '"from"?: "09:00", "to"?: "17:00", "days"?: [1,2,3,4,5] }; { "kind": "daily", "times": ["08:00","17:00"], ' +
+            '"days"?: [...] }; { "kind": "monthly", "dates": [1, 15, -1], "times": ["09:00"] } (-1 = last day); ' +
+            '{ "kind": "once", "at": "<ISO date-time>" }; { "kind": "cron", "expr": "0 8 * * 1-5" }. Local time of the ' +
+            'computer that runs it; days 0 = Sunday; at most every 15 minutes. The result says the schedule in words.',
         },
         notify: {
           type: 'string',

@@ -16,9 +16,15 @@
 // moves it): one Device, so two desktops never run the same Job twice. Any Device that has an AI
 // Runtime can run it by hand. `space` is the Root Drive key of the Space whose Reader the Job reads.
 //
-// A schedule is null (by hand only), { kind: 'interval', minutes }, or { kind: 'daily', time: 'HH:MM',
-// days? } where days are weekdays, 0 = Sunday, and none means every day. Times are the running
-// Device's local time.
+// A schedule is null (by hand only) or one of:
+//   { kind: 'interval', minutes, from?, to?, days? }  every N minutes (15 or more), only between
+//                                                    from and to ('HH:MM') and on days, if given
+//   { kind: 'daily', times: ['HH:MM', …], days? }    at these times, on these weekdays (none: every day)
+//   { kind: 'monthly', dates: [1, 15, -1], times }   on these days of the month (-1: the last day)
+//   { kind: 'once', at: ISO }                        once, then never again
+//   { kind: 'cron', expr: '0 8 * * 1-5' }            a five-field cron expression
+// Weekdays are 0 = Sunday to 6. Times are the running Device's local time. (Older daily records
+// have one `time` instead of `times`.)
 //
 // A Job can come from a drive (`source`): a folder with `job.js` (a module, run like the AI's execute
 // code: `import { nomad } from 'nomad:runtime'` and `export default async function main(params)`)
@@ -130,35 +136,89 @@ export function isRun(rec) {
 // Schedules
 // =
 
-// A schedule as the AI or a form gives it, checked and tidied. Also takes words: "hourly",
-// "daily 08:00", "weekdays 9:00", "every 30 minutes". Null for none (by hand only). Throws for
-// anything else.
-export function normalizeSchedule(input) {
+const MON_NAMES = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+const MAX_TIMES = 24; // times of day in one schedule
+const MAX_DATES = 31;
+const LAST = -1; // the last day of the month, in a monthly schedule's dates
+const SEARCH_DAYS = 366 * 5; // how far ahead a schedule's next time is looked for
+
+// A schedule as the AI or a form gives it, checked and tidied. Also takes words: "hourly", "daily
+// 08:00", "weekdays 9:00 and 17:00", "every 30 minutes from 9:00 to 17:00 on weekdays", "monthly on
+// the 1st and 15th at 9am", "last day of the month 18:00", "tomorrow 9:00", "in 2 hours",
+// "2026-11-02 09:00", or a cron expression ("0 8 * * 1-5"). `now` is for the relative ones. Null for
+// none (by hand only). Throws for anything else.
+export function normalizeSchedule(input, now = new Date()) {
   if (input == null || input === '' || input === 'manual' || input === 'none') return null;
-  if (typeof input === 'string') return parseSchedule(input);
+  if (typeof input === 'string') return parseSchedule(input, now);
   if (typeof input !== 'object')
     throw new Error('A schedule is an object, a phrase like "daily 08:00", or null');
-  if (input.kind === 'interval') {
-    const minutes = Math.round(Number(input.minutes));
-    if (!Number.isFinite(minutes) || minutes < MIN_INTERVAL) {
-      throw new Error(`A Job can run at most every ${MIN_INTERVAL} minutes`);
+  switch (input.kind) {
+    case 'interval': {
+      const minutes = Math.round(Number(input.minutes));
+      if (!Number.isFinite(minutes) || minutes < MIN_INTERVAL) {
+        throw new Error(`A Job can run at most every ${MIN_INTERVAL} minutes`);
+      }
+      if (minutes > MAX_INTERVAL)
+        throw new Error('An interval can be at most a week; use a daily or monthly schedule');
+      const out = { kind: 'interval', minutes };
+      if (input.from != null || input.to != null) {
+        const from = normalizeTime(input.from ?? '00:00');
+        const to = normalizeTime(input.to ?? '23:59');
+        if (to <= from) throw new Error('An interval’s `to` is later in the day than its `from`');
+        Object.assign(out, { from, to });
+      }
+      const days = normalizeDays(input.days);
+      return days ? { ...out, days } : out;
     }
-    if (minutes > MAX_INTERVAL)
-      throw new Error('An interval can be at most a week; use a daily schedule');
-    return { kind: 'interval', minutes };
+    case 'daily': {
+      const times = normalizeTimes(input.times ?? input.time);
+      const days = normalizeDays(input.days);
+      return days ? { kind: 'daily', times, days } : { kind: 'daily', times };
+    }
+    case 'monthly':
+      return {
+        kind: 'monthly',
+        dates: normalizeDates(input.dates ?? input.date),
+        times: normalizeTimes(input.times ?? input.time),
+      };
+    case 'once': {
+      const at = new Date(input.at);
+      if (input.at == null || Number.isNaN(at.getTime()))
+        throw new Error('A one-time schedule needs `at`, a date and time like 2026-11-02T09:00');
+      return { kind: 'once', at: at.toISOString() };
+    }
+    case 'cron':
+      return { kind: 'cron', expr: parseCron(input.expr).expr };
   }
-  if (input.kind === 'daily') {
-    const time = normalizeTime(input.time);
-    const days = normalizeDays(input.days);
-    return days ? { kind: 'daily', time, days } : { kind: 'daily', time };
-  }
-  throw new Error('A schedule\'s kind is "interval" or "daily"');
+  throw new Error('A schedule\'s kind is "interval", "daily", "monthly", "once" or "cron"');
 }
 
 function normalizeTime(t) {
-  const m = TIME_RE.exec(String(t || '').trim());
+  const m = TIME_RE.exec(String(t ?? '').trim());
   if (!m) throw new Error('A time is HH:MM, 24-hour, like 08:00');
   return `${m[1].padStart(2, '0')}:${m[2]}`;
+}
+
+function normalizeTimes(times) {
+  const list = (Array.isArray(times) ? times : [times]).filter((t) => t != null && t !== '');
+  if (!list.length) throw new Error('A schedule needs a time of day, like 08:00');
+  const out = [...new Set(list.map(normalizeTime))].sort();
+  if (out.length > MAX_TIMES)
+    throw new Error(`A schedule can have at most ${MAX_TIMES} times a day`);
+  return out;
 }
 
 function normalizeDays(days) {
@@ -172,72 +232,411 @@ function normalizeDays(days) {
   return out.length && out.length < 7 ? out : null;
 }
 
-const DAY_WORDS = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+function normalizeDates(dates) {
+  const list = (Array.isArray(dates) ? dates : [dates]).filter((d) => d != null && d !== '');
+  const nums = list.map((d) => (d === 'last' ? LAST : Number(d)));
+  if (!nums.length || nums.some((d) => !Number.isInteger(d) || d === 0 || d < LAST || d > 31)) {
+    throw new Error(
+      'dates is a list of days of the month, 1 to 31, or -1 (or "last") for the last day'
+    );
+  }
+  const out = [...new Set(nums)].sort((a, b) => (a === LAST ? 1 : b === LAST ? -1 : a - b));
+  return out.slice(0, MAX_DATES);
+}
 
-function parseSchedule(text) {
-  const s = text.trim().toLowerCase();
-  const interval = /^every\s+(\d+)\s*(m|min|mins|minutes?|h|hr|hrs|hours?)$/.exec(s);
-  if (interval) {
-    const n = Number(interval[1]);
+// Cron
+// =
+
+const CRON_FIELDS = [
+  { name: 'minute', min: 0, max: 59 },
+  { name: 'hour', min: 0, max: 23 },
+  { name: 'day of month', min: 1, max: 31 },
+  {
+    name: 'month',
+    min: 1,
+    max: 12,
+    names: ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'],
+    base: 1,
+  },
+  {
+    name: 'day of week',
+    min: 0,
+    max: 7,
+    names: ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'],
+    base: 0,
+  },
+];
+const CRON_ALIASES = {
+  '@hourly': '0 * * * *',
+  '@daily': '0 0 * * *',
+  '@midnight': '0 0 * * *',
+  '@weekly': '0 0 * * 0',
+  '@monthly': '0 0 1 * *',
+  '@yearly': '0 0 1 1 *',
+  '@annually': '0 0 1 1 *',
+};
+
+// A standard five-field cron expression (minute hour day-of-month month day-of-week, with *, lists,
+// ranges, steps, and month and day names), in the running computer's local time. As in cron, a day
+// matches when either day field matches if both are restricted. Throws for a bad one, or one that
+// runs more often than every MIN_INTERVAL minutes.
+export function parseCron(input) {
+  const raw = String(input || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+  const expr = CRON_ALIASES[raw] || raw;
+  const parts = expr.split(' ');
+  if (parts.length !== 5) {
+    throw new Error(
+      'A cron expression has five fields: minute hour day-of-month month day-of-week, like "0 8 * * 1-5"'
+    );
+  }
+  const sets = parts.map((p, i) => cronField(p, CRON_FIELDS[i]));
+  if (sets[4].has(7)) {
+    sets[4].delete(7);
+    sets[4].add(0);
+  }
+  // Its times in a day, and the gap between them (across midnight too), must be MIN_INTERVAL or more.
+  const day = [];
+  for (const h of sets[1]) for (const m of sets[0]) day.push(h * 60 + m);
+  day.sort((a, b) => a - b);
+  const gaps = day.map((t, i) => (i ? t - day[i - 1] : t + 24 * 60 - day[day.length - 1]));
+  if (day.length > 1 && Math.min(...gaps) < MIN_INTERVAL) {
+    throw new Error(`A Job can run at most every ${MIN_INTERVAL} minutes`);
+  }
+  return {
+    expr: CRON_ALIASES[raw] ? raw : parts.join(' '),
+    minute: sets[0],
+    hour: sets[1],
+    dom: sets[2],
+    month: sets[3],
+    dow: sets[4],
+    domAny: parts[2] === '*',
+    dowAny: parts[4] === '*',
+  };
+}
+
+function cronField(text, f) {
+  const out = new Set();
+  for (const item of text.split(',')) {
+    const m = /^(\*|[a-z0-9]+(?:-[a-z0-9]+)?)(?:\/(\d+))?$/.exec(item);
+    if (!m) throw new Error(`“${text}” isn’t a cron ${f.name}`);
+    const step = m[2] ? Number(m[2]) : 1;
+    if (!step) throw new Error(`A cron step can’t be 0`);
+    let lo = f.min;
+    let hi = f.max;
+    if (m[1] !== '*') {
+      const [a, b] = m[1].split('-').map((v) => cronValue(v, f));
+      lo = a;
+      hi = b ?? (m[2] ? f.max : a);
+    }
+    if (lo > hi) throw new Error(`“${item}” runs backwards in the cron ${f.name}`);
+    for (let v = lo; v <= hi; v += step) out.add(v);
+  }
+  return out;
+}
+
+function cronValue(v, f) {
+  const named = f.names ? f.names.indexOf(v.slice(0, 3)) : -1;
+  const n = named >= 0 && /^[a-z]+$/.test(v) ? named + f.base : Number(v);
+  if (!Number.isInteger(n) || n < f.min || n > f.max) {
+    throw new Error(`“${v}” is out of range for the cron ${f.name} (${f.min}–${f.max})`);
+  }
+  return n;
+}
+
+function cronDayMatches(c, at) {
+  if (!c.month.has(at.getMonth() + 1)) return false;
+  const dom = c.dom.has(at.getDate());
+  const dow = c.dow.has(at.getDay());
+  if (c.domAny && c.dowAny) return true;
+  if (c.domAny) return dow;
+  if (c.dowAny) return dom;
+  return dom || dow;
+}
+
+// Phrases
+// =
+
+const DAY_WORDS = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+const MONTH_WORDS = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
+// 08:00, 8:00, 8am, 8:30 pm, noon, midnight.
+const CLOCK_RE = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b|\b(\d{1,2}):(\d{2})\b|\b(noon|midnight)\b/g;
+
+function clockTimes(s) {
+  const out = [];
+  for (const m of s.matchAll(CLOCK_RE)) {
+    if (m[6]) out.push(m[6] === 'noon' ? '12:00' : '00:00');
+    else if (m[3]) {
+      let h = Number(m[1]) % 12;
+      if (m[3] === 'pm') h += 12;
+      out.push(`${String(h).padStart(2, '0')}:${m[2] || '00'}`);
+    } else out.push(`${m[4].padStart(2, '0')}:${m[5]}`);
+  }
+  return out;
+}
+
+function weekdaysIn(s) {
+  if (/\bweekdays?\b/.test(s)) return [1, 2, 3, 4, 5];
+  if (/\bweekends?\b/.test(s)) return [0, 6];
+  const days = [
+    ...s.matchAll(
+      /\b(sun|mon|tue|wed|thu|fri|sat)(?:days?|s|sdays?|nesdays?|rs|rsdays?|urdays?)?\b/g
+    ),
+  ].map((m) => DAY_WORDS[m[1]]);
+  return days.length ? days : null;
+}
+
+const HELP =
+  'Try "daily 08:00", "weekdays 9:00 and 17:00", "every 2 hours", "monthly on the 1st at 9:00", "tomorrow 9:00" or a cron expression like "0 8 * * 1-5"';
+
+function parseSchedule(text, now) {
+  const s = text.trim().toLowerCase().replace(/\s+/g, ' ');
+
+  // Cron: "cron …", an @alias, or five fields that parse as one.
+  const said = /^cron\s+(.+)$/.exec(s)?.[1];
+  if (said || CRON_ALIASES[s]) return { kind: 'cron', expr: parseCron(said || s).expr };
+  if (/^[\d*][\d*,/-]*( [\d*a-z][\d*,/\-a-z]*){4}$/.test(s)) {
+    try {
+      return { kind: 'cron', expr: parseCron(s).expr };
+    } catch (err) {
+      if (/^[\d*,/\- ]+$/.test(s)) throw err; // only cron could mean that
+    }
+  }
+
+  // Once: "in 2 hours", "tomorrow 9:00", "today at 5pm", "2026-11-02 09:00", "Nov 2 9:00", "once …".
+  const rel = /^(?:once )?in (\d+) ?(m|min|mins|minutes?|h|hr|hrs|hours?|d|days?)$/.exec(s);
+  if (rel) {
+    const n = Number(rel[1]);
+    const unit = rel[2][0] === 'm' ? 60_000 : rel[2][0] === 'h' ? 3_600_000 : 86_400_000;
+    return onceAt(new Date(new Date(now).getTime() + n * unit));
+  }
+  const iso = /\b(\d{4})-(\d{2})-(\d{2})(?:[t ](\d{1,2}):(\d{2}))?\b/.exec(s);
+  if (iso) {
+    const [h, m] = (
+      clockTimes(s.replace(iso[0], ' '))[0] || (iso[4] ? `${iso[4]}:${iso[5]}` : '09:00')
+    )
+      .split(':')
+      .map(Number);
+    return onceAt(new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]), h, m));
+  }
+  const named =
+    /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* (\d{1,2})(?:st|nd|rd|th)?\b/.exec(s);
+  if (
+    /\b(today|tonight|tomorrow|once)\b/.test(s) ||
+    (named && !/\b(every|monthly|each)\b/.test(s))
+  ) {
+    const base = new Date(now);
+    let day = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    if (/\btomorrow\b/.test(s)) day.setDate(day.getDate() + 1);
+    if (named) {
+      day = new Date(base.getFullYear(), MONTH_WORDS[named[1]], Number(named[2]));
+      if (day < new Date(base.getFullYear(), base.getMonth(), base.getDate()))
+        day.setFullYear(day.getFullYear() + 1);
+    }
+    const [time] = clockTimes(s.replace(named?.[0] || '', ' '));
+    if (!time) throw new Error(`“${text}” needs a time, like "tomorrow 9:00"`);
+    const [h, m] = time.split(':').map(Number);
+    day.setHours(h, m, 0, 0);
+    return onceAt(day);
+  }
+
+  // Intervals, with an optional window and days: "every 30 minutes from 9:00 to 17:00 on weekdays".
+  const every = /\bevery (\d+)? ?(m|min|mins|minutes?|h|hr|hrs|hours?)\b/.exec(s);
+  if (every || /\b(hourly|every hour)\b/.test(s)) {
+    const n = every ? Number(every[1] || 1) : 1;
+    const minutes = every && every[2][0] === 'm' ? n : n * 60;
+    const times = clockTimes(s);
+    const days = weekdaysIn(s);
     return normalizeSchedule({
       kind: 'interval',
-      minutes: interval[2].startsWith('h') ? n * 60 : n,
+      minutes,
+      ...(times.length >= 2 ? { from: times[0], to: times[1] } : {}),
+      ...(days ? { days } : {}),
     });
   }
-  if (s === 'hourly' || s === 'every hour') return { kind: 'interval', minutes: 60 };
-  const time = /(\d{1,2}:\d{2})/.exec(s);
-  if (!time)
-    throw new Error(
-      `“${text}” isn’t a schedule. Try "daily 08:00", "weekdays 09:00" or "every 2 hours"`
-    );
-  if (/weekdays?/.test(s))
-    return normalizeSchedule({ kind: 'daily', time: time[1], days: [1, 2, 3, 4, 5] });
-  if (/weekends?/.test(s)) return normalizeSchedule({ kind: 'daily', time: time[1], days: [0, 6] });
-  const days = [...s.matchAll(/\b(sun|mon|tue|wed|thu|fri|sat)[a-z]*/g)].map(
-    (m) => DAY_WORDS[m[1]]
+
+  const times = clockTimes(s);
+  if (!times.length) throw new Error(`“${text}” isn’t a schedule. ${HELP}`);
+
+  // Monthly: "monthly on the 1st and 15th 9:00", "last day of the month 18:00", "on the 3rd at 8am".
+  const ords = [...s.replace(CLOCK_RE, ' ').matchAll(/\b(\d{1,2})(?:st|nd|rd|th)\b/g)].map((m) =>
+    Number(m[1])
   );
-  return normalizeSchedule({ kind: 'daily', time: time[1], days: days.length ? days : null });
+  const last = /\blast day\b/.test(s);
+  if (/\bmonth/.test(s) || ords.length || last) {
+    const dates = [...ords, ...(last ? [LAST] : [])];
+    return normalizeSchedule({ kind: 'monthly', dates: dates.length ? dates : [1], times });
+  }
+
+  return normalizeSchedule({ kind: 'daily', times, days: weekdaysIn(s) });
 }
 
-// "Every 2 hours", "Every day at 08:00", "Weekdays at 09:00", "Mon, Wed at 07:30", "By hand".
+function onceAt(at) {
+  if (Number.isNaN(at.getTime())) throw new Error('That date isn’t a real date');
+  return { kind: 'once', at: at.toISOString() };
+}
+
+// Descriptions
+// =
+
+// "Every 2 hours", "Every 30 minutes, 09:00–17:00 on weekdays", "Every day at 08:00", "Weekdays at
+// 09:00 and 17:00", "Mon, Wed at 07:30", "Monthly on the 1st and last day at 09:00", "Once, Mon Nov
+// 2 at 09:00", "Cron 0 8 * * 1-5", "By hand".
 export function describeSchedule(schedule) {
   if (!schedule) return 'By hand';
-  if (schedule.kind === 'interval') {
-    const m = schedule.minutes;
-    if (m % (24 * 60) === 0)
-      return m === 24 * 60 ? 'Every 24 hours' : `Every ${m / (24 * 60)} days`;
-    if (m % 60 === 0) return m === 60 ? 'Every hour' : `Every ${m / 60} hours`;
-    return `Every ${m} minutes`;
+  switch (schedule.kind) {
+    case 'interval': {
+      const m = schedule.minutes;
+      let when;
+      if (m % (24 * 60) === 0)
+        when = m === 24 * 60 ? 'Every 24 hours' : `Every ${m / (24 * 60)} days`;
+      else if (m % 60 === 0) when = m === 60 ? 'Every hour' : `Every ${m / 60} hours`;
+      else when = `Every ${m} minutes`;
+      const window = schedule.from ? `, ${schedule.from}–${schedule.to}` : '';
+      const named = schedule.days ? describeDays(schedule.days) : '';
+      const days = named ? ` on ${/^Week/.test(named) ? named.toLowerCase() : named}` : '';
+      return when + window + days;
+    }
+    case 'daily':
+      return `${schedule.days ? describeDays(schedule.days) : 'Every day'} at ${listWords(timesOf(schedule))}`;
+    case 'monthly':
+      return `Monthly on the ${listWords(schedule.dates.map(ordinal))} at ${listWords(timesOf(schedule))}`;
+    case 'once': {
+      const at = new Date(schedule.at);
+      return `Once, ${DAY_NAMES[at.getDay()]} ${MON_NAMES[at.getMonth()]} ${at.getDate()} at ${hhmm(at)}`;
+    }
+    case 'cron':
+      return `Cron ${schedule.expr}`;
   }
-  const days = schedule.days;
-  let when = 'Every day';
-  if (days?.join() === '1,2,3,4,5') when = 'Weekdays';
-  else if (days?.join() === '0,6') when = 'Weekends';
-  else if (days?.length) when = days.map((d) => DAY_NAMES[d]).join(', ');
-  return `${when} at ${schedule.time}`;
+  return 'By hand';
 }
+
+function describeDays(days) {
+  if (days.join() === '1,2,3,4,5') return 'Weekdays';
+  if (days.join() === '0,6') return 'Weekends';
+  return days.map((d) => DAY_NAMES[d]).join(', ');
+}
+
+function listWords(items) {
+  return items.length <= 1
+    ? items.join('')
+    : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+function ordinal(d) {
+  if (d === LAST) return 'last day';
+  const s = d % 100 >= 11 && d % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][d % 10] || 'th';
+  return d + s;
+}
+
+function hhmm(at) {
+  return `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+}
+
+// A daily or monthly schedule's times (older records have one `time`).
+function timesOf(schedule) {
+  return schedule.times || (schedule.time ? [schedule.time] : []);
+}
+
+// Next times
+// =
 
 // The first time the schedule runs strictly after `after`, or null for none.
 export function nextRunAt(schedule, after) {
   if (!schedule) return null;
   const from = new Date(after);
   if (Number.isNaN(from.getTime())) return null;
-  if (schedule.kind === 'interval') return new Date(from.getTime() + schedule.minutes * 60_000);
-  const [h, m] = schedule.time.split(':').map(Number);
-  for (let d = 0; d <= 7; d++) {
-    const at = new Date(from.getFullYear(), from.getMonth(), from.getDate() + d, h, m, 0, 0);
-    if (at <= from) continue;
-    if (schedule.days && !schedule.days.includes(at.getDay())) continue;
-    return at;
+  switch (schedule.kind) {
+    case 'interval':
+      return nextInterval(schedule, from);
+    case 'daily':
+      return nextOnDays(
+        from,
+        timesOf(schedule),
+        (day) => !schedule.days || schedule.days.includes(day.getDay())
+      );
+    case 'monthly':
+      return nextOnDays(from, timesOf(schedule), (day) => monthlyDateMatches(schedule.dates, day));
+    case 'once': {
+      const at = new Date(schedule.at);
+      return at > from ? at : null;
+    }
+    case 'cron': {
+      let c;
+      try {
+        c = parseCron(schedule.expr);
+      } catch {
+        return null;
+      }
+      const times = [];
+      for (const h of [...c.hour].sort((a, b) => a - b)) {
+        for (const m of [...c.minute].sort((a, b) => a - b))
+          times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+      }
+      return nextOnDays(from, times, (day) => cronDayMatches(c, day));
+    }
   }
   return null;
 }
 
+function monthlyDateMatches(dates, day) {
+  const lastDate = new Date(day.getFullYear(), day.getMonth() + 1, 0).getDate();
+  return dates.some((d) => (d === LAST ? day.getDate() === lastDate : d === day.getDate()));
+}
+
+// The first of `times` (sorted HH:MM) on a day that matches, strictly after `from`.
+function nextOnDays(from, times, dayMatches) {
+  if (!times.length) return null;
+  const hm = times.map((t) => t.split(':').map(Number));
+  for (let d = 0; d <= SEARCH_DAYS; d++) {
+    const day = new Date(from.getFullYear(), from.getMonth(), from.getDate() + d);
+    if (!dayMatches(day)) continue;
+    for (const [h, m] of hm) {
+      const at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, m, 0, 0);
+      if (at > from) return at;
+    }
+  }
+  return null;
+}
+
+// Every `minutes` after the last run, but only inside the window and on the days, if it has them.
+// Outside them it next runs when the window opens.
+function nextInterval(schedule, from) {
+  const next = new Date(from.getTime() + schedule.minutes * 60_000);
+  if (!schedule.from && !schedule.days) return next;
+  const okDay = (at) => !schedule.days || schedule.days.includes(at.getDay());
+  const t = hhmm(next);
+  if (okDay(next) && (!schedule.from || (t >= schedule.from && t <= schedule.to))) return next;
+  // The window's next opening after `from` (or the next allowed day's midnight without a window).
+  return nextOnDays(from, [schedule.from || '00:00'], okDay);
+}
+
 // When the Job next runs on its schedule: the first time after its last run, or after the schedule
 // was set (so a new schedule never fires for a time that already went by). A time missed while the
-// Device was asleep is due at once, and runs once, however many were missed.
+// Device was asleep is due at once, and runs once, however many were missed. A one-time schedule
+// runs once: a run by hand before its time doesn't count.
 export function dueAt(job, lastRunAt = null) {
   if (!job || !job.enabled || !job.schedule) return null;
+  if (job.schedule.kind === 'once') {
+    const at = new Date(job.schedule.at);
+    if (Number.isNaN(at.getTime())) return null;
+    return lastRunAt && new Date(lastRunAt) >= at ? null : at;
+  }
   const times = [job.scheduleFrom, lastRunAt]
     .map((t) => new Date(t || 0).getTime())
     .filter((t) => t > 0);
@@ -282,7 +681,15 @@ export function makeJob(fields, prev = null, now = new Date()) {
     clip(f.source?.title, MAX_TITLE) ||
     sourceTitle(source);
   const schedule =
-    f.schedule !== undefined ? normalizeSchedule(f.schedule) : prev?.schedule || null;
+    f.schedule !== undefined ? normalizeSchedule(f.schedule, now) : prev?.schedule || null;
+  if (
+    schedule?.kind === 'once' &&
+    f.schedule !== undefined &&
+    new Date(schedule.at).getTime() < now.getTime() - 60_000 &&
+    JSON.stringify(schedule) !== JSON.stringify(prev?.schedule || null)
+  ) {
+    throw new Error(`${describeSchedule(schedule)} has already passed`);
+  }
   const notify = f.notify !== undefined ? f.notify : prev?.notify || 'always';
   if (!NOTIFY.includes(notify)) throw new Error('notify is "always", "auto" or "never"');
   const enabled = f.enabled !== undefined ? !!f.enabled : prev ? prev.enabled : true;

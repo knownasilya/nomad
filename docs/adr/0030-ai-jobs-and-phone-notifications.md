@@ -26,10 +26,17 @@ rules are in `shared/jobs.mjs`; the desktop side is `app/bg/ai/jobs.js` (store, 
    writes `/.vault/job-requests/<jobId>.json`; the Job's computer runs it when it sees the request and
    deletes the record. That works without AI sharing turned on and waits out a sleeping laptop,
    which a call over the AI Bridge would not.
-3. **Schedules are simple and local.** None (by hand), every N minutes (15 at least), or a time of
-   day on some weekdays, in the running computer's time zone. A schedule counts from when it was
-   set (`scheduleFrom`), so a new or edited schedule never fires for a time already past. A time
-   missed while the computer slept runs once when it wakes, not once per missed time.
+3. **Schedules are local, and say what people say.** By hand; every N minutes (15 at least),
+   optionally only between two times and on some weekdays; at one or more times of day on some
+   weekdays; on days of the month (the last day too) at one or more times; once, at a date and
+   time; or a five-field cron expression. All in the running computer's time zone.
+   `normalizeSchedule` also reads phrases ("weekdays 9:00 and 17:00", "every 30 minutes from 9:00 to
+   17:00", "last day of the month 18:00", "tomorrow 9:00", "in 2 hours", "0 8 * * 1-5"), so the AI
+   can pass what the user said; My Library has a form per kind plus a "type it" box, and shows the
+   schedule in words with its next three runs (`previewSchedule`). A schedule counts from when it
+   was set (`scheduleFrom`), so a new or edited schedule never fires for a time already past. A
+   time missed while the computer slept runs once when it wakes, not once per missed time. A
+   one-time Job runs once at its time, however often it was run by hand before.
 4. **A run is a turn on a new `job` stage** (ADR-0021): the user's own AI, with no tab and nobody
    watching. It reads and changes nothing: of the personal capabilities it gets only listNotes,
    readNote, listReaderPosts, readReaderPost and notify (`JOB_CAPS`), plus the drive readers and

@@ -65,10 +65,10 @@ describe('normalizeSchedule', () => {
     expect(normalizeSchedule(null)).toBe(null);
     expect(normalizeSchedule('manual')).toBe(null);
     expect(normalizeSchedule({ kind: 'interval', minutes: 120 })).toEqual({ kind: 'interval', minutes: 120 });
-    expect(normalizeSchedule({ kind: 'daily', time: '8:05' })).toEqual({ kind: 'daily', time: '08:05' });
-    expect(normalizeSchedule({ kind: 'daily', time: '09:00', days: [5, 1, 1] })).toEqual({
+    expect(normalizeSchedule({ kind: 'daily', time: '8:05' })).toEqual({ kind: 'daily', times: ['08:05'] });
+    expect(normalizeSchedule({ kind: 'daily', times: ['17:00', '9:00', '09:00'], days: [5, 1, 1] })).toEqual({
       kind: 'daily',
-      time: '09:00',
+      times: ['09:00', '17:00'],
       days: [1, 5],
     });
   });
@@ -76,7 +76,7 @@ describe('normalizeSchedule', () => {
   it('treats every weekday as every day', () => {
     expect(normalizeSchedule({ kind: 'daily', time: '09:00', days: [0, 1, 2, 3, 4, 5, 6] })).toEqual({
       kind: 'daily',
-      time: '09:00',
+      times: ['09:00'],
     });
   });
 
@@ -84,9 +84,50 @@ describe('normalizeSchedule', () => {
     expect(normalizeSchedule('hourly')).toEqual({ kind: 'interval', minutes: 60 });
     expect(normalizeSchedule('every 2 hours')).toEqual({ kind: 'interval', minutes: 120 });
     expect(normalizeSchedule('every 30 minutes')).toEqual({ kind: 'interval', minutes: 30 });
-    expect(normalizeSchedule('daily 07:30')).toEqual({ kind: 'daily', time: '07:30' });
-    expect(normalizeSchedule('weekdays at 9:00')).toEqual({ kind: 'daily', time: '09:00', days: [1, 2, 3, 4, 5] });
-    expect(normalizeSchedule('Mondays and Fridays 18:00')).toEqual({ kind: 'daily', time: '18:00', days: [1, 5] });
+    expect(normalizeSchedule('daily 07:30')).toEqual({ kind: 'daily', times: ['07:30'] });
+    expect(normalizeSchedule('weekdays at 9:00')).toEqual({ kind: 'daily', times: ['09:00'], days: [1, 2, 3, 4, 5] });
+    expect(normalizeSchedule('Mondays and Fridays 18:00')).toEqual({ kind: 'daily', times: ['18:00'], days: [1, 5] });
+  });
+
+  it('reads several times a day, windows, months, one-offs and cron', () => {
+    const now = at(30, 10); // Friday 2026-10-30 10:00
+    expect(normalizeSchedule('8am, 1pm and 5:30pm on weekdays', now)).toEqual({
+      kind: 'daily',
+      times: ['08:00', '13:00', '17:30'],
+      days: [1, 2, 3, 4, 5],
+    });
+    expect(normalizeSchedule('Tuesdays and Thursdays at noon')).toEqual({ kind: 'daily', times: ['12:00'], days: [2, 4] });
+    expect(normalizeSchedule('every 30 minutes from 9:00 to 17:00 on weekdays')).toEqual({
+      kind: 'interval',
+      minutes: 30,
+      from: '09:00',
+      to: '17:00',
+      days: [1, 2, 3, 4, 5],
+    });
+    expect(normalizeSchedule('monthly on the 1st and 15th at 9am')).toEqual({ kind: 'monthly', dates: [1, 15], times: ['09:00'] });
+    expect(normalizeSchedule('last day of the month 18:00')).toEqual({ kind: 'monthly', dates: [-1], times: ['18:00'] });
+    expect(normalizeSchedule('tomorrow 9:00', now)).toEqual({ kind: 'once', at: at(31, 9).toISOString() });
+    expect(normalizeSchedule('in 2 hours', now)).toEqual({ kind: 'once', at: at(30, 12).toISOString() });
+    expect(normalizeSchedule('2026-11-02 09:00', now)).toEqual({ kind: 'once', at: new Date(2026, 10, 2, 9).toISOString() });
+    expect(normalizeSchedule('Nov 5 at noon', now)).toEqual({ kind: 'once', at: new Date(2026, 10, 5, 12).toISOString() });
+    expect(normalizeSchedule('0 8 * * 1-5')).toEqual({ kind: 'cron', expr: '0 8 * * 1-5' });
+    expect(normalizeSchedule('cron */15 9-17 * * MON-FRI')).toEqual({ kind: 'cron', expr: '*/15 9-17 * * mon-fri' });
+    expect(normalizeSchedule('@weekly')).toEqual({ kind: 'cron', expr: '@weekly' });
+  });
+
+  it('takes the new kinds as objects', () => {
+    expect(normalizeSchedule({ kind: 'monthly', dates: ['last', 1], time: '9:00' })).toEqual({
+      kind: 'monthly',
+      dates: [1, -1],
+      times: ['09:00'],
+    });
+    expect(normalizeSchedule({ kind: 'once', at: '2026-11-02T09:00:00Z' })).toEqual({ kind: 'once', at: '2026-11-02T09:00:00.000Z' });
+    expect(normalizeSchedule({ kind: 'interval', minutes: 60, from: '9:00', to: '17:00' })).toEqual({
+      kind: 'interval',
+      minutes: 60,
+      from: '09:00',
+      to: '17:00',
+    });
   });
 
   it('refuses too often, bad times and bad days', () => {
@@ -95,6 +136,13 @@ describe('normalizeSchedule', () => {
     expect(() => normalizeSchedule({ kind: 'daily', time: '08:00', days: [7] })).toThrow();
     expect(() => normalizeSchedule({ kind: 'weekly' })).toThrow();
     expect(() => normalizeSchedule('sometimes')).toThrow();
+    expect(() => normalizeSchedule({ kind: 'monthly', dates: [32], times: ['09:00'] })).toThrow(/days of the month/);
+    expect(() => normalizeSchedule({ kind: 'once', at: 'soon' })).toThrow(/needs `at`/);
+    expect(() => normalizeSchedule({ kind: 'interval', minutes: 60, from: '17:00', to: '09:00' })).toThrow(/later/);
+    expect(() => normalizeSchedule('*/5 * * * *')).toThrow(/15 minutes/);
+    expect(() => normalizeSchedule('0,10 8 * * *')).toThrow(/15 minutes/);
+    expect(() => normalizeSchedule('cron 0 8 * *')).toThrow(/five fields/);
+    expect(() => normalizeSchedule('cron 0 25 * * *')).toThrow(/out of range/);
   });
 });
 
@@ -107,6 +155,15 @@ describe('describeSchedule', () => {
     expect(describeSchedule({ kind: 'daily', time: '08:00' })).toBe('Every day at 08:00');
     expect(describeSchedule({ kind: 'daily', time: '09:00', days: [1, 2, 3, 4, 5] })).toBe('Weekdays at 09:00');
     expect(describeSchedule({ kind: 'daily', time: '07:30', days: [1, 3] })).toBe('Mon, Wed at 07:30');
+    expect(describeSchedule({ kind: 'daily', times: ['08:00', '13:00', '17:00'] })).toBe('Every day at 08:00, 13:00 and 17:00');
+    expect(describeSchedule({ kind: 'interval', minutes: 30, from: '09:00', to: '17:00', days: [1, 2, 3, 4, 5] })).toBe(
+      'Every 30 minutes, 09:00–17:00 on weekdays'
+    );
+    expect(describeSchedule({ kind: 'monthly', dates: [1, 22, -1], times: ['09:00'] })).toBe(
+      'Monthly on the 1st, 22nd and last day at 09:00'
+    );
+    expect(describeSchedule({ kind: 'once', at: new Date(2026, 10, 2, 9).toISOString() })).toBe('Once, Mon Nov 2 at 09:00');
+    expect(describeSchedule({ kind: 'cron', expr: '0 8 * * 1-5' })).toBe('Cron 0 8 * * 1-5');
   });
 });
 
@@ -132,6 +189,41 @@ describe('nextRunAt', () => {
   it('has nothing to run by hand', () => {
     expect(nextRunAt(null, at(1, 8))).toBe(null);
   });
+
+  it('takes the next of several times a day', () => {
+    const twice = { kind: 'daily', times: ['08:00', '17:00'] };
+    expect(nextRunAt(twice, at(1, 9))).toEqual(at(1, 17));
+    expect(nextRunAt(twice, at(1, 17))).toEqual(at(2, 8));
+  });
+
+  it('keeps an interval inside its window and days', () => {
+    const work = { kind: 'interval', minutes: 60, from: '09:00', to: '17:00', days: [1, 2, 3, 4, 5] };
+    expect(nextRunAt(work, at(30, 10))).toEqual(at(30, 11));
+    // Friday 16:30: 17:30 is past the window, so Monday 09:00.
+    expect(nextRunAt(work, at(30, 16, 30))).toEqual(new Date(2026, 10, 2, 9, 0));
+    expect(nextRunAt(work, at(30, 7))).toEqual(at(30, 9));
+  });
+
+  it('finds monthly dates, the last day of each month included', () => {
+    const m = { kind: 'monthly', dates: [31, -1], times: ['09:00'] };
+    expect(nextRunAt(m, new Date(2026, 10, 1))).toEqual(new Date(2026, 10, 30, 9)); // November has no 31st
+    expect(nextRunAt(m, new Date(2027, 1, 1))).toEqual(new Date(2027, 1, 28, 9));
+    expect(nextRunAt({ kind: 'monthly', dates: [15], times: ['09:00'] }, new Date(2026, 9, 15, 9))).toEqual(new Date(2026, 10, 15, 9));
+  });
+
+  it('follows cron', () => {
+    const c = { kind: 'cron', expr: '30 8 * * mon-fri' };
+    expect(nextRunAt(c, at(30, 9))).toEqual(new Date(2026, 10, 2, 8, 30));
+    // Both day fields restricted: either matches, as in cron.
+    expect(nextRunAt({ kind: 'cron', expr: '0 9 13 * 5' }, new Date(2026, 10, 1))).toEqual(new Date(2026, 10, 6, 9));
+    expect(nextRunAt({ kind: 'cron', expr: '0 0 29 2 *' }, new Date(2026, 2, 1))).toEqual(new Date(2028, 1, 29, 0));
+  });
+
+  it('runs once at its time', () => {
+    const once = { kind: 'once', at: at(2, 9).toISOString() };
+    expect(nextRunAt(once, at(1, 9))).toEqual(at(2, 9));
+    expect(nextRunAt(once, at(2, 9))).toBe(null);
+  });
 });
 
 describe('dueAt and isDue', () => {
@@ -153,6 +245,18 @@ describe('dueAt and isDue', () => {
     // Asleep for three days: due now, and once it runs, next is the following 8:00.
     expect(isDue(job(), at(2, 8).toISOString(), at(5, 12))).toBe(true);
     expect(dueAt(job(), at(5, 12).toISOString())).toEqual(at(6, 8));
+  });
+
+  it('runs a one-time Job once, even after a run by hand', () => {
+    const once = job({ schedule: { kind: 'once', at: at(2, 9).toISOString() } });
+    expect(dueAt(once)).toEqual(at(2, 9));
+    expect(dueAt(once, at(1, 12).toISOString())).toEqual(at(2, 9)); // by hand, before its time
+    expect(isDue(once, null, at(4, 0))).toBe(true); // asleep at 9:00: runs on wake
+    expect(dueAt(once, at(4, 0).toISOString())).toBe(null);
+  });
+
+  it('refuses a one-time schedule already past', () => {
+    expect(() => job({ schedule: { kind: 'once', at: at(1, 8).toISOString() } })).toThrow(/already passed/);
   });
 
   it('is never due off, or by hand', () => {

@@ -17,7 +17,7 @@ import * as openTabs from '../../ui/open-tabs';
 import * as jobs from '../../ai/jobs';
 import { readJobSource } from './job-source';
 import { PRESETS } from '../../../../shared/mods.mjs';
-import { describeSchedule } from '../../../../shared/jobs.mjs';
+import { describeSchedule, nextRunAt, normalizeSchedule } from '../../../../shared/jobs.mjs';
 
 function thisPlatform() {
   return 'desktop';
@@ -274,6 +274,22 @@ export default {
       source = { url, live: false, module, prompt: text };
     }
     return jobs.save({ id, title, prompt, source, schedule, notify, enabled, runHere: !!runHere, space });
+  },
+
+  // A schedule as the Jobs editor has it (an object, a phrase or cron), checked: { schedule, when,
+  // next: [ISO, …] } with its next few times from now. Throws with what's wrong.
+  async previewSchedule(input) {
+    const now = new Date();
+    const schedule = normalizeSchedule(input, now);
+    const next = [];
+    let after = now;
+    while (schedule && next.length < 3) {
+      const at = nextRunAt(schedule, after);
+      if (!at) break;
+      next.push(at.toISOString());
+      after = at;
+    }
+    return { schedule, when: describeSchedule(schedule), next };
   },
 
   // A Job's source as its drive has it now: { url, live, module, prompt, title, hash }, so the user

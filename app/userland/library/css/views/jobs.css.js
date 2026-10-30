@@ -38,6 +38,46 @@ const cssStr = css`
     width: 70px;
   }
 
+  .when {
+    flex-wrap: wrap;
+  }
+
+  .when.sub {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--text-color--light);
+  }
+
+  .when .check {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .time-item {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  input.text {
+    flex: 1;
+    min-width: 260px;
+  }
+
+  input.dates {
+    width: 120px;
+  }
+
+  .preview {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-color--light);
+  }
+
+  .preview.err {
+    color: var(--mods-err);
+  }
+
   .days {
     margin-top: 8px;
     align-items: center;
