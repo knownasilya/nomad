@@ -206,7 +206,7 @@ _Avoid_: profile, account, identity, workspace
 **Shared Space**:
 A Space its owner shared with other people. Its library (Drive Registry, Contacts, Bookmarks, Reader
 feeds, and its own Notes and Names) lives in a Space Library that every Member reads; each Member
-keeps their own Root Drive, read marks and everything else (ADR-0028, proposed).
+keeps their own Root Drive, read marks and everything else (ADR-0029, proposed).
 _Avoid_: team, group, workspace, shared folder
 
 **Space Library**:
