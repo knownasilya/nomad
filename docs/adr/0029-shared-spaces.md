@@ -266,8 +266,10 @@ with a code. Sharing from the phone (being an owner Device that approves) comes 
 ## Rollout
 
 1. **Space-only Notes and Names.** The `space-lib` Vault records, the two sections in My Library →
-   Names and in Notes, and moving an item. Desktop first; the phone lists and edits only the
-   user's own until its follow-up.
+   Names and in Notes, and moving an item. Desktop first, then the phone: `RPC_APPS` sends the
+   active Space for Notes and Names (`mobile/backend/lib/vault-apps.mjs`), Notes shows the
+   Space's section and a pin in the editor to move a note, and the name sheet has **Only in
+   <Space>**.
 2. **Desktop per-drive writer keys.** The first-open rule from S1 in `autobases.js`, then
    ADR-0026's Writer grants on desktop. *Landed:* `_storeFor` in `autobases.js` (the Vault opens
    on the root store, `VAULT_OPEN`), `shared/drive-writers.mjs`, `app/bg/hyper/drive-writers.js`

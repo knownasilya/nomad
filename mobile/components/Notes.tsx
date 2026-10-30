@@ -9,6 +9,7 @@ import LinkPhone from './LinkPhone'
 import ScreenHeader from './ScreenHeader'
 import IconButton from './IconButton'
 import Icon from './Icon'
+import { ListSection } from './List'
 
 const SAVE_DELAY = 800
 
@@ -17,6 +18,8 @@ interface Props {
   onClose: () => void
   apps: Backend['apps']
   onVaultChange: Backend['onVaultChange']
+  space?: string // the active Space's Root Drive key: a Space can keep notes of its own (ADR-0029)
+  spaceName?: string
   onOpenDevices: () => void
   // A link to a page; noteId is the note it was in, which openNoteId gets back when back returns here.
   onOpenUrl: (url: string, noteId?: string) => void
@@ -25,7 +28,8 @@ interface Props {
 
 // The note in the editor. One object per open note, changed in place, so a save that finishes after
 // more typing still gives the new note its id. base: the updatedAt of the version it started from.
-interface Draft { id: string | null; body: string; title: string; base: string | null; openedTitle: string | null; conflictOf: string | null }
+// inSpace: the note is kept only in the active Space.
+interface Draft { id: string | null; body: string; title: string; base: string | null; openedTitle: string | null; conflictOf: string | null; inSpace: boolean }
 
 // The editor's formatting buttons: [command in app/userland/notes/js/editor/commands.js, label].
 const TOOLS: [string, string][] = [['heading', 'H'], ['bold', 'B'], ['italic', 'I'], ['strike', 'S'], ['bullet', '•'], ['task', '☑'], ['quote', '❝'], ['code', '</>'], ['link', '[[ ]]']]
@@ -37,15 +41,18 @@ const TOOLS: [string, string][] = [['heading', 'H'], ['bold', 'B'], ['italic', '
 // becomes a conflict copy. A new note left empty is never stored; an emptied one is deleted when you
 // leave it. Retitling a note updates the links to it. Another Device's edits show while this is open.
 // Back from a note reached by a [[link]] returns to the note the link was in, then to the list.
-export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDevices, onOpenUrl, openNoteId }: Props) {
+// A note is the user's, shown in every Space, or kept only in the active Space (ADR-0029): the list
+// shows the Space's first, and the pin in the editor moves a note between the two.
+export default function Notes ({ visible, onClose, apps, onVaultChange, space, spaceName, onOpenDevices, onOpenUrl, openNoteId }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const insets = useSafeAreaInsets()
   // backend.apps is a new function on every parent render. Calling through a ref keeps the effects
-  // below from re-running (and reloading) on each one.
+  // below from re-running (and reloading) on each one. Every call names the active Space, and a new
+  // Space reloads the list.
   const appsRef = useRef(apps)
   appsRef.current = apps
-  const call = useCallback(((app, action, args) => appsRef.current(app, action, args)) as Backend['apps'], [])
+  const call = useCallback(((app, action, args = {}) => appsRef.current(app, action, { space, ...args })) as Backend['apps'], [space])
 
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [writable, setWritable] = useState(true)
@@ -56,6 +63,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
   const [status, setStatus] = useState('')
   const [banner, setBanner] = useState<string | null>(null)
   const [listLoaded, setListLoaded] = useState(false) // since Notes last opened
+  const [inSpace, setInSpace] = useState(false) // the open note's place, for the pin
 
   const notesRef = useRef<Note[]>([])
   const draft = useRef<Draft | null>(null)
@@ -133,7 +141,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
     setStatus('Saving…')
     const wasId = target.id
     const run = (async () => {
-      const res = await call<Note>('notes', 'save', { id: target.id || undefined, body: target.body, baseUpdatedAt: target.base || undefined })
+      const res = await call<Note>('notes', 'save', { id: target.id || undefined, body: target.body, baseUpdatedAt: target.base || undefined, inSpace: target.inSpace })
       if (!res.ok || !res.value) {
         dirty.current = true
         setStatus('Not saved: ' + (res.message || 'unknown error'))
@@ -182,8 +190,9 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
 
   const openEditor = (note: Note | null, { body = '', heading = '' } = {}) => {
     draft.current = note
-      ? { id: note.id, body: note.body, title: note.title, base: note.updatedAt, openedTitle: note.title, conflictOf: note.conflictOf || null }
-      : { id: null, body, title: '', base: null, openedTitle: null, conflictOf: null }
+      ? { id: note.id, body: note.body, title: note.title, base: note.updatedAt, openedTitle: note.title, conflictOf: note.conflictOf || null, inSpace: !!note.space }
+      : { id: null, body, title: '', base: null, openedTitle: null, conflictOf: null, inSpace: false }
+    setInSpace(draft.current.inSpace)
     dirty.current = !note && !!body
     pendingHeading.current = heading
     setStatus('')
@@ -278,6 +287,23 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
     }
   }
 
+  // The pin: keep the open note only in this Space, or show it in every Space. A note not saved yet
+  // is saved there when it first is.
+  const toggleScope = async () => {
+    const target = draft.current
+    if (!target || !space) return
+    const next = !target.inSpace
+    if (!target.id) { target.inSpace = next; setInSpace(next); return }
+    await save()
+    const res = await call<Note>('notes', 'move', { id: target.id, inSpace: next })
+    if (!res.ok || !res.value) return Alert.alert('Couldn’t move the note', res.message || 'Unknown error')
+    const note = res.value
+    target.inSpace = !!note.space
+    setInSpace(target.inSpace)
+    keepNotes(notesRef.current.map((n) => (n.id === note.id ? { ...n, space: note.space } : n)))
+    setStatus(note.space ? `Only in ${spaceName || 'this Space'}` : 'In every Space')
+  }
+
   const deleteNote = () => {
     const target = draft.current
     if (!target) return
@@ -310,6 +336,14 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
 
   const q = query.trim().toLowerCase()
   const shown = (notes || []).filter((n) => !q || n.body.toLowerCase().includes(q))
+  // The Space's own notes first, under its name, when it has any.
+  const sections: { title: string | null; notes: Note[] }[] =
+    space && shown.some((n) => n.space)
+      ? [
+          { title: `Only in ${spaceName || 'this Space'}`, notes: shown.filter((n) => n.space) },
+          { title: 'All Spaces', notes: shown.filter((n) => !n.space) }
+        ].filter((sec) => sec.notes.length)
+      : [{ title: null, notes: shown }]
   const conflictOf = draft.current?.conflictOf
   const original = conflictOf ? notesRef.current.find((n) => n.id === conflictOf) : null
 
@@ -321,6 +355,16 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
             <View style={s.header}>
               <IconButton icon='arrow-left' label='Back' onPress={backFromEditor} color={t.text} />
               <Text numberOfLines={1} style={s.status}>{writable ? status : 'Read only for now'}</Text>
+              {space ? (
+                <IconButton
+                  icon={inSpace ? 'thumbtack' : 'globe'}
+                  label={inSpace ? `Only in ${spaceName || 'this Space'}. Show it in every Space` : `In every Space. Keep it only in ${spaceName || 'this Space'}`}
+                  onPress={toggleScope}
+                  disabled={!writable}
+                  active={inSpace}
+                  size={17}
+                />
+              ) : null}
               <IconButton icon='trash-alt' label='Delete note' onPress={deleteNote} disabled={!writable} color={t.danger} />
             </View>
             {(banner || conflictOf) && (
@@ -386,17 +430,19 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
                 {shown.length === 0 ? (
                   <Text style={s.empty}>{q ? 'No notes match.' : 'No notes yet. Tap New note to write one. It shows on your computer too.'}</Text>
                 ) : (
-                  <View style={s.card}>
-                    {shown.map((n, i) => (
-                      <Pressable key={n.id} style={[s.row, i > 0 && s.rowDivider]} android_ripple={{ color: t.ripple }} onPress={() => openFromList(n)}>
-                        <Text numberOfLines={1} style={s.rowTitle}>{n.title}</Text>
-                        <Text numberOfLines={1} style={s.rowSub}>
-                          <Text style={s.rowDate}>{relativeDate(n.updatedAt)}</Text>
-                          {n.snippet ? `  ${n.snippet}` : ''}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
+                  sections.map((sec) => (
+                    <ListSection key={sec.title || 'all'} title={sec.title || undefined}>
+                        {sec.notes.map((n, i) => (
+                          <Pressable key={n.id} style={[s.row, i > 0 && s.rowDivider]} android_ripple={{ color: t.ripple }} onPress={() => openFromList(n)}>
+                            <Text numberOfLines={1} style={s.rowTitle}>{n.title}</Text>
+                            <Text numberOfLines={1} style={s.rowSub}>
+                              <Text style={s.rowDate}>{relativeDate(n.updatedAt)}</Text>
+                              {n.snippet ? `  ${n.snippet}` : ''}
+                            </Text>
+                          </Pressable>
+                        ))}
+                    </ListSection>
+                  ))
                 )}
               </ScrollView>
             )}

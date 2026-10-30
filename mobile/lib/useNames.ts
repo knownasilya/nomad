@@ -6,6 +6,8 @@ import type { Backend, NameRecord, NamesForUrl } from './useBackend'
 // has them. The backend reads and writes the records with the shared rules (shared/names.mjs); this
 // side only asks. Desktop and other Devices change names while the phone is away, so the looked-up
 // state refreshes whenever the app comes back to the foreground, and after the phone saves a name.
+// `space` is the active Space's Root Drive key: a Space can have names of its own (ADR-0029), and
+// the user's own name wins over the Space's with the same word.
 
 // How long a navigation waits to learn whether the address is a name before it goes on as typed.
 const RESOLVE_WAIT_MS = 1500
@@ -19,13 +21,16 @@ export function mayBeName (input: string): boolean {
   return m[1].length !== 64 && m[1].length !== 52
 }
 
-export function useNames (apps: Backend['apps']) {
+export function useNames (apps: Backend['apps'], space?: string) {
   // backend.apps is a new function on every parent render; calling through a ref keeps the
-  // callbacks and effects below stable.
-  const appsRef = useRef(apps)
-  appsRef.current = apps
+  // callbacks and effects below stable. Every call names the active Space.
+  const appsRef = useRef<Backend['apps']>(apps)
+  appsRef.current = ((app, action, args = {}) => apps(app, action, { space, ...args })) as Backend['apps']
   const [version, setVersion] = useState(0)
   const changed = useCallback(() => setVersion((v) => v + 1), [])
+
+  // Another Space has other names.
+  useEffect(() => { changed() }, [space, changed])
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => { if (s === 'active') changed() })
@@ -48,14 +53,15 @@ export function useNames (apps: Backend['apps']) {
   const forUrl = useCallback((url: string, title = '') =>
     appsRef.current<NamesForUrl>('names', 'forUrl', { url, title }), [])
 
-  const set = useCallback(async (rec: { name: string; url: string; title: string; previous?: string }) => {
+  // inSpace: keep the name only in the active Space. previousInSpace: where `previous` is.
+  const set = useCallback(async (rec: { name: string; url: string; title: string; previous?: string; inSpace?: boolean; previousInSpace?: boolean }) => {
     const r = await appsRef.current<NameRecord>('names', 'set', rec)
     if (r.ok) changed()
     return r
   }, [changed])
 
-  const remove = useCallback(async (name: string) => {
-    const r = await appsRef.current('names', 'remove', { name })
+  const remove = useCallback(async (name: string, inSpace = false) => {
+    const r = await appsRef.current('names', 'remove', { name, inSpace })
     if (r.ok) changed()
     return r
   }, [changed])

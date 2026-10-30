@@ -223,3 +223,101 @@ describe('phone Names over a shared Vault (ADR-0018)', () => {
     })
   }, 30000)
 })
+
+describe('phone Space-only Notes and Names over a shared Vault (ADR-0029)', () => {
+  const DRIVE = `hyper://${'b'.repeat(64)}/`
+  const OTHER = 'd'.repeat(64) // another Space
+
+  it('reads the Space’s notes the computer kept, and only in that Space', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      const own = apps.makeNote({ id: apps.newNoteId(), body: 'Mine' })
+      const theirs = apps.makeNote({ id: apps.newNoteId(), body: 'Team plan' })
+      await computer.append(putJson(apps.notePath(own.id), own))
+      await computer.append(putJson(apps.notePath(theirs.id, SPACE), theirs))
+      await computer.update()
+
+      await until(async () => (await phone.listNotes(base, SPACE)).notes.length === 2)
+      const list = await phone.listNotes(base, SPACE)
+      expect(list.space).toBe(SPACE)
+      expect(list.notes.find((n) => n.id === theirs.id).space).toBe(SPACE)
+      expect(list.notes.find((n) => n.id === own.id).space).toBe(null)
+      expect((await phone.listNotes(base, OTHER)).notes.map((n) => n.id)).toEqual([own.id])
+      expect((await phone.listNotes(base)).notes.map((n) => n.id)).toEqual([own.id])
+    })
+  }, 30000)
+
+  it('writes, moves and deletes a Space note the computer can read', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      const saved = await phone.saveNote(base, { body: 'Only here', inSpace: true, space: SPACE })
+      expect(saved.space).toBe(SPACE)
+      await until(async () => !!(await readJson(computer, apps.notePath(saved.id, SPACE))))
+      expect(await readJson(computer, apps.notePath(saved.id))).toBe(null)
+
+      // An edit stays where the note is, even without inSpace.
+      const edited = await phone.saveNote(base, { id: saved.id, body: 'Only here, edited', baseUpdatedAt: saved.updatedAt, space: SPACE })
+      expect(edited.space).toBe(SPACE)
+
+      const out = await phone.moveNote(base, { id: saved.id, inSpace: false, space: SPACE })
+      expect(out.space).toBe(null)
+      await until(async () => !!(await readJson(computer, apps.notePath(saved.id))))
+      expect(await readJson(computer, apps.notePath(saved.id, SPACE))).toBe(null)
+
+      await phone.moveNote(base, { id: saved.id, inSpace: true, space: SPACE })
+      await phone.deleteNote(base, saved.id, SPACE)
+      await until(async () => !(await readJson(computer, apps.notePath(saved.id, SPACE))))
+      expect((await phone.listNotes(base, SPACE)).notes).toEqual([])
+      await expect(phone.moveNote(base, { id: saved.id, inSpace: true, space: SPACE })).rejects.toThrow(/No note/)
+    })
+  }, 30000)
+
+  it('renames links across the user’s and the Space’s notes', async () => {
+    await withDevices(async ({ phone: base }) => {
+      const seeds = await phone.saveNote(base, { body: '# Seed order' })
+      await phone.saveNote(base, { body: 'Team\nSee [[Seed order]]', inSpace: true, space: SPACE })
+      const renamed = await phone.saveNote(base, { id: seeds.id, body: '# Seeds 2027', baseUpdatedAt: seeds.updatedAt })
+      expect(await phone.renameNoteLinks(base, { id: renamed.id, from: 'Seed order', to: 'Seeds 2027', space: SPACE })).toBe(1)
+      const team = (await phone.listNotes(base, SPACE)).notes.find((n) => n.title === 'Team')
+      expect(team).toMatchObject({ body: 'Team\nSee [[Seeds 2027]]', space: SPACE })
+    })
+  }, 30000)
+
+  it('resolves a Space’s names in that Space only, the user’s own first', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      await computer.append(putJson(names.namePath('wiki', SPACE), names.makeNameRecord({ name: 'wiki', url: DRIVE, title: 'Team wiki' })))
+      await computer.append(putJson(names.namePath('home', SPACE), names.makeNameRecord({ name: 'home', url: 'https://team.example/', title: 'Team' })))
+      await computer.append(putJson(names.namePath('home'), names.makeNameRecord({ name: 'home', url: 'https://me.example/', title: 'Me' })))
+      await computer.update()
+      await until(async () => (await phone.listNames(base, SPACE)).names.length === 3)
+
+      expect(await phone.resolveName(base, 'wiki', SPACE)).toBe(DRIVE)
+      expect(await phone.resolveName(base, 'wiki', OTHER)).toBe(null)
+      expect(await phone.resolveName(base, 'wiki')).toBe(null)
+      expect(await phone.resolveName(base, 'home', SPACE)).toBe('https://me.example/')
+
+      const listed = (await phone.listNames(base, SPACE)).names
+      expect(listed.find((r) => r.name === 'home' && r.space === SPACE).hidden).toBe(true)
+      expect((await phone.matchNames(base, 'home', 5, SPACE)).map((r) => r.url)).toEqual(['https://me.example/'])
+      expect((await phone.namesForUrl(base, DRIVE, '', SPACE)).approved).toMatchObject({ name: 'wiki', space: SPACE })
+      expect((await phone.namesForUrl(base, DRIVE, '', OTHER)).approved).toBe(null)
+    })
+  }, 30000)
+
+  it('names in the Space, moves a name out, and removes it', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      const rec = await phone.setName(base, { name: 'Wiki', url: DRIVE, title: 'Team wiki', inSpace: true, space: SPACE })
+      expect(rec).toMatchObject({ name: 'wiki', space: SPACE })
+      await until(async () => !!(await readJson(computer, names.namePath('wiki', SPACE))))
+      expect(await readJson(computer, names.namePath('wiki'))).toBe(null)
+
+      // Out to the user's own names, keeping the word.
+      await phone.setName(base, { name: 'wiki', url: DRIVE, title: 'Team wiki', previous: 'wiki', previousInSpace: true, space: SPACE })
+      await until(async () => !(await readJson(computer, names.namePath('wiki', SPACE))))
+      expect(await readJson(computer, names.namePath('wiki'))).toMatchObject({ url: DRIVE })
+
+      await phone.setName(base, { name: 'docs', url: DRIVE, inSpace: true, space: SPACE })
+      await phone.removeName(base, 'docs', { inSpace: true, space: SPACE })
+      await until(async () => !(await readJson(computer, names.namePath('docs', SPACE))))
+      await expect(phone.setName(base, { name: 'x', url: DRIVE, inSpace: true })).rejects.toThrow(/isn’t ready/)
+    })
+  }, 30000)
+})
