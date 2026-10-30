@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Modal, Platform, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { radius, useTheme, type Theme } from '../lib/theme'
+import { checkForUpdate, currentVersion, installUpdate, setAutoInstall, updatesSupported, useAutoInstall, useUpdateState } from '../lib/updater'
 
 interface Props {
   visible: boolean
@@ -18,6 +19,9 @@ interface Props {
 export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosting, onOpenLogs, shareTabs, onShareTabs }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
+  const update = useUpdateState()
+  const auto = useAutoInstall()
+  const version = currentVersion()
 
   const rows: { title: string; sub: string; onPress: () => void }[][] = [
     [
@@ -62,13 +66,52 @@ export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosti
               <Switch
                 value={shareTabs}
                 onValueChange={onShareTabs}
-                trackColor={{ true: t.accent, false: t.border }}
+                trackColor={{ false: t.border, true: t.accent }}
+                thumbColor={t.surface}
                 accessibilityLabel="Share this phone's open tabs"
               />
             </View>
           </View>
+          {updatesSupported ? (
+            <>
+              <Text style={s.sectionTitle}>Updates</Text>
+              <View style={s.card}>
+                <View style={s.row}>
+                  <View style={s.rowText}>
+                    <Text style={s.rowTitle}>Install updates automatically</Text>
+                    <Text style={s.rowSub}>
+                      {update.kind === 'downloading' || update.kind === 'installing' ? `Updating to ${update.release.version}…`
+                        : update.kind === 'failed' ? update.error
+                          : 'New releases install when you open Nomad. Android asks you to confirm the first one.'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={auto}
+                    onValueChange={setAutoInstall}
+                    trackColor={{ false: t.border, true: t.accent }}
+                    thumbColor={t.surface}
+                  />
+                </View>
+                {update.kind === 'available' ? (
+                  <TouchableOpacity style={[s.row, s.rowDivider]} onPress={() => installUpdate(update.release)}>
+                    <Text style={[s.rowTitle, s.flex, s.link]}>Update to {update.release.version}</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={[s.row, s.rowDivider]} onPress={() => checkForUpdate({ force: true })}>
+                    <Text style={[s.rowTitle, s.flex, s.link]}>Check for updates</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </>
+          ) : null}
           <Text style={s.sectionTitle}>About</Text>
           <View style={s.card}>
+            {version ? (
+              <View style={[s.row, s.rowDividerBelow]}>
+                <Text style={[s.rowTitle, s.flex]}>Version</Text>
+                <Text style={s.value}>{version}</Text>
+              </View>
+            ) : null}
             <View style={s.row}>
               <Text style={[s.rowTitle, s.flex]}>Platform</Text>
               <Text style={s.value}>{Platform.OS} {String(Platform.Version)}</Text>
@@ -92,11 +135,13 @@ function makeStyles (t: Theme) {
     card: { backgroundColor: t.surface, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, overflow: 'hidden', marginBottom: 18 },
     row: { flexDirection: 'row', alignItems: 'center', minHeight: 56, paddingHorizontal: 14, gap: 12 },
     rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
+    rowDividerBelow: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border },
     rowText: { flex: 1, paddingVertical: 10 },
     rowTitle: { color: t.text, fontSize: 14, fontWeight: '500' },
     rowSub: { color: t.textMuted, fontSize: 12, marginTop: 2, lineHeight: 17 },
     chevron: { color: t.textMuted, fontSize: 22 },
     flex: { flex: 1 },
-    value: { color: t.textDim, fontSize: 13 }
+    value: { color: t.textDim, fontSize: 13 },
+    link: { color: t.accent }
   })
 }

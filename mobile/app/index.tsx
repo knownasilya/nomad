@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, StyleSheet, StatusBar, Alert, Keyboard, BackHandler, Platform } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, StyleSheet, StatusBar, Alert, Keyboard, BackHandler, Platform, AppState } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { WebView } from 'react-native-webview'
 import type { WebViewNavigation } from 'react-native-webview'
@@ -19,6 +19,7 @@ import Devices from '../components/Devices'
 import SpaceSwitcher from '../components/SpaceSwitcher'
 import Settings from '../components/Settings'
 import Logs from '../components/Logs'
+import UpdateBanner from '../components/UpdateBanner'
 import DevTools from '../components/DevTools'
 import AiPanel from '../components/AiPanel'
 import Shortcuts from '../components/Shortcuts'
@@ -37,6 +38,7 @@ import { useTheme, radius, type Theme } from '../lib/theme'
 import { CONSOLE_SHIM, FAVICON_JS, VIEW_SOURCE_JS, type ContentMsg, type StatusMsg, type ErrorMsg, type LogEntry } from '../lib/types'
 import { publishTabs, setTabActions, type TabThumb } from '../lib/tabSwitcher'
 import { useShareOpenTabs, type DeviceTabsList, type SyncedSpace } from '../lib/openTabs'
+import { checkForUpdate } from '../lib/updater'
 
 // Thumbnails for the tab grid are scaled to this width; a grid card is about half a phone wide.
 const THUMB_WIDTH = 360
@@ -932,6 +934,14 @@ export default function Browser () {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Look for a new release on launch and each time the app comes back to the front
+  // (lib/updater.ts limits this to once an hour).
+  useEffect(() => {
+    checkForUpdate()
+    const sub = AppState.addEventListener('change', (next) => { if (next === 'active') checkForUpdate() })
+    return () => sub.remove()
+  }, [])
+
   return (
     <>
     <SafeAreaView style={s.root} edges={['top', 'bottom']}>
@@ -1002,6 +1012,8 @@ export default function Browser () {
         ) : null}
         {showSuggestions ? <Suggestions items={suggestions} onSelect={onSelectSuggestion} /> : null}
       </View>
+
+      <UpdateBanner />
 
       <View style={s.toolbar}>
         <TouchableOpacity style={s.spaceChip} onPress={() => { spacesApi.syncFromVault(); setSpacesOpen(true) }} hitSlop={6}>
