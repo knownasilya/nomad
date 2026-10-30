@@ -106,8 +106,10 @@ function noteCompletions(getNotes) {
 
 // Make an editor in `parent`. Returns { view, getText, setText, setNotes, setReadOnly, focus, run,
 // goToHeading, destroy }. `onChange(text)` fires on the user's edits; `onOpenLink(link)` when the
-// user follows a link: { kind: 'note', target, heading } or { kind: 'url', href }.
-export function createNoteEditor({ parent, doc = '', notes = [], readOnly = false, placeholder: hint = '', onChange, onOpenLink }) {
+// user follows a link: { kind: 'note', target, heading } or { kind: 'url', href }. `collab` is a
+// shared-editing extension (yCollab, for a Live Doc): it brings its own undo history, so the
+// editor's is left out, and the text then comes from the shared document, not `doc`.
+export function createNoteEditor({ parent, doc = '', notes = [], readOnly = false, placeholder: hint = '', onChange, onOpenLink, collab = null }) {
   let currentNotes = notes;
   const editable = new Compartment();
   const view = new EditorView({
@@ -115,7 +117,7 @@ export function createNoteEditor({ parent, doc = '', notes = [], readOnly = fals
     state: EditorState.create({
       doc,
       extensions: [
-        history(),
+        collab || history(),
         drawSelection(),
         EditorView.lineWrapping,
         // The language alone, not markdown(): that also loads HTML, CSS and JavaScript support
@@ -129,7 +131,15 @@ export function createNoteEditor({ parent, doc = '', notes = [], readOnly = fals
         livePreview,
         previewClicks((link) => onOpenLink && onOpenLink(link)),
         autocompletion({ override: [noteCompletions(() => currentNotes)], icons: false }),
-        keymap.of([...formattingKeymap, ...closeBracketsKeymap, ...completionKeymap, ...markdownKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
+        keymap.of([
+          ...formattingKeymap,
+          ...closeBracketsKeymap,
+          ...completionKeymap,
+          ...markdownKeymap,
+          ...defaultKeymap,
+          ...(collab ? [] : historyKeymap),
+          indentWithTab,
+        ]),
         placeholder(hint),
         theme,
         editable.of([EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)]),

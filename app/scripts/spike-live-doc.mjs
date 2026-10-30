@@ -13,9 +13,9 @@
 //       `base.system.get(key)` and not removed; a removed Writer fails it.
 //   Q4  Inline (`value`) vs blob update files, for both of the above. Snapshots are always blobs.
 //
-// Run from the app dir so deps resolve (autobase/corestore/hyperbee/hyperblobs in app/node_modules).
-// Yjs isn't an app dependency yet, so add it without saving first:
-//   cd ~/maintained/nomad/app && npm i --no-save yjs@13 && node scripts/spike-live-doc.mjs
+// Run from the app dir so deps resolve (autobase/corestore/hyperbee/hyperblobs in app/node_modules;
+// yjs from the repo root's, a dev dependency for the Document drive template):
+//   cd ~/maintained/nomad/app && node scripts/spike-live-doc.mjs
 // --batches=N sets the update files per Writer (default 5000 → 10,000 files, ~7 min);
 // --samples=N the latency samples per delay (default 60).
 // Exit 0 = all checks passed; 1 = a check failed. Numbers are printed for the ADR.
@@ -77,7 +77,11 @@ async function openWriter(dir, key = null) {
   const store = new Corestore(path.join(TMP, dir));
   // The creator gets its own namespace (createCollaborativeDrive); a loader uses the root store.
   const baseStore = key ? store : store.namespace(dir);
-  const base = new Autobase(baseStore, key, { ...AUTOBASE_OPTS, open: fsCore.open, apply: fsCore.apply });
+  const base = new Autobase(baseStore, key, {
+    ...AUTOBASE_OPTS,
+    open: fsCore.open,
+    apply: fsCore.apply,
+  });
   await base.ready();
   const w = { dir, store, base, blobs: null };
   return w;
@@ -134,7 +138,8 @@ const updatePath = (w) =>
 
 async function buildPut(w, p, bytes, mode) {
   const metadata = makeMetadata({ mtime: Date.now(), ctime: Date.now() });
-  if (mode === 'inline') return { op: 'put', path: p, metadata, value: b4a.toString(bytes, 'base64') };
+  if (mode === 'inline')
+    return { op: 'put', path: p, metadata, value: b4a.toString(bytes, 'base64') };
   return { op: 'put', path: p, metadata, blob: await blobStore.putBlob(blobsFor(w), bytes) };
 }
 // One nomad.fs-style write: append + update().
@@ -160,7 +165,9 @@ function treeMerge(updates, n = 64) {
 }
 async function readDoc(w) {
   const nodes = await listDoc(w);
-  const parts = await Promise.all(nodes.map((n) => reader.readContent(n.value, { store: w.store })));
+  const parts = await Promise.all(
+    nodes.map((n) => reader.readContent(n.value, { store: w.store }))
+  );
   // Merge in a tree of 64-file chunks, then apply once. The files come back in key order (one
   // Writer's, then the next's), not causal order, and each Writer's updates depend on the others':
   // applying them one by one parks most in Yjs's pending queue and goes quadratic (16 s for 10k),
@@ -177,7 +184,10 @@ async function readDoc(w) {
 async function compact(w) {
   const { nodes, merged } = await readDoc(w);
   const snap = `${DOC}/snapshots/${hex(w.base.local.key)}-${Date.now()}.ystate`;
-  const ops = [await buildPut(w, snap, b4a.from(merged), 'blob'), ...nodes.map((n) => ({ op: 'del', path: n.key }))];
+  const ops = [
+    await buildPut(w, snap, b4a.from(merged), 'blob'),
+    ...nodes.map((n) => ({ op: 'del', path: n.key })),
+  ];
   await w.base.append(ops);
   await w.base.update();
   return { deleted: nodes.length, snapshotBytes: merged.byteLength };
@@ -209,7 +219,10 @@ function makeTypist(name, rand) {
           text.delete(cursor - 1, 1);
           cursor--;
         } else {
-          text.insert(cursor, rand() < 0.15 ? ' ' : String.fromCharCode(97 + Math.floor(rand() * 26)));
+          text.insert(
+            cursor,
+            rand() < 0.15 ? ' ' : String.fromCharCode(97 + Math.floor(rand() * 26))
+          );
           cursor++;
         }
       }
@@ -247,13 +260,21 @@ async function storageOf(w, other) {
     await x.blobs.core.ready();
     blobs += await coreBytes(w.store.get({ key: x.blobs.core.key }));
   }
-  return { oplogs: oplogA + oplogB, view, system, blobs, total: oplogA + oplogB + view + system + blobs };
+  return {
+    oplogs: oplogA + oplogB,
+    view,
+    system,
+    blobs,
+    total: oplogA + oplogB + view + system + blobs,
+  };
 }
 
 // --- Q1a: latency, durable path vs live path ---------------------------------
 
 async function latency(mode) {
-  console.log(`\nQ1a/Q4 — durable-path latency, ${mode} update files (${LATENCY_SAMPLES} samples per delay)`);
+  console.log(
+    `\nQ1a/Q4 — durable-path latency, ${mode} update files (${LATENCY_SAMPLES} samples per delay)`
+  );
   const { A, B, link } = await makeDrive(`lat-${mode}`);
   const rows = [];
   for (const delay of [0, 25, 75]) {
@@ -295,7 +316,11 @@ async function livePathLatency(link) {
   const m1 = Protomux.from(link.s1.noiseStream);
   const m2 = Protomux.from(link.s2.noiseStream);
   let resolveMsg;
-  const c1 = m1.createChannel({ protocol: 'spike/live-doc', id, messages: [{ encoding: c.buffer }] });
+  const c1 = m1.createChannel({
+    protocol: 'spike/live-doc',
+    id,
+    messages: [{ encoding: c.buffer }],
+  });
   const c2 = m2.createChannel({
     protocol: 'spike/live-doc',
     id,
@@ -328,7 +353,9 @@ async function livePathLatency(link) {
 
 async function session(mode) {
   const files = BATCHES * 2;
-  console.log(`\nQ1b/Q2/Q4 — ${files} ${mode} update files (two Writers × ${BATCHES} s of continuous typing)`);
+  console.log(
+    `\nQ1b/Q2/Q4 — ${files} ${mode} update files (two Writers × ${BATCHES} s of continuous typing)`
+  );
   const { A, B, link } = await makeDrive(`sess-${mode}`);
   const ta = makeTypist('A', mulberry32(1));
   const tb = makeTypist('B', mulberry32(2));
@@ -347,8 +374,16 @@ async function session(mode) {
     }
   }
   const writeMs = performance.now() - t0;
-  await until(async () => (await A.base.update(), (await listDoc(A)).length === files), 'A has every file', 120000);
-  await until(async () => (await B.base.update(), (await listDoc(B)).length === files), 'B has every file', 120000);
+  await until(
+    async () => (await A.base.update(), (await listDoc(A)).length === files),
+    'A has every file',
+    120000
+  );
+  await until(
+    async () => (await B.base.update(), (await listDoc(B)).length === files),
+    'B has every file',
+    120000
+  );
   const expected = ta.text.toString();
   check(`${mode}: both Writers' live docs agree`, expected === tb.text.toString());
   console.log(
@@ -393,8 +428,15 @@ async function session(mode) {
   t = performance.now();
   r = await readDoc(A2);
   const after = performance.now() - t;
-  check(`${mode}: after compaction one snapshot gives the same text`, r.text === expected && r.files === 1);
-  await until(async () => (await B.base.update(), (await listDoc(B)).length === 1), 'B sees compaction', 60000);
+  check(
+    `${mode}: after compaction one snapshot gives the same text`,
+    r.text === expected && r.files === 1
+  );
+  await until(
+    async () => (await B.base.update(), (await listDoc(B)).length === 1),
+    'B sees compaction',
+    60000
+  );
   const rb = await readDoc(B);
   check(`${mode}: B converges on the compacted doc`, rb.text === expected);
   const st2 = await storageOf(A2, B);
@@ -405,13 +447,29 @@ async function session(mode) {
   link2.close();
   await A2.base.close();
   await B.base.close();
-  return { files, raw, writeMs, warm, reopen, cold, compMs, after, storage: st, storageAfter: st2, diskA, chars: expected.length, snapshot: comp.snapshotBytes };
+  return {
+    files,
+    raw,
+    writeMs,
+    warm,
+    reopen,
+    cold,
+    compMs,
+    after,
+    storage: st,
+    storageAfter: st2,
+    diskA,
+    chars: expected.length,
+    snapshot: comp.snapshotBytes,
+  };
 }
 
 // --- Q2b: concurrent compaction under a partition ----------------------------
 
 async function concurrentCompaction() {
-  console.log('\nQ2b — two Writers compact at once while partitioned, and a new edit lands during it');
+  console.log(
+    '\nQ2b — two Writers compact at once while partitioned, and a new edit lands during it'
+  );
   const { A, B, link } = await makeDrive('conc');
   const ta = makeTypist('A', mulberry32(3));
   const tb = makeTypist('B', mulberry32(4));
@@ -438,7 +496,10 @@ async function concurrentCompaction() {
   await writeFile(A, updatePath(A), b4a.from(late), 'inline');
   await B.base.update();
   const bBefore = await listDoc(B);
-  check('B is really partitioned (sees none of A\'s compaction)', bBefore.length === 400 && !bBefore.some((n) => n.key.includes('/snapshots/')));
+  check(
+    "B is really partitioned (sees none of A's compaction)",
+    bBefore.length === 400 && !bBefore.some((n) => n.key.includes('/snapshots/'))
+  );
   await compact(B);
 
   const link2 = connect(A, B);
@@ -452,8 +513,16 @@ async function concurrentCompaction() {
     return ra.text === expected && rb.text === expected && same && ra.files === 3;
   }, 'both converge after the partition heals');
   const ra = await readDoc(A);
-  check('concurrent compactions + a late edit converge with nothing lost', ra.text === expected, `${ra.files} files remain (2 snapshots + 1 update)`);
-  check('the set left is exactly two snapshots and the late update', ra.files === 3, ra.nodes.map((n) => n.key.split('/').slice(3).join('/').slice(0, 24)).join(', '));
+  check(
+    'concurrent compactions + a late edit converge with nothing lost',
+    ra.text === expected,
+    `${ra.files} files remain (2 snapshots + 1 update)`
+  );
+  check(
+    'the set left is exactly two snapshots and the late update',
+    ra.files === 3,
+    ra.nodes.map((n) => n.key.split('/').slice(3).join('/').slice(0, 24)).join(', ')
+  );
   link2.close();
   await A.base.close();
   await B.base.close();
@@ -471,7 +540,10 @@ async function writerProof() {
   const hB = link.s2.noiseStream.handshakeHash;
   check('both ends see the same handshakeHash', !!hA && b4a.equals(hA, hB));
 
-  check("B's base exposes its writer keypair", !!(B.base.local.keyPair && B.base.local.keyPair.secretKey));
+  check(
+    "B's base exposes its writer keypair",
+    !!(B.base.local.keyPair && B.base.local.keyPair.secretKey)
+  );
   const nonce = crypto.randomBytes(32);
   const msg = b4a.concat([nonce, hB]);
   const sig = crypto.sign(msg, B.base.local.keyPair.secretKey);
@@ -484,17 +556,29 @@ async function writerProof() {
   }
   // The writer key is a manifest hash, not the ed25519 public key that signs (hypercore 11). The
   // verifier opens the writer core and checks against its manifest signer, as ai-bridge.js does.
-  check('the writer key is not the signing key', !b4a.equals(claimed, B.base.local.keyPair.publicKey));
+  check(
+    'the writer key is not the signing key',
+    !b4a.equals(claimed, B.base.local.keyPair.publicKey)
+  );
   const core = A.store.get({ key: claimed });
   await core.ready();
   const signer = core.manifest && core.manifest.signers && core.manifest.signers[0].publicKey;
-  check('A finds B\'s signer in the writer core\'s manifest', !!signer && b4a.equals(signer, B.base.local.keyPair.publicKey));
-  check('A verifies B\'s signature over nonce‖handshakeHash', crypto.verify(msg, sig, signer));
+  check(
+    "A finds B's signer in the writer core's manifest",
+    !!signer && b4a.equals(signer, B.base.local.keyPair.publicKey)
+  );
+  check("A verifies B's signature over nonce‖handshakeHash", crypto.verify(msg, sig, signer));
   check('A finds B in the writer set', await isCurrentWriter(A.base, claimed));
   check('the creator counts as a Writer', await isCurrentWriter(A.base, A.base.local.key));
-  check('a signature over another connection\'s hash fails', !crypto.verify(b4a.concat([nonce, crypto.randomBytes(32)]), sig, signer));
+  check(
+    "a signature over another connection's hash fails",
+    !crypto.verify(b4a.concat([nonce, crypto.randomBytes(32)]), sig, signer)
+  );
   await C.base.update();
-  check('a reader that was never added is not a Writer', !(await isCurrentWriter(A.base, C.base.local.key)));
+  check(
+    'a reader that was never added is not a Writer',
+    !(await isCurrentWriter(A.base, C.base.local.key))
+  );
 
   await A.base.append({ removeWriter: hex(B.base.local.key) });
   await A.base.update();
@@ -515,7 +599,9 @@ try {
   const sInline = await session('inline');
   const sBlob = await session('blob');
   console.log('\nJSON summary');
-  console.log(JSON.stringify({ batchesPerWriter: BATCHES, latInline, latBlob, sInline, sBlob }, null, 2));
+  console.log(
+    JSON.stringify({ batchesPerWriter: BATCHES, latInline, latBlob, sInline, sBlob }, null, 2)
+  );
 } catch (err) {
   console.error(err);
   results.push(false);

@@ -1,9 +1,10 @@
 # Live Docs: a Yjs document stored as per-writer update files in its Drive
 
-**Status: Proposed.** 2026-10-30. The four spikes ran the same day (`app/scripts/spike-live-doc.mjs`,
-all checks pass) and the design holds; their results are under *Spike results* and are folded into
-the decision below. Remaining before *Accepted*: one run between two real machines over Hyperswarm,
-and Phase 1.
+**Status: Accepted.** 2026-10-30. The four spikes ran the same day (`app/scripts/spike-live-doc.mjs`,
+all checks pass); their results are under *Spike results* and are folded into the decision below.
+The first version is built as the **Document** drive template (see *What v1 built*). Still to do: a
+run between two real machines over Hyperswarm, and the phone, which reads a Document drive but
+can't edit it yet (a separate ADR).
 
 The user wants document-style Drives that several people, and the same person's Devices, edit at
 the same time, the way Slack canvases and Notion pages work: you see the other person's cursor, text
@@ -228,23 +229,43 @@ in total (11.1 MB against 13.6 MB). Update files go inline; snapshots, which run
 stay blobs so their bytes stay out of the oplog. `nomad.fs.writeFile` can't choose today, so it gains
 `{ inline: true }`, refused above 4 KB.
 
-## Implementation touchpoints (non-binding)
+## What v1 built
 
-`app/userland/app-stdlib/js/live-doc.js` and a vendored Yjs, y-protocols and lib0; `{ inline }` on
-`writeFile` in `app/bg/web-apis/bg/autobase.ts` (`buildPutInlineOp`) and the mobile dispatcher;
-`app/bg/web-apis/bg/peersockets.ts` (Writer proof, `writerKey` on peer events) plus its docs triad;
-`app/lib/schemas/walled.garden/live-doc.ts` and `docs.ts` registered per *Adding a walled.garden
-schema*; the Live Doc skip in `app/bg/hyper/drafts.js`; and in nomad.dev a `docs` template
-(`static/templates/docs/`, `src/content/docs/docs/templates/docs.mdx`) with TipTap, the page tree and
-the WebMCP tools.
+New Drives can start from a built-in template, picked in the Create Drive dialog or passed as
+`nomad.fs.createDrive({ template })`: **Blank** (the default) or **Document**, one Live Doc per
+Drive. The list is `app/lib/drive-templates.ts`; `app/bg/hyper/drive-templates.js` sets the manifest
+(`type: 'walled.garden/document'`, `fallback: '/index.html'`, collaborative by default) and copies
+the template's files from `app/drive-templates/document/`.
+
+- **The library ships inside the Drive, not from app-stdlib** (a change from §7). A Drive's pages
+  must work for any peer, and on the phone, which serves pages from its own origin with no nomad://.
+  `src/live-doc.js` and `src/main.js` are bundled with Yjs, y-codemirror.next and the Notes editor
+  (Markdown with Live Preview) into one `app.js` by `npm run build:drive-templates`. Each Drive keeps
+  the version it was made with. The Document is plain Markdown text (`schema: 'text'`); rich text
+  and a page tree come later.
+- **Compaction isn't one batch** (a change from §6): `nomad.fs` has no batch write, so the snapshot is
+  written first and the deletes follow as separate appends by the same Writer. One Writer's appends
+  stay in order, so a reader still never sees the deletes without the snapshot. It deletes only the
+  files it could read.
+- **The Writer proof signs `roomId ‖ handshakeHash`** with no nonce: the handshake hash is fresh per
+  connection, and the room id ties the proof to the topic. A Writer that was added but hasn't
+  written yet may not have sent its manifest, so the verifier waits up to 3 s for it
+  (`app/bg/hyper/writer-proof.js`). Peersocket topics now report their own `join`/`leave`/`writer`
+  events, and messages carry `writerKey` (`app/bg/web-apis/bg/peersockets.ts`).
+- **The page learns its writer key** from `getInfo().writerKey`.
+- **Draft Mode:** the library writes with `{ draft: false }` instead of a path rule in `drafts.js`.
+- **Not in v1:** the WebMCP editing tools (§9), named versions, and phone editing.
+
+Tests: `tests/unit/live-doc.test.js`, `writer-proof.test.js` (real Autobases) and
+`drive-templates.test.js`.
 
 ## Rollout
 
 - **Phase 0 (done):** `app/scripts/spike-live-doc.mjs` answers Q1 to Q4 in process. Still to do:
   the same two Writers on two machines over Hyperswarm, to confirm the trip counts on a real network.
-- **Phase 1:** `live-doc.js` on the durable path only, and a plain-text Live Doc page to try it.
-- **Phase 2:** the Writer proof in peersockets, then the live room and presence.
-- **Phase 3:** the docs template (rich text, page tree, `content.md`, WebMCP tools), the schemas and
-  the docs.
+- **Phase 1 (done):** drive templates, the Document template with `live-doc.js` on both paths,
+  presence, the Writer proof, `{ inline }` writes, `getInfo().writerKey`, and the docs.
+- **Next:** phone editing (its own ADR), the WebMCP editing tools, rich text and a page tree, and the
+  `walled.garden/document` and `live-doc` schemas.
 - **Later:** Notes as Live Docs (no more conflict copies), named versions in the UI, and per-writer
   cores if Q1 calls for them.

@@ -27,6 +27,7 @@
     "uwg": "readonly"
   },
   "ignorePatterns": [
+    "app/drive-templates/*/app.js",
     "app/node_modules",
     "app/userland",
     "**/vendor/**",

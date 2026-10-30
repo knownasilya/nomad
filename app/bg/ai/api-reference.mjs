@@ -83,6 +83,13 @@ const entries = await nomad.fs.query('hyper://key.../posts/')   // listing under
 // flag — LOCKED (single-writer) by default. Unlock without changing the URL:
 await nomad.fs.configure(url, { collaborative: true })   // or pass { collaborative: true } to createDrive
 const { collaborative } = await nomad.fs.getInfo(url)    // is it accepting writers?
+const { writerKey } = await drive.getInfo()              // this device's writer key (null if none)
+
+// Built-in templates: 'blank' (default) or 'document', a page several people edit at once (a Live
+// Doc, ADR-0025). A Document starts collaborative; its text is also kept in /doc/content.md.
+const doc = await nomad.fs.createDrive({ title: 'Team plan', template: 'document' })
+// A small file (up to 4 KB) can live in the drive's view instead of a blob, so peers see it sooner:
+await drive.writeFile('/state.json', JSON.stringify(state), { inline: true })
 
 // Multi-writer: invite/approve writers so others can write to the same drive (this also unlocks it)
 const inviteUrl = await drive.createInvite()
@@ -180,6 +187,12 @@ topic.send(peerId, new TextEncoder().encode('hello'))
 topic.addEventListener('message', e => {
   console.log(e.peerId, new TextDecoder().decode(e.message))
 })
+
+// A topic also reports its own peers. 'writer' means the peer proved it is a current writer of
+// this drive; from then on its messages carry e.writerKey (null for anyone else).
+topic.addEventListener('join',   e => { /* e.peerId */ })
+topic.addEventListener('writer', e => { /* e.peerId, e.writerKey */ })
+topic.addEventListener('leave',  e => { /* e.peerId */ })
 \`\`\`
 
 ## Page-provided tools (WebMCP)

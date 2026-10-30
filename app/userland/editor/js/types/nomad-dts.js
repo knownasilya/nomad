@@ -36,11 +36,31 @@ declare namespace Nomad {
     description: string;
     /** Whether the drive currently accepts writer-access requests (locked/single-writer by default). */
     collaborative?: boolean;
+    /** The manifest's type, e.g. 'walled.garden/document' for a Document drive. */
+    type?: string;
+    /** This Device's writer key for the drive (what listWriters and peersockets report); null if none. */
+    writerKey?: string | null;
     /** Tags applied to the drive in the local library. */
     tags?: string[];
   }
 
   interface ReadOptions { encoding?: 'utf8' | 'json' | 'binary' | 'base64' | 'hex'; }
+  interface WriteOptions {
+    encoding?: 'utf8' | 'binary' | 'base64' | 'hex';
+    /** Keep a small file (up to 4 KB) in the drive's view instead of a blob, so peers see it sooner. */
+    inline?: boolean;
+    /** false writes live even while the drive's Draft Mode is on; true stages into the Draft. */
+    draft?: boolean;
+  }
+  interface CreateDriveOptions {
+    title?: string;
+    description?: string;
+    /** Accept writer-access requests. A template can default this on (Document does). */
+    collaborative?: boolean;
+    /** A built-in template: 'blank' (default) or 'document', a page several people edit at once. */
+    template?: 'blank' | 'document';
+    tags?: string | string[];
+  }
   interface ReaddirOptions { recursive?: boolean; includeStats?: boolean; }
   interface DirEntry { name: string; stat: Stat; }
   interface QueryOptions {
@@ -255,8 +275,11 @@ declare namespace Nomad {
 
   interface PeersocketsTopic extends EventTarget {
     /** Send a message to a peer on this topic. */
-    send(peerId: number, message: Uint8Array): void;
-    // Events: 'message' (e.peerId, e.message)
+    send(peerId: string, message: Uint8Array): void;
+    // Events, for peers that joined this topic:
+    //   'join' (e.peerId), 'leave' (e.peerId)
+    //   'writer' (e.peerId, e.writerKey): the peer proved it is a current writer of this drive
+    //   'message' (e.peerId, e.message, e.writerKey): writerKey is null until the peer proved it
   }
   interface Peersockets {
     /** Join a named topic, scoped to the current drive's peers. */
@@ -333,8 +356,8 @@ declare namespace Nomad {
     readdir(path?: string, opts?: object): Promise<any[]>;
     query(path?: string, opts?: object): Promise<any[]>;
     diff(other: string, opts?: object): Promise<any[]>;
-    put(path: string, data: any, opts?: object | string): Promise<void>;
-    writeFile(path: string, data: any, opts?: object | string): Promise<void>;
+    put(path: string, data: any, opts?: WriteOptions | string): Promise<void>;
+    writeFile(path: string, data: any, opts?: WriteOptions | string): Promise<void>;
     del(path: string, opts?: object): Promise<void>;
     unlink(path: string, opts?: object): Promise<void>;
     mkdir(path: string, opts?: object): Promise<void>;
@@ -383,8 +406,8 @@ declare namespace Nomad {
     readdir(url: string, opts?: object): Promise<any[]>;
     query(url: string, opts?: object): Promise<any[]>;
     diff(url: string, other: string, opts?: object): Promise<any[]>;
-    put(url: string, data: any, opts?: object | string): Promise<void>;
-    writeFile(url: string, data: any, opts?: object | string): Promise<void>;
+    put(url: string, data: any, opts?: WriteOptions | string): Promise<void>;
+    writeFile(url: string, data: any, opts?: WriteOptions | string): Promise<void>;
     del(url: string, opts?: object): Promise<void>;
     unlink(url: string, opts?: object): Promise<void>;
     mkdir(url: string, opts?: object): Promise<void>;
@@ -393,8 +416,8 @@ declare namespace Nomad {
     rename(src: string, dst: string, opts?: object): Promise<void>;
     watch(url: string, pathSpec?: string | null, onChanged?: (e: any) => void): EventTarget;
     // drive lifecycle (new drives are Autobase-from-birth)
-    createDrive(opts?: object): Promise<FsDrive>;
-    createCollaborativeDrive(opts?: object): Promise<FsDrive>;
+    createDrive(opts?: CreateDriveOptions): Promise<FsDrive>;
+    createCollaborativeDrive(opts?: CreateDriveOptions): Promise<FsDrive>;
     forkDrive(url: string, opts?: object): Promise<FsDrive>;
     loadDrive(url: string): Promise<any>;
     configure(url: string, info: object, opts?: object): Promise<void>;

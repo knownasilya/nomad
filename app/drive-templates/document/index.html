@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Document</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --doc-page: #ffffff;
+        --doc-surface: #f7f7fa;
+        --doc-border: #e2e2ea;
+        --doc-text: #1a1a22;
+        --doc-muted: #6a6a7e;
+        --doc-accent: #4040e7;
+        --doc-accent-soft: rgba(64, 64, 231, 0.12);
+        --doc-error: #d93229;
+        /* The editor's own variables (app/userland/notes/js/editor). */
+        --note-text: var(--doc-text);
+        --note-muted: var(--doc-muted);
+        --note-accent: var(--doc-accent);
+        --note-accent-soft: var(--doc-accent-soft);
+        --note-border: var(--doc-border);
+        --note-code-bg: #f0f0f5;
+        --note-selection: rgba(64, 64, 231, 0.18);
+        --note-bg: var(--doc-page);
+        --note-font: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, sans-serif;
+        --note-code-font: ui-monospace, Menlo, 'Roboto Mono', monospace;
+        --note-font-size: 16px;
+        --note-width: 760px;
+        --note-padding: 28px 28px 80px;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --doc-page: #18181d;
+          --doc-surface: #202027;
+          --doc-border: #34343e;
+          --doc-text: #e8e8ef;
+          --doc-muted: #9a9aae;
+          --doc-accent: #8f8fff;
+          --doc-accent-soft: rgba(143, 143, 255, 0.16);
+          --doc-error: #ff6b63;
+          --note-code-bg: #26262e;
+          --note-selection: rgba(143, 143, 255, 0.28);
+        }
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--doc-page);
+        color: var(--doc-text);
+        font-family: var(--note-font);
+      }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: 52px;
+        padding: 0 16px;
+        background: var(--doc-page);
+        border-bottom: 1px solid var(--doc-border);
+      }
+      #title {
+        flex: 0 1 auto;
+        overflow: hidden;
+        font-size: 15px;
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #status {
+        flex: 1 1 auto;
+        overflow: hidden;
+        font-size: 12px;
+        color: var(--doc-muted);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #status[data-kind='error'] {
+        color: var(--doc-error);
+      }
+      #presence {
+        display: flex;
+        flex-direction: row-reverse;
+      }
+      .avatar {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        margin-left: -6px;
+        border: 2px solid var(--doc-page);
+        border-radius: 50%;
+        background: var(--avatar);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .avatar.viewer {
+        opacity: 0.55;
+      }
+      nav {
+        display: flex;
+        gap: 2px;
+        padding: 6px 16px;
+        border-bottom: 1px solid var(--doc-border);
+        background: var(--doc-surface);
+      }
+      nav button {
+        min-width: 30px;
+        height: 28px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: 6px;
+        background: none;
+        color: var(--doc-muted);
+        font: 600 13px var(--note-font);
+        cursor: pointer;
+      }
+      nav button:hover {
+        background: var(--doc-accent-soft);
+        color: var(--doc-text);
+      }
+      nav:not(:has(button:not([hidden]))) {
+        display: none;
+      }
+      /* Other people's cursors (y-codemirror.next) */
+      .cm-ySelectionInfo {
+        font-family: var(--note-font) !important;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 1px 4px;
+        border-radius: 3px 3px 3px 0;
+        opacity: 1 !important;
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span id="title"></span>
+      <span id="status" data-kind="muted"></span>
+      <span id="presence"></span>
+    </header>
+    <nav aria-label="Formatting">
+      <button data-cmd="heading" title="Heading" hidden>H</button>
+      <button data-cmd="bold" title="Bold (Ctrl/Cmd+B)" hidden><b>B</b></button>
+      <button data-cmd="italic" title="Italic (Ctrl/Cmd+I)" hidden><i>I</i></button>
+      <button data-cmd="strike" title="Strikethrough" hidden><s>S</s></button>
+      <button data-cmd="bullet" title="Bulleted list" hidden>•</button>
+      <button data-cmd="task" title="Checklist (Ctrl/Cmd+L)" hidden>☐</button>
+      <button data-cmd="quote" title="Quote" hidden>“</button>
+      <button data-cmd="code" title="Code (Ctrl/Cmd+E)" hidden>&lt;/&gt;</button>
+    </nav>
+    <main id="editor"></main>
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -3,6 +3,7 @@ import b4a from 'b4a';
 import { promises as nodefs } from 'fs';
 import * as autobases from '../../hyper/autobases';
 import * as discovery from '../../hyper/discovery';
+import * as driveTemplates from '../../hyper/drive-templates';
 import { sanitizeListingFields } from '../../../lib/listing';
 import * as archivesDb from '../../dbs/archives';
 import { gitCloneToTmp } from '../../lib/git';
@@ -25,6 +26,9 @@ import {
 } from 'beaker-error-constants';
 import * as modals from '../../ui/subwindows/modals';
 
+// The largest file `{ inline: true }` stores in the view (its bytes also go into the oplog).
+const INLINE_MAX = 4096;
+
 const to = (opts) =>
   opts && typeof opts.timeout !== 'undefined' ? opts.timeout : DEFAULT_DRIVE_API_TIMEOUT;
 
@@ -42,7 +46,10 @@ const autobaseAPI = {
     collaborative,
     prompt,
     fromGitUrl,
+    template,
   }: any = {}) {
+    // Throws on an unknown id before any dialog opens.
+    const tpl = driveTemplates.getTemplate(template);
     if (prompt !== false) {
       let res;
       try {
@@ -50,6 +57,7 @@ const autobaseAPI = {
           title,
           description,
           collaborative,
+          template: tpl.id,
         });
         // The create dialog saves the folder link, then asks the caller to open the sync
         // step. Without this, the selection is stored and never shown.
@@ -79,12 +87,14 @@ const autobaseAPI = {
         }
       }
 
-      const meta: any = {};
+      let meta: any = {};
       if (title) meta.title = title;
       if (description) meta.description = description;
       if (type) meta.type = type;
-      // Locked (single-writer) by default; the toggle in the create modal sets this.
+      // Locked (single-writer) by default; the toggle in the create modal sets this. A template
+      // can default it on (a Document is for several editors) and sets its type and fallback.
       if (typeof collaborative !== 'undefined') meta.collaborative = !!collaborative;
+      meta = driveTemplates.templateManifest(tpl, meta);
       const sess = await autobases.createCollaborativeDrive(meta);
       // Use configAutobaseDrive instead of configDriveForSpace — the latter calls
       // getOrLoadDrive() which tries to open the URL as a Hyperdrive and hangs.
@@ -96,6 +106,11 @@ const autobaseAPI = {
         type: 'autobase',
         writable: true,
       } as any);
+
+      for (const file of await driveTemplates.templateFiles(tpl, { title: meta.title })) {
+        if (file.inline) await autobases.putInline(sess, file.path, file.data);
+        else await autobases.writeFile(sess, file.path, file.data);
+      }
 
       if (importFolder) {
         try {
@@ -146,6 +161,8 @@ const autobaseAPI = {
         key: b4a.toString(sess.key, 'hex'),
         url: sess.url,
         writable: sess.writable,
+        // This Device's writer key for the Drive (what listWriters and peersockets report).
+        writerKey: sess.base?.local?.key ? b4a.toString(sess.base.local.key, 'hex') : null,
         title: manifest.title || '',
         description: manifest.description || '',
         type: manifest.type || '',
@@ -271,6 +288,14 @@ const autobaseAPI = {
       assertValidFilePath(filepath);
 
       const buf = _toBuffer(data, opts);
+      if (opts.inline) {
+        // A small file kept in the view itself: no blob to fetch, so peers see it sooner (ADR-0025).
+        if (buf.length > INLINE_MAX) {
+          throw new Error(`inline files are limited to ${INLINE_MAX} bytes (got ${buf.length})`);
+        }
+        await autobases.putInline(sess, filepath, buf);
+        return;
+      }
       // File content is stored as a blob (bytes stay out of the oplog).
       await autobases.writeFile(sess, filepath, buf);
     });
