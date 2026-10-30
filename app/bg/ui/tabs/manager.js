@@ -660,6 +660,8 @@ class Tab extends EventEmitter {
 // =
 
 export async function setup() {
+  // A Space another Device added to the Vault (hyper/vault.js) appears in every window's Space list.
+  vault.events.on('spaces-synced', () => emitReplaceStateAllWindows());
   // defaultUrl stays as the hardcoded 'nomad://desktop/'.
   // Per-space new tab URLs are resolved at the RPC call site (createTab).
 

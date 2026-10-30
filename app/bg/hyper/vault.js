@@ -90,7 +90,31 @@ export async function getVault() {
     _carryWatched = true;
     _watchCarry(sess);
   }
+  if (!_spacesWatched && sess?.base) {
+    _spacesWatched = true;
+    _watchVaultSpaces(sess);
+  }
   return sess;
+}
+
+// Spaces are shared: one made on another Device (the phone, say) shows up here while this Device
+// runs, not only when it pairs. Debounced, because a sync brings many updates in a row. Emits
+// 'spaces-synced' when it added any, so the shell can redraw its Space list.
+let _spacesWatched = false;
+let _spacesTimer = null;
+function _watchVaultSpaces(sess) {
+  const run = () => {
+    clearTimeout(_spacesTimer);
+    _spacesTimer = setTimeout(() => {
+      syncSpacesFromVault()
+        .then((res) => {
+          if (res.created) events.emit('spaces-synced', res);
+        })
+        .catch((e) => logger.warn('Could not sync spaces from the vault', { error: e.toString() }));
+    }, 2000);
+  };
+  sess.base.on('update', run);
+  run();
 }
 
 // A Vault that this Device created and no other Device has joined. A Device can leave such a Vault
@@ -307,6 +331,8 @@ export async function registerSpace(space, rootDriveKey) {
     color: space.color,
     sortOrder: space.sort_order ?? 0,
     originId: space.id,
+    // The default Personal Space. A paired phone shows this one as its own Personal.
+    ...(space.id === 1 ? { personal: true } : {}),
     createdAt: space.created_at || new Date().toISOString(),
   });
   logger.info('Registered space in vault', { spaceId: space.id, rootDriveKey });

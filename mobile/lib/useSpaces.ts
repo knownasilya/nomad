@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { Backend } from './useBackend'
+import { mergeVaultSpaces, PERSONAL_ID } from './spacesMerge'
 
 // Spaces — a named user context with its own Root Drive, mirroring nomad desktop
-// (app/bg/dbs/spaces.js). One space is active at a time. Spaces are stored locally; when this
-// device is paired into a Vault, the Vault's spaces are merged in (keyed by rootDriveKey) so
-// spaces created on other devices appear here. See nomad/docs/multi-device-protocol.md.
+// (app/bg/dbs/spaces.js). One space is active at a time. An unpaired phone keeps its own spaces
+// here; once it is paired into a Vault, its spaces are the Vault's (see syncFromVault), shared with
+// the user's other devices. See nomad/docs/multi-device-protocol.md.
 
 // Desktop's 8-color palette (app/fg/shell-menus/spaces.js).
 export const SPACE_COLORS = [
@@ -28,7 +29,7 @@ export interface Space {
 
 const SPACES_KEY = 'hb:spaces'
 const ACTIVE_KEY = 'hb:activeSpace'
-export const PERSONAL_ID = 'personal'
+export { PERSONAL_ID }
 
 function defaultPersonal (now: number): Space {
   return { id: PERSONAL_ID, name: 'Personal', icon: 'home', color: SPACE_COLORS[0], sortOrder: 0, createdAt: now, source: 'local' }
@@ -70,49 +71,41 @@ export function useSpaces (backend: Backend): Spaces {
     AsyncStorage.setItem(SPACES_KEY, JSON.stringify(next))
   }, [])
 
-  // Merge the Vault's spaces (if paired) into the local list, by rootDriveKey.
+  // Once paired, the phone's Spaces are the Vault's (spacesMerge.ts): its Personal is the Vault's
+  // Personal, names and colors follow the Vault, and Spaces the phone made before pairing are
+  // published into the Vault so the user's other Devices get them.
   const syncFromVault = useCallback(async () => {
     try {
       const v = await backendRef.current.vaultStatus()
       // This device was removed from the Vault on another device: drop the shared markers and
       // downgrade the synced spaces to local-only copies (mirrors a manual unlink, minus the prompt).
       if (v.removed) { leaveVaultRef.current(); return }
-      const live = v.hasVault && v.spaces ? v.spaces.filter((sp) => sp.rootDriveKey && !sp.movedTo) : []
-      const keys = live.map((sp) => sp.rootDriveKey)
+      if (!v.hasVault || v.opening || !v.spaces) return
+      const keys = v.spaces.filter((sp) => sp.rootDriveKey && !sp.movedTo).map((sp) => sp.rootDriveKey)
       setVaultKeys(keys)
       if (!keys.length) return
-      // A Space whose Root Drive got a new key on another device: old key -> new key.
-      const moves = new Map((v.spaces || []).filter((sp) => sp.movedTo).map((sp) => [sp.rootDriveKey, sp.movedTo!]))
+      const vaultSpaces = v.spaces
+      const { toPublish, dropped } = mergeVaultSpaces(spacesRef.current, vaultSpaces)
       setSpaces((prev) => {
-        // Repoint local copies in place. The id stays, so the space keeps its tabs and history.
-        let moved = false
-        const repointed = prev.map((s) => {
-          const to = s.rootDriveKey && moves.get(s.rootDriveKey)
-          if (!to || prev.some((o) => o.rootDriveKey === to)) return s
-          moved = true
-          return { ...s, rootDriveKey: to, rootDriveUrl: `hyper://${to}/`, ns: undefined }
-        })
-        const have = new Set(repointed.map((s) => s.rootDriveKey).filter(Boolean) as string[])
-        const additions: Space[] = []
-        live.forEach((vs, i) => {
-          if (have.has(vs.rootDriveKey)) return
-          additions.push({
-            id: vs.rootDriveKey,
-            name: vs.name || 'Space',
-            icon: vs.icon || 'circle',
-            color: vs.color || SPACE_COLORS[0],
-            rootDriveKey: vs.rootDriveKey,
-            rootDriveUrl: `hyper://${vs.rootDriveKey}/`,
-            sortOrder: prev.length + i,
-            createdAt: Date.now(),
-            source: 'vault'
-          })
-        })
-        if (!additions.length && !moved) return prev
-        const next = [...repointed, ...additions]
+        const { next, changed } = mergeVaultSpaces(prev, vaultSpaces)
+        if (!changed) return prev
         persist(next)
         return next
       })
+      if (dropped.length) {
+        setActiveSpaceId((cur) => {
+          if (!dropped.includes(cur)) return cur
+          AsyncStorage.setItem(ACTIVE_KEY, PERSONAL_ID)
+          return PERSONAL_ID
+        })
+      }
+      if (!v.writable || !toPublish.length) return
+      const published: string[] = []
+      for (const sp of toPublish) {
+        const res = await backendRef.current.addVaultSpace({ rootDriveKey: sp.rootDriveKey!, name: sp.name, icon: sp.icon, color: sp.color })
+        if (!res.message) published.push(sp.rootDriveKey!)
+      }
+      if (published.length) setVaultKeys((prev) => [...new Set([...prev, ...published])])
     } catch {}
   }, [persist])
 
