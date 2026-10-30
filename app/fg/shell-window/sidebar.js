@@ -236,8 +236,10 @@ class ShellWindowSidebar extends LitElement {
 
   _renderTab(tab, index, inGroup = false) {
     const faviconUrl = this.getFavicon(index);
+    // no spinner for a restored tab loading in the background at startup
+    const showSpinner = tab.isLoading && !tab.isQuietLoading;
     const showFavicon = Boolean(
-      tab.isLoading || tab.isPinned || faviconUrl || tab.url.startsWith('nomad:')
+      showSpinner || tab.isPinned || faviconUrl || tab.url.startsWith('nomad:')
     );
     const cls = classMap({
       'sidebar-tab': true,
@@ -262,7 +264,7 @@ class ShellWindowSidebar extends LitElement {
         @drop=${(e) => this._onDropTab(e, tab, index)}
       >
         <div class="tab-favicon">
-          ${tab.isLoading
+          ${showSpinner
             ? tab.isReceivingAssets
               ? html`<div class="spinner"></div>`
               : html`<div class="spinner reverse"></div>`
