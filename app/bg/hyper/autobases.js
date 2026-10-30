@@ -84,7 +84,10 @@ export async function createCollaborativeDrive(meta = {}) {
 // How long to wait for a remote base's bootstrap to replicate before serving.
 const LOAD_REPLICATION_TIMEOUT = 15000;
 
-export async function loadCollaborativeDrive(key) {
+// opts.root: open on the root store, for the Vault a Device joined by pairing, whose approved writer
+// key is the root `local` core. opts.ns: open in this namespace, for a Drive whose writer key was
+// minted there before its key was known (a Space Library joined by invite, ADR-0029 §4).
+export async function loadCollaborativeDrive(key, opts = {}) {
   const keyStr = typeof key === 'string' ? key : b4a.toString(key, 'hex');
   if (sessions[keyStr]) {
     sessions[keyStr]._lastUsed = Date.now();
@@ -92,7 +95,7 @@ export async function loadCollaborativeDrive(key) {
   }
   if (loadPromises[keyStr]) return loadPromises[keyStr];
 
-  const p = _loadCollaborativeDriveInner(keyStr);
+  const p = _loadCollaborativeDriveInner(keyStr, opts);
   loadPromises[keyStr] = p;
   const clear = () => {
     delete loadPromises[keyStr];
@@ -101,8 +104,32 @@ export async function loadCollaborativeDrive(key) {
   return p;
 }
 
-async function _loadCollaborativeDriveInner(keyStr) {
+// The store a Drive opens on (ADR-0029, spike S1). A Drive's bootstrap core remembers the writer key
+// of its first open here (`autobase/local`), and every later open uses it, in any namespace. So a
+// Drive this Device created, or opened before, opens on the root store as it always has. A Drive it
+// has never opened gets its own namespace, `autobase:<key>`, whose `local` core is this Device's
+// writer key for that Drive alone (the rule ADR-0026 §1 sets for the phone). It can't be the root
+// `local` core: a Device that joined a Vault by pairing holds that one for the Vault, exclusively,
+// and a second base on it waits forever. A session, so closing the base doesn't close the store.
+async function _storeFor(keyStr, { root = false, ns = null } = {}) {
   const store = daemon.getCorestore();
+  if (ns) return store.namespace(ns);
+  if (root) return store.session();
+  const boot = store.get({ key: b4a.from(keyStr, 'hex'), active: false });
+  try {
+    await boot.ready();
+    if (boot.writable || (await boot.getUserData('autobase/local'))) return store.session();
+  } catch (e) {
+    logger.warn('Could not read a drive’s bootstrap core, opening it as before', { key: keyStr, error: e.toString() });
+    return store.session();
+  } finally {
+    await boot.close().catch(() => {});
+  }
+  return store.namespace('autobase:' + keyStr);
+}
+
+async function _loadCollaborativeDriveInner(keyStr, opts = {}) {
+  const store = await _storeFor(keyStr, opts);
   const keyBuf = b4a.from(keyStr, 'hex');
   const base = new Autobase(store, keyBuf, {
     apply: _applyFn,
@@ -173,10 +200,10 @@ export async function isKnownAutobase(key) {
   }
 }
 
-export async function getOrLoadCollaborativeDrive(key) {
+export async function getOrLoadCollaborativeDrive(key, opts = {}) {
   const sess = getCollaborativeDrive(key);
   if (sess) return sess;
-  return loadCollaborativeDrive(key);
+  return loadCollaborativeDrive(key, opts);
 }
 
 export function unloadCollaborativeDrive(key) {
