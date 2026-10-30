@@ -196,6 +196,9 @@ module.exports = function (src, dest, opts) {
               format: 'cjs',
               entryFileNames: destFile,
               dir: destDir,
+              // One file per window: a dynamic import (lang-core's telemetry pulls in ci-info that
+              // way) would otherwise become a chunk the nomad:// handler never serves.
+              inlineDynamicImports: true,
               // Patch process.nextTick in sandboxed Electron contexts where the
               // minimal process object doesn't include it.
               banner:

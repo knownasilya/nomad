@@ -3,6 +3,8 @@ import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import * as bg from './bg-process-rpc';
 import { fromEventStream } from '../../bg/web-apis/fg/event-target';
 import { streamToAsyncIterator } from '../../bg/web-apis/fg/ai-stream';
+import { splitGenUi } from '../../lib/genui/segments.mjs';
+import './genui/index.js';
 
 // Minimal markdown -> HTML (headings, lists, code fences, inline emphasis/code). Mirrors the
 // renderer chat-bubble/ai-sidebar used before the two were unified into this component.
@@ -477,7 +479,7 @@ class ShellWindowAiSidebar extends LitElement {
     .msg.error .fas {
       margin-top: 3px;
     }
-    .msg.streaming > :last-child::after {
+    .msg.streaming > :last-child:not(nomad-genui)::after {
       content: '';
       display: inline-block;
       width: 7px;
@@ -1526,7 +1528,7 @@ class ShellWindowAiSidebar extends LitElement {
     const streamingLast = i === this.messages.length - 1 && this.streaming;
     const body =
       m.role === 'assistant'
-        ? unsafeHTML(mdToHtml((m.content || '').trim()))
+        ? this._renderAnswer((m.content || '').trim(), streamingLast)
         : m.role === 'error'
           ? html`<span class="fas fa-exclamation-circle"></span
               ><span>${(m.content || '').trim()}</span>`
@@ -1575,6 +1577,45 @@ class ShellWindowAiSidebar extends LitElement {
         : ''}
       ${m.files && m.files.length ? this._renderCheckpoint(m, i) : ''}
     `;
+  }
+
+  // An answer is Markdown with OpenUI Lang programs fenced in it (ADR-0027); each program is drawn
+  // by <nomad-genui>.
+  _renderAnswer(text, streaming) {
+    const segments = splitGenUi(text);
+    if (!segments.some((s) => s.type === 'ui')) return unsafeHTML(mdToHtml(text));
+    return segments.map((s) =>
+      s.type === 'md'
+        ? unsafeHTML(mdToHtml(s.text.trim()))
+        : html`<nomad-genui
+            .source=${s.source}
+            .streaming=${streaming && !s.closed}
+            .disabled=${this.streaming}
+            @genui-action=${this._onGenUiAction}
+          ></nomad-genui>`
+    );
+  }
+
+  // A Button or link in a drawn answer. @ToAssistant sends its message as the user's next one;
+  // @OpenUrl opens a web or hyper:// page in a new tab. Only on a click, and never mid-turn.
+  async _onGenUiAction(e) {
+    for (const step of e.detail?.steps || []) {
+      if (step.type === 'open_url') {
+        let url;
+        try {
+          url = new URL(step.url);
+        } catch {
+          continue;
+        }
+        if (['http:', 'https:', 'hyper:'].includes(url.protocol)) {
+          bg.views.createTab(url.href, { setActive: true });
+        }
+      } else if (step.type === 'continue_conversation' && step.message.trim()) {
+        if (this.streaming) return;
+        this.draft = step.message.trim();
+        await this._send();
+      }
+    }
   }
 
   // The last message, when it is a finished answer: its Copy shows without a hover.

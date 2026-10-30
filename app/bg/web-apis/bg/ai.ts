@@ -27,6 +27,7 @@ import {
   REASON_PROVIDER,
 } from '../../ai/awake';
 import { STANDING_PROMPT, PERSONAL_PROMPT, DRAFT_PROMPT } from '../../ai/api-reference.mjs';
+import { genuiPrompt } from '../../../lib/genui/library.mjs';
 import { askOncePerTurn } from '../../ai/vault-tools.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
 import { completionStreamError } from '../../ai/stream-error.mjs';
@@ -260,7 +261,10 @@ async function routeChat(messages, sender, emitter, opts) {
     opts: {
       driveUrl: opts.driveUrl,
       allowWrite: opts.allowWrite,
-      context: opts.context,
+      // The other Device's runtime answers; this window draws the UI, so the prompt for it goes too.
+      context: opts.genUi
+        ? [genuiPrompt(), opts.context].filter(Boolean).join('\n\n---\n\n')
+        : opts.context,
       model: opts.model,
       think: opts.think,
       effort: opts.effort,
@@ -532,6 +536,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     // A remote turn's writes stage into a Draft. Without this the model reads back the published
     // file, doubts its own edit and tells the user the phone can't edit.
     offerTools && opts.draft ? DRAFT_PROMPT : '',
+    // The AI Sidebar draws OpenUI Lang fenced in an answer (ADR-0027).
+    opts.genUi ? genuiPrompt() : '',
     opts.context,
   ]
     .filter(Boolean)
