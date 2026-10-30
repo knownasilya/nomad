@@ -297,6 +297,16 @@ export function jobForModel(j, deviceName = () => 'another device') {
     id: j.id,
     title: j.title,
     prompt: clip(j.prompt),
+    ...(j.source
+      ? {
+          source: {
+            url: j.source.url,
+            // live: the user's own drive, read each run. Otherwise a copy, and maybe a newer version waiting.
+            live: !!j.source.live,
+            ...(j.source.live ? {} : { copiedAt: j.source.copiedAt, updateWaiting: !!j.source.changed }),
+          },
+        }
+      : {}),
     schedule: j.schedule,
     when: describeSchedule(j.schedule),
     notify: j.notify,

@@ -35,6 +35,8 @@ import {
 import { genuiPrompt } from '../../../lib/genui/library.mjs';
 import { askOncePerTurn, jobPermit } from '../../ai/vault-tools.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
+import { jobWork, promptWithResult } from '../../../../shared/jobs.mjs';
+import { readJobSource } from './job-source';
 import { completionStreamError } from '../../ai/stream-error.mjs';
 import { normalizeChatMessages } from '../../ai/chat-messages.mjs';
 import {
@@ -436,15 +438,50 @@ export { runChat };
 // active tab's own webContents) standing in for "the page this call is about".
 export { routeChat };
 
-// One run of an AI Job (ADR-0030; app/bg/ai/jobs.js runs it): a turn on the job stage, on this
-// Device's own runtime only, never another Device's over the Bridge. The user's own AI with no tab
-// and nobody watching: it reads the Notes and Reader of the Job's Space, drives and the web, changes
-// nothing, and asks no permission (jobPermit). `notify` gets what the AI sends with the notify
-// capability. Resolves { output }: the answer the AI gave after its last tool call.
-export async function runJobTurn(job, { signal, notify }) {
-  if (!(await aiBridge.localRuntimeReachable())) {
+// One run of an AI Job (ADR-0030; app/bg/ai/jobs.js runs it), on this Device only, never another
+// Device's over the Bridge. The user's own AI with no tab and nobody watching: it reads the Notes
+// and Reader of the Job's Space, drives and the web, changes nothing, and asks no permission
+// (jobPermit). `notify` gets what the Job sends with the notify capability.
+//
+// A Job from a drive (`source`) runs its job.js first, in the execute sandbox with the same
+// capabilities, then gives the AI its result with the prompt (job.md and the Job's own); with no
+// prompt, the module's result is the answer and no AI runs. A live source reads its files now; a
+// copied one runs its copy, and this looks whether the drive has a newer version.
+//
+// Resolves { output, sourceHash }: the answer the AI gave after its last tool call, and the hash
+// of the copied source's drive as it is now (null when unknown).
+export async function runJobTurn(job, { signal, notify, trigger = 'manual', lastRun = null }) {
+  const newer =
+    job.source && !job.source.live
+      ? readJobSource(job.source.url).then(
+          (r) => r.hash,
+          () => null
+        )
+      : Promise.resolve(null);
+  const files = job.source?.live ? await readJobSource(job.source.url) : null;
+  const work = jobWork(job, files);
+  if (work.prompt && !(await aiBridge.localRuntimeReachable())) {
     throw new Error('The AI runtime on this computer isn’t reachable. Check Settings → AI.');
   }
+  const space = isSpaceKey(job.space) ? job.space : null;
+
+  let result = null;
+  if (work.module) {
+    result = await runJobModule(work.module, {
+      params: {
+        job: { id: job.id, title: job.title, trigger },
+        prompt: job.prompt || null,
+        lastRun: lastRun
+          ? { finishedAt: lastRun.finishedAt, status: lastRun.status, output: lastRun.output }
+          : null,
+      },
+      space,
+      notify,
+      signal,
+    });
+    if (!work.prompt) return { output: moduleOutput(result), sourceHash: await newer };
+  }
+
   const emitter = new EventEmitter();
   let answer = '';
   let all = '';
@@ -457,18 +494,63 @@ export async function runJobTurn(job, { signal, notify }) {
   emitter.on('tool', (e) => {
     if (e?.phase === 'start') answer = '';
   });
-  await runChat([{ role: 'user', content: job.prompt }], makeRemoteSender('nomad://jobs/'), emitter, {
+  const content = work.module ? promptWithResult(work.prompt, result) : work.prompt;
+  await runChat([{ role: 'user', content }], makeRemoteSender('nomad://jobs/'), emitter, {
     stage: 'job',
     // No renderer and no tab: the page tools, openTab and the page readers stay out of the catalog.
     remote: true,
     allowWrite: false,
-    space: isSpaceKey(job.space) ? job.space : null,
+    space,
     requestPermission: jobPermit,
     context: jobContext(job),
     job: { notify },
     signal,
   });
-  return { output: answer.trim() || all.trim() };
+  return { output: answer.trim() || all.trim(), sourceHash: await newer };
+}
+
+// A Job's job.js, run like the AI's execute code with the job turn's capabilities: reads only, no
+// tab, no page tools, and notify. Resolves what main() returned (text, or JSON for anything else).
+async function runJobModule(code, { params, space, notify, signal }) {
+  const sender = makeRemoteSender('nomad://jobs/');
+  const catalog = buildCatalog({
+    allowWrite: false,
+    remote: true,
+    pageTools: null,
+    personal: true,
+    tab: false,
+    job: true,
+    names: names.list(),
+  });
+  const opts = {
+    driveUrl: null,
+    currentTab: null,
+    emitter: null,
+    requestPermission: askOncePerTurn(jobPermit),
+    remote: true,
+    space,
+    signal,
+    catalog,
+    job: { notify },
+  };
+  return executeInUtilityProcess({
+    code,
+    params,
+    signal,
+    invoke: async (call) => {
+      assertCallAllowed(call.target, call.name, catalog);
+      if (call.target === 'page') throw new Error('page tools are not available in a Job');
+      const value = await executeTool(call.target, call.args || {}, sender, opts);
+      // A screenshot's image can't go anywhere from here; its text can.
+      return value && typeof value === 'object' && 'imageDataUrl' in value ? value.text : value;
+    },
+  });
+}
+
+// A module's result as a run's answer: text as it is, JSON in a code block.
+function moduleOutput(result) {
+  const text = typeof result === 'string' ? result.trim() : JSON.stringify(result ?? '', null, 2);
+  return /^[[{]/.test(text) ? '```json\n' + text + '\n```' : text;
 }
 
 // What a Job's turn is told about the Job and its notification.

@@ -28,6 +28,7 @@ const GUIDE_IDS = [
   ['After using tools', 'after-tools'],
   ['Resolving which file', 'resolve-file'],
   ['Building an SPA', 'spa'],
+  ['A Job in a drive', 'job-drive'],
 ]
 
 const DOMAIN_COPY = {
@@ -346,16 +347,29 @@ export const CAPABILITIES = [
   {
     name: 'saveJob',
     description:
-      'Create a Job (no `id`; `prompt` required) or change one (`id`; fields you leave out stay as they are). Each run, ' +
-      "the AI gets `prompt` on its own, with no chat history and nobody watching, on this computer: write it as a complete " +
-      'instruction. A run can read the Notes, Reader, drives and the web, and change nothing; its answer is saved for the ' +
-      'user, and it can notify their phone. Asks permission to change Jobs.',
+      'Create a Job (no `id`; `prompt` or `source` required) or change one (`id`; fields you leave out stay as they are). ' +
+      "Each run, the AI gets `prompt` on its own, with no chat history and nobody watching, on this computer: write it as " +
+      'a complete instruction. A run can read the Notes, Reader, drives and the web, and change nothing; its answer is ' +
+      'saved for the user, and it can notify their phone. A Job can also come from a drive (`source`): its job.js runs ' +
+      'first (an execute-style module with the same capabilities, getting { job, prompt, lastRun }), then the AI gets ' +
+      'job.md with what the module returned; with no job.md, the module\'s result is the answer. `prompt` then adds to ' +
+      "job.md. The user's own drive runs its latest files; anyone else's is copied now, and a newer version waits for " +
+      'the user to accept it in My Library → Jobs. Asks permission to change Jobs.',
     inputSchema: {
       type: 'object',
       properties: {
         id: { type: 'string', description: 'Optional. The Job to change, from listJobs' },
         title: { type: 'string', description: 'Optional. A short name, e.g. "Morning digest"' },
-        prompt: { type: 'string', description: 'Required for a new Job. What the AI does each run' },
+        prompt: {
+          type: 'string',
+          description: 'Required for a new Job without `source`. What the AI does each run',
+        },
+        source: {
+          type: ['string', 'null'],
+          description:
+            'Optional. A drive the Job runs: a folder with job.js and/or job.md (hyper://<key>/ or hyper://<key>/jobs/digest/), ' +
+            'one file and the other next to it (hyper://<key>/digest.js), or one of the user\'s names. null drops it.',
+        },
         schedule: {
           description:
             'Optional. null to run only by hand (the default); { "kind": "interval", "minutes": 120 } (15 or more); or ' +

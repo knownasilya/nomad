@@ -327,6 +327,10 @@ only. The AI gets `listJobs`/`saveJob`/`runJob`/`deleteJob` (`jobsRead`/`jobsWri
 Job, `notify`. Desktop UI is My Library → Jobs (`nomad.vault.listJobs`/…/`watchJobs`). The phone lists
 them (`mobile/components/Jobs.tsx`, `RPC_APPS` `jobs`) and posts local notifications with
 `expo-notifications` for new runs (`mobile/lib/useJobNotifications.ts`); there is no push server.
+A Job can come from a drive (`source`): `job.md` is its prompt and `job.js` an `execute`-format module
+run first (`runJobTurn`/`runJobModule` in `ai.ts`, files read by `bg/web-apis/bg/job-source.ts`). The
+user's own drives are live; anyone else's is copied into the record, and a newer version waits for the
+user in My Library (`checkJobSource`). The AI must not be able to take it for them.
 
 ## Look and feel: every UI supports dark mode and matches the rest
 

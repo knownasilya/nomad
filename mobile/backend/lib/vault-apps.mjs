@@ -316,6 +316,10 @@ export async function listJobs (base) {
   return {
     jobs: jl.jobsWithRuns(jobs, runs).map((j) => ({
       ...j,
+      // Where a drive Job comes from, without its copied files: the phone shows only that.
+      source: j.source
+        ? { url: j.source.url, live: !!j.source.live, copiedAt: j.source.copiedAt || null, newer: !!j.source.changed }
+        : null,
       when: jl.describeSchedule(j.schedule),
       deviceName: nameOf(j.device),
       requested: requested.has(j.id)

@@ -126,9 +126,21 @@ export default function Jobs ({ visible, onClose, apps, onVaultChange, openJobId
           <View style={s.center}><ActivityIndicator color={t.accent} /></View>
         ) : job ? (
           <ScrollView contentContainerStyle={s.page}>
-            <ListSection title='Prompt'>
-              <Text style={s.prompt}>{job.prompt}</Text>
-            </ListSection>
+            {job.source && (
+              <ListSection
+                title='From a drive'
+                footer={job.source.live
+                  ? 'Your drive: each run uses its files as they are then.'
+                  : `A copy of someone else’s drive${job.source.copiedAt ? `, made ${when(job.source.copiedAt)}` : ''}.${job.source.newer ? ' The drive has a newer version: take it in My Library → Jobs on your computer.' : ''}`}
+              >
+                <Text style={s.prompt} selectable>{job.source.url}</Text>
+              </ListSection>
+            )}
+            {!!job.prompt && (
+              <ListSection title={job.source ? 'More instructions' : 'Prompt'}>
+                <Text style={s.prompt}>{job.prompt}</Text>
+              </ListSection>
+            )}
             <ListSection footer={`Runs on ${job.deviceName}${job.notify === 'never' ? '. Doesn’t notify.' : job.notify === 'auto' ? '. Notifies when the AI finds something.' : '. Notifies this phone after each run.'}`}>
               <ListRow
                 title={job.requested ? 'Run asked for' : 'Run now'}

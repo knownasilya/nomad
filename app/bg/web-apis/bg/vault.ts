@@ -15,6 +15,7 @@ import * as names from '../../hyper/names';
 import * as mods from '../../ui/mods';
 import * as openTabs from '../../ui/open-tabs';
 import * as jobs from '../../ai/jobs';
+import { readJobSource } from './job-source';
 import { PRESETS } from '../../../../shared/mods.mjs';
 import { describeSchedule } from '../../../../shared/jobs.mjs';
 
@@ -252,8 +253,10 @@ export default {
     return jobs.runsOf(id);
   },
 
-  // ({ id?, title?, prompt?, schedule?, notify?, enabled?, runHere? }) -> record. A new Job runs on
-  // this Device and reads the Reader of the calling page's Space.
+  // ({ id?, title?, prompt?, source?, schedule?, notify?, enabled?, runHere? }) -> record. A new Job
+  // runs on this Device and reads the Reader of the calling page's Space. `source` is a drive URL
+  // to read now (the user's own drive stays live, anyone else's is copied), { url, module, prompt }
+  // for a newer version the user looked at (from checkJobSource) and took, or null to drop it.
   async saveJob(fields) {
     const f = fields || {};
     let space;
@@ -263,7 +266,22 @@ export default {
       } catch {}
     }
     const { id, title, prompt, schedule, notify, enabled, runHere } = f;
-    return jobs.save({ id, title, prompt, schedule, notify, enabled, runHere: !!runHere, space });
+    let source;
+    if (f.source === null) source = null;
+    else if (typeof f.source === 'string') source = await readJobSource(f.source);
+    else if (f.source && typeof f.source === 'object') {
+      const { url, module = null, prompt: text = null } = f.source;
+      source = { url, live: false, module, prompt: text };
+    }
+    return jobs.save({ id, title, prompt, source, schedule, notify, enabled, runHere: !!runHere, space });
+  },
+
+  // A Job's source as its drive has it now: { url, live, module, prompt, title, hash }, so the user
+  // can look at a newer version before taking it.
+  async checkJobSource(id) {
+    const job = jobs.get(id);
+    if (!job?.source) throw new Error('This Job doesn’t come from a drive');
+    return readJobSource(job.source.url);
   },
 
   async deleteJob(id) {

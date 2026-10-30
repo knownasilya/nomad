@@ -4,8 +4,8 @@
 // result can notify the user's phone. A Job and each of its runs are Vault records, so every linked
 // Device sees them:
 //
-//   /.vault/jobs/<id>.json                { type, id, title, prompt, schedule, notify, enabled, device, space,
-//                                           createdAt, updatedAt, scheduleFrom }
+//   /.vault/jobs/<id>.json                { type, id, title, prompt, source?, schedule, notify, enabled, device,
+//                                           space, createdAt, updatedAt, scheduleFrom }
 //   /.vault/job-runs/<jobId>/<runId>.json { type, id, jobId, title, device, trigger, startedAt, finishedAt,
 //                                           status, output, error?, notification }
 //   /.vault/job-requests/<jobId>.json     { type, jobId, requestedAt, by }   "run it now", from a Device
@@ -19,6 +19,17 @@
 // A schedule is null (by hand only), { kind: 'interval', minutes }, or { kind: 'daily', time: 'HH:MM',
 // days? } where days are weekdays, 0 = Sunday, and none means every day. Times are the running
 // Device's local time.
+//
+// A Job can come from a drive (`source`): a folder with `job.js` (a module, run like the AI's execute
+// code: `import { nomad } from 'nomad:runtime'` and `export default async function main(params)`)
+// and/or `job.md` (a prompt). A module runs first; with a prompt, the AI gets the module's result
+// with it, and without one the result is the run's answer. The Job's own `prompt` is then optional
+// extra instructions. A source in one of the user's own drives (one this Device can write) is
+// `live`: each run reads the files as they are now. Anyone else's is copied into the record when
+// it's added, so its owner can't change what runs on the user's computer; `changed` is the hash of
+// a newer version the runner saw, and the user accepts it by adding the source again.
+//
+//   source: { url, live, module?, prompt?, hash?, copiedAt?, changed? }
 //
 // `notify` is 'always' (every run sends its answer), 'auto' (only when the AI calls notify), or
 // 'never'. A failed run notifies too, once per streak of failures, unless 'never'.
@@ -42,9 +53,13 @@ const MAX_PROMPT = 8000;
 const MAX_NOTE_TITLE = 80;
 const MAX_NOTE_BODY = 300;
 const MAX_ERROR = 500;
+export const MAX_MODULE = 32_000; // the execute sandbox's limit (search-execute.mjs MAX_CODE)
+export const SOURCE_MODULE = 'job.js';
+export const SOURCE_PROMPT = 'job.md';
 
 const ID_RE = /^[a-z0-9-]{6,40}$/;
 const KEY_RE = /^[0-9a-f]{64}$/;
+const DRIVE_HOST_RE = /^[0-9a-z]{52,64}$/;
 const TIME_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -247,13 +262,25 @@ export function makeJob(fields, prev = null, now = new Date()) {
   if (!isJobId(id)) throw new Error('Not a Job id');
 
   const prompt = f.prompt !== undefined ? String(f.prompt || '').trim() : prev?.prompt || '';
-  if (!prompt) throw new Error('A Job needs a prompt: what the AI should do each time it runs');
   if (prompt.length > MAX_PROMPT)
     throw new Error(`A Job's prompt can be at most ${MAX_PROMPT} characters`);
+  const source =
+    f.source !== undefined
+      ? f.source
+        ? makeSource(f.source, prev?.source, now)
+        : null
+      : prev?.source || null;
+  if (!prompt && !source) {
+    throw new Error(
+      'A Job needs a prompt (what the AI should do each time it runs) or a drive with job.js or job.md'
+    );
+  }
 
   const title =
     clip(f.title !== undefined ? f.title : prev?.title, MAX_TITLE) ||
-    clip(prompt.split('\n')[0], 60);
+    clip(prompt.split('\n')[0], 60) ||
+    clip(f.source?.title, MAX_TITLE) ||
+    sourceTitle(source);
   const schedule =
     f.schedule !== undefined ? normalizeSchedule(f.schedule) : prev?.schedule || null;
   const notify = f.notify !== undefined ? f.notify : prev?.notify || 'always';
@@ -277,6 +304,7 @@ export function makeJob(fields, prev = null, now = new Date()) {
     id,
     title,
     prompt,
+    ...(source ? { source } : {}),
     schedule,
     notify,
     enabled,
@@ -286,6 +314,139 @@ export function makeJob(fields, prev = null, now = new Date()) {
     updatedAt: iso,
     scheduleFrom: restart ? iso : prev.scheduleFrom || prev.createdAt || iso,
   };
+}
+
+// Drive sources
+// =
+
+// The files a source URL names: a folder's job.js and job.md, or a .js or .md file and the file
+// next to it with the other extension. `drive` is the drive's root URL, `url` the tidied source.
+// Throws for anything but a hyper:// drive URL with a key (resolve names first).
+export function sourceFiles(input) {
+  const m = /^hyper:\/\/([^/?#]+)(\/[^?#]*)?(?:[?#].*)?$/i.exec(String(input || '').trim());
+  if (!m || !DRIVE_HOST_RE.test(m[1].toLowerCase())) {
+    throw new Error(
+      'A Job’s source is a hyper:// drive URL, like hyper://<key>/ or hyper://<key>/jobs/digest.js'
+    );
+  }
+  const drive = `hyper://${m[1].toLowerCase()}/`;
+  let path = (m[2] || '/').replace(/\/{2,}/g, '/');
+  if (path.split('/').includes('..')) throw new Error('A Job’s source can’t use ..');
+  let module, prompt;
+  if (/\.js$/i.test(path)) {
+    module = path;
+    prompt = path.replace(/\.js$/i, '.md');
+  } else if (/\.md$/i.test(path)) {
+    prompt = path;
+    module = path.replace(/\.md$/i, '.js');
+  } else {
+    if (!path.endsWith('/')) path += '/';
+    module = path + SOURCE_MODULE;
+    prompt = path + SOURCE_PROMPT;
+  }
+  return { url: drive.slice(0, -1) + path, drive, module, prompt };
+}
+
+// A short, stable hash of a source's files, to tell a newer version from the copy. Not for security:
+// the copy is what runs, and the user looks at a new version before taking it.
+export function hashSource(module, prompt) {
+  const s = `${module ?? ''}\u0000${prompt ?? ''}`;
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ c, 0x5bd1e995) >>> 0;
+  }
+  return h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
+}
+
+// A Job's `source` from what was read from the drive: { url, live, module?, prompt?, title? }, where
+// module and prompt are the files' text or null when missing (title only names a new Job). A live source keeps only its URL: each run
+// reads the files. Otherwise the files are copied in.
+export function makeSource(input, prev = null, now = new Date()) {
+  if (!input || typeof input !== 'object')
+    throw new Error('source is { url, live, module?, prompt? }');
+  const { url } = sourceFiles(input.url);
+  if (input.live) return { url, live: true };
+  const module = typeof input.module === 'string' && input.module.trim() ? input.module : null;
+  const prompt =
+    typeof input.prompt === 'string' && input.prompt.trim() ? input.prompt.trim() : null;
+  if (!module && !prompt) {
+    // Kept as it was: the record already holds the copy (an edit that doesn't touch the source).
+    if (prev && !prev.live && prev.url === url && (prev.module || prev.prompt)) return prev;
+    throw new Error(`${url} has no ${SOURCE_MODULE} or ${SOURCE_PROMPT}`);
+  }
+  checkSourceFiles(module, prompt);
+  const hash = hashSource(module, prompt);
+  if (prev && !prev.live && prev.url === url && prev.hash === hash) {
+    const { changed, ...same } = prev;
+    return changed && changed !== hash ? prev : same;
+  }
+  return {
+    url,
+    live: false,
+    ...(module ? { module } : {}),
+    ...(prompt ? { prompt } : {}),
+    hash,
+    copiedAt: now.toISOString(),
+  };
+}
+
+// Throws when a source's files are too big to run.
+export function checkSourceFiles(module, prompt) {
+  if (module && module.length > MAX_MODULE) {
+    throw new Error(`${SOURCE_MODULE} can be at most ${MAX_MODULE} characters`);
+  }
+  if (prompt && prompt.length > MAX_PROMPT) {
+    throw new Error(`${SOURCE_PROMPT} can be at most ${MAX_PROMPT} characters`);
+  }
+}
+
+// The source with a newer version noted (the runner saw `hash` in the drive), or null when there's
+// nothing new to note.
+export function noteSourceChange(source, hash) {
+  if (!source || source.live || !hash || hash === source.hash || hash === source.changed)
+    return null;
+  return { ...source, changed: hash };
+}
+
+// What a run does: { module, prompt } from the source's files (`files`: what a live source read now;
+// a copied source uses its copy) and the Job's own prompt. Either can be null, not both.
+export function jobWork(job, files = null) {
+  const from = job?.source ? (job.source.live ? files || {} : job.source) : {};
+  const module = from.module || null;
+  const prompt = [from.prompt, job?.prompt]
+    .map((p) => String(p || '').trim())
+    .filter(Boolean)
+    .join('\n\n');
+  if (!module && !prompt) {
+    throw new Error(
+      job?.source
+        ? `${job.source.url} has no ${SOURCE_MODULE} or ${SOURCE_PROMPT}`
+        : 'The Job has no prompt'
+    );
+  }
+  return { module, prompt: prompt || null };
+}
+
+// The AI's prompt when a module ran first: the prompt, then what the module returned.
+export function promptWithResult(prompt, result) {
+  const text = typeof result === 'string' ? result : JSON.stringify(result ?? null, null, 2);
+  return `${prompt}\n\nThe Job’s module (${SOURCE_MODULE}) ran first and returned:\n\n\`\`\`\n${text || '(nothing)'}\n\`\`\``;
+}
+
+function sourceTitle(source) {
+  if (!source) return '';
+  const heading = /^#\s+(.+)$/m.exec(source.prompt || '');
+  if (heading) return clip(heading[1], 60);
+  const { drive, url } = sourceFiles(source.url);
+  const name = url
+    .slice(drive.length - 1)
+    .replace(/\/$/, '')
+    .split('/')
+    .pop();
+  return clip(name ? name.replace(/\.(js|md)$/i, '') : `Job from ${drive.slice(8, 14)}…`, 60);
 }
 
 // Jobs A to Z by title.

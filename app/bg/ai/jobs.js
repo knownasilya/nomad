@@ -8,6 +8,9 @@
 //   phone over the AI Bridge).
 // - One run at a time. A run is a turn on the `job` stage (ai.ts runJobTurn): the user's own AI,
 //   reading only, with nobody to ask. It times out after RUN_TIMEOUT_MS.
+// - A Job from someone else's drive runs its copy. When a run sees a newer version in the drive,
+//   the Job notes it (`source.changed`) and My Library offers it; nothing changes until the user
+//   takes it.
 // - A time missed while the computer slept runs once when it wakes (shared/jobs.mjs dueAt).
 // - Each Job keeps its newest KEEP_RUNS runs.
 //
@@ -43,7 +46,7 @@ const running = new Map(); // jobId -> AbortController
 const attempted = new Map(); // jobId -> ISO time
 let draining = false;
 
-/** @param {{ runTurn: (job: any, opts: { signal: AbortSignal, notify: (n: any) => void }) => Promise<{ output: string }> }} opts */
+/** @param {{ runTurn: (job: any, opts: { signal: AbortSignal, notify: (n: any) => void, trigger: string, lastRun: any }) => Promise<{ output: string, sourceHash?: string | null }> }} opts */
 export function setup(opts) {
   runTurn = opts.runTurn;
   refresh();
@@ -148,7 +151,8 @@ export { ownKey };
 // Save a Job: a new one (no id) or changes to one. Fields left out keep their values. A new Job
 // runs on this Device and reads the Reader of `space`; `runHere` moves a Job's schedule to this
 // Device.
-/** @param {{ id?: string, title?: string, prompt?: string, schedule?: any, notify?: string, enabled?: boolean, space?: string, runHere?: boolean }} fields */
+// `source` is what job-source.ts read from a drive (shared/jobs.mjs makeSource), null to drop it.
+/** @param {{ id?: string, title?: string, prompt?: string, source?: any, schedule?: any, notify?: string, enabled?: boolean, space?: string, runHere?: boolean }} fields */
 export function save(fields) {
   const run = writes.then(async () => {
     const { runHere, ...rest } = fields;
@@ -249,8 +253,11 @@ async function runOne(job, trigger) {
       notify: (n) => {
         notified = jl.makeNotification(n, job.title);
       },
+      trigger,
+      lastRun: prevRun,
     });
     output = res?.output || '';
+    if (res?.sourceHash) noteSourceChange(job.id, res.sourceHash);
     if (controller.signal.aborted) error = 'The Job took longer than 10 minutes and was stopped';
   } catch (err) {
     error = err?.message || String(err);
@@ -284,4 +291,19 @@ async function runOne(job, trigger) {
     logger.warn('Could not save a Job’s run', { id: job.id, error: err?.message });
   }
   events.emit('changed');
+}
+
+// Someone else's drive has a newer version of a Job's source than its copy: note it on the Job, once.
+function noteSourceChange(id, hash) {
+  writes = writes
+    .then(async () => {
+      const job = jobs.get(id);
+      const source = jl.noteSourceChange(job?.source, hash);
+      if (!source) return;
+      const rec = { ...job, source, updatedAt: new Date().toISOString() };
+      await vault.putAppRecord(jl.jobPath(id), rec);
+      jobs.set(id, rec);
+      events.emit('changed');
+    })
+    .catch((err) => logger.warn('Could not note a Job’s newer source', { id, error: err?.message }));
 }

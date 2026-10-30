@@ -13,7 +13,7 @@ rules are in `shared/jobs.mjs`; the desktop side is `app/bg/ai/jobs.js` (store, 
 ## Decision
 
 1. **Jobs and their runs are Vault records.**
-   `/.vault/jobs/<id>.json` `{ type: 'nomad/job', id, title, prompt, schedule, notify, enabled, device, space, createdAt, updatedAt, scheduleFrom }`
+   `/.vault/jobs/<id>.json` `{ type: 'nomad/job', id, title, prompt, source?, schedule, notify, enabled, device, space, createdAt, updatedAt, scheduleFrom }`
    and `/.vault/job-runs/<jobId>/<runId>.json`
    `{ type: 'nomad/job-run', id, jobId, title, device, trigger, startedAt, finishedAt, status, output, error?, notification }`.
    Every linked Device sees them, like Notes and Mods. A run's answer is the user's own content,
@@ -53,6 +53,23 @@ rules are in `shared/jobs.mjs`; the desktop side is `app/bg/ai/jobs.js` (store, 
    reads Notes and Reader). So the AI Sidebar, the phone's AI panel and the loopback MCP can all
    make one. A Job made from the phone runs on the computer that answered it.
 
+8. **A Job can come from a drive.** `source` names a folder with `job.md` (a prompt) and/or
+   `job.js` (a module in the `execute` format: `import { nomad } from 'nomad:runtime'` and a
+   default-exported `main(params)`), or one of those files and the one next to it
+   (`shared/jobs.mjs` `sourceFiles`). The module runs first, in the `execute` sandbox with the
+   Job's capabilities (reads, plus `notify`), and gets `{ job, prompt, lastRun }`. With a prompt,
+   the AI gets the module's result with `job.md` and the Job's own `prompt`; without one, the
+   result is the run's answer and no AI runs, so a module-only Job works without an AI Runtime.
+   - A source in a drive this Device can write (the user's own) is **live**: each run reads the
+     files as they are then, so editing the drive edits the Job.
+   - Anyone else's drive is **copied** into the Job record when it's added (`module`, `prompt`,
+     `hash`, `copiedAt`), because a Job runs unattended with the user's Notes and Reader, and the
+     drive's owner shouldn't be able to change what runs. Autobase drives have no version-pinned
+     reads, so a copy is the pin. Each run also reads the drive and, when its hash differs, notes
+     it on the Job (`changed`). My Library shows that version's files; "Use this version" saves
+     exactly what the user looked at. The AI can add a source but can't take a newer version of
+     a copy.
+
 ## Consequences
 
 - **No push server.** The phone learns about a run when its Vault syncs: while the app is open, or
@@ -66,3 +83,5 @@ rules are in `shared/jobs.mjs`; the desktop side is `app/bg/ai/jobs.js` (store, 
   when the Job is made, would open those up.
 - The run's prompt has no chat history, so the AI writes it as a complete instruction (the
   `saveJob` description and `PERSONAL_PROMPT` say so).
+- A copied source makes the Job record as big as its files (32,000 characters of module and 8,000
+  of prompt at most). Live sources store only their URL.

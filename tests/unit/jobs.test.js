@@ -23,6 +23,13 @@ import {
   runsToPrune,
   jobsWithRuns,
   pendingNotifications,
+  sourceFiles,
+  makeSource,
+  hashSource,
+  noteSourceChange,
+  jobWork,
+  promptWithResult,
+  MAX_MODULE,
 } from '../../shared/jobs.mjs';
 
 const DEV = 'd'.repeat(64);
@@ -303,5 +310,84 @@ describe('pendingNotifications', () => {
 
   it('shows every run after an empty mark', () => {
     expect(pendingNotifications([run(1)], '').notify).toHaveLength(1);
+  });
+});
+
+describe('drive sources', () => {
+  const KEY = 'a'.repeat(64);
+  const DRIVE = `hyper://${KEY}`;
+  const MOD = "import { nomad } from 'nomad:runtime'\nexport default async function main() { return 1 }";
+  const at = new Date('2026-10-30T10:00:00Z');
+
+  it('finds a folder’s job.js and job.md, or a file and its sibling', () => {
+    expect(sourceFiles(DRIVE)).toEqual({ url: `${DRIVE}/`, drive: `${DRIVE}/`, module: '/job.js', prompt: '/job.md' });
+    expect(sourceFiles(`${DRIVE}/jobs/digest`)).toMatchObject({ url: `${DRIVE}/jobs/digest/`, module: '/jobs/digest/job.js' });
+    expect(sourceFiles(`${DRIVE}/x.js`)).toMatchObject({ module: '/x.js', prompt: '/x.md' });
+    expect(sourceFiles(`${DRIVE}/x.md`)).toMatchObject({ module: '/x.js', prompt: '/x.md' });
+    expect(sourceFiles(`HYPER://${KEY.toUpperCase()}//a//`).url).toBe(`${DRIVE}/a/`);
+  });
+
+  it('takes only hyper:// URLs with a key', () => {
+    expect(() => sourceFiles('https://example.com/job.js')).toThrow(/hyper:\/\//);
+    expect(() => sourceFiles('hyper://blog/')).toThrow(/hyper:\/\//);
+    expect(() => sourceFiles(`${DRIVE}/../x/`)).toThrow(/\.\./);
+  });
+
+  it('keeps only the URL of a live source and copies anyone else’s', () => {
+    expect(makeSource({ url: DRIVE, live: true, module: MOD })).toEqual({ url: `${DRIVE}/`, live: true });
+    const copy = makeSource({ url: DRIVE, live: false, module: MOD, prompt: ' Sum it up ' }, null, at);
+    expect(copy).toEqual({
+      url: `${DRIVE}/`,
+      live: false,
+      module: MOD,
+      prompt: 'Sum it up',
+      hash: hashSource(MOD, 'Sum it up'),
+      copiedAt: at.toISOString(),
+    });
+    expect(() => makeSource({ url: DRIVE, live: false })).toThrow(/no job\.js or job\.md/);
+    expect(() => makeSource({ url: DRIVE, module: 'x'.repeat(MAX_MODULE + 1) })).toThrow(/at most/);
+  });
+
+  it('notes a newer version once, and taking it clears the note', () => {
+    const copy = makeSource({ url: DRIVE, prompt: 'v1' }, null, at);
+    const newer = hashSource(null, 'v2');
+    const noted = noteSourceChange(copy, newer);
+    expect(noted.changed).toBe(newer);
+    expect(noteSourceChange(noted, newer)).toBeNull();
+    expect(noteSourceChange(copy, copy.hash)).toBeNull();
+    expect(noteSourceChange({ url: DRIVE, live: true }, newer)).toBeNull();
+    const taken = makeSource({ url: DRIVE, prompt: 'v2' }, noted, new Date('2026-10-31T00:00:00Z'));
+    expect(taken.changed).toBeUndefined();
+    expect(taken.prompt).toBe('v2');
+    // Adding the same version again keeps the copy, and its note of a newer one.
+    expect(makeSource({ url: DRIVE, prompt: 'v1' }, noted)).toBe(noted);
+  });
+
+  it('makes a Job from a source without a prompt, named by job.md’s heading', () => {
+    const job = makeJob(
+      { id: 'job-src-1', source: { url: `${DRIVE}/jobs/digest/`, prompt: '# Morning digest\nSum up my Reader.' } },
+      null,
+      at
+    );
+    expect(job.prompt).toBe('');
+    expect(job.title).toBe('Morning digest');
+    expect(job.source.url).toBe(`${DRIVE}/jobs/digest/`);
+    expect(makeJob({ id: 'job-src-2', source: { url: `${DRIVE}/jobs/digest/`, live: true } }).title).toBe('digest');
+    expect(makeJob({ id: 'job-src-3', source: { url: DRIVE, live: true, title: 'Status' } }).title).toBe('Status');
+    expect(() => makeJob({ id: 'job-src-4' })).toThrow(/prompt/);
+    // An edit that leaves source out keeps it; null drops it.
+    expect(makeJob({ notify: 'never' }, job).source).toEqual(job.source);
+    expect(() => makeJob({ source: null }, job)).toThrow(/prompt/);
+    expect(makeJob({ source: null, prompt: 'x' }, job).source).toBeUndefined();
+  });
+
+  it('works out what a run does', () => {
+    const copied = { prompt: 'Extra', source: makeSource({ url: DRIVE, module: MOD, prompt: 'Main' }) };
+    expect(jobWork(copied)).toEqual({ module: MOD, prompt: 'Main\n\nExtra' });
+    const live = { prompt: '', source: { url: `${DRIVE}/`, live: true } };
+    expect(jobWork(live, { module: MOD, prompt: null })).toEqual({ module: MOD, prompt: null });
+    expect(() => jobWork(live, { module: null, prompt: null })).toThrow(/no job\.js or job\.md/);
+    expect(jobWork({ prompt: 'Just a prompt' })).toEqual({ module: null, prompt: 'Just a prompt' });
+    expect(promptWithResult('Sum it up', '{"n":2}')).toContain('```\n{"n":2}\n```');
   });
 });

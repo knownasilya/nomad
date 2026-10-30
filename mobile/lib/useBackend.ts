@@ -174,6 +174,9 @@ export interface JobRun {
 }
 export interface Job {
   type: 'nomad/job'; id: string; title: string; prompt: string; schedule: JobSchedule
+  // A Job from a drive: live runs the user's own drive's latest files, otherwise a copy; newer: the
+  // drive has a version the user hasn't taken (on the computer, in My Library → Jobs).
+  source: { url: string; live: boolean; copiedAt: string | null; newer: boolean } | null
   notify: 'always' | 'auto' | 'never'; enabled: boolean; device: string | null; space: string | null
   createdAt: string; updatedAt: string
   // Worked out by the backend: the newest run, when it next runs, the schedule in words, the name of

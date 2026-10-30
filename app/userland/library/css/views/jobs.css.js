@@ -63,6 +63,56 @@ const cssStr = css`
     white-space: pre-wrap;
   }
 
+  .source {
+    margin-bottom: 10px;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+
+  .source a {
+    color: var(--text-color--link);
+  }
+
+  .source .hint-row {
+    margin: 4px 0 6px;
+  }
+
+  .file {
+    margin: 4px 0;
+    font-size: 12px;
+  }
+
+  .file summary {
+    cursor: pointer;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+
+  .file pre {
+    margin: 4px 0 0;
+    padding: 8px 10px;
+    max-height: 260px;
+    overflow: auto;
+    border-radius: 6px;
+    background: var(--bg-color--secondary);
+    font-size: 12px;
+    white-space: pre-wrap;
+  }
+
+  .update {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--border-color--light);
+  }
+
+  .update .buttons {
+    margin-top: 8px;
+  }
+
+  input.source-url {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
   .elsewhere,
   .hint-row {
     margin-bottom: 10px;

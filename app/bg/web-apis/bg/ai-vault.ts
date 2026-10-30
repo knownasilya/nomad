@@ -11,6 +11,7 @@ import * as vaultApps from './vault-apps';
 import { highlightForAi, assertCanHighlight } from '../../ui/highlights';
 import * as mods from '../../ui/mods';
 import * as jobs from '../../ai/jobs';
+import { readJobSource } from './job-source';
 import * as vault from '../../hyper/vault';
 import { describeSchedule } from '../../../../shared/jobs.mjs';
 import fsAPI from './fs';
@@ -158,16 +159,33 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
     case 'listJobs':
       return json(findJobs(jobs.list(), args, await deviceNamer()));
 
-    // A new Job (no id; `prompt` required) or changes to one. A new Job runs on this computer and
-    // reads the Reader of this turn's Space.
+    // A new Job (no id; `prompt` or `source` required) or changes to one. A new Job runs on this
+    // computer and reads the Reader of this turn's Space. A source is read now: the user's own drive
+    // stays live, anyone else's is copied. The AI can't take a newer version of a copy: the user
+    // does, in My Library.
     case 'saveJob': {
       const { id, title, prompt, schedule, notify, enabled } = args;
-      if (id && !jobs.get(id)) throw new Error('No Job with that id. Use listJobs to find it.');
-      if (!id && !prompt) throw new Error('A new Job needs `prompt`: what the AI does each run');
+      const prev = id ? jobs.get(id) : null;
+      if (id && !prev) throw new Error('No Job with that id. Use listJobs to find it.');
+      if (!id && !prompt && !args.source) {
+        throw new Error('A new Job needs `prompt` (what the AI does each run) or `source` (a drive with job.js or job.md)');
+      }
+      let source;
+      let kept = false;
+      if (args.source === null) source = null;
+      else if (args.source !== undefined) {
+        const read = await readJobSource(String(args.source));
+        kept = !!prev?.source && !prev.source.live && !read.live && prev.source.url === read.url;
+        if (!kept) source = read;
+      }
       const space = id ? undefined : await readerSpace().catch(() => null);
-      const rec = await jobs.save({ id, title, prompt, schedule, notify, enabled, space });
+      const rec = await jobs.save({ id, title, prompt, source, schedule, notify, enabled, space });
       const row = jobs.list().find((j) => j.id === rec.id) || rec;
-      return json({ ...jobForModel(row, await deviceNamer()), created: !id });
+      return json({
+        ...jobForModel(row, await deviceNamer()),
+        created: !id,
+        ...(kept ? { note: 'The Job keeps its copy of this drive. The user takes a newer version in My Library → Jobs.' } : {}),
+      });
     }
 
     case 'runJob': {

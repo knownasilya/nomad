@@ -12,6 +12,10 @@ import jobsCSS from '../../css/views/jobs.css.js';
 // Vault records, so the phone lists them too. The AI Sidebar makes them ("every morning, sum up my
 // Reader and send it to my phone"); this is where they're seen, run, changed and paused.
 //
+// A Job can come from a drive: its job.js and/or job.md (shared/jobs.mjs sourceFiles). A drive of
+// the user's own runs its latest files; anyone else's is copied, and a newer version shows here to
+// look at and take, or leave.
+//
 // ?id=<id> opens one. The rules (schedules, notify, sizes) live in shared/jobs.mjs; bg checks
 // them on save.
 
@@ -26,6 +30,7 @@ const blank = () => ({
   id: null,
   title: '',
   prompt: '',
+  source: '', // a drive URL or name; '' for none
   kind: 'manual', // 'manual' | 'interval' | 'daily'
   every: 1,
   unit: 'hours',
@@ -44,6 +49,7 @@ export class JobsView extends LitElement {
       editing: { type: Object }, // a form: blank() or one made from a Job
       openId: { type: String }, // the Job whose runs show
       runs: { type: Array },
+      newer: { type: Object }, // a newer version of the open Job's source: { jobId, url, module, prompt } or { jobId, error }
     };
   }
 
@@ -57,6 +63,7 @@ export class JobsView extends LitElement {
     this.filter = undefined;
     this.editing = null;
     this.runs = [];
+    this.newer = null;
     this.openId = new URLSearchParams(location.search).get('id') || null;
     this.load();
     // Jobs change on other Devices, from the AI, and when a run starts or ends.
@@ -84,7 +91,11 @@ export class JobsView extends LitElement {
   filtered() {
     const f = (this.filter || '').toLowerCase();
     return (this.jobs || []).filter(
-      (j) => !f || j.title.toLowerCase().includes(f) || j.prompt.toLowerCase().includes(f)
+      (j) =>
+        !f ||
+        j.title.toLowerCase().includes(f) ||
+        j.prompt.toLowerCase().includes(f) ||
+        (j.source?.url || '').includes(f)
     );
   }
 
@@ -98,8 +109,9 @@ export class JobsView extends LitElement {
         A Job is a prompt the AI runs by itself, by hand or on a schedule, like “every weekday at
         8:00, sum up my unread Reader posts”. It can read your Notes, Reader, drives and the web, and
         it changes nothing. Its answers are kept here, and it can notify your phone. Ask the AI in the
-        sidebar to make one, or make it here. A Job runs on the computer that made it, while that
-        computer is awake.
+        sidebar to make one, or make it here. A Job can also come from a drive with a
+        <code>job.md</code> prompt and a <code>job.js</code> module. A Job runs on the computer that
+        made it, while that computer is awake.
       </div>
       <div class="toolbar">
         <span></span>
@@ -157,6 +169,7 @@ export class JobsView extends LitElement {
     if (!j.enabled) parts.push('paused');
     if (!j.here) parts.push(`runs on ${j.deviceName}`);
     if (j.notify !== 'never') parts.push(j.notify === 'auto' ? 'notifies when it finds something' : 'notifies your phone');
+    if (j.source?.changed) parts.push('a newer version is in its drive');
     return parts.join(' · ');
   }
 
@@ -164,8 +177,11 @@ export class JobsView extends LitElement {
     const runs = this.runs || [];
     return html`
       <div class="job-body">
-        <div class="label">Prompt</div>
-        <div class="prompt">${j.prompt}</div>
+        ${j.source ? this.renderSource(j) : ''}
+        ${j.prompt
+          ? html`<div class="label">${j.source ? 'More instructions' : 'Prompt'}</div>
+              <div class="prompt">${j.prompt}</div>`
+          : ''}
         ${j.here
           ? ''
           : html`<div class="elsewhere">
@@ -192,6 +208,56 @@ export class JobsView extends LitElement {
     `;
   }
 
+  // Where a drive Job comes from, its copy, and a newer version to take.
+  renderSource(j) {
+    const src = j.source;
+    const u = this.newer && this.newer.jobId === j.id ? this.newer : null;
+    return html`
+      <div class="label">From a drive</div>
+      <div class="source">
+        <a href=${src.url} target="_blank">${src.url}</a>
+        <div class="hint-row">
+          ${src.live
+            ? 'Your drive: each run uses its files as they are then.'
+            : `Someone else’s drive: this Job runs the copy made ${ago(src.copiedAt)}.`}
+        </div>
+        ${src.live ? '' : this.renderFiles(src)}
+        ${src.live
+          ? ''
+          : u?.error
+            ? html`<div class="error">${u.error}</div>`
+            : u
+              ? html`<div class="update">
+                  ${u.same
+                    ? html`<div class="hint-row">The drive has the same version as this copy.</div>`
+                    : html`
+                        <div class="hint-row">The drive’s version now. Look it over before you take it: the Job runs it on this computer.</div>
+                        ${this.renderFiles(u, true)}
+                        <div class="buttons">
+                          <button class="primary" @click=${() => this.onTakeUpdate(j, u)}>Use this version</button>
+                          <button @click=${() => (this.newer = null)}>Keep the copy</button>
+                        </div>
+                      `}
+                </div>`
+              : html`<div class="hint-row">
+                  ${src.changed ? html`<strong>A newer version is in the drive.</strong>` : ''}
+                  <button class="link" @click=${() => this.onCheckSource(j)}>${src.changed ? 'Look at it' : 'Check for a newer version'}</button>
+                </div>`}
+      </div>
+    `;
+  }
+
+  renderFiles(f, open = false) {
+    return html`
+      ${f.prompt
+        ? html`<details class="file" ?open=${open}><summary>job.md</summary><pre>${f.prompt}</pre></details>`
+        : ''}
+      ${f.module
+        ? html`<details class="file" ?open=${open}><summary>job.js</summary><pre>${f.module}</pre></details>`
+        : ''}
+    `;
+  }
+
   renderEditor(e) {
     const set = (patch) => (this.editing = { ...this.editing, ...patch, error: '' });
     return html`
@@ -204,7 +270,14 @@ export class JobsView extends LitElement {
         </div>
 
         <div class="block">
-          <div class="label">Prompt <span class="hint">What the AI does each run. It starts fresh each time, with nobody to ask, so say everything it needs.</span></div>
+          <div class="label">Drive <span class="hint">Optional. A folder with a job.md prompt and/or a job.js module, or one of your drive names.</span></div>
+          <input class="source-url" placeholder="hyper://…/jobs/digest/" .value=${e.source} @input=${(ev) => set({ source: ev.target.value })} />
+        </div>
+
+        <div class="block">
+          <div class="label">${e.source.trim() ? 'More instructions' : 'Prompt'} <span class="hint">${e.source.trim()
+            ? 'Optional. Added to the drive’s job.md, or given to the AI with what job.js returns.'
+            : 'What the AI does each run. It starts fresh each time, with nobody to ask, so say everything it needs.'}</span></div>
           <textarea rows="5" placeholder="Sum up my unread Reader posts from the last day in a few bullet points, newest first." .value=${e.prompt} @input=${(ev) => set({ prompt: ev.target.value })}></textarea>
         </div>
 
@@ -269,7 +342,15 @@ export class JobsView extends LitElement {
 
   edit(j) {
     const s = j.schedule;
-    const form = { ...blank(), id: j.id, title: j.title, prompt: j.prompt, notify: j.notify, enabled: j.enabled };
+    const form = {
+      ...blank(),
+      id: j.id,
+      title: j.title,
+      prompt: j.prompt,
+      source: j.source?.url || '',
+      notify: j.notify,
+      enabled: j.enabled,
+    };
     if (s?.kind === 'interval') {
       const hours = s.minutes % 60 === 0;
       Object.assign(form, { kind: 'interval', every: hours ? s.minutes / 60 : s.minutes, unit: hours ? 'hours' : 'minutes' });
@@ -299,6 +380,7 @@ export class JobsView extends LitElement {
     if (this.editing?.id === j.id) return;
     this.openId = this.openId === j.id ? null : j.id;
     this.runs = [];
+    this.newer = null;
     history.replaceState({}, '', this.openId ? `/jobs?id=${this.openId}` : '/jobs');
     if (this.openId) this.runs = await nomad.vault.listJobRuns(j.id).catch(() => []);
   }
@@ -306,11 +388,16 @@ export class JobsView extends LitElement {
   async onSave(ev) {
     ev.preventDefault();
     const e = this.editing;
+    const prev = e.id ? this.jobs.find((j) => j.id === e.id) : null;
+    const url = e.source.trim();
+    // The drive is read again only when it changed: keeping the URL keeps the copy.
+    const source = url === (prev?.source?.url || '') ? undefined : url || null;
     try {
       const rec = await nomad.vault.saveJob({
         id: e.id || undefined,
         title: e.title,
         prompt: e.prompt,
+        source,
         schedule: this.schedule(e),
         notify: e.notify,
       });
@@ -328,6 +415,27 @@ export class JobsView extends LitElement {
       await nomad.vault.runJob(j.id);
       if (this.openId !== j.id) await this.onOpen(j);
       toast.create(`Running “${j.title}”…`);
+    } catch (err) {
+      toast.create(cleanError(err), 'error');
+    }
+  }
+
+  async onCheckSource(j) {
+    try {
+      const now = await nomad.vault.checkJobSource(j.id);
+      this.newer = { jobId: j.id, ...now, same: now.hash === j.source.hash };
+    } catch (err) {
+      this.newer = { jobId: j.id, error: cleanError(err) };
+    }
+  }
+
+  // Take the version the user looked at: exactly those files, even if the drive changed since.
+  async onTakeUpdate(j, u) {
+    try {
+      await nomad.vault.saveJob({ id: j.id, source: { url: j.source.url, module: u.module, prompt: u.prompt } });
+      this.newer = null;
+      await this.load();
+      toast.create(`“${j.title}” now runs the new version`, 'success');
     } catch (err) {
       toast.create(cleanError(err), 'error');
     }
