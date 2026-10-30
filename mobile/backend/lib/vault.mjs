@@ -119,9 +119,13 @@ export async function removeDevice (base, deviceKey) {
 }
 
 // Register a space in the Vault (keyed by rootDriveKey), matching nomad's record shape so the
-// space syncs to other devices. Requires the Vault to be writable on this device.
+// space syncs to other devices. Requires the Vault to be writable on this device. A Space the Vault
+// already lists keeps its record (another device may have published it first, or moved it).
 export async function addSpaceToVault (base, { rootDriveKey, name, icon, color }) {
   if (!base || !rootDriveKey) return
+  const path = `${SPACES_PREFIX}${rootDriveKey}.json`
+  const node = await base.view.get(path)
+  if (node && decodeInlineJson(node.value, b4a)) return
   const rec = {
     rootDriveKey,
     name: name || 'Space',
@@ -130,7 +134,7 @@ export async function addSpaceToVault (base, { rootDriveKey, name, icon, color }
     sortOrder: 0,
     createdAt: new Date().toISOString()
   }
-  await base.append(inlineOp(`/.vault/spaces/${rootDriveKey}.json`, rec))
+  await base.append(inlineOp(path, rec))
   await base.update()
 }
 

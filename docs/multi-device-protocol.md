@@ -40,13 +40,19 @@ Written via ordinary `{ op: 'put' }` ops **as inline control records** (small JS
 | Path | Payload (JSON, stored inline) |
 |------|--------------|
 | `/.vault/meta.json` | `{ version: 1, createdAt, profileUrl? }` |
-| `/.vault/spaces/<rootDriveKey>.json` | `{ rootDriveKey, name, icon, color, sortOrder, originId?, createdAt }` |
+| `/.vault/spaces/<rootDriveKey>.json` | `{ rootDriveKey, name, icon, color, sortOrder, originId?, personal?, createdAt }` |
 | `/.vault/devices/<hexDeviceKey>.json` | `{ key, name, platform: 'desktop'\|'mobile', addedAt, lastSeen? }` |
 
 Space records are keyed by `rootDriveKey` (the hex key of the now-Autobase-backed Root Drive), which
 is globally stable — **not** by the local space id, which is a per-Device autoincrement and would
 collide/diverge across Devices (`originId` is a non-authoritative hint only). A newly-paired Device
-reads `/.vault/spaces/*` to discover every Space and the drives to replicate. Device records exist
+reads `/.vault/spaces/*` to discover every Space and the drives to replicate. Desktop marks its
+default Personal Space `personal: true` (older records: `originId: 1`).
+
+Spaces are shared, not per Device. A running desktop adds any Space another Device indexes
+(`syncSpacesFromVault` on Vault updates). A paired phone has no Spaces of its own
+(`mobile/lib/spacesMerge.ts`): its Personal takes the Vault's Personal Root Drive, names and colors
+follow the Vault, and Spaces it made before pairing are indexed in the Vault. Device records exist
 for human-readable names/management; the Vault's own writer set (autobase oplog) remains the
 security boundary.
 
