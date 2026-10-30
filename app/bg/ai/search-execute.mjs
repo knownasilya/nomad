@@ -97,9 +97,10 @@ export const CAPABILITIES = [
   {
     name: 'currentTab',
     description:
-      'The tab the user is looking at right now: { url, title, drive, writable }. `drive` is the hyper:// Drive open in ' +
-      'it, or null. The user can change tabs while you work, so ask again when it matters, and pass its drive to ' +
-      'writeDriveFile.',
+      'The tab the user is looking at right now: { url, title, drive, writable, draft }. `drive` is the hyper:// Drive ' +
+      'open in it, or null. `writable` is null when it is not known. `draft` is true when your writes to that drive ' +
+      'stage in its Draft, for the user to publish. The user can change tabs while you work, so ask again when it ' +
+      'matters, and pass its drive to writeDriveFile.',
     inputSchema: { type: 'object', properties: {}, required: [] },
     gates: { personal: true, tab: true },
   },

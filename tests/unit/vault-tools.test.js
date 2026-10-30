@@ -54,10 +54,20 @@ describe('vault tools: permissions', () => {
     expect(await ask('notesRead', 'wc')).toBe(true);
     expect(await ask('readerWrite', 'wc')).toBe(false);
     expect(await ask('readerWrite', 'wc')).toBe(false); // a "no" holds for the turn too
-    await ask('modifyDrive:abc', 'wc');
-    await ask('modifyDrive:abc', 'wc');
-    expect(permit.mock.calls.map((c) => c[0])).toEqual(['notesRead', 'readerWrite', 'modifyDrive:abc', 'modifyDrive:abc']);
+    await ask('deleteDrive', 'wc');
+    await ask('deleteDrive', 'wc');
+    expect(permit.mock.calls.map((c) => c[0])).toEqual(['notesRead', 'readerWrite', 'deleteDrive', 'deleteDrive']);
     expect(permit).toHaveBeenCalledWith('notesRead', 'wc');
+  });
+
+  // The phone keeps no grant, so a Bridge turn that writes several files asked once per file.
+  it('asks once per turn to edit each drive', async () => {
+    const permit = vi.fn(async () => true);
+    const ask = askOncePerTurn(permit);
+    expect(await ask('modifyDrive:abc', 'wc')).toBe(true);
+    expect(await ask('modifyDrive:abc', 'wc')).toBe(true);
+    await ask('modifyDrive:def', 'wc');
+    expect(permit.mock.calls.map((c) => c[0])).toEqual(['modifyDrive:abc', 'modifyDrive:def']);
   });
 
   it('asks again on another site in the same turn', async () => {
