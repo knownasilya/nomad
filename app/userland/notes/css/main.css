@@ -16,6 +16,14 @@ body {
   --nts-warn-bg: #fff7e6;
   --nts-warn-border: #f5d48a;
 
+  /* The canvas (js/graph-view.js). */
+  --nts-graph-bg: var(--bg-color--default);
+  --nts-graph-grid: rgba(0, 0, 0, 0.07);
+  --nts-graph-node: #8e8ea6;
+  --nts-graph-node-ring: var(--bg-color--default);
+  --nts-graph-link: rgba(60, 60, 90, 0.2);
+  --nts-graph-label: var(--text-color--light);
+
   /* The editor's colors (js/editor/index.js reads these). */
   --note-text: var(--text-color--default);
   --note-muted: var(--text-color--pretty-light);
@@ -53,6 +61,9 @@ body {
     --nts-warn-border: #5c4a1f;
     --note-code-bg: rgba(255, 255, 255, 0.07);
     --note-selection: rgba(123, 159, 255, 0.28);
+    --nts-graph-grid: rgba(255, 255, 255, 0.06);
+    --nts-graph-node: #8a8aa0;
+    --nts-graph-link: rgba(200, 200, 230, 0.2);
   }
 }
 
@@ -146,7 +157,46 @@ header .brand img {
 
 .header-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 10px;
+}
+
+/* List / Canvas */
+.view-switch {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--nts-search-bg);
+}
+
+.view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-color--light);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.view-btn:hover {
+  color: var(--text-color--default);
+}
+
+.view-btn.active {
+  background: var(--bg-color--default);
+  color: var(--text-color--default);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.view-btn .fas {
+  font-size: 11px;
 }
 
 /* buttons */
@@ -485,6 +535,181 @@ main {
   color: var(--text-color--pretty-light);
 }
 
+/* canvas: every note and the links between them, in place of the list and the note */
+
+.graph-pane {
+  display: none;
+}
+
+.layout.canvas {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.layout.canvas nav,
+.layout.canvas main {
+  display: none;
+}
+
+.layout.canvas .graph-pane {
+  position: relative;
+  display: block;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--nts-graph-bg);
+  /* A dot grid; js/graph-view.js moves and scales it with the canvas. */
+  background-image: radial-gradient(circle, var(--nts-graph-grid) 1px, transparent 1.2px);
+  background-size: 24px 24px;
+}
+
+.graph-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.graph-svg.panning {
+  cursor: grabbing;
+}
+
+.graph-link {
+  stroke: var(--nts-graph-link);
+  stroke-width: 1.2px;
+  vector-effect: non-scaling-stroke;
+  transition: opacity 0.15s, stroke 0.15s;
+}
+
+.graph-link.hover {
+  stroke: var(--nts-accent);
+  stroke-width: 1.6px;
+}
+
+.graph-link.dim {
+  opacity: 0.35;
+}
+
+.graph-node {
+  cursor: pointer;
+  outline: none;
+  transition: opacity 0.15s;
+}
+
+.graph-svg.dragging-node,
+.graph-svg.dragging-node .graph-node {
+  cursor: grabbing;
+}
+
+.graph-node circle {
+  fill: var(--nts-graph-node);
+  stroke: var(--nts-graph-node-ring);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+  transition: fill 0.15s;
+}
+
+.graph-node text {
+  display: none;
+  fill: var(--nts-graph-label);
+  font-size: 11px;
+  paint-order: stroke;
+  stroke: var(--nts-graph-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.graph-svg.labels .graph-node text,
+.graph-node.current text,
+.graph-node.hover text,
+.graph-node.near text {
+  display: block;
+}
+
+.graph-node.near circle {
+  fill: var(--nts-accent);
+  opacity: 0.7;
+}
+
+.graph-node.current circle,
+.graph-node.hover circle {
+  fill: var(--nts-accent);
+}
+
+.graph-node.current text,
+.graph-node.hover text {
+  fill: var(--text-color--default);
+  font-weight: 600;
+}
+
+.graph-node:focus-visible circle {
+  stroke: var(--nts-accent);
+  stroke-width: 3px;
+}
+
+.graph-node.dim {
+  opacity: 0.18;
+}
+
+.graph-overlay {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.graph-overlay.top {
+  top: 12px;
+  left: 14px;
+  pointer-events: none;
+}
+
+.graph-overlay.bottom {
+  right: 14px;
+  bottom: 14px;
+  padding: 3px;
+  border: 1px solid var(--border-color--semi-light);
+  border-radius: 8px;
+  background: var(--nts-header-bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.graph-info {
+  font-size: 12px;
+  color: var(--text-color--pretty-light);
+}
+
+.graph-hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.graph-hint:empty {
+  display: none;
+}
+
+.graph-hint .notice {
+  margin-top: 60px;
+  width: 420px;
+}
+
+.graph-tip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 7px 12px;
+  border: 1px solid var(--border-color--semi-light);
+  border-radius: 999px;
+  background: var(--nts-header-bg);
+  font-size: 12px;
+  color: var(--text-color--light);
+  white-space: nowrap;
+}
+
 /* states */
 
 .notice {
@@ -519,5 +744,8 @@ main {
   }
   .layout {
     grid-template-columns: 200px minmax(0, 1fr);
+  }
+  .view-btn span {
+    display: none;
   }
 }

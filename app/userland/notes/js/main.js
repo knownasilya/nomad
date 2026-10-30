@@ -12,12 +12,17 @@
 // an emptied one is deleted when you leave it. Retitling a note updates the links to it.
 //
 // Each note has its own address, nomad://notes/<id>, so back and forward move between notes.
+// The header's List / Canvas switch swaps the list and the editor for a canvas of every note and
+// the links between them (./graph-view.js); ?view=canvas in the address keeps it across back and
+// forward, and the last choice is remembered for the next visit.
 // Bundled (scripts/build.js → js/main.build.js), styled with the app-stdlib tokens like nomad://reader.
 
 import { createNoteEditor } from './editor/index.js';
+import { createGraphView } from './graph-view.js';
 import { noteTitle, noteSnippet, makeResolver, linkedIds } from '../../../../shared/vault-apps.mjs';
 
 const SAVE_DELAY = 700;
+const VIEW_KEY = 'nomad-notes-view';
 
 const state = {
   notes: [], // stored notes, newest first
@@ -37,9 +42,12 @@ let saveMsg = { kind: 'idle', text: '' };
 let banner = null; // { text, originalId } after a conflict copy was made
 let mentionsOpen = false; // the user opened Linked mentions; it stays open from note to note
 let editor = null;
+let view = 'list'; // 'list' (the list and the open note) or 'canvas' (the notes and their links)
+let graph = null; // the canvas, made the first time it's shown
 
 const app = document.getElementById('app');
-let listEl, mainEl, searchInput, newBtn, savedEl;
+let listEl, mainEl, searchInput, newBtn, savedEl, layoutEl, graphPane, graphInfo, graphHint;
+const viewBtns = new Map();
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
@@ -53,6 +61,10 @@ async function init() {
   await loadNotes();
   state.loaded = true;
   const fromUrl = idFromUrl();
+  const params = new URLSearchParams(location.search);
+  // A link to a note opens that note; a bare nomad://notes opens the view used last.
+  if (params.get('view') === 'canvas') view = 'canvas';
+  else if (!fromUrl && !params.has('write') && storedView() === 'canvas') view = 'canvas';
   const first = state.notes.find((n) => n.id === fromUrl) || state.notes[0];
   if (first) await openNote(first.id, { push: false });
   else renderAll();
@@ -66,6 +78,11 @@ async function init() {
   });
   window.addEventListener('popstate', () => {
     const id = idFromUrl();
+    const v = viewFromUrl();
+    if (v !== view) {
+      view = v;
+      applyView();
+    }
     if (id && (!draft || draft.id !== id)) openNote(id, { push: false });
   });
   watchOtherDevices();
@@ -81,11 +98,35 @@ function idFromUrl() {
   return decodeURIComponent(location.pathname.replace(/^\/+|\/+$/g, ''));
 }
 
+function viewFromUrl() {
+  return new URLSearchParams(location.search).get('view') === 'canvas' ? 'canvas' : 'list';
+}
+
 function setUrl(id, push) {
-  const path = '/' + (id ? encodeURIComponent(id) : '');
-  if (location.pathname === path) return;
+  const path = '/' + (id ? encodeURIComponent(id) : '') + (view === 'canvas' ? '?view=canvas' : '');
+  if (location.pathname + location.search === path) return;
   if (push) history.pushState(null, '', path);
   else history.replaceState(null, '', path);
+}
+
+function storedView() {
+  try {
+    return localStorage.getItem(VIEW_KEY);
+  } catch {
+    return null;
+  }
+}
+
+// The List / Canvas switch. The open note stays open behind the canvas.
+function setView(v) {
+  if (v === view) return;
+  view = v;
+  try {
+    localStorage.setItem(VIEW_KEY, v);
+  } catch {}
+  setUrl(draft?.id || null, true);
+  applyView();
+  if (v === 'list') editor?.focus();
 }
 
 // ── Data (nomad.vault) ───────────────────────────────────────────────────────
@@ -188,6 +229,7 @@ function upsert(note) {
 
 async function newNote(body = '') {
   await leaveNote();
+  view = 'list';
   draft = { id: null, body, base: null, openedTitle: null, conflictOf: null };
   dirty = !!body;
   banner = null;
@@ -278,6 +320,18 @@ function liveNotes() {
   return [{ id: draft.id || '', body: draft.body, updatedAt: '￿' }, ...others];
 }
 
+// A note picked on the canvas opens in the list view; back returns to the canvas.
+async function openFromCanvas(id) {
+  view = 'list';
+  if (draft && draft.id === id) {
+    setUrl(id, true);
+    applyView();
+    editor?.focus();
+    return;
+  }
+  await openNote(id);
+}
+
 // Follow a link from the editor. A link to a note that doesn't exist yet creates it.
 async function openLink(link) {
   if (link.kind === 'url') {
@@ -304,26 +358,85 @@ function renderShell() {
     oninput: (e) => {
       state.query = e.target.value;
       renderList();
+      graph?.setQuery(state.query);
     },
     onkeydown: (e) => {
       if (e.key === 'Escape') {
         searchInput.value = '';
         state.query = '';
         renderList();
+        graph?.setQuery('');
       }
     },
   });
   newBtn = el('button', { class: 'btn primary', onclick: () => newNote() }, [icon('plus'), ' New note']);
+  const switcher = el('div', { class: 'view-switch', role: 'group', 'aria-label': 'View' }, [
+    viewButton('list', 'list-ul', 'List'),
+    viewButton('canvas', 'project-diagram', 'Canvas'),
+  ]);
 
   const header = el('header', {}, [
     el('div', { class: 'brand' }, [el('img', { src: 'asset:favicon:nomad://notes/', alt: '' }), 'Notes']),
     el('div', { class: 'search-ctrl' }, [icon('search'), searchInput]),
-    el('div', { class: 'header-actions' }, [newBtn]),
+    el('div', { class: 'header-actions' }, [switcher, newBtn]),
   ]);
   listEl = el('div', { class: 'notes' });
   const nav = el('nav', {}, [listEl, el('footer', {}, [])]);
   mainEl = el('main', {});
-  app.append(header, el('div', { class: 'layout' }, [nav, mainEl]));
+  graphInfo = el('span', { class: 'graph-info' });
+  graphHint = el('div', { class: 'graph-hint' });
+  graphPane = el('section', { class: 'graph-pane', 'aria-label': 'Canvas' }, [
+    el('div', { class: 'graph-overlay top' }, [graphInfo]),
+    graphHint,
+    el('div', { class: 'graph-overlay bottom' }, [
+      el('button', { class: 'icon-btn', title: 'Zoom in', 'aria-label': 'Zoom in', onclick: () => graph?.zoomIn() }, [icon('plus')]),
+      el('button', { class: 'icon-btn', title: 'Zoom out', 'aria-label': 'Zoom out', onclick: () => graph?.zoomOut() }, [icon('minus')]),
+      el('button', { class: 'icon-btn', title: 'Fit all notes', 'aria-label': 'Fit all notes', onclick: () => graph?.fit() }, [icon('compress-arrows-alt')]),
+    ]),
+  ]);
+  layoutEl = el('div', { class: 'layout' }, [nav, mainEl, graphPane]);
+  app.append(header, layoutEl);
+}
+
+function viewButton(v, ic, label) {
+  const b = el('button', { class: 'view-btn', title: label, 'aria-pressed': 'false', onclick: () => setView(v) }, [icon(ic), el('span', {}, [label])]);
+  viewBtns.set(v, b);
+  return b;
+}
+
+// Show the list and the note, or the canvas.
+function applyView() {
+  const canvas = view === 'canvas';
+  layoutEl.classList.toggle('canvas', canvas);
+  for (const [v, b] of viewBtns) {
+    b.classList.toggle('active', v === view);
+    b.setAttribute('aria-pressed', String(v === view));
+  }
+  if (canvas) {
+    if (!graph) graph = createGraphView({ parent: graphPane, onOpen: openFromCanvas });
+    renderGraph();
+    graph.setVisible(true);
+  } else {
+    graph?.setVisible(false);
+    editor?.view.requestMeasure();
+  }
+}
+
+// The canvas shows what's typed in the open note, like the list does.
+function renderGraph() {
+  if (!graph || view !== 'canvas' || !state.loaded) return;
+  graph.update(
+    liveNotes().filter((n) => n.id),
+    { currentId: draft?.id || null, query: state.query }
+  );
+  const { notes, links } = graph.count;
+  graphInfo.textContent = `${notes} ${notes === 1 ? 'note' : 'notes'} · ${links} ${links === 1 ? 'link' : 'links'}`;
+  if (!notes) {
+    const action = state.writable ? el('button', { class: 'btn primary', onclick: () => newNote() }, [icon('plus'), ' New note']) : null;
+    graphHint.replaceChildren(notice('project-diagram', 'No notes yet', ['Your notes and the links between them appear here.'], action));
+  } else if (!links) {
+    graphHint.replaceChildren(el('p', { class: 'graph-tip' }, [icon('link'), 'No links yet. Link notes with [[ and a note’s title.']));
+  } else graphHint.replaceChildren();
 }
 
 // keepEditor: leave the editor as it is (it already shows the right text), refresh the rest.
@@ -333,6 +446,7 @@ function renderAll({ keepEditor = false } = {}) {
   if (keepEditor && editor && draft) renderAround();
   else renderEditor();
   app.querySelector('nav footer').replaceChildren(syncNote());
+  applyView();
 }
 
 function visibleNotes() {
