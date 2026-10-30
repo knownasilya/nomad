@@ -81,7 +81,7 @@ export default function HostingSettings ({ visible, onClose, hosting, onStatus }
               <Text style={s.btnText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.btn, s.btnPrimary]} onPress={save}>
-              <Text style={[s.btnText, { color: '#fff' }]}>Save</Text>
+              <Text style={[s.btnText, { color: t.onAccent }]}>Save</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -92,22 +92,25 @@ export default function HostingSettings ({ visible, onClose, hosting, onStatus }
 
 function makeStyles (t: Theme) {
   return StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 24 },
-    sheet: { backgroundColor: t.surface, borderRadius: radius.lg, padding: 20, gap: 8 },
-    title: { color: t.text, fontSize: 18, fontWeight: '700', marginBottom: 4 },
+    // In the top part of the screen, so the number pad doesn't cover the field (a Modal never hears
+    // the keyboard on Android; see AiPanel).
+    backdrop: { flex: 1, backgroundColor: t.backdrop, justifyContent: 'flex-start', paddingTop: 120, paddingHorizontal: 24 },
+    sheet: { backgroundColor: t.surface, borderRadius: radius.lg + 6, padding: 24, gap: 8 },
+    title: { color: t.text, fontSize: 20, fontWeight: '600', marginBottom: 4 },
     line: { color: t.textDim, fontSize: 14 },
     label: { color: t.textMuted, fontSize: 13, marginTop: 10 },
     input: {
       color: t.text,
-      borderWidth: StyleSheet.hairlineWidth,
+      backgroundColor: t.bg,
+      borderWidth: 1,
       borderColor: t.border,
       borderRadius: radius.md,
       paddingHorizontal: 12,
-      paddingVertical: 8,
+      minHeight: 48,
       fontSize: 16
     },
     row: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 14 },
-    btn: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: radius.md },
+    btn: { paddingHorizontal: 20, minHeight: 40, justifyContent: 'center', borderRadius: radius.pill },
     btnPrimary: { backgroundColor: t.accent },
     btnText: { color: t.text, fontSize: 15, fontWeight: '600' }
   })

@@ -309,8 +309,12 @@ Every new or changed screen must work in light **and** dark, and look like its n
   `nomad://notes`: the 50px header with the brand favicon, My Library's sidebar, bordered result
   lists, the `.notice` empty state, and `.btn` / `.btn.primary` / `.icon-btn`. No hard-coded
   light-only hex colors.
-- **Mobile:** colors come only from `useTheme()` (`mobile/lib/theme.ts`). Follow the `Library.tsx`
-  full-screen-modal pattern: 52px header, `t.surface` cards with hairline borders, `t.accent` buttons.
+- **Mobile:** colors come only from `useTheme()` (`mobile/lib/theme.ts`, whose dark grays are
+  desktop's). Build screens from the shared parts instead of hand-drawing them: `ScreenHeader` (the
+  56dp top bar with a back arrow), `ListSection`/`ListRow`/`SwitchRow` (`List.tsx`: `t.surface` cards
+  with hairline borders, ripple rows of at least 48dp), `Tabs`, `ActionSheet` for menus and
+  long-press actions, and `Icon`/`IconButton` (Font Awesome 5, desktop's icon set). Never use a text
+  glyph (☰ ✕ ⌂) as an icon. `Library.tsx` is the worked example.
 - Check both schemes before calling UI work done.
 
 ## Drive templates live in `nomad.dev`

@@ -5,6 +5,8 @@ import { useTheme, radius, type Theme } from '../lib/theme'
 import { hyperKeyOf, isHyperUrl, normalizeUrl, resolveAddress, shortKey } from '../lib/hyperUrl'
 import type { SavedSite } from '../lib/usePersistence'
 import SiteIcon from './SiteIcon'
+import ScreenHeader from './ScreenHeader'
+import Icon from './Icon'
 
 const ICON = 30
 
@@ -51,7 +53,7 @@ export default function Shortcuts ({ pins, iconFor, suggest, onOpen, onAdd, onRe
       ))}
       <TouchableOpacity style={s.tile} activeOpacity={0.7} onPress={() => setAdding(true)} accessibilityLabel='Add shortcut'>
         <View style={[s.iconBox, s.addBox]}>
-          <Text style={s.addText}>＋</Text>
+          <Icon name='plus' size={18} color={t.accent} />
         </View>
         <Text numberOfLines={2} style={[s.label, s.addLabel]}>Add</Text>
       </TouchableOpacity>
@@ -113,13 +115,10 @@ function AddShortcut ({ visible, pins, iconFor, suggest, onClose, onPick }: {
   return (
     <Modal visible={visible} animationType='slide' onRequestClose={close} presentationStyle='fullScreen'>
       <SafeAreaView style={s.sheet} edges={['top', 'bottom']}>
-        <View style={s.header}>
-          <Text style={s.title}>Add shortcut</Text>
-          <TouchableOpacity onPress={close} hitSlop={10} style={s.close}>
-            <Text style={s.closeText}>✕</Text>
-          </TouchableOpacity>
-        </View>
-        <TextInput
+        <ScreenHeader title='Add shortcut' onBack={close} />
+        <View style={s.searchWrap}>
+          <Icon name='search' size={14} color={t.textMuted} />
+          <TextInput
           style={s.search}
           value={query}
           onChangeText={setQuery}
@@ -131,7 +130,8 @@ function AddShortcut ({ visible, pins, iconFor, suggest, onClose, onPick }: {
           returnKeyType='done'
           autoFocus
           onSubmitEditing={() => { if (typed) pick(typed, typedName(typed)) }}
-        />
+          />
+        </View>
         {/* A Modal on Android never hears the keyboard (see AiPanel), so the list keeps room at the
             bottom for its last rows to scroll up above it. */}
         <ScrollView style={s.list} contentContainerStyle={s.listPad} keyboardShouldPersistTaps='handled'>
@@ -161,29 +161,26 @@ function makeStyles (t: Theme) {
       justifyContent: 'center'
     },
     addBox: { backgroundColor: 'transparent', borderStyle: 'dashed', borderWidth: 1.5 },
-    addText: { color: t.accent, fontSize: 24, lineHeight: 28 },
     label: { color: t.text, fontSize: 12, marginTop: 6, textAlign: 'center', lineHeight: 15 },
     addLabel: { color: t.textMuted },
     sheet: { flex: 1, backgroundColor: t.bg },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 52 },
-    title: { color: t.text, fontSize: 20, fontWeight: '700' },
-    close: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-    closeText: { color: t.textDim, fontSize: 18 },
-    search: {
+    searchWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      height: 44,
       marginHorizontal: 16,
       marginBottom: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderRadius: radius.md,
+      paddingHorizontal: 14,
+      borderRadius: radius.pill,
       backgroundColor: t.inputBg,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: t.border,
-      color: t.text,
-      fontSize: 15
+      borderWidth: 1,
+      borderColor: t.accent
     },
+    search: { flex: 1, color: t.text, fontSize: 15, padding: 0 },
     list: { flex: 1 },
     listPad: { paddingBottom: 360 },
-    row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10 },
+    row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, minHeight: 56 },
     rowText: { flex: 1 },
     rowTitle: { color: t.text, fontSize: 15, fontWeight: '500' },
     rowUrl: { color: t.textMuted, fontSize: 12, marginTop: 1 },

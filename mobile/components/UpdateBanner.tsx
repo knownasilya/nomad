@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useTheme, type Theme } from '../lib/theme'
+import IconButton from './IconButton'
 import { confirmInstall, dismissUpdate, installUpdate, useUpdateState } from '../lib/updater'
 
 // A strip above the toolbar while an update is available or installing (lib/updater.ts).
@@ -42,9 +43,7 @@ export default function UpdateBanner () {
           </TouchableOpacity>
         ) : null}
         {state.kind === 'available' || state.kind === 'failed' ? (
-          <TouchableOpacity onPress={dismissUpdate} hitSlop={10} accessibilityLabel='Dismiss'>
-            <Text style={s.close}>✕</Text>
-          </TouchableOpacity>
+          <IconButton icon='times' label='Dismiss' onPress={dismissUpdate} size={15} color={t.textMuted} style={s.close} />
         ) : null}
       </View>
       {state.kind === 'downloading' ? (
@@ -65,7 +64,7 @@ function makeStyles (t: Theme) {
     titleFailed: { color: t.danger },
     error: { color: t.textDim, fontSize: 12, marginTop: 2, lineHeight: 17 },
     action: { color: t.accent, fontSize: 15, fontWeight: '600' },
-    close: { color: t.textMuted, fontSize: 15 },
+    close: { width: 40, height: 40, marginVertical: -8, marginRight: -10 },
     track: { height: 3, borderRadius: 2, backgroundColor: t.surfaceAlt, overflow: 'hidden' },
     bar: { height: 3, backgroundColor: t.accent }
   })

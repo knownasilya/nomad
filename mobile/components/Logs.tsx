@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FlatList, Modal, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import ScreenHeader from './ScreenHeader'
+import Tabs from './Tabs'
 import { radius, useTheme, type Theme } from '../lib/theme'
 import { appLogsSince, type LogEntry } from '../lib/log'
 import type { LogsMsg } from '../lib/useBackend'
@@ -118,20 +120,25 @@ export default function Logs ({ visible, onClose, logs }: Props) {
   return (
     <Modal visible={visible} animationType='slide' onRequestClose={onClose} presentationStyle='fullScreen'>
       <SafeAreaView style={s.root} edges={['top', 'bottom']}>
-        <View style={s.header}>
-          <Text style={s.title}>Logs</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={10} style={s.close}>
-            <Text style={s.closeText}>✕</Text>
-          </TouchableOpacity>
-        </View>
+        <ScreenHeader
+          title='Logs'
+          onBack={onClose}
+          actions={[
+            ...(session === 'current'
+              ? [
+                  { icon: paused ? 'play' : 'pause', label: paused ? 'Resume' : 'Pause', onPress: () => setPaused((p) => !p) } as const,
+                  { icon: 'broom', label: 'Clear', onPress: clear } as const
+                ]
+              : []),
+            { icon: 'share-alt', label: 'Share', onPress: share }
+          ]}
+        />
 
-        <View style={s.tabs}>
-          {(['current', 'previous'] as Session[]).map((k) => (
-            <TouchableOpacity key={k} style={[s.tab, session === k && s.tabActive]} onPress={() => setSession(k)}>
-              <Text style={[s.tabText, session === k && s.tabTextActive]}>{k === 'current' ? 'This session' : 'Last session'}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <Tabs
+          tabs={[{ key: 'current' as Session, label: 'This session' }, { key: 'previous' as Session, label: 'Last session' }]}
+          value={session}
+          onChange={setSession}
+        />
 
         <View style={s.controls}>
           <View style={s.chipRow}>
@@ -153,21 +160,6 @@ export default function Logs ({ visible, onClose, logs }: Props) {
                 ? (previous ? `${shown.length} lines from the last run` : 'Loading…')
                 : paused ? `Paused · ${shown.length} lines` : `Streaming · ${shown.length} lines`}
             </Text>
-            {session === 'current'
-              ? (
-                <>
-                  <TouchableOpacity onPress={() => setPaused((p) => !p)} hitSlop={6}>
-                    <Text style={s.action}>{paused ? 'Resume' : 'Pause'}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={clear} hitSlop={6}>
-                    <Text style={s.action}>Clear</Text>
-                  </TouchableOpacity>
-                </>
-                )
-              : null}
-            <TouchableOpacity onPress={share} hitSlop={6}>
-              <Text style={s.action}>Share</Text>
-            </TouchableOpacity>
           </View>
           {error ? <Text style={s.error}>{error}</Text> : null}
         </View>
@@ -212,34 +204,24 @@ export default function Logs ({ visible, onClose, logs }: Props) {
 function makeStyles (t: Theme) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: t.bg },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 52 },
-    title: { color: t.text, fontSize: 20, fontWeight: '700' },
-    close: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-    closeText: { color: t.textDim, fontSize: 18 },
-    tabs: { flexDirection: 'row', paddingHorizontal: 10, gap: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border, paddingBottom: 8 },
-    tab: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: radius.md },
-    tabActive: { backgroundColor: t.trustBg },
-    tabText: { color: t.textDim, fontSize: 13, fontWeight: '500' },
-    tabTextActive: { color: t.trustText, fontWeight: '700' },
-    controls: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, gap: 8 },
-    chipRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
-    chip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, backgroundColor: t.surface },
-    chipActive: { backgroundColor: t.trustBg, borderColor: t.trustText },
+    controls: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, gap: 10 },
+    chipRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+    chip: { height: 32, justifyContent: 'center', paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: t.border, backgroundColor: t.surface },
+    chipActive: { backgroundColor: t.trustBg, borderColor: t.trustBg },
     chipText: { color: t.textDim, fontSize: 12, fontWeight: '500' },
     chipTextActive: { color: t.trustText, fontWeight: '700' },
     divider: { width: StyleSheet.hairlineWidth, height: 18, backgroundColor: t.border, marginHorizontal: 2 },
     actions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
     status: { flex: 1, color: t.textMuted, fontSize: 12 },
-    action: { color: t.accent, fontSize: 13, fontWeight: '600' },
     error: { color: t.danger, fontSize: 12 },
-    list: { marginHorizontal: 16, marginBottom: 16, backgroundColor: t.surface, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, overflow: 'hidden' },
+    list: { marginHorizontal: 16, marginBottom: 16, backgroundColor: t.surface, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, overflow: 'hidden' },
     row: { paddingHorizontal: 12, paddingVertical: 8 },
     rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
     rowHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
     time: { color: t.textMuted, fontSize: 11, fontFamily: 'monospace' },
     level: { color: t.textDim, fontSize: 10, fontFamily: 'monospace', textTransform: 'uppercase', fontWeight: '700' },
     levelError: { color: t.danger },
-    levelWarn: { color: '#b9770e' },
+    levelWarn: { color: t.warn },
     source: { color: t.textMuted, fontSize: 10, fontFamily: 'monospace' },
     msg: { color: t.text, fontSize: 12, lineHeight: 17, fontFamily: 'monospace' },
     msgError: { color: t.danger },

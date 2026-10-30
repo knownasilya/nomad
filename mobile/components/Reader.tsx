@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native'
+import { Modal, View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { Backend, Feed, FeedPost, ReaderState } from '../lib/useBackend'
 import LinkPhone from './LinkPhone'
+import ScreenHeader from './ScreenHeader'
 
 // One Feed's load state: posts once it loads, or why it didn't.
 interface FeedLoad { url: string; title: string; posts: FeedPost[]; loading: boolean; error?: string }
@@ -130,19 +131,11 @@ export default function Reader ({ visible, onClose, apps, space, onOpenPost, onO
   return (
     <Modal visible={visible} animationType='slide' onRequestClose={onClose} presentationStyle='fullScreen'>
       <SafeAreaView style={s.root} edges={['top', 'bottom']}>
-        <View style={s.header}>
-          <Text style={s.title}>Reader</Text>
-          <View style={s.headerActions}>
-            {state && (
-              <TouchableOpacity onPress={refresh} hitSlop={10} style={s.close} disabled={loadingAny}>
-                {loadingAny ? <ActivityIndicator color={t.textDim} /> : <Text style={s.closeText}>↻</Text>}
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={onClose} hitSlop={10} style={s.close}>
-              <Text style={s.closeText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ScreenHeader
+          title='Reader'
+          onBack={onClose}
+          actions={state ? [{ icon: 'redo-alt', label: 'Refresh', onPress: refresh, busy: loadingAny }] : undefined}
+        />
 
         {noVault ? (
           <LinkPhone what='Reader' onOpenDevices={onOpenDevices} />
@@ -231,8 +224,9 @@ export default function Reader ({ visible, onClose, apps, space, onOpenPost, onO
 }
 
 function PostRow ({ p, read, divider, s, onPress }: { p: FeedPost; read: boolean; divider: boolean; s: Styles; onPress: () => void }) {
+  const t = useTheme()
   return (
-    <TouchableOpacity style={[s.post, divider && s.rowDivider]} activeOpacity={0.7} onPress={onPress}>
+    <Pressable style={[s.post, divider && s.rowDivider]} android_ripple={{ color: t.ripple }} onPress={onPress}>
       <View style={[s.unreadDot, read && s.dotRead]} />
       <View style={s.postText}>
         <Text numberOfLines={1} style={s.postFeed}>{p.feedTitle}</Text>
@@ -240,7 +234,7 @@ function PostRow ({ p, read, divider, s, onPress }: { p: FeedPost; read: boolean
         {!!p.summary && <Text numberOfLines={2} style={s.postSummary}>{p.summary}</Text>}
         {!!p.createdAt && <Text style={s.postDate}>{formatDate(p.createdAt)}</Text>}
       </View>
-    </TouchableOpacity>
+    </Pressable>
   )
 }
 
@@ -263,16 +257,11 @@ type Styles = ReturnType<typeof makeStyles>
 function makeStyles (t: Theme) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: t.bg },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 52 },
-    headerActions: { flexDirection: 'row', alignItems: 'center' },
-    title: { color: t.text, fontSize: 20, fontWeight: '700' },
-    close: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-    closeText: { color: t.textDim, fontSize: 18 },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     chips: { flexGrow: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border },
-    chipsContent: { paddingHorizontal: 10, paddingBottom: 8, gap: 6 },
-    chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.md, maxWidth: 200 },
-    chipActive: { backgroundColor: t.trustBg },
+    chipsContent: { paddingHorizontal: 16, paddingBottom: 10, gap: 8 },
+    chip: { height: 34, justifyContent: 'center', paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: t.border, maxWidth: 200 },
+    chipActive: { backgroundColor: t.trustBg, borderColor: t.trustBg },
     chipText: { color: t.textDim, fontSize: 13, fontWeight: '500' },
     chipTextActive: { color: t.trustText, fontWeight: '700' },
     chipTextErr: { color: t.danger },
@@ -283,9 +272,9 @@ function makeStyles (t: Theme) {
     countText: { color: t.textMuted, fontSize: 12 },
     action: { color: t.accent, fontSize: 13, fontWeight: '500' },
     loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 30 },
-    card: { backgroundColor: t.surface, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, overflow: 'hidden' },
+    card: { backgroundColor: t.surface, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, overflow: 'hidden' },
     rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
-    post: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 14, paddingVertical: 12, gap: 10 },
+    post: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 16, paddingVertical: 14, gap: 10 },
     unreadDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: t.accent, marginTop: 5 },
     dotRead: { backgroundColor: 'transparent' },
     postText: { flex: 1 },
@@ -295,11 +284,11 @@ function makeStyles (t: Theme) {
     postSummary: { color: t.textDim, fontSize: 13, lineHeight: 18, marginTop: 2 },
     postDate: { color: t.textMuted, fontSize: 12, marginTop: 4 },
     empty: { color: t.textMuted, fontSize: 13, textAlign: 'center', marginTop: 30, lineHeight: 19 },
-    addCard: { backgroundColor: t.surface, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, padding: 12, marginTop: 18 },
+    addCard: { backgroundColor: t.surface, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, padding: 16, marginTop: 24 },
     addLabel: { color: t.text, fontSize: 14, fontWeight: '700', marginBottom: 8 },
     addRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    addInput: { flex: 1, height: 42, color: t.text, fontSize: 14, backgroundColor: t.inputBg, borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, paddingHorizontal: 10 },
-    addBtn: { backgroundColor: t.accent, borderRadius: radius.sm, paddingHorizontal: 14, paddingVertical: 10 },
+    addInput: { flex: 1, height: 44, color: t.text, fontSize: 14, backgroundColor: t.bg, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, paddingHorizontal: 12 },
+    addBtn: { backgroundColor: t.accent, borderRadius: radius.pill, paddingHorizontal: 18, height: 40, justifyContent: 'center' },
     addBtnOff: { opacity: 0.4 },
     addBtnText: { color: t.onAccent, fontSize: 14, fontWeight: '600' },
     addHint: { color: t.textMuted, fontSize: 12, marginTop: 8 }

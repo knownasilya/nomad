@@ -4,11 +4,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
   ScrollView,
   ActivityIndicator,
   StyleSheet
 } from 'react-native'
 import BottomSheet from './BottomSheet'
+import Icon from './Icon'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
 import { SPACE_COLORS, type Space } from '../lib/useSpaces'
 
@@ -62,26 +64,33 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
 
   return (
     <BottomSheet visible={visible} onClose={close} style={s.sheet}>
-      <View style={s.handle} />
       <Text style={s.title}>Spaces</Text>
 
       <ScrollView style={s.list} keyboardShouldPersistTaps='handled'>
         {spaces.map((sp) => (
-          <TouchableOpacity
+          <Pressable
             key={sp.id}
-            style={s.row}
+            style={[s.row, sp.id === activeSpaceId && s.rowActive]}
             onPress={() => { onSwitch(sp.id); close() }}
+            android_ripple={{ color: t.ripple }}
+            accessibilityRole='button'
+            accessibilityState={{ selected: sp.id === activeSpaceId }}
           >
             <View style={[s.dot, { backgroundColor: sp.color }]} />
-            <Text style={s.rowName} numberOfLines={1}>{sp.name}</Text>
+            <Text style={[s.rowName, sp.id === activeSpaceId && s.rowNameActive]} numberOfLines={1}>{sp.name}</Text>
             {sp.rootDriveKey && shared.has(sp.rootDriveKey)
-              ? <Text style={s.shared} accessibilityLabel='Shared across your devices'>⇆</Text>
+              ? <Icon name='sync-alt' size={13} color={t.secure} style={s.shared} />
               : null}
-            {sp.id === activeSpaceId ? <Text style={s.check}>✓</Text> : null}
-          </TouchableOpacity>
+            {sp.id === activeSpaceId ? <Icon name='check' size={15} color={t.accent} /> : null}
+          </Pressable>
         ))}
       </ScrollView>
-      {anyShared ? <Text style={s.legend}>⇆ shared across your devices</Text> : null}
+      {anyShared ? (
+        <View style={s.legendRow}>
+          <Icon name='sync-alt' size={11} color={t.secure} />
+          <Text style={s.legend}>Shared across your devices</Text>
+        </View>
+      ) : null}
 
       {creating ? (
         <View style={s.form}>
@@ -114,9 +123,10 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
           </View>
         </View>
       ) : (
-        <TouchableOpacity style={s.newBtn} onPress={() => setCreating(true)}>
-          <Text style={s.newBtnText}>+ New space</Text>
-        </TouchableOpacity>
+        <Pressable style={s.newBtn} onPress={() => setCreating(true)} android_ripple={{ color: t.ripple }} accessibilityRole='button'>
+          <View style={s.newIcon}><Icon name='plus' size={13} color={t.accent} /></View>
+          <Text style={s.newBtnText}>New space</Text>
+        </Pressable>
       )}
     </BottomSheet>
   )
@@ -125,41 +135,42 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
 function makeStyles (t: Theme) {
   return StyleSheet.create({
     sheet: {
-      backgroundColor: t.bg,
-      paddingHorizontal: space.lg,
-      paddingTop: space.sm,
-      paddingBottom: space.xl,
+      backgroundColor: t.surface,
+      paddingHorizontal: space.sm,
+      paddingBottom: space.lg,
       maxHeight: '80%'
     },
-    handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: radius.pill, backgroundColor: t.border, marginBottom: space.md },
-    title: { fontSize: 13, fontWeight: '600', color: t.textDim, marginBottom: space.sm },
+    title: { fontSize: 16, fontWeight: '600', color: t.text, marginBottom: space.sm, paddingHorizontal: space.lg },
     list: { flexGrow: 0 },
-    row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
+    row: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 52, paddingHorizontal: space.lg, borderRadius: radius.md, overflow: 'hidden' },
+    rowActive: { backgroundColor: t.surfaceAlt },
     dot: { width: 14, height: 14, borderRadius: radius.pill },
     rowName: { flex: 1, fontSize: 16, color: t.text },
-    shared: { color: t.secure, fontSize: 15, marginRight: space.sm },
-    check: { color: t.accent, fontSize: 16, fontWeight: '700' },
-    legend: { color: t.textMuted, fontSize: 12, marginTop: space.xs },
-    newBtn: { paddingVertical: space.md, marginTop: space.xs },
+    rowNameActive: { fontWeight: '600' },
+    shared: { marginRight: space.sm },
+    legendRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: space.lg, marginTop: space.sm },
+    legend: { color: t.textMuted, fontSize: 12 },
+    newBtn: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 52, paddingHorizontal: space.lg, marginTop: space.xs, borderRadius: radius.md, overflow: 'hidden' },
+    newIcon: { width: 14, alignItems: 'center' },
     newBtnText: { color: t.accent, fontSize: 15, fontWeight: '600' },
-    form: { marginTop: space.sm, gap: space.md },
+    form: { marginTop: space.sm, gap: space.md, paddingHorizontal: space.lg },
     input: {
-      backgroundColor: t.inputBg,
+      backgroundColor: t.bg,
       borderWidth: 1,
       borderColor: t.border,
       borderRadius: radius.md,
       paddingHorizontal: space.md,
-      paddingVertical: space.sm,
+      minHeight: 48,
       fontSize: 15,
       color: t.text
     },
-    swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-    swatch: { width: 28, height: 28, borderRadius: radius.pill, borderWidth: 2, borderColor: 'transparent' },
+    swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
+    swatch: { width: 36, height: 36, borderRadius: radius.pill, borderWidth: 3, borderColor: 'transparent' },
     swatchActive: { borderColor: t.text },
     formActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: space.sm },
-    btnGhost: { paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.md },
+    btnGhost: { minHeight: 40, justifyContent: 'center', paddingHorizontal: space.md, borderRadius: radius.pill },
     btnGhostText: { color: t.textDim, fontSize: 15, fontWeight: '500' },
-    btn: { backgroundColor: t.accent, borderRadius: radius.md, paddingVertical: space.sm, paddingHorizontal: space.lg, alignItems: 'center', minWidth: 88 },
+    btn: { backgroundColor: t.accent, borderRadius: radius.pill, minHeight: 40, justifyContent: 'center', paddingHorizontal: space.xl, alignItems: 'center', minWidth: 88 },
     btnDisabled: { opacity: 0.5 },
     btnText: { color: t.onAccent, fontSize: 15, fontWeight: '600' }
   })

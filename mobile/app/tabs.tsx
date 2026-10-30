@@ -8,6 +8,7 @@ import { Redirect, router } from 'expo-router'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import { useTabSnapshot, tabActions, type TabCard } from '../lib/tabSwitcher'
 import SiteIcon from '../components/SiteIcon'
+import Icon from '../components/Icon'
 import { ago, type DeviceTabsList } from '../lib/openTabs'
 
 const GAP = 12
@@ -83,7 +84,7 @@ export default function TabGrid () {
           <Text style={s.barText}>Close all</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.newBtn} onPress={openNew} accessibilityLabel='New tab'>
-          <Text style={s.newBtnText}>＋</Text>
+          <Icon name='plus' size={20} color={t.onAccent} />
         </TouchableOpacity>
         <TouchableOpacity style={[s.barSide, s.barRight]} onPress={leave} hitSlop={8}>
           <Text style={[s.barText, s.barDone]}>Done</Text>
@@ -145,8 +146,8 @@ function Card ({ tab, active, width, swipeDistance, onSelect, onClose, onActiveL
                 : <View style={[s.dot, { backgroundColor: tab.kind === 'hyper' ? t.secure : t.textMuted }]} />}
           </View>
           <Text numberOfLines={1} style={[s.cardTitle, active && s.cardTitleActive]}>{tab.title || 'New tab'}</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={10} accessibilityLabel={`Close ${tab.title}`}>
-            <Text style={s.cardClose}>✕</Text>
+          <TouchableOpacity onPress={onClose} hitSlop={12} style={s.cardClose} accessibilityLabel={`Close ${tab.title}`}>
+            <Icon name='times' size={13} color={t.textMuted} />
           </TouchableOpacity>
         </View>
         <View style={[s.cardBody, { height: bodyHeight }]}>
@@ -257,7 +258,7 @@ function makeStyles (t: Theme) {
     dot: { width: 7, height: 7, borderRadius: radius.pill },
     cardTitle: { flex: 1, color: t.textDim, fontSize: 13 },
     cardTitleActive: { color: t.text, fontWeight: '600' },
-    cardClose: { color: t.textMuted, fontSize: 13, paddingHorizontal: 2 },
+    cardClose: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
     cardBody: { overflow: 'hidden', backgroundColor: t.bg },
     placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 12 },
     placeholderLogo: { width: 52, height: 52, borderRadius: radius.pill, opacity: 0.9 },
@@ -275,10 +276,9 @@ function makeStyles (t: Theme) {
     },
     barSide: { flex: 1 },
     barRight: { alignItems: 'flex-end' },
-    barText: { color: t.accent, fontSize: 16 },
+    barText: { color: t.accent, fontSize: 16, paddingVertical: 12 },
     barDone: { fontWeight: '600' },
-    newBtn: { width: 48, height: 48, borderRadius: radius.pill, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center' },
-    newBtnText: { color: t.onAccent, fontSize: 26, lineHeight: 30 },
+    newBtn: { width: 56, height: 56, borderRadius: radius.lg + 2, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center', elevation: 3, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
     others: { width: '100%', marginTop: 12, gap: 10 },
     othersTitle: { color: t.textDim, fontSize: 13, fontWeight: '600' },
     othersEmpty: { color: t.textMuted, fontSize: 13 },

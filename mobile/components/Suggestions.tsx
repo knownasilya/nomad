@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native'
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { SavedSite } from '../lib/usePersistence'
+import Icon from './Icon'
 
 // URL-bar autocomplete dropdown: recently-visited sites + known drives for the active space,
 // filtered by what's typed. Floats over the top of the page (anchored just below the address bar)
@@ -16,20 +17,26 @@ export default function Suggestions ({ items, onSelect }: { items: Array<SavedSi
     <View style={s.wrap}>
       <ScrollView style={s.scroll} keyboardShouldPersistTaps='handled' keyboardDismissMode='none'>
         {items.map((it, i) => (
-          <TouchableOpacity
+          <Pressable
             key={it.url}
             style={[s.row, i > 0 && s.divider]}
-            activeOpacity={0.7}
+            android_ripple={{ color: t.ripple }}
             onPress={() => onSelect(it.url)}
           >
-            <View style={[s.dot, { backgroundColor: it.url.startsWith('hyper://') ? t.secure : t.textMuted }]} />
+            <View style={s.lead}>
+              {it.name
+                ? <Icon name='tag' size={14} color={t.secure} />
+                : it.url.startsWith('hyper://')
+                  ? <Icon name='share-alt' size={14} color={t.secure} />
+                  : <Icon name='history' size={14} color={t.textMuted} />}
+            </View>
             <View style={s.text}>
               <Text numberOfLines={1} style={s.title}>{it.title}</Text>
               {it.name
                 ? <View style={s.nameRow}><Text numberOfLines={1} style={s.nameTag}>✓ {it.name}</Text></View>
                 : <Text numberOfLines={1} style={s.url}>{it.url}</Text>}
             </View>
-          </TouchableOpacity>
+          </Pressable>
         ))}
       </ScrollView>
     </View>
@@ -60,7 +67,7 @@ function makeStyles (t: Theme) {
     scroll: { maxHeight: 312 },
     row: { flexDirection: 'row', alignItems: 'center', minHeight: 52, paddingHorizontal: 16, gap: 12 },
     divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
-    dot: { width: 8, height: 8, borderRadius: radius.pill },
+    lead: { width: 20, alignItems: 'center' },
     text: { flex: 1, paddingVertical: 8 },
     title: { color: t.text, fontSize: 14, fontWeight: '500' },
     url: { color: t.textMuted, fontSize: 12, marginTop: 1 },

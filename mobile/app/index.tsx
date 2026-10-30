@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, StyleSheet, StatusBar, Alert, Keyboard, BackHandler, Platform, AppState } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, Image, StyleSheet, StatusBar, Alert, Keyboard, BackHandler, Platform, AppState } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { WebView } from 'react-native-webview'
 import type { WebViewNavigation } from 'react-native-webview'
@@ -14,7 +14,10 @@ import Suggestions from '../components/Suggestions'
 import Library from '../components/Library'
 import Reader from '../components/Reader'
 import Notes from '../components/Notes'
-import BottomSheet from '../components/BottomSheet'
+import ActionSheet from '../components/ActionSheet'
+import IconButton from '../components/IconButton'
+import SiteIcon from '../components/SiteIcon'
+import { ListSection, ListRow, ListEmpty } from '../components/List'
 import Devices from '../components/Devices'
 import SpaceSwitcher from '../components/SpaceSwitcher'
 import Settings from '../components/Settings'
@@ -965,6 +968,7 @@ export default function Browser () {
         onToggleDraft={onToggleDraftPreview}
         siteName={!urlFocused && activeNames?.approved ? activeNames.approved.name : ''}
         inputRef={addressRef}
+        canReload={active.kind !== 'home'}
       />
 
       {/* Only the active tab is mounted: keeping inactive panes in an absolute
@@ -1015,41 +1019,62 @@ export default function Browser () {
 
       <UpdateBanner />
 
+      {/* The bottom bar, in thumb reach: the Space, home, bookmark, the AI, the tab grid, the menu. */}
       <View style={s.toolbar}>
-        <TouchableOpacity style={s.spaceChip} onPress={() => { spacesApi.syncFromVault(); setSpacesOpen(true) }} hitSlop={6}>
+        <Pressable
+          style={s.spaceChip}
+          onPress={() => { spacesApi.syncFromVault(); setSpacesOpen(true) }}
+          android_ripple={{ color: t.ripple, borderless: true }}
+          accessibilityRole='button'
+          accessibilityLabel={`Space: ${spacesApi.activeSpace.name}. Switch space`}
+        >
           <View style={[s.spaceDot, { backgroundColor: spacesApi.activeSpace.color }]} />
           <Text style={s.spaceChipText} numberOfLines={1}>{spacesApi.activeSpace.name}</Text>
-        </TouchableOpacity>
-        <ToolButton label='⌂' onPress={() => goHome(active.id)} />
-        <ToolButton
-          label={bookmarked ? '★' : '☆'}
+        </Pressable>
+        <IconButton icon='home' label='Home' onPress={() => goHome(active.id)} />
+        <IconButton
+          icon='star'
+          regular={!bookmarked}
+          label={bookmarked ? 'Remove bookmark' : 'Bookmark this page'}
           active={bookmarked}
           disabled={!active.url}
           onPress={() => persist.toggleBookmark(active.url, active.title)}
         />
-        <ToolButton label='✦' active={aiOpen} onPress={() => setAiOpen(true)} />
+        <IconButton icon='robot' label='AI assistant' active={aiOpen} onPress={() => setAiOpen(true)} />
         <TabCountButton count={tabs.length} onPress={openTabGrid} />
-        <ToolButton label='☰' onPress={() => setMenuOpen(true)} />
+        <IconButton icon='ellipsis-v' label='Menu' onPress={() => setMenuOpen(true)} />
       </View>
 
-      <Menu
+      <ActionSheet
         visible={menuOpen}
         onClose={() => setMenuOpen(false)}
-        items={[
-          { label: 'My Library', onPress: () => setLibraryOpen(true) },
-          { label: 'Reader', onPress: () => setReaderOpen(true) },
-          { label: 'Notes', onPress: () => setNotesOpen(true) },
-          { label: 'Edit files', disabled: !ownedActive, onPress: () => ownedActive && openExplorer(ownedActive) },
-          { label: 'Devices', onPress: () => setDevicesOpen(true) },
-          { label: 'Developer tools', onPress: () => { viewSource(); setDevtoolsOpen(true) } },
-          { label: 'Copy link', disabled: !active.url, onPress: copyLink },
-          { label: activeNames?.named.length ? 'Rename this site' : 'Name this site', disabled: !active.url, onPress: () => setNameSheetOpen(true) },
+        title={active.kind === 'home' ? undefined : active.title}
+        subtitle={active.kind === 'home' ? undefined : active.url}
+        // A new tab has nothing to reload, copy, name or pin, so its menu starts at the list.
+        quick={active.kind === 'home' ? undefined : [
+          { label: 'Reload', icon: 'redo-alt', onPress: reload },
+          { label: 'Copy link', icon: 'link', disabled: !active.url, onPress: copyLink },
+          { label: activeNames?.named.length ? 'Rename' : 'Name', icon: 'tag', disabled: !active.url, onPress: () => setNameSheetOpen(true) },
           persist.isPinned(active.url)
-            ? { label: 'Remove from home shortcuts', onPress: () => persist.setPinned(active.url, '', false) }
-            : { label: 'Add to home shortcuts', disabled: !active.url, onPress: () => persist.setPinned(active.url, active.title, true) },
-          { label: activeHosted ? 'Stop hosting this drive' : 'Host this drive', disabled: !canHostActive, onPress: toggleHosting },
-          { label: 'Settings', onPress: () => setSettingsOpen(true) },
-          { label: 'Reload', disabled: active.kind === 'home', onPress: reload }
+            ? { label: 'On home', icon: 'thumbtack', active: true, onPress: () => persist.setPinned(active.url, '', false) }
+            : { label: 'Add to home', icon: 'thumbtack', disabled: !active.url, onPress: () => persist.setPinned(active.url, active.title, true) }
+        ]}
+        groups={[
+          [
+            { label: 'My Library', icon: 'book', onPress: () => setLibraryOpen(true) },
+            { label: 'Reader', icon: 'rss', onPress: () => setReaderOpen(true) },
+            { label: 'Notes', icon: 'sticky-note', onPress: () => setNotesOpen(true) }
+          ],
+          [
+            // Only for a drive this phone owns, and hosting only for one it doesn't.
+            { label: 'Edit files', icon: 'folder-open', hidden: !ownedActive, onPress: () => ownedActive && openExplorer(ownedActive) },
+            { label: activeHosted ? 'Stop hosting this drive' : 'Host this drive', icon: 'server', active: !!activeHosted, hidden: !canHostActive, onPress: toggleHosting },
+            { label: 'Developer tools', icon: 'code', onPress: () => { viewSource(); setDevtoolsOpen(true) } }
+          ],
+          [
+            { label: 'Devices', icon: 'laptop', onPress: () => setDevicesOpen(true) },
+            { label: 'Settings', icon: 'cog', onPress: () => setSettingsOpen(true) }
+          ]
         ]}
       />
 
@@ -1101,6 +1126,7 @@ export default function Browser () {
         drives={libraryDrives}
         bookmarks={persist.bookmarks}
         history={persist.history}
+        iconFor={favicons.iconFor}
         onOpen={openFromLibrary}
         onCreateDrive={createDrive}
         onEditDrive={openExplorer}
@@ -1260,9 +1286,9 @@ function Home ({
           <Text style={s.logo}>Nomad</Text>
           <Text style={s.tagline}>Peer-to-peer browser</Text>
         </View>
-        <TouchableOpacity style={s.libBtn} onPress={onOpenLibrary}>
+        <Pressable style={s.libBtn} onPress={onOpenLibrary} android_ripple={{ color: t.ripple }} accessibilityRole='button'>
           <Text style={s.libBtnText}>My Library</Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
       <Text style={s.hint}>Enter a web address, a search, or a hyper:// drive key. Open My Library to manage drives, bookmarks, and history.</Text>
 
@@ -1275,72 +1301,23 @@ function Home ({
         onRemove={onRemovePin}
       />
 
-      <Section title='Recent' action={history.length ? { label: 'Clear', onPress: onClearHistory } : undefined}>
+      <ListSection title='Recent' style={s.section} action={history.length ? { label: 'Clear', onPress: onClearHistory } : undefined}>
         {history.length === 0 ? (
-          <Text style={s.empty}>Pages you visit appear here.</Text>
+          <ListEmpty text='Pages you visit appear here.' />
         ) : (
           history.slice(0, 30).map((h, i) => (
-            <SiteRow key={h.url + h.ts} site={h} hyper={h.url.startsWith('hyper://')} divider={i > 0} onPress={() => onNavigate(h.url)} />
+            <ListRow
+              key={h.url + h.ts}
+              title={h.title}
+              subtitle={h.url}
+              divider={i > 0}
+              left={<SiteIcon url={h.url} title={h.title} uri={iconFor(h.url)} size={24} />}
+              onPress={() => onNavigate(h.url)}
+            />
           ))
         )}
-      </Section>
+      </ListSection>
     </ScrollView>
-  )
-}
-
-function Section ({ title, action, children }: { title: string; action?: { label: string; onPress: () => void }; children: ReactNode }) {
-  const t = useTheme()
-  const s = useMemo(() => makeStyles(t), [t])
-  return (
-    <View style={s.section}>
-      <View style={s.sectionHead}>
-        <Text style={s.sectionTitle}>{title}</Text>
-        {action && (
-          <TouchableOpacity onPress={action.onPress} hitSlop={8}>
-            <Text style={s.sectionAction}>{action.label}</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-      <View style={s.card}>{children}</View>
-    </View>
-  )
-}
-
-function SiteRow ({ site, hyper, divider, onPress, onLongPress }: { site: SavedSite; hyper: boolean; divider: boolean; onPress: () => void; onLongPress?: () => void }) {
-  const t = useTheme()
-  const s = useMemo(() => makeStyles(t), [t])
-  return (
-    <TouchableOpacity style={[s.siteRow, divider && s.siteDivider]} activeOpacity={0.7} onPress={onPress} onLongPress={onLongPress}>
-      <View style={[s.siteDot, { backgroundColor: hyper ? t.secure : t.textMuted }]} />
-      <View style={s.siteText}>
-        <Text numberOfLines={1} style={s.siteTitle}>{site.title}</Text>
-        <Text numberOfLines={1} style={s.siteUrl}>{site.url}</Text>
-      </View>
-    </TouchableOpacity>
-  )
-}
-
-function Menu ({ visible, onClose, items }: { visible: boolean; onClose: () => void; items: { label: string; onPress: () => void; disabled?: boolean }[] }) {
-  const t = useTheme()
-  const s = useMemo(() => makeStyles(t), [t])
-  return (
-    <BottomSheet visible={visible} onClose={onClose} style={s.menuSheet}>
-      {items.map((it) => (
-        <TouchableOpacity key={it.label} style={s.menuItem} disabled={it.disabled} onPress={() => { onClose(); it.onPress() }}>
-          <Text style={[s.menuItemText, it.disabled && { color: t.textMuted }]}>{it.label}</Text>
-        </TouchableOpacity>
-      ))}
-    </BottomSheet>
-  )
-}
-
-function ToolButton ({ label, onPress, disabled, active }: { label: string; onPress: () => void; disabled?: boolean; active?: boolean }) {
-  const t = useTheme()
-  const s = useMemo(() => makeStyles(t), [t])
-  return (
-    <TouchableOpacity style={s.toolBtn} onPress={onPress} disabled={disabled} hitSlop={6}>
-      <Text style={[s.toolBtnText, active && { color: t.accent }, disabled && s.toolBtnDisabled]}>{label}</Text>
-    </TouchableOpacity>
   )
 }
 
@@ -1350,11 +1327,11 @@ function TabCountButton ({ count, onPress }: { count: number; onPress: () => voi
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   return (
-    <TouchableOpacity style={s.toolBtn} onPress={onPress} hitSlop={6} accessibilityLabel={`${count} open ${count === 1 ? 'tab' : 'tabs'}`}>
+    <IconButton onPress={onPress} label={`${count} open ${count === 1 ? 'tab' : 'tabs'}`}>
       <View style={s.tabCount}>
         <Text style={s.tabCountText}>{count > 99 ? ':D' : count}</Text>
       </View>
-    </TouchableOpacity>
+    </IconButton>
   )
 }
 
@@ -1368,44 +1345,38 @@ function makeStyles (t: Theme) {
     hidden: { display: 'none' },
     toolbar: {
       flexDirection: 'row',
-      justifyContent: 'space-around',
+      justifyContent: 'space-between',
       alignItems: 'center',
-      height: 52,
+      height: 56,
+      paddingHorizontal: 6,
       backgroundColor: t.bg,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: t.border
     },
-    toolBtn: { flex: 1, height: 52, alignItems: 'center', justifyContent: 'center' },
-    toolBtnText: { color: t.textDim, fontSize: 24, fontWeight: '500' },
-    spaceChip: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 130, paddingHorizontal: 12, height: 52 },
+    spaceChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      maxWidth: 124,
+      height: 36,
+      paddingHorizontal: 12,
+      marginRight: 2,
+      borderRadius: radius.pill,
+      backgroundColor: t.surfaceAlt
+    },
     spaceDot: { width: 10, height: 10, borderRadius: radius.pill },
-    spaceChipText: { color: t.text, fontSize: 13, fontWeight: '500' },
-    toolBtnDisabled: { color: t.border },
-    tabCount: { minWidth: 22, height: 22, paddingHorizontal: 3, borderRadius: 5, borderWidth: 2, borderColor: t.textDim, alignItems: 'center', justifyContent: 'center' },
+    spaceChipText: { color: t.text, fontSize: 13, fontWeight: '600', flexShrink: 1 },
+    tabCount: { minWidth: 22, height: 22, paddingHorizontal: 3, borderRadius: 6, borderWidth: 2, borderColor: t.textDim, alignItems: 'center', justifyContent: 'center' },
     tabCountText: { color: t.textDim, fontSize: 11, fontWeight: '700' },
-    menuSheet: { backgroundColor: t.surface, paddingVertical: 8, paddingBottom: 28 },
-    menuItem: { paddingHorizontal: 22, paddingVertical: 15 },
-    menuItemText: { color: t.text, fontSize: 16 },
     home: { flex: 1, backgroundColor: t.bg },
     homeContent: { padding: 20, paddingBottom: 40 },
     brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 },
     brandMark: { width: 46, height: 46, borderRadius: radius.pill },
-    libBtn: { backgroundColor: t.trustBg, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 8 },
+    libBtn: { backgroundColor: t.trustBg, borderRadius: radius.pill, paddingHorizontal: 16, minHeight: 40, justifyContent: 'center', overflow: 'hidden' },
     libBtnText: { color: t.trustText, fontSize: 13, fontWeight: '600' },
     logo: { fontSize: 22, fontWeight: '700', color: t.text },
     tagline: { color: t.textDim, fontSize: 14, marginTop: 1 },
     hint: { color: t.textMuted, fontSize: 13, marginTop: 18, lineHeight: 19 },
-    section: { marginTop: 26 },
-    sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingHorizontal: 2 },
-    sectionTitle: { color: t.text, fontSize: 15, fontWeight: '700' },
-    sectionAction: { color: t.accent, fontSize: 13, fontWeight: '500' },
-    card: { backgroundColor: t.surface, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, overflow: 'hidden' },
-    empty: { color: t.textMuted, fontSize: 13, padding: 16 },
-    siteRow: { flexDirection: 'row', alignItems: 'center', minHeight: 52, paddingHorizontal: 14, gap: 12 },
-    siteDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
-    siteDot: { width: 8, height: 8, borderRadius: radius.pill },
-    siteText: { flex: 1, paddingVertical: 9 },
-    siteTitle: { color: t.text, fontSize: 14, fontWeight: '500' },
-    siteUrl: { color: t.textMuted, fontSize: 12, marginTop: 1 }
+    section: { marginTop: 22 }
   })
 }

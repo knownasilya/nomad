@@ -4,6 +4,7 @@ import { WebView } from 'react-native-webview'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import { type DirEntry, CONSOLE_SHIM, FAVICON_JS, NOMAD_SHIM } from '../lib/types'
 import { shortKey } from '../lib/hyperUrl'
+import Icon from './Icon'
 
 export type HyperRender =
   | { type: 'loading'; status: string; peers: number }
@@ -64,7 +65,7 @@ export default function HyperView ({ render, onNavigate, onMessage, registerWebV
   if (render.type === 'error') {
     return (
       <View style={s.center}>
-        <Text style={[s.errIcon, { color: t.danger }]}>⬡</Text>
+        <Icon name='exclamation-triangle' size={30} color={t.danger} style={s.errIcon} />
         <Text style={s.errTitle}>Couldn’t load drive</Text>
         <Text style={s.errMsg}>{render.message}</Text>
         <Text style={s.errUrl}>{render.url}</Text>
@@ -163,7 +164,7 @@ export default function HyperView ({ render, onNavigate, onMessage, registerWebV
             activeOpacity={0.7}
             onPress={() => onNavigate(`hyper://${render.keyHex}${item.path}`)}
           >
-            <Text style={[s.entryIcon, { color: item.isDir ? t.accent : t.textMuted }]}>{item.isDir ? '▸' : '·'}</Text>
+            <Icon name={item.isDir ? 'folder' : 'file'} regular={!item.isDir} size={15} color={item.isDir ? t.accent : t.textMuted} style={s.entryIcon} />
             <Text style={s.entryName}>{item.name}{item.isDir ? '/' : ''}</Text>
           </TouchableOpacity>
         )}
@@ -178,7 +179,7 @@ function makeStyles (t: Theme) {
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: t.bg },
     status: { color: t.text, marginTop: 16, fontSize: 15 },
     peers: { color: t.textMuted, marginTop: 6, fontSize: 13 },
-    errIcon: { fontSize: 34 },
+    errIcon: { marginBottom: 4 },
     errTitle: { color: t.text, fontSize: 18, fontWeight: '700', marginTop: 12 },
     errMsg: { color: t.danger, fontSize: 14, marginTop: 8, textAlign: 'center' },
     errUrl: { color: t.textMuted, fontSize: 12, marginTop: 12, textAlign: 'center' },
@@ -187,7 +188,7 @@ function makeStyles (t: Theme) {
     dirKey: { color: t.trustText, fontSize: 12, fontFamily: 'monospace' },
     dirPath: { color: t.text, fontSize: 15, marginTop: 2 },
     entry: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: 16, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border },
-    entryIcon: { fontSize: 16, width: 16, textAlign: 'center' },
+    entryIcon: { width: 18, textAlign: 'center' },
     entryName: { color: t.text, fontSize: 15 },
     empty: { color: t.textMuted, textAlign: 'center', marginTop: 40 }
   })

@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { Modal, View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { Backend, Note } from '../lib/useBackend'
 import editorHtml from '../lib/noteEditorHtml'
 import LinkPhone from './LinkPhone'
+import ScreenHeader from './ScreenHeader'
+import IconButton from './IconButton'
+import Icon from './Icon'
 
 const SAVE_DELAY = 800
 
@@ -33,6 +36,7 @@ const TOOLS: [string, string][] = [['heading', 'H'], ['bold', 'B'], ['italic', '
 export default function Notes ({ visible, onClose, apps, onOpenDevices, onOpenUrl }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
+  const insets = useSafeAreaInsets()
   // backend.apps is a new function on every parent render. Calling through a ref keeps the effects
   // below from re-running (and reloading) on each one.
   const appsRef = useRef(apps)
@@ -241,13 +245,9 @@ export default function Notes ({ visible, onClose, apps, onOpenDevices, onOpenUr
         {editorOpen ? (
           <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <View style={s.header}>
-              <TouchableOpacity onPress={closeEditor} hitSlop={10} style={s.back}>
-                <Text style={s.backText}>‹ Notes</Text>
-              </TouchableOpacity>
+              <IconButton icon='arrow-left' label='Back to Notes' onPress={closeEditor} color={t.text} />
               <Text numberOfLines={1} style={s.status}>{writable ? status : 'Read only for now'}</Text>
-              <TouchableOpacity onPress={deleteNote} hitSlop={10} style={s.back} disabled={!writable}>
-                <Text style={[s.deleteText, !writable && { color: t.textMuted }]}>Delete</Text>
-              </TouchableOpacity>
+              <IconButton icon='trash-alt' label='Delete note' onPress={deleteNote} disabled={!writable} color={t.danger} />
             </View>
             {(banner || conflictOf) && (
               <View style={s.banner}>
@@ -284,12 +284,7 @@ export default function Notes ({ visible, onClose, apps, onOpenDevices, onOpenUr
           </KeyboardAvoidingView>
         ) : (
           <>
-            <View style={s.header}>
-              <Text style={s.title}>Notes</Text>
-              <TouchableOpacity onPress={closeAll} hitSlop={10} style={s.close}>
-                <Text style={s.closeText}>✕</Text>
-              </TouchableOpacity>
-            </View>
+            <ScreenHeader title='Notes' onBack={closeAll} />
 
             {noVault ? (
               <LinkPhone what='Notes' onOpenDevices={onOpenDevices} />
@@ -300,6 +295,7 @@ export default function Notes ({ visible, onClose, apps, onOpenDevices, onOpenUr
             ) : (
               <ScrollView contentContainerStyle={s.page} keyboardShouldPersistTaps='handled'>
                 <View style={s.toolRow}>
+                  <Icon name='search' size={14} color={t.textMuted} />
                   <TextInput
                     style={s.search}
                     value={query}
@@ -309,30 +305,41 @@ export default function Notes ({ visible, onClose, apps, onOpenDevices, onOpenUr
                     autoCorrect={false}
                     clearButtonMode='while-editing'
                   />
-                  <TouchableOpacity style={[s.newBtn, !writable && s.newBtnOff]} onPress={() => openEditor(null)} disabled={!writable}>
-                    <Text style={s.newBtnText}>New</Text>
-                  </TouchableOpacity>
                 </View>
                 {!writable && (
                   <Text style={s.hint}>This phone can’t save changes to your Vault yet. Keep your other device online until it syncs.</Text>
                 )}
                 {shown.length === 0 ? (
-                  <Text style={s.empty}>{q ? 'No notes match.' : 'No notes yet. Tap New to write one. It shows on your computer too.'}</Text>
+                  <Text style={s.empty}>{q ? 'No notes match.' : 'No notes yet. Tap New note to write one. It shows on your computer too.'}</Text>
                 ) : (
                   <View style={s.card}>
                     {shown.map((n, i) => (
-                      <TouchableOpacity key={n.id} style={[s.row, i > 0 && s.rowDivider]} activeOpacity={0.7} onPress={() => openEditor(n)}>
+                      <Pressable key={n.id} style={[s.row, i > 0 && s.rowDivider]} android_ripple={{ color: t.ripple }} onPress={() => openEditor(n)}>
                         <Text numberOfLines={1} style={s.rowTitle}>{n.title}</Text>
                         <Text numberOfLines={1} style={s.rowSub}>
                           <Text style={s.rowDate}>{relativeDate(n.updatedAt)}</Text>
                           {n.snippet ? `  ${n.snippet}` : ''}
                         </Text>
-                      </TouchableOpacity>
+                      </Pressable>
                     ))}
                   </View>
                 )}
               </ScrollView>
             )}
+            {/* Material's extended floating action button: the one thing this page is for. */}
+            {notes && !noVault && !error ? (
+              <Pressable
+                // Absolute, so the SafeAreaView's padding doesn't lift it: add the inset itself.
+                style={[s.fab, { bottom: 16 + insets.bottom }, !writable && s.fabOff]}
+                onPress={() => openEditor(null)}
+                disabled={!writable}
+                android_ripple={{ color: t.ripple }}
+                accessibilityRole='button'
+              >
+                <Icon name='pen' size={15} color={t.onAccent} />
+                <Text style={s.fabText}>New note</Text>
+              </Pressable>
+            ) : null}
           </>
         )}
       </SafeAreaView>
@@ -357,13 +364,7 @@ function relativeDate (iso: string): string {
 function makeStyles (t: Theme) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: t.bg },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 52, gap: 8 },
-    title: { color: t.text, fontSize: 20, fontWeight: '700' },
-    close: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-    closeText: { color: t.textDim, fontSize: 18 },
-    back: { minWidth: 64, height: 40, justifyContent: 'center' },
-    backText: { color: t.accent, fontSize: 15, fontWeight: '600' },
-    deleteText: { color: t.danger, fontSize: 15, fontWeight: '600', textAlign: 'right' },
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4, height: 56, gap: 8 },
     status: { flex: 1, color: t.textMuted, fontSize: 12, textAlign: 'center' },
     banner: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 12, marginBottom: 8, padding: 10, borderRadius: radius.md, backgroundColor: t.surfaceAlt },
     bannerText: { flex: 1, color: t.text, fontSize: 13, lineHeight: 18 },
@@ -377,17 +378,45 @@ function makeStyles (t: Theme) {
     strike: { textDecorationLine: 'line-through' },
     web: { flex: 1, backgroundColor: t.surface },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    page: { padding: 16 },
-    toolRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-    search: { flex: 1, height: 42, color: t.text, fontSize: 14, backgroundColor: t.inputBg, borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, paddingHorizontal: 10 },
-    newBtn: { backgroundColor: t.accent, borderRadius: radius.sm, paddingHorizontal: 16, paddingVertical: 11 },
-    newBtnOff: { opacity: 0.4 },
-    newBtnText: { color: t.onAccent, fontSize: 14, fontWeight: '600' },
+    page: { padding: 16, paddingBottom: 96 },
+    toolRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 16,
+      height: 44,
+      paddingHorizontal: 14,
+      borderRadius: radius.pill,
+      backgroundColor: t.inputBg,
+      borderWidth: 1,
+      borderColor: t.border
+    },
+    search: { flex: 1, color: t.text, fontSize: 15, padding: 0 },
+    fab: {
+      position: 'absolute',
+      right: 16,
+      bottom: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      height: 56,
+      paddingHorizontal: 20,
+      borderRadius: radius.lg + 2,
+      backgroundColor: t.accent,
+      overflow: 'hidden',
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 3 }
+    },
+    fabOff: { opacity: 0.4 },
+    fabText: { color: t.onAccent, fontSize: 15, fontWeight: '600' },
     hint: { color: t.textMuted, fontSize: 12, lineHeight: 17, marginBottom: 12 },
     errText: { color: t.danger, fontSize: 14, textAlign: 'center', marginTop: 30 },
     empty: { color: t.textMuted, fontSize: 13, textAlign: 'center', marginTop: 30, lineHeight: 19 },
-    card: { backgroundColor: t.surface, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, overflow: 'hidden' },
-    row: { paddingHorizontal: 14, paddingVertical: 11, minHeight: 56, justifyContent: 'center' },
+    card: { backgroundColor: t.surface, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, overflow: 'hidden' },
+    row: { paddingHorizontal: 16, paddingVertical: 12, minHeight: 64, justifyContent: 'center' },
     rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
     rowTitle: { color: t.text, fontSize: 15, fontWeight: '600' },
     rowSub: { color: t.textMuted, fontSize: 13, marginTop: 2 },

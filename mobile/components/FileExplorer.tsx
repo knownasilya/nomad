@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Modal,
   View,
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
   FlatList,
   ScrollView,
   ActivityIndicator,
@@ -14,6 +15,10 @@ import {
   StyleSheet
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import ScreenHeader from './ScreenHeader'
+import ActionSheet from './ActionSheet'
+import IconButton from './IconButton'
+import Icon from './Icon'
 import b4a from 'b4a'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import { type DriveType } from '../lib/hyperUrl'
@@ -97,6 +102,7 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
   const [editor, setEditor] = useState<EditorState | null>(null)
   const [prompt, setPrompt] = useState<PromptState | null>(null)
   const [actionFor, setActionFor] = useState<DirEntry | null>(null)
+  const lastActionFor = useRef<DirEntry | null>(null)
   const [busy, setBusy] = useState(false)
 
   const driveKey = drive?.key
@@ -325,6 +331,11 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
     return out
   }, [cwd, drive?.name])
 
+  // The entry the row actions are for, kept after they close so the sheet keeps its rows while it
+  // slides away.
+  const sheetEntry = actionFor ?? lastActionFor.current
+  if (actionFor) lastActionFor.current = actionFor
+
   if (!drive) return null
 
   return (
@@ -342,18 +353,11 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
           />
         ) : (
           <>
-            <View style={s.header}>
-              <View style={s.headerText}>
-                <Text numberOfLines={1} style={s.title}>{drive.name}</Text>
-                <Text style={s.subtitle}>
-                  {drive.type === 'autobase' ? 'Collaborative' : 'Hyperdrive'}
-                  {writable ? '' : '  ·  read-only'}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={onClose} hitSlop={10} style={s.close}>
-                <Text style={s.closeText}>Done</Text>
-              </TouchableOpacity>
-            </View>
+            <ScreenHeader
+              title={drive.name}
+              subtitle={`${drive.type === 'autobase' ? 'Collaborative' : 'Hyperdrive'}${writable ? '' : ' · read-only'}`}
+              onBack={onClose}
+            />
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.crumbBar} contentContainerStyle={s.crumbContent}>
               {crumbs.map((c, i) => (
@@ -368,12 +372,14 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
 
             {writable && (
               <View style={s.toolbar}>
-                <TouchableOpacity style={s.toolBtn} onPress={promptNewFile} disabled={busy}>
-                  <Text style={s.toolBtnText}>+ File</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.toolBtn} onPress={promptNewFolder} disabled={busy}>
-                  <Text style={s.toolBtnText}>+ Folder</Text>
-                </TouchableOpacity>
+                <Pressable style={s.toolBtn} onPress={promptNewFile} disabled={busy} android_ripple={{ color: t.ripple }} accessibilityRole='button'>
+                  <Icon name='file-alt' size={13} color={t.trustText} />
+                  <Text style={s.toolBtnText}>New file</Text>
+                </Pressable>
+                <Pressable style={s.toolBtn} onPress={promptNewFolder} disabled={busy} android_ripple={{ color: t.ripple }} accessibilityRole='button'>
+                  <Icon name='folder-plus' size={13} color={t.trustText} />
+                  <Text style={s.toolBtnText}>New folder</Text>
+                </Pressable>
               </View>
             )}
 
@@ -387,46 +393,42 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
                 keyExtractor={(e) => e.path}
                 ListHeaderComponent={
                   cwd !== '/' ? (
-                    <TouchableOpacity style={s.entry} onPress={() => setCwd(parentOf(cwd))} activeOpacity={0.7}>
-                      <Text style={[s.entryIcon, { color: t.accent }]}>↰</Text>
+                    <Pressable style={s.entry} onPress={() => setCwd(parentOf(cwd))} android_ripple={{ color: t.ripple }} accessibilityLabel='Up one folder'>
+                      <Icon name='level-up-alt' size={15} color={t.accent} style={s.entryIcon} />
                       <Text style={s.entryName}>..</Text>
-                    </TouchableOpacity>
+                    </Pressable>
                   ) : null
                 }
                 ListEmptyComponent={<Text style={s.empty}>Empty folder</Text>}
                 renderItem={({ item }) => (
-                  <TouchableOpacity
+                  <Pressable
                     style={s.entry}
-                    activeOpacity={0.7}
+                    android_ripple={{ color: t.ripple }}
                     onPress={() => (item.isDir ? setCwd(ensureSlash(item.path)) : openFile(item))}
                     onLongPress={() => writable && setActionFor(item)}
                   >
-                    <Text style={[s.entryIcon, { color: item.isDir ? t.accent : t.textMuted }]}>{item.isDir ? '▸' : '·'}</Text>
+                    <Icon name={item.isDir ? 'folder' : 'file'} regular={!item.isDir} size={15} color={item.isDir ? t.accent : t.textMuted} style={s.entryIcon} />
                     <Text numberOfLines={1} style={s.entryName}>{item.name}{item.isDir ? '/' : ''}</Text>
                     {writable && (
-                      <TouchableOpacity hitSlop={10} onPress={() => setActionFor(item)} style={s.entryMore}>
-                        <Text style={s.entryMoreText}>⋯</Text>
-                      </TouchableOpacity>
+                      <IconButton icon='ellipsis-v' label={`More for ${item.name}`} size={15} onPress={() => setActionFor(item)} style={s.entryMore} />
                     )}
-                  </TouchableOpacity>
+                  </Pressable>
                 )}
               />
             )}
           </>
         )}
 
-        {/* row action sheet */}
-        {actionFor && (
-          <Overlay onDismiss={() => setActionFor(null)} s={s}>
-            <Text numberOfLines={1} style={s.sheetTitle}>{actionFor.name}{actionFor.isDir ? '/' : ''}</Text>
-            <TouchableOpacity style={s.sheetItem} onPress={() => promptRename(actionFor)}>
-              <Text style={s.sheetItemText}>Rename</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.sheetItem} onPress={() => confirmDelete(actionFor)}>
-              <Text style={[s.sheetItemText, { color: t.danger }]}>Delete</Text>
-            </TouchableOpacity>
-          </Overlay>
-        )}
+        {/* row actions */}
+        <ActionSheet
+          visible={!!actionFor}
+          onClose={() => setActionFor(null)}
+          title={sheetEntry ? `${sheetEntry.name}${sheetEntry.isDir ? '/' : ''}` : ''}
+          groups={sheetEntry ? [[
+            { label: 'Rename', icon: 'pen', onPress: () => promptRename(sheetEntry) },
+            { label: 'Delete', icon: 'trash-alt', destructive: true, onPress: () => confirmDelete(sheetEntry) }
+          ]] : []}
+        />
 
         {/* text-input prompt (new / rename) */}
         {prompt && (
@@ -458,21 +460,22 @@ function EditorScreen ({
 }) {
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={onBack} hitSlop={10} style={s.close}>
-          <Text style={s.closeText}>‹ Files</Text>
-        </TouchableOpacity>
-        <View style={[s.headerText, { alignItems: 'center' }]}>
-          <Text numberOfLines={1} style={s.title}>{editor.name}{editor.dirty ? ' •' : ''}</Text>
-        </View>
-        {writable && editor.editable ? (
-          <TouchableOpacity onPress={onSave} hitSlop={10} style={s.close} disabled={editor.saving || !editor.dirty}>
-            <Text style={[s.closeText, { color: editor.dirty ? t.accent : t.textMuted, fontWeight: '700' }]}>{editor.saving ? '…' : 'Save'}</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={s.close} />
-        )}
-      </View>
+      <ScreenHeader
+        title={`${editor.name}${editor.dirty ? ' •' : ''}`}
+        onBack={onBack}
+        backLabel='Back to files'
+        right={writable && editor.editable ? (
+          <Pressable
+            onPress={onSave}
+            disabled={editor.saving || !editor.dirty}
+            style={[s.saveBtn, !editor.dirty && s.saveBtnOff]}
+            android_ripple={{ color: t.ripple }}
+            accessibilityRole='button'
+          >
+            {editor.saving ? <ActivityIndicator size='small' color={t.onAccent} /> : <Text style={s.saveText}>Save</Text>}
+          </Pressable>
+        ) : undefined}
+      />
 
       {editor.loading ? (
         <View style={s.center}><ActivityIndicator color={t.accent} /></View>
@@ -492,7 +495,7 @@ function EditorScreen ({
         />
       ) : (
         <View style={s.center}>
-          <Text style={s.binIcon}>⬡</Text>
+          <Icon name='file' regular size={30} color={t.textMuted} />
           <Text style={s.binTitle}>Can’t edit this file here</Text>
           <Text style={s.binSub}>{editor.mime || 'binary'} · {formatBytes(editor.bytes)}</Text>
         </View>
@@ -532,11 +535,11 @@ function PromptBody ({ s, t, prompt, onDone }: { s: Styles; t: Theme; prompt: Pr
 
 function Overlay ({ children, onDismiss, s }: { children: ReactNode; onDismiss: () => void; s: Styles }) {
   return (
+    // A dialog in the top part of the screen: this page is a Modal, which never hears the keyboard
+    // on Android (see AiPanel), so a field lower down would end up under it.
     <View style={s.overlay}>
       <TouchableOpacity style={s.overlayBackdrop} activeOpacity={1} onPress={onDismiss} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={s.sheet}>{children}</View>
-      </KeyboardAvoidingView>
+      <View style={s.sheet}>{children}</View>
     </View>
   )
 }
@@ -552,44 +555,37 @@ type Styles = ReturnType<typeof makeStyles>
 function makeStyles (t: Theme) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: t.bg },
-    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, height: 52, gap: 8 },
-    headerText: { flex: 1 },
-    title: { color: t.text, fontSize: 17, fontWeight: '700' },
-    subtitle: { color: t.textMuted, fontSize: 12, marginTop: 1 },
-    close: { minWidth: 56, height: 40, alignItems: 'flex-end', justifyContent: 'center' },
-    closeText: { color: t.accent, fontSize: 15, fontWeight: '600' },
-    crumbBar: { maxHeight: 38, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border },
+    saveBtn: { minHeight: 36, minWidth: 72, marginRight: 8, paddingHorizontal: 16, borderRadius: 999, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+    saveBtnOff: { opacity: 0.4 },
+    saveText: { color: t.onAccent, fontSize: 14, fontWeight: '600' },
+    crumbBar: { maxHeight: 40, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border },
     crumbContent: { alignItems: 'center', paddingHorizontal: 14, gap: 2 },
     crumbWrap: { flexDirection: 'row', alignItems: 'center' },
     crumbSep: { color: t.textMuted, fontSize: 13, marginHorizontal: 6 },
     crumb: { color: t.accent, fontSize: 13, maxWidth: 160 },
     crumbActive: { color: t.text, fontWeight: '700' },
     toolbar: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border },
-    toolBtn: { backgroundColor: t.trustBg, borderRadius: radius.sm, paddingHorizontal: 12, paddingVertical: 7 },
+    toolBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, backgroundColor: t.trustBg, borderRadius: radius.pill, paddingHorizontal: 14, overflow: 'hidden' },
     toolBtnText: { color: t.trustText, fontSize: 13, fontWeight: '600' },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
     errText: { color: t.danger, fontSize: 14, textAlign: 'center' },
     empty: { color: t.textMuted, fontSize: 13, textAlign: 'center', marginTop: 40 },
-    entry: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: 16, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border },
-    entryIcon: { fontSize: 16, width: 16, textAlign: 'center' },
+    entry: { flexDirection: 'row', alignItems: 'center', minHeight: 52, paddingLeft: 16, paddingRight: 4, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border },
+    entryIcon: { width: 18, textAlign: 'center' },
     entryName: { color: t.text, fontSize: 15, flex: 1 },
-    entryMore: { paddingHorizontal: 6 },
-    entryMoreText: { color: t.textMuted, fontSize: 20, fontWeight: '700' },
+    entryMore: { width: 44 },
     code: { flex: 1, color: t.text, backgroundColor: t.surface, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 13, lineHeight: 19, padding: 16 },
-    binIcon: { color: t.textMuted, fontSize: 32 },
     binTitle: { color: t.text, fontSize: 16, fontWeight: '600', marginTop: 12 },
     binSub: { color: t.textMuted, fontSize: 13, marginTop: 6 },
-    overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end' },
-    overlayBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
-    sheet: { backgroundColor: t.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: 16, paddingBottom: 28, gap: 4 },
-    sheetTitle: { color: t.text, fontSize: 15, fontWeight: '700', marginBottom: 8, paddingHorizontal: 4 },
-    sheetItem: { paddingHorizontal: 8, paddingVertical: 14 },
-    sheetItemText: { color: t.text, fontSize: 16 },
-    promptInput: { height: 46, color: t.text, fontSize: 15, backgroundColor: t.inputBg, borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, paddingHorizontal: 12, marginBottom: 12 },
+    overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-start', paddingTop: 96, paddingHorizontal: 24 },
+    overlayBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: t.backdrop },
+    sheet: { backgroundColor: t.surface, borderRadius: radius.lg + 6, padding: 20, gap: 4 },
+    sheetTitle: { color: t.text, fontSize: 17, fontWeight: '600', marginBottom: 12 },
+    promptInput: { height: 48, color: t.text, fontSize: 15, backgroundColor: t.bg, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, paddingHorizontal: 12, marginBottom: 12 },
     promptRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
-    promptCancel: { paddingHorizontal: 16, paddingVertical: 10 },
+    promptCancel: { paddingHorizontal: 16, minHeight: 40, justifyContent: 'center' },
     promptCancelText: { color: t.textDim, fontSize: 15, fontWeight: '500' },
-    promptOk: { backgroundColor: t.accent, borderRadius: radius.sm, paddingHorizontal: 18, paddingVertical: 10 },
+    promptOk: { backgroundColor: t.accent, borderRadius: radius.pill, paddingHorizontal: 20, minHeight: 40, justifyContent: 'center' },
     promptOkText: { color: t.onAccent, fontSize: 15, fontWeight: '600' }
   })
 }
