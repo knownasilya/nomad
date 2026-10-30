@@ -110,25 +110,6 @@ const cssStr = css`
     flex: 0 0 auto;
   }
 
-  .rule-row .reorder-btns {
-    display: flex;
-    flex-direction: column;
-    flex: 0 0 auto;
-  }
-
-  .rule-row .reorder-btns a {
-    color: var(--text-color--pretty-light);
-    cursor: pointer;
-    line-height: 1;
-    padding: 1px 2px;
-  }
-
-  .rule-row .reorder-btns a.disabled {
-    color: var(--text-color--very-light);
-    cursor: default;
-    pointer-events: none;
-  }
-
   .rule-row .enabled-toggle {
     flex: 0 0 auto;
     display: flex;
