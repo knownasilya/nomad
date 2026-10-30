@@ -169,14 +169,25 @@ async function _baseInfo(ctx, url, access = 'drive') {
   return { api, url: u, isAutobase, baseKey, path };
 }
 
+// Only an Autobase Drive has a Draft. `{ draft:false }` writes live; `{ draft:true }` stages; with
+// neither, the Drive's own Draft Mode decides.
+async function _wantsDraft(isAutobase, baseKey, o) {
+  return isAutobase && o.draft !== false && (o.draft === true || (await drafts.getMode(baseKey)));
+}
+
+// Whether a write to `url` with these opts stages into the Draft rather than going live. The AI's
+// drive tools ask this so they read back what they wrote (bg/ai.ts executeTool).
+export async function writeStagesInDraft(ctx, url, opts = {}) {
+  const { isAutobase, baseKey } = await _baseInfo(ctx, url, 'read');
+  return _wantsDraft(isAutobase, baseKey, _opts(opts));
+}
+
 // Stage a write instead of dispatching, when the Drive is in Draft Mode. Returns { staged } and, when
 // not staged, the resolved { api, u } so the caller can dispatch without re-canonicalising.
 async function _stageWrite(ctx, url, kind, data, opts) {
   const o = _opts(opts);
   const { api, url: u, isAutobase, baseKey, path } = await _baseInfo(ctx, url, 'write');
-  const wantDraft =
-    isAutobase && o.draft !== false && (o.draft === true || (await drafts.getMode(baseKey)));
-  if (!wantDraft) return { staged: false, api, u };
+  if (!(await _wantsDraft(isAutobase, baseKey, o))) return { staged: false, api, u };
   if (kind === 'del') await drafts.stageDel(baseKey, path);
   else await drafts.stagePut(baseKey, path, _toBuffer(data, o), { executable: o.executable });
   return { staged: true, api, u };

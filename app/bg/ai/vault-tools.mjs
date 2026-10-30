@@ -53,19 +53,24 @@ function matches(query, fields) {
   return words.every((w) => text.includes(w))
 }
 
-// A permission function that asks once per turn for the Vault permissions: the first answer, allow
-// or deny, holds for the rest of the turn. A Bridge turn relays every ask to the phone, which keeps
-// no grant, and a denied ask isn't stored anywhere, so without this a turn could ask again and again.
-// Any other permission (modifyDrive) goes straight through. The answer is per site too: a grant is
-// for a site (ADR-0019 §4), and the user's own AI can move to another tab in a turn (ADR-0021).
+// A permission function that asks once per turn for the Vault permissions and for each drive's
+// modifyDrive: the first answer, allow or deny, holds for the rest of the turn. A Bridge turn relays
+// every ask to the phone, which keeps no grant, and a denied ask isn't stored anywhere, so without
+// this a turn asks again on every write. Any other permission goes straight through. The answer is
+// per site too: a grant is for a site (ADR-0019 §4), and the user's own AI can move to another tab
+// in a turn (ADR-0021).
 export function askOncePerTurn(permit) {
   const answers = new Map()
   return (permission, sender, ...rest) => {
-    if (!VAULT_PERMS.includes(permission)) return permit(permission, sender, ...rest)
+    if (!askedOnce(permission)) return permit(permission, sender, ...rest)
     const key = `${permission} ${siteOf(sender)}`
     if (!answers.has(key)) answers.set(key, Promise.resolve(permit(permission, sender, ...rest)))
     return answers.get(key)
   }
+}
+
+function askedOnce(permission) {
+  return VAULT_PERMS.includes(permission) || String(permission).startsWith('modifyDrive:')
 }
 
 function siteOf(sender) {

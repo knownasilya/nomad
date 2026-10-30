@@ -12,7 +12,7 @@ import * as permissions from '../../ui/permissions';
 import { parseDriveUrl } from '../../../lib/urls';
 import * as tabManager from '../../ui/tabs/manager';
 import * as wcTrust from '../../wc-trust';
-import fsAPI from './fs';
+import fsAPI, { writeStagesInDraft } from './fs';
 import * as modelContext from './model-context';
 import { pageToolResultToText } from './webmcp-schema';
 import * as daemon from '../../hyper/daemon';
@@ -26,7 +26,7 @@ import {
   setCurrent as setCurrentAwake,
   REASON_PROVIDER,
 } from '../../ai/awake';
-import { STANDING_PROMPT, PERSONAL_PROMPT } from '../../ai/api-reference.mjs';
+import { STANDING_PROMPT, PERSONAL_PROMPT, DRAFT_PROMPT } from '../../ai/api-reference.mjs';
 import { askOncePerTurn } from '../../ai/vault-tools.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
 import { completionStreamError } from '../../ai/stream-error.mjs';
@@ -511,7 +511,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     names: personal ? names.list() : null,
     ownerId: opts.ownerId,
   });
-  // One answer per Notes or Reader permission per turn (vault-tools.mjs askOncePerTurn).
+  // One answer per Notes, Reader or drive-edit permission per turn (vault-tools.mjs askOncePerTurn).
   const requestPermission = askOncePerTurn(opts.requestPermission || permissions.requestPermission);
   // tools:false is a plain completion: no search/execute, and no standing prompt telling the
   // model to call them. A local runtime that injects its own tool contract (MTPLX) otherwise
@@ -529,6 +529,9 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     systemPrompt,
     offerTools ? STANDING_PROMPT : '',
     offerTools && personal ? PERSONAL_PROMPT : '',
+    // A remote turn's writes stage into a Draft. Without this the model reads back the published
+    // file, doubts its own edit and tells the user the phone can't edit.
+    offerTools && opts.draft ? DRAFT_PROMPT : '',
     opts.context,
   ]
     .filter(Boolean)
@@ -744,6 +747,12 @@ async function executeTool(name, args, sender, opts: any = {}) {
     });
     return { ...picked, base: driveBaseUrl(picked.url) };
   };
+  // Whether a write to this drive stages in its Draft (ADR-0012) instead of going live: always on a
+  // remote turn (`draft`), and on any turn while the drive's own Draft Mode is on (the AI Sidebar
+  // turns it on). The drive tools then read the Draft too, so the AI reads back what it wrote.
+  const stagesInDraft = (base) =>
+    writeStagesInDraft(ctx, base, draft ? { draft: true } : {}).catch(() => false);
+  const readOpts = (staged) => (staged ? { draft: true } : {});
 
   // The user's Notes and Reader (ai-vault.ts): a personal turn only, each after its permission.
   if (isVaultTool(name)) {
@@ -805,13 +814,21 @@ async function executeTool(name, args, sender, opts: any = {}) {
       const { base } = driveFor(args.drive);
       // Route through nomad.fs (fsAPI) so BOTH drive backends work — the raw
       // per-writer Hyperdrive read hangs on an Autobase collaborative drive.
-      const text = await readTextOrNull(ctx, fullDriveUrl(base, args.path));
+      const text = await readTextOrNull(
+        ctx,
+        fullDriveUrl(base, args.path),
+        readOpts(await stagesInDraft(base))
+      );
       if (text === null) throw new Error(`File not found: ${args.path}`);
       return text;
     }
     case 'listDriveFiles': {
       const { base } = driveFor(args.drive);
-      const entries = await fsAPI.list.call(ctx, fullDriveUrl(base, args.path || '/'), {});
+      const entries = await fsAPI.list.call(
+        ctx,
+        fullDriveUrl(base, args.path || '/'),
+        readOpts(await stagesInDraft(base))
+      );
       return JSON.stringify((entries || []).map((e) => e.key ?? e.name ?? e));
     }
     case 'fetchUrl': {
@@ -839,10 +856,13 @@ async function executeTool(name, args, sender, opts: any = {}) {
       if (!allowed) throw new Error('Write permission denied');
       // Capture the file's pre-write content (or null if it didn't exist) BEFORE
       // overwriting, so the editor can build a per-turn undo Checkpoint. This is
-      // the only place that still knows the prior state.
-      const priorContent = await readTextOrNull(ctx, target);
+      // the only place that still knows the prior state. A staged write's prior
+      // state is the Draft's, which may already hold an earlier edit.
+      const staged = await stagesInDraft(base);
+      const priorContent = await readTextOrNull(ctx, target, readOpts(staged));
       // `draft:true` (remote AI edits) stages into the Drive's Vault-hosted Draft instead of writing
-      // the live Drive, so the change is reviewable/publishable (ADR-0012).
+      // the live Drive, so the change is reviewable/publishable (ADR-0012). So does a write while
+      // the Drive's own Draft Mode is on.
       await fsAPI.writeFile.call(ctx, target, args.content, draft ? { draft: true } : {});
       // The 'write' event makes an undo Checkpoint, and tells an editor that shows this drive to
       // reload. It names the drive: the user's own AI can write to any of the user's drives.
@@ -853,10 +873,17 @@ async function executeTool(name, args, sender, opts: any = {}) {
           drive: base,
           path: cleanPath,
           priorContent,
-          draft: !!draft,
+          draft: staged,
         });
       }
-      return `File written successfully to ${drive.current ? cleanPath : target}`;
+      const where = drive.current ? cleanPath : target;
+      if (staged) {
+        return (
+          `Staged ${where} in the drive's Draft. It is not live yet: the user previews the Draft, ` +
+          'then publishes or discards it. Reading the file now returns this version.'
+        );
+      }
+      return `File written successfully to ${where}`;
     }
     case 'currentTab': {
       if (!currentTab) throw new Error('currentTab is not available here');
@@ -866,6 +893,8 @@ async function executeTool(name, args, sender, opts: any = {}) {
         drive: tab?.drive?.url || null,
         // null: unknown (the phone's tab, from the Provider).
         writable: tab?.drive ? tab.drive.writable : false,
+        // Writes to this drive stage in its Draft (always, for the phone's tab).
+        draft: tab?.drive ? await stagesInDraft(driveBaseUrl(tab.drive.url)) : false,
       });
     }
     case 'readCurrentPage': {
@@ -1022,9 +1051,9 @@ function fullDriveUrl(base, path) {
 
 // Read a Drive file as text via fsAPI (backend-agnostic, with a built-in read
 // timeout). Returns null on a missing file or any read failure.
-async function readTextOrNull(ctx, url) {
+async function readTextOrNull(ctx, url, opts = {}) {
   try {
-    const v = await fsAPI.readFile.call(ctx, url, 'utf8');
+    const v = await fsAPI.readFile.call(ctx, url, { ...opts, encoding: 'utf8' });
     if (v === null || v === undefined) return null;
     return typeof v === 'string' ? v : b4a.toString(v);
   } catch {
