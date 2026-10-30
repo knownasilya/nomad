@@ -52,6 +52,15 @@ appends so they linearise into the Drive's replicated state and become visible t
 clears the Draft. Can be all-or-subset.
 _Avoid_: commit, push, go live, release, sync
 
+### Live Docs
+
+**Live Doc**:
+A document in a Drive that several Writers edit at the same time, like a Notion page: a folder
+holding a Yjs document as update files, each written only by its own Writer, so edits merge instead
+of overwriting each other. Keystrokes and cursors also travel live between open copies, but that
+channel stores nothing (ADR-0025, proposed).
+_Avoid_: canvas, shared doc, collaborative file
+
 ### Shell chrome
 
 **Tab Layout**:
