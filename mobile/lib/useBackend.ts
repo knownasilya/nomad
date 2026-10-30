@@ -163,13 +163,16 @@ export type AppName = 'reader' | 'notes' | 'names' | 'tabs'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
-export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string }
+// space: the Space's key when the note is kept only in that Space (ADR-0029), else null.
+export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string; space?: string | null }
 export interface ReaderState { follows: string[]; read: string[]; writable: boolean }
 export interface FeedPost { title: string; summary: string; tags: string[]; createdAt: string; url: string; feedUrl: string; feedTitle: string }
 export interface Feed { url: string; title: string; posts: FeedPost[] }
 // A short name the user gave a drive or URL (shared/names.mjs). auto: the AI gave it and the user
 // hasn't kept it yet.
-export interface NameRecord { name: string; url: string; title: string; auto?: boolean; createdAt: string; updatedAt: string }
+// space: the Space's key for a name kept only in that Space (ADR-0029), else null. hidden: a Space
+// name the user's own name with the same word hides.
+export interface NameRecord { name: string; url: string; title: string; auto?: boolean; createdAt: string; updatedAt: string; space?: string | null; hidden?: boolean }
 // approved: the user's own name for the page, shown in the address bar. named: every name that
 // points to it. suggested: a name to offer for its title.
 export interface NamesForUrl { approved: NameRecord | null; named: NameRecord[]; suggested: string; writable: boolean }

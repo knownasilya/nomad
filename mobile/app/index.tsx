@@ -305,7 +305,7 @@ export default function Browser () {
     onError: (message) => Alert.alert('Couldn’t save', message)
   })
   const favicons = useFavicons()
-  const names = useNames(backend.apps)
+  const names = useNames(backend.apps, spacesApi.activeSpace.rootDriveKey || undefined)
   // The user's own name for the drive in the active tab: the address bar shows it in a green tag.
   const activeNames = useNamesForUrl(names, active.url, active.kind !== 'home')
   persistRef.current = persist
@@ -1099,6 +1099,7 @@ export default function Browser () {
         names={names}
         url={active.url}
         title={active.title}
+        spaceName={spacesApi.activeSpace.rootDriveKey ? spacesApi.activeSpace.name : undefined}
         onOpenDevices={() => { setNameSheetOpen(false); openScreen({ name: 'devices' }) }}
       />
 
@@ -1166,6 +1167,8 @@ export default function Browser () {
         openNoteId={notesScreen?.name === 'notes' ? notesScreen.noteId : undefined}
         apps={backend.apps}
         onVaultChange={backend.onVaultChange}
+        space={spacesApi.activeSpace.rootDriveKey || undefined}
+        spaceName={spacesApi.activeSpace.name}
         onOpenDevices={() => openScreen({ name: 'devices' })}
         onOpenUrl={openFromNotes}
       />

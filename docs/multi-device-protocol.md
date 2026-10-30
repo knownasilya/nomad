@@ -89,8 +89,10 @@ like §1.1. `<space>` is a Space's Root Drive key: subscriptions are per Space, 
 
 ### 1.3 Names (ADR-0018)
 
-The user's short names for Drives, app folders and URLs, one set per user. Rules and helpers in
-`shared/names.mjs`; desktop reads and writes them in `app/bg/hyper/names.js`.
+The user's short names for Drives, app folders and URLs: the user's own, and a Space's own. Rules and
+helpers in `shared/names.mjs`; desktop reads and writes them in `app/bg/hyper/names.js`, the phone in
+`mobile/backend/lib/vault-apps.mjs` (each call names the active Space). In a Space the user's own name
+wins over the Space's with the same word.
 
 | Path | Payload (JSON, stored inline) |
 |------|--------------|
