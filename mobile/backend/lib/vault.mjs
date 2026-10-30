@@ -152,6 +152,20 @@ export async function publishOwnSpaces (base, deviceKey, spaces) {
   return true
 }
 
+// Record the app version this phone runs on its own Device record (`version`), like desktop's
+// publishOwnVersion, so the user's other Devices can flag one that runs a different version.
+// Writes only when it changed. Returns true when it wrote.
+export async function publishOwnVersion (base, deviceKey, version) {
+  if (!base || !deviceKey || !version || !base.writable) return false
+  const path = `${DEVICES_PREFIX}${deviceKey}.json`
+  const node = await base.view.get(path)
+  const rec = node && decodeInlineJson(node.value, b4a)
+  if (!rec || rec.version === version) return false
+  await base.append(inlineOp(path, { ...rec, version }))
+  await boundedUpdate(base)
+  return true
+}
+
 export async function readVaultIndex (base) {
   await boundedUpdate(base)
   return {

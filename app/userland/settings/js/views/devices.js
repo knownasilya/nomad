@@ -307,6 +307,27 @@ class DevicesView extends LitElement {
       : html`<span class="tag">Not connected</span>`;
   }
 
+  // The Nomad version a Device runs (its record's `version`, written by that Device itself; this
+  // Device's comes live from getStatus). Flagged when it isn't the version this Device runs.
+  _deviceVersion(d) {
+    const thisKey = this.thisDevice?.key;
+    return d.key && d.key === thisKey ? this.thisDevice?.version || d.version : d.version;
+  }
+
+  _isVersionMismatch(d) {
+    const mine = this.thisDevice?.version;
+    const theirs = this._deviceVersion(d);
+    return !!mine && !!theirs && theirs !== mine;
+  }
+
+  renderVersion(d) {
+    const version = this._deviceVersion(d);
+    if (!version) return html`<span class="tag" title="Update Nomad on this device to see its version">Version unknown</span>`;
+    return this._isVersionMismatch(d)
+      ? html`<span class="tag warn" title="This device runs v${this.thisDevice.version}">v${version} · different version</span>`
+      : html`<span class="tag">v${version}</span>`;
+  }
+
   // The Spaces a Device says it has (its record's `spaces`, written by that Device itself).
   renderDeviceSpaces(d) {
     if (!Array.isArray(d.spaces)) return '';
@@ -321,7 +342,19 @@ class DevicesView extends LitElement {
       </div>`;
     }
     const thisKey = this.thisDevice?.key;
+    const mismatched = this.devices.filter((d) => this._isVersionMismatch(d));
     return html`
+      ${mismatched.length
+        ? html`<div class="message warning">
+            <span class="fas fa-fw fa-exclamation-triangle"></span>
+            <span>
+              ${mismatched.map((d) => d.name).join(', ')}
+              ${mismatched.length === 1 ? 'runs' : 'run'} a different version of Nomad than this
+              device (v${this.thisDevice.version}). Update your devices to the same version so they
+              sync the same way.
+            </span>
+          </div>`
+        : ''}
       <div class="list">
         ${this.devices.map(
           (d) => html`
@@ -349,6 +382,7 @@ class DevicesView extends LitElement {
                       </div>
                       <div class="meta">
                         Added ${this._formatDate(d.addedAt)} · <span class="tag">${d.platform}</span>
+                        ${this.renderVersion(d)}
                         ${d.key && d.key === thisKey ? '' : this.renderConnected(d)}
                       </div>
                       ${this.renderDeviceSpaces(d)}

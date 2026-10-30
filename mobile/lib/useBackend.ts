@@ -7,6 +7,7 @@ import b4a from 'b4a'
 
 import bundle from '../app/app.bundle.mjs'
 import { holdForAiTurn } from './hostingService'
+import { currentVersion } from './updater'
 import {
   RPC_OPEN,
   RPC_CLOSE,
@@ -78,7 +79,8 @@ export interface PairedMsg {
 
 // spaces: the Spaces that Device says it has (it writes this itself); missing on an older Nomad.
 export interface DeviceSpace { rootDriveKey: string; name: string }
-export interface VaultDevice { key: string; name: string; platform: string; addedAt?: string; spaces?: DeviceSpace[] }
+// version: the Nomad version the Device runs, written by that Device (absent on older versions).
+export interface VaultDevice { key: string; name: string; platform: string; addedAt?: string; spaces?: DeviceSpace[]; version?: string }
 // movedTo: the Space's Root Drive got a new key; this record only points at it.
 export interface VaultSpace { rootDriveKey: string; name: string; icon?: string; color?: string; movedTo?: string }
 // Replication state of one Autobase (the Vault, or a Space Root Drive). `loaded: false` means
@@ -487,7 +489,8 @@ export function useBackend (handlers: BackendHandlers): Backend {
         }, 10000)
         pending.current[reqId] = (msg: VaultMsg) => { clearTimeout(timer); resolve(msg) }
         const req = rpc.request(RPC_VAULT_STATUS)
-        req.send(b4a.from(JSON.stringify({ reqId, spaceKeys, ownSpaces })))
+        // ownVersion: what the phone runs, for its own Device record (null in Expo Go / iOS).
+        req.send(b4a.from(JSON.stringify({ reqId, spaceKeys, ownSpaces, ownVersion: currentVersion() })))
       })
     },
     renameDevice (deviceKey, name) {

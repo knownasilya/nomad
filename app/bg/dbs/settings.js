@@ -21,6 +21,7 @@ const JSON_ENCODED_SETTINGS = [
 // Settings that are always global (never per-space)
 const GLOBAL_SETTINGS = new Set([
   'auto_update_enabled',
+  'auto_update_prerelease',
   'run_background',
   'launch_on_startup',
   'analytics_enabled',
@@ -79,6 +80,8 @@ export const setup = async function (opts) {
 
   defaultSettings = {
     auto_update_enabled: 1,
+    // Settings → Auto Updater → Beta releases: update to GitHub prereleases too (bg/browser.js).
+    auto_update_prerelease: 0,
     auto_redirect_to_dat: 1,
     custom_start_page: 'blank',
     new_tab: 'nomad://desktop/',

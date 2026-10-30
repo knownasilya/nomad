@@ -24,6 +24,51 @@ The `--follow-tags` push of the tag is what triggers the workflow below. Because
 sets `package.json` to the same version as the tag it creates, the desktop and Android artifacts
 always land on one release — no manual sync needed.
 
+## Cutting a beta release
+
+A beta is a release with a prerelease version (`1.22.0-beta.0`). It goes only to people who turned
+on **Beta releases**: on desktop in Settings → Auto Updater, on the phone in Settings → Updates.
+Everyone else keeps getting the last stable release.
+
+```bash
+npm run release-version -- --prerelease beta                     # 1.21.0 → 1.22.0-beta.0 (bump from the commits)
+npm run release-version -- --release-as minor --prerelease beta  # or pick the bump yourself
+npm run release-version -- --prerelease beta                     # next beta: 1.22.0-beta.0 → 1.22.0-beta.1
+git push --follow-tags origin main
+```
+
+The tag (`v1.22.0-beta.0`) runs the same workflow as a release. Because the tag has a `-`, both jobs
+also mark the draft as a **prerelease**. Check the artifacts and publish the draft as usual; leave
+"Set as a pre-release" ticked. A published prerelease is what beta users update to. GitHub's
+`releases/latest`, which everyone else checks, never returns one.
+
+When the beta is good, cut the stable release with the same number:
+
+```bash
+npm run release-version -- --release-as 1.22.0
+git push --follow-tags origin main
+```
+
+Beta users get it too, since `1.22.0` is newer than `1.22.0-beta.1`. Turning Beta releases off
+doesn't take an app back to the older stable build; it waits for the next stable release that is
+newer than the beta it runs.
+
+How each app finds a beta:
+
+- **Desktop:** `auto_update_prerelease` (a global setting) sets electron-updater's
+  `allowPrerelease` on every check (`checkForUpdates` in `app/bg/browser.js`). electron-updater then
+  takes the newest published release from the repo's releases feed, prerelease or not, and reads
+  its `latest-mac.yml`. electron-builder writes `latest-*.yml` for betas too, because it doesn't
+  split update channels for the GitHub provider.
+- **Android:** with the `hb:updates-beta` preference on, `mobile/lib/updater.ts` reads
+  `GET /repos/knownasilya/nomad/releases` instead of `releases/latest` and installs the newest
+  version with an APK (`pickNewestRelease` in `mobile/lib/updateRelease.ts`, which orders versions
+  the semver way).
+
+A beta and its stable release share an Android `versionCode` (the prerelease part isn't in it).
+Android installs an update with an equal `versionCode`, so sideloaded APKs work; the Play Store
+would reject the second upload with the same code.
+
 > **Mobile note:** the Android `versionName`/`versionCode` come from the **tag** in CI (see
 > [Versioning (Android)](#versioning-android)), so `mobile/app.json`'s `version` is only a local-dev
 > fallback and is *not* bumped by `standard-version` — nudge it by hand if you care about the
@@ -54,7 +99,7 @@ The AAB is what the Play Store accepts; the APK is what users can sideload direc
 GitHub release (AABs are not installable).
 
 **Publishing the draft is what ships the phone update.** The Android app checks GitHub's
-`releases/latest` (which skips drafts) on launch and hourly, and installs the
+`releases/latest` (which skips drafts and prereleases) on launch and hourly, and installs the
 `nomad-<version>-android.apk` asset when its version is newer than its own (see
 [`mobile/README.md`](../mobile/README.md#updates)). So keep that asset name, and keep the
 `versionName`/`versionCode` derived from the tag: Android refuses an update whose `versionCode` is
@@ -65,8 +110,8 @@ why the release keystore below must never change.
 
 The Android job derives versions from the tag:
 
-- `versionName` = the tag without the `v` prefix (`v1.2.3` → `1.2.3`)
-- `versionCode` = `major×1000000 + minor×1000 + patch` (`v1.2.3` → `1002003`)
+- `versionName` = the tag without the `v` prefix (`v1.2.3` → `1.2.3`, `v1.2.3-beta.0` → `1.2.3-beta.0`)
+- `versionCode` = `major×1000000 + minor×1000 + patch` (`v1.2.3` → `1002003`; a beta of it gets the same code)
 
 Both are passed to Gradle as environment variables (`NOMAD_VERSION_NAME` / `NOMAD_VERSION_CODE`);
 local builds without them fall back to `1.0.0` / `1`.

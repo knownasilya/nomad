@@ -166,7 +166,9 @@ downloads it and installs it in place with Android's `PackageInstaller`
 (`modules/nomad-updater`, a local Expo module; the check and the state are `lib/updater.ts`).
 Android asks the user to confirm the first update and to let Nomad install apps; from Android 12 on,
 later updates install without a prompt. Settings → Updates turns automatic installs off and checks
-by hand. An update only installs over a build signed with the same key, so local debug builds
+by hand. Its **Beta releases** switch lets published prereleases in too: the check then reads
+GitHub's release list and takes the newest version (see
+[Cutting a beta release](../docs/releasing.md#cutting-a-beta-release)). An update only installs over a build signed with the same key, so local debug builds
 don't check on their own.
 
 ## Verifying the P2P core

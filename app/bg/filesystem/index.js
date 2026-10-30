@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import { join as joinPath } from 'path';
 import b4a from 'b4a';
 import * as logLib from '../logger';
@@ -191,6 +191,7 @@ export async function setup() {
         vault
           .registerOwnDevice({ platform: 'desktop' })
           .then(() => vault.publishOwnSpaces())
+          .then(() => vault.publishOwnVersion(app.getVersion()))
           .catch(() => {});
         devicePresence.install();
       }
