@@ -2,16 +2,18 @@ import { useMemo } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { useTheme, radius, type Theme } from '../lib/theme'
 
-// Shown by Reader and Notes when this phone isn't linked. Both keep their data in the Vault
-// (ADR-0017), so an unlinked phone has nothing to show.
-export default function LinkPhone ({ what, onOpenDevices }: { what: 'Reader' | 'Notes'; onOpenDevices: () => void }) {
+// Shown by Reader, Notes and the name sheet when this phone isn't linked. They keep their data in the
+// Vault (ADR-0017, ADR-0018), so an unlinked phone has nothing to show.
+const NOUN = { Reader: 'feeds', Notes: 'notes', Names: 'names' }
+
+export default function LinkPhone ({ what, onOpenDevices }: { what: keyof typeof NOUN; onOpenDevices: () => void }) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   return (
     <View style={s.page}>
       <Text style={s.heading}>Link this phone</Text>
       <Text style={s.body}>
-        {what} syncs through your Vault. Link this phone to your computer to see the same {what === 'Reader' ? 'feeds' : 'notes'} on both.
+        {what} {what === 'Names' ? 'sync' : 'syncs'} through your Vault. Link this phone to your computer to see the same {NOUN[what]} on both.
       </Text>
       <TouchableOpacity style={s.btn} onPress={onOpenDevices}>
         <Text style={s.btnText}>Open Devices</Text>

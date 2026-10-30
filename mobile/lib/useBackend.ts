@@ -151,8 +151,9 @@ export interface Backend {
   aiChat: (messages: unknown[], opts: Record<string, unknown>, handlers: AiChatHandlers) => AiChatHandle
 }
 
-// The phone's Reader and Notes (ADR-0017). `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'reader' | 'notes'
+// The phone's Reader, Notes and Names (ADR-0017, ADR-0018). `noVault`: this phone isn't linked, so
+// there's no data.
+export type AppName = 'reader' | 'notes' | 'names'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
@@ -160,6 +161,12 @@ export interface Note { type: 'nomad/note'; id: string; body: string; createdAt:
 export interface ReaderState { follows: string[]; read: string[]; writable: boolean }
 export interface FeedPost { title: string; summary: string; tags: string[]; createdAt: string; url: string; feedUrl: string; feedTitle: string }
 export interface Feed { url: string; title: string; posts: FeedPost[] }
+// A short name the user gave a drive or URL (shared/names.mjs). auto: the AI gave it and the user
+// hasn't kept it yet.
+export interface NameRecord { name: string; url: string; title: string; auto?: boolean; createdAt: string; updatedAt: string }
+// approved: the user's own name for the page, shown in the address bar. named: every name that
+// points to it. suggested: a name to offer for its title.
+export interface NamesForUrl { approved: NameRecord | null; named: NameRecord[]; suggested: string; writable: boolean }
 
 // An in-page nomad.* call forwarded from a drive WebView (see NOMAD_SHIM).
 export interface NomadCall { id?: string; api: string; method: string; url?: string | null; args?: unknown[] }
@@ -283,7 +290,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
     })
   }
 
-  // A Reader or Notes call. Always resolves, so screens can show `message` instead of catching.
+  // A Reader, Notes or Names call. Always resolves, so screens can show `message` instead of catching.
   // Opening a Feed may wait on the swarm (both drive types, ~15 s each), so it gets longer.
   function appsCall<T> (app: AppName, action: string, args: Record<string, unknown> = {}): Promise<AppsResult<T>> {
     return new Promise<AppsResult<T>>((resolve) => {

@@ -7,7 +7,8 @@ import type { SavedSite } from '../lib/usePersistence'
 // filtered by what's typed. Floats over the top of the page (anchored just below the address bar)
 // so it never shifts content down. elevation (Android) + zIndex (iOS) + a shadow lift it above page
 // content, including WebViews. Capped by the caller; we scroll if the keyboard squeezes it.
-export default function Suggestions ({ items, onSelect }: { items: SavedSite[]; onSelect: (url: string) => void }) {
+// An item with `name` is one of the user's names (ADR-0018): it shows hyper://<name>/ in a green tag.
+export default function Suggestions ({ items, onSelect }: { items: Array<SavedSite & { name?: string }>; onSelect: (url: string) => void }) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   if (!items.length) return null
@@ -24,7 +25,9 @@ export default function Suggestions ({ items, onSelect }: { items: SavedSite[]; 
             <View style={[s.dot, { backgroundColor: it.url.startsWith('hyper://') ? t.secure : t.textMuted }]} />
             <View style={s.text}>
               <Text numberOfLines={1} style={s.title}>{it.title}</Text>
-              <Text numberOfLines={1} style={s.url}>{it.url}</Text>
+              {it.name
+                ? <View style={s.nameRow}><Text numberOfLines={1} style={s.nameTag}>✓ {it.name}</Text></View>
+                : <Text numberOfLines={1} style={s.url}>{it.url}</Text>}
             </View>
           </TouchableOpacity>
         ))}
@@ -60,6 +63,8 @@ function makeStyles (t: Theme) {
     dot: { width: 8, height: 8, borderRadius: radius.pill },
     text: { flex: 1, paddingVertical: 8 },
     title: { color: t.text, fontSize: 14, fontWeight: '500' },
-    url: { color: t.textMuted, fontSize: 12, marginTop: 1 }
+    url: { color: t.textMuted, fontSize: 12, marginTop: 1 },
+    nameRow: { flexDirection: 'row', marginTop: 2 },
+    nameTag: { backgroundColor: t.secure, color: t.onAccent, fontSize: 11, fontWeight: '700', borderRadius: 5, overflow: 'hidden', paddingHorizontal: 5, paddingVertical: 1 }
   })
 }

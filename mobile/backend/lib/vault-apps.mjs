@@ -1,11 +1,12 @@
 import b4a from 'b4a'
 import { decodeInlineJson } from '../../../shared/fs-core.mjs'
 import * as apps from '../../../shared/vault-apps.mjs'
+import * as names from '../../../shared/names.mjs'
 import { inlineOp, boundedUpdate } from './vault.mjs'
 import { parseHyperUrl } from './hyper-url.mjs'
 import { DRIVE_AUTOBASE, DRIVE_HYPERDRIVE } from '../../rpc-commands.mjs'
 
-// The phone's Reader and Notes (ADR-0017). They read and write the same Vault records as desktop's
+// The phone's Reader, Notes and Names (ADR-0017, ADR-0018). They read and write the same Vault records as desktop's
 // nomad://reader and nomad://notes (shared/vault-apps.mjs), so a subscription or a note made on one
 // Device shows on the others. The phone only has this data once it is linked: with no Vault there is
 // nothing here, and the UI points the user to Devices.
@@ -166,4 +167,79 @@ export async function renameNoteLinks (base, { id, from, to } = {}) {
     await putRecord(base, apps.notePath(note.id), apps.makeNote({ id: note.id, body }, note))
   }
   return changes.length
+}
+
+// Names (ADR-0018)
+// =
+//
+// The user's short names for drives and URLs, the same /.vault/names/ records desktop's
+// app/bg/hyper/names.js keeps (rules in shared/names.mjs). The phone resolves hyper://<name>/ where
+// the user navigates (the address bar and links in a page), never for a page's own reads, as on
+// desktop. These read the view as it is, without waiting on an update, so a navigation never stalls.
+
+async function allNames (base) {
+  return (await readPrefix(base, names.NAMES_PREFIX)).filter(names.isNameRecord).sort((a, b) => a.name.localeCompare(b.name))
+}
+
+async function readName (base, name) {
+  if (names.nameError(name)) return null
+  const rec = await readRecord(base, names.namePath(name))
+  return names.isNameRecord(rec) ? rec : null
+}
+
+export async function listNames (base) {
+  await boundedUpdate(base)
+  return { names: await allNames(base), writable: !!base.writable }
+}
+
+// Where the address bar entry `input` goes, or null when it isn't a name. "blog", "hyper://blog/"
+// and "hyper://blog/posts/" all count, as typing a name and pressing Enter does on desktop.
+export async function resolveName (base, input) {
+  const s = String(input || '').trim()
+  const url = /^[a-z0-9-]+\/?$/i.test(s) ? `hyper://${s.replace(/\/$/, '')}/` : s
+  const m = /^hyper:\/\/([a-z0-9-]+)(?:[/?#]|$)/i.exec(url)
+  if (!m) return null
+  const rec = await readName(base, m[1].toLowerCase())
+  return rec ? names.resolveNamedUrl(url, () => rec) : null
+}
+
+// The page at `url`: `approved` is the user's own name for it, the one the address bar shows (a name
+// the AI gave doesn't count until the user keeps it); `named` are the names that point to it, AI's
+// included, for the name sheet; `suggested` is a name to offer for a page titled `title`.
+export async function namesForUrl (base, url, title = '') {
+  const all = await allNames(base)
+  const target = names.nameTarget(url)
+  return {
+    approved: names.approvedNameFor(url, all),
+    named: all.filter((r) => r.url === target || r.url === url),
+    suggested: names.suggestName(title),
+    writable: !!base.writable
+  }
+}
+
+// The names that match what's typed in the address bar, best first.
+export async function matchNames (base, query, limit = 5) {
+  return names.matchNames(query, await allNames(base), limit)
+}
+
+// Give the page at `url` the name `name`, as desktop's site-info panel does: the name is tidied,
+// a drive page names its folder, and `previous` is the name being changed. A name saved here is the
+// user's, so it drops the AI's `auto` mark. Refuses a name that already points somewhere else.
+export async function setName (base, { name, url, title, previous } = {}) {
+  const clean = names.normalizeName(name)
+  const err = names.nameError(clean)
+  if (err) throw new Error(err)
+  const target = names.nameTarget(url)
+  const existing = await readName(base, clean)
+  if (existing && existing.url !== target && previous !== clean) {
+    throw new Error(`“${clean}” already names ${existing.title || existing.url}`)
+  }
+  const rec = names.makeNameRecord({ name: clean, url: target, title }, existing)
+  await putRecord(base, names.namePath(clean), rec)
+  if (previous && previous !== clean && (await readName(base, previous))) await delRecord(base, names.namePath(previous))
+  return rec
+}
+
+export async function removeName (base, name) {
+  await delRecord(base, names.namePath(name))
 }

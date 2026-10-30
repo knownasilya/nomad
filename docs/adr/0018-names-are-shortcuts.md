@@ -49,8 +49,25 @@ goes to what it names, and the AI can look names up and read or write a named Dr
 - A link to `hyper://blog/` works only for its author; shared links keep the real key.
 - Writes the AI makes to a named Drive get no editor undo Checkpoint; those are for the current Drive.
 - A solo Vault brings its names along when it joins another Vault (ADR-0017).
-- The phone's URL bar doesn't resolve names yet. Its AI panel uses them, because the Provider runs
-  the turn with its own copy of the Vault.
+- The phone's AI panel uses names because the Provider runs the turn with its own copy of the Vault.
+
+## Amendment: names on the phone (2026-10-30)
+
+A linked phone has the same names: they are Vault records, so they already replicate to it. Its
+backend reads and writes them with the shared rules (`mobile/backend/lib/vault-apps.mjs`, the
+`names` app of `RPC_APPS`), and the UI asks it through `mobile/lib/useNames.ts`.
+
+- **The same shortcut.** `navigate` in `mobile/app/index.tsx` resolves a typed name ("blog",
+  `hyper://blog/posts/`) and a `hyper://<name>/` link followed in a page, and the tab lands on the
+  real address. Nothing else on the phone resolves names: not the drive serve path or the in-page
+  `nomad.fs` bridge. A navigation waits at most 1.5 s for the answer, then goes on as typed.
+- **The green tag.** The address bar shows the user's own name for the drive in the tab, and the
+  URL-bar suggestions list matching names first. An AI name isn't shown until the user keeps it.
+- **Naming from the phone.** The menu's "Name this site" sheet names the page's folder, renames,
+  removes, or keeps the AI's name, as desktop's site-info panel does. It needs the phone to write
+  the Vault, and an unlinked phone points the user to Devices.
+- **Refresh.** The phone looks names up again when the app returns to the foreground and after it
+  saves one, so a name made on desktop shows the next time the user opens the app.
 
 ## Amendment: the AI names sites the user visits often (2026-10-27)
 

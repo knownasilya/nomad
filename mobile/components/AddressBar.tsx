@@ -20,13 +20,14 @@ interface Props {
   hasDraft?: boolean // drive has unpublished draft changes (ADR-0012)
   draftPreviewing?: boolean // this tab is rendering the merged draft
   onToggleDraft?: () => void
+  siteName?: string // the user's own name for this drive (ADR-0018), shown in a green tag
   inputRef?: Ref<TextInput> // lets the browser focus the field, e.g. on a new tab from the tab grid
 }
 
 // nomad-style location bar: back/forward nav, a rounded input with a leading
 // trust indicator and drive-type chip, and a reload/go button on the right.
 export default function AddressBar (props: Props) {
-  const { value, onChangeText, onSubmit, onReload, loading, isHyper, canBack, canForward, onBack, onForward, onFocus, onBlur, hasDraft, draftPreviewing, onToggleDraft, inputRef } = props
+  const { value, onChangeText, onSubmit, onReload, loading, isHyper, canBack, canForward, onBack, onForward, onFocus, onBlur, hasDraft, draftPreviewing, onToggleDraft, siteName, inputRef } = props
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
 
@@ -39,7 +40,14 @@ export default function AddressBar (props: Props) {
         <Text style={[s.navBtnText, !canForward && s.navBtnDisabled]}>›</Text>
       </TouchableOpacity>
       <View style={[s.inputWrap, isHyper && { borderColor: t.trustText }]}>
-        <Text style={[s.trust, { color: isHyper ? t.secure : t.textMuted }]}>{isHyper ? '⬡' : '◯'}</Text>
+        {/* A drive the user named shows its name in a green tag with a check, as on desktop. */}
+        {isHyper && siteName ? (
+          <View style={s.nameTag} accessibilityLabel={`Your name for this site: hyper://${siteName}/`}>
+            <Text style={s.nameTagText} numberOfLines={1}>✓ {siteName}</Text>
+          </View>
+        ) : (
+          <Text style={[s.trust, { color: isHyper ? t.secure : t.textMuted }]}>{isHyper ? '⬡' : '◯'}</Text>
+        )}
         <TextInput
           ref={inputRef}
           style={s.input}
@@ -100,6 +108,8 @@ function makeStyles (t: Theme) {
       height: 44
     },
     trust: { fontSize: 13, marginRight: 8 },
+    nameTag: { backgroundColor: t.secure, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginRight: 8, maxWidth: 140 },
+    nameTagText: { color: t.onAccent, fontSize: 12, fontWeight: '700' },
     input: { flex: 1, color: t.text, fontSize: 15, padding: 0 },
     draftBtn: { paddingHorizontal: 7, paddingVertical: 4, marginLeft: 4, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
     draftBtnActive: { backgroundColor: 'rgba(31,157,77,0.18)' },
