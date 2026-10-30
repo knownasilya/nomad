@@ -461,6 +461,12 @@ export async function completeText(messages, { maxTokens = 400, timeoutMs = 60e3
 // Internal helpers
 // =
 
+// The Space a turn's names come from: the one another Device sent, or the caller's own.
+async function turnSpaceKey(sender, opts: any = {}) {
+  if (opts.remote) return isSpaceKey(opts.space) ? opts.space : null;
+  return vaultApps.spaceKey({ sender }).catch(() => null);
+}
+
 async function runChat(messages, sender, emitter, opts: any = {}) {
   const chatMessages = normalizeChatMessages(messages);
   // The turn's stage decides what it may do (ADR-0021). The user's own assistant (the AI Sidebar,
@@ -512,7 +518,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     // The user's own AI (see chat()): their names, Notes, Reader and other Drives.
     personal,
     tab: !!currentTab,
-    names: personal ? names.list() : null,
+    // The user's own names, and those of the Space the turn is in (ADR-0029).
+    names: personal ? names.list(await turnSpaceKey(sender, opts)).filter((r) => !r.hidden) : null,
     ownerId: opts.ownerId,
   });
   // One answer per Notes, Reader or drive-edit permission per turn (vault-tools.mjs askOncePerTurn).
@@ -739,6 +746,8 @@ async function executeTool(name, args, sender, opts: any = {}) {
   const tab = currentTab ? await currentTab() : null;
   if (tab?.sender) sender = tab.sender;
   const ctx = { sender };
+  // Names resolve in the Space of the user's tab, or the Space another Device sent.
+  const nameSpace = isSpaceKey(space) ? space : await vaultApps.spaceKey(ctx).catch(() => null);
   // The drive a drive tool works on: `drive` (one of the user's names, hyper://<name>/, or a
   // hyper:// URL; hyper/names.js), else the turn's own Drive, or the drive in the user's current
   // tab. `url` names the drive the write permission is asked for. Only a personal turn
@@ -750,7 +759,7 @@ async function executeTool(name, args, sender, opts: any = {}) {
       personal: !!catalog?.personal,
       hasTab: !!currentTab,
       own: currentTab ? tab?.drive?.url || null : driveUrl || sender.getURL(),
-      resolve: names.resolveDrive,
+      resolve: (input) => names.resolveDrive(input, nameSpace),
     });
     return { ...picked, base: driveBaseUrl(picked.url) };
   };
@@ -1419,7 +1428,7 @@ export async function callLocalTool(name, args, turn = null) {
     pageTools: pageListed,
     // A program on this machine driving the user's browser is the user's own AI (loopback only).
     personal: true,
-    names: names.list(),
+    names: names.list(await vaultApps.spaceKey({ sender }).catch(() => null)).filter((r) => !r.hidden),
   });
   return executeTool(name, args || {}, sender, {
     driveUrl: drive.url || undefined,

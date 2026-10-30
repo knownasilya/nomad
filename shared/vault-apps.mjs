@@ -9,9 +9,11 @@
 //   /.vault/reader/<space>/read.json             { read: [postUrl] }    posts marked read
 //   /.vault/reader/<space>/imported.json         { importedAt }         the Space's old file was copied in
 //   /.vault/notes/<id>.json                      { type, id, body, createdAt, updatedAt, conflictOf? }
+//   /.vault/space-lib/<space>/notes/<id>.json    the same Note, kept only in that Space (ADR-0029)
 //
 // <space> is the Space's Root Drive key (hex): each Space has its own subscriptions. Notes belong to
-// the user. One record per Feed and per Note, so two Devices that change different ones never
+// the user, or to one Space (the Space's library, /.vault/space-lib/<space>/). A Note id is unique
+// across both, so a Note moves between them by changing only its path. One record per Feed and per Note, so two Devices that change different ones never
 // overwrite each other. The read marks are one record; writers merge into it (mergeReadState).
 //
 // A Note's body is Markdown. Its first line with text is its title. Notes link to each other the
@@ -20,6 +22,9 @@
 
 export const READER_PREFIX = '/.vault/reader/';
 export const NOTES_PREFIX = '/.vault/notes/';
+// A Space's own library in the Vault, while the Space isn't shared (ADR-0029): its Notes under
+// notes/ and its Names under names/ (shared/names.mjs).
+export const SPACE_LIB_PREFIX = '/.vault/space-lib/';
 
 export const NOTE_TYPE = 'nomad/note';
 // Every save appends the whole Note to the Vault's log, so keep Notes to text.
@@ -35,6 +40,11 @@ export function isSpaceKey(space) {
 function readerPrefix(space) {
   if (!isSpaceKey(space)) throw new Error('Not a Space key: ' + space);
   return READER_PREFIX + space + '/';
+}
+
+export function spaceLibPrefix(space) {
+  if (!isSpaceKey(space)) throw new Error('Not a Space key: ' + space);
+  return SPACE_LIB_PREFIX + space + '/';
 }
 
 export const followsPrefix = (space) => readerPrefix(space) + 'follows/';
@@ -116,9 +126,14 @@ export function isNoteId(id) {
   return typeof id === 'string' && /^[a-z0-9-]{1,40}$/.test(id);
 }
 
-export function notePath(id) {
+// Where a Space's Notes are (`space` a Space key), or the user's (`space` null).
+export function notesPrefix(space = null) {
+  return space ? spaceLibPrefix(space) + 'notes/' : NOTES_PREFIX;
+}
+
+export function notePath(id, space = null) {
   if (!isNoteId(id)) throw new Error('Not a note id: ' + id);
-  return NOTES_PREFIX + id + '.json';
+  return notesPrefix(space) + id + '.json';
 }
 
 // The Note record to store for a save. `prev` is the stored Note with that id, if any.

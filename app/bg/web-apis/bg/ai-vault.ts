@@ -3,8 +3,9 @@
 // Vault and Drive reads and writes behind them. ai.ts executeTool calls runVaultTool on a personal turn only
 // (the user's own AI); each capability first asks its permission (vault-tools.mjs VAULT_TOOL_PERMS).
 //
-// Notes belong to the user. Reader follows belong to a Space: the calling tab's, or, for a turn
-// another Device asked for over the AI Bridge, the Space that Device sent.
+// Notes belong to the user, or to a Space (ADR-0029). Reader follows belong to a Space. The Space is
+// the calling tab's, or, for a turn another Device asked for over the AI Bridge, the one that Device
+// sent. The AI sees the user's Notes and that Space's; a Note it creates is the user's.
 
 import * as apps from '../../../../shared/vault-apps.mjs';
 import * as vaultApps from './vault-apps';
@@ -45,13 +46,14 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
     throw new Error(`The user didn't allow ${permission}`);
   const readerSpace = async () => (apps.isSpaceKey(space) ? space : vaultApps.spaceKey(ctx));
   const json = (v) => JSON.stringify(v, null, 2);
+  const notes = async () => vaultApps.allNotes(await readerSpace().catch(() => null));
 
   switch (name) {
     case 'listNotes':
-      return json(findNotes(await vaultApps.allNotes(), args));
+      return json(findNotes(await notes(), args));
 
     case 'readNote': {
-      const note = findNote(await vaultApps.allNotes(), args);
+      const note = findNote(await notes(), args);
       if (!note) throw new Error('No note with that id or title. Use listNotes to find it.');
       return json(noteForModel(note));
     }
@@ -65,9 +67,14 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
             'To edit a note, read it first (readNote) and pass its updatedAt as baseUpdatedAt'
           );
         }
-        if (!findNote(await vaultApps.allNotes(), { id })) throw new Error('No note with that id');
+        if (!findNote(await notes(), { id })) throw new Error('No note with that id');
       }
-      const note = await vaultApps.saveNote(ctx, { id: id || undefined, body, baseUpdatedAt });
+      const note = await vaultApps.saveNote(ctx, {
+        id: id || undefined,
+        body,
+        baseUpdatedAt,
+        space: await readerSpace().catch(() => null),
+      });
       return json({
         id: note.id,
         title: apps.noteTitle(note.body),

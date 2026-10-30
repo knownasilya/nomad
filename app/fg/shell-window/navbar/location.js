@@ -105,9 +105,13 @@ class NavbarLocation extends LitElement {
     ipcRenderer.on('command', this.onCommand.bind(this));
   }
 
-  // The user's names, for suggestions. Fetched again on each focus, since they change on any Device.
+  // The user's names and this window's Space's, for suggestions. Fetched again on each focus, since
+  // they change on any Device. A Space's name that one of the user's own hides doesn't work, so skip it.
   fetchNames() {
-    return bg.vault.listNames().catch(() => []);
+    return bg.vault
+      .listNames()
+      .then((list) => list.filter((r) => !r.hidden))
+      .catch(() => []);
   }
 
   get isAutocompleteOpen() {
