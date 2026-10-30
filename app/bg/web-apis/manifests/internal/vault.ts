@@ -22,7 +22,20 @@ export default {
 
   // Editing a Drive another of the user's Devices can write (bg/hyper/drive-writers.js)
   driveEditStatus: 'promise', // (url) -> { writable, canAsk, legacy, linked, request: { pending, granted } | null }
-  requestDriveEdit: 'promise', // (url) -> the same, after asking the user's other Devices
+  requestDriveEdit: 'promise', // (url, { note? }) -> the same, after asking the user's other Devices (and a shared Space's members)
+
+  // Shared Spaces (bg/hyper/space-library.js, ADR-0029), for the caller's Space
+  getSpaceShare: 'promise', // -> { spaceId, name, personal, shared, preview?, role, memberId, members, joins, requests, writable }
+  shareSpace: 'promise', // ({ name }) -> share info
+  createSpaceInvite: 'promise', // (role: 'editor' | 'viewer') -> { code, role }
+  approveSpaceJoin: 'promise', // (memberId)
+  denySpaceJoin: 'promise', // (memberId)
+  setSpaceRole: 'promise', // (memberId, role)
+  removeSpaceMember: 'promise', // (memberId)
+  answerSpaceRequest: 'promise', // ({ drive, writerKey, approve })
+  leaveSpace: 'promise',
+  joinSpace: 'promise', // (code, { name }) -> { spaceId, name }, once an owner approves
+  watchSpaceShare: 'readable', // 'changed'
 
   // Reader and Notes data (bg/vault-apps.ts)
   readerState: 'promise', // -> { follows, read, writable, linked } for the caller's Space

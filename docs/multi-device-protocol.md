@@ -40,7 +40,7 @@ Written via ordinary `{ op: 'put' }` ops **as inline control records** (small JS
 | Path | Payload (JSON, stored inline) |
 |------|--------------|
 | `/.vault/meta.json` | `{ version: 1, createdAt, profileUrl? }` |
-| `/.vault/spaces/<rootDriveKey>.json` | `{ rootDriveKey, name, icon, color, sortOrder, originId?, personal?, createdAt }` |
+| `/.vault/spaces/<rootDriveKey>.json` | `{ rootDriveKey, name, icon, color, sortOrder, originId?, personal?, createdAt, library?, role?, memberId?, confirmed?, removed? }` (a Shared Space adds the last five, §1.5) |
 | `/.vault/devices/<hexDeviceKey>.json` | `{ key, name, platform: 'desktop'\|'mobile', addedAt, lastSeen? }` |
 | `/.vault/drive-writers/<driveKey>/<writerKey>.json` | Writer grant (ADR-0026 §2): `{ type: 'nomad/drive-writer', drive, writerKey, device, name, requestedAt, grantedBy?, grantedAt? }`. Rules in `shared/drive-writers.mjs` |
 
@@ -89,8 +89,10 @@ like §1.1. `<space>` is a Space's Root Drive key: subscriptions are per Space, 
 
 ### 1.3 Names (ADR-0018)
 
-The user's short names for Drives, app folders and URLs, one set per user. Rules and helpers in
-`shared/names.mjs`; desktop reads and writes them in `app/bg/hyper/names.js`.
+The user's short names for Drives, app folders and URLs: the user's own, and a Space's own. Rules and
+helpers in `shared/names.mjs`; desktop reads and writes them in `app/bg/hyper/names.js`, the phone in
+`mobile/backend/lib/vault-apps.mjs` (each call names the active Space). In a Space the user's own name
+wins over the Space's with the same word.
 
 | Path | Payload (JSON, stored inline) |
 |------|--------------|
@@ -115,6 +117,40 @@ Text the user marked on a web or hyper:// page, one set per user. Rules and help
 of it (`pageKey`). `text` is a text directive, the part of a link after `#:~:text=`. `noteId` names a
 Note (§1.2) about the Highlight. A solo Vault that joins another (§1.2) brings `/.vault/highlights/`
 along; a record already in the joined Vault wins.
+
+### 1.5 Shared Spaces (ADR-0029)
+
+A Space shared with other people keeps its library in a **Space Library**: its own Autobase, with the
+Drive reducer and wire format (`shared/fs-core.mjs`), outside the Vault. Paths, record builders and
+role rules are in `shared/space-library.mjs`; desktop reads and writes it in
+`app/bg/hyper/space-library.js`, the phone in `mobile/backend/lib/space-library.mjs` and
+`vault-apps.mjs`. Every record is inline JSON.
+
+| Path (in the Space Library) | Payload |
+|------|--------------|
+| `/index.json` | `{ type: 'nomad/space', name, icon, color, createdAt }` |
+| `/drives.json` | `{ drives: [...] }`, the Space's Drive Registry (§5) |
+| `/bookmarks/<slug>.json` | a bookmark, as in §5 |
+| `/reader/follows/<host>.json` | a follow, as `/.vault/reader/<space>/follows/` (§1.2) |
+| `/notes/<id>.json` | a Note, as `/.vault/space-lib/<space>/notes/` (§1.2) |
+| `/names/<name>.json` | a name, as `/.vault/space-lib/<space>/names/` (§1.3) |
+| `/.space/members/<memberId>.json` | `{ type: 'nomad/space-member', memberId, name, role, profileUrl?, addedBy, addedAt, updatedAt, writers? }` |
+| `/.space/writers/<driveKey>/<writerKey>.json` | `{ type: 'nomad/space-writer', drive, writerKey, memberId, device, kind: 'editor'\|'request', note?, requestedAt, grantedBy?, grantedAt? }` |
+
+- **The Vault's Space record** gets `library` (the Space Library key), `role` (`owner`, `editor`,
+  `viewer`), `memberId`, `confirmed` (this person's Devices have seen their member record) and
+  `removed`. Each of the person's Devices then reads the Space's feeds, Notes, Names, Bookmarks and
+  Drive Registry from the Space Library instead of the Vault and the Root Drive. Read marks stay in
+  the Vault.
+- **Writers.** An owner's and an editor's Devices are Writers of the Space Library; a viewer's aren't.
+  A person's other Device asks for its key with a Vault Writer grant (§1.1). A writing Device lists its
+  key in its member record's `writers`, so an owner can remove all of a member's keys.
+- **Joining** uses blind-pairing (§2) on the Space Library's discovery key, on the same
+  `BlindPairing` instance as Device pairing. The candidate's `userData` is `{ memberId, name,
+  writerKey, profileUrl? }`; the owner's confirm hands back the Space Library key.
+- **A viewer's ask** for one Drive goes over the Protomux channel `nomad/space-control`, keyed by the
+  Space Library, as JSON `{ type: 'access-request', grant }`; a Device that writes the Space Library keeps it as
+  a `request` record.
 
 ## 2. Pairing (blind-pairing)
 

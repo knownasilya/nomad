@@ -40,6 +40,7 @@ export interface Spaces {
   activeSpaceId: string
   activeSpace: Space
   vaultKeys: string[] // rootDriveKeys present in the Vault (i.e. shared across devices)
+  peopleKeys: string[] // rootDriveKeys of the Spaces shared with other people (ADR-0029)
   ready: boolean
   setActive: (id: string) => void
   createSpace: (opts: { name: string; icon?: string; color?: string }) => Promise<Space | null>
@@ -58,6 +59,7 @@ export function useSpaces (backend: Backend): Spaces {
   const [spaces, setSpaces] = useState<Space[]>([])
   const [activeSpaceId, setActiveSpaceId] = useState<string>(PERSONAL_ID)
   const [vaultKeys, setVaultKeys] = useState<string[]>([])
+  const [peopleKeys, setPeopleKeys] = useState<string[]>([])
   const [ready, setReady] = useState(false)
 
   const spacesRef = useRef(spaces)
@@ -83,6 +85,7 @@ export function useSpaces (backend: Backend): Spaces {
       if (!v.hasVault || v.opening || !v.spaces) return
       const keys = v.spaces.filter((sp) => sp.rootDriveKey && !sp.movedTo).map((sp) => sp.rootDriveKey)
       setVaultKeys(keys)
+      setPeopleKeys(v.spaces.filter((sp) => sp.rootDriveKey && sp.library && !sp.movedTo && !sp.removed).map((sp) => sp.rootDriveKey))
       if (!keys.length) return
       const vaultSpaces = v.spaces
       const { toPublish, dropped } = mergeVaultSpaces(spacesRef.current, vaultSpaces)
@@ -264,6 +267,7 @@ export function useSpaces (backend: Backend): Spaces {
   // the caller can ask whether to also remove their local copies from this device.
   const leaveVault = useCallback((): Space[] => {
     setVaultKeys([])
+    setPeopleKeys([])
     const fromVault = spacesRef.current.filter((s) => s.source === 'vault')
     if (fromVault.length) {
       setSpaces((prev) => {
@@ -283,6 +287,7 @@ export function useSpaces (backend: Backend): Spaces {
     activeSpaceId,
     activeSpace,
     vaultKeys,
+    peopleKeys,
     ready,
     setActive,
     createSpace,

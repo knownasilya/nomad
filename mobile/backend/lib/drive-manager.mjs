@@ -55,6 +55,9 @@ export default class DriveManager {
     this.swarm.on('connection', (conn) => this.store.replicate(conn))
     this.drives = new Map() // cacheKey -> { drive, discovery, reader, close, refs }
     this.opening = new Map() // cacheKey -> Promise<entry> for opens still in flight
+    // keyHex -> namespace for an Autobase this phone joined with a writer key it minted before it
+    // knew the key (a shared Space's Library, ADR-0029). Opened there by key, so that key writes.
+    this.joinedNs = new Map()
   }
 
   get peers () {
@@ -187,7 +190,8 @@ export default class DriveManager {
 
   async _openAutobase (key, ck, onStatus, ns) {
     // ns => reopen a drive we own (writable); otherwise read-only by key.
-    const base = ns ? openAutobaseDrive(this.store.namespace(ns), null) : openAutobaseDrive(this.store.namespace(ck), key)
+    const joined = !ns && this.joinedNs.get(b4a.toString(key, 'hex'))
+    const base = ns ? openAutobaseDrive(this.store.namespace(ns), null) : openAutobaseDrive(this.store.namespace(joined || ck), key)
     await base.ready()
     // Linearise whatever is already in the LOCAL corestore — fast, no network.
     try { await base.update() } catch {}

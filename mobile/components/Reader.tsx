@@ -135,7 +135,7 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
   }
 
   const unsubscribe = (f: FeedLoad) => {
-    Alert.alert('Unsubscribe?', `Stop following ${f.title} on all your devices?`, [
+    Alert.alert('Unsubscribe?', state?.shared ? `Stop following ${f.title} for everyone in this Space?` : `Stop following ${f.title} on all your devices?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Unsubscribe',
@@ -182,7 +182,7 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
                     active={filter === f.url}
                     error={!!f.error}
                     onPress={() => setFilter(f.url)}
-                    onLongPress={() => unsubscribe(f)}
+                    onLongPress={state.canFollow === false ? undefined : () => unsubscribe(f)}
                   />
                 ))}
               </ScrollView>
@@ -220,6 +220,9 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
                 <Text style={s.empty}>No posts yet.</Text>
               )}
 
+              {state.canFollow === false ? (
+                <Text style={s.hint}>This Space is shared, and you can view it. People who can edit it choose its feeds.</Text>
+              ) : (
               <View style={s.addCard}>
                 <Text style={s.addLabel}>Add a feed</Text>
                 <View style={s.addRow}>
@@ -241,6 +244,7 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
                 </View>
                 {feedList.length > 0 && <Text style={s.addHint}>Long-press a feed’s name to unsubscribe.</Text>}
               </View>
+              )}
             </ScrollView>
           </>
         )}

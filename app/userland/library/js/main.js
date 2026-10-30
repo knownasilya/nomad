@@ -12,6 +12,7 @@ import './views/listings.js';
 import './views/names.js';
 import './views/mods.js';
 import './views/jobs.js';
+import './views/sharing.js';
 import './views/bookmarks.js';
 import './views/contacts.js';
 import './views/history.js';
@@ -76,7 +77,7 @@ export class LibraryApp extends LitElement {
     }
 
     await this.requestUpdate();
-    this.shadowRoot.querySelector('[loadable]').load();
+    this.shadowRoot.querySelector('[loadable]')?.load();
   }
 
   // rendering
@@ -141,6 +142,11 @@ export class LibraryApp extends LitElement {
                 <span class="label">Jobs</span>`
             )}
             ${pageNav(
+              'sharing',
+              html`<span class="fas fa-fw fa-user-friends"></span>
+                <span class="label">Sharing</span>`
+            )}
+            ${pageNav(
               'bookmarks',
               html`<span class="far fa-fw fa-star"></span>
                 <span class="label">Bookmarks</span>`
@@ -184,6 +190,9 @@ export class LibraryApp extends LitElement {
             : ''}
           ${this.view === 'jobs'
             ? html`<jobs-view class="full-size" .filter=${this.filter}></jobs-view>`
+            : ''}
+          ${this.view === 'sharing'
+            ? html`<sharing-view class="full-size"></sharing-view>`
             : ''}
           ${this.view === 'bookmarks'
             ? html`

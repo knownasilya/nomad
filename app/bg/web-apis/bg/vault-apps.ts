@@ -19,6 +19,7 @@ import fsAPI from './fs';
 import * as apps from '../../../../shared/vault-apps.mjs';
 import { findWebContentsParentWindow } from '../../lib/electron';
 import * as tabManager from '../../ui/tabs/manager';
+import * as spaceLibrary from '../../hyper/space-library';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'vault-apps' });
 
@@ -68,10 +69,13 @@ async function copyLegacy(ctx, space) {
   const urls = (await readLegacy(ctx, LEGACY_FOLLOWS))?.urls || [];
   const read = (await readLegacy(ctx, LEGACY_READ))?.read || [];
   if (!urls.length && !read.length) return; // nothing to bring; don't make a Vault for it
-  const have = apps.followUrls(await vault.listAppRecords(apps.followsPrefix(space)));
+  const store = await spaceLibrary.records(space, 'follows');
+  const have = apps.followUrls(await store.list());
   const follows = apps.followUrls(urls.map((url) => ({ url })));
-  for (const url of follows) {
-    if (!have.includes(url)) await vault.putAppRecord(apps.followPath(space, url), apps.followRecord(url));
+  if (store.writable) {
+    for (const url of follows) {
+      if (!have.includes(url)) await store.put(followFile(space, url), apps.followRecord(url));
+    }
   }
   if (read.length) {
     const current = (await vault.readAppRecord(apps.readPath(space)))?.read || [];
@@ -119,21 +123,34 @@ export async function saveRead(ctx, add = [], loaded = {}) {
 // The same, for a Space named by its key: the AI (ai-vault.ts) may run a turn for another Device,
 // with no page here to name the Space.
 
-// { follows: [feedUrl], read: [postUrl] }
+// A follow record's file name under the Space's feeds. Throws for a non-hyper address.
+function followFile(space, url) {
+  const path = apps.followPath(space, url);
+  return path.slice(apps.followsPrefix(space).length);
+}
+
+// { follows: [feedUrl], read: [postUrl], shared, canFollow }. A shared Space's feeds are in its
+// Space Library (ADR-0029), so `canFollow` is false for a person who can only view it. Read marks
+// are always the user's own, in the Vault.
 export async function readerOf(space) {
+  const store = await spaceLibrary.records(space, 'follows');
   return {
-    follows: apps.followUrls(await vault.listAppRecords(apps.followsPrefix(space))),
+    follows: apps.followUrls(await store.list()),
     read: (await vault.readAppRecord(apps.readPath(space)))?.read || [],
+    shared: store.shared,
+    canFollow: store.writable,
   };
 }
 
 export async function followIn(space, url) {
-  const path = apps.followPath(space, url); // throws for a non-hyper address
-  if (!(await vault.readAppRecord(path))) await vault.putAppRecord(path, apps.followRecord(url));
+  const name = followFile(space, url); // throws for a non-hyper address
+  const store = await spaceLibrary.records(space, 'follows');
+  if (!(await store.get(name))) await store.put(name, apps.followRecord(url));
 }
 
 export async function unfollowIn(space, url) {
-  if (apps.driveRoot(url)) await vault.delAppRecord(apps.followPath(space, url));
+  if (!apps.driveRoot(url)) return;
+  await (await spaceLibrary.records(space, 'follows')).del(followFile(space, url));
 }
 
 export async function saveReadIn(space, add = [], loaded = {}) {
@@ -151,8 +168,30 @@ export async function saveReadIn(space, add = [], loaded = {}) {
 const withSpace = (space) => (note) => ({ ...note, space: space || null });
 const stored = ({ space, ...note }: any) => note;
 
+// A Space's Notes are in its Space Library when it is shared (ADR-0029), else in the Vault. The
+// user's own are always in the Vault.
+function noteFile(id) {
+  apps.notePath(id); // validates the id
+  return id + '.json';
+}
+
 async function notesIn(space = null) {
-  return (await vault.listAppRecords(apps.notesPrefix(space))).filter(apps.isNote).map(withSpace(space));
+  const list = space ? await (await spaceLibrary.records(space, 'notes')).list() : await vault.listAppRecords(apps.notesPrefix());
+  return list.filter(apps.isNote).map(withSpace(space));
+}
+
+async function getNote(space, id) {
+  return space ? (await spaceLibrary.records(space, 'notes')).get(noteFile(id)) : vault.readAppRecord(apps.notePath(id));
+}
+
+async function putNote(space, note) {
+  if (space) return (await spaceLibrary.records(space, 'notes')).put(noteFile(note.id), note);
+  return vault.putAppRecord(apps.notePath(note.id), note);
+}
+
+async function delNote(space, id) {
+  if (space) return (await spaceLibrary.records(space, 'notes')).del(noteFile(id));
+  return vault.delAppRecord(apps.notePath(id));
 }
 
 // The Notes a Space sees, newest first: the user's, and the Space's own when `space` is given.
@@ -170,7 +209,7 @@ async function findStored(id, space) {
   const own = await vault.readAppRecord(apps.notePath(id));
   if (own) return { space: null, prev: own };
   if (space) {
-    const theirs = await vault.readAppRecord(apps.notePath(id, space));
+    const theirs = await getNote(space, id);
     if (theirs) return { space, prev: theirs };
   }
   return { space: null, prev: null };
@@ -178,9 +217,22 @@ async function findStored(id, space) {
 
 // { notes: [note], space, spaceName, writable, linked }, newest first. `space` is the caller's
 // Space key (null outside a Space), and `spaceName` its name, for the Notes page's sections.
+// In a shared Space, `shared` is true, `canWriteSpace` says whether this person can write its Notes,
+// and `members` how many people see them.
 export async function listNotes(ctx = null) {
   const space = await spaceOrNull(ctx);
-  return { notes: await allNotes(space), space, spaceName: spaceNameOf(space), ...(await vaultInfo()) };
+  const share = space ? await spaceLibrary.info(space).catch(() => ({ shared: false })) : { shared: false };
+  const store = share.shared ? await spaceLibrary.records(space, 'notes') : null;
+  const members = share.shared ? (await spaceLibrary.members(space).catch(() => [])).length : 0;
+  return {
+    notes: await allNotes(space),
+    space,
+    spaceName: spaceNameOf(space),
+    shared: !!share.shared,
+    canWriteSpace: store ? store.writable : true,
+    members,
+    ...(await vaultInfo()),
+  };
 }
 
 export function spaceNameOf(space) {
@@ -209,14 +261,14 @@ export async function saveNote(
   const found = id ? await findStored(id, callerSpace) : { space: null, prev: null };
   const where = found.prev ? found.space : inSpace && callerSpace ? callerSpace : null;
   const { note, write } = apps.planNoteSave({ id, body, baseUpdatedAt }, found.prev);
-  if (write) await vault.putAppRecord(apps.notePath(note.id, where), note);
+  if (write) await putNote(where, note);
   if (note.conflictOf && note.conflictOf === id) logger.info('Saved a note conflict copy', { id, copy: note.id });
   return withSpace(where)(note);
 }
 
 export async function deleteNote(ctx, id) {
   const { space, prev } = await findStored(id, await spaceOrNull(ctx)); // notePath validates the id
-  if (prev) await vault.delAppRecord(apps.notePath(id, space));
+  if (prev) await delNote(space, id);
 }
 
 // Move a Note into the caller's Space (`inSpace` true) or out to the user's Notes. Returns it.
@@ -227,8 +279,8 @@ export async function moveNote(ctx, { id, inSpace }: { id?: string; inSpace?: bo
   const to = inSpace ? callerSpace : null;
   if (inSpace && !to) throw new Error('This page has no Space');
   if (to === space) return withSpace(space)(prev);
-  await vault.putAppRecord(apps.notePath(id, to), prev);
-  await vault.delAppRecord(apps.notePath(id, space));
+  await putNote(to, prev);
+  await delNote(space, id);
   logger.info('Moved a note', { id, toSpace: !!to });
   return withSpace(to)(prev);
 }
@@ -239,7 +291,7 @@ export async function moveNote(ctx, { id, inSpace }: { id?: string; inSpace?: bo
 export async function renameNoteLinks(ctx, { id, from, to }: { id?: string; from?: string; to?: string } = {}) {
   const changes = apps.linkRenames(await allNotes(await spaceOrNull(ctx)), id, from, to);
   for (const { note, body } of changes) {
-    await vault.putAppRecord(apps.notePath(note.id, note.space), apps.makeNote({ id: note.id, body }, stored(note)));
+    await putNote(note.space, apps.makeNote({ id: note.id, body }, stored(note)));
   }
   if (changes.length) logger.info('Renamed note links', { id, notes: changes.length });
   return changes.length;
@@ -271,11 +323,14 @@ export function watch() {
     changed();
   };
   vault.events.on('changed', onSwitch);
+  // A shared Space's Notes and feeds are in its Space Library (ADR-0029).
+  spaceLibrary.events.on('changed', changed);
   attach();
   emitter.close = () => {
     emitter.closed = true;
     clearTimeout(timer);
     vault.events.removeListener('changed', onSwitch);
+    spaceLibrary.events.removeListener('changed', changed);
     if (base) base.removeListener('update', changed);
   };
   return emitter;

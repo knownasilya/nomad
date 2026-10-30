@@ -30,6 +30,7 @@ class SiteInfoApp extends LitElement {
       names: { type: Array }, // the user's names for this page (nomad.vault.namesForUrl)
       naming: { type: Object }, // { value, previous, inSpace, error } while the name field is open
       edit: { type: Object }, // nomad.vault.driveEditStatus for a Drive this Device can't write
+      askingEdit: { type: Boolean }, // a viewer of a shared Space is typing a note to ask to edit
     };
   }
 
@@ -330,9 +331,11 @@ class SiteInfoApp extends LitElement {
   }
 
   // Editing a Drive one of the user's other Devices can write: ask them to add this Device's key.
+  // In a shared Space (ADR-0029), a viewer asks the people who can edit the drive instead.
   renderEdit() {
     const st = this.edit;
     if (!st || st.writable || this.info?.writable) return '';
+    if (st.space && !st.legacy) return this.renderSpaceEdit(st);
     if (st.request?.granted) {
       return html`
         <div class="name-row">
@@ -372,9 +375,73 @@ class SiteInfoApp extends LitElement {
     `;
   }
 
-  async onRequestEdit() {
+  renderSpaceEdit(st) {
+    const sp = st.space;
+    const viewer = sp.ask === 'request';
+    if (sp.state?.granted || st.request?.granted) {
+      return html`
+        <div class="name-row">
+          <span class="fas fa-fw fa-check"></span>
+          <span class="name-hint">Allowed. You can edit once the drive syncs.</span>
+        </div>
+      `;
+    }
+    if (sp.state?.pending || st.request?.pending) {
+      return html`
+        <div class="name-row">
+          <span class="fas fa-fw fa-hourglass-half"></span>
+          <span class="name-hint">
+            ${viewer
+              ? `Asked ${sp.name}. Someone who can edit this drive allows it when they’re on.`
+              : 'Waiting for a device that can edit this drive to add this one.'}
+          </span>
+        </div>
+      `;
+    }
+    if (!st.canAsk) return '';
+    if (this.askingEdit) {
+      return html`
+        <form class="name-row" @submit=${this.onSubmitAskEdit}>
+          <input
+            class="name-input ask-note"
+            placeholder="Why? (optional)"
+            aria-label="Note for the people who can edit"
+            maxlength="200"
+          />
+          <button type="submit" class="primary">Ask</button>
+          <button type="button" @click=${() => (this.askingEdit = false)}>Cancel</button>
+        </form>
+      `;
+    }
+    return html`
+      <div class="name-row">
+        <button @click=${viewer ? this.onStartAskEdit : this.onRequestEdit}>
+          <span class="fas fa-fw fa-pen"></span> ${viewer ? 'Ask to edit' : 'Edit on this device'}
+        </button>
+        <span class="name-hint">
+          ${viewer
+            ? `You can view ${sp.name}. Ask to edit just this drive.`
+            : `You can edit ${sp.name}, so this device is added on its own.`}
+        </span>
+      </div>
+    `;
+  }
+
+  onStartAskEdit() {
+    this.askingEdit = true;
+    this.updateComplete.then(() => this.shadowRoot.querySelector('.ask-note')?.focus());
+  }
+
+  async onSubmitAskEdit(e) {
+    e.preventDefault();
+    const note = this.shadowRoot.querySelector('.ask-note')?.value?.trim() || '';
+    this.askingEdit = false;
+    await this.onRequestEdit(note);
+  }
+
+  async onRequestEdit(note = '') {
     try {
-      this.edit = await nomad.vault.requestDriveEdit(this.url);
+      this.edit = await nomad.vault.requestDriveEdit(this.url, { note: typeof note === 'string' ? note : '' });
     } catch (err) {
       toast.create(err.message || String(err), 'error');
     }

@@ -127,6 +127,11 @@ ${toastCSS}
     font-size: 12px;
     font-family: var(--code-font, monospace);
   }
+  .name-input.ask-note {
+    flex: 1;
+    min-width: 140px;
+    font-family: inherit;
+  }
   .name-error {
     flex-basis: 100%;
     color: #cc1010;

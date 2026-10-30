@@ -2,7 +2,8 @@
 
 **Status: Proposed.** 2026-10-30. Builds on ADR-0006 (the Vault), ADR-0017 (Reader and Notes in the
 Vault), ADR-0018 (Names) and ADR-0026 (per-drive writer keys and Writer grants). Spike S1 passed
-(below); S2 is still open.
+(below); S2 is still open. All seven rollout steps are built (see Rollout and "Built", below); S2
+has not been run against a live swarm yet.
 
 The user wants a Space to have its own library: its own Drives, Contacts, Bookmarks, Reader feeds,
 Notes and Names, next to the ones that belong to the user in every Space. Then they want to share a
@@ -208,6 +209,39 @@ The phone reads and writes the same records through its backend (`RPC_APPS` gain
 argument for Notes and Names), shows the Space and All Spaces sections, and can join a Shared Space
 with a code. Sharing from the phone (being an owner Device that approves) comes after desktop.
 
+### Built (amendment, 2026-10-30)
+
+What the build settled that the sections above left open:
+
+- **The Personal Space can't be shared.** It holds the user's own things (desktop keeps the user's
+  Bookmarks in its Root Drive), so **Share** is offered only for other Spaces.
+- **Where sharing lives.** My Library → **Sharing** (`app/userland/library/js/views/sharing.js`)
+  is the share dialog: what will be shared, Share, invites (a code with **Can view** or **Can
+  edit**), people waiting to join, viewers' asks, each member's role, Remove and Leave. **Join a
+  shared Space** is on the same page on desktop and in the phone's Space switcher.
+- **Code.** `shared/space-library.mjs` (rules, `tests/unit/space-library.test.js`),
+  `app/bg/hyper/space-library.js` (desktop: open, share, invites, members, Space Writer grants,
+  `nomad/space-control`), `mobile/backend/lib/space-library.mjs` (phone: open, join, attach). Code
+  that reads a Space's library asks `spaceLibrary.records(space, kind)` on desktop, and
+  `placeOf(base, space, kind)` in the phone's `vault-apps.mjs`; both return the Vault for an
+  unshared Space and the Space Library for a shared one. The Drive Registry goes through
+  `_registryDrive(space)` in `bg/filesystem/index.js`.
+- **The Space record** also gets `confirmed` (this person's Devices have seen their member record,
+  so its absence later means they were removed) and `removed`.
+- **Each writing Device lists its key** on its member record (`writers`), so an owner can take every
+  one of a member's keys off when they change the member's role or remove them.
+- **A viewer's ask** for one Drive is kept in memory and re-sent to each peer while the app runs. It
+  is not kept across a restart; the viewer asks again from the site-info panel.
+- **The phone** reads and writes a Shared Space's feeds, Notes, Names and Drive Registry through its
+  Library, and joins with a code (it makes the Space and its Root Drive, then writes `library`,
+  `role` and `memberId` on the Vault record). A phone that can edit asks for its own Library writer
+  key with a Vault Writer grant (§5), which a desktop Device that writes the Library answers. The
+  phone doesn't grant keys itself yet, so a Space joined only on the phone becomes editable on the
+  user's computer once the owner's or another editor's Device is online to grant it through the
+  Space (§6), not through the phone.
+- **Not built yet:** **Make a new copy without them** (§8), and approving or inviting from the
+  phone.
+
 ## Considered options
 
 - **Share the Root Drive.** It already holds the Drive Registry and Bookmarks. Rejected: it is the
@@ -266,16 +300,20 @@ with a code. Sharing from the phone (being an owner Device that approves) comes 
 ## Rollout
 
 1. **Space-only Notes and Names.** The `space-lib` Vault records, the two sections in My Library →
-   Names and in Notes, and moving an item. Desktop first; the phone lists and edits only the
-   user's own until its follow-up.
+   Names and in Notes, and moving an item. Desktop first, then the phone: `RPC_APPS` sends the
+   active Space for Notes and Names (`mobile/backend/lib/vault-apps.mjs`), Notes shows the
+   Space's section and a pin in the editor to move a note, and the name sheet has **Only in
+   <Space>**.
 2. **Desktop per-drive writer keys.** The first-open rule from S1 in `autobases.js`, then
    ADR-0026's Writer grants on desktop. *Landed:* `_storeFor` in `autobases.js` (the Vault opens
    on the root store, `VAULT_OPEN`), `shared/drive-writers.mjs`, `app/bg/hyper/drive-writers.js`
    (ask, grant, revoke, and Space Root Drives asked for on their own), and **Edit on this device**
    in the site-info panel.
 3. **Share a Space.** The Space Library, `spaceLibrary(space)`, the move, invites and approval, and
-   the share dialog (members, roles, pending requests) from the Space menu.
+   the share dialog (members, roles, pending requests). *Landed:* My Library → Sharing (see Built).
 4. **Join a Shared Space.** Joining with a code, a member's other Devices, editor Drive grants.
-5. **Access requests.** `nomad/space-control`, the request records, approve and deny.
-6. **The phone** joins and edits Shared Spaces.
-7. **Docs.** The nomad.dev help page.
+   *Landed.*
+5. **Access requests.** `nomad/space-control`, the request records, approve and deny. *Landed:*
+   **Ask to edit** in the site-info panel, answered in My Library → Sharing.
+6. **The phone** joins and edits Shared Spaces. *Landed*, with the limits under Built.
+7. **Docs.** The nomad.dev help page. *Landed:* `/docs/api/advanced/sharing-a-space/` on nomad.dev.

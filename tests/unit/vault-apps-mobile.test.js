@@ -77,7 +77,7 @@ async function withDevices (fn) {
   await until(async () => { await phoneBase.update(); return phoneBase.writable })
 
   try {
-    return await fn({ computer, phone: phoneBase })
+    return await fn({ computer, phone: phoneBase, storeA, storeB })
   } finally {
     await phoneBase.close(); await computer.close()
     sa.destroy(); sb.destroy()
@@ -269,6 +269,181 @@ describe('phone Names over a shared Vault (ADR-0018)', () => {
       expect(await readJson(computer, jl.runPath(job.id, run.id))).toBe(null)
       expect(await readJson(computer, jl.requestPath(job.id))).toBe(null)
       expect((await phone.listJobs(base)).jobs).toEqual([])
+    })
+  }, 30000)
+})
+
+describe('phone Space-only Notes and Names over a shared Vault (ADR-0029)', () => {
+  const DRIVE = `hyper://${'b'.repeat(64)}/`
+  const OTHER = 'd'.repeat(64) // another Space
+
+  it('reads the Space’s notes the computer kept, and only in that Space', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      const own = apps.makeNote({ id: apps.newNoteId(), body: 'Mine' })
+      const theirs = apps.makeNote({ id: apps.newNoteId(), body: 'Team plan' })
+      await computer.append(putJson(apps.notePath(own.id), own))
+      await computer.append(putJson(apps.notePath(theirs.id, SPACE), theirs))
+      await computer.update()
+
+      await until(async () => (await phone.listNotes(base, SPACE)).notes.length === 2)
+      const list = await phone.listNotes(base, SPACE)
+      expect(list.space).toBe(SPACE)
+      expect(list.notes.find((n) => n.id === theirs.id).space).toBe(SPACE)
+      expect(list.notes.find((n) => n.id === own.id).space).toBe(null)
+      expect((await phone.listNotes(base, OTHER)).notes.map((n) => n.id)).toEqual([own.id])
+      expect((await phone.listNotes(base)).notes.map((n) => n.id)).toEqual([own.id])
+    })
+  }, 30000)
+
+  it('writes, moves and deletes a Space note the computer can read', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      const saved = await phone.saveNote(base, { body: 'Only here', inSpace: true, space: SPACE })
+      expect(saved.space).toBe(SPACE)
+      await until(async () => !!(await readJson(computer, apps.notePath(saved.id, SPACE))))
+      expect(await readJson(computer, apps.notePath(saved.id))).toBe(null)
+
+      // An edit stays where the note is, even without inSpace.
+      const edited = await phone.saveNote(base, { id: saved.id, body: 'Only here, edited', baseUpdatedAt: saved.updatedAt, space: SPACE })
+      expect(edited.space).toBe(SPACE)
+
+      const out = await phone.moveNote(base, { id: saved.id, inSpace: false, space: SPACE })
+      expect(out.space).toBe(null)
+      await until(async () => !!(await readJson(computer, apps.notePath(saved.id))))
+      await until(async () => !(await readJson(computer, apps.notePath(saved.id, SPACE))))
+
+      await phone.moveNote(base, { id: saved.id, inSpace: true, space: SPACE })
+      await phone.deleteNote(base, saved.id, SPACE)
+      await until(async () => !(await readJson(computer, apps.notePath(saved.id, SPACE))))
+      expect((await phone.listNotes(base, SPACE)).notes).toEqual([])
+      await expect(phone.moveNote(base, { id: saved.id, inSpace: true, space: SPACE })).rejects.toThrow(/No note/)
+    })
+  }, 30000)
+
+  it('renames links across the user’s and the Space’s notes', async () => {
+    await withDevices(async ({ phone: base }) => {
+      const seeds = await phone.saveNote(base, { body: '# Seed order' })
+      await phone.saveNote(base, { body: 'Team\nSee [[Seed order]]', inSpace: true, space: SPACE })
+      const renamed = await phone.saveNote(base, { id: seeds.id, body: '# Seeds 2027', baseUpdatedAt: seeds.updatedAt })
+      expect(await phone.renameNoteLinks(base, { id: renamed.id, from: 'Seed order', to: 'Seeds 2027', space: SPACE })).toBe(1)
+      const team = (await phone.listNotes(base, SPACE)).notes.find((n) => n.title === 'Team')
+      expect(team).toMatchObject({ body: 'Team\nSee [[Seeds 2027]]', space: SPACE })
+    })
+  }, 30000)
+
+  it('resolves a Space’s names in that Space only, the user’s own first', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      await computer.append(putJson(names.namePath('wiki', SPACE), names.makeNameRecord({ name: 'wiki', url: DRIVE, title: 'Team wiki' })))
+      await computer.append(putJson(names.namePath('home', SPACE), names.makeNameRecord({ name: 'home', url: 'https://team.example/', title: 'Team' })))
+      await computer.append(putJson(names.namePath('home'), names.makeNameRecord({ name: 'home', url: 'https://me.example/', title: 'Me' })))
+      await computer.update()
+      await until(async () => (await phone.listNames(base, SPACE)).names.length === 3)
+
+      expect(await phone.resolveName(base, 'wiki', SPACE)).toBe(DRIVE)
+      expect(await phone.resolveName(base, 'wiki', OTHER)).toBe(null)
+      expect(await phone.resolveName(base, 'wiki')).toBe(null)
+      expect(await phone.resolveName(base, 'home', SPACE)).toBe('https://me.example/')
+
+      const listed = (await phone.listNames(base, SPACE)).names
+      expect(listed.find((r) => r.name === 'home' && r.space === SPACE).hidden).toBe(true)
+      expect((await phone.matchNames(base, 'home', 5, SPACE)).map((r) => r.url)).toEqual(['https://me.example/'])
+      expect((await phone.namesForUrl(base, DRIVE, '', SPACE)).approved).toMatchObject({ name: 'wiki', space: SPACE })
+      expect((await phone.namesForUrl(base, DRIVE, '', OTHER)).approved).toBe(null)
+    })
+  }, 30000)
+
+  it('names in the Space, moves a name out, and removes it', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      const rec = await phone.setName(base, { name: 'Wiki', url: DRIVE, title: 'Team wiki', inSpace: true, space: SPACE })
+      expect(rec).toMatchObject({ name: 'wiki', space: SPACE })
+      await until(async () => !!(await readJson(computer, names.namePath('wiki', SPACE))))
+      expect(await readJson(computer, names.namePath('wiki'))).toBe(null)
+
+      // Out to the user's own names, keeping the word.
+      await phone.setName(base, { name: 'wiki', url: DRIVE, title: 'Team wiki', previous: 'wiki', previousInSpace: true, space: SPACE })
+      await until(async () => !(await readJson(computer, names.namePath('wiki', SPACE))))
+      expect(await readJson(computer, names.namePath('wiki'))).toMatchObject({ url: DRIVE })
+
+      await phone.setName(base, { name: 'docs', url: DRIVE, inSpace: true, space: SPACE })
+      await phone.removeName(base, 'docs', { inSpace: true, space: SPACE })
+      await until(async () => !(await readJson(computer, names.namePath('docs', SPACE))))
+      await expect(phone.setName(base, { name: 'x', url: DRIVE, inSpace: true })).rejects.toThrow(/isn’t ready/)
+    })
+  }, 30000)
+})
+
+// A shared Space (ADR-0029): its feeds, Notes and Names are in its Space Library, another Autobase
+// the computer owns. The phone opens it by key and reaches it through useSpaceLibraries, as
+// backend.mjs does with lib/space-library.mjs libraryFor.
+describe('phone in a shared Space (ADR-0029)', () => {
+  const SPACE = 'e'.repeat(64)
+
+  async function withLibrary ({ storeA, storeB }, { editor }, fn) {
+    const owner = new Autobase(storeA.namespace('library'), null, { open, apply, ...AUTOBASE_OPTS })
+    await owner.ready()
+    const lib = new Autobase(storeB.namespace('library'), owner.key, { open, apply, ...AUTOBASE_OPTS })
+    await lib.ready()
+    if (editor) {
+      await owner.append({ addWriter: b4a.toString(lib.local.key, 'hex') })
+      await owner.update()
+      await until(async () => { await lib.update(); return lib.writable })
+    }
+    phone.useSpaceLibraries(async (space) => (space === SPACE ? { base: lib } : null))
+    try {
+      return await fn({ owner, lib })
+    } finally {
+      phone.useSpaceLibraries(null)
+      await lib.close(); await owner.close()
+    }
+  }
+
+  it('reads the Space’s feeds, notes and names from its Library, not the Vault', async () => {
+    await withDevices(async (devices) => {
+      const base = devices.phone
+      await withLibrary(devices, { editor: false }, async ({ owner, lib }) => {
+        const note = apps.makeNote({ id: apps.newNoteId(), body: 'Team plan' })
+        await owner.append(putJson('/notes/' + note.id + '.json', note))
+        await owner.append(putJson('/reader/follows/' + KEY + '.json', apps.followRecord(FEED)))
+        await owner.append(putJson('/names/wiki.json', names.makeNameRecord({ name: 'wiki', url: FEED, title: 'Wiki' })))
+        await owner.update()
+        await until(async () => (await phone.listNotes(base, SPACE)).notes.length === 1)
+
+        const listed = await phone.listNotes(base, SPACE)
+        expect(listed).toMatchObject({ shared: true, canWriteSpace: false })
+        expect(listed.notes[0]).toMatchObject({ id: note.id, space: SPACE })
+        expect(await phone.readerState(base, SPACE)).toMatchObject({ follows: [FEED], shared: true, canFollow: false })
+        expect(await phone.resolveName(base, 'wiki', SPACE)).toBe(FEED)
+
+        // Someone who can only view the Space can't change it, but keeps their own notes.
+        await expect(phone.saveNote(base, { body: 'mine', inSpace: true, space: SPACE })).rejects.toThrow(/can view this Space/)
+        await expect(phone.follow(base, SPACE, `hyper://${'b'.repeat(64)}/`)).rejects.toThrow(/can view this Space/)
+        const own = await phone.saveNote(base, { body: 'Just mine', space: SPACE })
+        expect(own.space).toBe(null)
+        expect(await readJson(lib, '/notes/' + own.id + '.json')).toBe(null)
+      })
+    })
+  }, 30000)
+
+  it('writes a Space note, feed and name into the Library when this person can edit', async () => {
+    await withDevices(async (devices) => {
+      const base = devices.phone
+      await withLibrary(devices, { editor: true }, async ({ owner }) => {
+        const note = await phone.saveNote(base, { body: 'Agenda', inSpace: true, space: SPACE })
+        expect(note.space).toBe(SPACE)
+        await phone.follow(base, SPACE, FEED)
+        await phone.setName(base, { name: 'agenda', url: FEED, inSpace: true, space: SPACE })
+
+        await until(async () => !!(await readJson(owner, '/notes/' + note.id + '.json')))
+        await until(async () => !!(await readJson(owner, '/names/agenda.json')))
+        expect(await readJson(owner, '/reader/follows/' + KEY + '.json')).toMatchObject({ url: FEED })
+        // Nothing of the Space's went to the Vault.
+        expect(await readJson(devices.computer, apps.notePath(note.id, SPACE))).toBe(null)
+        expect(await readJson(devices.computer, apps.followPath(SPACE, FEED))).toBe(null)
+
+        // Moving it out makes it the user's own again, in the Vault.
+        await phone.moveNote(base, { id: note.id, inSpace: false, space: SPACE })
+        await until(async () => !(await readJson(owner, '/notes/' + note.id + '.json')))
+        await until(async () => !!(await readJson(devices.computer, apps.notePath(note.id))))
+      })
     })
   }, 30000)
 })
