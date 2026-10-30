@@ -203,6 +203,28 @@ _Avoid_: tag, search term, meta keyword
 A named user context with its own Root Drive and browser session isolation (separate cookies, localStorage, and Electron partition). The user can have multiple Spaces; one is active at a time. Spaces belong to a Vault.
 _Avoid_: profile, account, identity, workspace
 
+**Shared Space**:
+A Space its owner shared with other people. Its library (Drive Registry, Contacts, Bookmarks, Reader
+feeds, and its own Notes and Names) lives in a Space Library that every Member reads; each Member
+keeps their own Root Drive, read marks and everything else (ADR-0028, proposed).
+_Avoid_: team, group, workspace, shared folder
+
+**Space Library**:
+The Autobase that holds a Shared Space's library. Never browsed, never Listed, and distinct from the
+Root Drive (`hyper://private/`), which is never shared.
+_Avoid_: shared drive, space drive, team drive
+
+**Member**:
+A person in a Shared Space, with a role: owner, can edit (a Writer of the Space Library, and of each
+Drive in the Space on demand) or can view (reads only). Distinct from a Device, which is one of one
+person's installations.
+_Avoid_: collaborator, guest, user, participant
+
+**Space Writer grant**:
+A Space Library record that adds one Member's per-drive writer key to one Drive of the Space. Granted
+without a prompt for an editor, and only on approval for a viewer, which is an **access request**.
+_Avoid_: invite, share
+
 **Vault**:
 The private, identity-level Collaborative Drive that indexes a single user's Spaces (by Root Drive key) and trusted Devices, and holds that user's in-flight Drafts, Reader Follows, and Notes. It is the root of trust for multi-device: every Device the user owns is a Writer of the Vault, and a new Device joins by pairing into it. Because every Device already writes the Vault, it is also where Drafts, Follows, and Notes live, so they sync privately across a user's Devices. Distinct from a Space — the Vault is the parent that ties one user's Spaces and Devices together.
 _Avoid_: account, identity, profile, keyring, sync base
