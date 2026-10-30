@@ -201,6 +201,7 @@ export interface NomadResult { ok: boolean; value?: unknown; error?: string }
 export interface AiChatHandlers {
   onChunk?: (text: string) => void
   onTool?: (event: unknown) => void
+  onReasoning?: (text: string) => void // the model's reasoning, streamed (desktop Providers since this release)
   onPrompt?: (permission: string) => boolean | Promise<boolean> // relayed modifyDrive consent
   onDone?: () => void
   onError?: (message: string) => void
@@ -383,6 +384,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
       armIdle()
       if (msg.kind === 'chunk') h.onChunk?.(msg.text)
       else if (msg.kind === 'tool') h.onTool?.(msg.event)
+      else if (msg.kind === 'reasoning') h.onReasoning?.(msg.text)
       else if (msg.kind === 'prompt') {
         Promise.resolve(h.onPrompt ? h.onPrompt(msg.permission) : false).then((allow) => {
           const r = rpc.request(RPC_AI_PROMPT_RESULT)

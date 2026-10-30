@@ -1,0 +1,997 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "Stack": {
+      "$ref": "#/$defs/Stack"
+    },
+    "Card": {
+      "$ref": "#/$defs/Card"
+    },
+    "CardHeader": {
+      "$ref": "#/$defs/CardHeader"
+    },
+    "Tabs": {
+      "$ref": "#/$defs/Tabs"
+    },
+    "TabItem": {
+      "$ref": "#/$defs/TabItem"
+    },
+    "Separator": {
+      "$ref": "#/$defs/Separator"
+    },
+    "TextContent": {
+      "$ref": "#/$defs/TextContent"
+    },
+    "Callout": {
+      "$ref": "#/$defs/Callout"
+    },
+    "Tag": {
+      "$ref": "#/$defs/Tag"
+    },
+    "TagBlock": {
+      "$ref": "#/$defs/TagBlock"
+    },
+    "Steps": {
+      "$ref": "#/$defs/Steps"
+    },
+    "StepsItem": {
+      "$ref": "#/$defs/StepsItem"
+    },
+    "Stat": {
+      "$ref": "#/$defs/Stat"
+    },
+    "Progress": {
+      "$ref": "#/$defs/Progress"
+    },
+    "Table": {
+      "$ref": "#/$defs/Table"
+    },
+    "Col": {
+      "$ref": "#/$defs/Col"
+    },
+    "BarChart": {
+      "$ref": "#/$defs/BarChart"
+    },
+    "HorizontalBarChart": {
+      "$ref": "#/$defs/HorizontalBarChart"
+    },
+    "LineChart": {
+      "$ref": "#/$defs/LineChart"
+    },
+    "AreaChart": {
+      "$ref": "#/$defs/AreaChart"
+    },
+    "Series": {
+      "$ref": "#/$defs/Series"
+    },
+    "PieChart": {
+      "$ref": "#/$defs/PieChart"
+    },
+    "ScatterChart": {
+      "$ref": "#/$defs/ScatterChart"
+    },
+    "ScatterSeries": {
+      "$ref": "#/$defs/ScatterSeries"
+    },
+    "Point": {
+      "$ref": "#/$defs/Point"
+    },
+    "Map": {
+      "$ref": "#/$defs/Map"
+    },
+    "MapMarker": {
+      "$ref": "#/$defs/MapMarker"
+    },
+    "EntityCard": {
+      "$ref": "#/$defs/EntityCard"
+    },
+    "Field": {
+      "$ref": "#/$defs/Field"
+    },
+    "LinkCard": {
+      "$ref": "#/$defs/LinkCard"
+    },
+    "ProductCard": {
+      "$ref": "#/$defs/ProductCard"
+    },
+    "EventCard": {
+      "$ref": "#/$defs/EventCard"
+    },
+    "QuoteCard": {
+      "$ref": "#/$defs/QuoteCard"
+    },
+    "ProsCons": {
+      "$ref": "#/$defs/ProsCons"
+    },
+    "Timeline": {
+      "$ref": "#/$defs/Timeline"
+    },
+    "TimelineItem": {
+      "$ref": "#/$defs/TimelineItem"
+    },
+    "CardGrid": {
+      "$ref": "#/$defs/CardGrid"
+    },
+    "Button": {
+      "$ref": "#/$defs/Button"
+    },
+    "Buttons": {
+      "$ref": "#/$defs/Buttons"
+    }
+  },
+  "required": [
+    "Stack",
+    "Card",
+    "CardHeader",
+    "Tabs",
+    "TabItem",
+    "Separator",
+    "TextContent",
+    "Callout",
+    "Tag",
+    "TagBlock",
+    "Steps",
+    "StepsItem",
+    "Stat",
+    "Progress",
+    "Table",
+    "Col",
+    "BarChart",
+    "HorizontalBarChart",
+    "LineChart",
+    "AreaChart",
+    "Series",
+    "PieChart",
+    "ScatterChart",
+    "ScatterSeries",
+    "Point",
+    "Map",
+    "MapMarker",
+    "EntityCard",
+    "Field",
+    "LinkCard",
+    "ProductCard",
+    "EventCard",
+    "QuoteCard",
+    "ProsCons",
+    "Timeline",
+    "TimelineItem",
+    "CardGrid",
+    "Button",
+    "Buttons"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "Stack": {
+      "type": "object",
+      "properties": {
+        "children": {
+          "type": "array",
+          "items": {}
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["row", "column"]
+        },
+        "gap": {
+          "type": "string",
+          "enum": ["none", "xs", "s", "m", "l", "xl"]
+        },
+        "align": {
+          "type": "string",
+          "enum": ["start", "center", "end", "stretch"]
+        },
+        "wrap": {
+          "type": "boolean"
+        }
+      },
+      "required": ["children"],
+      "additionalProperties": false,
+      "description": "Lays out children in a column (default) or a row"
+    },
+    "Card": {
+      "type": "object",
+      "properties": {
+        "children": {
+          "type": "array",
+          "items": {}
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["card", "sunk", "clear"]
+        }
+      },
+      "required": ["children"],
+      "additionalProperties": false,
+      "description": "A bordered box that groups related content"
+    },
+    "CardHeader": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Title and optional subtitle at the top of a Card"
+    },
+    "Tabs": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TabItem"
+          }
+        }
+      },
+      "required": ["items"],
+      "additionalProperties": false,
+      "description": "Alternative views of the same subject, one visible at a time"
+    },
+    "TabItem": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "trigger": {
+          "type": "string"
+        },
+        "content": {
+          "type": "array",
+          "items": {}
+        }
+      },
+      "required": ["value", "trigger", "content"],
+      "additionalProperties": false,
+      "description": "value is a unique id, trigger is the tab label"
+    },
+    "Separator": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "description": "A horizontal rule between sections"
+    },
+    "TextContent": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "size": {
+          "type": "string",
+          "enum": ["small", "default", "large", "small-heavy", "large-heavy"]
+        }
+      },
+      "required": ["text"],
+      "additionalProperties": false,
+      "description": "A paragraph or a heading of plain text"
+    },
+    "Callout": {
+      "type": "object",
+      "properties": {
+        "variant": {
+          "type": "string",
+          "enum": ["info", "warning", "error", "success", "neutral"]
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": ["variant", "title", "description"],
+      "additionalProperties": false,
+      "description": "A colored notice with a title and a description"
+    },
+    "Tag": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["neutral", "info", "success", "warning", "danger"]
+        }
+      },
+      "required": ["text"],
+      "additionalProperties": false,
+      "description": "A small colored badge"
+    },
+    "TagBlock": {
+      "type": "object",
+      "properties": {
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["tags"],
+      "additionalProperties": false,
+      "description": "A row of neutral tags"
+    },
+    "Steps": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StepsItem"
+          }
+        }
+      },
+      "required": ["items"],
+      "additionalProperties": false,
+      "description": "A numbered step-by-step guide"
+    },
+    "StepsItem": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        }
+      },
+      "required": ["title", "details"],
+      "additionalProperties": false,
+      "description": "One numbered step"
+    },
+    "Stat": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "change": {
+          "type": "string"
+        },
+        "trend": {
+          "type": "string",
+          "enum": ["up", "down", "flat"]
+        },
+        "caption": {
+          "type": "string"
+        }
+      },
+      "required": ["label", "value"],
+      "additionalProperties": false,
+      "description": "A headline number (KPI). change is a short delta like \"+12%\"; trend colors it"
+    },
+    "Progress": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        }
+      },
+      "required": ["label", "value"],
+      "additionalProperties": false,
+      "description": "A labelled bar showing value out of max (default 100)"
+    },
+    "Table": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Col"
+          }
+        }
+      },
+      "required": ["columns"],
+      "additionalProperties": false,
+      "description": "A table, column by column. Every Col has one value per row"
+    },
+    "Col": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "data": {
+          "type": "array",
+          "items": {}
+        },
+        "type": {
+          "type": "string",
+          "enum": ["string", "number"]
+        }
+      },
+      "required": ["label", "data"],
+      "additionalProperties": false,
+      "description": "One table column: a header and one value per row"
+    },
+    "BarChart": {
+      "type": "object",
+      "properties": {
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "series": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Series"
+          }
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["grouped", "stacked"]
+        },
+        "xLabel": {
+          "type": "string"
+        },
+        "yLabel": {
+          "type": "string"
+        }
+      },
+      "required": ["labels", "series"],
+      "additionalProperties": false,
+      "description": "Vertical bars: compare values across a few categories, one or more series"
+    },
+    "Series": {
+      "type": "object",
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "required": ["category", "values"],
+      "additionalProperties": false,
+      "description": "One named series of numbers, one per label"
+    },
+    "HorizontalBarChart": {
+      "type": "object",
+      "properties": {
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "series": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Series"
+          }
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["grouped", "stacked"]
+        },
+        "xLabel": {
+          "type": "string"
+        },
+        "yLabel": {
+          "type": "string"
+        }
+      },
+      "required": ["labels", "series"],
+      "additionalProperties": false,
+      "description": "Horizontal bars: rankings, or categories with long names"
+    },
+    "LineChart": {
+      "type": "object",
+      "properties": {
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "series": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Series"
+          }
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["linear", "step"]
+        },
+        "xLabel": {
+          "type": "string"
+        },
+        "yLabel": {
+          "type": "string"
+        }
+      },
+      "required": ["labels", "series"],
+      "additionalProperties": false,
+      "description": "Lines over ordered labels (time): trends, one or more series"
+    },
+    "AreaChart": {
+      "type": "object",
+      "properties": {
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "series": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Series"
+          }
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["overlap", "stacked"]
+        },
+        "xLabel": {
+          "type": "string"
+        },
+        "yLabel": {
+          "type": "string"
+        }
+      },
+      "required": ["labels", "series"],
+      "additionalProperties": false,
+      "description": "Filled lines over time; \"stacked\" shows parts of a total"
+    },
+    "PieChart": {
+      "type": "object",
+      "properties": {
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["pie", "donut"]
+        }
+      },
+      "required": ["labels", "values"],
+      "additionalProperties": false,
+      "description": "Shares of one whole, at most 6 slices"
+    },
+    "ScatterChart": {
+      "type": "object",
+      "properties": {
+        "datasets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ScatterSeries"
+          }
+        },
+        "xLabel": {
+          "type": "string"
+        },
+        "yLabel": {
+          "type": "string"
+        }
+      },
+      "required": ["datasets"],
+      "additionalProperties": false,
+      "description": "X/Y points: correlation and clusters"
+    },
+    "ScatterSeries": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Point"
+          }
+        }
+      },
+      "required": ["name", "points"],
+      "additionalProperties": false,
+      "description": "A named set of points"
+    },
+    "Point": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": ["x", "y"],
+      "additionalProperties": false,
+      "description": "One x/y point; label names it in the tooltip"
+    },
+    "Map": {
+      "type": "object",
+      "properties": {
+        "markers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MapMarker"
+          }
+        },
+        "route": {
+          "type": "boolean"
+        },
+        "zoom": {
+          "type": "number"
+        }
+      },
+      "required": ["markers"],
+      "additionalProperties": false,
+      "description": "An OpenStreetMap map that fits its markers. route: true joins them in order (an itinerary)"
+    },
+    "MapMarker": {
+      "type": "object",
+      "properties": {
+        "lat": {
+          "type": "number"
+        },
+        "lng": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        }
+      },
+      "required": ["lat", "lng", "label"],
+      "additionalProperties": false,
+      "description": "A place on a Map, in decimal degrees"
+    },
+    "EntityCard": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Field"
+          }
+        },
+        "description": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "icon": {
+          "type": "string",
+          "enum": [
+            "user",
+            "users",
+            "building",
+            "map-marker-alt",
+            "box",
+            "book",
+            "code",
+            "file-alt",
+            "folder",
+            "globe",
+            "calendar-alt",
+            "music",
+            "film",
+            "utensils",
+            "plane",
+            "star"
+          ]
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": ["title"],
+      "additionalProperties": false,
+      "description": "A person, place, project, package or other thing: its name, facts and tags"
+    },
+    "Field": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": ["label", "value"],
+      "additionalProperties": false,
+      "description": "One label and value on an EntityCard"
+    },
+    "LinkCard": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": ["title", "url"],
+      "additionalProperties": false,
+      "description": "A page to open: a search result, a source, a file in a drive (hyper://). The whole card is the link"
+    },
+    "ProductCard": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "price": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "rating": {
+          "type": "number"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "badge": {
+          "type": "string"
+        },
+        "action": {
+          "$ref": "#/$defs/ActionExpression"
+        }
+      },
+      "required": ["title"],
+      "additionalProperties": false,
+      "description": "Something to buy or choose: price, a 0-5 rating, tags, a badge like \"Best value\""
+    },
+    "ActionExpression": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "open_url"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": ["type", "url"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "continue_conversation"
+            },
+            "context": {
+              "type": "string"
+            }
+          },
+          "required": ["type"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "params": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": ["type"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "EventCard": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": ["title", "date"],
+      "additionalProperties": false,
+      "description": "Something that happens on a date. date is YYYY-MM-DD when you know it"
+    },
+    "QuoteCard": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": ["text"],
+      "additionalProperties": false,
+      "description": "A quotation, with who said it or where it is from"
+    },
+    "ProsCons": {
+      "type": "object",
+      "properties": {
+        "pros": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": ["pros", "cons"],
+      "additionalProperties": false,
+      "description": "Two lists side by side, for and against"
+    },
+    "Timeline": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TimelineItem"
+          }
+        }
+      },
+      "required": ["items"],
+      "additionalProperties": false,
+      "description": "Dated events in order: history, a changelog, a schedule"
+    },
+    "TimelineItem": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["neutral", "info", "success", "warning", "danger"]
+        }
+      },
+      "required": ["date", "title"],
+      "additionalProperties": false,
+      "description": "One dated entry on a Timeline"
+    },
+    "CardGrid": {
+      "type": "object",
+      "properties": {
+        "cards": {
+          "type": "array",
+          "items": {}
+        }
+      },
+      "required": ["cards"],
+      "additionalProperties": false,
+      "description": "Cards in as many columns as fit (one in a narrow sidebar)"
+    },
+    "Button": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "action": {
+          "$ref": "#/$defs/ActionExpression"
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["primary", "secondary", "tertiary"]
+        }
+      },
+      "required": ["label"],
+      "additionalProperties": false,
+      "description": "A button. Without an action it sends its label to you"
+    },
+    "Buttons": {
+      "type": "object",
+      "properties": {
+        "buttons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Button"
+          }
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["row", "column"]
+        }
+      },
+      "required": ["buttons"],
+      "additionalProperties": false,
+      "description": "A group of Buttons"
+    }
+  }
+}

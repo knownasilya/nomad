@@ -56,11 +56,23 @@ export function createAgentReducer() {
       return events;
     }
 
+    // claude: the results of the tools it called come back as a `user` line, one
+    // tool_result block per call, named by the tool_use block's id.
+    if (msg?.type === 'user') {
+      const results = Array.isArray(msg.message?.content) ? msg.message.content : [];
+      for (const block of results) {
+        if (block?.type !== 'tool_result' || typeof block.tool_use_id !== 'string') continue;
+        events.push({ type: 'toolEnd', id: block.tool_use_id, error: !!block.is_error });
+      }
+      return events;
+    }
+
     if (msg?.type !== 'assistant') return events;
     const blocks = Array.isArray(msg.message?.content) ? msg.message.content : [];
     for (const block of blocks) {
       if (block?.type === 'tool_use' && typeof block.name === 'string' && block.name) {
-        events.push({ type: 'tool', name: block.name, input: block.input });
+        const id = typeof block.id === 'string' && block.id ? block.id : undefined;
+        events.push({ type: 'tool', id, name: block.name, input: block.input });
         segment = '';
       }
       if (block?.type !== 'text' || typeof block.text !== 'string') continue;
@@ -169,7 +181,8 @@ export function parseClaudeModels(text) {
       const value = typeof m?.value === 'string' ? m.value : '';
       if (!value || value === 'default') continue;
       const name = m.displayName || value;
-      const label = m.resolvedModel && m.resolvedModel !== value ? `${name} (latest, "${value}")` : name;
+      const label =
+        m.resolvedModel && m.resolvedModel !== value ? `${name} (latest, "${value}")` : name;
       out.push({ value, label });
     }
     return out;

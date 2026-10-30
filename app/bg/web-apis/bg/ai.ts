@@ -32,6 +32,7 @@ import {
   DRAFT_PROMPT,
   JOB_PROMPT,
 } from '../../ai/api-reference.mjs';
+import { genuiPrompt } from '../../../lib/genui/library.mjs';
 import { askOncePerTurn, jobPermit } from '../../ai/vault-tools.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
 import { completionStreamError } from '../../ai/stream-error.mjs';
@@ -57,7 +58,7 @@ import {
 import { closeTurn, openTurn } from '../../ai/localhost-mcp.mjs';
 import { startLocalhostMcp } from '../../ai/localhost-mcp-host.mjs';
 import { streamAgent } from '../../ai/agent-cli.mjs';
-import { toolSummary } from '../../ai/tool-summary.mjs';
+import { newToolCallId, trackToolCall } from '../../ai/tool-events.mjs';
 import { pickToolDrive, remoteStage, stageRules, tabSnapshot } from '../../ai/stages.mjs';
 import { openTabGroup, openTabUrl } from '../../ai/open-tab.mjs';
 import {
@@ -265,7 +266,10 @@ async function routeChat(messages, sender, emitter, opts) {
     opts: {
       driveUrl: opts.driveUrl,
       allowWrite: opts.allowWrite,
-      context: opts.context,
+      // The other Device's runtime answers; this window draws the UI, so the prompt for it goes too.
+      context: opts.genUi
+        ? [genuiPrompt(), opts.context].filter(Boolean).join('\n\n---\n\n')
+        : opts.context,
       model: opts.model,
       think: opts.think,
       effort: opts.effort,
@@ -280,6 +284,7 @@ async function routeChat(messages, sender, emitter, opts) {
     signal: opts.signal,
     onChunk: (text) => emitter.emit('chunk', { text }),
     onTool: (event) => emitter.emit('tool', event),
+    onReasoning: (text) => emitter.emit('reasoning', { text }),
     // The human is on THIS (Client) Device, so the relayed modifyDrive prompt is shown here.
     onPrompt: (permission) => permissions.requestPermission(permission, sender),
   });
@@ -291,7 +296,7 @@ async function routeChat(messages, sender, emitter, opts) {
 // a synthetic sender carries the Client's driveUrl, events are forwarded as frames, and the
 // modifyDrive prompt is relayed to the Client via requestPermission (ADR-0013 §1, §6).
 aiBridge.setServeChat(
-  async ({ messages, opts, signal, requestPermission, sendChunk, sendTool }) => {
+  async ({ messages, opts, signal, requestPermission, sendChunk, sendTool, sendReasoning }) => {
     const driveUrl = opts?.driveUrl;
     // The phone's AI panel is the phone stage; anything else from a remote Device is a page
     // (ADR-0021). Only the phone stage gets the phone's tab.
@@ -315,8 +320,7 @@ aiBridge.setServeChat(
     emitter.on('error', () => {});
     emitter.on('chunk', (e) => sendChunk(e.text));
     emitter.on('tool', (e) => sendTool(e));
-    // `reasoning` events are local-only for now (no Bridge frame for them) — `think:false` still
-    // takes effect remotely because opts.think is forwarded to this runChat.
+    emitter.on('reasoning', (e) => sendReasoning(e.text));
     // Remote AI edits stage into the Drive's Vault-hosted Draft (ADR-0012) so the phone user can
     // review + publish, rather than writing the live Drive directly.
     await runChat(messages, sender, emitter, {
@@ -587,6 +591,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     // A remote turn's writes stage into a Draft. Without this the model reads back the published
     // file, doubts its own edit and tells the user the phone can't edit.
     offerTools && opts.draft ? DRAFT_PROMPT : '',
+    // The AI Sidebar draws OpenUI Lang fenced in an answer (ADR-0027).
+    opts.genUi ? genuiPrompt() : '',
     opts.context,
   ]
     .filter(Boolean)
@@ -653,14 +659,15 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
           /* keep {} */
         }
         // Live activity for the sidebar — shows what the agent is doing while the
-        // user waits (before/instead of streamed prose).
-        emitter.emit('tool', {
-          phase: 'start',
-          name: tc.function.name,
-          summary: toolSummary(tc.function.name, args),
-        });
+        // user waits (before/instead of streamed prose). A capability `execute` calls names
+        // this call as its parent.
+        const toolCallId = tc.id || newToolCallId();
         try {
-          result = await executeTool(tc.function.name, args, sender, toolOpts);
+          result = await trackToolCall(
+            emitter,
+            { id: toolCallId, name: tc.function.name, args },
+            () => executeTool(tc.function.name, args, sender, { ...toolOpts, toolCallId })
+          );
         } catch (err) {
           console.error(`[ai] tool "${tc.function.name}" failed:`, err);
           result = `Error: ${err.message}`;
@@ -843,14 +850,11 @@ async function executeTool(name, args, sender, opts: any = {}) {
         invoke: async (call) => {
           assertCallAllowed(call.target, call.name, catalog);
           const toolName = call.target === 'page' ? 'page_' + call.name : call.target;
-          if (emitter) {
-            emitter.emit('tool', {
-              phase: 'start',
-              name: toolName,
-              summary: toolSummary(toolName, call.args || {}),
-            });
-          }
-          const inner = await executeTool(toolName, call.args || {}, sender, opts);
+          const inner = await trackToolCall(
+            emitter,
+            { parentId: opts.toolCallId, name: toolName, args: call.args },
+            () => executeTool(toolName, call.args || {}, sender, opts)
+          );
           if (inner && typeof inner === 'object' && inner.imageDataUrl)
             imageDataUrl = inner.imageDataUrl;
           return inner;

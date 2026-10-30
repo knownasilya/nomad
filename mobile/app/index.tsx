@@ -574,6 +574,7 @@ export default function Browser () {
         aiHandles.current[id] = backendRef.current.aiChat(msg.payload.messages || [], opts, {
           onChunk: (text) => inject({ kind: 'chunk', text }),
           onTool: (event) => inject({ kind: 'tool', event }),
+          onReasoning: (text) => inject({ kind: 'reasoning', text }),
           onDone: () => { delete aiHandles.current[id]; inject({ kind: 'done' }) },
           onError: (message) => { delete aiHandles.current[id]; inject({ kind: 'error', message }) },
           onPrompt: (permission) => confirmAiPermission(permission, describeDrive(permission))
