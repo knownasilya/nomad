@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native'
 import BottomSheet from './BottomSheet'
 import LinkPhone from './LinkPhone'
+import Icon from './Icon'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
 import type { NamesForUrl } from '../lib/useBackend'
 import type { Names } from '../lib/useNames'
@@ -71,7 +72,6 @@ export default function NameSheet ({ visible, onClose, names, url, title, onOpen
 
   return (
     <BottomSheet visible={visible} onClose={onClose} style={s.sheet}>
-      <View style={s.handle} />
       <Text style={s.title}>Name this site</Text>
 
       {noVault ? (
@@ -112,7 +112,8 @@ export default function NameSheet ({ visible, onClose, names, url, title, onOpen
         <View style={s.form}>
           <View style={s.tagRow}>
             <View style={[s.tag, named.auto && s.tagAuto]}>
-              <Text style={[s.tagText, named.auto && s.tagAutoText]}>{named.auto ? '' : '✓ '}hyper://{named.name}/</Text>
+              {named.auto ? null : <Icon name='check' size={11} color={t.onAccent} />}
+              <Text style={[s.tagText, named.auto && s.tagAutoText]}>hyper://{named.name}/</Text>
             </View>
           </View>
           {named.auto ? <Text style={s.hint}>Named by the AI, as you visit often. Keep it to see it in the address bar.</Text> : null}
@@ -139,37 +140,36 @@ export default function NameSheet ({ visible, onClose, names, url, title, onOpen
 function makeStyles (t: Theme) {
   return StyleSheet.create({
     sheet: {
-      backgroundColor: t.bg,
-      paddingHorizontal: space.lg,
-      paddingTop: space.sm,
+      backgroundColor: t.surface,
+      paddingHorizontal: space.xl,
       paddingBottom: space.xl
     },
-    handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: radius.pill, backgroundColor: t.border, marginBottom: space.md },
-    title: { fontSize: 13, fontWeight: '600', color: t.textDim, marginBottom: space.sm },
+    title: { fontSize: 16, fontWeight: '600', color: t.text, marginBottom: space.sm },
     spinner: { marginVertical: space.lg },
     form: { marginTop: space.xs, gap: space.md },
     inputRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: t.inputBg,
+      backgroundColor: t.bg,
       borderWidth: 1,
       borderColor: t.border,
       borderRadius: radius.md,
-      paddingHorizontal: space.md
+      paddingHorizontal: space.md,
+      minHeight: 48
     },
     affix: { color: t.textMuted, fontSize: 15 },
     input: { flex: 1, paddingVertical: space.sm, paddingHorizontal: 2, fontSize: 15, color: t.text },
     tagRow: { flexDirection: 'row' },
-    tag: { backgroundColor: t.secure, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs },
+    tag: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: t.secure, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: space.xs + 2 },
     tagText: { color: t.onAccent, fontSize: 14, fontWeight: '600' },
     tagAuto: { backgroundColor: t.surfaceAlt },
     tagAutoText: { color: t.textDim },
     hint: { color: t.textMuted, fontSize: 12, lineHeight: 17 },
     error: { color: t.danger, fontSize: 13 },
     actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: space.sm },
-    btnGhost: { paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.md },
+    btnGhost: { minHeight: 40, justifyContent: 'center', paddingHorizontal: space.md, borderRadius: radius.pill },
     btnGhostText: { color: t.textDim, fontSize: 15, fontWeight: '500' },
-    btn: { backgroundColor: t.accent, borderRadius: radius.md, paddingVertical: space.sm, paddingHorizontal: space.lg, alignItems: 'center', minWidth: 88 },
+    btn: { backgroundColor: t.accent, borderRadius: radius.pill, minHeight: 40, justifyContent: 'center', paddingHorizontal: space.xl, alignItems: 'center', minWidth: 88 },
     btnDisabled: { opacity: 0.5 },
     btnText: { color: t.onAccent, fontSize: 15, fontWeight: '600' }
   })

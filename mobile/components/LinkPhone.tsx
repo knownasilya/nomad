@@ -27,7 +27,7 @@ function makeStyles (t: Theme) {
     page: { padding: 24, alignItems: 'center', marginTop: 24 },
     heading: { color: t.text, fontSize: 16, fontWeight: '700', marginBottom: 6 },
     body: { color: t.textMuted, fontSize: 13, lineHeight: 19, textAlign: 'center' },
-    btn: { backgroundColor: t.accent, borderRadius: radius.sm, paddingHorizontal: 16, paddingVertical: 10, marginTop: 16 },
+    btn: { backgroundColor: t.accent, borderRadius: radius.pill, paddingHorizontal: 20, minHeight: 40, justifyContent: 'center', marginTop: 16 },
     btnText: { color: t.onAccent, fontSize: 14, fontWeight: '600' }
   })
 }

@@ -5,6 +5,9 @@ import { useTheme, radius, type Theme } from '../lib/theme'
 import type { AiChatHandlers, AiChatHandle } from '../lib/useBackend'
 import { pickImages } from '../lib/pickImages'
 import Markdown from './Markdown'
+import ScreenHeader from './ScreenHeader'
+import IconButton from './IconButton'
+import Icon from './Icon'
 
 // `images` are data:image URLs — nomad.ai.chat's short form, which the Provider expands into
 // image_url parts (app/bg/ai/chat-messages.mjs).
@@ -272,7 +275,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
           <View key={hidden + i} style={s.stepRow}>
             <View style={s.stepIcon}>
               {step.done
-                ? <Text style={s.stepCheck}>✓</Text>
+                ? <Icon name='check' size={12} color={t.secure} />
                 : <ActivityIndicator size='small' color={t.accent} />}
             </View>
             <Text style={[s.stepText, step.done && s.stepDoneText]} numberOfLines={2}>{step.label}</Text>
@@ -309,21 +312,16 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
   if (!visible) return null
   return (
     <View style={[s.overlay, { paddingTop: insets.top }]}>
-      <View style={s.header}>
-        <Text style={s.title}>AI</Text>
-        <View style={s.headerRight}>
-          {messages.length > 0 && (
-            <TouchableOpacity onPress={() => { stop(); setMessages([]); setError(null) }} hitSlop={8} style={s.headerBtn}>
-              <Text style={s.headerBtnText}>Clear</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={onClose} hitSlop={10} style={s.close}><Text style={s.closeText}>✕</Text></TouchableOpacity>
-        </View>
-      </View>
+      <ScreenHeader
+        title='AI'
+        onBack={onClose}
+        backLabel='Close the AI'
+        actions={messages.length > 0 ? [{ icon: 'broom', label: 'Clear the conversation', onPress: () => { stop(); setMessages([]); setError(null) } }] : undefined}
+      />
       {url ? (
-        // The page the AI sees as the current tab. The dot is green for a Drive.
+        // The page the AI sees as the current tab. The mark is green for a Drive.
         <View style={s.pageBadge}>
-          <View style={[s.pageDot, !driveUrl && s.pageDotWeb]} />
+          <Icon name={driveUrl ? 'share-alt' : 'globe'} size={12} color={driveUrl ? t.secure : t.textMuted} style={s.pageDot} />
           <View style={s.pageBadgeText}>
             <Text numberOfLines={1} style={s.pageTitle}>{title || 'Untitled page'}</Text>
             <Text numberOfLines={1} style={s.pageUrl}>{url}</Text>
@@ -336,9 +334,12 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
       <View style={[s.flex, bottomPad > 0 ? { paddingBottom: bottomPad } : null]}>
         <ScrollView ref={scrollRef} style={s.body} contentContainerStyle={s.bodyPad}>
           {messages.length === 0 ? (
-            <Text style={s.empty}>
-              Ask anything. The AI runs on your desktop device and streams answers here. It can see the tab you're on, and it can read your drives and, with your approval, edit them.
-            </Text>
+            <View style={s.emptyWrap}>
+              <View style={s.emptyIcon}><Icon name='robot' size={22} color={t.trustText} /></View>
+              <Text style={s.empty}>
+                Ask anything. The AI runs on your desktop device and streams answers here. It can see the tab you're on, and it can read your drives and, with your approval, edit them.
+              </Text>
+            </View>
           ) : (
             messages.map((m, i) => {
               const streaming = busy && i === messages.length - 1
@@ -370,25 +371,33 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
             })
           )}
           {busy && renderSteps()}
-          {error && <Text style={s.error}>⚠️ {error}</Text>}
+          {error && (
+            <View style={s.errorRow}>
+              <Icon name='exclamation-triangle' size={13} color={t.danger} style={s.errorIcon} />
+              <Text style={s.error}>{error}</Text>
+            </View>
+          )}
         </ScrollView>
 
         {driveUrl && draftPaths.length > 0 && !busy && (
           <View style={s.draftBanner}>
-            <Text style={s.draftText}>
-              ✎ Draft ready — {draftPaths.length} change{draftPaths.length > 1 ? 's' : ''} to this page
-            </Text>
+            <View style={s.draftHead}>
+              <Icon name='pen-nib' size={13} color={t.accent} />
+              <Text style={s.draftText}>
+                Draft ready: {draftPaths.length} change{draftPaths.length > 1 ? 's' : ''} to this page
+              </Text>
+            </View>
             {draftBusy ? (
               <ActivityIndicator size='small' color={t.accent} />
             ) : (
               <View style={s.draftBtns}>
-                <TouchableOpacity onPress={() => onPreviewDraft?.(url)} hitSlop={6}>
+                <TouchableOpacity onPress={() => onPreviewDraft?.(url)} style={s.draftBtn}>
                   <Text style={s.draftLink}>Preview</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => draftAction('discardDraft')} hitSlop={6}>
+                <TouchableOpacity onPress={() => draftAction('discardDraft')} style={s.draftBtn}>
                   <Text style={s.draftDanger}>Discard</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => draftAction('publishDraft')} hitSlop={6}>
+                <TouchableOpacity onPress={() => draftAction('publishDraft')} style={[s.draftBtn, s.draftPrimaryBtn]}>
                   <Text style={s.draftPrimary}>Publish</Text>
                 </TouchableOpacity>
               </View>
@@ -407,7 +416,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
                     hitSlop={8}
                     onPress={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
                   >
-                    <Text style={s.attachRemoveText}>✕</Text>
+                    <Icon name='times' size={10} color='#fff' />
                   </TouchableOpacity>
                 </View>
               ))}
@@ -420,14 +429,14 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
           )}
 
           <View style={s.inputRow}>
-            <TouchableOpacity
-              style={[s.attachBtn, (busy || attaching || attachments.length >= MAX_IMAGES) && s.sendDisabled]}
+            <IconButton
+              icon='image'
+              label='Add a photo'
               onPress={chooseAttach}
               disabled={busy || attaching || attachments.length >= MAX_IMAGES}
-              accessibilityLabel='Add a photo'
-            >
-              <Text style={s.attachBtnText}>＋</Text>
-            </TouchableOpacity>
+              color={t.accent}
+              style={s.attachBtn}
+            />
             <TextInput
               style={s.input}
               value={input}
@@ -439,12 +448,12 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
               onSubmitEditing={send}
             />
             {busy ? (
-              <TouchableOpacity style={[s.sendBtn, s.stopBtn]} onPress={stop}>
-                <Text style={s.sendText}>Stop</Text>
+              <TouchableOpacity style={[s.sendBtn, s.stopBtn]} onPress={stop} accessibilityRole='button' accessibilityLabel='Stop'>
+                <Icon name='stop' size={14} color={t.onAccent} />
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity style={[s.sendBtn, !canSend && s.sendDisabled]} onPress={send} disabled={!canSend}>
-                <Text style={s.sendText}>Send</Text>
+              <TouchableOpacity style={[s.sendBtn, !canSend && s.sendDisabled]} onPress={send} disabled={!canSend} accessibilityRole='button' accessibilityLabel='Send'>
+                <Icon name='paper-plane' size={15} color={t.onAccent} />
               </TouchableOpacity>
             )}
           </View>
@@ -462,13 +471,6 @@ function makeStyles (t: Theme) {
     // out from its parent's padding box), so the panel never sits under the status or nav bar.
     overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: t.bg, zIndex: 50, elevation: 50 },
     flex: { flex: 1 },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 48 },
-    title: { color: t.text, fontSize: 18, fontWeight: '700' },
-    headerRight: { flexDirection: 'row', alignItems: 'center' },
-    headerBtn: { paddingHorizontal: 10, paddingVertical: 6 },
-    headerBtnText: { color: t.accent, fontSize: 14 },
-    close: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-    closeText: { color: t.textDim, fontSize: 18 },
     url: { color: t.textMuted, fontSize: 12, paddingHorizontal: 16, paddingBottom: 8, fontFamily: 'monospace' },
     pageBadge: {
       flexDirection: 'row',
@@ -478,21 +480,22 @@ function makeStyles (t: Theme) {
       marginHorizontal: 16,
       marginBottom: 10,
       paddingVertical: 7,
-      paddingHorizontal: 10,
+      paddingHorizontal: 12,
       backgroundColor: t.surface,
-      borderRadius: radius.md,
+      borderRadius: radius.pill,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: t.border
     },
-    pageDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: t.secure, marginRight: 8 },
-    pageDotWeb: { backgroundColor: t.textMuted },
+    pageDot: { marginRight: 8 },
     pageBadgeText: { flexShrink: 1 },
     pageTitle: { color: t.text, fontSize: 13, fontWeight: '600' },
     pageUrl: { color: t.textMuted, fontSize: 11, fontFamily: 'monospace', marginTop: 1 },
     body: { flex: 1 },
     bodyPad: { padding: 14, gap: 10 },
-    empty: { color: t.textMuted, fontSize: 13, lineHeight: 19 },
-    bubble: { maxWidth: '88%', paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.md },
+    emptyWrap: { alignItems: 'center', gap: 14, paddingTop: 40, paddingHorizontal: 16 },
+    emptyIcon: { width: 56, height: 56, borderRadius: radius.pill, backgroundColor: t.trustBg, alignItems: 'center', justifyContent: 'center' },
+    empty: { color: t.textMuted, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+    bubble: { maxWidth: '88%', paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.lg + 4 },
     userBubble: { alignSelf: 'flex-end', backgroundColor: t.trustBg },
     userMsg: { alignSelf: 'flex-end', alignItems: 'flex-end', maxWidth: '88%', gap: 6 },
     userImages: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 },
@@ -500,20 +503,24 @@ function makeStyles (t: Theme) {
     aiBubble: { alignSelf: 'flex-start', backgroundColor: t.surface },
     userText: { color: t.trustText, fontSize: 15, lineHeight: 21 },
     aiText: { color: t.text, fontSize: 15, lineHeight: 21 },
-    error: { color: t.danger, fontSize: 13, paddingVertical: 6 },
+    errorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 6 },
+    errorIcon: { marginTop: 2 },
+    error: { flex: 1, color: t.danger, fontSize: 13, lineHeight: 18 },
     steps: { gap: 6, paddingVertical: 8 },
     stepRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     stepIcon: { width: 20, alignItems: 'center' },
-    stepCheck: { color: t.secure, fontSize: 13, fontWeight: '700' },
     stepText: { color: t.textDim, fontSize: 14, flexShrink: 1 },
     stepDoneText: { color: t.textMuted },
     stepMore: { color: t.textMuted, fontSize: 12 },
     draftBanner: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border, backgroundColor: t.surface, paddingHorizontal: 16, paddingVertical: 10, gap: 10 },
-    draftText: { color: t.text, fontSize: 13, fontWeight: '600' },
-    draftBtns: { flexDirection: 'row', alignItems: 'center', gap: 20 },
-    draftLink: { color: t.accent, fontSize: 15, fontWeight: '600' },
-    draftDanger: { color: t.danger, fontSize: 15, fontWeight: '600' },
-    draftPrimary: { color: t.secure, fontSize: 15, fontWeight: '700' },
+    draftHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    draftText: { flex: 1, color: t.text, fontSize: 13, fontWeight: '600' },
+    draftBtns: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
+    draftBtn: { minHeight: 36, paddingHorizontal: 14, borderRadius: radius.pill, justifyContent: 'center' },
+    draftPrimaryBtn: { backgroundColor: t.accent },
+    draftLink: { color: t.accent, fontSize: 14, fontWeight: '600' },
+    draftDanger: { color: t.danger, fontSize: 14, fontWeight: '600' },
+    draftPrimary: { color: t.onAccent, fontSize: 14, fontWeight: '700' },
     composer: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
     attachRow: { flexGrow: 0 },
     attachRowPad: { paddingHorizontal: 10, paddingTop: 10, gap: 8 },
@@ -521,14 +528,11 @@ function makeStyles (t: Theme) {
     attachImage: { width: 64, height: 64, borderRadius: radius.sm, backgroundColor: t.surfaceAlt },
     attachLoading: { alignItems: 'center', justifyContent: 'center' },
     attachRemove: { position: 'absolute', top: 3, right: 3, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
-    attachRemoveText: { color: '#fff', fontSize: 11 },
-    attachBtn: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: t.inputBg, alignItems: 'center', justifyContent: 'center' },
-    attachBtnText: { color: t.accent, fontSize: 22, lineHeight: 26 },
-    inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 10 },
-    input: { flex: 1, maxHeight: 120, color: t.text, fontSize: 15, backgroundColor: t.inputBg, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 9 },
-    sendBtn: { paddingHorizontal: 16, paddingVertical: 11, borderRadius: radius.md, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center' },
+    attachBtn: { width: 44, height: 44 },
+    inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, paddingVertical: 8, paddingHorizontal: 8 },
+    input: { flex: 1, minHeight: 44, maxHeight: 120, color: t.text, fontSize: 15, backgroundColor: t.inputBg, borderRadius: 22, borderWidth: 1, borderColor: t.border, paddingHorizontal: 16, paddingTop: 11, paddingBottom: 11 },
+    sendBtn: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center' },
     stopBtn: { backgroundColor: t.danger },
-    sendDisabled: { opacity: 0.4 },
-    sendText: { color: t.onAccent, fontSize: 15, fontWeight: '600' }
+    sendDisabled: { opacity: 0.4 }
   })
 }

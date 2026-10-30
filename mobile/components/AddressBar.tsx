@@ -1,7 +1,9 @@
-import { useMemo, type Ref } from 'react'
-import { View, TextInput, TouchableOpacity, Text, StyleSheet } from 'react-native'
+import { useMemo, useState, type Ref } from 'react'
+import { View, TextInput, Text, ActivityIndicator, StyleSheet } from 'react-native'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { DriveType } from '../lib/hyperUrl'
+import Icon, { type IconName } from './Icon'
+import IconButton from './IconButton'
 
 interface Props {
   value: string
@@ -22,31 +24,34 @@ interface Props {
   onToggleDraft?: () => void
   siteName?: string // the user's own name for this drive (ADR-0018), shown in a green tag
   inputRef?: Ref<TextInput> // lets the browser focus the field, e.g. on a new tab from the tab grid
+  canReload?: boolean // false on a new tab, which has nothing to reload
 }
 
-// nomad-style location bar: back/forward nav, a rounded input with a leading
-// trust indicator and drive-type chip, and a reload/go button on the right.
+// nomad-style location bar: back/forward, and a rounded field with a leading trust icon (a lock
+// for https, the peer-to-peer mark for hyper://, as desktop's location bar), the Draft preview
+// toggle, and reload. While the field has focus the trailing button clears it instead; the
+// keyboard's Go key opens what was typed.
 export default function AddressBar (props: Props) {
-  const { value, onChangeText, onSubmit, onReload, loading, isHyper, canBack, canForward, onBack, onForward, onFocus, onBlur, hasDraft, draftPreviewing, onToggleDraft, siteName, inputRef } = props
+  const { value, onChangeText, onSubmit, onReload, loading, isHyper, canBack, canForward, onBack, onForward, onFocus, onBlur, hasDraft, draftPreviewing, onToggleDraft, siteName, inputRef, canReload = true } = props
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
+  const [focused, setFocused] = useState(false)
+  const secure = /^https:\/\//i.test(value)
+  const lead: IconName = focused || !value ? 'search' : isHyper ? 'share-alt' : secure ? 'lock' : 'info-circle'
 
   return (
     <View style={s.row}>
-      <TouchableOpacity style={s.navBtn} onPress={onBack} disabled={!canBack} hitSlop={6}>
-        <Text style={[s.navBtnText, !canBack && s.navBtnDisabled]}>‹</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={s.navBtn} onPress={onForward} disabled={!canForward} hitSlop={6}>
-        <Text style={[s.navBtnText, !canForward && s.navBtnDisabled]}>›</Text>
-      </TouchableOpacity>
-      <View style={[s.inputWrap, isHyper && { borderColor: t.trustText }]}>
+      <IconButton icon='arrow-left' label='Back' onPress={onBack} disabled={!canBack} color={t.text} style={s.navBtn} />
+      <IconButton icon='arrow-right' label='Forward' onPress={onForward} disabled={!canForward} color={t.text} style={s.navBtn} />
+      <View style={[s.inputWrap, focused && s.inputFocused, !focused && isHyper && s.inputHyper]}>
         {/* A drive the user named shows its name in a green tag with a check, as on desktop. */}
-        {isHyper && siteName ? (
+        {isHyper && siteName && !focused ? (
           <View style={s.nameTag} accessibilityLabel={`Your name for this site: hyper://${siteName}/`}>
-            <Text style={s.nameTagText} numberOfLines={1}>✓ {siteName}</Text>
+            <Icon name='check' size={10} color={t.onAccent} />
+            <Text style={s.nameTagText} numberOfLines={1}>{siteName}</Text>
           </View>
         ) : (
-          <Text style={[s.trust, { color: isHyper ? t.secure : t.textMuted }]}>{isHyper ? '⬡' : '◯'}</Text>
+          <Icon name={lead} size={14} color={!focused && isHyper ? t.secure : t.textMuted} style={s.lead} />
         )}
         <TextInput
           ref={inputRef}
@@ -54,8 +59,8 @@ export default function AddressBar (props: Props) {
           value={value}
           onChangeText={onChangeText}
           onSubmitEditing={onSubmit}
-          onFocus={onFocus}
-          onBlur={onBlur}
+          onFocus={() => { setFocused(true); onFocus?.() }}
+          onBlur={() => { setFocused(false); onBlur?.() }}
           placeholder='Search or enter address'
           placeholderTextColor={t.textMuted}
           autoCapitalize='none'
@@ -64,20 +69,25 @@ export default function AddressBar (props: Props) {
           returnKeyType='go'
           selectTextOnFocus
         />
-        {hasDraft && (
-          <TouchableOpacity
-            style={[s.draftBtn, draftPreviewing && s.draftBtnActive]}
+        {hasDraft && !focused ? (
+          <IconButton
+            icon='pen-nib'
+            label={draftPreviewing ? 'Stop previewing the Draft' : 'Preview the Draft'}
             onPress={onToggleDraft}
-            hitSlop={6}
-            activeOpacity={0.7}
-          >
-            <Text style={s.draftText}>✎</Text>
-          </TouchableOpacity>
-        )}
+            active={draftPreviewing}
+            size={15}
+            style={[s.inBtn, draftPreviewing && s.draftActive]}
+          />
+        ) : null}
+        {focused && value ? (
+          <IconButton icon='times-circle' label='Clear' onPress={() => onChangeText('')} size={16} color={t.textMuted} style={s.inBtn} />
+        ) : !focused && canReload ? (
+          // While a drive is still connecting, the spinner is the button: tap it to try again.
+          loading
+            ? <IconButton label='Connecting. Tap to retry' onPress={onReload} style={s.inBtn}><ActivityIndicator size='small' color={t.accent} /></IconButton>
+            : <IconButton icon='redo-alt' label='Reload' onPress={onReload} size={15} style={s.inBtn} />
+        ) : null}
       </View>
-      <TouchableOpacity style={s.go} onPress={loading ? onReload : onSubmit} activeOpacity={0.85}>
-        <Text style={s.goText}>{loading ? '↻' : '→'}</Text>
-      </TouchableOpacity>
     </View>
   )
 }
@@ -88,40 +98,31 @@ function makeStyles (t: Theme) {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: t.bg,
-      paddingHorizontal: 10,
+      paddingLeft: 2,
+      paddingRight: 10,
       paddingTop: 4,
-      paddingBottom: 8,
-      gap: 6
+      paddingBottom: 6
     },
-    navBtn: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' },
-    navBtnText: { color: t.textDim, fontSize: 24, fontWeight: '400' },
-    navBtnDisabled: { color: t.border },
+    navBtn: { width: 42 },
     inputWrap: {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: t.inputBg,
-      borderRadius: radius.md,
-      borderWidth: StyleSheet.hairlineWidth,
+      borderRadius: radius.pill,
+      borderWidth: 1,
       borderColor: t.border,
-      paddingHorizontal: 10,
+      paddingLeft: 14,
+      marginLeft: 4,
       height: 44
     },
-    trust: { fontSize: 13, marginRight: 8 },
-    nameTag: { backgroundColor: t.secure, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginRight: 8, maxWidth: 140 },
+    inputFocused: { borderColor: t.accent },
+    inputHyper: { borderColor: t.scheme === 'dark' ? t.border : t.trustBg },
+    lead: { marginRight: 10, width: 16, textAlign: 'center' },
+    nameTag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: t.secure, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 3, marginRight: 8, maxWidth: 140 },
     nameTagText: { color: t.onAccent, fontSize: 12, fontWeight: '700' },
     input: { flex: 1, color: t.text, fontSize: 15, padding: 0 },
-    draftBtn: { paddingHorizontal: 7, paddingVertical: 4, marginLeft: 4, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-    draftBtnActive: { backgroundColor: 'rgba(31,157,77,0.18)' },
-    draftText: { color: '#1f9d4d', fontSize: 15, fontWeight: '700' },
-    go: {
-      width: 44,
-      height: 44,
-      borderRadius: radius.md,
-      backgroundColor: t.accent,
-      alignItems: 'center',
-      justifyContent: 'center'
-    },
-    goText: { color: t.onAccent, fontSize: 20, fontWeight: '600' }
+    inBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    draftActive: { backgroundColor: t.trustBg, borderRadius: radius.pill }
   })
 }

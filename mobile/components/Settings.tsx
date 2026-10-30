@@ -1,7 +1,9 @@
 import { useMemo } from 'react'
-import { Modal, Platform, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native'
+import { Modal, Platform, ScrollView, StyleSheet, Text } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { radius, useTheme, type Theme } from '../lib/theme'
+import ScreenHeader from './ScreenHeader'
+import { ListSection, ListRow, SwitchRow } from './List'
+import { useTheme, type Theme } from '../lib/theme'
 import { checkForUpdate, currentVersion, installUpdate, setAutoInstall, setBetaUpdates, updatesSupported, useAutoInstall, useBetaUpdates, useUpdateState } from '../lib/updater'
 
 interface Props {
@@ -24,112 +26,57 @@ export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosti
   const beta = useBetaUpdates()
   const version = currentVersion()
 
-  const rows: { title: string; sub: string; onPress: () => void }[][] = [
-    [
-      { title: 'Devices', sub: 'Your other devices, the spaces they share, and sync details', onPress: onOpenDevices },
-      { title: 'Hosting', sub: 'How much data hosting drives may use each day', onPress: onOpenHosting }
-    ],
-    [
-      { title: 'Logs', sub: 'What the app and its peer-to-peer backend have logged, including the last run', onPress: onOpenLogs }
-    ]
-  ]
-
   return (
     <Modal visible={visible} animationType='slide' onRequestClose={onClose} presentationStyle='fullScreen'>
       <SafeAreaView style={s.root} edges={['top', 'bottom']}>
-        <View style={s.header}>
-          <Text style={s.title}>Settings</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={10} style={s.close}>
-            <Text style={s.closeText}>✕</Text>
-          </TouchableOpacity>
-        </View>
+        <ScreenHeader title='Settings' onBack={onClose} />
         <ScrollView contentContainerStyle={s.page}>
-          {rows.map((group, gi) => (
-            <View key={gi} style={s.card}>
-              {group.map((row, i) => (
-                <TouchableOpacity key={row.title} style={[s.row, i > 0 && s.rowDivider]} onPress={row.onPress}>
-                  <View style={s.rowText}>
-                    <Text style={s.rowTitle}>{row.title}</Text>
-                    <Text style={s.rowSub}>{row.sub}</Text>
-                  </View>
-                  <Text style={s.chevron}>›</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ))}
-          <Text style={s.sectionTitle}>Open tabs</Text>
-          <View style={s.card}>
-            <View style={s.row}>
-              <View style={s.rowText}>
-                <Text style={s.rowTitle}>Share this phone's open tabs</Text>
-                <Text style={s.rowSub}>Your other devices list them by space. Turning this off removes them there.</Text>
-              </View>
-              <Switch
-                value={shareTabs}
-                onValueChange={onShareTabs}
-                trackColor={{ false: t.border, true: t.accent }}
-                thumbColor={t.surface}
-                accessibilityLabel="Share this phone's open tabs"
-              />
-            </View>
-          </View>
+          <ListSection>
+            <ListRow icon='laptop' title='Devices' subtitle='Your other devices, the spaces they share, and sync details' subtitleLines={2} chevron onPress={onOpenDevices} />
+            <ListRow icon='server' title='Hosting' subtitle='How much data hosting drives may use each day' subtitleLines={2} chevron divider onPress={onOpenHosting} />
+          </ListSection>
+          <ListSection title='Open tabs'>
+            <SwitchRow
+              icon='clone'
+              title="Share this phone's open tabs"
+              subtitle='Your other devices list them by space. Turning this off removes them there.'
+              value={shareTabs}
+              onValueChange={onShareTabs}
+            />
+          </ListSection>
           {updatesSupported ? (
-            <>
-              <Text style={s.sectionTitle}>Updates</Text>
-              <View style={s.card}>
-                <View style={s.row}>
-                  <View style={s.rowText}>
-                    <Text style={s.rowTitle}>Install updates automatically</Text>
-                    <Text style={s.rowSub}>
-                      {update.kind === 'downloading' || update.kind === 'installing' ? `Updating to ${update.release.version}…`
-                        : update.kind === 'failed' ? update.error
-                          : 'New releases install when you open Nomad. Android asks you to confirm the first one.'}
-                    </Text>
-                  </View>
-                  <Switch
-                    value={auto}
-                    onValueChange={setAutoInstall}
-                    trackColor={{ false: t.border, true: t.accent }}
-                    thumbColor={t.surface}
-                  />
-                </View>
-                <View style={[s.row, s.rowDivider]}>
-                  <View style={s.rowText}>
-                    <Text style={s.rowTitle}>Beta releases</Text>
-                    <Text style={s.rowSub}>Get test builds before they are released to everyone. They can have bugs.</Text>
-                  </View>
-                  <Switch
-                    value={beta}
-                    onValueChange={setBetaUpdates}
-                    trackColor={{ false: t.border, true: t.accent }}
-                    thumbColor={t.surface}
-                  />
-                </View>
-                {update.kind === 'available' ? (
-                  <TouchableOpacity style={[s.row, s.rowDivider]} onPress={() => installUpdate(update.release)}>
-                    <Text style={[s.rowTitle, s.flex, s.link]}>Update to {update.release.version}</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity style={[s.row, s.rowDivider]} onPress={() => checkForUpdate({ force: true })}>
-                    <Text style={[s.rowTitle, s.flex, s.link]}>Check for updates</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </>
+            <ListSection title='Updates'>
+              <SwitchRow
+                icon='download'
+                title='Install updates automatically'
+                subtitle={update.kind === 'downloading' || update.kind === 'installing' ? `Updating to ${update.release.version}…`
+                  : update.kind === 'failed' ? update.error
+                    : 'New releases install when you open Nomad. Android asks you to confirm the first one.'}
+                value={auto}
+                onValueChange={setAutoInstall}
+              />
+              <SwitchRow
+                icon='flask'
+                title='Beta releases'
+                subtitle='Get test builds before they are released to everyone. They can have bugs.'
+                value={beta}
+                onValueChange={setBetaUpdates}
+                divider
+              />
+              {update.kind === 'available' ? (
+                <ListRow icon='arrow-circle-up' iconColor={t.accent} title={`Update to ${update.release.version}`} accent divider onPress={() => installUpdate(update.release)} />
+              ) : (
+                <ListRow icon='sync-alt' iconColor={t.accent} title='Check for updates' accent divider onPress={() => checkForUpdate({ force: true })} />
+              )}
+            </ListSection>
           ) : null}
-          <Text style={s.sectionTitle}>About</Text>
-          <View style={s.card}>
-            {version ? (
-              <View style={[s.row, s.rowDividerBelow]}>
-                <Text style={[s.rowTitle, s.flex]}>Version</Text>
-                <Text style={s.value}>{version}</Text>
-              </View>
-            ) : null}
-            <View style={s.row}>
-              <Text style={[s.rowTitle, s.flex]}>Platform</Text>
-              <Text style={s.value}>{Platform.OS} {String(Platform.Version)}</Text>
-            </View>
-          </View>
+          <ListSection title='Troubleshooting'>
+            <ListRow icon='terminal' title='Logs' subtitle='What the app and its peer-to-peer backend have logged, including the last run' subtitleLines={2} chevron onPress={onOpenLogs} />
+          </ListSection>
+          <ListSection title='About'>
+            {version ? <ListRow icon='info-circle' title='Version' right={<Text style={s.value}>{version}</Text>} /> : null}
+            <ListRow icon='mobile-alt' title='Platform' divider={!!version} right={<Text style={s.value}>{Platform.OS} {String(Platform.Version)}</Text>} />
+          </ListSection>
         </ScrollView>
       </SafeAreaView>
     </Modal>
@@ -139,22 +86,7 @@ export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosti
 function makeStyles (t: Theme) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: t.bg },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 52 },
-    title: { color: t.text, fontSize: 20, fontWeight: '700' },
-    close: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-    closeText: { color: t.textDim, fontSize: 18 },
     page: { padding: 16 },
-    sectionTitle: { color: t.textDim, fontSize: 13, fontWeight: '600', marginBottom: 8 },
-    card: { backgroundColor: t.surface, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, overflow: 'hidden', marginBottom: 18 },
-    row: { flexDirection: 'row', alignItems: 'center', minHeight: 56, paddingHorizontal: 14, gap: 12 },
-    rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
-    rowDividerBelow: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border },
-    rowText: { flex: 1, paddingVertical: 10 },
-    rowTitle: { color: t.text, fontSize: 14, fontWeight: '500' },
-    rowSub: { color: t.textMuted, fontSize: 12, marginTop: 2, lineHeight: 17 },
-    chevron: { color: t.textMuted, fontSize: 22 },
-    flex: { flex: 1 },
-    value: { color: t.textDim, fontSize: 13 },
-    link: { color: t.accent }
+    value: { color: t.textDim, fontSize: 13 }
   })
 }

@@ -10,6 +10,8 @@ import {
   StyleSheet
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import ScreenHeader from './ScreenHeader'
+import Icon from './Icon'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
 import type { Backend, DeviceSpace, DriveSync, VaultDevice, VaultMsg } from '../lib/useBackend'
@@ -231,12 +233,7 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
   return (
     <Modal visible={visible} animationType='slide' onRequestClose={onClose} presentationStyle='fullScreen'>
       <SafeAreaView style={s.root} edges={['top', 'bottom']}>
-        <View style={s.header}>
-          <Text style={s.title}>Devices</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={10} style={s.close}>
-            <Text style={s.closeText}>✕</Text>
-          </TouchableOpacity>
-        </View>
+        <ScreenHeader title='Devices' onBack={onClose} />
 
         {loading ? (
           <View style={s.center}>
@@ -248,7 +245,7 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
             <Text style={s.sectionTitle}>This device</Text>
             <View style={[s.list, { marginBottom: space.xl }]}>
               <View style={s.row}>
-                <Text style={s.rowIcon}>▢</Text>
+                <Icon name='mobile-alt' size={18} color={t.textDim} style={s.rowIcon} />
                 {editingThis ? (
                   <>
                     <TextInput
@@ -313,7 +310,7 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
                       const connected = connectedKeys.has(d.key)
                       return (
                         <View key={d.key} style={s.row}>
-                          <Text style={s.rowIcon}>{d.platform === 'mobile' ? '▢' : '▭'}</Text>
+                          <Icon name={d.platform === 'mobile' ? 'mobile-alt' : 'laptop'} size={16} color={t.textDim} style={s.rowIcon} />
                           {editingKey === d.key ? (
                             <>
                               <TextInput
@@ -383,7 +380,7 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
                   accessibilityRole='button'
                   accessibilityState={{ expanded: showSyncDetails }}
                 >
-                  <Text style={s.detailsChevron}>{showSyncDetails ? '▾' : '▸'}</Text>
+                  <Icon name={showSyncDetails ? 'chevron-down' : 'chevron-right'} size={11} color={t.textDim} style={s.detailsChevron} />
                   <Text style={s.detailsTitle}>Sync details</Text>
                   <Text style={s.detailsSummary}>{syncSummary(status)}</Text>
                 </TouchableOpacity>
@@ -603,18 +600,6 @@ function SyncRow ({ name, st, tags, s, t }: { name: string; st: DriveSync; tags:
 function makeStyles (t: Theme) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: t.bg },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: space.lg,
-      paddingVertical: space.md,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: t.border
-    },
-    title: { fontSize: 18, fontWeight: '600', color: t.text },
-    close: { padding: space.xs },
-    closeText: { fontSize: 18, color: t.textDim },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     body: { padding: space.lg },
     lead: { fontSize: 15, color: t.text, lineHeight: 22, marginBottom: space.lg },
@@ -632,17 +617,18 @@ function makeStyles (t: Theme) {
       borderRadius: radius.md,
       textAlign: 'center'
     },
-    list: { borderWidth: 1, borderColor: t.border, borderRadius: radius.md, overflow: 'hidden' },
+    list: { backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, borderRadius: radius.lg, overflow: 'hidden' },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: space.md,
-      padding: space.md,
+      paddingVertical: space.md,
+      paddingHorizontal: space.lg,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: t.border,
       backgroundColor: t.surface
     },
-    rowIcon: { fontSize: 16, color: t.textDim, width: 20, textAlign: 'center' },
+    rowIcon: { width: 22, textAlign: 'center' },
     rowBody: { flex: 1 },
     nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' },
     rowName: { fontSize: 15, color: t.text },
@@ -656,13 +642,14 @@ function makeStyles (t: Theme) {
     leaveSection: { marginTop: space.xl, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border, paddingTop: space.lg },
     leaveBtn: { alignSelf: 'flex-start', paddingVertical: space.xs },
     leaveConfirm: { gap: space.sm },
-    link: { color: t.accent, fontSize: 14, fontWeight: '500', paddingHorizontal: space.xs },
+    // Text buttons in a row: padded out to a comfortable touch target.
+    link: { color: t.accent, fontSize: 14, fontWeight: '600', paddingHorizontal: space.xs, paddingVertical: space.sm },
     dot: { width: 8, height: 8, borderRadius: radius.pill },
     rowTop: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
     statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
     statusText: { marginTop: 0 },
     spacesNote: { fontSize: 12, color: t.textMuted, marginTop: space.sm },
-    versionWarn: { fontSize: 13, lineHeight: 18, color: '#b9770e', marginBottom: space.sm },
+    versionWarn: { fontSize: 13, lineHeight: 18, color: t.warn, marginBottom: space.sm },
     chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.sm },
     chip: {
       flexDirection: 'row',
@@ -676,33 +663,34 @@ function makeStyles (t: Theme) {
       paddingHorizontal: space.sm,
       paddingVertical: 3
     },
-    chipWarn: { borderColor: '#b9770e' },
+    chipWarn: { borderColor: t.warn },
     chipDot: { width: 8, height: 8, borderRadius: radius.pill },
     chipText: { fontSize: 12, color: t.text, flexShrink: 1 },
-    chipWarnText: { fontSize: 11, color: '#b9770e' },
+    chipWarnText: { fontSize: 11, color: t.warn },
     detailsToggle: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.xl, marginBottom: space.sm, paddingVertical: space.xs },
-    detailsChevron: { fontSize: 12, color: t.textDim, width: 12 },
+    detailsChevron: { width: 12, textAlign: 'center' },
     detailsTitle: { fontSize: 13, fontWeight: '600', color: t.textDim },
     detailsSummary: { flex: 1, textAlign: 'right', fontSize: 12, color: t.textMuted },
     keyText: { fontSize: 11, color: t.textMuted, fontFamily: 'monospace' },
     tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.xs },
     tag: { fontSize: 11, color: t.textDim, backgroundColor: t.surfaceAlt, borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 1, overflow: 'hidden' },
-    tagWarn: { color: '#b9770e' },
+    tagWarn: { color: t.warn },
     input: {
       backgroundColor: t.inputBg,
       borderWidth: 1,
       borderColor: t.border,
       borderRadius: radius.md,
       paddingHorizontal: space.md,
-      paddingVertical: space.sm,
+      minHeight: 44,
       fontSize: 14,
       color: t.text,
       marginBottom: space.md
     },
     btn: {
       backgroundColor: t.accent,
-      borderRadius: radius.md,
-      paddingVertical: space.md,
+      borderRadius: radius.pill,
+      minHeight: 48,
+      justifyContent: 'center',
       alignItems: 'center'
     },
     btnDisabled: { opacity: 0.5 },

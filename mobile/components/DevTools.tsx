@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
-import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native'
+import { Modal, View, Text, ScrollView, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useTheme, radius, type Theme } from '../lib/theme'
+import ScreenHeader from './ScreenHeader'
+import Tabs from './Tabs'
+import { useTheme, type Theme } from '../lib/theme'
 import type { LogEntry } from '../lib/types'
 
 interface Props {
@@ -22,24 +24,23 @@ export default function DevTools ({ visible, onClose, url, logs, source, onClear
   const s = useMemo(() => makeStyles(t), [t])
   const [tab, setTab] = useState<'console' | 'source'>('console')
 
-  const color = (level: string) => (level === 'error' ? t.danger : level === 'warn' ? t.secure : t.textDim)
+  const color = (level: string) => (level === 'error' ? t.danger : level === 'warn' ? t.warn : t.textDim)
 
   return (
     <Modal visible={visible} animationType='slide' onRequestClose={onClose} presentationStyle='fullScreen'>
       <SafeAreaView style={s.root} edges={['top', 'bottom']}>
-        <View style={s.header}>
-          <Text style={s.title}>Developer tools</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={10} style={s.close}><Text style={s.closeText}>✕</Text></TouchableOpacity>
-        </View>
-        <Text numberOfLines={1} style={s.url}>{url || 'about:blank'}</Text>
+        <ScreenHeader
+          title='Developer tools'
+          subtitle={url || 'about:blank'}
+          onBack={onClose}
+          actions={tab === 'console' && logs.length > 0 ? [{ icon: 'broom', label: 'Clear console', onPress: onClearLogs }] : undefined}
+        />
 
-        <View style={s.tabs}>
-          <TabBtn label={`Console${logs.length ? ` (${logs.length})` : ''}`} active={tab === 'console'} onPress={() => setTab('console')} s={s} />
-          <TabBtn label='Source' active={tab === 'source'} onPress={() => { setTab('source'); onViewSource() }} s={s} />
-          {tab === 'console' && logs.length > 0 && (
-            <TouchableOpacity style={s.clear} onPress={onClearLogs}><Text style={s.clearText}>Clear</Text></TouchableOpacity>
-          )}
-        </View>
+        <Tabs
+          tabs={[{ key: 'console' as const, label: `Console${logs.length ? ` (${logs.length})` : ''}` }, { key: 'source' as const, label: 'Source' }]}
+          value={tab}
+          onChange={(k) => { setTab(k); if (k === 'source') onViewSource() }}
+        />
 
         {tab === 'console' ? (
           <ScrollView style={s.body} contentContainerStyle={s.bodyPad}>
@@ -64,31 +65,9 @@ export default function DevTools ({ visible, onClose, url, logs, source, onClear
   )
 }
 
-function TabBtn ({ label, active, onPress, s }: { label: string; active: boolean; onPress: () => void; s: Styles }) {
-  return (
-    <TouchableOpacity style={[s.tab, active && s.tabActive]} onPress={onPress}>
-      <Text style={[s.tabText, active && s.tabTextActive]}>{label}</Text>
-    </TouchableOpacity>
-  )
-}
-
-type Styles = ReturnType<typeof makeStyles>
-
 function makeStyles (t: Theme) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: t.bg },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 48 },
-    title: { color: t.text, fontSize: 18, fontWeight: '700' },
-    close: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-    closeText: { color: t.textDim, fontSize: 18 },
-    url: { color: t.textMuted, fontSize: 12, paddingHorizontal: 16, paddingBottom: 8, fontFamily: 'monospace' },
-    tabs: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, gap: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border, paddingBottom: 8 },
-    tab: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.md },
-    tabActive: { backgroundColor: t.trustBg },
-    tabText: { color: t.textDim, fontSize: 13, fontWeight: '500' },
-    tabTextActive: { color: t.trustText, fontWeight: '700' },
-    clear: { marginLeft: 'auto', paddingHorizontal: 8, paddingVertical: 6 },
-    clearText: { color: t.accent, fontSize: 13 },
     body: { flex: 1 },
     bodyPad: { padding: 14 },
     empty: { color: t.textMuted, fontSize: 13, lineHeight: 19 },
