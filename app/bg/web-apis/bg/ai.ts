@@ -26,8 +26,13 @@ import {
   setCurrent as setCurrentAwake,
   REASON_PROVIDER,
 } from '../../ai/awake';
-import { STANDING_PROMPT, PERSONAL_PROMPT, DRAFT_PROMPT } from '../../ai/api-reference.mjs';
-import { askOncePerTurn } from '../../ai/vault-tools.mjs';
+import {
+  STANDING_PROMPT,
+  PERSONAL_PROMPT,
+  DRAFT_PROMPT,
+  JOB_PROMPT,
+} from '../../ai/api-reference.mjs';
+import { askOncePerTurn, jobPermit } from '../../ai/vault-tools.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
 import { completionStreamError } from '../../ai/stream-error.mjs';
 import { normalizeChatMessages } from '../../ai/chat-messages.mjs';
@@ -427,6 +432,52 @@ export { runChat };
 // active tab's own webContents) standing in for "the page this call is about".
 export { routeChat };
 
+// One run of an AI Job (ADR-0030; app/bg/ai/jobs.js runs it): a turn on the job stage, on this
+// Device's own runtime only, never another Device's over the Bridge. The user's own AI with no tab
+// and nobody watching: it reads the Notes and Reader of the Job's Space, drives and the web, changes
+// nothing, and asks no permission (jobPermit). `notify` gets what the AI sends with the notify
+// capability. Resolves { output }: the answer the AI gave after its last tool call.
+export async function runJobTurn(job, { signal, notify }) {
+  if (!(await aiBridge.localRuntimeReachable())) {
+    throw new Error('The AI runtime on this computer isn’t reachable. Check Settings → AI.');
+  }
+  const emitter = new EventEmitter();
+  let answer = '';
+  let all = '';
+  emitter.on('error', () => {});
+  emitter.on('chunk', (e) => {
+    answer += e?.text || '';
+    all += e?.text || '';
+  });
+  // Text before a tool call is the model thinking aloud; the answer is what comes after the last one.
+  emitter.on('tool', (e) => {
+    if (e?.phase === 'start') answer = '';
+  });
+  await runChat([{ role: 'user', content: job.prompt }], makeRemoteSender('nomad://jobs/'), emitter, {
+    stage: 'job',
+    // No renderer and no tab: the page tools, openTab and the page readers stay out of the catalog.
+    remote: true,
+    allowWrite: false,
+    space: isSpaceKey(job.space) ? job.space : null,
+    requestPermission: jobPermit,
+    context: jobContext(job),
+    job: { notify },
+    signal,
+  });
+  return { output: answer.trim() || all.trim() };
+}
+
+// What a Job's turn is told about the Job and its notification.
+function jobContext(job) {
+  const rule =
+    job.notify === 'never'
+      ? 'This Job sends no notifications, so don’t call notify.'
+      : job.notify === 'auto'
+        ? 'Call notify only when the result is something the Job’s prompt asks to hear about. Otherwise just answer: no notification is sent.'
+        : 'When you finish, the user is notified with the start of your answer. Call notify only to say something more specific.';
+  return `The Job: “${job.title}”. ${rule}`;
+}
+
 // One plain completion for Nomad's own background work (hyper/auto-names.js): no tools, no
 // standing prompt, no reasoning asked for. This Device's runtime only: it never borrows another
 // Device's AI over the Bridge. Resolves the reply text, or null when no runtime is reachable here.
@@ -465,6 +516,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   const rules = stageRules(opts.stage);
   const personal = rules.personal;
   const currentTab = rules.tab ? opts.currentTab || null : null;
+  // One of the user's AI Jobs (runJobTurn): reads only, and may notify the user's phone.
+  const job = opts.stage === 'job' ? opts.job || {} : null;
   const driveUrl = currentTab ? null : opts.driveUrl || null;
   const allowWrite = opts.allowWrite !== false; // default true
   // Independent lookups — run concurrently rather than paying the sum of their latencies on
@@ -508,6 +561,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     // The user's own AI (see chat()): their names, Notes, Reader and other Drives.
     personal,
     tab: !!currentTab,
+    job: !!job,
     names: personal ? names.list() : null,
     ownerId: opts.ownerId,
   });
@@ -528,7 +582,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   const systemContent = [
     systemPrompt,
     offerTools ? STANDING_PROMPT : '',
-    offerTools && personal ? PERSONAL_PROMPT : '',
+    offerTools && personal && !job ? PERSONAL_PROMPT : '',
+    offerTools && job ? JOB_PROMPT : '',
     // A remote turn's writes stage into a Draft. Without this the model reads back the published
     // file, doubts its own edit and tells the user the phone can't edit.
     offerTools && opts.draft ? DRAFT_PROMPT : '',
@@ -555,6 +610,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     space: opts.remote ? opts.space : null,
     signal,
     catalog,
+    job,
   };
   const mcpTurn = cli && mcpPort ? openTurn({ sender, toolOpts }) : null;
 
@@ -708,6 +764,7 @@ async function executeTool(name, args, sender, opts: any = {}) {
     space = null,
     signal = null,
     catalog = null,
+    job = null,
   } = opts;
   // WebMCP page tool — round-trip to the renderer that registered it. Access was already
   // consented per-origin in resolvePageTools(); running it can only do what page JS can do.
@@ -884,6 +941,13 @@ async function executeTool(name, args, sender, opts: any = {}) {
         );
       }
       return `File written successfully to ${where}`;
+    }
+    case 'notify': {
+      // A Job's turn only (ADR-0030). jobs.js saves it with the run, and the phone shows it.
+      if (!job) throw new Error('notify is only for Jobs');
+      if (typeof args?.body !== 'string' || !args.body.trim()) throw new Error('notify needs `body`');
+      job.notify?.({ title: args.title, body: args.body });
+      return 'The user will get this notification when the Job finishes.';
     }
     case 'currentTab': {
       if (!currentTab) throw new Error('currentTab is not available here');

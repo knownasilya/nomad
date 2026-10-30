@@ -14,6 +14,7 @@ import Suggestions from '../components/Suggestions'
 import Library from '../components/Library'
 import Reader from '../components/Reader'
 import Notes from '../components/Notes'
+import Jobs from '../components/Jobs'
 import ActionSheet from '../components/ActionSheet'
 import IconButton from '../components/IconButton'
 import SiteIcon from '../components/SiteIcon'
@@ -29,6 +30,7 @@ import Shortcuts from '../components/Shortcuts'
 import FileExplorer, { type ExplorerDrive } from '../components/FileExplorer'
 import type { HyperRender } from '../components/HyperView'
 import { useBackend } from '../lib/useBackend'
+import { useJobNotifications } from '../lib/useJobNotifications'
 import { syncHostingService } from '../lib/hostingService'
 import HostingSettings from '../components/HostingSettings'
 import { usePersistence, type SavedSite, type SavedDrive } from '../lib/usePersistence'
@@ -54,6 +56,7 @@ type Kind = 'home' | 'web' | 'hyper'
 type Screen =
   | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' }
   | { name: 'notes'; noteId?: string } // noteId: the note to open, e.g. the one a followed link was in
+  | { name: 'jobs'; jobId?: string; runId?: string } // a tapped Job notification opens its run
   | { name: 'explorer'; drive: ExplorerDrive }
 type ScreenName = Screen['name']
 
@@ -163,7 +166,9 @@ const VAULT_PROMPTS: Record<string, { title: string; message: string }> = {
   readerRead: { title: 'Allow AI to read your Reader?', message: 'The AI running on your other device wants to read the feeds you follow and their posts.' },
   readerWrite: { title: 'Allow AI to change your Reader?', message: 'The AI running on your other device wants to follow or unfollow feeds, or mark posts read.' },
   modsRead: { title: 'Allow AI to read your Mods?', message: 'The AI running on your other device wants to read your Mods: your own styles and scripts for sites.' },
-  modsWrite: { title: 'Allow AI to change your Mods?', message: 'The AI running on your other device wants to create or change your Mods. A Mod can run a script on every page of its site.' }
+  modsWrite: { title: 'Allow AI to change your Mods?', message: 'The AI running on your other device wants to create or change your Mods. A Mod can run a script on every page of its site.' },
+  jobsRead: { title: 'Allow AI to see your Jobs?', message: 'The AI running on your other device wants to see your AI Jobs and their results.' },
+  jobsWrite: { title: 'Allow AI to change your Jobs?', message: 'The AI running on your other device wants to create, change or run your AI Jobs. A Job runs a prompt by itself, reads your Notes and Reader, and notifies this phone.' }
 }
 
 function confirmAiPermission (permission: string, drive?: { name: string; url: string }): Promise<boolean> {
@@ -237,6 +242,7 @@ export default function Browser () {
   const lastExplorerDrive = useRef<ExplorerDrive | null>(null)
   if (explorerDrive) lastExplorerDrive.current = explorerDrive
   const notesScreen = screens.find((sc) => sc.name === 'notes')
+  const jobsScreen = screens.find((sc) => sc.name === 'jobs')
   // The sheets over the browser, and the AI panel.
   const [spacesOpen, setSpacesOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -295,6 +301,9 @@ export default function Browser () {
       patch(msg.tabId, { render: { type: 'error', message: msg.message, url: msg.url }, loading: false })
     }
   })
+
+  // A notification from an AI Job for each new run that has one; a tap opens that run.
+  useJobNotifications(backend, ({ jobId, runId }) => openScreen({ name: 'jobs', jobId, runId }))
 
   // Spaces — each has its own Root Drive; bookmarks/history/drives are scoped to the active space.
   const spacesApi = useSpaces(backend)
@@ -1077,7 +1086,8 @@ export default function Browser () {
           [
             { label: 'My Library', icon: 'book', onPress: () => openScreen({ name: 'library' }) },
             { label: 'Reader', icon: 'rss', onPress: () => openScreen({ name: 'reader' }) },
-            { label: 'Notes', icon: 'sticky-note', onPress: () => openScreen({ name: 'notes' }) }
+            { label: 'Notes', icon: 'sticky-note', onPress: () => openScreen({ name: 'notes' }) },
+            { label: 'AI Jobs', icon: 'clock', onPress: () => openScreen({ name: 'jobs' }) }
           ],
           [
             // Only for a drive this phone owns, and hosting only for one it doesn't.
@@ -1167,6 +1177,16 @@ export default function Browser () {
         onVaultChange={backend.onVaultChange}
         onOpenDevices={() => openScreen({ name: 'devices' })}
         onOpenUrl={openFromNotes}
+      />
+
+      <Jobs
+        visible={!!jobsScreen}
+        onClose={() => closeScreenNamed('jobs')}
+        openJobId={jobsScreen?.name === 'jobs' ? jobsScreen.jobId : undefined}
+        openRunId={jobsScreen?.name === 'jobs' ? jobsScreen.runId : undefined}
+        apps={backend.apps}
+        onVaultChange={backend.onVaultChange}
+        onOpenDevices={() => openScreen({ name: 'devices' })}
       />
 
       <Devices

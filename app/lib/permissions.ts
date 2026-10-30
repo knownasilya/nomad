@@ -249,6 +249,23 @@ export const PERMS = {
     dangerous: true,
     promptTrusted: true,
   },
+  // The AI's access to the user's AI Jobs (ADR-0030). Changing them is dangerous: a Job runs a prompt
+  // by itself, reads the user's Notes and Reader each time, and can notify their phone.
+  jobsRead: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    promptTrusted: true,
+  },
+  jobsWrite: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+    promptTrusted: true,
+  },
   // One file or folder of the user's private drive (hyper://private/), for a limited time. The
   // param is the path. Not persisted here: private-drive-guard.ts keeps the grant and ends it.
   privateRead: {
@@ -302,6 +319,8 @@ export const PERM_ICONS = {
   readerWrite: 'fas fa-rss',
   modsRead: 'fas fa-magic',
   modsWrite: 'fas fa-magic',
+  jobsRead: 'fas fa-clock',
+  jobsWrite: 'fas fa-clock',
   privateRead: 'fas fa-lock',
   privateWrite: 'fas fa-lock',
 };
@@ -363,6 +382,10 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Let the AI assistant read your Mods (your styles and scripts for sites)';
     case 'modsWrite':
       return 'Let the AI assistant create and change your Mods, including scripts that run on those sites';
+    case 'jobsRead':
+      return 'Let the AI assistant see your AI Jobs and their results';
+    case 'jobsWrite':
+      return 'Let the AI assistant create, change and run your AI Jobs, which run prompts on a schedule, read your Notes and Reader, and notify your phone';
     case 'privateRead':
     case 'privateWrite': {
       const verb = permId === 'privateWrite' ? 'Read and change' : 'Read';

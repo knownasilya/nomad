@@ -14,7 +14,9 @@ import * as vaultApps from './vault-apps';
 import * as names from '../../hyper/names';
 import * as mods from '../../ui/mods';
 import * as openTabs from '../../ui/open-tabs';
+import * as jobs from '../../ai/jobs';
 import { PRESETS } from '../../../../shared/mods.mjs';
+import { describeSchedule } from '../../../../shared/jobs.mjs';
 
 function thisPlatform() {
   return 'desktop';
@@ -225,6 +227,61 @@ export default {
 
   async deleteMod(id) {
     await mods.remove(id);
+  },
+
+  // AI Jobs (bg/ai/jobs.js, ADR-0030): My Library → Jobs. Each Job comes with its newest run, when
+  // it next runs, whether it is running here now, and the name of the Device that runs it.
+  async listJobs() {
+    const [own, devices] = await Promise.all([
+      jobs.ownKey().catch(() => null),
+      vault.listDevices().catch(() => []),
+    ]);
+    const names = new Map((devices || []).map((d) => [d.key, d.name]));
+    return {
+      jobs: jobs.list().map((j) => ({
+        ...j,
+        when: describeSchedule(j.schedule),
+        here: !!own && j.device === own,
+        deviceName: j.device === own ? 'This computer' : names.get(j.device) || 'Another device',
+      })),
+    };
+  },
+
+  // A Job's saved runs, newest first.
+  async listJobRuns(id) {
+    return jobs.runsOf(id);
+  },
+
+  // ({ id?, title?, prompt?, schedule?, notify?, enabled?, runHere? }) -> record. A new Job runs on
+  // this Device and reads the Reader of the calling page's Space.
+  async saveJob(fields) {
+    const f = fields || {};
+    let space;
+    if (!f.id) {
+      try {
+        space = await vaultApps.spaceKey(this);
+      } catch {}
+    }
+    const { id, title, prompt, schedule, notify, enabled, runHere } = f;
+    return jobs.save({ id, title, prompt, schedule, notify, enabled, runHere: !!runHere, space });
+  },
+
+  async deleteJob(id) {
+    await jobs.remove(id);
+  },
+
+  // Run a Job now, on this Device.
+  async runJob(id) {
+    jobs.runNow(id);
+  },
+
+  // 'changed' when a Job or a run changes, here or on another Device, and when a run starts.
+  watchJobs() {
+    const emitter: any = new EventEmitter();
+    const changed = () => emitter.emit('changed', {});
+    jobs.events.on('changed', changed);
+    emitter.close = () => jobs.events.removeListener('changed', changed);
+    return emitter;
   },
 
   // Open tabs on the user's other Devices, the calling page's Space first (nomad://history).

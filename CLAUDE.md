@@ -301,6 +301,20 @@ nomad://history → Tabs From Other Devices (`nomad.vault.listDeviceTabs`). The 
 `mobile/app/index.tsx` over `RPC_APPS` `tabs` and lists them under the tab grid. `sync_open_tabs`
 (Settings → Devices) and the phone's Settings switch turn it off per Device and delete the record.
 
+### AI Jobs and phone notifications (ADR-0030)
+
+A Job is a saved prompt the user's AI runs by itself, by hand or on a schedule; a run can notify
+the phone. Jobs, runs and the phone's "run now" requests are Vault records (`/.vault/jobs/`,
+`/.vault/job-runs/<jobId>/`, `/.vault/job-requests/`; rules, schedules and notification logic in
+`shared/jobs.mjs`, tests `tests/unit/jobs.test.js`). `app/bg/ai/jobs.js` keeps them in memory, runs
+the Jobs whose `device` is this one when due (and once on wake), and saves each run; `main.js`
+injects the turn (`runJobTurn` in `ai.ts`). A run is the `job` stage: personal, no tab, reads only
+(`JOB_CAPS` in `search-execute.mjs`), no permission prompts (`jobPermit`), this Device's runtime
+only. The AI gets `listJobs`/`saveJob`/`runJob`/`deleteJob` (`jobsRead`/`jobsWrite`) and, inside a
+Job, `notify`. Desktop UI is My Library → Jobs (`nomad.vault.listJobs`/…/`watchJobs`). The phone lists
+them (`mobile/components/Jobs.tsx`, `RPC_APPS` `jobs`) and posts local notifications with
+`expo-notifications` for new runs (`mobile/lib/useJobNotifications.ts`); there is no push server.
+
 ## Look and feel: every UI supports dark mode and matches the rest
 
 Every new or changed screen must work in light **and** dark, and look like its neighbours.

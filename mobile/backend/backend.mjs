@@ -561,7 +561,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
       return
     }
     if (!vault) {
-      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : 'Link this phone to use Reader and Notes' })
+      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : 'Link this phone to use Reader and Notes' })
       return
     }
     let value
@@ -582,6 +582,12 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'names' && action === 'match') value = await vaultApps.matchNames(vault, args.query, args.limit)
     else if (app === 'names' && action === 'set') value = await vaultApps.setName(vault, { name: args.name, url: args.url, title: args.title, previous: args.previous })
     else if (app === 'names' && action === 'remove') value = await vaultApps.removeName(vault, args.name)
+    else if (app === 'jobs' && action === 'list') value = await vaultApps.listJobs(vault)
+    else if (app === 'jobs' && action === 'runs') value = await vaultApps.jobRuns(vault, args.id)
+    else if (app === 'jobs' && action === 'setEnabled') value = await vaultApps.setJobEnabled(vault, args.id, args.enabled)
+    else if (app === 'jobs' && action === 'run') value = await vaultApps.requestJobRun(vault, args.id)
+    else if (app === 'jobs' && action === 'delete') value = await vaultApps.deleteJob(vault, args.id)
+    else if (app === 'jobs' && action === 'notifications') value = await vaultApps.jobNotifications(vault, args.since)
     else throw new Error(`Unknown ${app} action: ${action}`)
     send(RPC_APPS_RESULT, { reqId, ok: true, value })
   } catch (err) {

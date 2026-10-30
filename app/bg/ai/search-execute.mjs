@@ -329,7 +329,95 @@ export const CAPABILITIES = [
     },
     gates: { personal: true },
   },
+  // The user's AI Jobs (ADR-0030): prompts that run by themselves, on a schedule or by hand, and can
+  // notify the user's phone. A Job's own turn gets none of these but notify (JOB_CAPS).
+  {
+    name: 'listJobs',
+    description:
+      "List the user's AI Jobs: saved prompts the AI runs by itself on a schedule or by hand, each with its schedule, " +
+      'whether it notifies the phone, which device runs it, and its last run (status and answer). Asks permission to read Jobs.',
+    inputSchema: {
+      type: 'object',
+      properties: { query: { type: 'string', description: 'Optional. Words that must all be in the Job' } },
+      required: [],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'saveJob',
+    description:
+      'Create a Job (no `id`; `prompt` required) or change one (`id`; fields you leave out stay as they are). Each run, ' +
+      "the AI gets `prompt` on its own, with no chat history and nobody watching, on this computer: write it as a complete " +
+      'instruction. A run can read the Notes, Reader, drives and the web, and change nothing; its answer is saved for the ' +
+      'user, and it can notify their phone. Asks permission to change Jobs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Optional. The Job to change, from listJobs' },
+        title: { type: 'string', description: 'Optional. A short name, e.g. "Morning digest"' },
+        prompt: { type: 'string', description: 'Required for a new Job. What the AI does each run' },
+        schedule: {
+          description:
+            'Optional. null to run only by hand (the default); { "kind": "interval", "minutes": 120 } (15 or more); or ' +
+            '{ "kind": "daily", "time": "08:00", "days": [1,2,3,4,5] } (24-hour local time; days 0 = Sunday, leave out for every day). ' +
+            'A phrase works too: "daily 08:00", "weekdays 09:00", "every 2 hours".',
+        },
+        notify: {
+          type: 'string',
+          enum: ['always', 'auto', 'never'],
+          description:
+            'Optional. "always" (default): every run notifies the phone with its answer. "auto": only when the run calls ' +
+            'notify, for "tell me if…" Jobs. "never": no notification. A failed run notifies unless "never".',
+        },
+        enabled: { type: 'boolean', description: 'Optional. On (default) or paused' },
+      },
+      required: [],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'runJob',
+    description:
+      'Run one of the user\'s Jobs now, on this computer, in the background. Its answer is saved with the Job, and it ' +
+      'notifies the phone as the Job says. Returns at once. Asks permission to change Jobs.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'The Job id, from listJobs or saveJob' } },
+      required: ['id'],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'deleteJob',
+    description: "Delete one of the user's Jobs and its saved runs. Asks permission to change Jobs.",
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'The Job id, from listJobs' } },
+      required: ['id'],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'notify',
+    description:
+      "Send the user a notification on their phone: a short title and one or two sentences. " +
+      'Only in a Job. Tapping it opens this run\'s full answer, so keep the details in your answer.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Optional. A few words; the Job\'s title when left out' },
+        body: { type: 'string', description: 'The message, at most 300 characters' },
+      },
+      required: ['body'],
+    },
+    gates: { job: true },
+  },
 ]
+
+// What a Job's turn may use (ADR-0030): it runs with nobody watching, so it reads and never changes
+// anything, and it never asks a permission (the Notes and Reader reads are granted with the Job).
+// Capabilities with no `personal` gate are filtered by the usual gates (no writes, no renderer).
+export const JOB_CAPS = new Set(['listNotes', 'readNote', 'listReaderPosts', 'readReaderPost', 'notify'])
 
 const RUNTIME_IMPORT = /^import\s+\{\s*nomad\s*\}\s+from\s+['"]nomad:runtime['"]\s*;?/
 
@@ -372,12 +460,15 @@ const TAB_DRIVE_ARG = {
 // never a page's nomad.ai.chat(). It adds the user's Notes and Reader, and `drive` on the drive tools.
 // `tab`: the turn has the user's current tab (the AI Sidebar, the phone's AI panel; ADR-0021). It
 // adds currentTab, and a write must name its drive.
+// `job`: the turn is one of the user's AI Jobs (ADR-0030). Of the personal capabilities it keeps only
+// JOB_CAPS, and it adds notify.
 export function visibleCapabilities({
   allowWrite = true,
   allowVision = false,
   remote = false,
   personal = false,
   tab = false,
+  job = false,
 } = {}) {
   return CAPABILITIES.filter((cap) => {
     if (cap.gates?.write && !allowWrite) return false
@@ -385,6 +476,8 @@ export function visibleCapabilities({
     if (cap.gates?.renderer && remote) return false
     if (cap.gates?.personal && !personal) return false
     if (cap.gates?.tab && !tab) return false
+    if (cap.gates?.job && !job) return false
+    if (job && (cap.gates?.personal || cap.gates?.job) && !JOB_CAPS.has(cap.name)) return false
     return true
   }).map(({ namedDescription, tabDescription, ...cap }) => {
     if (!personal || !namedDescription) return cap
@@ -440,8 +533,15 @@ function guideRecord(id, title, markdown) {
 const GUIDES = splitGuides(API_REFERENCE)
 
 export function buildCatalog(opts) {
-  const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, tab, names, ownerId } = opts || {}
-  const caps = visibleCapabilities({ allowWrite, allowVision, remote, personal: !!personal, tab: !!personal && !!tab })
+  const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, tab, job, names, ownerId } = opts || {}
+  const caps = visibleCapabilities({
+    allowWrite,
+    allowVision,
+    remote,
+    personal: !!personal,
+    tab: !!personal && !!tab,
+    job: !!personal && !!job,
+  })
   return {
     capabilities: caps,
     // The user's own AI: its turn may use their names, Notes, Reader and other Drives (see above).

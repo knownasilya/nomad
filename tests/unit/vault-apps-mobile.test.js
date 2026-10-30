@@ -14,6 +14,7 @@ import fs from 'fs'
 import { createFsCore, makeMetadata, AUTOBASE_OPTS } from '../../shared/fs-core.mjs'
 import * as apps from '../../shared/vault-apps.mjs'
 import * as names from '../../shared/names.mjs'
+import * as jl from '../../shared/jobs.mjs'
 import * as phone from '../../mobile/backend/lib/vault-apps.mjs'
 
 let Autobase, Hyperbee, Corestore, b4a
@@ -220,6 +221,54 @@ describe('phone Names over a shared Vault (ADR-0018)', () => {
       await phone.removeName(base, 'my-blog')
       await until(async () => !(await readJson(computer, names.namePath('my-blog'))))
       expect((await phone.listNames(base)).names).toEqual([])
+    })
+  }, 30000)
+
+  it('lists the AI Jobs the computer runs, asks for a run, pauses and notifies (ADR-0030)', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      const computerKey = b4a.toString(computer.local.key, 'hex')
+      await computer.append(putJson('/.vault/devices/' + computerKey + '.json', { key: computerKey, name: 'Laptop' }))
+      const job = jl.makeJob({ id: jl.newJobId(), title: 'Digest', prompt: 'Sum up Reader', schedule: 'daily 08:00', device: computerKey })
+      await computer.append(putJson(jl.jobPath(job.id), job))
+      const run = jl.makeRun({
+        id: jl.newRunId(),
+        job,
+        device: computerKey,
+        startedAt: new Date(),
+        finishedAt: new Date(),
+        status: 'ok',
+        output: '# Three new posts',
+        notification: { title: 'Digest', body: 'Three new posts' }
+      })
+      await computer.append(putJson(jl.runPath(job.id, run.id), run))
+      await computer.update()
+
+      await until(async () => (await phone.listJobs(base)).jobs.length === 1)
+      const [row] = (await phone.listJobs(base)).jobs
+      expect(row).toMatchObject({ id: job.id, when: 'Every day at 08:00', deviceName: 'Laptop', requested: false })
+      expect(row.lastRun.id).toBe(run.id)
+      expect((await phone.jobRuns(base, job.id)).map((r) => r.id)).toEqual([run.id])
+
+      // The first look starts from the newest run; a later run notifies.
+      const first = await phone.jobNotifications(base, null)
+      expect(first).toMatchObject({ notify: [], since: run.finishedAt, wants: true })
+      expect((await phone.jobNotifications(base, '')).notify).toEqual([
+        { id: run.id, jobId: job.id, title: 'Digest', body: 'Three new posts' }
+      ])
+
+      await phone.requestJobRun(base, job.id)
+      await until(async () => !!(await readJson(computer, jl.requestPath(job.id))))
+      expect(jl.isRequest(await readJson(computer, jl.requestPath(job.id)))).toBe(true)
+      expect((await phone.listJobs(base)).jobs[0].requested).toBe(true)
+
+      await phone.setJobEnabled(base, job.id, false)
+      await until(async () => (await readJson(computer, jl.jobPath(job.id)))?.enabled === false)
+
+      await phone.deleteJob(base, job.id)
+      await until(async () => !(await readJson(computer, jl.jobPath(job.id))))
+      expect(await readJson(computer, jl.runPath(job.id, run.id))).toBe(null)
+      expect(await readJson(computer, jl.requestPath(job.id))).toBe(null)
+      expect((await phone.listJobs(base)).jobs).toEqual([])
     })
   }, 30000)
 })

@@ -42,6 +42,12 @@
           "microphonePermission": false
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "color": "#0f2747"
+        }
+      ],
       "./plugins/withGradleVersion",
       "./plugins/withReleaseSigning"
     ]

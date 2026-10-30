@@ -159,11 +159,29 @@ export interface Backend {
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'reader' | 'notes' | 'names' | 'tabs'
+export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'jobs'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
 export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string }
+// The user's AI Jobs (shared/jobs.mjs, ADR-0030). A desktop runs them; the phone lists them, pauses
+// them, asks for a run, and notifies on a run that has a notification.
+export type JobSchedule = null | { kind: 'interval'; minutes: number } | { kind: 'daily'; time: string; days?: number[] }
+export interface JobRun {
+  type: 'nomad/job-run'; id: string; jobId: string; title: string; device: string | null
+  trigger: 'schedule' | 'manual'; startedAt: string; finishedAt: string; status: 'ok' | 'error'
+  output: string; error?: string; notification: { title: string; body: string } | null
+}
+export interface Job {
+  type: 'nomad/job'; id: string; title: string; prompt: string; schedule: JobSchedule
+  notify: 'always' | 'auto' | 'never'; enabled: boolean; device: string | null; space: string | null
+  createdAt: string; updatedAt: string
+  // Worked out by the backend: the newest run, when it next runs, the schedule in words, the name of
+  // the Device that runs it, and whether a "run now" from a phone is waiting for it.
+  lastRun: JobRun | null; nextRunAt: string | null; when: string; deviceName: string; requested: boolean
+}
+export interface JobsList { jobs: Job[]; writable: boolean }
+export interface JobNotifications { notify: { id: string; jobId: string; title: string; body: string }[]; since: string; wants: boolean }
 export interface ReaderState { follows: string[]; read: string[]; writable: boolean }
 export interface FeedPost { title: string; summary: string; tags: string[]; createdAt: string; url: string; feedUrl: string; feedTitle: string }
 export interface Feed { url: string; title: string; posts: FeedPost[] }

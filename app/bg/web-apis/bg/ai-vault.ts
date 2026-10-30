@@ -1,5 +1,5 @@
-// The AI's Notes, Highlights, Reader and Mods capabilities (search-execute.mjs CAPABILITIES,
-// ADR-0019, ADR-0023): the
+// The AI's Notes, Highlights, Reader, Mods and Jobs capabilities (search-execute.mjs CAPABILITIES,
+// ADR-0019, ADR-0023, ADR-0030): the
 // Vault and Drive reads and writes behind them. ai.ts executeTool calls runVaultTool on a personal turn only
 // (the user's own AI); each capability first asks its permission (vault-tools.mjs VAULT_TOOL_PERMS).
 //
@@ -10,6 +10,9 @@ import * as apps from '../../../../shared/vault-apps.mjs';
 import * as vaultApps from './vault-apps';
 import { highlightForAi, assertCanHighlight } from '../../ui/highlights';
 import * as mods from '../../ui/mods';
+import * as jobs from '../../ai/jobs';
+import * as vault from '../../hyper/vault';
+import { describeSchedule } from '../../../../shared/jobs.mjs';
 import fsAPI from './fs';
 import {
   VAULT_TOOL_PERMS,
@@ -24,6 +27,8 @@ import {
   clip,
   findMods,
   modForModel,
+  findJobs,
+  jobForModel,
 } from '../../ai/vault-tools.mjs';
 
 // A feed that doesn't answer in this time is listed with an error, so one offline peer can't stall
@@ -149,6 +154,35 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
       await mods.remove(b.id);
       return `Deleted the Mod “${b.name}” for ${b.site}`;
     }
+
+    case 'listJobs':
+      return json(findJobs(jobs.list(), args, await deviceNamer()));
+
+    // A new Job (no id; `prompt` required) or changes to one. A new Job runs on this computer and
+    // reads the Reader of this turn's Space.
+    case 'saveJob': {
+      const { id, title, prompt, schedule, notify, enabled } = args;
+      if (id && !jobs.get(id)) throw new Error('No Job with that id. Use listJobs to find it.');
+      if (!id && !prompt) throw new Error('A new Job needs `prompt`: what the AI does each run');
+      const space = id ? undefined : await readerSpace().catch(() => null);
+      const rec = await jobs.save({ id, title, prompt, schedule, notify, enabled, space });
+      const row = jobs.list().find((j) => j.id === rec.id) || rec;
+      return json({ ...jobForModel(row, await deviceNamer()), created: !id });
+    }
+
+    case 'runJob': {
+      const job = jobs.get(args.id);
+      if (!job) throw new Error('No Job with that id. Use listJobs to find it.');
+      jobs.runNow(job.id);
+      return `Started “${job.title}” in the background. Its answer is saved with the Job (My Library → Jobs).`;
+    }
+
+    case 'deleteJob': {
+      const job = jobs.get(args.id);
+      if (!job) throw new Error('No Job with that id. Use listJobs to find it.');
+      await jobs.remove(job.id);
+      return `Deleted the Job “${job.title}” (${describeSchedule(job.schedule).toLowerCase()})`;
+    }
   }
   throw new Error(`Unknown capability ${name}`);
 }
@@ -211,4 +245,14 @@ async function readPost(ctx, { root, dir }, read) {
     };
   }
   throw new Error('This post has no text file');
+}
+
+// Names a Device by its Vault key: "this computer", or the name the user gave it.
+async function deviceNamer(): Promise<(key: string) => string> {
+  const [own, devices] = await Promise.all([
+    jobs.ownKey().catch(() => null),
+    vault.listDevices().catch(() => []),
+  ]);
+  const names = new Map<string, string>((devices || []).map((d: any) => [d.key, d.name]));
+  return (key) => (key === own ? 'this computer' : names.get(key) || 'another device');
 }
