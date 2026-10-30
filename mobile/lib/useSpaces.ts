@@ -139,6 +139,11 @@ export function useSpaces (backend: Backend): Spaces {
     return () => timers.forEach(clearTimeout)
   }, [syncFromVault])
 
+  // And again whenever the Vault changes (another Device added a Space, or the phone linked), so a
+  // Space made on desktop shows up here without reopening the switcher.
+  const onVaultChange = backend.onVaultChange
+  useEffect(() => onVaultChange(() => { syncFromVault() }), [onVaultChange, syncFromVault])
+
   // Keep this phone's own Device record listing its Spaces, so the user's other Devices can show
   // what the phone has. The backend writes only when the list changed, and only once paired.
   const ownSpacesSig = JSON.stringify(spaces.filter((s) => s.rootDriveKey).map((s) => [s.rootDriveKey, s.name]))
