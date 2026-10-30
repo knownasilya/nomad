@@ -163,12 +163,40 @@ export interface Backend {
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces'
+export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
 // space: the Space's key when the note is kept only in that Space (ADR-0029), else null.
 export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string; space?: string | null }
+// The user's AI Jobs (shared/jobs.mjs, ADR-0030). A desktop runs them; the phone lists them, pauses
+// them, asks for a run, and notifies on a run that has a notification.
+// What the phone shows is `when` (the schedule in words), so the shapes are loose here.
+export type JobSchedule =
+  | null
+  | { kind: 'interval'; minutes: number; from?: string; to?: string; days?: number[] }
+  | { kind: 'daily'; times?: string[]; time?: string; days?: number[] }
+  | { kind: 'monthly'; dates: number[]; times: string[] }
+  | { kind: 'once'; at: string }
+  | { kind: 'cron'; expr: string }
+export interface JobRun {
+  type: 'nomad/job-run'; id: string; jobId: string; title: string; device: string | null
+  trigger: 'schedule' | 'manual'; startedAt: string; finishedAt: string; status: 'ok' | 'error'
+  output: string; error?: string; notification: { title: string; body: string } | null
+}
+export interface Job {
+  type: 'nomad/job'; id: string; title: string; prompt: string; schedule: JobSchedule
+  // A Job from a drive: live runs the user's own drive's latest files, otherwise a copy; newer: the
+  // drive has a version the user hasn't taken (on the computer, in My Library → Jobs).
+  source: { url: string; live: boolean; copiedAt: string | null; newer: boolean } | null
+  notify: 'always' | 'auto' | 'never'; enabled: boolean; device: string | null; space: string | null
+  createdAt: string; updatedAt: string
+  // Worked out by the backend: the newest run, when it next runs, the schedule in words, the name of
+  // the Device that runs it, and whether a "run now" from a phone is waiting for it.
+  lastRun: JobRun | null; nextRunAt: string | null; when: string; deviceName: string; requested: boolean
+}
+export interface JobsList { jobs: Job[]; writable: boolean }
+export interface JobNotifications { notify: { id: string; jobId: string; title: string; body: string }[]; since: string; wants: boolean }
 // shared: the Space is shared (ADR-0029); canFollow is false for someone who can only view it.
 export interface ReaderState { follows: string[]; read: string[]; writable: boolean; shared?: boolean; canFollow?: boolean }
 export interface FeedPost { title: string; summary: string; tags: string[]; createdAt: string; url: string; feedUrl: string; feedTitle: string }

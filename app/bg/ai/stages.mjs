@@ -1,16 +1,19 @@
-// The four kinds of AI turn (ADR-0021). A turn's stage decides what it may do.
+// The kinds of AI turn (ADR-0021). A turn's stage decides what it may do.
 //   page    — a page's nomad.ai.chat(), on desktop or on the phone. Only its own Drive; never personal.
 //   sidebar — the desktop AI Sidebar. The user's own AI, with the tab the user is on, looked up live.
 //   phone   — the phone's AI panel over the AI Bridge. The user's own AI, with a snapshot of the
 //             phone's tab from when the user sent the message.
 //   outside — another program on this machine, through the loopback MCP (callLocalTool). The user's
 //             own AI, on the focused tab.
+//   job     — one of the user's AI Jobs, run by this Device on its schedule or by hand (ADR-0030). The
+//             user's own AI with no tab, nobody watching, and reads only (search-execute.mjs JOB_CAPS).
 
 const RULES = {
   page: { personal: false, tab: false },
   sidebar: { personal: true, tab: true },
   phone: { personal: true, tab: true },
   outside: { personal: true, tab: false },
+  job: { personal: true, tab: false },
 }
 
 export function stageRules(stage) {

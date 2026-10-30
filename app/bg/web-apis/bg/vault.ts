@@ -24,7 +24,10 @@ import * as tabManager from '../../ui/tabs/manager';
 const callerSpace = (ctx) => vaultApps.spaceKey(ctx).catch(() => null);
 import * as mods from '../../ui/mods';
 import * as openTabs from '../../ui/open-tabs';
+import * as jobs from '../../ai/jobs';
+import { readJobSource } from './job-source';
 import { PRESETS } from '../../../../shared/mods.mjs';
+import { describeSchedule, nextRunAt, normalizeSchedule } from '../../../../shared/jobs.mjs';
 
 // The Drive key of a hyper://<key>/ URL, or null.
 function driveKeyOf(url) {
@@ -372,6 +375,94 @@ export default {
 
   async deleteMod(id) {
     await mods.remove(id);
+  },
+
+  // AI Jobs (bg/ai/jobs.js, ADR-0030): My Library → Jobs. Each Job comes with its newest run, when
+  // it next runs, whether it is running here now, and the name of the Device that runs it.
+  async listJobs() {
+    const [own, devices] = await Promise.all([
+      jobs.ownKey().catch(() => null),
+      vault.listDevices().catch(() => []),
+    ]);
+    const names = new Map((devices || []).map((d) => [d.key, d.name]));
+    return {
+      jobs: jobs.list().map((j) => ({
+        ...j,
+        when: describeSchedule(j.schedule),
+        here: !!own && j.device === own,
+        deviceName: j.device === own ? 'This computer' : names.get(j.device) || 'Another device',
+      })),
+    };
+  },
+
+  // A Job's saved runs, newest first.
+  async listJobRuns(id) {
+    return jobs.runsOf(id);
+  },
+
+  // ({ id?, title?, prompt?, source?, schedule?, notify?, enabled?, runHere? }) -> record. A new Job
+  // runs on this Device and reads the Reader of the calling page's Space. `source` is a drive URL
+  // to read now (the user's own drive stays live, anyone else's is copied), { url, module, prompt }
+  // for a newer version the user looked at (from checkJobSource) and took, or null to drop it.
+  async saveJob(fields) {
+    const f = fields || {};
+    let space;
+    if (!f.id) {
+      try {
+        space = await vaultApps.spaceKey(this);
+      } catch {}
+    }
+    const { id, title, prompt, schedule, notify, enabled, runHere } = f;
+    let source;
+    if (f.source === null) source = null;
+    else if (typeof f.source === 'string') source = await readJobSource(f.source);
+    else if (f.source && typeof f.source === 'object') {
+      const { url, module = null, prompt: text = null } = f.source;
+      source = { url, live: false, module, prompt: text };
+    }
+    return jobs.save({ id, title, prompt, source, schedule, notify, enabled, runHere: !!runHere, space });
+  },
+
+  // A schedule as the Jobs editor has it (an object, a phrase or cron), checked: { schedule, when,
+  // next: [ISO, …] } with its next few times from now. Throws with what's wrong.
+  async previewSchedule(input) {
+    const now = new Date();
+    const schedule = normalizeSchedule(input, now);
+    const next = [];
+    let after = now;
+    while (schedule && next.length < 3) {
+      const at = nextRunAt(schedule, after);
+      if (!at) break;
+      next.push(at.toISOString());
+      after = at;
+    }
+    return { schedule, when: describeSchedule(schedule), next };
+  },
+
+  // A Job's source as its drive has it now: { url, live, module, prompt, title, hash }, so the user
+  // can look at a newer version before taking it.
+  async checkJobSource(id) {
+    const job = jobs.get(id);
+    if (!job?.source) throw new Error('This Job doesn’t come from a drive');
+    return readJobSource(job.source.url);
+  },
+
+  async deleteJob(id) {
+    await jobs.remove(id);
+  },
+
+  // Run a Job now, on this Device.
+  async runJob(id) {
+    jobs.runNow(id);
+  },
+
+  // 'changed' when a Job or a run changes, here or on another Device, and when a run starts.
+  watchJobs() {
+    const emitter: any = new EventEmitter();
+    const changed = () => emitter.emit('changed', {});
+    jobs.events.on('changed', changed);
+    emitter.close = () => jobs.events.removeListener('changed', changed);
+    return emitter;
   },
 
   // Open tabs on the user's other Devices, the calling page's Space first (nomad://history).

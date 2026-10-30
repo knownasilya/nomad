@@ -1,4 +1,4 @@
-// The AI's Notes, Reader and Mods capabilities (search-execute.mjs CAPABILITIES, gate `personal`): the
+// The AI's Notes, Reader, Mods and Jobs capabilities (search-execute.mjs CAPABILITIES, gate `personal`): the
 // pure parts, finding and shaping what the model gets. bg/web-apis/bg/ai-vault.ts does the Vault and
 // Drive reads and writes, after the user's permission.
 //
@@ -10,6 +10,7 @@
 
 import { noteTitle, noteSnippet, sortNotes, makeResolver, findLinks, driveRoot } from '../../../shared/vault-apps.mjs'
 import { PRESETS, normalizeSite, describeMod } from '../../../shared/mods.mjs'
+import { describeSchedule } from '../../../shared/jobs.mjs'
 
 // Capability -> the permission it asks for.
 export const VAULT_TOOL_PERMS = {
@@ -25,9 +26,30 @@ export const VAULT_TOOL_PERMS = {
   listMods: 'modsRead',
   saveMod: 'modsWrite',
   deleteMod: 'modsWrite',
+  listJobs: 'jobsRead',
+  saveJob: 'jobsWrite',
+  runJob: 'jobsWrite',
+  deleteJob: 'jobsWrite',
 }
 
-export const VAULT_PERMS = ['notesRead', 'notesWrite', 'readerRead', 'readerWrite', 'modsRead', 'modsWrite']
+export const VAULT_PERMS = [
+  'notesRead',
+  'notesWrite',
+  'readerRead',
+  'readerWrite',
+  'modsRead',
+  'modsWrite',
+  'jobsRead',
+  'jobsWrite',
+]
+
+// A Job's turn runs with nobody to ask (ADR-0030). Making the Job was the user's yes to it reading
+// their Notes and Reader; anything else is refused without a prompt.
+export const JOB_GRANTS = ['notesRead', 'readerRead']
+
+export function jobPermit(permission) {
+  return Promise.resolve(JOB_GRANTS.includes(permission))
+}
 
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 100
@@ -255,5 +277,56 @@ export function modForModel(b) {
     css: clip(b.css),
     js: clip(b.js),
     updatedAt: b.updatedAt,
+  }
+}
+
+// Jobs
+// =
+
+// The Jobs that match, A to Z, each with its last run. `jobs` come from jobsWithRuns (shared/jobs.mjs);
+// `deviceName(key)` names the Device that runs one.
+/**
+ * @param {any[]} jobs
+ * @param {{ query?: string }} [opts]
+ * @param {(key: string) => string} [deviceName]
+ */
+export function findJobs(jobs, { query } = {}, deviceName = () => 'another device') {
+  return jobs.filter((j) => matches(query, [j.title, j.prompt])).map((j) => jobForModel(j, deviceName))
+}
+
+/**
+ * @param {any} j
+ * @param {(key: string) => string} [deviceName]
+ */
+export function jobForModel(j, deviceName = () => 'another device') {
+  const last = j.lastRun
+  return {
+    id: j.id,
+    title: j.title,
+    prompt: clip(j.prompt),
+    ...(j.source
+      ? {
+          source: {
+            url: j.source.url,
+            // live: the user's own drive, read each run. Otherwise a copy, and maybe a newer version waiting.
+            live: !!j.source.live,
+            ...(j.source.live ? {} : { copiedAt: j.source.copiedAt, updateWaiting: !!j.source.changed }),
+          },
+        }
+      : {}),
+    schedule: j.schedule,
+    when: describeSchedule(j.schedule),
+    notify: j.notify,
+    enabled: j.enabled,
+    runsOn: j.device ? deviceName(j.device) : 'no device',
+    nextRunAt: j.nextRunAt || null,
+    lastRun: last
+      ? {
+          startedAt: last.startedAt,
+          status: last.status,
+          answer: clip(last.output, 2000),
+          ...(last.error ? { error: last.error } : {}),
+        }
+      : null,
   }
 }

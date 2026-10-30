@@ -11,6 +11,7 @@ import './views/drives.js';
 import './views/listings.js';
 import './views/names.js';
 import './views/mods.js';
+import './views/jobs.js';
 import './views/sharing.js';
 import './views/bookmarks.js';
 import './views/contacts.js';
@@ -136,6 +137,11 @@ export class LibraryApp extends LitElement {
                 <span class="label">Mods</span>`
             )}
             ${pageNav(
+              'jobs',
+              html`<span class="fas fa-fw fa-clock"></span>
+                <span class="label">Jobs</span>`
+            )}
+            ${pageNav(
               'sharing',
               html`<span class="fas fa-fw fa-user-friends"></span>
                 <span class="label">Sharing</span>`
@@ -181,6 +187,9 @@ export class LibraryApp extends LitElement {
             : ''}
           ${this.view === 'mods'
             ? html`<mods-view class="full-size" .filter=${this.filter}></mods-view>`
+            : ''}
+          ${this.view === 'jobs'
+            ? html`<jobs-view class="full-size" .filter=${this.filter}></jobs-view>`
             : ''}
           ${this.view === 'sharing'
             ? html`<sharing-view class="full-size"></sharing-view>`

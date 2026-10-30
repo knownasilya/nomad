@@ -3,12 +3,13 @@ import { decodeInlineJson } from '../../../shared/fs-core.mjs'
 import * as apps from '../../../shared/vault-apps.mjs'
 import * as names from '../../../shared/names.mjs'
 import * as ot from '../../../shared/open-tabs.mjs'
+import * as jl from '../../../shared/jobs.mjs'
 import * as sl from '../../../shared/space-library.mjs'
 import { inlineOp, boundedUpdate } from './vault.mjs'
 import { parseHyperUrl } from './hyper-url.mjs'
 import { DRIVE_AUTOBASE, DRIVE_HYPERDRIVE } from '../../rpc-commands.mjs'
 
-// The phone's Reader, Notes and Names (ADR-0017, ADR-0018). They read and write the same Vault records as desktop's
+// The phone's Reader, Notes, Names (ADR-0017, ADR-0018) and AI Jobs (ADR-0030). They read and write the same Vault records as desktop's
 // nomad://reader and nomad://notes (shared/vault-apps.mjs), so a subscription or a note made on one
 // Device shows on the others. The phone only has this data once it is linked: with no Vault there is
 // nothing here, and the UI points the user to Devices.
@@ -444,5 +445,91 @@ export async function listDeviceTabs (base, space, connected) {
     }),
     linked: devices.length > 1,
     currentSpace: space || null
+  }
+}
+
+// AI Jobs (shared/jobs.mjs, ADR-0030)
+// =
+// A desktop runs them; the phone lists them and their runs, pauses, deletes and asks for a run, and
+// shows a notification for each new run that has one (lib/useJobNotifications.ts).
+
+async function deviceNames (base) {
+  const own = ownKey(base)
+  const devices = await readPrefix(base, '/.vault/devices/')
+  const names = new Map(devices.filter((d) => d && d.key).map((d) => [d.key, d.name || 'Device']))
+  return (key) => (key && key === own ? 'This phone' : names.get(key) || 'A removed device')
+}
+
+// Every Job with its newest run, when it next runs, its schedule in words, and its Device's name.
+export async function listJobs (base) {
+  await boundedUpdate(base)
+  const [jobs, runs, nameOf] = await Promise.all([
+    readPrefix(base, jl.JOBS_PREFIX),
+    readPrefix(base, jl.RUNS_PREFIX),
+    deviceNames(base)
+  ])
+  const requested = new Set((await readPrefix(base, jl.REQUESTS_PREFIX)).filter(jl.isRequest).map((r) => r.jobId))
+  return {
+    jobs: jl.jobsWithRuns(jobs, runs).map((j) => ({
+      ...j,
+      // Where a drive Job comes from, without its copied files: the phone shows only that.
+      source: j.source
+        ? { url: j.source.url, live: !!j.source.live, copiedAt: j.source.copiedAt || null, newer: !!j.source.changed }
+        : null,
+      when: jl.describeSchedule(j.schedule),
+      deviceName: nameOf(j.device),
+      requested: requested.has(j.id)
+    })),
+    writable: !!base.writable
+  }
+}
+
+// A Job's runs, newest first.
+export async function jobRuns (base, jobId) {
+  await boundedUpdate(base)
+  return jl.sortRuns(await readPrefix(base, jl.runsPrefix(jobId)))
+}
+
+async function readJob (base, id) {
+  const job = await readRecord(base, jl.jobPath(id))
+  if (!jl.isJob(job)) throw new Error('That Job is gone')
+  return job
+}
+
+// Pause or resume a Job, for every Device.
+export async function setJobEnabled (base, id, enabled) {
+  const job = await readJob(base, id)
+  const rec = jl.makeJob({ enabled: !!enabled }, job)
+  await putRecord(base, jl.jobPath(id), rec)
+  return rec
+}
+
+// Ask the Job's Device to run it now. It runs when that Device sees the request, which may be later
+// if it is asleep; the run then notifies as usual.
+export async function requestJobRun (base, id) {
+  await readJob(base, id)
+  await putRecord(base, jl.requestPath(id), jl.makeRequest(id, ownKey(base)))
+  return true
+}
+
+export async function deleteJob (base, id) {
+  for (const r of await readPrefix(base, jl.runsPrefix(id))) {
+    if (jl.isRun(r)) await delRecord(base, jl.runPath(id, r.id))
+  }
+  if (await readRecord(base, jl.requestPath(id))) await delRecord(base, jl.requestPath(id))
+  await delRecord(base, jl.jobPath(id))
+  return true
+}
+
+// Runs that finished after `since` with a notification, and the mark to keep (pendingNotifications).
+export async function jobNotifications (base, since) {
+  await boundedUpdate(base)
+  const { notify, since: next } = jl.pendingNotifications(await readPrefix(base, jl.RUNS_PREFIX), since ?? null)
+  // Whether any Job wants to notify, so the phone asks for the notification permission only then.
+  const wants = (await readPrefix(base, jl.JOBS_PREFIX)).some((j) => jl.isJob(j) && j.notify !== 'never')
+  return {
+    notify: notify.map((r) => ({ id: r.id, jobId: r.jobId, title: r.notification.title, body: r.notification.body })),
+    since: next,
+    wants
   }
 }
