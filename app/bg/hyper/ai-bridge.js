@@ -47,7 +47,7 @@ export const SHARE_PROVIDER_SETTING = 'ai_share_provider';
 // peerId (remotePublicKey hex) -> Peer
 const peers = new Map();
 let installed = false;
-let serveChat = null; // registered by bg/ai.ts: ({ messages, opts, signal, requestPermission, sendChunk, sendTool }) => Promise<void>
+let serveChat = null; // registered by bg/ai.ts: ({ messages, opts, signal, requestPermission, sendChunk, sendTool, sendReasoning }) => Promise<void>
 let awake = null; // registered by bg/ai.ts: the shared keep-awake controller (bg/ai/awake.js)
 
 let _reqSeq = 0;
@@ -82,7 +82,8 @@ export async function isSharingEnabled() {
 // error, on no Provider being reachable, or on abort. Frames are request-id multiplexed so
 // several turns can share one channel.
 //   onChunk(text)            — streamed assistant text
-//   onTool(event)            — tool activity (start / write Checkpoint payloads)
+//   onTool(event)            — tool activity (start / end / write Checkpoint payloads)
+//   onReasoning(text)        — streamed reasoning text (not sent by an older Provider)
 //   onPrompt(permission)     — reverse consent: return Promise<boolean> (this Device is where the
 //                              human is, so the modifyDrive prompt is shown HERE, not on the Provider)
 export async function requestRemoteChat({
@@ -91,6 +92,7 @@ export async function requestRemoteChat({
   signal = null,
   onChunk,
   onTool,
+  onReasoning,
   onPrompt,
 }) {
   ensureInstalled();
@@ -98,7 +100,7 @@ export async function requestRemoteChat({
   const id = nextReqId();
 
   return new Promise((resolve, reject) => {
-    peer.clientReqs.set(id, { onChunk, onTool, onPrompt, resolve, reject });
+    peer.clientReqs.set(id, { onChunk, onTool, onReasoning, onPrompt, resolve, reject });
     if (signal) {
       if (signal.aborted) sendFrame(peer, { t: FRAME.CANCEL, id });
       else
@@ -293,6 +295,7 @@ function onFrame(peer, data) {
       return onReady(peer, f, false);
     case FRAME.CHUNK:
     case FRAME.TOOL:
+    case FRAME.REASONING:
     case FRAME.PROMPT:
     case FRAME.DONE:
     case FRAME.ERROR:
@@ -396,6 +399,7 @@ async function onRequest(peer, f) {
       requestPermission,
       sendChunk: (text) => sendFrame(peer, { t: FRAME.CHUNK, id, text }),
       sendTool: (event) => sendFrame(peer, { t: FRAME.TOOL, id, event }),
+      sendReasoning: (text) => sendFrame(peer, { t: FRAME.REASONING, id, text }),
     });
     sendFrame(peer, { t: FRAME.DONE, id });
   } catch (err) {
@@ -455,6 +459,8 @@ function onClientStream(peer, f) {
       return req.onChunk?.(f.text);
     case FRAME.TOOL:
       return req.onTool?.(f.event);
+    case FRAME.REASONING:
+      return req.onReasoning?.(f.text);
     case FRAME.PROMPT:
       // Show the consent prompt locally and relay the answer back.
       return Promise.resolve(req.onPrompt ? req.onPrompt(f.permission) : false)

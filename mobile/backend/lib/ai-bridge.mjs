@@ -124,12 +124,12 @@ export function createAiBridge ({ swarm, getVault }) {
   // Client entry point. Forwards one turn to an available Provider; resolves on done, rejects on a
   // remote error / no Provider / abort. onChunk/onTool stream results; onPrompt(permission) shows
   // the relayed modifyDrive consent HERE (this Device is where the human is) and returns Promise<bool>.
-  async function requestRemoteChat ({ messages, opts = {}, signal = null, onChunk, onTool, onPrompt, onHeartbeat }) {
+  async function requestRemoteChat ({ messages, opts = {}, signal = null, onChunk, onTool, onReasoning, onPrompt, onHeartbeat }) {
     install()
     const peer = await pickProvider(signal)
     const id = nextReqId()
     return new Promise((resolve, reject) => {
-      peer.clientReqs.set(id, { onChunk, onTool, onPrompt, onHeartbeat, resolve, reject })
+      peer.clientReqs.set(id, { onChunk, onTool, onReasoning, onPrompt, onHeartbeat, resolve, reject })
       if (signal) {
         if (signal.aborted) sendFrame(peer, { t: FRAME.CANCEL, id })
         else signal.addEventListener('abort', () => sendFrame(peer, { t: FRAME.CANCEL, id }), { once: true })
@@ -178,6 +178,7 @@ export function createAiBridge ({ swarm, getVault }) {
         return onReady(peer, f, false)
       case FRAME.CHUNK:
       case FRAME.TOOL:
+      case FRAME.REASONING:
       case FRAME.PROMPT:
       case FRAME.DONE:
       case FRAME.ERROR:
@@ -218,6 +219,8 @@ export function createAiBridge ({ swarm, getVault }) {
         return req.onChunk && req.onChunk(f.text)
       case FRAME.TOOL:
         return req.onTool && req.onTool(f.event)
+      case FRAME.REASONING:
+        return req.onReasoning && req.onReasoning(f.text)
       case FRAME.PROMPT:
         return Promise.resolve(req.onPrompt ? req.onPrompt(f.permission) : false)
           .then((allow) => sendFrame(peer, { t: FRAME.PROMPT_RESULT, id: f.id, allow: !!allow }))
