@@ -193,7 +193,9 @@ get a menu entry in `fg/shell-menus/browser.js`. See `docs/adr/0008` and `0009`.
 `nomad://reader` subscriptions (per Space) and read marks, and `nomad://notes` notes (per user), go
 through the internal `nomad.vault` API (`readerState`/`readerFollow`/…/`listNotes`/`saveNote`/
 `deleteNote`/`renameNoteLinks`/`watchAppData`, backed by `bg/web-apis/bg/vault-apps.ts`). They are
-Vault records, so the phone sees them (`mobile/components/Reader.tsx`, `Notes.tsx`, over `RPC_APPS`).
+Vault records, so the phone sees them (`mobile/components/Reader.tsx`, `Notes.tsx`, over `RPC_APPS`). Both
+reload while open when the phone's backend pushes `RPC_VAULT_CHANGED` (`backend.onVaultChange`), as
+desktop's pages do on `watchAppData()`.
 The record layout and the shared rules (titles, `[[links]]`, conflict copies, read marks) are
 `shared/vault-apps.mjs`, used by desktop and mobile (tests: `tests/unit/vault-apps*.test.js`). The
 first write makes a Vault; a solo Vault can still join another one and bring its data (`adoptVault`).

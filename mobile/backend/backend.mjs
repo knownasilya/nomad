@@ -56,6 +56,7 @@ import {
   RPC_APPS_RESULT,
   RPC_LOGS,
   RPC_LOGS_RESULT,
+  RPC_VAULT_CHANGED,
   DRIVE_HYPERDRIVE,
   DRIVE_AUTOBASE
 } from '../rpc-commands.mjs'
@@ -113,6 +114,23 @@ goodbye(() => gateway.close())
 // The Vault key (this device's link to its identity) is persisted next to the corestore.
 const vaultKeyPath = join(storagePath, 'vault-key')
 let vault = null // the opened Vault Autobase, once paired
+
+// Tell the UI when the Vault changes, so an open Reader or Notes screen shows another Device's
+// subscriptions, read marks and notes without being reopened (desktop: vault-apps.ts watch()).
+// One event for a burst of updates. Every assignment to `vault` goes through setVault.
+let vaultChangedTimer = null
+function vaultChanged () {
+  clearTimeout(vaultChangedTimer)
+  vaultChangedTimer = setTimeout(() => send(RPC_VAULT_CHANGED, {}), 400)
+}
+
+function setVault (base) {
+  if (vault === base) return
+  if (vault) vault.removeListener('update', vaultChanged)
+  vault = base
+  if (vault) vault.on('update', vaultChanged)
+  vaultChanged()
+}
 
 // AI Bridge (ADR-0013): this phone is the AI Client. `getVault` is late-bound — it returns the
 // Vault only once paired, which is exactly when the Bridge can key its channel and sign the auth
@@ -246,7 +264,7 @@ manager.onHostingBytes = (n) => {
   const key = loadVaultKey()
   if (key) {
     try {
-      vault = await openVault(store, manager.swarm, key)
+      setVault(await openVault(store, manager.swarm, key))
       // Open the Bridge channel proactively now the Vault is up — matches the desktop + the
       // peersockets/autobase-control pattern (both sides open on connection). Safe: openOnConn is
       // fully guarded so it can never throw into the swarm emitter.
@@ -601,7 +619,7 @@ async function handleRemoveDevice ({ reqId, deviceKey, self = false }) {
       // removeWriter on our own key previously stalled, so the forget never ran — the device blinked
       // out (UI timeout) and then reappeared on the next status read.
       const base = vault
-      vault = null
+      setVault(null)
       ownDeviceSeen = false
       presence.reset()
       try { if (fs.existsSync(vaultKeyPath)) fs.unlinkSync(vaultKeyPath) } catch {}
@@ -714,7 +732,7 @@ async function handlePairSubmit ({ reqId, code, name = 'Mobile device' }) {
     // the UI — it only needs to know pairing succeeded. The Vault opens in the background;
     // vaultStatus() reflects it once ready.
     send(RPC_PAIRED, { reqId, ok: true, vaultKey, deviceKey })
-    openVault(store, manager.swarm, vaultKey).then((b) => { vault = b; aiBridge.install(); presence.install() }).catch(() => {})
+    openVault(store, manager.swarm, vaultKey).then((b) => { setVault(b); aiBridge.install(); presence.install() }).catch(() => {})
   } catch (err) {
     send(RPC_PAIRED, { reqId, ok: false, message: err.message || String(err) })
   }
@@ -748,7 +766,7 @@ async function handleVaultStatus ({ reqId, spaceKeys = [], ownSpaces = null, own
     if (ownDeviceSeen && !present && (devices.length > 0 || index.writable === false)) {
       console.log('[vault] this device was removed remotely — unlinking')
       const base = vault
-      vault = null
+      setVault(null)
       ownDeviceSeen = false
       presence.reset()
       try { if (fs.existsSync(vaultKeyPath)) fs.unlinkSync(vaultKeyPath) } catch {}

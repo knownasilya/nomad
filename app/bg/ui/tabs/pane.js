@@ -95,6 +95,8 @@ const STATE_VARS = [
   // 'isPinned', tab sends this
   'isBookmarked',
   'isLoading',
+  // a restored tab's first load at startup: the tab strip shows no spinner for it
+  'isQuietLoading',
   'isReceivingAssets',
   'canGoBack',
   'canGoForward',
@@ -156,6 +158,7 @@ export class Pane extends EventEmitter {
     // webview state
     this.loadingURL = null; // URL being loaded, if any
     this.isLoading = false; // is the pane loading?
+    this.isQuietLoading = false; // is this load one the user didn't start (session restore)?
     this.isReceivingAssets = false; // has the webview started receiving assets in the current load-cycle?
     this.favicons = null; // array of favicon URLs
     this.zoom = 0; // what's the current zoom level?
@@ -415,12 +418,17 @@ export class Pane extends EventEmitter {
   // =
 
   loadURL(url, opts = undefined) {
+    // `quiet` is for loads the user didn't start, like restoring the last session: the tab strip
+    // leaves out the spinner until the load ends. Any later loadURL or reload shows it again.
+    const { quiet, ...loadOpts } = opts || {};
+    this.isQuietLoading = Boolean(quiet);
     // hyper://<name>/ is a shortcut to what the user named (hyper/names.js): the tab goes to the
     // real address, so the drive keeps one origin and no page can resolve a name for itself.
-    this.webContents.loadURL(names.resolveUrl(url) || url, opts);
+    this.webContents.loadURL(names.resolveUrl(url) || url, opts ? loadOpts : undefined);
   }
 
   reload() {
+    this.isQuietLoading = false;
     this.webContents.reload();
   }
 
@@ -892,6 +900,7 @@ export class Pane extends EventEmitter {
 
     // update state
     this.isLoading = false;
+    this.isQuietLoading = false;
     this.loadingURL = null;
     this.isReceivingAssets = false;
 

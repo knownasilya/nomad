@@ -46,7 +46,8 @@ import {
   RPC_APPS,
   RPC_APPS_RESULT,
   RPC_LOGS,
-  RPC_LOGS_RESULT
+  RPC_LOGS_RESULT,
+  RPC_VAULT_CHANGED
 } from '../rpc-commands.mjs'
 import type { LogEntry } from './log'
 
@@ -151,6 +152,9 @@ export interface Backend {
   nomad: (payload: NomadCall) => Promise<NomadResult>
   apps: <T = unknown>(app: AppName, action: string, args?: Record<string, unknown>) => Promise<AppsResult<T>>
   aiChat: (messages: unknown[], opts: Record<string, unknown>, handlers: AiChatHandlers) => AiChatHandle
+  // Call `listener` whenever the Vault changes, here or on another Device (RPC_VAULT_CHANGED).
+  // Returns the function that stops it. The same function on every render.
+  onVaultChange: (listener: () => void) => () => void
 }
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
@@ -200,6 +204,11 @@ export function useBackend (handlers: BackendHandlers): Backend {
   // backgrounded, and the worklet they need kept awake. Only AI turns take a hold today.
   const awakeHolds = useRef(0)
   const workletRef = useRef<any>(null)
+  const vaultListeners = useRef(new Set<() => void>())
+  const onVaultChange = useRef((listener: () => void) => {
+    vaultListeners.current.add(listener)
+    return () => { vaultListeners.current.delete(listener) }
+  }).current
 
   useEffect(() => {
     const worklet = new Worklet()
@@ -239,6 +248,9 @@ export function useBackend (handlers: BackendHandlers): Backend {
       if (req.command === RPC_STATUS) h.onStatus(msg)
       else if (req.command === RPC_CONTENT) h.onContent(msg)
       else if (req.command === RPC_ERROR) h.onError(msg)
+      else if (req.command === RPC_VAULT_CHANGED) {
+        for (const listener of [...vaultListeners.current]) listener()
+      }
       else if (req.command === RPC_AI_EVENT) {
         // Streaming: many frames per reqId, so the sink stays registered until it sees done|error.
         aiStreams.current[msg.reqId]?.(msg)
@@ -391,6 +403,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
       })
     },
     apps: (app, action, args) => appsCall(app, action, args),
+    onVaultChange,
     aiChat: (messages, opts, handlers) => aiChat(messages, opts, handlers),
     fsList: (driveType, key, ns, path) => fsCall(RPC_FS_LIST, { driveType, key, ns, path }),
     fsRead: (driveType, key, ns, path) => fsCall(RPC_FS_READ, { driveType, key, ns, path }),

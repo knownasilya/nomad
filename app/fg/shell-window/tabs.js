@@ -176,8 +176,10 @@ class ShellWindowTabs extends LitElement {
 
   renderTab(tab, index) {
     const faviconUrl = this.getFavicon(index);
+    // no spinner for a restored tab loading in the background at startup
+    const showSpinner = tab.isLoading && !tab.isQuietLoading;
     const showFavicon = Boolean(
-      tab.isLoading || tab.isPinned || faviconUrl || tab.url.startsWith('nomad:')
+      showSpinner || tab.isPinned || faviconUrl || tab.url.startsWith('nomad:')
     );
     const group = tab.groupId ? (this.groups || []).find((g) => g.id === tab.groupId) : null;
     const cls = classMap({
@@ -210,7 +212,7 @@ class ShellWindowTabs extends LitElement {
         ${showFavicon
           ? html`
               <div class="tab-favicon">
-                ${tab.isLoading
+                ${showSpinner
                   ? tab.isReceivingAssets
                     ? html`<div class="spinner"></div>`
                     : html`<div class="spinner reverse"></div>`

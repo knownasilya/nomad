@@ -13,6 +13,7 @@ interface Props {
   visible: boolean
   onClose: () => void
   apps: Backend['apps']
+  onVaultChange: Backend['onVaultChange']
   space?: string // the active Space's Root Drive key: each Space has its own subscriptions
   onOpenPost: (url: string) => void
   onOpenDevices: () => void
@@ -20,8 +21,9 @@ interface Props {
 
 // The phone's Reader (ADR-0017): the Feeds the active Space subscribes to, from any linked Device,
 // merged into one list, newest first. Subscriptions and read marks live in the Vault, per Space, so
-// they match desktop's nomad://reader. Opening a post closes this and loads the post in the current tab.
-export default function Reader ({ visible, onClose, apps, space, onOpenPost, onOpenDevices }: Props) {
+// they match desktop's nomad://reader. Another Device's change shows while this is open. Opening a
+// post closes this and loads the post in the current tab.
+export default function Reader ({ visible, onClose, apps, onVaultChange, space, onOpenPost, onOpenDevices }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   // backend.apps is a new function on every parent render. Calling through a ref keeps the effects
@@ -72,6 +74,28 @@ export default function Reader ({ visible, onClose, apps, space, onOpenPost, onO
 
   useEffect(() => { if (visible) refresh() }, [visible, refresh])
 
+  // Another Device subscribed, unsubscribed or read something (our own writes land here too). Only a
+  // change to the subscriptions reloads the Feeds; new read marks just update the list.
+  const stateRef = useRef(state)
+  stateRef.current = state
+  // Marks still being saved, so a reload from the Vault in the meantime doesn't drop them.
+  const pendingRead = useRef(new Set<string>())
+  useEffect(() => {
+    if (!visible) return
+    return onVaultChange(async () => {
+      if (!space) return
+      const before = stateRef.current
+      if (!before) return refresh() // linked while open, or the first load failed
+      const res = await call<ReaderState>('reader', 'state', { space })
+      if (!res.ok || !res.value) return
+      setState({ ...res.value, read: [...new Set([...res.value.read, ...pendingRead.current])] })
+      if (res.value.follows.join(' ') !== before.follows.join(' ')) {
+        setFilter((f) => (f === 'all' || res.value!.follows.includes(f) ? f : 'all'))
+        loadFeeds(res.value.follows)
+      }
+    })
+  }, [visible, onVaultChange, call, refresh, loadFeeds, space])
+
   const read = useMemo(() => new Set(state?.read || []), [state])
   const allPosts = useMemo(() => {
     const posts = Object.values(feeds).flatMap((f) => f.posts)
@@ -85,9 +109,11 @@ export default function Reader ({ visible, onClose, apps, space, onOpenPost, onO
   const saveRead = useCallback(async (add: string[]) => {
     if (!state) return
     setState({ ...state, read: [...new Set([...state.read, ...add])] })
+    for (const u of add) pendingRead.current.add(u)
     const loaded: Record<string, string[]> = {}
     for (const f of Object.values(feeds)) if (!f.loading && !f.error) loaded[f.url] = f.posts.map((p) => p.url)
     const res = await call<ReaderState>('reader', 'saveRead', { space, add, loaded })
+    for (const u of add) pendingRead.current.delete(u)
     if (res.ok && res.value) setState(res.value)
   }, [call, feeds, state, space])
 
