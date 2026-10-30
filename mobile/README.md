@@ -96,6 +96,7 @@ mobile/
 │   └── HyperView.tsx        # renders hyper:// files / images / directory listings
 ├── lib/
 │   ├── useBackend.ts        # boots the worklet, wires RPC, exposes open()/close()
+│   ├── updater.ts           # auto-updates: checks GitHub Releases, drives modules/nomad-updater
 │   ├── hyperUrl.ts          # address parsing / web-vs-hyper detection
 │   └── types.ts             # shared message types
 ├── backend/
@@ -103,6 +104,8 @@ mobile/
 │   └── lib/
 │       ├── drive-manager.mjs # opens/replicates drives, resolves files & dirs
 │       └── hyper-url.mjs     # key/path parsing (z32 + hex)
+├── modules/
+│   └── nomad-updater/       # local Expo module: installs a downloaded APK (Android)
 ├── rpc-commands.mjs         # shared RPC command IDs + drive-type constants
 └── tools/
     ├── publish.mjs          # seed a local folder as a hyper:// drive (for testing)
@@ -153,6 +156,18 @@ Keep the publisher running so the app has a peer to pull from.
 Pushing a `v*` tag builds a release AAB + APK in CI (alongside the desktop builds) and attaches
 them to a draft GitHub release. Versioning, the release-keystore signing setup, and the required
 repo secrets are documented in [docs/releasing.md](../docs/releasing.md).
+
+## Updates
+
+The Android app updates itself from GitHub Releases, the way pearbell's does. On launch and when it
+comes back to the front (at most once an hour) it asks GitHub for the latest **published** release
+(drafts don't count), and if its `nomad-<version>-android.apk` is newer than the running build it
+downloads it and installs it in place with Android's `PackageInstaller`
+(`modules/nomad-updater`, a local Expo module; the check and the state are `lib/updater.ts`).
+Android asks the user to confirm the first update and to let Nomad install apps; from Android 12 on,
+later updates install without a prompt. Settings → Updates turns automatic installs off and checks
+by hand. An update only installs over a build signed with the same key, so local debug builds
+don't check on their own.
 
 ## Verifying the P2P core
 
