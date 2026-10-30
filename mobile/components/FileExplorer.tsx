@@ -95,6 +95,8 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
   const s = useMemo(() => makeStyles(t), [t])
 
   const [cwd, setCwd] = useState('/')
+  // The folders you came through, oldest first: back returns to them before it closes the explorer.
+  const [trail, setTrail] = useState<string[]>([])
   const [entries, setEntries] = useState<DirEntry[]>([])
   const [writable, setWritable] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -131,6 +133,7 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
   useEffect(() => {
     if (!visible || !driveKey) return
     setCwd('/')
+    setTrail([])
     setEditor(null)
     setPrompt(null)
     setActionFor(null)
@@ -143,6 +146,19 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
   }, [visible, driveKey, cwd, load])
 
   const refresh = useCallback(() => load(cwd), [load, cwd])
+
+  // Go to a folder (a row, "..", a breadcrumb); back returns to the one you were in.
+  const goTo = useCallback((path: string) => {
+    if (path === cwd) return
+    setTrail((prev) => [...prev, cwd])
+    setCwd(path)
+  }, [cwd])
+
+  const back = useCallback(() => {
+    if (!trail.length) return onClose()
+    setCwd(trail[trail.length - 1])
+    setTrail(trail.slice(0, -1))
+  }, [trail, onClose])
 
   // --- file open / edit ---------------------------------------------------
   const openFile = useCallback(
@@ -339,7 +355,7 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
   if (!drive) return null
 
   return (
-    <Modal visible={visible} animationType='slide' onRequestClose={editor ? closeEditor : onClose} presentationStyle='fullScreen'>
+    <Modal visible={visible} animationType='slide' onRequestClose={editor ? closeEditor : back} presentationStyle='fullScreen'>
       <SafeAreaView style={s.root} edges={['top', 'bottom']}>
         {editor ? (
           <EditorScreen
@@ -356,14 +372,14 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
             <ScreenHeader
               title={drive.name}
               subtitle={`${drive.type === 'autobase' ? 'Collaborative' : 'Hyperdrive'}${writable ? '' : ' · read-only'}`}
-              onBack={onClose}
+              onBack={back}
             />
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.crumbBar} contentContainerStyle={s.crumbContent}>
               {crumbs.map((c, i) => (
                 <View key={c.path} style={s.crumbWrap}>
                   {i > 0 && <Text style={s.crumbSep}>/</Text>}
-                  <TouchableOpacity onPress={() => setCwd(c.path)} disabled={c.path === cwd} hitSlop={6}>
+                  <TouchableOpacity onPress={() => goTo(c.path)} disabled={c.path === cwd} hitSlop={6}>
                     <Text numberOfLines={1} style={[s.crumb, c.path === cwd && s.crumbActive]}>{c.label}</Text>
                   </TouchableOpacity>
                 </View>
@@ -393,7 +409,7 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
                 keyExtractor={(e) => e.path}
                 ListHeaderComponent={
                   cwd !== '/' ? (
-                    <Pressable style={s.entry} onPress={() => setCwd(parentOf(cwd))} android_ripple={{ color: t.ripple }} accessibilityLabel='Up one folder'>
+                    <Pressable style={s.entry} onPress={() => goTo(parentOf(cwd))} android_ripple={{ color: t.ripple }} accessibilityLabel='Up one folder'>
                       <Icon name='level-up-alt' size={15} color={t.accent} style={s.entryIcon} />
                       <Text style={s.entryName}>..</Text>
                     </Pressable>
@@ -404,7 +420,7 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
                   <Pressable
                     style={s.entry}
                     android_ripple={{ color: t.ripple }}
-                    onPress={() => (item.isDir ? setCwd(ensureSlash(item.path)) : openFile(item))}
+                    onPress={() => (item.isDir ? goTo(ensureSlash(item.path)) : openFile(item))}
                     onLongPress={() => writable && setActionFor(item)}
                   >
                     <Icon name={item.isDir ? 'folder' : 'file'} regular={!item.isDir} size={15} color={item.isDir ? t.accent : t.textMuted} style={s.entryIcon} />

@@ -42,19 +42,26 @@ import { CONSOLE_SHIM, FAVICON_JS, VIEW_SOURCE_JS, type ContentMsg, type StatusM
 import { publishTabs, setTabActions, type TabThumb } from '../lib/tabSwitcher'
 import { useShareOpenTabs, type DeviceTabsList, type SyncedSpace } from '../lib/openTabs'
 import { checkForUpdate } from '../lib/updater'
+import { pushScreen, closeScreen, loadEntry, pageLoaded, planStep, type NavEntry as StackEntry, type TabHistory } from '../lib/navStack'
 
 // Thumbnails for the tab grid are scaled to this width; a grid card is about half a phone wide.
 const THUMB_WIDTH = 360
 
 type Kind = 'home' | 'web' | 'hyper'
 
-// One entry in a tab's back/forward history.
-type NavEntry =
-  | { kind: 'home' }
-  | { kind: 'web'; url: string }
-  | { kind: 'hyper'; url: string; driveType: DriveType; ns?: string; detect?: boolean }
+// The full-screen pages over the browser. They stack (lib/navStack.ts): one opened from another
+// sits on top of it, and back closes only the top one.
+type Screen =
+  | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' }
+  | { name: 'notes'; noteId?: string } // noteId: the note to open, e.g. the one a followed link was in
+  | { name: 'explorer'; drive: ExplorerDrive }
+type ScreenName = Screen['name']
 
-interface Tab {
+// One entry in a tab's back/forward history.
+type NavEntry = StackEntry<Screen>
+
+// A tab's history (stack, sp, session, …) is lib/navStack.ts's TabHistory.
+interface Tab extends TabHistory<Screen> {
   id: string
   input: string // address bar text
   kind: Kind
@@ -67,13 +74,15 @@ interface Tab {
   driveKey?: string // for backend cleanup on close
   hasDraft?: boolean // drive has unpublished draft changes (ADR-0012)
   draftPreviewing?: boolean // this tab is rendering the merged draft
-  webCanGoBack?: boolean // web tab's WebView has in-page history to step back through
-  stack: NavEntry[] // back/forward history
-  sp: number // stack pointer
+  webCanGoBack?: boolean // the WebView on screen has its own history to step back through
+  webCanGoForward?: boolean
 }
 
 let seq = 0
 const newId = () => `tab_${++seq}_${Math.floor(Math.random() * 1e6)}`
+// Each load of a history entry into a tab starts a new WebView session (see lib/navStack.ts).
+let sessionSeq = 0
+const newSession = () => ++sessionSeq
 
 function blankTab (): Tab {
   return {
@@ -85,8 +94,11 @@ function blankTab (): Tab {
     driveType: 'hyperdrive',
     reloadToken: 0,
     loading: false,
-    stack: [{ kind: 'home' }],
-    sp: 0
+    stack: [{ kind: 'home', session: 0 }],
+    sp: 0,
+    session: 0,
+    settled: true,
+    pendingStep: false
   }
 }
 
@@ -210,17 +222,26 @@ export default function Browser () {
   // cycle. The actual `persist` is created below, after backend + useSpaces.
   const persistRef = useRef<ReturnType<typeof usePersistence> | null>(null)
 
-  // menu / devtools / library overlay state
-  const [libraryOpen, setLibraryOpen] = useState(false)
-  const [devicesOpen, setDevicesOpen] = useState(false)
-  const [readerOpen, setReaderOpen] = useState(false)
-  const [notesOpen, setNotesOpen] = useState(false)
+  // The open screens, bottom first (lib/navStack.ts): each is a full-screen Modal, and Android's back
+  // reaches the top one through its onRequestClose, which closes just that one.
+  const [screens, setScreens] = useState<Screen[]>([])
+  const screensRef = useRef(screens)
+  screensRef.current = screens
+  const openScreen = useCallback((screen: Screen) => setScreens((prev) => pushScreen(prev, screen)), [])
+  const closeScreenNamed = useCallback((name: ScreenName) => setScreens((prev) => closeScreen(prev, name)), [])
+  const isOpen = (name: ScreenName) => screens.some((sc) => sc.name === name)
+  const libraryOpen = isOpen('library')
+  const explorerScreen = screens.find((sc) => sc.name === 'explorer')
+  const explorerDrive = explorerScreen?.name === 'explorer' ? explorerScreen.drive : null
+  // FileExplorer renders nothing without a drive, so keep the last one while its Modal slides away.
+  const lastExplorerDrive = useRef<ExplorerDrive | null>(null)
+  if (explorerDrive) lastExplorerDrive.current = explorerDrive
+  const notesScreen = screens.find((sc) => sc.name === 'notes')
+  // The sheets over the browser, and the AI panel.
   const [spacesOpen, setSpacesOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [nameSheetOpen, setNameSheetOpen] = useState(false)
-  const [devtoolsOpen, setDevtoolsOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
-  const [explorerDrive, setExplorerDrive] = useState<ExplorerDrive | null>(null)
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [source, setSource] = useState('')
   // URL-bar autocomplete: visible while the address bar is focused. blurTimer delays hiding so a tap
@@ -359,15 +380,11 @@ export default function Browser () {
       if (blurTimer.current) { clearTimeout(blurTimer.current); blurTimer.current = null }
       setUrlFocused(false)
       const fields = fieldsFor(tab, entry, sameDrive)
+      const session = newSession()
       setTabs((prev) =>
-        prev.map((tb) => {
-          if (tb.id !== id) return tb
-          if (push) {
-            const stack = [...tb.stack.slice(0, tb.sp + 1), entry]
-            return { ...tb, ...fields, stack, sp: stack.length - 1 }
-          }
-          return { ...tb, ...fields, sp: sp ?? tb.sp }
-        })
+        prev.map((tb) => (tb.id === id
+          ? { ...tb, ...fields, ...loadEntry(tb, entry, push, session, sp), webCanGoBack: false, webCanGoForward: false }
+          : tb))
       )
       if (entry.kind === 'hyper') backend.open(id, entry.url, entry.driveType, entry.ns, entry.detect ?? true)
     },
@@ -429,13 +446,26 @@ export default function Browser () {
     setUrlFocused(false)
   }, [activeId])
 
+  // Back (-1) or forward (+1) in a tab's history (lib/navStack.ts): inside the WebView on screen
+  // when both entries are its own pages, else by loading the entry. Back from a page opened from a
+  // screen (My Library, Reader, Notes) opens that screen again. Returns true if it went anywhere.
   const step = useCallback(
-    (id: string, delta: number) => {
+    (id: string, delta: -1 | 1): boolean => {
       const tab = tabsRef.current.find((tb) => tb.id === id)
-      if (!tab) return
-      const nsp = tab.sp + delta
-      if (nsp < 0 || nsp >= tab.stack.length) return
-      navTo(id, tab.stack[nsp], false, nsp)
+      if (!tab) return false
+      const plan = planStep(tab, delta, !!(delta < 0 ? tab.webCanGoBack : tab.webCanGoForward))
+      if (plan.type === 'none') return false
+      const wv = webviews.current[id]
+      if (plan.type === 'native' && wv) {
+        // The address bar and the entry follow when the WebView lands (onWebNav/onHyperNav).
+        setTabs((prev) => prev.map((tb) => (tb.id === id ? { ...tb, sp: plan.sp, pendingStep: true } : tb)))
+        if (delta < 0) wv.goBack()
+        else wv.goForward()
+      } else {
+        navTo(id, tab.stack[plan.sp], false, plan.sp)
+      }
+      if (plan.returnTo) setScreens(plan.returnTo)
+      return true
     },
     [navTo]
   )
@@ -562,42 +592,33 @@ export default function Browser () {
     if (active.url) Clipboard.setStringAsync(active.url)
   }, [active.url])
 
-  const openFromLibrary = useCallback(
-    (url: string, type?: DriveType) => {
-      setLibraryOpen(false)
+  // Open a page from a screen (My Library, Reader, Notes) in the current tab. The screens close and
+  // the page remembers them (`returnTo`), so back from the page opens them again.
+  const openFromScreens = useCallback(
+    (url: string, type?: DriveType, returnTo: Screen[] = screensRef.current) => {
       const r = resolveAddress(url)
       const known = type ?? persist.driveTypeFor(r.url)
       const entry: NavEntry = r.kind === 'hyper'
         ? { kind: 'hyper', url: r.url, driveType: known ?? 'hyperdrive', ns: persist.driveNsFor(r.url), detect: !known }
         : { kind: 'web', url: r.url }
-      navTo(active.id, entry, true)
+      setScreens([])
+      navTo(active.id, { ...entry, returnTo }, true)
     },
     [active.id, navTo, persist]
   )
 
+  const openFromLibrary = useCallback((url: string, type?: DriveType) => openFromScreens(url, type), [openFromScreens])
+
   // A Reader post opens in the current tab, like an item from My Library.
-  const openFromReader = useCallback(
-    (url: string) => {
-      setReaderOpen(false)
-      openFromLibrary(url)
-    },
-    [openFromLibrary]
-  )
+  const openFromReader = useCallback((url: string) => openFromScreens(url), [openFromScreens])
 
-  // A web or hyper:// link in a note opens in the current tab.
+  // A web or hyper:// link in a note opens in the current tab. Back returns to that note.
   const openFromNotes = useCallback(
-    (url: string) => {
-      setNotesOpen(false)
-      openFromLibrary(url)
+    (url: string, noteId?: string) => {
+      openFromScreens(url, undefined, screensRef.current.map((sc) => (sc.name === 'notes' ? { name: 'notes', noteId } : sc)))
     },
-    [openFromLibrary]
+    [openFromScreens]
   )
-
-  // Reader and Notes need a linked phone; their "Open Devices" button closes them first.
-  const openDevicesFrom = useCallback((close: () => void) => {
-    close()
-    setDevicesOpen(true)
-  }, [])
 
   // Create a brand-new writable drive (nomad's createNewDrive): the backend
   // generates a key + URL; we save it (with its ns, so it reopens writable) and
@@ -616,28 +637,29 @@ export default function Browser () {
           .then((r) => { if (r.ok) setRegistryDrives(r.drives || []) })
           .catch(() => {})
       }
-      setLibraryOpen(false)
-      navTo(active.id, { kind: 'hyper', url: res.url, driveType: type, ns: res.ns, detect: false }, true)
+      const returnTo = screensRef.current
+      setScreens([])
+      navTo(active.id, { kind: 'hyper', url: res.url, driveType: type, ns: res.ns, detect: false, returnTo }, true)
     },
     [backend, persist, navTo, active.id, spacesApi.activeSpace]
   )
 
-  // Open the file explorer/editor for a drive you own (carries an `ns`).
+  // Open the file explorer/editor for a drive you own (carries an `ns`), over My Library when it
+  // was opened from there.
   const openExplorer = useCallback((d: SavedDrive) => {
     if (!d.ns) return
     setMenuOpen(false)
-    setLibraryOpen(false)
-    setExplorerDrive({ url: d.url, key: hyperKeyOf(d.url), name: d.name, type: d.type, ns: d.ns })
-  }, [])
+    openScreen({ name: 'explorer', drive: { url: d.url, key: hyperKeyOf(d.url), name: d.name, type: d.type, ns: d.ns } })
+  }, [openScreen])
 
   // On close, reflect any edits in an open tab showing the same drive.
   const closeExplorer = useCallback(() => {
     const edited = explorerDrive
-    setExplorerDrive(null)
+    closeScreenNamed('explorer')
     if (edited && active.kind === 'hyper' && active.driveKey && active.driveKey.toLowerCase() === edited.key.toLowerCase()) {
       reload()
     }
-  }, [explorerDrive, active, reload])
+  }, [explorerDrive, closeScreenNamed, active, reload])
 
   // --- tab management ----------------------------------------------------
   // Each tab's last look, taken when the tab grid opens (only the active tab is ever on screen).
@@ -798,42 +820,37 @@ export default function Browser () {
     }, [])
   )
 
+  // A page in the tab's WebView finished loading: a link followed in the page becomes its own
+  // history entry, so back always returns to the page you were on (lib/navStack.ts pageLoaded).
+  const settlePage = useCallback((id: string, url: string, fields: Partial<Tab>) => {
+    const web = { canGoBack: !!fields.webCanGoBack, canGoForward: !!fields.webCanGoForward }
+    setTabs((prev) => prev.map((tb) => (tb.id === id ? { ...tb, ...fields, ...pageLoaded(tb, url, web) } : tb)))
+  }, [])
+
   const onWebNav = useCallback(
     (id: string, nav: WebViewNavigation) => {
-      patch(id, { url: nav.url, input: nav.url, title: nav.title || nav.url, loading: nav.loading, webCanGoBack: nav.canGoBack })
-      if (!nav.loading) persist.recordVisit(nav.url, nav.title || nav.url)
+      const fields = { url: nav.url, input: nav.url, title: nav.title || nav.url, loading: nav.loading, webCanGoBack: nav.canGoBack, webCanGoForward: nav.canGoForward }
+      if (nav.loading) return patch(id, fields)
+      settlePage(id, nav.url, fields)
+      persist.recordVisit(nav.url, nav.title || nav.url)
     },
-    [patch, persist]
+    [patch, settlePage, persist]
   )
 
   // Native in-page navigation within a drive (loopback origin): reflect the mapped hyper:// URL in
   // the address bar and track WebView history so back/forward drive the WebView, like web tabs.
   // The document title (e.g. a rendered Markdown page's h1) follows into the tab label when set.
   const onHyperNav = useCallback(
-    (id: string, hyperUrl: string, canGoBack: boolean, title?: string) => {
-      patch(id, { url: hyperUrl, input: hyperUrl, webCanGoBack: canGoBack, ...(title ? { title } : {}) })
+    (id: string, hyperUrl: string, canGoBack: boolean, canGoForward: boolean, title?: string) => {
+      settlePage(id, hyperUrl, { url: hyperUrl, input: hyperUrl, webCanGoBack: canGoBack, webCanGoForward: canGoForward, ...(title ? { title } : {}) })
       persist.recordVisit(hyperUrl, title || hyperUrl)
     },
-    [patch, persist]
+    [settlePage, persist]
   )
 
-  // Go back in the active tab: inside a web page's own history first (in-page link navigation lives
-  // in the WebView, not the app stack), then across the tab's app-level nav stack (hyper pages,
-  // typed URLs, home). Returns true if it navigated. Shared by the on-screen ‹ button and Android's
-  // hardware back so the two always agree.
-  const goBackActive = useCallback((): boolean => {
-    const tab = tabsRef.current.find((tb) => tb.id === activeIdRef.current)
-    if (!tab) return false
-    if ((tab.kind === 'web' || (tab.kind === 'hyper' && tab.render?.type === 'http')) && tab.webCanGoBack) {
-      webviews.current[tab.id]?.goBack()
-      return true
-    }
-    if (tab.sp > 0) {
-      step(tab.id, -1)
-      return true
-    }
-    return false
-  }, [step])
+  // Go back in the active tab. Shared by the on-screen back button and Android's hardware back so
+  // the two always agree.
+  const goBackActive = useCallback((): boolean => step(activeIdRef.current, -1), [step])
 
   // Android hardware back navigates back instead of exiting the app. Returning false when there's
   // nowhere to go lets Android background the app as usual. A visible full-screen Modal (Library/…)
@@ -854,7 +871,7 @@ export default function Browser () {
   )
 
   // --- render ------------------------------------------------------------
-  const canBack = active.sp > 0 || (active.kind === 'web' && !!active.webCanGoBack)
+  const canBack = active.sp > 0
   const canForward = active.sp < active.stack.length - 1
   const bookmarked = persist.isBookmarked(active.url)
   // Load the active space's drive registry (its drives, incl. ones added on other devices). A
@@ -907,9 +924,6 @@ export default function Browser () {
   // the persisted state is fetched lazily when the menu opens.
   const canHostActive = active.kind === 'hyper' && !!active.driveKey && !ownedActive
   const [activeHosted, setActiveHosted] = useState<boolean | null>(null)
-  const [hostingSettingsOpen, setHostingSettingsOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [logsOpen, setLogsOpen] = useState(false)
   useEffect(() => {
     if (!menuOpen || !canHostActive || !active.driveKey) { setActiveHosted(null); return }
     backend.hosting('get', { driveType: active.driveType, key: active.driveKey }).then((r) => setActiveHosted(r.ok ? !!r.hosted : null))
@@ -960,7 +974,7 @@ export default function Browser () {
         canBack={canBack}
         canForward={canForward}
         onBack={goBackActive}
-        onForward={() => step(active.id, 1)}
+        onForward={() => { step(active.id, 1) }}
         onFocus={onUrlFocus}
         onBlur={onUrlBlur}
         hasDraft={!!active.hasDraft}
@@ -996,10 +1010,10 @@ export default function Browser () {
           }}
           onNavigate={(url) => navigate(active.id, url)}
           onWebNav={(nav) => onWebNav(active.id, nav)}
-          onHyperNav={(hyperUrl, canGoBack, title) => onHyperNav(active.id, hyperUrl, canGoBack, title)}
+          onHyperNav={(hyperUrl, canGoBack, canGoForward, title) => onHyperNav(active.id, hyperUrl, canGoBack, canGoForward, title)}
           onMessage={handleWebMessage}
           onClearHistory={persist.clearHistory}
-          onOpenLibrary={() => setLibraryOpen(true)}
+          onOpenLibrary={() => openScreen({ name: 'library' })}
           registerWebView={(ref) => { webviews.current[active.id] = ref }}
         />
         {/* Floating autocomplete: overlays the top of the page (anchored just below the address
@@ -1061,19 +1075,19 @@ export default function Browser () {
         ]}
         groups={[
           [
-            { label: 'My Library', icon: 'book', onPress: () => setLibraryOpen(true) },
-            { label: 'Reader', icon: 'rss', onPress: () => setReaderOpen(true) },
-            { label: 'Notes', icon: 'sticky-note', onPress: () => setNotesOpen(true) }
+            { label: 'My Library', icon: 'book', onPress: () => openScreen({ name: 'library' }) },
+            { label: 'Reader', icon: 'rss', onPress: () => openScreen({ name: 'reader' }) },
+            { label: 'Notes', icon: 'sticky-note', onPress: () => openScreen({ name: 'notes' }) }
           ],
           [
             // Only for a drive this phone owns, and hosting only for one it doesn't.
             { label: 'Edit files', icon: 'folder-open', hidden: !ownedActive, onPress: () => ownedActive && openExplorer(ownedActive) },
             { label: activeHosted ? 'Stop hosting this drive' : 'Host this drive', icon: 'server', active: !!activeHosted, hidden: !canHostActive, onPress: toggleHosting },
-            { label: 'Developer tools', icon: 'code', onPress: () => { viewSource(); setDevtoolsOpen(true) } }
+            { label: 'Developer tools', icon: 'code', onPress: () => { viewSource(); openScreen({ name: 'devtools' }) } }
           ],
           [
-            { label: 'Devices', icon: 'laptop', onPress: () => setDevicesOpen(true) },
-            { label: 'Settings', icon: 'cog', onPress: () => setSettingsOpen(true) }
+            { label: 'Devices', icon: 'laptop', onPress: () => openScreen({ name: 'devices' }) },
+            { label: 'Settings', icon: 'cog', onPress: () => openScreen({ name: 'settings' }) }
           ]
         ]}
       />
@@ -1084,35 +1098,35 @@ export default function Browser () {
         names={names}
         url={active.url}
         title={active.title}
-        onOpenDevices={() => openDevicesFrom(() => setNameSheetOpen(false))}
+        onOpenDevices={() => { setNameSheetOpen(false); openScreen({ name: 'devices' }) }}
       />
 
       <Settings
-        visible={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        onOpenDevices={() => openDevicesFrom(() => setSettingsOpen(false))}
-        onOpenHosting={() => { setSettingsOpen(false); setHostingSettingsOpen(true) }}
-        onOpenLogs={() => { setSettingsOpen(false); setLogsOpen(true) }}
+        visible={isOpen('settings')}
+        onClose={() => closeScreenNamed('settings')}
+        onOpenDevices={() => openScreen({ name: 'devices' })}
+        onOpenHosting={() => openScreen({ name: 'hosting' })}
+        onOpenLogs={() => openScreen({ name: 'logs' })}
         shareTabs={shareTabs}
         onShareTabs={setShareTabs}
       />
 
       <Logs
-        visible={logsOpen}
-        onClose={() => setLogsOpen(false)}
+        visible={isOpen('logs')}
+        onClose={() => closeScreenNamed('logs')}
         logs={backend.logs}
       />
 
       <HostingSettings
-        visible={hostingSettingsOpen}
-        onClose={() => setHostingSettingsOpen(false)}
+        visible={isOpen('hosting')}
+        onClose={() => closeScreenNamed('hosting')}
         hosting={backend.hosting}
         onStatus={syncFromHosting}
       />
 
       <DevTools
-        visible={devtoolsOpen}
-        onClose={() => setDevtoolsOpen(false)}
+        visible={isOpen('devtools')}
+        onClose={() => closeScreenNamed('devtools')}
         url={active.url}
         logs={logs}
         source={source}
@@ -1122,7 +1136,7 @@ export default function Browser () {
 
       <Library
         visible={libraryOpen}
-        onClose={() => setLibraryOpen(false)}
+        onClose={() => closeScreenNamed('library')}
         drives={libraryDrives}
         bookmarks={persist.bookmarks}
         history={persist.history}
@@ -1136,27 +1150,28 @@ export default function Browser () {
       />
 
       <Reader
-        visible={readerOpen}
-        onClose={() => setReaderOpen(false)}
+        visible={isOpen('reader')}
+        onClose={() => closeScreenNamed('reader')}
         apps={backend.apps}
         onVaultChange={backend.onVaultChange}
         space={spacesApi.activeSpace.rootDriveKey}
         onOpenPost={openFromReader}
-        onOpenDevices={() => openDevicesFrom(() => setReaderOpen(false))}
+        onOpenDevices={() => openScreen({ name: 'devices' })}
       />
 
       <Notes
-        visible={notesOpen}
-        onClose={() => setNotesOpen(false)}
+        visible={!!notesScreen}
+        onClose={() => closeScreenNamed('notes')}
+        openNoteId={notesScreen?.name === 'notes' ? notesScreen.noteId : undefined}
         apps={backend.apps}
         onVaultChange={backend.onVaultChange}
-        onOpenDevices={() => openDevicesFrom(() => setNotesOpen(false))}
+        onOpenDevices={() => openScreen({ name: 'devices' })}
         onOpenUrl={openFromNotes}
       />
 
       <Devices
-        visible={devicesOpen}
-        onClose={() => setDevicesOpen(false)}
+        visible={isOpen('devices')}
+        onClose={() => closeScreenNamed('devices')}
         pair={backend.pair}
         vaultStatus={backend.vaultStatus}
         renameDevice={backend.renameDevice}
@@ -1177,7 +1192,7 @@ export default function Browser () {
 
       <FileExplorer
         visible={!!explorerDrive}
-        drive={explorerDrive}
+        drive={explorerDrive ?? lastExplorerDrive.current}
         backend={backend}
         onClose={closeExplorer}
       />
@@ -1231,7 +1246,7 @@ function TabPane ({
   onClearHistory: () => void
   onOpenLibrary: () => void
   registerWebView: (ref: WebView | null) => void
-  onHyperNav: (hyperUrl: string, canGoBack: boolean, title?: string) => void
+  onHyperNav: (hyperUrl: string, canGoBack: boolean, canGoForward: boolean, title?: string) => void
 }) {
   const t = useTheme()
   if (tab.kind === 'home') {

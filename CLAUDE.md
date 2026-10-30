@@ -325,6 +325,19 @@ The "Create Drive From This Template" starter drives (forum, blog, microblog, â€
 **`nomad.dev`** repo (`static/templates/` + `src/content/docs/docs/templates/`), not here. See `nomad.dev/CLAUDE.md`
 for how a template is structured and how to add one.
 
+## Mobile: back goes where you came from
+
+The phone's navigation is a stack (`mobile/lib/navStack.ts`, tests in `tests/unit/mobile-nav-stack.test.js`).
+- Full-screen pages (My Library, Settings, Logs, Devices, â€¦) are entries in `screens` in
+  `mobile/app/index.tsx`. Open one with `openScreen` (it goes on top of what is open, so don't
+  close the screen you open it from) and close it with `closeScreenNamed`. A new screen needs a
+  `Screen` name and a Modal whose `onRequestClose` closes it.
+- A tab's history holds every page, including links followed inside a WebView (`pageLoaded`), so
+  back from a typed address lands on the page you left. A page opened from a screen carries
+  `returnTo`, so back from it opens that screen again.
+- Inside a screen, back steps back through its own trail first: folders in FileExplorer, linked
+  notes in Notes.
+
 ## Mobile: safe areas on Android
 
 The mobile app (Expo 55) is **edge-to-edge** on Android: it draws behind the status bar and the

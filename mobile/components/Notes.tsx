@@ -18,7 +18,9 @@ interface Props {
   apps: Backend['apps']
   onVaultChange: Backend['onVaultChange']
   onOpenDevices: () => void
-  onOpenUrl: (url: string) => void
+  // A link to a page; noteId is the note it was in, which openNoteId gets back when back returns here.
+  onOpenUrl: (url: string, noteId?: string) => void
+  openNoteId?: string // a note to open as Notes shows
 }
 
 // The note in the editor. One object per open note, changed in place, so a save that finishes after
@@ -34,7 +36,8 @@ const TOOLS: [string, string][] = [['heading', 'H'], ['bold', 'B'], ['italic', '
 // and run in a WebView. Edits save a moment after typing stops. An edit that crosses another Device's
 // becomes a conflict copy. A new note left empty is never stored; an emptied one is deleted when you
 // leave it. Retitling a note updates the links to it. Another Device's edits show while this is open.
-export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDevices, onOpenUrl }: Props) {
+// Back from a note reached by a [[link]] returns to the note the link was in, then to the list.
+export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDevices, onOpenUrl, openNoteId }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const insets = useSafeAreaInsets()
@@ -52,6 +55,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
   const [editorOpen, setEditorOpen] = useState(false)
   const [status, setStatus] = useState('')
   const [banner, setBanner] = useState<string | null>(null)
+  const [listLoaded, setListLoaded] = useState(false) // since Notes last opened
 
   const notesRef = useRef<Note[]>([])
   const draft = useRef<Draft | null>(null)
@@ -61,6 +65,8 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
   const web = useRef<WebView>(null)
   const ready = useRef(false)
   const pendingHeading = useRef('')
+  // The notes [[links]] were followed from to reach the open one, oldest first: back walks them.
+  const trail = useRef<string[]>([])
 
   const keepNotes = (list: Note[]) => {
     notesRef.current = list
@@ -80,10 +86,11 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
     if (!res.ok || !res.value) { setError(res.message || 'Couldn’t load your notes'); return }
     keepNotes(res.value.notes)
     setWritable(res.value.writable)
+    setListLoaded(true)
     if (ready.current) send({ type: 'notes', notes: res.value.notes })
   }, [call, send])
 
-  useEffect(() => { if (visible) load() }, [visible, load])
+  useEffect(() => { if (visible) load(); else setListLoaded(false) }, [visible, load])
 
   // Another Device added, edited or deleted a note (our own saves land here too, and change
   // nothing). The open note takes the new text unless there are edits here not saved yet: those
@@ -97,6 +104,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
       const fresh = notesRef.current.find((n) => n.id === d.id)
       if (!fresh) {
         // Deleted on another Device.
+        trail.current = []
         draft.current = null
         ready.current = false
         setEditorOpen(false)
@@ -185,25 +193,65 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
     if (dirty.current) save()
   }
 
-  const closeEditor = useCallback(async () => {
-    await leave()
+  // A note opened from the list (or the New note button) starts a new trail.
+  const openFromList = (note: Note | null) => {
+    trail.current = []
+    openEditor(note)
+  }
+
+  const showList = useCallback(() => {
     draft.current = null
     ready.current = false
     setEditorOpen(false)
     load()
-  }, [leave, load])
+  }, [load])
 
-  // Follow a [[link]] from the editor: to another note, or to a new one with that title.
+  const closeEditor = useCallback(async () => {
+    await leave()
+    showList()
+  }, [leave, showList])
+
+  // Back from the editor: to the note the [[link]] was followed from, else to the list.
+  const backFromEditor = async () => {
+    while (trail.current.length && !notesRef.current.some((n) => n.id === trail.current[trail.current.length - 1])) trail.current.pop()
+    const id = trail.current.pop()
+    if (!id) return closeEditor()
+    await leave()
+    // Found again after leave(), which can rewrite links in it when the open note was retitled.
+    const note = notesRef.current.find((n) => n.id === id)
+    if (note) openEditor(note)
+    else showList()
+  }
+
+  // Follow a [[link]] from the editor: to another note, or to a new one with that title. The note
+  // it was in goes on the trail, so back returns to it.
   const openLinked = async (id: string, heading: string) => {
+    const from = draft.current?.id
     await leave()
     const note = notesRef.current.find((n) => n.id === id)
-    if (note) openEditor(note, { heading })
+    if (!note) return
+    if (from && from !== id) trail.current.push(from)
+    openEditor(note, { heading })
   }
 
   const createLinked = async (title: string) => {
+    const from = draft.current?.id
     await leave()
-    if (writable) openEditor(null, { body: `# ${title}\n\n` })
+    if (!writable) return
+    if (from) trail.current.push(from)
+    openEditor(null, { body: `# ${title}\n\n` })
   }
+
+  // Open the note Notes was asked for, once each time it opens, after the list has loaded.
+  const openedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!visible) { openedFor.current = null; return }
+    if (!openNoteId || !listLoaded || openedFor.current === openNoteId) return
+    openedFor.current = openNoteId
+    const note = notesRef.current.find((n) => n.id === openNoteId)
+    if (note && !draft.current) openEditor(note)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, openNoteId, listLoaded])
 
   const onMessage = (e: WebViewMessageEvent) => {
     let msg: any
@@ -224,14 +272,16 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
     } else if (msg.type === 'createNote') {
       createLinked(msg.title)
     } else if (msg.type === 'openUrl') {
-      closeEditor().then(() => onOpenUrl(msg.href))
+      // The note's id is read after closing: a new note gets one when that saves it.
+      const from = draft.current
+      closeEditor().then(() => onOpenUrl(msg.href, from?.id || undefined))
     }
   }
 
   const deleteNote = () => {
     const target = draft.current
     if (!target) return
-    if (!target.id) { draft.current = null; ready.current = false; setEditorOpen(false); return }
+    if (!target.id) { trail.current = []; draft.current = null; ready.current = false; setEditorOpen(false); return }
     Alert.alert('Delete this note?', 'It is removed from all your linked devices.', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -244,6 +294,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
           const res = await call('notes', 'delete', { id: target.id })
           if (!res.ok) return Alert.alert('Couldn’t delete', res.message || 'Unknown error')
           keepNotes(notesRef.current.filter((n) => n.id !== target.id))
+          trail.current = []
           draft.current = null
           ready.current = false
           setEditorOpen(false)
@@ -263,12 +314,12 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
   const original = conflictOf ? notesRef.current.find((n) => n.id === conflictOf) : null
 
   return (
-    <Modal visible={visible} animationType='slide' onRequestClose={editorOpen ? closeEditor : onClose} presentationStyle='fullScreen'>
+    <Modal visible={visible} animationType='slide' onRequestClose={editorOpen ? backFromEditor : onClose} presentationStyle='fullScreen'>
       <SafeAreaView style={s.root} edges={['top', 'bottom']}>
         {editorOpen ? (
           <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <View style={s.header}>
-              <IconButton icon='arrow-left' label='Back to Notes' onPress={closeEditor} color={t.text} />
+              <IconButton icon='arrow-left' label='Back' onPress={backFromEditor} color={t.text} />
               <Text numberOfLines={1} style={s.status}>{writable ? status : 'Read only for now'}</Text>
               <IconButton icon='trash-alt' label='Delete note' onPress={deleteNote} disabled={!writable} color={t.danger} />
             </View>
@@ -337,7 +388,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
                 ) : (
                   <View style={s.card}>
                     {shown.map((n, i) => (
-                      <Pressable key={n.id} style={[s.row, i > 0 && s.rowDivider]} android_ripple={{ color: t.ripple }} onPress={() => openEditor(n)}>
+                      <Pressable key={n.id} style={[s.row, i > 0 && s.rowDivider]} android_ripple={{ color: t.ripple }} onPress={() => openFromList(n)}>
                         <Text numberOfLines={1} style={s.rowTitle}>{n.title}</Text>
                         <Text numberOfLines={1} style={s.rowSub}>
                           <Text style={s.rowDate}>{relativeDate(n.updatedAt)}</Text>
@@ -354,7 +405,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, onOpenDe
               <Pressable
                 // Absolute, so the SafeAreaView's padding doesn't lift it: add the inset itself.
                 style={[s.fab, { bottom: 16 + insets.bottom }, !writable && s.fabOff]}
-                onPress={() => openEditor(null)}
+                onPress={() => openFromList(null)}
                 disabled={!writable}
                 android_ripple={{ color: t.ripple }}
                 accessibilityRole='button'
