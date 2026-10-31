@@ -30,18 +30,6 @@ export default function RecentsSheet ({ visible, onClose, initialQuery, names, s
   // Each opening starts from what the address bar holds now.
   useEffect(() => { if (visible) setQuery(initialQuery) }, [visible, initialQuery])
 
-  // A Modal gets no resize from the keyboard under edge-to-edge (see AiPanel), so the card lifts its
-  // own content by the keyboard's height while the filter has focus.
-  const [keyboardHeight, setKeyboardHeight] = useState(0)
-  useEffect(() => {
-    if (!visible) { setKeyboardHeight(0); return }
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
-    const show = Keyboard.addListener(showEvent, (e) => setKeyboardHeight(e.endCoordinates?.height ?? 0))
-    const hide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0))
-    return () => { show.remove(); hide.remove() }
-  }, [visible])
-
   const nameMatches = useNameMatches(names, query)
   const items = useMemo((): Array<SavedSite & { name?: string }> => {
     const named = nameMatches.map((r) => ({ url: `hyper://${r.name}/`, title: r.title || r.url, ts: 0, name: r.name }))
@@ -54,7 +42,7 @@ export default function RecentsSheet ({ visible, onClose, initialQuery, names, s
   const q = query.trim()
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} style={[s.sheet, { maxHeight: Math.max(240, screenH * 0.85 - keyboardHeight) }]}>
+    <BottomSheet visible={visible} onClose={onClose} style={[s.sheet, { maxHeight: screenH * 0.85 }]}>
       <View style={s.head}>
         <Text style={s.title} accessibilityRole='header'>Recent sites</Text>
       </View>
@@ -105,7 +93,6 @@ export default function RecentsSheet ({ visible, onClose, initialQuery, names, s
           </Pressable>
         ))}
       </ScrollView>
-      <View style={{ height: keyboardHeight }} />
     </BottomSheet>
   )
 }

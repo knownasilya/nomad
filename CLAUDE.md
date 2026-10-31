@@ -446,6 +446,11 @@ lands under the back/home buttons.
 - For a bottom sheet, use `mobile/components/BottomSheet.tsx`. It owns the Modal, the backdrop,
   close-on-tap-outside, and the bottom inset. Don't hand-build `<Modal transparent>` + a
   `justifyContent: 'flex-end'` backdrop.
+- The keyboard: a Modal is its own Android window, so React Native's `Keyboard` events never fire
+  for an input inside one, and edge-to-edge means it isn't resized either. `BottomSheet` keeps the
+  sheet above the keyboard with `components/KeyboardInset.tsx`, which reads the keyboard inset of
+  its own window (`modules/nomad-keyboard-inset`). Use it for any other Modal with an input low on
+  the screen; `Keyboard` listeners only work outside a Modal (`AiPanel`).
 - Anything else pinned to an edge outside a `SafeAreaView` (an overlay like `AiPanel`, a centered
   dialog that can grow tall) must apply `useSafeAreaInsets()` itself.
 - A full-screen `Modal` is safe when its content sits in a `SafeAreaView` with the right `edges`
