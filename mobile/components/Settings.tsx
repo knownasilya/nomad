@@ -1,9 +1,11 @@
 import { useMemo } from 'react'
-import { Modal, Platform, ScrollView, StyleSheet, Text } from 'react-native'
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ScreenHeader from './ScreenHeader'
 import { ListSection, ListRow, SwitchRow } from './List'
 import { useTheme, type Theme } from '../lib/theme'
+import type { Backend } from '../lib/useBackend'
+import { useDesktopUpdates } from '../lib/deviceUpdates'
 import { checkForUpdate, currentVersion, installUpdate, setAutoInstall, setBetaUpdates, updatesSupported, useAutoInstall, useBetaUpdates, useUpdateState } from '../lib/updater'
 
 interface Props {
@@ -14,17 +16,20 @@ interface Props {
   onOpenLogs: () => void
   shareTabs: boolean
   onShareTabs: (on: boolean) => void
+  apps: Backend['apps']
 }
 
 // The phone's browser settings, like desktop's nomad://settings: one list of the places to change
 // how Nomad works on this phone, plus the logs for when something goes wrong.
-export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosting, onOpenLogs, shareTabs, onShareTabs }: Props) {
+export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosting, onOpenLogs, shareTabs, onShareTabs, apps }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const update = useUpdateState()
   const auto = useAutoInstall()
   const beta = useBetaUpdates()
   const version = currentVersion()
+  // The user's computers, so one on an older Nomad can be updated from here too.
+  const computers = useDesktopUpdates(apps, visible)
 
   return (
     <Modal visible={visible} animationType='slide' onRequestClose={onClose} presentationStyle='fullScreen'>
@@ -70,6 +75,32 @@ export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosti
               )}
             </ListSection>
           ) : null}
+          {computers.desktops.length ? (
+            <ListSection
+              title='Your computers'
+              footer={computers.error || 'Update installs the newest Nomad on that computer and restarts it. Its windows and tabs come back.'}
+            >
+              {computers.desktops.map((d, i) => (
+                <ListRow
+                  key={d.key}
+                  icon='laptop'
+                  title={d.name}
+                  subtitle={d.message || (d.version ? `v${d.version}${d.behind ? ' · older than this phone' : ''}` : 'Version unknown')}
+                  subtitleLines={2}
+                  divider={i > 0}
+                  right={d.busy
+                    ? <ActivityIndicator size='small' color={t.accent} />
+                    : d.behind
+                      ? (
+                        <Pressable onPress={() => computers.request(d.key)} hitSlop={10} accessibilityRole='button' accessibilityLabel={`Update ${d.name} and restart it`}>
+                          <Text style={s.action}>Update</Text>
+                        </Pressable>
+                        )
+                      : null}
+                />
+              ))}
+            </ListSection>
+          ) : null}
           <ListSection title='Troubleshooting'>
             <ListRow icon='terminal' title='Logs' subtitle='What the app and its peer-to-peer backend have logged, including the last run' subtitleLines={2} chevron onPress={onOpenLogs} />
           </ListSection>
@@ -87,6 +118,7 @@ function makeStyles (t: Theme) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: t.bg },
     page: { padding: 16 },
-    value: { color: t.textDim, fontSize: 13 }
+    value: { color: t.textDim, fontSize: 13 },
+    action: { color: t.accent, fontSize: 15, fontWeight: '600' }
   })
 }

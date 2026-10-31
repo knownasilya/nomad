@@ -342,6 +342,17 @@ nomad://history → Tabs From Other Devices (`nomad.vault.listDeviceTabs`). The 
 `mobile/app/index.tsx` over `RPC_APPS` `tabs` and lists them under the tab grid. `sync_open_tabs`
 (Settings → Devices) and the phone's Settings switch turn it off per Device and delete the record.
 
+### Updating a computer from the phone (ADR-0031)
+
+The phone can ask one of the user's computers to install the newest release and restart. The phone
+writes `/.vault/update-requests/<deviceKey>.json`; the computer (`app/bg/remote-update.js`) takes it
+once, downloads with `browser.downloadUpdateNow`, writes its progress to
+`/.vault/update-status/<deviceKey>.json`, and restarts with `installUpdateAndRestart` (session restore
+reopens the tabs). Rules are `shared/device-updates.mjs` (tests `tests/unit/device-updates.test.js`):
+only a request from another Device the Vault lists, less than an hour old. The `remote_update_enabled`
+setting (Settings → Auto Updater) turns it off. Phone UI: `DesktopUpdateBanner` after the phone
+updates, Devices, and Settings → Your computers (`mobile/lib/deviceUpdates.ts`, `RPC_APPS` `updates`).
+
 ### Shared Spaces (ADR-0029)
 
 A Space (not Personal) can be shared with other people as **Can view** or **Can edit**. Its library

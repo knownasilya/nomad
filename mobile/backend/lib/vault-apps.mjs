@@ -5,6 +5,7 @@ import * as names from '../../../shared/names.mjs'
 import * as ot from '../../../shared/open-tabs.mjs'
 import * as jl from '../../../shared/jobs.mjs'
 import * as sl from '../../../shared/space-library.mjs'
+import * as du from '../../../shared/device-updates.mjs'
 import { inlineOp, boundedUpdate } from './vault.mjs'
 import { parseHyperUrl } from './hyper-url.mjs'
 import { DRIVE_AUTOBASE, DRIVE_HYPERDRIVE } from '../../rpc-commands.mjs'
@@ -532,4 +533,52 @@ export async function jobNotifications (base, since) {
     since: next,
     wants
   }
+}
+
+// Updating a computer from the phone (shared/device-updates.mjs)
+// =
+// The phone asks one of the user's computers to install the newest release and restart; the
+// computer (desktop bg/remote-update.js) writes how it goes, and the phone shows that.
+
+// The user's computers, each with its version, whether it runs an older one than `version` (this
+// phone's), whether a request is waiting for it, and its update status in words.
+export async function deviceUpdates (base, version) {
+  await boundedUpdate(base)
+  const own = ownKey(base)
+  const [devices, requests, statuses] = await Promise.all([
+    readPrefix(base, '/.vault/devices/'),
+    readPrefix(base, du.REQUESTS_PREFIX),
+    readPrefix(base, du.STATUS_PREFIX)
+  ])
+  const behind = new Set(du.behindDesktops(devices, { ownKey: own, version }).map((d) => d.key))
+  const pendingOf = new Map(requests.filter(du.isRequest).map((r) => [r.device, r]))
+  const statusOf = new Map(statuses.filter(du.isStatus).map((st) => [st.device, st]))
+  const now = Date.now()
+  return {
+    desktops: devices
+      .filter((d) => d && du.isDeviceKey(d.key) && d.key !== own && d.platform === 'desktop')
+      .map((d) => {
+        const pending = pendingOf.get(d.key) || null
+        const status = statusOf.get(d.key) || null
+        return {
+          key: d.key,
+          name: d.name || 'Computer',
+          version: d.version || null,
+          behind: behind.has(d.key),
+          busy: !!pending || du.isBusy(status, now),
+          state: status?.state || null,
+          message: du.describeUpdate({ status, pending, deviceVersion: d.version || null }, now)
+        }
+      }),
+    writable: !!base.writable
+  }
+}
+
+// Ask a computer to update to at least `version` and restart. Replaces any request still waiting.
+export async function requestDeviceUpdate (base, { device, version, prerelease = false }) {
+  const devices = await readPrefix(base, '/.vault/devices/')
+  if (!devices.some((d) => d && d.key === device)) throw new Error('That device isn’t linked anymore')
+  const req = du.makeRequest({ device, version, prerelease, by: ownKey(base) })
+  await putRecord(base, du.requestPath(device), req)
+  return req
 }

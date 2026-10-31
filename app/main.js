@@ -40,6 +40,7 @@ import * as highlights from './bg/ui/highlights';
 import * as mods from './bg/ui/mods';
 import * as pageControl from './bg/ui/page-control';
 import * as openTabs from './bg/ui/open-tabs';
+import * as remoteUpdate from './bg/remote-update';
 import * as trayIcon from './bg/ui/tray-icon';
 import * as downloads from './bg/ui/downloads';
 import * as permissions from './bg/ui/permissions';
@@ -192,6 +193,8 @@ app.on('ready', async function () {
   pageControl.setup();
   // This Device's open tabs, published to the Vault for the user's other Devices.
   openTabs.setup();
+  // The user's phone can ask this computer to update and restart (Settings → Auto Updater).
+  remoteUpdate.setup();
   log.info('Initializing tray icon');
   trayIcon.setup();
   log.info('Initializing browser windows');

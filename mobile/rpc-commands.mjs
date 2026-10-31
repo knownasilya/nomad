@@ -25,7 +25,7 @@ export const RPC_NOMAD = 40 // { reqId, api, method, url?, args } an in-page nom
 //   tabs:   'publish' {spaces, off?} | 'list' {space} — open tabs on the user's Devices (shared/open-tabs.mjs)
 //   jobs:   'list' | 'runs' {id} | 'setEnabled' {id, enabled} | 'run' {id} | 'delete' {id}
 //           | 'notifications' {since} — the user's AI Jobs (shared/jobs.mjs)
-export const RPC_APPS = 46 // { reqId, app: 'reader'|'notes'|'names'|'tabs'|'jobs', action, ...args }
+export const RPC_APPS = 46 // { reqId, app: 'reader'|'notes'|'names'|'tabs'|'jobs'|'updates', action, ...args }
 // The Logs page (Settings → Logs): the backend's console lines with id > since, plus the previous
 // session's when `previous` (to read what led up to a crash).
 export const RPC_LOGS = 48 // { reqId, since?, previous? }
