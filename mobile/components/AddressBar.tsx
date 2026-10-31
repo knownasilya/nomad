@@ -29,6 +29,7 @@ interface Props {
   onAi: () => void
   tabCount: number
   onTabs: () => void
+  onNewTab: () => void // a long press on the tab count, as in Chrome
   onMenu: () => void
 }
 
@@ -38,7 +39,7 @@ interface Props {
 // are in the menu, as in Chrome, which leaves the address room. While the field has focus it takes the whole row and its trailing button clears it; the
 // keyboard's Go key opens what was typed. The bar takes on the site's theme color when it has one.
 export default function AddressBar (props: Props) {
-  const { value, onChangeText, onSubmit, onReload, loading, isHyper, onFocus, onBlur, hasDraft, draftPreviewing, onToggleDraft, siteName, inputRef, canReload = true, tint, topInset = 0, space, aiOpen, onAi, tabCount, onTabs, onMenu } = props
+  const { value, onChangeText, onSubmit, onReload, loading, isHyper, onFocus, onBlur, hasDraft, draftPreviewing, onToggleDraft, siteName, inputRef, canReload = true, tint, topInset = 0, space, aiOpen, onAi, tabCount, onTabs, onNewTab, onMenu } = props
   const base = useTheme()
   const t = useMemo(() => tintTheme(base, tint), [base, tint])
   const s = useMemo(() => makeStyles(t, !!tint), [t, tint])
@@ -113,8 +114,8 @@ export default function AddressBar (props: Props) {
           <>
             <IconButton icon='robot' label='AI assistant' onPress={onAi} color={aiOpen ? t.accent : t.textDim} ripple={t.ripple} style={s.btn} />
             {/* Chrome's tab switcher button: the open-tab count in a rounded square. Past 99 it gives
-                up and grins, as Chrome does. */}
-            <IconButton onPress={onTabs} label={`${tabCount} open ${tabCount === 1 ? 'tab' : 'tabs'}`} ripple={t.ripple} style={s.btn}>
+                up and grins, as Chrome does. Touch and hold opens a new tab. */}
+            <IconButton onPress={onTabs} onLongPress={onNewTab} label={`${tabCount} open ${tabCount === 1 ? 'tab' : 'tabs'}. Touch and hold for a new tab`} ripple={t.ripple} style={s.btn}>
               <View style={s.tabCount}>
                 <Text style={s.tabCountText}>{tabCount > 99 ? ':D' : tabCount}</Text>
               </View>

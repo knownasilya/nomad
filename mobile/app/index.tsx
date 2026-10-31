@@ -851,6 +851,12 @@ export default function Browser () {
     return () => setTabActions(null)
   }, [closeTab, openTab, closeAllTabs, openInNewTab, backend, spacesApi.activeSpace.rootDriveKey])
 
+  // Touch and hold on the tab count: a new tab, ready to type an address in.
+  const openTabAndType = useCallback(() => {
+    openTab()
+    setTimeout(() => addressRef.current?.focus(), 100)
+  }, [openTab])
+
   useFocusEffect(
     useCallback(() => {
       if (!focusAddressOnReturn.current) return
@@ -1041,6 +1047,7 @@ export default function Browser () {
         onAi={() => setAiOpen(true)}
         tabCount={tabs.length}
         onTabs={openTabGrid}
+        onNewTab={openTabAndType}
         onMenu={() => setMenuOpen(true)}
       />
 
