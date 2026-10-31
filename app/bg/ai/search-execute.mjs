@@ -7,7 +7,7 @@
 import vm from 'node:vm'
 import { API_REFERENCE } from './api-reference.mjs'
 
-export const DOMAINS = ['capability', 'guide', 'page', 'drive', 'name']
+export const DOMAINS = ['capability', 'guide', 'page', 'drive', 'name', 'skill']
 
 const GUIDE_BUDGET = 12000
 const MAX_HITS = 8
@@ -46,6 +46,8 @@ const DOMAIN_COPY = {
     'Names the user gave their drives, apps and pages ("blog", "notes"), with what each points to. ' +
     'Pass a drive or app name as `drive` to readDriveFile, listDriveFiles or writeDriveFile. ' +
     'hyper://<name>/ opens it in a tab.',
+  skill:
+    'Skills the user wrote: instructions for kinds of tasks. Open one with entity skill:<name> to read its instructions.',
 }
 
 export const CAPABILITIES = [
@@ -810,7 +812,7 @@ function guideRecord(id, title, markdown) {
 const GUIDES = splitGuides(API_REFERENCE)
 
 export function buildCatalog(opts) {
-  const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, tab, job, secrets, memory, names, ownerId } =
+  const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, tab, job, secrets, memory, names, skills, ownerId } =
     opts || {}
   const caps = visibleCapabilities({
     allowWrite,
@@ -834,6 +836,9 @@ export function buildCatalog(opts) {
     listedDrives: listedDrives == null ? null : listedDrives.map(driveRecord),
     // The user's names (shared/names.mjs records), on a personal turn only. null hides the name domain.
     names: !personal || names == null ? null : names.map(nameRecord),
+    // The user's enabled skills (shared/ai-skills.mjs, ADR-0034), on a personal turn only. null hides
+    // the skill domain.
+    skills: !personal || skills == null ? null : skills.map(skillRecord),
     // Reserved until Personas choose a home. Passed through and not read.
     ownerId,
   }
@@ -887,6 +892,16 @@ function nameRecord(n) {
   }
 }
 
+// A skill: its name and description to search and list, its instructions to open.
+function skillRecord(s) {
+  return {
+    name: String(s.name),
+    title: String(s.name),
+    description: String(s.description || ''),
+    instructions: String(s.instructions || ''),
+  }
+}
+
 function pageRecord(tool) {
   return {
     name: String(tool.name),
@@ -912,6 +927,9 @@ export function search(input, catalog) {
   if (domain === 'name' && catalog.names == null) {
     throw new Error('names are not available in this context')
   }
+  if (domain === 'skill' && catalog.skills == null) {
+    throw new Error('skills are not available in this context')
+  }
   if (entity != null) return { kind: 'detail', details: entityDetails(entity, catalog) }
   if (!query && !domain) return { kind: 'index', domains: domainIndex(catalog) }
   if (domain && !query) {
@@ -932,6 +950,7 @@ function domainIndex(catalog) {
     if (domain === 'page' && catalog.pageTools == null) continue
     if (domain === 'drive' && catalog.listedDrives == null) continue
     if (domain === 'name' && catalog.names == null) continue
+    if (domain === 'skill' && catalog.skills == null) continue
     rows.push({
       domain,
       description: DOMAIN_COPY[domain],
@@ -955,6 +974,7 @@ function listDomain(domain, catalog) {
   if (domain === 'page') return catalog.pageTools || []
   if (domain === 'drive') return catalog.listedDrives || []
   if (domain === 'name') return catalog.names || []
+  if (domain === 'skill') return catalog.skills || []
   return []
 }
 
@@ -966,6 +986,7 @@ function rank(query, domain, catalog) {
     if (d === 'page' && catalog.pageTools == null) continue
     if (d === 'drive' && catalog.listedDrives == null) continue
     if (d === 'name' && catalog.names == null) continue
+    if (d === 'skill' && catalog.skills == null) continue
     for (const item of listDomain(d, catalog)) hits.push(scoreHit(d, item, tokens))
   }
   hits.sort((a, b) => b.score - a.score || a.entity.localeCompare(b.entity))
@@ -985,7 +1006,7 @@ function scoreHit(domain, item, tokens) {
   const name = item.name || item.id
   const title = item.title || name
   const summary = item.description || item.summary || ''
-  const body = item.markdown || ''
+  const body = item.markdown || item.instructions || ''
   const score =
     tokens.reduce((sum, token) => sum + (title.toLowerCase().includes(token) ? 3 : 0), 0) +
     tokens.reduce((sum, token) => sum + (summary.toLowerCase().includes(token) ? 2 : 0), 0) +
@@ -1078,6 +1099,18 @@ function openEntity(ref, catalog) {
     const n = catalog.names.find((x) => x.name === id)
     if (!n) throw new Error(`unknown name "${id}"`)
     return { entity: `name:${id}`, type: 'name', title: n.title, url: n.url, shortcut: `hyper://${id}/`, kind: n.kind }
+  }
+  if (type === 'skill') {
+    if (catalog.skills == null) throw new Error('skills are not available in this context')
+    const skill = catalog.skills.find((x) => x.name === id)
+    if (!skill) throw new Error(`unknown skill "${id}"`)
+    return {
+      entity: `skill:${id}`,
+      type: 'skill',
+      title: skill.name,
+      summary: skill.description,
+      instructions: skill.instructions,
+    }
   }
   if (type === 'guide') {
     const guide = catalog.guides.find((g) => g.id === id)
@@ -1269,9 +1302,9 @@ export const MODEL_TOOLS = [
     function: {
       name: 'search',
       description:
-        'Find a capability, a guide section, a page tool, or a drive listed for public search. ' +
+        "Find a capability, a guide section, a page tool, a drive listed for public search, or one of the user's skills. " +
         '{} lists domains. {query} ranks. {domain} lists one domain. {entity} opens one or more refs ' +
-        '(capability:<name>, guide:<id>, page:<name>, drive:<key>).',
+        '(capability:<name>, guide:<id>, page:<name>, drive:<key>, skill:<name>).',
       parameters: {
         type: 'object',
         properties: {

@@ -29,6 +29,16 @@ import { driveTitle, readJobSource, resolveJobWrites } from './job-source';
 import { PRESETS } from '../../../../shared/mods.mjs';
 import { searchMemories, MAX_MEMORIES } from '../../../../shared/ai-memory.mjs';
 import * as aiMemory from '../../ai/memory';
+import {
+  searchSkills,
+  parseSkillMd,
+  skillMd,
+  MAX_SKILLS,
+  MAX_SKILL_NAME,
+  MAX_SKILL_DESCRIPTION,
+  MAX_SKILL_INSTRUCTIONS,
+} from '../../../../shared/ai-skills.mjs';
+import * as aiSkills from '../../ai/skills';
 import { describeSchedule, nextRunAt, normalizeSchedule } from '../../../../shared/jobs.mjs';
 
 // The Drive key of a hyper://<key>/ URL, or null.
@@ -441,6 +451,46 @@ export default {
 
   async clearMemories() {
     return aiMemory.clear();
+  },
+
+  // AI skills (bg/ai/skills.js, ADR-0034): nomad://ai/skills. The AI reads them; only the user
+  // changes them, here.
+  async listSkills({ query = '' } = {}) {
+    return {
+      skills: searchSkills(aiSkills.list(), query),
+      max: MAX_SKILLS,
+      limits: { name: MAX_SKILL_NAME, description: MAX_SKILL_DESCRIPTION, instructions: MAX_SKILL_INSTRUCTIONS },
+    };
+  },
+
+  async saveSkill(fields) {
+    const { id, name, description, instructions, enabled } = fields || {};
+    return aiSkills.save({
+      id: id || undefined,
+      name,
+      description,
+      instructions,
+      enabled: typeof enabled === 'boolean' ? enabled : undefined,
+    });
+  },
+
+  async deleteSkill(id) {
+    await aiSkills.remove(id);
+  },
+
+  // A SKILL.md's text as { name, description, instructions }, to fill the page's form; nothing is saved.
+  async parseSkillMd(text) {
+    if (typeof text !== 'string' || text.length > 2 * MAX_SKILL_INSTRUCTIONS) {
+      throw new Error('That file is too big to be a skill');
+    }
+    return parseSkillMd(text);
+  },
+
+  // A skill as SKILL.md text, to save as a file.
+  async exportSkill(id) {
+    const s = aiSkills.get(id);
+    if (!s) throw new Error('No skill with that id');
+    return skillMd(s);
   },
 
   // AI Jobs (bg/ai/jobs.js, ADR-0030): My Library → Jobs. Each Job comes with its newest run, when

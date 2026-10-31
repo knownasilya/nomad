@@ -47,6 +47,7 @@ const DOMAINS = {
   page: { place: "this page's tools", list: "Listing this page's tools" },
   drive: { place: 'public drives', list: 'Listing public drives' },
   name: { place: 'your names', list: 'Listing your names' },
+  skill: { place: 'your skills', list: 'Listing your skills' },
 };
 
 export function toolSummary(name, args) {
@@ -167,6 +168,8 @@ function refSummary(ref) {
       return `Looking up the drive ${id}`;
     case 'name':
       return `Looking up the name ${quote(id)}`;
+    case 'skill':
+      return `Reading your skill ${quote(id)}`;
     default:
       return `Looking up ${ref}`;
   }

@@ -421,7 +421,7 @@ user in My Library (`checkJobSource`). The AI must not be able to take it for th
 ### The AI page, chats and memory (ADR-0032)
 
 `nomad://ai` (`app/userland/ai/`, in the browser menu) is the AI's own page: `/chats`, `/memory`,
-`/setup` (the old Settings → AI; Settings' AI item and `?view=ai` now open it), and a link to My
+`/skills`, `/setup` (the old Settings → AI; Settings' AI item and `?view=ai` now open it), and a link to My
 Library → Jobs. Chats are the sidebar's sessions in `hyper://private/.ai-chat/` (`app/bg/ai/chat-store.js`;
 search helpers in `chat-search.mjs`); a user's name for a chat lives in `/.ai-chat/names.json` because
 the sidebar rewrites `title` on every save. The page uses the internal `nomad.aiChats`
@@ -433,6 +433,14 @@ cache in `app/bg/ai/memory.js`, page API `nomad.vault.listMemories`/`saveMemory`
 them with the `remember`/`forget` capabilities (`gates: { personal, memory }`, not in `JOB_CAPS`),
 behind the `memoryWrite` permission. The `ai_memory` setting turns it all off. A page's
 `nomad.ai.chat()` never sees memories.
+
+Skills (ADR-0034) live on `nomad://ai/skills`: instructions the user writes for kinds of tasks, Vault
+records `/.vault/ai-skills/<id>.json` (rules and the SKILL.md format in `shared/ai-skills.mjs`, tests
+`tests/unit/ai-skills.test.js`, cache in `app/bg/ai/skills.js`, page API `nomad.vault.listSkills`/
+`saveSkill`/`deleteSkill`/`parseSkillMd`/`exportSkill`). A personal turn that offers tools lists each
+enabled skill by name and description (`skillsPrompt()`); the model reads one through `search`'s
+`skill` domain (`skill:<name>`), which `buildCatalog` fills only on a personal turn. The AI has no
+capability that changes a skill; only the AI page does.
 
 ### Secrets (ADR-0033)
 
