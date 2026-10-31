@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.26.2](https://github.com/knownasilya/nomad/compare/v1.26.1...v1.26.2) (2026-10-31)
+
+
+### Bug Fixes
+
+* **ai-sidebar:** load Leaflet when a map first draws, so the window isn't blank ([eebf10e](https://github.com/knownasilya/nomad/commit/eebf10eb93d1796b0bf91607c718d07958ab1ade))
+* **settings:** drop the sidebar width slider ([8bcf5ff](https://github.com/knownasilya/nomad/commit/8bcf5ff611729bed1f6158bf0ef98a9b957542e4))
+
 ### [1.26.1](https://github.com/knownasilya/nomad/compare/v1.25.0...v1.26.1) (2026-10-30)
 
 
