@@ -334,7 +334,8 @@ input with `sendInputEvent`/`insertText`. `app/fg/webview-preload/page-control.j
 ref and draws the cursor, border and Stop bar in a closed shadow root, through
 `window.__nomadPageControl` in world 999. The grant is the `aiPageControl` permission, stored in
 sitedata as the time it ends; `aiPageAction` is the per-click confirm, whose prompt can allow similar
-clicks (`similarKey`) for the rest of the sidebar chat (`chatId` from the sidebar). The model-facing text is
+clicks (`similarKey`) for the rest of the sidebar chat (`chatId` from the sidebar); `aiPagePlan` approves a
+plan of clicks from `planPageActions` at once (`planBudget`). The model-facing text is
 `PAGE_CONTROL_PROMPT` and the `## Page control` guide in `api-reference.mjs`.
 
 ### Open tabs on other Devices (ADR-0024)
@@ -346,6 +347,16 @@ after `custom-pages-updated`, only on a change, only once another Device joined)
 nomad://history → Tabs From Other Devices (`nomad.vault.listDeviceTabs`). The phone publishes from
 `mobile/app/index.tsx` over `RPC_APPS` `tabs` and lists them under the tab grid. `sync_open_tabs`
 (Settings → Devices) and the phone's Settings switch turn it off per Device and delete the record.
+
+### Pinned pages (ADR-0032)
+
+A Space's pinned pages are `/nomad/pins.json` in its Root Drive (its Space Library when shared), the
+file the phone's home shortcuts and the new tab page already use. Desktop draws them as icon tiles at
+the top of the sidebar (`fg/shell-window/sidebar.js`; closed pins also show in the top bar,
+`tabs.js`). `app/bg/ui/space-pins.js` keeps them per Space and watches the drive; a pinned tab is
+bound to its pin by `pinUrl`, and `reconcileSpacePins` in `bg/ui/tabs/manager.js` unpins, binds and
+adopts tabs when the pins change. Rules: `shared/pins.mjs` (tests `tests/unit/pins.test.js`). Pin
+through `togglePinned` / `spacePins`, never by setting `tab.isPinned` alone, or the pin won't sync.
 
 ### Updating a computer from the phone (ADR-0031)
 

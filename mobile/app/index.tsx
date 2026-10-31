@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, Image, StyleSheet, StatusBar, Alert, Keyboard, BackHandler, Platform, AppState } from 'react-native'
+import { View, Text, TextInput, Pressable, ScrollView, Image, StyleSheet, StatusBar, Alert, Keyboard, BackHandler, Platform, AppState } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WebView } from 'react-native-webview'
 import type { WebViewNavigation } from 'react-native-webview'
@@ -10,7 +10,7 @@ import b4a from 'b4a'
 
 import AddressBar from '../components/AddressBar'
 import HyperView from '../components/HyperView'
-import Suggestions from '../components/Suggestions'
+import RecentsSheet from '../components/RecentsSheet'
 import Library from '../components/Library'
 import Reader from '../components/Reader'
 import Notes from '../components/Notes'
@@ -36,7 +36,7 @@ import HostingSettings from '../components/HostingSettings'
 import { usePersistence, type SavedSite, type SavedDrive } from '../lib/usePersistence'
 import { useSpaces, PERSONAL_ID, SPACE_COLORS } from '../lib/useSpaces'
 import { useFavicons } from '../lib/useFavicons'
-import { useNames, useNamesForUrl, useNameMatches, mayBeName } from '../lib/useNames'
+import { useNames, useNamesForUrl, mayBeName } from '../lib/useNames'
 import NameSheet from '../components/NameSheet'
 import { resolveAddress, isHyperUrl, shortKey, hyperKeyOf, type DriveType } from '../lib/hyperUrl'
 import { useTheme, radius, type Theme } from '../lib/theme'
@@ -270,10 +270,11 @@ export default function Browser () {
   const [aiOpen, setAiOpen] = useState(false)
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [source, setSource] = useState('')
-  // URL-bar autocomplete: visible while the address bar is focused. blurTimer delays hiding so a tap
-  // on a suggestion lands before the list disappears.
+  // The address bar has focus (it hides the name tag then). recentsOpen: the recent-sites card that
+  // the bar's clock button opens, and recentsQuery what the bar held when it opened.
   const [urlFocused, setUrlFocused] = useState(false)
-  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [recentsOpen, setRecentsOpen] = useState(false)
+  const [recentsQuery, setRecentsQuery] = useState('')
   // Drives registered in the active space's Root Drive (/drives.json) — incl. drives added on other
   // devices. Merged with the locally-known drives for the Library.
   const [registryDrives, setRegistryDrives] = useState<{ key: string; type?: DriveType }[]>([])
@@ -421,8 +422,7 @@ export default function Browser () {
       if (tab.driveKey && !sameDrive) backend.close(tab.driveType, tab.driveKey)
       setLogs([]) // page-scoped console resets on navigation
       setSource('')
-      // Any navigation (typed URL, suggestion, back/forward, home button) dismisses the autocomplete.
-      if (blurTimer.current) { clearTimeout(blurTimer.current); blurTimer.current = null }
+      // Any navigation (typed URL, a recent site, back/forward, home button) leaves the address bar.
       setUrlFocused(false)
       const fields = fieldsFor(tab, entry, sameDrive)
       const session = newSession()
@@ -459,37 +459,19 @@ export default function Browser () {
     [navTo, persist, names.resolve]
   )
 
-  // URL-bar autocomplete. The address bar selects-all on focus, so treat the input as an empty query
-  // (show most-recent) until it diverges from the committed URL, then filter by what's typed.
-  // The user's names that match come first, the exact one at the top, as on desktop.
-  const suggestQuery = active.input.trim() === active.url.trim() ? '' : active.input
-  const nameMatches = useNameMatches(names, suggestQuery)
-  const suggestions = useMemo(() => {
-    const named = nameMatches.map((r) => ({ url: `hyper://${r.name}/`, title: r.title || r.url, ts: 0, name: r.name }))
-    return [...named, ...persist.suggest(suggestQuery, 10)].slice(0, 10)
-  }, [persist.suggest, suggestQuery, nameMatches])
-  const showSuggestions = urlFocused && suggestions.length > 0
-
-  const onUrlFocus = useCallback(() => {
-    if (blurTimer.current) { clearTimeout(blurTimer.current); blurTimer.current = null }
-    setUrlFocused(true)
-  }, [])
-  const onUrlBlur = useCallback(() => {
-    blurTimer.current = setTimeout(() => setUrlFocused(false), 150)
-  }, [])
-  const onSelectSuggestion = useCallback((url: string) => {
-    if (blurTimer.current) { clearTimeout(blurTimer.current); blurTimer.current = null }
-    setUrlFocused(false)
+  // The recent-sites card (no dropdown under the bar, which covered the page as you typed). The
+  // address bar selects-all on focus, so the committed URL counts as no filter; anything typed over
+  // it fills the card's filter.
+  const openRecents = useCallback(() => {
+    const tab = tabsRef.current.find((tb) => tb.id === activeIdRef.current)
+    const input = tab?.input ?? ''
+    setRecentsQuery(tab && input.trim() !== tab.url.trim() ? input : '')
     Keyboard.dismiss()
-    navigate(activeIdRef.current, url)
-  }, [navigate])
-  // Dismiss the autocomplete whenever the active tab changes (close / switch / new tab). urlFocused is
-  // plain state, decoupled from the TextInput's real focus — without this it can stay true after a tab
-  // close and, since no blur event follows, the dropdown gets stuck open over the new (home) tab.
-  useEffect(() => {
-    if (blurTimer.current) { clearTimeout(blurTimer.current); blurTimer.current = null }
-    setUrlFocused(false)
-  }, [activeId])
+    setRecentsOpen(true)
+  }, [])
+  // urlFocused is plain state, decoupled from the TextInput's real focus, so a tab close or switch
+  // (which sends no blur) resets it.
+  useEffect(() => { setUrlFocused(false) }, [activeId])
 
   // Back (-1) or forward (+1) in a tab's history (lib/navStack.ts): inside the WebView on screen
   // when both entries are its own pages, else by loading the entry. Back from a page opened from a
@@ -797,6 +779,13 @@ export default function Browser () {
   }, [captureActive])
 
   const addressRef = useRef<TextInput>(null)
+  // Closing the keyboard (Android back, or a tap on the page) leaves the address bar, as in Chrome,
+  // so the bar gets its buttons back instead of staying in its editing layout.
+  useEffect(() => {
+    if (!urlFocused) return
+    const sub = Keyboard.addListener('keyboardDidHide', () => addressRef.current?.blur())
+    return () => sub.remove()
+  }, [urlFocused])
   const focusAddressOnReturn = useRef(false)
 
   // A URL from another Device's tabs (the tab grid) opens in a new tab here. navTo reads tabsRef,
@@ -1043,8 +1032,9 @@ export default function Browser () {
         loading={active.kind === 'hyper' && active.render?.type === 'loading'}
         isHyper={isHyperUrl(active.input)}
         driveType={active.driveType}
-        onFocus={onUrlFocus}
-        onBlur={onUrlBlur}
+        onFocus={() => setUrlFocused(true)}
+        onBlur={() => setUrlFocused(false)}
+        onRecents={openRecents}
         hasDraft={!!active.hasDraft}
         draftPreviewing={!!active.draftPreviewing}
         onToggleDraft={onToggleDraftPreview}
@@ -1093,19 +1083,6 @@ export default function Browser () {
           onOpenLibrary={() => openScreen({ name: 'library' })}
           registerWebView={(ref) => { webviews.current[active.id] = ref }}
         />
-        {/* Floating autocomplete: overlays the top of the page (anchored just below the address
-            bar), so it never shifts the page down. A full-bleed backdrop underneath it catches taps
-            outside the list to dismiss — RN's TextInput blur doesn't fire when you tap non-input
-            content, so without this the dropdown wouldn't close on an outside tap. elevation keeps
-            the backdrop above page content (incl. Android WebViews) but below the list itself. */}
-        {showSuggestions ? (
-          <TouchableOpacity
-            style={[StyleSheet.absoluteFill, { zIndex: 999, elevation: 11 }]}
-            activeOpacity={1}
-            onPress={() => { if (blurTimer.current) { clearTimeout(blurTimer.current); blurTimer.current = null } setUrlFocused(false); Keyboard.dismiss() }}
-          />
-        ) : null}
-        {showSuggestions ? <Suggestions items={suggestions} onSelect={onSelectSuggestion} /> : null}
       </View>
 
       <UpdateBanner />
@@ -1154,6 +1131,16 @@ export default function Browser () {
             { label: 'Settings', icon: 'cog', onPress: () => openScreen({ name: 'settings' }) }
           ]
         ]}
+      />
+
+      <RecentsSheet
+        visible={recentsOpen}
+        onClose={() => setRecentsOpen(false)}
+        initialQuery={recentsQuery}
+        names={names}
+        suggest={persist.suggest}
+        iconFor={favicons.iconFor}
+        onOpen={(url) => navigate(activeIdRef.current, url)}
       />
 
       <NameSheet

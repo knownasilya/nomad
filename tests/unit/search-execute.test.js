@@ -318,7 +318,7 @@ describe('search: a personal turn (the user\'s own AI)', () => {
   });
 
   it('offers page control to the AI Sidebar only (ADR-0028)', () => {
-    const ACTIONS = ['snapshotPage', 'clickElement', 'typeText', 'pressKey', 'selectOption', 'scrollPage'];
+    const ACTIONS = ['snapshotPage', 'clickElement', 'typeText', 'pressKey', 'selectOption', 'scrollPage', 'planPageActions'];
     const names = (c) => c.capabilities.map((x) => x.name);
     // The sidebar: the user's own AI, with a tab, on this computer.
     const sidebar = personal({ tab: true });

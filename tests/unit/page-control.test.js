@@ -13,6 +13,8 @@ import {
   isPageAction,
   pageOffLimits,
   parseKey,
+  planArg,
+  planBudget,
   refArg,
   riskyWords,
   screenshotPoint,
@@ -132,6 +134,34 @@ describe('allowing similar clicks for a chat', () => {
     expect(similarLabel(url, { role: 'generic', name: '' })).toBe(
       'Also allow elements like this on mail.example.com for the rest of this chat'
     );
+  });
+});
+
+describe('a plan the user approves once', () => {
+  const url = 'https://mail.example.com/drafts';
+  const btn = (name) => ({ role: 'button', name });
+
+  it('checks the goal and the steps', () => {
+    expect(planArg({ goal: ' Delete 2 drafts ', steps: [{ ref: 4, note: 'Groceries' }, { ref: '7' }] })).toEqual({
+      goal: 'Delete 2 drafts',
+      steps: [
+        { ref: 4, note: 'Groceries' },
+        { ref: 7, note: '' },
+      ],
+    });
+    expect(() => planArg({ steps: [{ ref: 1 }] })).toThrow(/Pass `goal`/);
+    expect(() => planArg({ goal: 'x', steps: [] })).toThrow(/Pass `steps`/);
+    expect(() => planArg({ goal: 'x', steps: [{}] })).toThrow(/Pass `ref`/);
+    expect(() => planArg({ goal: 'x', steps: Array.from({ length: 51 }, () => ({ ref: 1 })) })).toThrow(/at most 50/);
+  });
+
+  it('lets through as many clicks like each one as it lists, and only those that would ask', () => {
+    const budget = planBudget(url, [btn('Delete'), btn('Delete'), btn('Delete draft 3'), btn('Next'), btn('Delete draft 4')]);
+    expect([...budget.values()].sort()).toEqual([2, 2]);
+    expect(budget.get(similarKey(url, 'plan', btn('Delete')))).toBe(2);
+    expect(budget.get(similarKey(url, 'plan', btn('Delete draft 9')))).toBe(2);
+    expect(budget.has(similarKey(url, 'plan', btn('Delete account')))).toBe(false);
+    expect(budget.has(similarKey('https://other.example/', 'plan', btn('Delete')))).toBe(false);
   });
 });
 

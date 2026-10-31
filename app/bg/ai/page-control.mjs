@@ -12,6 +12,7 @@ export const PAGE_ACTIONS = [
   'selectOption',
   'scrollPage',
   'clickAt',
+  'planPageActions',
 ]
 
 // The site's permission, kept in sitedata as the time the grant ends. 1 is Allow and 0 is Deny,
@@ -19,6 +20,9 @@ export const PAGE_ACTIONS = [
 export const PAGE_CONTROL_PERM = 'aiPageControl'
 // A click the user confirms first. Its param makes each one a new question.
 export const PAGE_ACTION_PERM = 'aiPageAction'
+// A plan of clicks the user approves at once (planPageActions). Its param numbers it too.
+export const PAGE_PLAN_PERM = 'aiPagePlan'
+export const MAX_PLAN_STEPS = 50
 export const GRANT_DAYS = 30
 const DAY = 24 * 60 * 60 * 1000
 
@@ -262,6 +266,34 @@ export function directionArg(args) {
   const d = args?.direction == null ? 'down' : String(args.direction).toLowerCase()
   if (!SCROLL_DIRECTIONS.includes(d)) throw new Error(`direction is one of ${SCROLL_DIRECTIONS.join(', ')}`)
   return d
+}
+
+// planPageActions' arguments: what the plan is for, and the controls it will click, in order.
+export function planArg(args) {
+  const goal = typeof args?.goal === 'string' ? args.goal.trim() : ''
+  if (!goal) throw new Error('Pass `goal`: what the plan does, in a few words the user will read')
+  if (!Array.isArray(args?.steps) || !args.steps.length) {
+    throw new Error('Pass `steps`: [{ ref, note }], one for each control you will click, in order')
+  }
+  if (args.steps.length > MAX_PLAN_STEPS) throw new Error(`A plan has at most ${MAX_PLAN_STEPS} steps`)
+  const steps = args.steps.map((s) => ({
+    ref: refArg(s),
+    note: typeof s?.note === 'string' ? clip(s.note.trim(), 120) : '',
+  }))
+  return { goal: clip(goal, 200), steps }
+}
+
+// What an approved plan lets through without asking: for each control in it that would ask, one
+// click of a control like it (similarKey, whatever the action), as many times as the plan lists it.
+// So a plan that deletes five drafts covers five "Delete" clicks, and not a sixth.
+export function planBudget(url, controls) {
+  const budget = new Map()
+  for (const c of controls) {
+    if (!riskyWords(c?.name)) continue
+    const key = similarKey(url, 'plan', c)
+    budget.set(key, (budget.get(key) || 0) + 1)
+  }
+  return budget
 }
 
 // clickAt's x and y are pixels in the last screenshot. The page's own coordinates, or throws.

@@ -16,6 +16,7 @@ interface Props {
   driveType: DriveType
   onFocus?: () => void
   onBlur?: () => void
+  onRecents: () => void // the clock button: a card of recent sites, filtered by what's typed
   hasDraft?: boolean // drive has unpublished draft changes (ADR-0012)
   draftPreviewing?: boolean // this tab is rendering the merged draft
   onToggleDraft?: () => void
@@ -36,10 +37,12 @@ interface Props {
 // The browser's one bar, at the top as in Chrome: the Space, the address field (a leading trust icon,
 // a lock for https or the peer-to-peer mark for hyper:// as on desktop, and the Draft preview
 // toggle), the AI, the tab grid and the menu. Back is the system back; forward, reload and the rest
-// are in the menu, as in Chrome, which leaves the address room. While the field has focus it takes the whole row and its trailing button clears it; the
-// keyboard's Go key opens what was typed. The bar takes on the site's theme color when it has one.
+// are in the menu, as in Chrome, which leaves the address room. While the field has focus it takes
+// the whole row; its trailing buttons clear it and open the recent-sites card (there's no dropdown
+// under the field), and the keyboard's Go key opens what was typed. The bar takes on the site's
+// theme color when it has one.
 export default function AddressBar (props: Props) {
-  const { value, onChangeText, onSubmit, onReload, loading, isHyper, onFocus, onBlur, hasDraft, draftPreviewing, onToggleDraft, siteName, inputRef, canReload = true, tint, topInset = 0, space, aiOpen, onAi, tabCount, onTabs, onNewTab, onMenu } = props
+  const { value, onChangeText, onSubmit, onReload, loading, isHyper, onFocus, onBlur, onRecents, hasDraft, draftPreviewing, onToggleDraft, siteName, inputRef, canReload = true, tint, topInset = 0, space, aiOpen, onAi, tabCount, onTabs, onNewTab, onMenu } = props
   const base = useTheme()
   const t = useMemo(() => tintTheme(base, tint), [base, tint])
   const s = useMemo(() => makeStyles(t, !!tint), [t, tint])
@@ -103,9 +106,12 @@ export default function AddressBar (props: Props) {
               style={[s.inBtn, draftPreviewing && s.draftActive]}
             />
           ) : null}
-          {focused && value ? (
-            <IconButton icon='times-circle' label='Clear' onPress={() => onChangeText('')} size={16} color={t.textMuted} ripple={t.ripple} style={s.inBtn} />
-          ) : !focused && canReload && loading ? (
+          {focused ? (
+            <>
+              {value ? <IconButton icon='times-circle' label='Clear' onPress={() => onChangeText('')} size={16} color={t.textMuted} ripple={t.ripple} style={s.inBtn} /> : null}
+              <IconButton icon='history' label='Recent sites' onPress={onRecents} size={16} color={t.textDim} ripple={t.ripple} style={s.inBtn} />
+            </>
+          ) : canReload && loading ? (
             // While a drive is still connecting, a spinner is the button: tap it to try again.
             <IconButton label='Connecting. Tap to retry' onPress={onReload} ripple={t.ripple} style={s.inBtn}><ActivityIndicator size='small' color={t.accent} /></IconButton>
           ) : null}

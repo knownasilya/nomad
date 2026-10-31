@@ -4,6 +4,7 @@ import { repeat } from 'lit/directives/repeat.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import spinnerCSS from './spinner.css';
 import * as bg from './bg-process-rpc';
+import { pinTiles } from '../../../shared/pins.mjs';
 
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 480;
@@ -23,6 +24,9 @@ class ShellWindowSidebar extends LitElement {
   static get properties() {
     return {
       tabs: { type: Array },
+      // The active Space's pinned pages, [{ href, title }] (bg/ui/space-pins.js)
+      pins: { type: Array },
+      pinsWritable: { type: Boolean },
       spaces: { type: Array },
       activeSpace: { type: Object },
       groups: { type: Array },
@@ -40,6 +44,10 @@ class ShellWindowSidebar extends LitElement {
   constructor() {
     super();
     this.tabs = [];
+    this.pins = [];
+    this.pinsWritable = true;
+    // The pin tile being dragged (its href), while one is.
+    this.draggedPinHref = null;
     this.spaces = [];
     this.activeSpace = null;
     this.groups = [];
@@ -118,10 +126,7 @@ class ShellWindowSidebar extends LitElement {
       linux: document.body.classList.contains('linux'),
       win32: document.body.classList.contains('win32'),
     });
-    const pinnedTabs = this.tabs
-      .map((tab, index) => ({ tab, index }))
-      .filter(({ tab }) => tab.isPinned);
-    const hasPinned = pinnedTabs.length > 0;
+    const tiles = pinTiles(this.pins, this.tabs);
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="${cls}" style=${sidebarStyle}>
@@ -132,16 +137,7 @@ class ShellWindowSidebar extends LitElement {
           </button>
         </div>
         <div class="sidebar-tabs">
-          ${hasPinned
-            ? html`
-                ${repeat(
-                  pinnedTabs,
-                  ({ index }) => `pin:${index}`,
-                  ({ tab, index }) => this._renderTab(tab, index)
-                )}
-                <div class="tab-separator"></div>
-              `
-            : ''}
+          ${this._renderPins(tiles)}
           ${repeat(
             this._buildItems(),
             (item) => (item.group ? `grp:${item.group.id}` : `tab:${item.index}`),
@@ -164,6 +160,76 @@ class ShellWindowSidebar extends LitElement {
           ? html` <div class="sidebar-footer">${this._renderSpacesDropdown()}</div> `
           : ''}
         ${this._renderResizeHandle(isLeft)}
+      </div>
+    `;
+  }
+
+  // The Space's pinned pages as icon tiles, like the phone's home shortcuts and Arc's favorites.
+  // A tile opens its pinned tab (opening it again if it was closed); drag tiles to reorder them, or
+  // drag a tab onto them to pin it.
+  _renderPins(tiles) {
+    const draggingTab =
+      this.draggedTabIndex !== null &&
+      !this.tabs[this.draggedTabIndex]?.isPinned &&
+      this.pinsWritable;
+    if (!tiles.length && !draggingTab) return '';
+    return html`
+      <div
+        class="pins ${tiles.length ? '' : 'empty'}"
+        @dragover=${(e) => this._onDragoverPins(e)}
+        @dragleave=${this._onDragleave}
+        @drop=${(e) => this._onDropPins(e, tiles.length)}
+      >
+        ${tiles.length
+          ? repeat(
+              tiles,
+              (t) => `pin:${t.href}`,
+              (t, i) => this._renderPin(t, i)
+            )
+          : html`<div class="pins-hint">Drop a tab here to pin it</div>`}
+      </div>
+      <div class="tab-separator"></div>
+    `;
+  }
+
+  _renderPin(tile, position) {
+    const tab = tile.index >= 0 ? this.tabs[tile.index] : null;
+    const showSpinner = tab && tab.isLoading && !tab.isQuietLoading;
+    const faviconUrl = tab ? this.getFavicon(tile.index) : null;
+    const cls = classMap({
+      pin: true,
+      open: Boolean(tab),
+      current: Boolean(tab?.isActive),
+      'draft-previewing': Boolean(tab?.draftPreviewing),
+    });
+    return html`
+      <div
+        class="${cls}"
+        title=${tile.title}
+        role="button"
+        aria-label=${tile.title}
+        draggable=${this.pinsWritable ? 'true' : 'false'}
+        @click=${() => this._onClickPin(tile)}
+        @mousedown=${(e) => this._onMousedownPin(e, tile)}
+        @contextmenu=${() => this._onContextmenuPin(tile)}
+        @dragstart=${(e) => this._onDragstartPin(e, tile)}
+        @dragend=${this._onDragendTab}
+        @dragover=${(e) => this._onDragoverPin(e, tile)}
+        @dragleave=${this._onDragleave}
+        @drop=${(e) => this._onDropPin(e, tile, position)}
+      >
+        ${showSpinner
+          ? html`<div class="spinner ${tab.isReceivingAssets ? '' : 'reverse'}"></div>`
+          : faviconUrl
+            ? html`<img
+                src="${faviconUrl}"
+                @load=${(e) => this._onFaviconLoad(e, tile.index)}
+                @error=${(e) => this._onFaviconError(e, tile.index)}
+              />`
+            : html`<img src="asset:favicon:${tab ? tab.url : tile.href}" />`}
+        ${tab?.isCurrentlyAudible && !tab.isAudioMuted
+          ? html`<span class="fas fa-volume-up pin-audio"></span>`
+          : ''}
       </div>
     `;
   }
@@ -496,12 +562,17 @@ class ShellWindowSidebar extends LitElement {
 
   _onDragstartTab(e, index) {
     this.draggedTabIndex = index;
+    if (!(this.pins || []).length) this.requestUpdate();
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', this.tabs[index]?.url || '');
   }
 
   _onDragendTab() {
+    const wasDraggingTab = this.draggedTabIndex !== null;
     this.draggedTabIndex = null;
+    this.draggedPinHref = null;
+    // the empty pin drop zone shows only while a tab is dragged
+    if (wasDraggingTab) this.requestUpdate();
     for (const el of this.shadowRoot.querySelectorAll('.drop-before, .drop-into')) {
       el.classList.remove('drop-before', 'drop-into');
     }
@@ -557,6 +628,81 @@ class ShellWindowSidebar extends LitElement {
     e.preventDefault();
     this._onDragendTab();
     if (this.tabs[from]?.groupId) bg.views.moveTabToGroup(from, null);
+  }
+
+  // pins
+
+  _onClickPin(tile) {
+    if (tile.index >= 0) bg.views.setActiveTab(tile.index);
+    else bg.views.openPin(tile.href);
+  }
+
+  // Middle-click closes a pin's tab; the tile stays.
+  _onMousedownPin(e, tile) {
+    if (e.which === 2 && tile.index >= 0) bg.views.closeTab(tile.index);
+  }
+
+  _onContextmenuPin(tile) {
+    if (tile.index >= 0) bg.views.showTabContextMenu(tile.index);
+    else bg.views.showPinContextMenu(tile.href);
+  }
+
+  _onDragstartPin(e, tile) {
+    this.draggedPinHref = tile.href;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', tile.href);
+  }
+
+  _canDropOnPins() {
+    if (!this.pinsWritable) return false;
+    if (this.draggedPinHref) return true;
+    return this.draggedTabIndex !== null && !this.tabs[this.draggedTabIndex]?.isPinned;
+  }
+
+  _onDragoverPin(e, tile) {
+    if (!this._canDropOnPins() || tile.href === this.draggedPinHref) return;
+    e.stopPropagation();
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    e.currentTarget.classList.add('drop-before');
+  }
+
+  // `position` is the tile's place in the grid; a pin moves to where that tile is now.
+  _onDropPin(e, tile, position) {
+    if (!this._canDropOnPins()) return;
+    e.stopPropagation();
+    e.preventDefault();
+    this._dropOnPins(position, tile);
+  }
+
+  _onDragoverPins(e) {
+    if (!this._canDropOnPins()) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    e.currentTarget.classList.add('drop-into');
+  }
+
+  _onDropPins(e, count) {
+    if (!this._canDropOnPins()) return;
+    e.preventDefault();
+    this._dropOnPins(count, null);
+  }
+
+  _dropOnPins(position, tile) {
+    const href = this.draggedPinHref;
+    const from = this.draggedTabIndex;
+    this._onDragendTab();
+    const order = (this.pins || []).map((p) => p.href);
+    if (href) {
+      if (tile && tile.href === href) return;
+      // the target's index once the dragged pin is out of the list
+      const rest = order.filter((h) => h !== href);
+      const to = tile ? rest.indexOf(tile.href) : rest.length;
+      bg.views.movePin(href, to === -1 ? rest.length : to);
+    } else if (from !== null) {
+      const to = tile ? order.indexOf(tile.href) : order.length;
+      bg.views.pinTab(from, to === -1 ? order.length : to);
+    }
   }
 
   _onDblclickGroupName(e, groupId) {
@@ -723,6 +869,105 @@ ShellWindowSidebar.styles = css`
   .spaces-popup-list {
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
+  /* pinned pages: icon tiles, like the phone's home shortcuts (mobile/components/Shortcuts.tsx) */
+
+  .pins {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+    gap: 6px;
+    padding: 2px 0 4px;
+    border-radius: 10px;
+  }
+
+  .pins.drop-into {
+    background: var(--bg-color--tab--hover);
+  }
+
+  .pins.empty {
+    display: block;
+    border: 1.5px dashed var(--border-color--tab);
+    padding: 10px 8px;
+  }
+
+  .pins-hint {
+    font-size: 12px;
+    text-align: center;
+    color: var(--text-color--tab--title);
+    opacity: 0.7;
+  }
+
+  .pin {
+    position: relative;
+    height: 42px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(
+      --bg-color--pin,
+      color-mix(in srgb, var(--text-color--tab--title) 6%, transparent)
+    );
+    border: 1px solid var(--border-color--tab);
+    box-sizing: border-box;
+    cursor: default;
+    transition:
+      background 0.1s,
+      border-color 0.1s;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .pin:hover {
+    background: var(--bg-color--tab--hover);
+  }
+
+  .pin img {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+  }
+
+  /* a pin whose tab isn't open: the tile stays, a little quieter */
+  .pin:not(.open) img {
+    opacity: 0.6;
+    filter: saturate(0.6);
+  }
+
+  .pin:not(.open):hover img {
+    opacity: 1;
+    filter: none;
+  }
+
+  /* the open tab's tile: lifted, like the current tab row below */
+  .pin.current {
+    background: var(--bg-color--tab--current);
+    border-color: color-mix(in srgb, var(--highlight-color--tab--current, #5b5ef4) 70%, transparent);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  }
+
+  .pin.draft-previewing {
+    outline: 1.5px solid #2864dc;
+    outline-offset: -1.5px;
+  }
+
+  .pin.drop-before {
+    box-shadow: inset 2px 0 0 var(--highlight-color--tab--current, #5b5ef4);
+  }
+
+  .pin .spinner {
+    width: 14px;
+    height: 14px;
+  }
+
+  .pin-audio {
+    position: absolute;
+    right: 4px;
+    bottom: 3px;
+    font-size: 8px;
+    color: var(--text-color--tab--title);
+    opacity: 0.6;
   }
 
   .tab-separator {

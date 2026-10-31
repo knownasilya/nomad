@@ -19,6 +19,7 @@ const PURPOSES = {
   selectOption: 'choose an option on this page',
   scrollPage: 'scroll this page',
   clickAt: 'click on this page',
+  planPageActions: 'show you a plan of clicks to approve',
   listNotes: 'look through your Notes',
   readNote: 'read a Note',
   writeNote: 'save a Note',
@@ -91,6 +92,8 @@ export function toolSummary(name, args) {
       return a.value ? `Choosing ${quote(a.value)}` : 'Choosing an option';
     case 'scrollPage':
       return `Scrolling ${a.direction || 'down'}`;
+    case 'planPageActions':
+      return a.goal ? `Asking you to approve a plan: ${quote(a.goal)}` : 'Asking you to approve a plan';
     case 'listNotes':
       return a.query ? `Looking in your Notes for ${quote(a.query)}` : 'Listing your Notes';
     case 'readNote':
