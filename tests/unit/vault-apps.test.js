@@ -7,6 +7,8 @@ import {
   followRecord,
   followUrls,
   mergeReadState,
+  mergeWebRead,
+  webReadUrls,
   newNoteId,
   isNoteId,
   notePath,
@@ -56,9 +58,30 @@ describe('follow records', () => {
     expect(readPath(SPACE)).toBe(`/.vault/reader/${SPACE}/read.json`);
     expect(followRecord(KEY, 'T')).toEqual({ url: `hyper://${KEY}/`, addedAt: 'T' });
   });
-  it('refuses a bad Space key or a non-hyper address', () => {
+  it('refuses a bad Space key or an address that isn’t a feed', () => {
     expect(() => followPath('../x', KEY)).toThrow(/Space/);
-    expect(() => followPath(SPACE, 'https://example.com')).toThrow(/hyper:\/\//);
+    expect(() => followPath(SPACE, 'nomad://reader/')).toThrow(/hyper:\/\//);
+    expect(() => followPath(SPACE, 'nope')).toThrow(/RSS/);
+  });
+  it('files an RSS or Atom feed under web-<hash>, and keeps its URL', () => {
+    const path = followPath(SPACE, 'feed://example.com/feed.xml#top');
+    expect(path).toMatch(new RegExp(`^${followsPrefix(SPACE)}web-[0-9a-f]{16}\\.json$`));
+    expect(path).toBe(followPath(SPACE, 'https://example.com/feed.xml'));
+    expect(followRecord('example.com/feed.xml', 'T')).toEqual({ url: 'https://example.com/feed.xml', addedAt: 'T', kind: 'web' });
+    expect(followUrls([{ url: 'https://example.com/feed.xml', addedAt: '2' }, { url: KEY, addedAt: '1' }])).toEqual([
+      `hyper://${KEY}/`,
+      'https://example.com/feed.xml',
+    ]);
+  });
+  it('keeps RSS read marks per feed, pruned to the items a loaded feed still lists', () => {
+    const F = 'https://a.example/feed.xml';
+    const G = 'https://b.example/rss';
+    const cur = { [F]: ['https://a.example/1', 'https://a.example/old'], [G]: ['https://b.example/x'], 'https://gone.example/rss': ['z'] };
+    const next = mergeWebRead(cur, ['https://a.example/2', 'https://nowhere.example/'], [F, G, `hyper://${KEY}/`], {
+      [F]: ['https://a.example/1', 'https://a.example/2'],
+    });
+    expect(next).toEqual({ [F]: ['https://a.example/1', 'https://a.example/2'], [G]: ['https://b.example/x'] });
+    expect(webReadUrls(next).length).toBe(3);
   });
   it('lists unique, valid feed URLs, oldest first', () => {
     expect(

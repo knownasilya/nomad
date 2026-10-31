@@ -10,14 +10,20 @@
 //                                               byline?, image?, publishedAt?, words, savedAt,
 //                                               readAt, topics, topicsBy, updatedAt }
 //   /.vault/reader/<space>/article-text/<id>.json  { id, text }: its readable text, written once
+//   /.vault/reader/<space>/post-topics/<id>.json   { type, id, url, topics, topicsBy, updatedAt }:
+//                                               a feed post's topics (hyper:// or RSS), by its URL
 //
 // The text is a record of its own so marking an article read or changing its topics doesn't add
 // the whole text to the Vault's log again. An article is the user's own, even in a shared Space
 // (like the read marks). Its id comes from its URL, so saving a page twice keeps one article.
 
-import { READER_PREFIX, isSpaceKey } from './vault-apps.mjs';
+import { READER_PREFIX, isSpaceKey, hashUrl } from './vault-apps.mjs';
 
 export const ARTICLE_TYPE = 'nomad/reader-article';
+export const POST_TOPICS_TYPE = 'nomad/reader-post-topics';
+// The AI sorts feed posts from this many days back, at most this many at a time.
+export const POST_TOPICS_DAYS = 30;
+export const POST_TOPICS_BATCH = 20;
 // Every save appends the text to the Vault's log, so keep it to a long article's worth.
 export const MAX_ARTICLE_TEXT = 50000;
 export const MAX_TOPICS = 6; // an article's topics, set by hand
@@ -31,6 +37,43 @@ function readerPrefix(space) {
 
 export const articlesPrefix = (space) => readerPrefix(space) + 'articles/';
 export const articleTextPrefix = (space) => readerPrefix(space) + 'article-text/';
+export const postTopicsPrefix = (space) => readerPrefix(space) + 'post-topics/';
+
+export function postTopicsPath(space, url) {
+  return postTopicsPrefix(space) + hashUrl(url) + '.json';
+}
+
+// A feed post's topics, set by the AI (topicsBy 'ai': [] means it found none) or the user.
+export function makePostTopics(url, topics, by, known = [], now = new Date().toISOString()) {
+  return {
+    type: POST_TOPICS_TYPE,
+    id: hashUrl(url),
+    url: String(url),
+    topics: normalizeTopics(topics, known),
+    topicsBy: by,
+    updatedAt: now,
+  };
+}
+
+export function isPostTopics(rec) {
+  return (
+    !!rec &&
+    rec.type === POST_TOPICS_TYPE &&
+    typeof rec.url === 'string' &&
+    Array.isArray(rec.topics)
+  );
+}
+
+// The feed posts the AI should sort now: recent, not looked at yet, newest first, a batch at most.
+export function postsToTag(posts, taggedUrls, now = Date.now()) {
+  const done = new Set(taggedUrls || []);
+  const since = now - POST_TOPICS_DAYS * 86400e3;
+  return (posts || [])
+    .filter((p) => p && typeof p.url === 'string' && !done.has(p.url))
+    .filter((p) => !p.createdAt || Date.parse(p.createdAt) >= since)
+    .sort((a, b) => ((a.createdAt || '') < (b.createdAt || '') ? 1 : -1))
+    .slice(0, POST_TOPICS_BATCH);
+}
 
 export function isArticleId(id) {
   return typeof id === 'string' && /^[0-9a-f]{16}$/.test(id);
@@ -85,20 +128,8 @@ export function articleSite(url) {
   }
 }
 
-// 16 hex characters from the article's URL: two 32-bit FNV-1a hashes. The same URL gives the same
-// id on every Device.
-export function articleId(url) {
-  const s = String(url);
-  let a = 0x811c9dc5;
-  let b = 0x01000193 ^ s.length;
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    a = Math.imul(a ^ c, 0x01000193) >>> 0;
-    b = Math.imul(b ^ c, 0x5bd1e995) >>> 0;
-    b ^= b >>> 15;
-  }
-  return a.toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0');
-}
+// 16 hex characters from the article's URL (hashUrl). The same URL gives the same id on every Device.
+export const articleId = (url) => hashUrl(url);
 
 const clean = (s, n) => {
   const t = String(s || '')
@@ -156,7 +187,7 @@ export function normalizeTopics(list, known = [], max = MAX_TOPICS) {
 // read mark (a saved page counts as read unless `read` is false).
 /**
  * @param {{ url: string, title?: string, excerpt?: string, byline?: string, siteName?: string,
- *   image?: string, publishedAt?: string, text?: string }} page
+ *   image?: string, publishedAt?: string, text?: string, feed?: string }} page
  * @param {any} [prev]
  * @param {{ read?: boolean, now?: string }} [opts]
  */
@@ -188,6 +219,9 @@ export function makeArticle(
     article.image = String(page.image).slice(0, 1000);
   if (page.publishedAt && !isNaN(Date.parse(page.publishedAt)))
     article.publishedAt = new Date(page.publishedAt).toISOString();
+  // The RSS or Atom feed the page links to, so Reader can offer to follow the site.
+  const feed = page.feed || (prev && prev.feed);
+  if (feed && /^https?:\/\//i.test(feed)) article.feed = String(feed).slice(0, 1000);
   return article;
 }
 
@@ -241,7 +275,7 @@ export function hasTopic(article, topic) {
 
 // What this Device's AI is asked when an article is saved. `known` are the user's topics so far, so
 // the AI reuses them and the list stays short. The page's words are data to sort, never orders.
-export function topicMessages({ title, site, excerpt, text }, known = []) {
+export function topicMessages({ title, site, excerpt, text, feedTitle = '' }, known = []) {
   const system = [
     'You sort the articles a person reads into topics, like folders.',
     `Reply with a JSON array of 1 to ${AI_TOPICS} topics and nothing else, e.g. ["Cooking", "Science"].`,
@@ -255,7 +289,7 @@ export function topicMessages({ title, site, excerpt, text }, known = []) {
       : 'Existing topics: none yet',
     '',
     `Title: ${clean(title, 300)}`,
-    site ? `Site: ${clean(site, 80)}` : '',
+    site || feedTitle ? `Site: ${clean(site || feedTitle, 80)}` : '',
     excerpt ? `Summary: ${clean(excerpt, 400)}` : '',
     text ? `Start of the article:\n${String(text).slice(0, 3000)}` : '',
   ]

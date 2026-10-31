@@ -349,7 +349,7 @@ export const CAPABILITIES = [
       type: 'object',
       properties: {
         query: { type: 'string', description: 'Optional. Words that must all be in the post' },
-        feed: { type: 'string', description: "Optional. A followed feed's hyper:// URL" },
+        feed: { type: 'string', description: "Optional. A followed feed's URL (hyper://, or an RSS or Atom feed's)" },
         unread: { type: 'boolean', description: 'Optional. Only posts not yet read' },
         limit: { type: 'number', description: 'Optional. How many, up to 100 (default 20)' },
       },
@@ -360,8 +360,8 @@ export const CAPABILITIES = [
   {
     name: 'readReaderPost',
     description:
-      'Read one post from a feed the user follows in Reader: title, date, tags and text. Asks permission ' +
-      'to read Reader.',
+      'Read one post from a hyper:// feed the user follows in Reader: title, date, tags and text. A post ' +
+      'from an RSS or Atom feed is a web page: fetch its URL instead. Asks permission to read Reader.',
     inputSchema: {
       type: 'object',
       properties: { url: { type: 'string', description: 'The post URL, from listReaderPosts' } },
@@ -371,10 +371,11 @@ export const CAPABILITIES = [
   },
   {
     name: 'followFeed',
-    description: 'Follow a feed in Reader, by its hyper:// URL. Asks permission to change Reader.',
+    description:
+      'Follow a feed in Reader: a hyper:// drive, or an RSS or Atom feed by its URL. Asks permission to change Reader.',
     inputSchema: {
       type: 'object',
-      properties: { url: { type: 'string', description: "The feed's hyper:// URL" } },
+      properties: { url: { type: 'string', description: "The feed's hyper:// URL, or the RSS or Atom feed's URL" } },
       required: ['url'],
     },
     gates: { personal: true },
@@ -384,7 +385,7 @@ export const CAPABILITIES = [
     description: 'Stop following a feed in Reader. Asks permission to change Reader.',
     inputSchema: {
       type: 'object',
-      properties: { url: { type: 'string', description: "The feed's hyper:// URL" } },
+      properties: { url: { type: 'string', description: "The feed's URL, as listReaderPosts gives it" } },
       required: ['url'],
     },
     gates: { personal: true },

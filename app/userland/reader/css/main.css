@@ -597,6 +597,44 @@ main {
   cursor: default;
 }
 
+.author-tag {
+  font-size: 11px;
+  color: var(--text-color--pretty-light);
+}
+
+.post[data-url] {
+  cursor: pointer;
+}
+
+.feed-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: var(--rdr-accent-soft);
+  font-size: 12px;
+  color: var(--text-color--default);
+}
+
+.feed-offer .fas {
+  color: var(--rdr-accent);
+}
+
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--rdr-accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
 /* the reading view: the article's text, nothing else */
 
 .reading {

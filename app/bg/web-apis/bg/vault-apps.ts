@@ -21,6 +21,7 @@ import { findWebContentsParentWindow } from '../../lib/electron';
 import * as tabManager from '../../ui/tabs/manager';
 import * as spaceLibrary from '../../hyper/space-library';
 import * as readerArticles from './reader-articles';
+import * as webFeeds from './web-feeds';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'vault-apps' });
 
@@ -106,6 +107,7 @@ export async function readerState(ctx) {
   return {
     ...(await readerOf(space)),
     articles: await readerArticles.list(space),
+    postTopics: await readerArticles.listPostTopics(space),
     ai: await readerArticles.aiState(space),
     ...(await vaultInfo()),
   };
@@ -141,6 +143,53 @@ export async function readArticle(ctx, id) {
   return { article, text: await readerArticles.getText(space, id) };
 }
 
+// What the box in Reader does with a link (ADR-0033): a drive's address or an RSS/Atom feed is
+// followed; a web page is saved as an article, with the feeds it links to so Reader can offer them.
+// Returns { followed?, article?, feeds?, state }.
+export async function addLink(ctx, url) {
+  const space = await spaceKey(ctx);
+  if (apps.driveRoot(url)) {
+    await followIn(space, url);
+    return { followed: apps.driveRoot(url), state: await readerState(ctx) };
+  }
+  const page = apps.webFeedUrl(url);
+  if (!page) throw new Error('Enter a web address, an RSS feed, or a hyper:// drive');
+  const session = ctx?.sender?.session;
+  const found = await webFeeds.probe(page, session);
+  // A feed, or a site's home page that links to one: follow it. Any other page is saved.
+  const home = /^https?:\/\/[^/]+\/?$/i.test(page);
+  const follow = found.kind === 'feed' ? found.url : home && found.kind === 'html' ? found.feeds[0]?.url : null;
+  if (follow) {
+    if (found.kind !== 'feed') await webFeeds.loadWebFeed(follow, { session }); // check it reads
+    await followIn(space, follow);
+    return { followed: apps.webFeedUrl(follow), state: await readerState(ctx) };
+  }
+  const article = await readerArticles.saveUrl(space, page, {
+    session,
+    fetched: { html: found.kind === 'html' ? found.html : '', finalUrl: found.finalUrl },
+  });
+  return { article, feeds: found.kind === 'html' ? found.feeds : [], state: await readerState(ctx) };
+}
+
+// An RSS or Atom feed the caller's Space follows: { url, title, siteUrl, posts }.
+export async function webFeed(ctx, url, { fresh = false } = {}) {
+  const { follows } = await readerOf(await spaceKey(ctx));
+  const key = apps.webFeedUrl(url);
+  if (!key || !follows.includes(key)) throw new Error('This Space doesn’t follow that feed');
+  return webFeeds.loadWebFeed(key, { session: ctx?.sender?.session, fresh });
+}
+
+// Feed posts the Reader loaded, for the AI to sort into topics; `urls` asks again for those.
+export async function tagPosts(ctx, posts = [], urls = null) {
+  await readerArticles.tagPosts(await spaceKey(ctx), posts, { urls });
+  return readerState(ctx);
+}
+
+export async function setPostTopics(ctx, url, topics) {
+  await readerArticles.setPostTopics(await spaceKey(ctx), url, topics);
+  return readerState(ctx);
+}
+
 // Load the page again and keep its readable text, for an article saved without any.
 export async function refetchArticle(ctx, id) {
   const space = await spaceKey(ctx);
@@ -172,20 +221,22 @@ export async function saveRead(ctx, add = [], loaded = {}) {
 // The same, for a Space named by its key: the AI (ai-vault.ts) may run a turn for another Device,
 // with no page here to name the Space.
 
-// A follow record's file name under the Space's feeds. Throws for a non-hyper address.
+// A follow record's file name under the Space's feeds. Throws for an address that isn't a feed.
 function followFile(space, url) {
   const path = apps.followPath(space, url);
   return path.slice(apps.followsPrefix(space).length);
 }
 
-// { follows: [feedUrl], read: [postUrl], shared, canFollow }. A shared Space's feeds are in its
-// Space Library (ADR-0029), so `canFollow` is false for a person who can only view it. Read marks
-// are always the user's own, in the Vault.
+// { follows: [feedUrl], read: [postUrl], webRead, shared, canFollow }. A shared Space's feeds are
+// in its Space Library (ADR-0029), so `canFollow` is false for a person who can only view it. Read
+// marks are always the user's own, in the Vault: `read` for hyper:// posts, `webRead` ({ feedUrl:
+// [itemUrl] }) for RSS and Atom items.
 export async function readerOf(space) {
   const store = await spaceLibrary.records(space, 'follows');
   return {
     follows: apps.followUrls(await store.list()),
     read: (await vault.readAppRecord(apps.readPath(space)))?.read || [],
+    webRead: (await vault.readAppRecord(apps.webReadPath(space)))?.read || {},
     shared: store.shared,
     canFollow: store.writable,
   };
@@ -198,15 +249,21 @@ export async function followIn(space, url) {
 }
 
 export async function unfollowIn(space, url) {
-  if (!apps.driveRoot(url)) return;
+  if (!apps.feedUrl(url)) return;
   await (await spaceLibrary.records(space, 'follows')).del(followFile(space, url));
 }
 
+// Marks for hyper:// posts go to read.json; RSS and Atom items to web-read.json, under the feed in
+// `loaded` that lists them.
 export async function saveReadIn(space, add = [], loaded = {}) {
-  const { follows, read } = await readerOf(space);
+  const { follows, read, webRead } = await readerOf(space);
   const next = apps.mergeReadState(read, add, follows, loaded);
-  if (next.length === read.length && next.every((u, i) => u === read[i])) return;
-  await vault.putAppRecord(apps.readPath(space), { read: next });
+  if (!(next.length === read.length && next.every((u, i) => u === read[i]))) {
+    await vault.putAppRecord(apps.readPath(space), { read: next });
+  }
+  if (!follows.some(apps.isWebFeed)) return;
+  const web = apps.mergeWebRead(webRead, add, follows, loaded);
+  if (JSON.stringify(web) !== JSON.stringify(webRead)) await vault.putAppRecord(apps.webReadPath(space), { read: web });
 }
 
 // Notes

@@ -8,7 +8,7 @@
 //
 // No Electron imports.
 
-import { noteTitle, noteSnippet, sortNotes, makeResolver, findLinks, driveRoot } from '../../../shared/vault-apps.mjs'
+import { noteTitle, noteSnippet, sortNotes, makeResolver, findLinks, driveRoot, feedUrl } from '../../../shared/vault-apps.mjs'
 import { PRESETS, normalizeSite, describeMod } from '../../../shared/mods.mjs'
 import { describeSchedule } from '../../../shared/jobs.mjs'
 
@@ -200,7 +200,7 @@ export async function loadFeedPosts(url, { readText, listKeys }) {
  */
 export function findPosts(feeds, read, { query, feed, unread, limit } = {}) {
   const readSet = new Set(read || [])
-  const only = feed ? driveRoot(feed) : null
+  const only = feed ? feedUrl(feed) : null
   return feeds
     .flatMap((f) => f.posts || [])
     .filter((p) => !only || p.feedUrl === only)

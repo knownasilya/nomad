@@ -201,7 +201,11 @@ export interface Job {
 export interface JobsList { jobs: Job[]; writable: boolean }
 export interface JobNotifications { notify: { id: string; jobId: string; title: string; body: string }[]; since: string; wants: boolean }
 // shared: the Space is shared (ADR-0029); canFollow is false for someone who can only view it.
-export interface ReaderState { follows: string[]; read: string[]; articles?: SavedArticle[]; writable: boolean; shared?: boolean; canFollow?: boolean }
+// webRead: RSS and Atom items read, per feed. postTopics: feed posts' topics, from a computer's AI.
+export interface ReaderState { follows: string[]; read: string[]; webRead?: Record<string, string[]>; postTopics?: PostTopics[]; articles?: SavedArticle[]; writable: boolean; shared?: boolean; canFollow?: boolean }
+export interface PostTopics { url: string; topics: string[]; topicsBy: 'ai' | 'user' }
+// An RSS or Atom feed parsed by the backend (shared/web-feeds.mjs), or the feeds a web page links to.
+export interface WebFeed { url: string; title: string; siteUrl: string | null; posts: FeedPost[]; feeds?: Array<{ url: string; title: string }> }
 // A page saved to Reader on a computer (shared/reader-articles.mjs, ADR-0033). topicsBy: who set
 // the topics ('ai' or 'user'), null until the AI has looked.
 export interface SavedArticle { id: string; url: string; title: string; site: string; excerpt: string; words: number; savedAt: string; readAt: string | null; topics: string[]; topicsBy: 'ai' | 'user' | null; byline?: string }
