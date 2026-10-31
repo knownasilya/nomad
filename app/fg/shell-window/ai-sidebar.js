@@ -4,6 +4,7 @@ import * as bg from './bg-process-rpc';
 import { fromEventStream } from '../../bg/web-apis/fg/event-target';
 import { streamToAsyncIterator } from '../../bg/web-apis/fg/ai-stream';
 import { splitGenUi } from '../../lib/genui/segments.mjs';
+import { mergeUserTurns } from '../../bg/ai/steering.mjs';
 import './genui/index.js';
 
 // Minimal markdown -> HTML (headings, lists, code fences, inline emphasis/code). Mirrors the
@@ -140,6 +141,7 @@ class ShellWindowAiSidebar extends LitElement {
       _sessions: { state: true },
       _sessionsOpen: { state: true },
       _copied: { state: true },
+      _queued: { state: true },
     };
   }
 
@@ -762,6 +764,22 @@ class ShellWindowAiSidebar extends LitElement {
       color: var(--ai-success);
     }
 
+    /* A message sent while the assistant works, waiting for its next step. */
+    .msg.user.queued {
+      background: transparent;
+      color: var(--ai-text);
+      border: 1px dashed var(--ai-accent);
+    }
+    .queued-note {
+      align-self: flex-end;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin: -6px 0 -2px;
+      color: var(--ai-text-muted);
+      font-size: 11px;
+    }
+
     /* — tools — */
 
     .tools-panel {
@@ -989,6 +1007,10 @@ class ShellWindowAiSidebar extends LitElement {
     this._toolsOpen = false;
     this._sessions = [];
     this._sessionsOpen = false;
+    // Messages sent while a turn runs, waiting for the assistant's next step: { id, text }
+    // (bg/ai/steering.mjs). _turnId names the running turn to bg.
+    this._queued = [];
+    this._turnId = null;
     // The assistant is the user's, not a tab's (ADR-0021): one conversation and one model choice,
     // whatever tab is open.
     this._loadModels();
@@ -1372,6 +1394,7 @@ class ShellWindowAiSidebar extends LitElement {
             ${this.streaming && !(this.messages[this.messages.length - 1]?.content || '').trim()
               ? this._renderActivity()
               : ''}
+            ${this._queued.map((q) => this._renderQueued(q))}
           </div>`}
       ${this._toolsOpen ? this._renderTools() : ''}
       <div class="composer">
@@ -1379,10 +1402,11 @@ class ShellWindowAiSidebar extends LitElement {
           class="input"
           rows="1"
           .value=${this.draft}
-          placeholder=${this.streaming ? 'Working…' : 'Ask about this tab, or anything…'}
+          placeholder=${this.streaming
+            ? 'Steer the assistant while it works…'
+            : 'Ask about this tab, or anything…'}
           @input=${this._onInput}
           @keydown=${this._onKeydown}
-          ?disabled=${this.streaming}
         ></textarea>
         <div class="composer-bar">
           <div class="options">
@@ -1452,14 +1476,19 @@ class ShellWindowAiSidebar extends LitElement {
             ? html`<button class="send-btn stop-btn" @click=${this._stop} title="Stop">
                 <span class="stop-icon"></span>
               </button>`
-            : html`<button
+            : ''}
+          ${!this.streaming || this.draft.trim()
+            ? html`<button
                 class="send-btn"
-                title="Send (Enter)"
+                title=${this.streaming
+                  ? 'Send now (Enter). The assistant reads it at its next step.'
+                  : 'Send (Enter)'}
                 @click=${this._send}
                 ?disabled=${!this.draft.trim()}
               >
                 <span class="fas fa-arrow-up"></span>
-              </button>`}
+              </button>`
+            : ''}
         </div>
       </div>
     `;
@@ -1671,6 +1700,20 @@ class ShellWindowAiSidebar extends LitElement {
     `;
   }
 
+  // A message sent while the assistant works, until its next step reads it.
+  _renderQueued(q) {
+    return html`
+      <div class="msg user queued">${q.text}</div>
+      <div class="queued-note">
+        <span class="far fa-fw fa-clock"></span>
+        Queued for the assistant's next step
+        <button class="msg-action" title="Take back this message" @click=${() => this._unqueue(q.id)}>
+          <span class="fas fa-fw fa-times"></span>
+        </button>
+      </div>
+    `;
+  }
+
   _renderCheckpoint(m, i) {
     const n = m.files.length;
     return html`
@@ -1741,7 +1784,40 @@ class ShellWindowAiSidebar extends LitElement {
 
   async _send() {
     const text = this.draft.trim();
-    if (!text || this.streaming || !this.activeTab) return;
+    if (!text || !this.activeTab) return;
+    if (this.streaming) return this._steer(text);
+    this.draft = '';
+    await this._runTurn([text]);
+  }
+
+  // A message sent while the assistant works. bg's turn reads it at its next step: after the tool
+  // it's running, or before it would stop (bg/ai/steering.mjs). Its `steer` event puts it in the
+  // transcript. One it never reads is sent as the next turn when this one ends.
+  async _steer(text) {
+    const item = { id: `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`, text };
+    this._queued = [...this._queued, item];
+    this.draft = '';
+    await this.updateComplete;
+    this._autosize();
+    this._scrollToBottom();
+    try {
+      await bg.aiShell.steer(this._turnId, item.id, text);
+    } catch (e) {
+      console.warn('[ai-sidebar] steer failed', e);
+    }
+  }
+
+  async _unqueue(id) {
+    this._queued = this._queued.filter((q) => q.id !== id);
+    try {
+      await bg.aiShell.unsteer(this._turnId, id);
+    } catch {
+      /* the turn ended; nothing to take back */
+    }
+  }
+
+  async _runTurn(texts) {
+    if (!texts.length || this.streaming || !this.activeTab) return;
 
     // Captured once, up front — this turn belongs to THIS session. A tab switch doesn't change
     // that (ADR-0021). The live this.messages only gets touched while isCurrent() holds; the turn
@@ -1763,12 +1839,13 @@ class ShellWindowAiSidebar extends LitElement {
       }
     }
 
-    this.draft = '';
     this.streaming = true;
     this._activity = [];
+    const turnId = `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    this._turnId = turnId;
 
-    let turnMessages = [...this.messages, { role: 'user', content: text }];
-    const assistantIdx = turnMessages.length;
+    let turnMessages = [...this.messages, ...texts.map((content) => ({ role: 'user', content }))];
+    let assistantIdx = turnMessages.length;
     // one Checkpoint per assistant turn: files[] captures {path, priorContent}
     turnMessages = [...turnMessages, { role: 'assistant', content: '', reasoning: '', files: [] }];
     this.messages = turnMessages;
@@ -1837,15 +1914,41 @@ class ShellWindowAiSidebar extends LitElement {
       sync();
     };
 
+    // The turn read messages the user sent while it ran: they go in the transcript where the model
+    // read them, and what it writes from here on is a new answer (with its own Checkpoint).
+    const onSteer = (e) => {
+      const ids = Array.isArray(e?.ids) ? e.ids : [];
+      const sent = (Array.isArray(e?.texts) ? e.texts : []).filter((t) => typeof t === 'string');
+      if (this._turnId === turnId) this._queued = this._queued.filter((q) => !ids.includes(q.id));
+      if (!sent.length) return;
+      const cur = turnMessages[assistantIdx];
+      const unused =
+        cur &&
+        cur.role === 'assistant' &&
+        !(cur.content || '').trim() &&
+        !(cur.reasoning || '').trim() &&
+        !cur.files?.length &&
+        !cur.images?.length;
+      turnMessages = unused ? turnMessages.slice(0, assistantIdx) : [...turnMessages];
+      for (const content of sent) turnMessages.push({ role: 'user', content });
+      assistantIdx = turnMessages.length;
+      turnMessages.push({ role: 'assistant', content: '', reasoning: '', files: [] });
+      if (isCurrent()) this._activity = [];
+      sync();
+    };
+
     let stopped = false;
+    let failed = false;
     let iterator = null;
     try {
       // 'error' is a UI-only pseudo-role (a failed turn's bubble) — the runtime only accepts
       // system/user/assistant/tool/developer, so a past failure must never be replayed as history.
-      const history = turnMessages
-        .slice(0, assistantIdx)
-        .filter((m) => m.role === 'user' || m.role === 'assistant')
-        .map((m) => ({ role: m.role, content: m.content }));
+      const history = mergeUserTurns(
+        turnMessages
+          .slice(0, assistantIdx)
+          .filter((m) => m.role === 'user' || m.role === 'assistant')
+          .map((m) => ({ role: m.role, content: m.content }))
+      );
 
       const eventTarget = fromEventStream(
         bg.aiShell.chat(history, {
@@ -1853,9 +1956,11 @@ class ShellWindowAiSidebar extends LitElement {
           think: this._think,
           effort: this._think ? this._effort || undefined : undefined,
           allowVision: this._visionModel === true,
+          turnId,
         })
       );
       eventTarget.addEventListener('tool', (e) => onToolEvent(e));
+      eventTarget.addEventListener('steer', (e) => onSteer(e));
       eventTarget.addEventListener('reasoning', (e) => onReasoning(e.text));
       iterator = streamToAsyncIterator(eventTarget);
       this._stopChat = () => {
@@ -1883,6 +1988,7 @@ class ShellWindowAiSidebar extends LitElement {
       sync();
       await this.updateComplete;
     } catch (err) {
+      failed = true;
       if (!stopped) {
         turnMessages = [...turnMessages];
         turnMessages[assistantIdx] = {
@@ -1894,6 +2000,13 @@ class ShellWindowAiSidebar extends LitElement {
     } finally {
       iterator?.return?.();
       this._stopChat = null;
+      // Messages the turn never read. After an answer they go as the next turn; after a Stop or an
+      // error they go back in the input, for the user to send or not.
+      const left = this._turnId === turnId ? this._queued.map((q) => q.text) : [];
+      if (this._turnId === turnId) {
+        this._queued = [];
+        this._turnId = null;
+      }
       if (isCurrent()) {
         this.streaming = false;
         this._activity = [];
@@ -1905,6 +2018,15 @@ class ShellWindowAiSidebar extends LitElement {
       }
       sync();
       await this._saveSession(turnSessionId, turnMessages);
+      if (left.length) {
+        if (stopped || failed || !isCurrent()) {
+          this.draft = [...left, this.draft.trim()].filter(Boolean).join('\n\n');
+          await this.updateComplete;
+          this._autosize();
+        } else {
+          this._runTurn(left);
+        }
+      }
     }
   }
 

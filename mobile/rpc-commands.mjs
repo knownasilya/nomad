@@ -37,6 +37,10 @@ export const RPC_LOGS = 48 // { reqId, since?, previous? }
 export const RPC_AI_CHAT = 42 // { reqId, messages, opts } start a remote chat turn
 export const RPC_AI_CANCEL = 43 // { reqId } abort an in-flight turn (-> CANCEL frame on the Bridge)
 export const RPC_AI_PROMPT_RESULT = 44 // { reqId, allow } answer a relayed modifyDrive consent prompt
+// A message the user sent while turn reqId runs (-> STEER frame), and taking it back (-> UNSTEER).
+// RPC_AI_EVENT kind 'steer' says when the Provider's loop read it.
+export const RPC_AI_STEER = 51 // { reqId, steerId, text }
+export const RPC_AI_UNSTEER = 52 // { reqId, steerId }
 
 // UI -> backend: file-system ops on a writable drive you own (identified by ns).
 // `key` is the drive key hex; `path` is a drive-absolute path ('/a/b.txt').
@@ -61,7 +65,7 @@ export const RPC_HOSTING_RESULT = 33 // { reqId, ok, hosted?, count?, paused?, u
 export const RPC_NOMAD_RESULT = 41 // { reqId, ok, value?, error? } reply to RPC_NOMAD
 export const RPC_APPS_RESULT = 47 // { reqId, ok, value?, noVault?, message? } reply to RPC_APPS
 export const RPC_LOGS_RESULT = 49 // { reqId, ok, entries: [{ id, t, level, msg }], previous?, message? } reply to RPC_LOGS
-export const RPC_AI_EVENT = 45 // { reqId, kind:'chunk'|'tool'|'reasoning'|'prompt'|'heartbeat'|'done'|'error', text?, event?, permission?, message? } one streamed AI frame
+export const RPC_AI_EVENT = 45 // { reqId, kind:'chunk'|'tool'|'reasoning'|'steer'|'prompt'|'heartbeat'|'done'|'error', text?, event?, ids?, texts?, permission?, message? } one streamed AI frame
 // The Vault changed, on this phone or another Device, or this phone linked or unlinked one. Not a
 // reply: an open Reader or Notes screen reloads on it, like desktop's nomad.vault.watchAppData().
 export const RPC_VAULT_CHANGED = 50 // {}

@@ -234,6 +234,20 @@ Revert and the phone's Draft banner work per drive. The sidebar's sessions live 
 `hyper://private/.ai-chat/sessions/`; its model choice is the `ai_sidebar_prefs` setting, with vision
 per model.
 
+### Steering a running turn
+
+The AI Sidebar and the phone's AI panel keep their input open while the assistant works. A message
+sent then is **steered** into the running turn instead of waiting for it to end (Stop stays). The
+queue is `app/bg/ai/steering.mjs`: the local loop in `runChat` adds waiting messages as a user
+message before its next model call (after tool results, or when the model would stop); a CLI turn
+gets them on its next loopback-MCP result (`withSteer`); a Bridge turn forwards them as `STEER`
+frames and the Provider's loop answers `STEERED` (`shared/ai-bridge.mjs`). Every delivery emits a
+`steer` event, and the UI moves the message into the transcript there. A message nothing read
+(an older Provider, the turn was ending) is sent as the next turn; after Stop or an error it goes
+back in the input. The sidebar steers through `aiShell.steer`/`unsteer` by the `turnId` it passes
+to `chat`; the phone through `RPC_AI_STEER`/`RPC_AI_UNSTEER` (`mobile/lib/aiSteer.ts`). Page
+turns (`nomad.ai.chat()`) and Jobs never steer.
+
 ### Generated UI in the AI Sidebar (ADR-0027)
 
 The sidebar's assistant can answer with charts, maps, tables, stats, buttons and cards for a purpose

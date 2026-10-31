@@ -124,12 +124,15 @@ export function createAiBridge ({ swarm, getVault }) {
   // Client entry point. Forwards one turn to an available Provider; resolves on done, rejects on a
   // remote error / no Provider / abort. onChunk/onTool stream results; onPrompt(permission) shows
   // the relayed modifyDrive consent HERE (this Device is where the human is) and returns Promise<bool>.
-  async function requestRemoteChat ({ messages, opts = {}, signal = null, onChunk, onTool, onReasoning, onPrompt, onHeartbeat }) {
+  // `steer` is how the user steers this turn while it runs: { queue: [], send: null }. Messages
+  // queue up until the REQUEST is out, then `send` takes each one as a STEER/UNSTEER frame.
+  // onSteered({ ids, texts }) says the Provider's loop read them.
+  async function requestRemoteChat ({ messages, opts = {}, signal = null, onChunk, onTool, onReasoning, onPrompt, onHeartbeat, steer = null, onSteered }) {
     install()
     const peer = await pickProvider(signal)
     const id = nextReqId()
     return new Promise((resolve, reject) => {
-      peer.clientReqs.set(id, { onChunk, onTool, onReasoning, onPrompt, onHeartbeat, resolve, reject })
+      peer.clientReqs.set(id, { onChunk, onTool, onReasoning, onPrompt, onHeartbeat, onSteered, resolve, reject })
       if (signal) {
         if (signal.aborted) sendFrame(peer, { t: FRAME.CANCEL, id })
         else signal.addEventListener('abort', () => sendFrame(peer, { t: FRAME.CANCEL, id }), { once: true })
@@ -160,7 +163,16 @@ export function createAiBridge ({ swarm, getVault }) {
           tab: opts.tab || null
         }
       })
-    }).finally(() => peer.clientReqs.delete(id))
+      if (steer) {
+        steer.send = (m) => sendFrame(peer, m.type === 'steer'
+          ? { t: FRAME.STEER, id, steerId: m.id, text: m.text }
+          : { t: FRAME.UNSTEER, id, steerId: m.id })
+        for (const m of steer.queue.splice(0, steer.queue.length)) steer.send(m)
+      }
+    }).finally(() => {
+      peer.clientReqs.delete(id)
+      if (steer) steer.send = null
+    })
   }
 
   function onFrame (peer, data) {
@@ -180,6 +192,7 @@ export function createAiBridge ({ swarm, getVault }) {
       case FRAME.TOOL:
       case FRAME.REASONING:
       case FRAME.PROMPT:
+      case FRAME.STEERED:
       case FRAME.DONE:
       case FRAME.ERROR:
       case FRAME.HEARTBEAT:
@@ -221,6 +234,11 @@ export function createAiBridge ({ swarm, getVault }) {
         return req.onTool && req.onTool(f.event)
       case FRAME.REASONING:
         return req.onReasoning && req.onReasoning(f.text)
+      case FRAME.STEERED:
+        return req.onSteered && req.onSteered({
+          ids: Array.isArray(f.ids) ? f.ids : [],
+          texts: Array.isArray(f.texts) ? f.texts : []
+        })
       case FRAME.PROMPT:
         return Promise.resolve(req.onPrompt ? req.onPrompt(f.permission) : false)
           .then((allow) => sendFrame(peer, { t: FRAME.PROMPT_RESULT, id: f.id, allow: !!allow }))

@@ -6,6 +6,7 @@ import { useTheme, radius, type Theme } from '../lib/theme'
 import type { AiChatHandlers, AiChatHandle } from '../lib/useBackend'
 import { pickImages } from '../lib/pickImages'
 import { applyToolEvent, finishSteps as finishedSteps, type Step } from '../lib/aiSteps'
+import { applySteer, mergeUserTurns, newSteerId, type Queued } from '../lib/aiSteer'
 import Markdown from './Markdown'
 import ScreenHeader from './ScreenHeader'
 import IconButton from './IconButton'
@@ -133,6 +134,13 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
   const [attachments, setAttachments] = useState<string[]>([])
   const [attaching, setAttaching] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Messages sent while the AI works, waiting for its next step (mobile/lib/aiSteer.ts). The ref
+  // is the truth: a turn's done can arrive before React has rendered the last 'steer' event.
+  const [queued, setQueuedState] = useState<Queued[]>([])
+  const queuedRef = useRef<Queued[]>([])
+  const setQueued = (next: Queued[]) => { queuedRef.current = next; setQueuedState(next) }
+  // Messages the Provider never read, sent as the next turn once this one has ended.
+  const [followUp, setFollowUp] = useState<string[] | null>(null)
   // What the agent did and is doing in this turn, so a long tool phase (drive I/O + model
   // round-trips, no streamed text) doesn't look frozen. A step runs until its tool ends or the
   // next text arrives (mobile/lib/aiSteps.ts).
@@ -191,20 +199,52 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
       return content === last.content ? prev : [...prev.slice(0, -1), { ...last, content }]
     })
 
-  const canSend = !busy && !attaching && (!!input.trim() || attachments.length > 0)
+  // While the AI works, a message steers it (text only; photos wait for the next turn).
+  const canSend = !attaching && (busy
+    ? !!input.trim() && attachments.length === 0
+    : !!input.trim() || attachments.length > 0)
 
   const finishSteps = () => setSteps(finishedSteps)
   const endTurn = () => { settleLast(); setBusy(false); setSteps([]); handleRef.current = null }
+  // Stopped or failed: what the AI never read goes back in the input, for the person to send or not.
+  const returnQueued = () => {
+    const left = queuedRef.current.map((q) => q.text)
+    setQueued([])
+    if (left.length) setInput((prev) => [...left, prev.trim()].filter(Boolean).join('\n\n'))
+  }
 
   const send = () => {
     const text = input.trim()
     if (!canSend) return
-    setError(null)
+    if (busy) {
+      // The AI reads it at its next step: after the tool it's running, or before it would stop.
+      const id = newSteerId()
+      setQueued([...queuedRef.current, { id, text }])
+      setInput('')
+      handleRef.current?.steer(id, text)
+      return
+    }
     const userMsg: ChatMsg = attachments.length ? { role: 'user', content: text, images: attachments } : { role: 'user', content: text }
-    const history: ChatMsg[] = [...messages, userMsg]
-    setMessages([...history, { role: 'assistant', content: '' }])
     setInput('')
     setAttachments([])
+    startTurn([...messages, userMsg])
+  }
+
+  const unqueue = (id: string) => {
+    setQueued(queuedRef.current.filter((q) => q.id !== id))
+    handleRef.current?.unsteer(id)
+  }
+
+  // Messages the last turn never read: they go now, as one turn.
+  useEffect(() => {
+    if (!followUp || busy) return
+    setFollowUp(null)
+    startTurn([...messages, ...followUp.map((content): ChatMsg => ({ role: 'user', content }))])
+  }, [followUp, busy])
+
+  const startTurn = (history: ChatMsg[]) => {
+    setError(null)
+    setMessages([...history, { role: 'assistant', content: '' }])
     setBusy(true)
     setSteps([])
     // A write with no drive on the event (an older Provider) went to the drive that was open.
@@ -213,7 +253,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
     // Reader (ADR-0018, ADR-0019). It is not tied to a tab: `tab` is what the person is looking at
     // now, for the Provider's currentTab (ADR-0021).
     const tab = url ? { url, title: title || '' } : null
-    handleRef.current = aiChat(fitImages(history), { context: describeContext(url, title), personal: true, space, tab }, {
+    handleRef.current = aiChat(fitImages(mergeUserTurns(history)), { context: describeContext(url, title), personal: true, space, tab }, {
       onChunk: (chunk) => { finishSteps(); appendToLast(chunk) },
       onReasoning: appendReasoning,
       onTool: (event: any) => {
@@ -227,13 +267,24 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
           })
         }
       },
-      onDone: endTurn,
-      onError: (message) => { endTurn(); setError(message) },
+      // The Provider read these messages: they go in the transcript here, and a new answer starts.
+      onSteer: ({ ids, texts }) => {
+        setQueued(queuedRef.current.filter((q) => !ids.includes(q.id)))
+        setSteps([])
+        setMessages((prev) => applySteer(prev, texts, unwrapReply))
+      },
+      onDone: () => {
+        endTurn()
+        const left = queuedRef.current.map((q) => q.text)
+        setQueued([])
+        if (left.length) setFollowUp(left)
+      },
+      onError: (message) => { endTurn(); returnQueued(); setError(message) },
       onPrompt: onPrompt
     })
   }
 
-  const stop = () => { handleRef.current?.cancel(); endTurn() }
+  const stop = () => { handleRef.current?.cancel(); endTurn(); returnQueued() }
 
   // An answer is copied as the Markdown it arrived in, a prompt as typed.
   const copy = (text: string, index?: number) => {
@@ -443,6 +494,18 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
             })
           )}
           {busy && renderSteps()}
+          {queued.map((q) => (
+            <View key={q.id} style={s.userMsg}>
+              <View style={[s.bubble, s.userBubble, s.queuedBubble]}>
+                <Text style={s.userText}>{q.text}</Text>
+              </View>
+              <View style={s.queuedRow}>
+                <Icon name='clock' regular size={11} color={t.textMuted} />
+                <Text style={s.queuedLabel}>Queued for the AI's next step</Text>
+                <IconButton icon='times' label='Take back this message' size={12} color={t.textMuted} onPress={() => unqueue(q.id)} style={s.queuedRemove} />
+              </View>
+            </View>
+          ))}
           {error && (
             <View style={s.errorRow}>
               <Icon name='exclamation-triangle' size={13} color={t.danger} style={s.errorIcon} />
@@ -513,18 +576,24 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
               style={s.input}
               value={input}
               onChangeText={setInput}
-              placeholder='Message the AI…'
+              placeholder={busy ? 'Steer the AI while it works…' : 'Message the AI…'}
               placeholderTextColor={t.textMuted}
               multiline
-              editable={!busy}
               onSubmitEditing={send}
             />
-            {busy ? (
+            {busy && (
               <TouchableOpacity style={[s.sendBtn, s.stopBtn]} onPress={stop} accessibilityRole='button' accessibilityLabel='Stop'>
                 <Icon name='stop' size={14} color={t.onAccent} />
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={[s.sendBtn, !canSend && s.sendDisabled]} onPress={send} disabled={!canSend} accessibilityRole='button' accessibilityLabel='Send'>
+            )}
+            {(!busy || canSend) && (
+              <TouchableOpacity
+                style={[s.sendBtn, !canSend && s.sendDisabled]}
+                onPress={send}
+                disabled={!canSend}
+                accessibilityRole='button'
+                accessibilityLabel={busy ? 'Send now; the AI reads it at its next step' : 'Send'}
+              >
                 <Icon name='paper-plane' size={15} color={t.onAccent} />
               </TouchableOpacity>
             )}
@@ -622,6 +691,11 @@ function makeStyles (t: Theme) {
     input: { flex: 1, minHeight: 44, maxHeight: 120, color: t.text, fontSize: 15, backgroundColor: t.inputBg, borderRadius: 22, borderWidth: 1, borderColor: t.border, paddingHorizontal: 16, paddingTop: 11, paddingBottom: 11 },
     sendBtn: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center' },
     stopBtn: { backgroundColor: t.danger },
+    // A message waiting for the AI's next step: the user's bubble, dimmed, with a dashed edge.
+    queuedBubble: { opacity: 0.7, borderWidth: 1, borderStyle: 'dashed', borderColor: t.trustText },
+    queuedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    queuedLabel: { color: t.textMuted, fontSize: 12 },
+    queuedRemove: { width: 40, height: 40, marginLeft: -8 },
     sendDisabled: { opacity: 0.4 }
   })
 }

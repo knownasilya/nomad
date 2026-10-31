@@ -27,6 +27,7 @@ import * as daemon from './daemon';
 import * as vault from './vault';
 import * as settingsDb from '../dbs/settings';
 import { getActiveRuntime } from '../ai/active-runtime.mjs';
+import { createSteering } from '../ai/steering.mjs';
 import { REASON_TURN as AWAKE_REASON_TURN } from '../ai/awake';
 import {
   AI_BRIDGE_PROTOCOL,
@@ -94,13 +95,15 @@ export async function requestRemoteChat({
   onTool,
   onReasoning,
   onPrompt,
+  steering = null,
+  onSteered,
 }) {
   ensureInstalled();
   const peer = await pickProvider(signal);
   const id = nextReqId();
 
   return new Promise((resolve, reject) => {
-    peer.clientReqs.set(id, { onChunk, onTool, onReasoning, onPrompt, resolve, reject });
+    peer.clientReqs.set(id, { onChunk, onTool, onReasoning, onPrompt, onSteered, resolve, reject });
     if (signal) {
       if (signal.aborted) sendFrame(peer, { t: FRAME.CANCEL, id });
       else
@@ -132,6 +135,15 @@ export async function requestRemoteChat({
         tab: opts.tab || null,
       },
     });
+    // The user steers this turn from here: each message goes to the Provider, after the REQUEST.
+    steering?.forward((m) =>
+      sendFrame(
+        peer,
+        m.type === 'steer'
+          ? { t: FRAME.STEER, id, steerId: m.id, text: m.text }
+          : { t: FRAME.UNSTEER, id, steerId: m.id }
+      )
+    );
   }).finally(() => peer.clientReqs.delete(id));
 }
 
@@ -285,6 +297,9 @@ function onFrame(peer, data) {
       return onCancel(peer, f);
     case FRAME.PROMPT_RESULT:
       return onPromptResult(peer, f);
+    case FRAME.STEER:
+    case FRAME.UNSTEER:
+      return onSteer(peer, f);
     // --- client role (we are the Client) ---
     case FRAME.CHALLENGE:
       return onChallenge(peer, f);
@@ -297,6 +312,7 @@ function onFrame(peer, data) {
     case FRAME.TOOL:
     case FRAME.REASONING:
     case FRAME.PROMPT:
+    case FRAME.STEERED:
     case FRAME.DONE:
     case FRAME.ERROR:
       return onClientStream(peer, f);
@@ -373,7 +389,9 @@ async function onRequest(peer, f) {
     return sendFrame(peer, { t: FRAME.ERROR, id: f.id, message: 'not authenticated' });
   const id = f.id;
   const controller = new AbortController();
-  const entry = { controller, promptResolve: null };
+  // Messages the Client's user sends while this turn runs (STEER frames).
+  const steering = createSteering();
+  const entry = { controller, promptResolve: null, steering };
   peer.serveReqs.set(id, entry);
 
   // Reverse consent (§6): the modifyDrive prompt is shown on the CLIENT (where the human is), so
@@ -400,6 +418,8 @@ async function onRequest(peer, f) {
       sendChunk: (text) => sendFrame(peer, { t: FRAME.CHUNK, id, text }),
       sendTool: (event) => sendFrame(peer, { t: FRAME.TOOL, id, event }),
       sendReasoning: (text) => sendFrame(peer, { t: FRAME.REASONING, id, text }),
+      steering,
+      sendSteered: (e) => sendFrame(peer, { t: FRAME.STEERED, id, ids: e.ids, texts: e.texts }),
     });
     sendFrame(peer, { t: FRAME.DONE, id });
   } catch (err) {
@@ -407,6 +427,7 @@ async function onRequest(peer, f) {
     sendFrame(peer, { t: FRAME.ERROR, id, message: err?.message || 'AI error' });
   } finally {
     clearInterval(heartbeat);
+    steering.close();
     peer.serveReqs.delete(id);
     if (!anyServing()) awake?.stop(AWAKE_REASON_TURN);
   }
@@ -419,6 +440,13 @@ function onCancel(peer, f) {
       entry.controller.abort();
     } catch {}
   }
+}
+
+function onSteer(peer, f) {
+  const steering = peer.serveReqs.get(f.id)?.steering;
+  if (!steering) return;
+  if (f.t === FRAME.STEER) steering.push(f.steerId, f.text);
+  else steering.remove(f.steerId);
 }
 
 function onPromptResult(peer, f) {
@@ -461,6 +489,11 @@ function onClientStream(peer, f) {
       return req.onTool?.(f.event);
     case FRAME.REASONING:
       return req.onReasoning?.(f.text);
+    case FRAME.STEERED:
+      return req.onSteered?.({
+        ids: Array.isArray(f.ids) ? f.ids : [],
+        texts: Array.isArray(f.texts) ? f.texts : [],
+      });
     case FRAME.PROMPT:
       // Show the consent prompt locally and relay the answer back.
       return Promise.resolve(req.onPrompt ? req.onPrompt(f.permission) : false)

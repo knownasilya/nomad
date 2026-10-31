@@ -52,6 +52,8 @@ import {
   RPC_AI_CHAT,
   RPC_AI_CANCEL,
   RPC_AI_PROMPT_RESULT,
+  RPC_AI_STEER,
+  RPC_AI_UNSTEER,
   RPC_AI_EVENT,
   RPC_APPS,
   RPC_APPS_RESULT,
@@ -338,6 +340,7 @@ const rpc = new RPC(IPC, (req) => {
   else if (req.command === RPC_AI_CHAT) handleAiChat(msg)
   else if (req.command === RPC_AI_CANCEL) handleAiCancel(msg)
   else if (req.command === RPC_AI_PROMPT_RESULT) handleAiPromptResult(msg)
+  else if (req.command === RPC_AI_STEER || req.command === RPC_AI_UNSTEER) handleAiSteer(req.command === RPC_AI_STEER, msg)
   else if (req.command === RPC_APPS) handleApps(msg)
   else if (req.command === RPC_LOGS) handleLogs(msg)
 })
@@ -418,7 +421,7 @@ async function handleNomad ({ reqId, api, method, url, args = [] }) {
 // --- AI chat (streaming, over the AI Bridge) -----------------------------
 // nomad.ai.chat() is a readable, so unlike handleNomad each RPC_AI_CHAT fans out many RPC_AI_EVENT
 // frames keyed by reqId. The turn runs on a remote AI Provider (desktop); this phone is the Client.
-const aiTurns = new Map() // reqId -> { signal, abort, promptResolve }
+const aiTurns = new Map() // reqId -> { signal, abort, promptResolve, steer }
 
 // Minimal AbortController-shaped primitive — Bare has no guaranteed global AbortController, and the
 // Bridge only needs { aborted, addEventListener('abort'), abort() }.
@@ -442,7 +445,9 @@ function makeAbort () {
 async function handleAiChat ({ reqId, messages, opts = {} }) {
   console.log('[ai-bridge] handleAiChat', reqId)
   const { signal, abort } = makeAbort()
-  const entry = { signal, abort, promptResolve: null }
+  // Messages the user sends while the turn runs; the Bridge sends them once the REQUEST is out.
+  const steer = { queue: [], send: null }
+  const entry = { signal, abort, promptResolve: null, steer }
   aiTurns.set(reqId, entry)
   try {
     await aiBridge.requestRemoteChat({
@@ -452,6 +457,8 @@ async function handleAiChat ({ reqId, messages, opts = {} }) {
       onChunk: (text) => send(RPC_AI_EVENT, { reqId, kind: 'chunk', text }),
       onTool: (event) => send(RPC_AI_EVENT, { reqId, kind: 'tool', event }),
       onReasoning: (text) => send(RPC_AI_EVENT, { reqId, kind: 'reasoning', text }),
+      steer,
+      onSteered: ({ ids, texts }) => send(RPC_AI_EVENT, { reqId, kind: 'steer', ids, texts }),
       // Provider keepalive during model load / slow first token — resets the UI idle timeout.
       onHeartbeat: () => send(RPC_AI_EVENT, { reqId, kind: 'heartbeat' }),
       // Relayed modifyDrive consent — the human is on THIS phone. Surface it to the RN UI and wait.
@@ -472,6 +479,18 @@ function handleAiCancel ({ reqId }) {
   console.log('[ai-bridge] handleAiCancel', reqId, '(if this fires right after handleAiChat, the UI is cancelling spuriously)')
   const entry = aiTurns.get(reqId)
   if (entry) entry.abort()
+}
+
+// A message sent while the turn runs. A turn that already ended drops it: the panel sends a message
+// that got no 'steer' event as the next turn.
+function handleAiSteer (add, { reqId, steerId, text }) {
+  const steer = aiTurns.get(reqId)?.steer
+  if (!steer || typeof steerId !== 'string') return
+  if (add && (typeof text !== 'string' || !text.trim())) return
+  const m = add ? { type: 'steer', id: steerId, text } : { type: 'unsteer', id: steerId }
+  if (steer.send) steer.send(m)
+  else if (add) steer.queue.push(m)
+  else steer.queue = steer.queue.filter((q) => q.id !== steerId)
 }
 
 function handleAiPromptResult ({ reqId, allow }) {

@@ -24,9 +24,15 @@ import {
 import aiAPI, { routeChat, createChatStream } from './ai';
 import * as chatStore from '../../ai/chat-store';
 import * as settingsDb from '../../dbs/settings';
+import { createSteering } from '../../ai/steering.mjs';
 
 // The sidebar's one model choice, on this device (ADR-0021).
 const PREFS_SETTING = 'ai_sidebar_prefs';
+
+// The running turns the user can steer, by shell window and the turn id the sidebar picked. A
+// message sent with steer() waits here until the turn's loop reads it (steering.mjs).
+const steerings = new Map();
+const steerKey = (shell, turnId) => `${shell?.id}:${turnId}`;
 
 function activePane(sender) {
   const win = findWebContentsParentWindow(sender);
@@ -75,10 +81,12 @@ function cleanPrefs(prefs: any = {}) {
 }
 
 export default {
-  // opts: { model, think, effort, allowVision } — the sidebar's own choices. The rest of a turn's
-  // options are set here: the stage, the tab lookup and the context.
+  // opts: { model, think, effort, allowVision, turnId } — the sidebar's own choices, and the id it
+  // steers this turn by. The rest of a turn's options are set here: the stage, the tab lookup and
+  // the context.
   chat(messages, opts: any = {}) {
     const shell = this.sender;
+    const turnId = typeof opts.turnId === 'string' && opts.turnId ? opts.turnId : null;
     const pane = activePane(shell);
     if (!pane) {
       return createChatStream(async () => {
@@ -87,6 +95,18 @@ export default {
     }
 
     return createChatStream(async (emitter, signal) => {
+      const steering = createSteering();
+      const key = turnId ? steerKey(shell, turnId) : null;
+      if (key) steerings.set(key, steering);
+      try {
+        await runSidebarTurn(emitter, signal, steering);
+      } finally {
+        steering.close();
+        if (key && steerings.get(key) === steering) steerings.delete(key);
+      }
+    });
+
+    async function runSidebarTurn(emitter, signal, steering) {
       // An editor or explorer that shows the drive the AI wrote to reloads that file.
       emitter.on('tool', (e) => {
         if (e?.phase === 'write') notifyAgentHostOfWrite(activePane(shell), e.drive, e.path);
@@ -118,8 +138,23 @@ export default {
         currentTab: () => currentTabOf(shell),
         context,
         signal,
+        steering,
       });
-    });
+    }
+  },
+
+  // A message the user sent while turn `turnId` runs. true when the turn will read it at its next
+  // step; false when it can't (it ended, it runs on another Device): the sidebar then sends it as
+  // the next turn. A `steer` event on the chat stream says when the model got it.
+  async steer(turnId, id, text) {
+    const steering = steerings.get(steerKey(this.sender, turnId));
+    return steering ? steering.push(id, text) : false;
+  },
+
+  // Takes back a message the turn hasn't read yet. false when it already has.
+  async unsteer(turnId, id) {
+    const steering = steerings.get(steerKey(this.sender, turnId));
+    return steering ? steering.remove(id) : false;
   },
 
   async listModels() {

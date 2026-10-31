@@ -62,6 +62,7 @@ import { closeTurn, openTurn } from '../../ai/localhost-mcp.mjs';
 import { startLocalhostMcp } from '../../ai/localhost-mcp-host.mjs';
 import { streamAgent } from '../../ai/agent-cli.mjs';
 import { newToolCallId, trackToolCall } from '../../ai/tool-events.mjs';
+import { addSteerMessages, deliverSteer, withSteer } from '../../ai/steering.mjs';
 import { pickToolDrive, remoteStage, stageRules, tabSnapshot } from '../../ai/stages.mjs';
 import { openTabGroup, openTabUrl } from '../../ai/open-tab.mjs';
 import { isPageAction } from '../../ai/page-control.mjs';
@@ -214,6 +215,7 @@ export default {
         ...opts,
         stage: 'page',
         currentTab: null,
+        steering: null,
         signal,
       })
     );
@@ -292,6 +294,9 @@ async function routeChat(messages, sender, emitter, opts) {
     onReasoning: (text) => emitter.emit('reasoning', { text }),
     // The human is on THIS (Client) Device, so the relayed modifyDrive prompt is shown here.
     onPrompt: (permission) => permissions.requestPermission(permission, sender),
+    // The user steers the turn from this window; the Provider's loop reads it (steering.mjs).
+    steering: opts.steering || null,
+    onSteered: (event) => emitter.emit('steer', event),
   });
   emitter.emit('done', {});
 }
@@ -301,7 +306,17 @@ async function routeChat(messages, sender, emitter, opts) {
 // a synthetic sender carries the Client's driveUrl, events are forwarded as frames, and the
 // modifyDrive prompt is relayed to the Client via requestPermission (ADR-0013 §1, §6).
 aiBridge.setServeChat(
-  async ({ messages, opts, signal, requestPermission, sendChunk, sendTool, sendReasoning }) => {
+  async ({
+    messages,
+    opts,
+    signal,
+    requestPermission,
+    sendChunk,
+    sendTool,
+    sendReasoning,
+    steering,
+    sendSteered,
+  }) => {
     const driveUrl = opts?.driveUrl;
     // The phone's AI panel is the phone stage; anything else from a remote Device is a page
     // (ADR-0021). Only the phone stage gets the phone's tab.
@@ -326,6 +341,7 @@ aiBridge.setServeChat(
     emitter.on('chunk', (e) => sendChunk(e.text));
     emitter.on('tool', (e) => sendTool(e));
     emitter.on('reasoning', (e) => sendReasoning(e.text));
+    emitter.on('steer', (e) => sendSteered?.(e));
     // Remote AI edits stage into the Drive's Vault-hosted Draft (ADR-0012) so the phone user can
     // review + publish, rather than writing the live Drive directly.
     await runChat(messages, sender, emitter, {
@@ -349,6 +365,8 @@ aiBridge.setServeChat(
       requestPermission,
       draft: true,
       remote: true, // no reachable renderer here — disables WebMCP page tools
+      // The Client's user steers this turn (STEER frames); never anything from opts.
+      steering: steering || null,
     });
   }
 );
@@ -724,7 +742,11 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     catalog,
     pageSession,
     job,
+    // Messages the user sends while this turn runs (steering.mjs). A CLI's loopback MCP calls
+    // carry them on their results.
+    steering: opts.steering || null,
   };
+  const steering = toolOpts.steering;
   const mcpTurn = cli && mcpPort ? openTurn({ sender, toolOpts }) : null;
 
   // Tool loop — repeats when model calls tools. A cancel (signal.abort, from a local stream
@@ -733,6 +755,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   try {
     while (true) {
       if (signal?.aborted) break;
+      // The user steered: their message goes in before the next model call.
+      addSteerMessages(msgHistory, deliverSteer(steering, emitter));
       const { finishReason, toolCalls, textContent }: any = cli
         ? await streamAgent({ ...runtime, model }, msgHistory, emitter, signal, {
             mcpUrl: mcpTurn ? `http://127.0.0.1:${mcpPort}/mcp` : null,
@@ -745,7 +769,15 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
             maxTokens: opts.maxTokens,
           });
 
-      if (finishReason !== 'tool_calls' || toolCalls.length === 0) break;
+      if (finishReason !== 'tool_calls' || toolCalls.length === 0) {
+        // The model is done, unless the user sent something it hasn't read yet. Then its answer
+        // so far stays in the history and it gets one more step with their message.
+        const late = signal?.aborted ? [] : deliverSteer(steering, emitter, { final: true });
+        if (!late.length) break;
+        msgHistory.push({ role: 'assistant', content: textContent || '' });
+        addSteerMessages(msgHistory, late);
+        continue;
+      }
 
       // Append assistant turn (with tool calls) to history. Use '' rather than null for content:
       // some local runtimes' chat templates do `content | trim`, which throws on null (None).
@@ -808,6 +840,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     if (!isAbort(err) && !signal?.aborted) throw err;
   } finally {
     if (mcpTurn) closeTurn(mcpTurn);
+    steering?.close();
     pageSession?.end();
   }
 
@@ -1583,7 +1616,11 @@ function runtimeError(status, body, tools, hasToken) {
 // the caller is another program on this machine, the user's own AI on the focused tab.
 export async function callLocalTool(name, args, turn = null) {
   if (name !== 'search' && name !== 'execute') throw new Error(`Unknown tool: ${name}`);
-  if (turn) return executeTool(name, args || {}, turn.sender, turn.toolOpts);
+  if (turn) {
+    // A CLI runs its own loop, so a message the user sent mid-turn rides on this result.
+    const result = await executeTool(name, args || {}, turn.sender, turn.toolOpts);
+    return withSteer(result, turn.toolOpts.steering, turn.toolOpts.emitter);
+  }
   const pane = focusedPane();
   const sender = pane?.webContents;
   if (!sender || (typeof sender.isDestroyed === 'function' && sender.isDestroyed())) {
