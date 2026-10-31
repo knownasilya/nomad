@@ -231,11 +231,12 @@ export function usePersistence (
     [drives]
   )
 
-  // URL-bar autocomplete: recently-visited sites + known drives for THIS space (history and drives
-  // are both device-local and space-scoped), deduped by URL, filtered by the typed query (matches
-  // url or title), most-recent first, capped. On-device only — nothing leaves the phone.
+  // Recently-visited sites + known drives for THIS space (history and drives are both device-local
+  // and space-scoped), deduped by URL, filtered by the query (matches url or title), most-recent
+  // first, capped: the address bar's recent-sites card and the Add shortcut picker. keepExact keeps
+  // a site whose URL is exactly the query. On-device only — nothing leaves the phone.
   const suggest = useCallback(
-    (query: string, limit = 10): SavedSite[] => {
+    (query: string, limit = 10, opts: { keepExact?: boolean } = {}): SavedSite[] => {
       const q = query.trim().toLowerCase()
       const byUrl = new Map<string, SavedSite>()
       const add = (url: string, title: string, ts: number) => {
@@ -247,8 +248,8 @@ export function usePersistence (
       history.forEach((h) => add(h.url, h.title, h.ts))
       drives.forEach((d) => add(d.url, d.name, d.ts || 0))
       let list = [...byUrl.values()]
-      // Don't suggest the exact thing already typed; filter the rest by substring match.
-      if (q) list = list.filter((it) => it.url.toLowerCase() !== q && (it.url.toLowerCase().includes(q) || it.title.toLowerCase().includes(q)))
+      // Unless asked, don't suggest the exact thing already typed; filter the rest by substring match.
+      if (q) list = list.filter((it) => (opts.keepExact || it.url.toLowerCase() !== q) && (it.url.toLowerCase().includes(q) || it.title.toLowerCase().includes(q)))
       list.sort((a, b) => b.ts - a.ts)
       return list.slice(0, limit)
     },
