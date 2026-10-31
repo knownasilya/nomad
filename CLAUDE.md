@@ -304,6 +304,20 @@ editing is My Library → Mods (`nomad.vault.listMods`/`saveMod`/`deleteMod`). T
 `listMods`, `saveMod`, `deleteMod` as personal capabilities (so the sidebar, the phone and
 the loopback MCP all have them), behind the `modsRead` / `modsWrite` permissions.
 
+### The AI Sidebar uses the page (ADR-0028)
+
+The sidebar's AI can click, type and scroll on the page in the user's tab: `snapshotPage`,
+`clickElement`, `typeText`, `pressKey`, `selectOption`, `scrollPage`, and `clickAt` for vision models.
+They are `CAPABILITIES` with `gates: { personal, tab, renderer }`, so the phone, a page's own chat and
+the loopback MCP's other programs never get them. The rules (blocked password/payment/file fields,
+clicks that need a confirm, the 30-day site grant, keys) are `app/bg/ai/page-control.mjs`; one session a
+turn (`createSession` in `app/bg/ui/page-control.js`, made in `runChat`) pins the tab and sends real
+input with `sendInputEvent`/`insertText`. `app/fg/webview-preload/page-control.js` lists controls by
+ref and draws the cursor, border and Stop bar in a closed shadow root, through
+`window.__nomadPageControl` in world 999. The grant is the `aiPageControl` permission, stored in
+sitedata as the time it ends; `aiPageAction` is the per-click confirm. The model-facing text is
+`PAGE_CONTROL_PROMPT` and the `## Page control` guide in `api-reference.mjs`.
+
 ### Open tabs on other Devices (ADR-0024)
 
 Each Device writes the tabs it has open, grouped by Space (Root Drive key), to its own Vault record

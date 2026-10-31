@@ -21,7 +21,8 @@ export function setup(rpc) {
       //   maxTokens caps the completion (sent as max_tokens).
       //   onToolEvent(e) fires for each tool the agent runs: { phase: 'start', id, parentId?,
       //     name, summary } then { phase: 'end', id, error? } (AG-UI's TOOL_CALL_START/END), plus
-      //     'write' (e.path / e.priorContent for undo), 'screenshot' and 'note'.
+      //     'detail' (a new summary for the call with that id), 'write' (e.path / e.priorContent
+      //     for undo), 'screenshot' and 'note'.
       //   onReasoning(text) fires for each reasoning-stream chunk (only when think !== false and
       //     the model emits one); the visible answer still comes back as iterator chunks.
       chat(messages, opts: any = {}) {

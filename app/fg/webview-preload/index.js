@@ -3,6 +3,7 @@ import { setup as setupWebAPIs } from '../../bg/web-apis/fg';
 import { setupModelContext } from './model-context';
 import { setupHighlights } from './highlights';
 import { setupMods } from './mods';
+import { setupPageControl } from './page-control';
 import { setup as setupPrompt } from './prompt';
 import { setup as setupExecuteJavascript } from './execute-javascript';
 import setupExitFullScreenHackfix from './exit-full-screen-hackfix';
@@ -21,6 +22,7 @@ setupMods();
 setupWebAPIs();
 setupModelContext();
 setupHighlights();
+setupPageControl();
 setupPrompt();
 setupExecuteJavascript();
 

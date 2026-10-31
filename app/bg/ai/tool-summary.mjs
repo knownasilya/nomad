@@ -12,6 +12,13 @@ const PURPOSES = {
   readCurrentPage: 'read this page',
   screenshotCurrentPage: 'take a screenshot of this page',
   openTab: 'open a tab',
+  snapshotPage: 'look at the controls on this page',
+  clickElement: 'click on this page',
+  typeText: 'type on this page',
+  pressKey: 'press a key on this page',
+  selectOption: 'choose an option on this page',
+  scrollPage: 'scroll this page',
+  clickAt: 'click on this page',
   listNotes: 'look through your Notes',
   readNote: 'read a Note',
   writeNote: 'save a Note',
@@ -64,6 +71,20 @@ export function toolSummary(name, args) {
       const where = a.group ? ` in the group ${quote(a.group)}` : '';
       return a.url ? `Opening ${a.url} in a new tab${where}` : `Opening a new tab${where}`;
     }
+    // A page action replaces these with the control's name once it finds it (a 'detail' event).
+    case 'snapshotPage':
+      return 'Looking at the controls on this page';
+    case 'clickElement':
+    case 'clickAt':
+      return 'Clicking on this page';
+    case 'typeText':
+      return a.text ? `Typing ${quote(a.text)}` : 'Typing on this page';
+    case 'pressKey':
+      return a.key ? `Pressing ${a.key}` : 'Pressing a key';
+    case 'selectOption':
+      return a.value ? `Choosing ${quote(a.value)}` : 'Choosing an option';
+    case 'scrollPage':
+      return `Scrolling ${a.direction || 'down'}`;
     case 'listNotes':
       return a.query ? `Looking in your Notes for ${quote(a.query)}` : 'Listing your Notes';
     case 'readNote':
