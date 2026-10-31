@@ -356,7 +356,8 @@ export const CAPABILITIES = [
     name: 'writeNote',
     description:
       'Create a Note (no `id`), or replace the text of one (`id`, and the updatedAt readNote gave as ' +
-      '`baseUpdatedAt`). The first line is its title; link Notes with [[Title]]. If the Note changed ' +
+      '`baseUpdatedAt`). A new Note is kept only in the current Space; the user can show it in every Space. ' +
+      'The first line is its title; link Notes with [[Title]]. If the Note changed ' +
       'since you read it, your text is kept as a conflict copy. Asks permission to write Notes.',
     inputSchema: {
       type: 'object',

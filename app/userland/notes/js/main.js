@@ -13,7 +13,7 @@
 //
 // A note is the user's, in every Space, or kept only in this Space (ADR-0029). The list shows the
 // Space's notes first, under the Space's name, then All Spaces; the toolbar's scope button moves the
-// open note between them. A new note is the user's.
+// open note between them. A new note is kept in this Space.
 //
 // Each note has its own address, nomad://notes/<id>, so back and forward move between notes.
 // The header's List / Canvas switch swaps the list and the editor for a canvas of every note and
@@ -148,7 +148,7 @@ async function loadNotes() {
   state.linked = !!res.linked;
   state.space = res.space || null;
   state.spaceName = res.space ? res.spaceName || 'This Space' : null;
-  // A shared Space (ADR-0029): its notes are seen by its members, and a new note goes there.
+  // A shared Space (ADR-0029): its notes are seen by its members. A new note goes to this Space.
   state.shared = !!res.shared;
   state.canWriteSpace = res.canWriteSpace !== false;
   state.members = res.members || 0;
@@ -251,7 +251,9 @@ function upsert(note) {
 async function newNote(body = '') {
   await leaveNote();
   view = 'list';
-  draft = { id: null, body, base: null, openedTitle: null, conflictOf: null, inSpace: !!(state.shared && state.canWriteSpace) };
+  // A new note is kept in this Space; the scope button shows it in every Space. A person who can
+  // only view a shared Space keeps it to themselves.
+  draft = { id: null, body, base: null, openedTitle: null, conflictOf: null, inSpace: !!(state.space && state.canWriteSpace) };
   dirty = !!body;
   banner = null;
   setUrl(null, true);
