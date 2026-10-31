@@ -6,7 +6,12 @@
 import b4a from 'b4a';
 import fsAPI from './fs';
 import * as names from '../../hyper/names';
-import { checkSourceFiles, hashSource, sourceFiles } from '../../../../shared/jobs.mjs';
+import {
+  checkSourceFiles,
+  hashSource,
+  normalizeWrites,
+  sourceFiles,
+} from '../../../../shared/jobs.mjs';
 
 const READ_TIMEOUT_MS = 30_000;
 
@@ -27,14 +32,14 @@ async function readText(url) {
 // `live` is whether this Device can write the drive: the user's own drive, whose latest files each
 // run reads. module and prompt are null when missing; it throws when both are, or the drive is out
 // of reach.
-export async function readJobSource(input: string) {
+export async function readJobSource(input: string, space: string | null = null) {
   const raw = String(input || '').trim();
   let url = raw;
   if (!/^hyper:\/\/[0-9a-z]{52,64}(\/|$)/i.test(raw)) {
     // A name: "digest", hyper://digest/ or hyper://digest/jobs/x.js.
     const m = /^(?:hyper:\/\/)?([^/?#]+)(\/.*)?$/i.exec(raw);
     if (!m) throw new Error('A Job’s source is a hyper:// drive URL');
-    const target = names.resolveDrive(m[1]);
+    const target = names.resolveDrive(m[1], space);
     url = target.replace(/\/$/, '') + (m[2] || '/');
   }
   const files = sourceFiles(url);
@@ -60,4 +65,33 @@ export async function readJobSource(input: string) {
     title: heading ? heading[1].trim() : info?.title || '',
     hash: hashSource(module, prompt),
   };
+}
+
+// A Job's `writes` as the AI or My Library gives them, with drive names resolved to their keys and
+// each drive checked: a Job can only be given a drive this computer can write. Null for none.
+export async function resolveJobWrites(input: any, space: string | null = null) {
+  if (!input) return null;
+  const drives = [];
+  for (const d of Array.isArray(input.drives) ? input.drives : []) {
+    const raw = typeof d === 'string' ? { url: d } : d || {};
+    const given = String(raw.url || '').trim();
+    const url = /^hyper:\/\/[0-9a-z]{52,64}(\/|$)/i.test(given)
+      ? given
+      : names.resolveDrive(given.replace(/^hyper:\/\//i, '').replace(/\/.*$/, ''), space);
+    drives.push({ url, draft: !!raw.draft });
+  }
+  const writes = normalizeWrites({ ...input, drives });
+  for (const d of writes?.drives || []) {
+    const info: any = await fsAPI.getInfo.call(ctx, d.url, { timeout: READ_TIMEOUT_MS }).catch(() => null);
+    if (info && !info.writable) {
+      throw new Error(`This computer can’t write ${d.url}${info.title ? ` (${info.title})` : ''}, so a Job can’t either`);
+    }
+  }
+  return writes;
+}
+
+// A drive's title for the user, or null.
+export async function driveTitle(url: string) {
+  const info: any = await fsAPI.getInfo.call(ctx, url, { timeout: 5000 }).catch(() => null);
+  return info?.title || null;
 }

@@ -35,12 +35,17 @@ import {
   JOB_PROMPT,
 } from '../../ai/api-reference.mjs';
 import { genuiPrompt } from '../../../lib/genui/library.mjs';
-import { askOncePerTurn, jobPermit } from '../../ai/vault-tools.mjs';
+import { askOncePerTurn, jobPermitFor } from '../../ai/vault-tools.mjs';
 import * as secretStore from '../../ai/secret-store';
 import { hostAllowed, permissionFor, redact, redactResult, secretForModel } from '../../ai/secrets.mjs';
 import { runHttpRequest } from '../../ai/http-request.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
-import { jobWork, promptWithResult } from '../../../../shared/jobs.mjs';
+import {
+  jobWork,
+  promptWithResult,
+  writeCaps,
+  writesInDraft,
+} from '../../../../shared/jobs.mjs';
 import { readJobSource } from './job-source';
 import { completionStreamError } from '../../ai/stream-error.mjs';
 import { normalizeChatMessages } from '../../ai/chat-messages.mjs';
@@ -471,17 +476,20 @@ export { routeChat };
 
 // One run of an AI Job (ADR-0030; app/bg/ai/jobs.js runs it), on this Device only, never another
 // Device's over the Bridge. The user's own AI with no tab and nobody watching: it reads the Notes
-// and Reader of the Job's Space, drives and the web, changes nothing, and asks no permission
-// (jobPermit). `notify` gets what the Job sends with the notify capability.
+// and Reader of the Job's Space, drives and the web, and asks no permission. It changes only what
+// the Job was given (`writes`: drives, Notes, Reader); jobPermitFor grants exactly that, and the
+// catalog offers only those write capabilities. `notify` gets what the Job sends with notify.
 //
 // A Job from a drive (`source`) runs its job.js first, in the execute sandbox with the same
 // capabilities, then gives the AI its result with the prompt (job.md and the Job's own); with no
 // prompt, the module's result is the answer and no AI runs. A live source reads its files now; a
 // copied one runs its copy, and this looks whether the drive has a newer version.
 //
-// Resolves { output, sourceHash }: the answer the AI gave after its last tool call, and the hash
-// of the copied source's drive as it is now (null when unknown).
-export async function runJobTurn(job, { signal, notify, trigger = 'manual', lastRun = null }) {
+// Resolves { output, sourceHash, changes }: the answer the AI gave after its last tool call, the
+// hash of the copied source's drive as it is now (null when unknown), and what the run changed.
+// `changes` is the list each change the run makes goes into, so a run that fails partway still
+// records what it changed.
+export async function runJobTurn(job, { signal, notify, trigger = 'manual', lastRun = null, changes: into = [] }) {
   const newer =
     job.source && !job.source.live
       ? readJobSource(job.source.url).then(
@@ -495,6 +503,8 @@ export async function runJobTurn(job, { signal, notify, trigger = 'manual', last
     throw new Error('The AI runtime on this computer isn’t reachable. Check the AI page (nomad://ai/setup).');
   }
   const space = isSpaceKey(job.space) ? job.space : null;
+  const grants = jobGrants(job);
+  const { emitter, changes } = jobEmitter(into);
 
   let result = null;
   if (work.module) {
@@ -510,14 +520,14 @@ export async function runJobTurn(job, { signal, notify, trigger = 'manual', last
       space,
       notify,
       signal,
+      grants,
+      emitter,
     });
-    if (!work.prompt) return { output: moduleOutput(result), sourceHash: await newer };
+    if (!work.prompt) return { output: moduleOutput(result), sourceHash: await newer, changes };
   }
 
-  const emitter = new EventEmitter();
   let answer = '';
   let all = '';
-  emitter.on('error', () => {});
   emitter.on('chunk', (e) => {
     answer += e?.text || '';
     all += e?.text || '';
@@ -531,35 +541,69 @@ export async function runJobTurn(job, { signal, notify, trigger = 'manual', last
     stage: 'job',
     // No renderer and no tab: the page tools, openTab and the page readers stay out of the catalog.
     remote: true,
-    allowWrite: false,
+    allowWrite: grants.allowWrite,
+    draft: grants.draft,
     space,
-    requestPermission: jobPermit,
+    requestPermission: grants.permit,
     context: jobContext(job),
-    job: { id: job.id, notify },
+    job: { id: job.id, notify, extra: grants.extra },
     signal,
   });
-  return { output: answer.trim() || all.trim(), sourceHash: await newer };
+  return { output: answer.trim() || all.trim(), sourceHash: await newer, changes };
 }
 
-// A Job's job.js, run like the AI's execute code with the job turn's capabilities: reads only, no
-// tab, no page tools, and notify. Resolves what main() returned (text, or JSON for anything else).
-async function runJobModule(code, { jobId, params, space, notify, signal }) {
+// What a Job's writes turn on for its turn: writeDriveFile (allowWrite) for a drive grant, the Note
+// and Reader write capabilities (extra), whether a drive's writes stage in its Draft, and the
+// permission check that says yes to exactly those.
+function jobGrants(job) {
+  const writes = job.writes || null;
+  return {
+    allowWrite: !!writes?.drives?.length,
+    extra: writeCaps(writes),
+    draft: writes?.drives?.some((d) => d.draft) ? (base) => writesInDraft(writes, base) : false,
+    permit: jobPermitFor(writes),
+  };
+}
+
+// An emitter for a Job's turn that keeps what it changed: each file written, and each Note or
+// Reader change that finished.
+const RECORDED_WRITES = new Set(['writeNote', 'followFeed', 'unfollowFeed', 'markPostsRead']);
+function jobEmitter(changes = []) {
+  const emitter = new EventEmitter();
+  const started = new Map();
+  emitter.on('error', () => {});
+  emitter.on('tool', (e) => {
+    if (e?.phase === 'write') changes.push({ drive: e.drive, path: e.path, draft: !!e.draft });
+    else if (e?.phase === 'start' && RECORDED_WRITES.has(e.name)) started.set(e.id, e.summary);
+    else if (e?.phase === 'end' && started.has(e.id)) {
+      if (!e.error) changes.push({ tool: e.name, summary: started.get(e.id) || e.name });
+      started.delete(e.id);
+    }
+  });
+  return { emitter, changes };
+}
+
+// A Job's job.js, run like the AI's execute code with the job turn's capabilities: no tab, no page
+// tools, notify, and the writes the Job was given. Resolves what main() returned (text, or JSON for
+// anything else).
+async function runJobModule(code, { jobId, params, space, notify, signal, grants, emitter }) {
   const sender = makeRemoteSender('nomad://jobs/');
   const catalog = buildCatalog({
-    allowWrite: false,
+    allowWrite: grants.allowWrite,
     remote: true,
     pageTools: null,
     personal: true,
     tab: false,
-    job: true,
+    job: { extra: grants.extra },
     secrets: true,
     names: names.list(space).filter((r) => !r.hidden),
   });
   const opts = {
     driveUrl: null,
     currentTab: null,
-    emitter: null,
-    requestPermission: askOncePerTurn(jobPermit),
+    emitter,
+    requestPermission: askOncePerTurn(grants.permit),
+    draft: grants.draft,
     remote: true,
     space,
     signal,
@@ -573,7 +617,9 @@ async function runJobModule(code, { jobId, params, space, notify, signal }) {
     invoke: async (call) => {
       assertCallAllowed(call.target, call.name, catalog);
       if (call.target === 'page') throw new Error('page tools are not available in a Job');
-      const value = await executeTool(call.target, call.args || {}, sender, opts);
+      const value = await trackToolCall(emitter, { name: call.target, args: call.args }, () =>
+        executeTool(call.target, call.args || {}, sender, opts)
+      );
       // A screenshot's image can't go anywhere from here; its text can.
       return value && typeof value === 'object' && 'imageDataUrl' in value ? value.text : value;
     },
@@ -586,7 +632,7 @@ function moduleOutput(result) {
   return /^[[{]/.test(text) ? '```json\n' + text + '\n```' : text;
 }
 
-// What a Job's turn is told about the Job and its notification.
+// What a Job's turn is told about the Job: its notification rule, and what it may change.
 function jobContext(job) {
   const rule =
     job.notify === 'never'
@@ -594,7 +640,20 @@ function jobContext(job) {
       : job.notify === 'auto'
         ? 'Call notify only when the result is something the Job’s prompt asks to hear about. Otherwise just answer: no notification is sent.'
         : 'When you finish, the user is notified with the start of your answer. Call notify only to say something more specific.';
-  return `The Job: “${job.title}”. ${rule}`;
+  const w = job.writes;
+  const drives = (w?.drives || []).map(
+    (d) =>
+      `${d.url}${d.draft ? ' (your writes stage in its Draft for the user to publish)' : ' (your writes go live)'}`
+  );
+  const may = [
+    ...(w?.notes ? ['the user’s Notes (writeNote)'] : []),
+    ...(w?.reader ? ['their Reader (followFeed, unfollowFeed, markPostsRead)'] : []),
+    ...(drives.length ? [`these drives with writeDriveFile, naming the drive: ${drives.join(', ')}`] : []),
+  ];
+  const change = may.length
+    ? `This Job may change ${may.join('; ')}. Change only what its prompt asks for, and say in your answer what you changed. Nothing else can be changed.`
+    : 'This Job changes nothing: it can only read.';
+  return `The Job: “${job.title}”. ${rule} ${change}`;
 }
 
 // One plain completion for Nomad's own background work (hyper/auto-names.js): no tools, no
@@ -688,7 +747,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     // The user's own AI (see chat()): their names, Notes, Reader and other Drives.
     personal,
     tab: !!currentTab,
-    job: !!job,
+    // A Job's turn: its write grants add those capabilities (ADR-0030).
+    job: job ? { extra: job.extra || [] } : false,
     // The user's saved secrets, by name (ADR-0033): the sidebar, the phone and Jobs, never a page.
     secrets: rules.secrets,
     // remember and forget, while AI memory is on (ADR-0032).
@@ -724,7 +784,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     offerTools && canControlPage ? PAGE_CONTROL_PROMPT : '',
     // A remote turn's writes stage into a Draft. Without this the model reads back the published
     // file, doubts its own edit and tells the user the phone can't edit.
-    offerTools && opts.draft ? DRAFT_PROMPT : '',
+    offerTools && opts.draft && !job ? DRAFT_PROMPT : '',
     // The AI Sidebar draws OpenUI Lang fenced in an answer (ADR-0027).
     opts.genUi ? genuiPrompt() : '',
     opts.context,
@@ -1012,9 +1072,11 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
   };
   // Whether a write to this drive stages in its Draft (ADR-0012) instead of going live: always on a
   // remote turn (`draft`), and on any turn while the drive's own Draft Mode is on (the AI Sidebar
-  // turns it on). The drive tools then read the Draft too, so the AI reads back what it wrote.
+  // turns it on). The drive tools then read the Draft too, so the AI reads back what it wrote. A
+  // Job's `draft` is per drive (a function of the drive's base URL), as its grants say.
+  const draftFor = (base) => (typeof draft === 'function' ? !!draft(base) : !!draft);
   const stagesInDraft = (base) =>
-    writeStagesInDraft(ctx, base, draft ? { draft: true } : {}).catch(() => false);
+    writeStagesInDraft(ctx, base, draftFor(base) ? { draft: true } : {}).catch(() => false);
   const readOpts = (staged) => (staged ? { draft: true } : {});
 
   // The user's Notes and Reader (ai-vault.ts): a personal turn only, each after its permission.
@@ -1196,7 +1258,7 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
       // `draft:true` (remote AI edits) stages into the Drive's Vault-hosted Draft instead of writing
       // the live Drive, so the change is reviewable/publishable (ADR-0012). So does a write while
       // the Drive's own Draft Mode is on.
-      await fsAPI.writeFile.call(ctx, target, args.content, draft ? { draft: true } : {});
+      await fsAPI.writeFile.call(ctx, target, args.content, draftFor(base) ? { draft: true } : {});
       // The 'write' event makes an undo Checkpoint, and tells an editor that shows this drive to
       // reload. It names the drive: the user's own AI can write to any of the user's drives.
       if (emitter) {

@@ -28,6 +28,13 @@ import {
   hashSource,
   noteSourceChange,
   jobWork,
+  normalizeWrites,
+  writeCaps,
+  writePermissions,
+  writesInDraft,
+  addedWrites,
+  describeWrites,
+  MAX_WRITE_DRIVES,
   promptWithResult,
   MAX_MODULE,
 } from '../../shared/jobs.mjs';
@@ -493,5 +500,105 @@ describe('drive sources', () => {
     expect(() => jobWork(live, { module: null, prompt: null })).toThrow(/no job\.js or job\.md/);
     expect(jobWork({ prompt: 'Just a prompt' })).toEqual({ module: null, prompt: 'Just a prompt' });
     expect(promptWithResult('Sum it up', '{"n":2}')).toContain('```\n{"n":2}\n```');
+  });
+});
+
+describe('write grants', () => {
+  const A = 'a'.repeat(64);
+  const B = 'b'.repeat(64);
+
+  it('tidies drives to hyper://<key>/ and drops the empty grant', () => {
+    expect(normalizeWrites(null)).toBe(null);
+    expect(normalizeWrites({ drives: [], notes: false })).toBe(null);
+    expect(
+      normalizeWrites({
+        drives: [`hyper://${A.toUpperCase()}/posts/x.md`, { url: `hyper://${B}`, draft: true }, `hyper://${A}/`],
+        notes: 1,
+      })
+    ).toEqual({
+      drives: [
+        { url: `hyper://${A}/`, draft: false },
+        { url: `hyper://${B}/`, draft: true },
+      ],
+      notes: true,
+      reader: false,
+    });
+  });
+
+  it('takes only drives by key, and only so many', () => {
+    expect(() => normalizeWrites({ drives: ['https://example.com/'] })).toThrow(/hyper:\/\/<key>/);
+    expect(() => normalizeWrites({ drives: ['blog'] })).toThrow(/isn’t a drive/);
+    expect(() => normalizeWrites('everything')).toThrow(/drives\?, notes\?, reader\?/);
+    const many = Array.from({ length: MAX_WRITE_DRIVES + 1 }, (_, i) => `hyper://${String(i).padStart(64, 'c')}/`);
+    expect(() => normalizeWrites({ drives: many })).toThrow(/at most/);
+  });
+
+  it('turns grants into capabilities and permissions, and nothing else', () => {
+    const w = normalizeWrites({ drives: [{ url: `hyper://${A}/`, draft: true }], notes: true });
+    expect(writeCaps(w)).toEqual(['writeNote']);
+    expect(writeCaps(normalizeWrites({ reader: true }))).toEqual(['followFeed', 'unfollowFeed', 'markPostsRead']);
+    expect(writeCaps(null)).toEqual([]);
+    expect(writePermissions(w)).toEqual(['notesWrite', `modifyDrive:${A}`]);
+    expect(writePermissions(null)).toEqual([]);
+  });
+
+  it('stages only the drives granted in a Draft', () => {
+    const w = normalizeWrites({ drives: [{ url: `hyper://${A}/`, draft: true }, `hyper://${B}/`] });
+    expect(writesInDraft(w, `hyper://${A}`)).toBe(true);
+    expect(writesInDraft(w, `hyper://${A}/`)).toBe(true);
+    expect(writesInDraft(w, `hyper://${B}`)).toBe(false);
+    expect(writesInDraft(null, `hyper://${A}`)).toBe(false);
+  });
+
+  it('finds what a change adds: a new grant, or a drive moved from its Draft to live', () => {
+    const prev = normalizeWrites({ drives: [{ url: `hyper://${A}/`, draft: true }], notes: true });
+    expect(addedWrites(prev, prev)).toBe(null);
+    expect(addedWrites(prev, normalizeWrites({ notes: true }))).toBe(null);
+    expect(addedWrites(prev, normalizeWrites({ drives: [`hyper://${A}/`], notes: true }))).toEqual({
+      drives: [{ url: `hyper://${A}/`, draft: false }],
+      notes: false,
+      reader: false,
+    });
+    expect(addedWrites(null, normalizeWrites({ reader: true }))).toEqual({ drives: [], notes: false, reader: true });
+  });
+
+  it('says what a Job can change in words', () => {
+    const w = normalizeWrites({ drives: [{ url: `hyper://${A}/`, draft: true }, `hyper://${B}/`], reader: true });
+    expect(describeWrites(w, (url) => (url.includes(A) ? 'My blog' : null))).toEqual([
+      'your Reader (follow, unfollow, mark read)',
+      'My blog (in a Draft)',
+      `hyper://${B.slice(0, 8)}…/`,
+    ]);
+    expect(describeWrites(null)).toEqual([]);
+  });
+
+  it('keeps a Job’s grants until it is given new ones or none', () => {
+    const job = makeJob({ id: 'job-w-1', title: 'Blog', prompt: 'Write it', writes: { drives: [`hyper://${A}/`] } });
+    expect(job.writes).toEqual({ drives: [{ url: `hyper://${A}/`, draft: false }], notes: false, reader: false });
+    expect(makeJob({ title: 'Blog 2' }, job).writes).toEqual(job.writes);
+    expect(makeJob({ writes: null }, job).writes).toBe(undefined);
+    expect(makeJob({ id: 'job-w-2', title: 'Read only', prompt: 'x' }).writes).toBe(undefined);
+  });
+
+  it('records what a run changed', () => {
+    const job = makeJob({ id: 'job-w-1', title: 'Blog', prompt: 'Write it' });
+    const run = makeRun({
+      id: 'r1',
+      job,
+      startedAt: 0,
+      finishedAt: 1,
+      status: 'ok',
+      output: 'Done',
+      changes: [
+        { drive: `hyper://${A}`, path: '/posts/x/post.md', draft: true },
+        { tool: 'writeNote', summary: 'Wrote “Digest”' },
+        { nonsense: true },
+      ],
+    });
+    expect(run.changes).toEqual([
+      { drive: `hyper://${A}/`, path: '/posts/x/post.md', draft: true },
+      { tool: 'writeNote', summary: 'Wrote “Digest”' },
+    ]);
+    expect(makeRun({ id: 'r2', job, startedAt: 0, finishedAt: 1, status: 'ok', output: '' }).changes).toBe(undefined);
   });
 });

@@ -54,10 +54,11 @@ and the UI is My Library → Secrets (`app/userland/library/js/views/secrets.js`
      box. A deleted Job's grants go with it.
    - **A page's `nomad.ai.chat()`** and **another program through the loopback MCP** get neither
      capability.
-7. **A Job still changes nothing in Nomad, and changes things on the web only with a secret.** In a
+7. **A Job changes in Nomad only what it was given, and things on the web only with a secret.** In a
    Job, `httpRequest` with any method but GET or HEAD must carry one of the Job's secrets, so prompt
    text a Job reads can't make it post the user's Notes to a site the text names. (A GET to anywhere is
-   the same as `fetchUrl` today.) Jobs that edit drives and pages are separate work.
+   the same as `fetchUrl` today.) What a Job may change in Nomad (drives, Notes, Reader) is its own
+   grant, `writes` (ADR-0030 item 9).
 8. **Not this computer, and the local network only with a secret for it.** `httpRequest` never
    connects to loopback (`127.0.0.0/8`, `::1`). That's where the loopback MCP listens, and a request to
    it would get a Job out of its stage. Private, link-local and CGNAT addresses (the user's router, a

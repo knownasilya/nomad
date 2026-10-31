@@ -186,12 +186,18 @@ export interface JobRun {
   type: 'nomad/job-run'; id: string; jobId: string; title: string; device: string | null
   trigger: 'schedule' | 'manual'; startedAt: string; finishedAt: string; status: 'ok' | 'error'
   output: string; error?: string; notification: { title: string; body: string } | null
+  // What the run changed: a file it wrote in a drive (in its Draft or live), or a Note or Reader change.
+  changes?: ({ drive: string; path: string; draft: boolean } | { tool: string; summary: string })[]
 }
 export interface Job {
   type: 'nomad/job'; id: string; title: string; prompt: string; schedule: JobSchedule
   // A Job from a drive: live runs the user's own drive's latest files, otherwise a copy; newer: the
   // drive has a version the user hasn't taken (on the computer, in My Library → Jobs).
   source: { url: string; live: boolean; copiedAt: string | null; newer: boolean } | null
+  // What it may change with nobody watching (drives, live or in a Draft; Notes; Reader), and that in
+  // words from the backend.
+  writes?: { drives: { url: string; draft: boolean }[]; notes: boolean; reader: boolean } | null
+  canChange: string[]
   notify: 'always' | 'auto' | 'never'; enabled: boolean; device: string | null; space: string | null
   createdAt: string; updatedAt: string
   // Worked out by the backend: the newest run, when it next runs, the schedule in words, the name of

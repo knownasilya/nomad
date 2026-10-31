@@ -25,7 +25,7 @@ const callerSpace = (ctx) => vaultApps.spaceKey(ctx).catch(() => null);
 import * as mods from '../../ui/mods';
 import * as openTabs from '../../ui/open-tabs';
 import * as jobs from '../../ai/jobs';
-import { readJobSource } from './job-source';
+import { driveTitle, readJobSource, resolveJobWrites } from './job-source';
 import { PRESETS } from '../../../../shared/mods.mjs';
 import { searchMemories, MAX_MEMORIES } from '../../../../shared/ai-memory.mjs';
 import * as aiMemory from '../../ai/memory';
@@ -444,16 +444,30 @@ export default {
   },
 
   // AI Jobs (bg/ai/jobs.js, ADR-0030): My Library → Jobs. Each Job comes with its newest run, when
-  // it next runs, whether it is running here now, and the name of the Device that runs it.
+  // it next runs, whether it is running here now, the name of the Device that runs it, and the
+  // title of each drive it may write.
   async listJobs() {
     const [own, devices] = await Promise.all([
       jobs.ownKey().catch(() => null),
       vault.listDevices().catch(() => []),
     ]);
     const names = new Map((devices || []).map((d) => [d.key, d.name]));
+    const list = jobs.list();
+    const urls = [...new Set(list.flatMap((j) => (j.writes?.drives || []).map((d) => d.url)))];
+    const titles = new Map(
+      await Promise.all(urls.map(async (u) => [u, await driveTitle(u).catch(() => null)] as const))
+    );
     return {
-      jobs: jobs.list().map((j) => ({
+      jobs: list.map((j) => ({
         ...j,
+        ...(j.writes
+          ? {
+              writes: {
+                ...j.writes,
+                drives: (j.writes.drives || []).map((d) => ({ ...d, title: titles.get(d.url) || '' })),
+              },
+            }
+          : {}),
         when: describeSchedule(j.schedule),
         here: !!own && j.device === own,
         deviceName: j.device === own ? 'This computer' : names.get(j.device) || 'Another device',
@@ -466,27 +480,39 @@ export default {
     return jobs.runsOf(id);
   },
 
-  // ({ id?, title?, prompt?, source?, schedule?, notify?, enabled?, runHere? }) -> record. A new Job
-  // runs on this Device and reads the Reader of the calling page's Space. `source` is a drive URL
-  // to read now (the user's own drive stays live, anyone else's is copied), { url, module, prompt }
+  // ({ id?, title?, prompt?, source?, writes?, schedule?, notify?, enabled?, runHere? }) -> record. A
+  // new Job runs on this Device and reads the Reader of the calling page's Space. `source` is a drive
+  // URL to read now (the user's own drive stays live, anyone else's is copied), { url, module, prompt }
   // for a newer version the user looked at (from checkJobSource) and took, or null to drop it.
+  // `writes` is what the Job may change ({ drives: [url | { url, draft }], notes, reader }, null for
+  // nothing); the user sets it here, in their own Library, so it isn't asked again.
   async saveJob(fields) {
     const f = fields || {};
     let space;
-    if (!f.id) {
-      try {
-        space = await vaultApps.spaceKey(this);
-      } catch {}
-    }
+    try {
+      space = await vaultApps.spaceKey(this);
+    } catch {}
     const { id, title, prompt, schedule, notify, enabled, runHere } = f;
     let source;
     if (f.source === null) source = null;
-    else if (typeof f.source === 'string') source = await readJobSource(f.source);
+    else if (typeof f.source === 'string') source = await readJobSource(f.source, space || null);
     else if (f.source && typeof f.source === 'object') {
       const { url, module = null, prompt: text = null } = f.source;
       source = { url, live: false, module, prompt: text };
     }
-    return jobs.save({ id, title, prompt, source, schedule, notify, enabled, runHere: !!runHere, space });
+    const writes = f.writes === undefined ? undefined : await resolveJobWrites(f.writes, space || null);
+    return jobs.save({
+      id,
+      title,
+      prompt,
+      source,
+      writes,
+      schedule,
+      notify,
+      enabled,
+      runHere: !!runHere,
+      space: f.id ? undefined : space,
+    });
   },
 
   // A schedule as the Jobs editor has it (an object, a phrase or cron), checked: { schedule, when,

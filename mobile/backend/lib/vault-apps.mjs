@@ -494,6 +494,17 @@ async function deviceNames (base) {
   return (key) => (key && key === own ? 'This phone' : names.get(key) || 'A removed device')
 }
 
+// The user's own name for a drive (hyper://<key>/), from their Names, or null.
+async function driveNamer (base) {
+  const recs = await namesIn(base, null).catch(() => [])
+  const byDrive = new Map()
+  for (const r of recs) {
+    const m = /^hyper:\/\/([0-9a-z]{52,64})\/?$/i.exec(String(r.url || ''))
+    if (m && !byDrive.has(m[1].toLowerCase())) byDrive.set(m[1].toLowerCase(), r.title || r.name)
+  }
+  return (url) => byDrive.get((/^hyper:\/\/([^/]+)/i.exec(url) || [])[1]?.toLowerCase()) || null
+}
+
 // Every Job with its newest run, when it next runs, its schedule in words, and its Device's name.
 export async function listJobs (base) {
   await boundedUpdate(base)
@@ -503,9 +514,12 @@ export async function listJobs (base) {
     deviceNames(base)
   ])
   const requested = new Set((await readPrefix(base, jl.REQUESTS_PREFIX)).filter(jl.isRequest).map((r) => r.jobId))
+  const driveName = await driveNamer(base)
   return {
     jobs: jl.jobsWithRuns(jobs, runs).map((j) => ({
       ...j,
+      // What the Job may change, in words, with the user's name for each drive when they have one.
+      canChange: jl.describeWrites(j.writes, driveName),
       // Where a drive Job comes from, without its copied files: the phone shows only that.
       source: j.source
         ? { url: j.source.url, live: !!j.source.live, copiedAt: j.source.copiedAt || null, newer: !!j.source.changed }

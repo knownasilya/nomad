@@ -404,9 +404,12 @@ the phone. Jobs, runs and the phone's "run now" requests are Vault records (`/.v
 `/.vault/job-runs/<jobId>/`, `/.vault/job-requests/`; rules, schedules and notification logic in
 `shared/jobs.mjs`, tests `tests/unit/jobs.test.js`). `app/bg/ai/jobs.js` keeps them in memory, runs
 the Jobs whose `device` is this one when due (and once on wake), and saves each run; `main.js`
-injects the turn (`runJobTurn` in `ai.ts`). A run is the `job` stage: personal, no tab, reads only
-(`JOB_CAPS` in `search-execute.mjs`), no permission prompts (`jobPermit`), this Device's runtime
-only. The AI gets `listJobs`/`saveJob`/`runJob`/`deleteJob` (`jobsRead`/`jobsWrite`) and, inside a
+injects the turn (`runJobTurn` in `ai.ts`). A run is the `job` stage: personal, no tab, reads
+(`JOB_CAPS` in `search-execute.mjs`) plus only the writes the Job was given, no permission prompts
+(`jobPermitFor`), this Device's runtime only. A Job's `writes` (`shared/jobs.mjs` `normalizeWrites`:
+drives, each live or staged in its Draft; Notes; Reader) are chosen when it is made: in My Library,
+or by the AI's `saveJob`, which asks the user with the `jobWrites` permission for each grant it adds.
+A run records what it changed (`changes`). The AI gets `listJobs`/`saveJob`/`runJob`/`deleteJob` (`jobsRead`/`jobsWrite`) and, inside a
 Job, `notify`. Desktop UI is My Library → Jobs (`nomad.vault.listJobs`/…/`watchJobs`). The phone lists
 them (`mobile/components/Jobs.tsx`, `RPC_APPS` `jobs`) and posts local notifications with
 `expo-notifications` for new runs (`mobile/lib/useJobNotifications.ts`); there is no push server.

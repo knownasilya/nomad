@@ -316,6 +316,16 @@ export const PERMS = {
     dangerous: true,
     promptTrusted: true,
   },
+  // Write grants for an AI Job the AI saves (ADR-0030): the drives, Notes or Reader it may change
+  // with nobody watching. Asked each time the AI adds one; the param numbers it.
+  jobWrites: {
+    persist: false,
+    idempotent: false,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+    promptTrusted: true,
+  },
   // One file or folder of the user's private drive (hyper://private/), for a limited time. The
   // param is the path. Not persisted here: private-drive-guard.ts keeps the grant and ends it.
   privateRead: {
@@ -371,6 +381,7 @@ export const PERM_ICONS = {
   modsWrite: 'fas fa-magic',
   jobsRead: 'fas fa-clock',
   jobsWrite: 'fas fa-clock',
+  jobWrites: 'fas fa-clock',
   memoryWrite: 'fas fa-brain',
   privateRead: 'fas fa-lock',
   privateWrite: 'fas fa-lock',
@@ -467,6 +478,16 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Let the AI assistant see your AI Jobs and their results';
     case 'jobsWrite':
       return 'Let the AI assistant create, change and run your AI Jobs, which run prompts on a schedule, read your Notes and Reader, and notify your phone';
+    case 'jobWrites': {
+      const grants = Array.isArray(permOpts?.grants) ? permOpts.grants : [];
+      return html`<span
+        >Let the AI Job “${permOpts?.title || 'Untitled'}” change these on its own, with nobody watching:
+        <ul class="plan-steps">
+          ${grants.map((g) => html`<li>${g}</li>`)}
+        </ul>
+        <span class="plan-note">You can take this back in My Library → Jobs.</span></span
+      >`;
+    }
     case 'memoryWrite':
       return 'Let the AI assistant remember things about you for later chats, and forget them';
     case 'privateRead':

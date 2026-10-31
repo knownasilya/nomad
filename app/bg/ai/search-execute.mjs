@@ -530,8 +530,8 @@ export const CAPABILITIES = [
     description:
       'Create a Job (no `id`; `prompt` or `source` required) or change one (`id`; fields you leave out stay as they are). ' +
       "Each run, the AI gets `prompt` on its own, with no chat history and nobody watching, on this computer: write it as " +
-      'a complete instruction. A run can read the Notes, Reader, drives and the web, and send requests with the ' +
-      'secrets the user lets it use (My Library → Secrets); it changes nothing in Nomad. Its answer is ' +
+      'a complete instruction. A run can read the Notes, Reader, drives and the web, send requests with the ' +
+      'secrets the user lets it use (My Library → Secrets), and changes nothing in Nomad unless `writes` lets it. Its answer is ' +
       'saved for the user, and it can notify their phone. A Job can also come from a drive (`source`): its job.js runs ' +
       'first (an execute-style module with the same capabilities, getting { job, prompt, lastRun }), then the AI gets ' +
       'job.md with what the module returned; with no job.md, the module\'s result is the answer. `prompt` then adds to ' +
@@ -571,6 +571,28 @@ export const CAPABILITIES = [
             'notify, for "tell me if…" Jobs. "never": no notification. A failed run notifies unless "never".',
         },
         enabled: { type: 'boolean', description: 'Optional. On (default) or paused' },
+        writes: {
+          type: ['object', 'null'],
+          description:
+            'Optional. What the Job may change; without it a Job only reads. { "drives": [{ "url": "hyper://<key>/" or a ' +
+            'name, "draft": false }], "notes": true, "reader": true }. A drive lets it write files there with writeDriveFile ' +
+            '(to update a site, say); "draft": true stages its writes in the drive\'s Draft for the user to publish. "notes" ' +
+            'lets it write Notes; "reader" lets it follow, unfollow and mark posts read. Give only what the task needs. ' +
+            'Adding any of these asks the user. The whole object replaces the old one; null takes them all away.',
+          properties: {
+            drives: {
+              type: 'array',
+              items: {
+                anyOf: [
+                  { type: 'string' },
+                  { type: 'object', properties: { url: { type: 'string' }, draft: { type: 'boolean' } }, required: ['url'] },
+                ],
+              },
+            },
+            notes: { type: 'boolean' },
+            reader: { type: 'boolean' },
+          },
+        },
       },
       required: [],
     },
@@ -704,10 +726,12 @@ const TAB_DRIVE_ARG = {
 // `tab`: the turn has the user's current tab (the AI Sidebar, the phone's AI panel; ADR-0021). It
 // adds currentTab, and a write must name its drive.
 // `job`: the turn is one of the user's AI Jobs (ADR-0030). Of the personal capabilities it keeps only
-// JOB_CAPS, and it adds notify.
+// JOB_CAPS, and it adds notify. `job.extra` names the write capabilities the Job was granted
+// (shared/jobs.mjs writeCaps); writeDriveFile comes with allowWrite, which a drive grant turns on.
 // `secrets`: the turn may use the user's secrets (stages.mjs; ADR-0033). It adds listSecrets and
 // httpRequest.
 // `memory`: AI memory is on (the `ai_memory` setting, ADR-0032). It adds remember and forget.
+/** @param {{ allowWrite?: boolean, allowVision?: boolean, remote?: boolean, personal?: boolean, tab?: boolean, job?: false | { extra?: string[] }, secrets?: boolean, memory?: boolean }} [opts] */
 export function visibleCapabilities({
   allowWrite = true,
   allowVision = false,
@@ -718,6 +742,7 @@ export function visibleCapabilities({
   secrets = false,
   memory = false,
 } = {}) {
+  const jobExtra = job && Array.isArray(job.extra) ? job.extra : []
   return CAPABILITIES.filter((cap) => {
     if (cap.gates?.write && !allowWrite) return false
     if (cap.gates?.vision && !allowVision) return false
@@ -727,7 +752,9 @@ export function visibleCapabilities({
     if (cap.gates?.job && !job) return false
     if (cap.gates?.secrets && !secrets) return false
     if (cap.gates?.memory && !memory) return false
-    if (job && (cap.gates?.personal || cap.gates?.job) && !JOB_CAPS.has(cap.name)) return false
+    if (job && (cap.gates?.personal || cap.gates?.job) && !JOB_CAPS.has(cap.name) && !jobExtra.includes(cap.name)) {
+      return false
+    }
     return true
   }).map(({ namedDescription, tabDescription, ...cap }) => {
     if (!personal || !namedDescription) return cap
@@ -791,7 +818,7 @@ export function buildCatalog(opts) {
     remote,
     personal: !!personal,
     tab: !!personal && !!tab,
-    job: !!personal && !!job,
+    job: personal && job ? job : false,
     secrets: !!personal && !!secrets,
     memory: !!personal && !!memory,
   })
