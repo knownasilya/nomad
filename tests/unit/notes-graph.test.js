@@ -6,7 +6,7 @@ import { noteGraph, neighborIds, createLayout } from '../../app/userland/notes/j
 const note = (id, body, updatedAt = '2026-01-01T00:00:00.000Z') => ({ id, body, updatedAt });
 
 describe('noteGraph', () => {
-  it('links notes by [[title]] and by Markdown link, each pair once', () => {
+  it('links notes by [[title]] and by Markdown link, each pair once, both ways', () => {
     const g = noteGraph([
       note('a', '# Garden\n\nSee [[Seeds]] and [[seeds|the seeds]].'),
       note('b', '# Seeds\n\nBack to [Garden](Garden.md).'),
@@ -17,7 +17,16 @@ describe('noteGraph', () => {
       ['b', 'Seeds', 1],
       ['c', 'Tools', 0],
     ]);
-    expect(g.links).toEqual([{ source: 0, target: 1 }]);
+    expect(g.links).toEqual([{ source: 0, target: 1, both: true }]);
+  });
+
+  it('points a link from the note that holds it to the note it names', () => {
+    const g = noteGraph([note('a', '# A'), note('b', '# B\n\n[[A]] and [[A|again]]'), note('c', '# C\n\n[[B]]')]);
+    expect(g.links).toEqual([
+      { source: 1, target: 0, both: false },
+      { source: 2, target: 1, both: false },
+    ]);
+    expect(g.nodes.map((n) => n.degree)).toEqual([1, 2, 1]);
   });
 
   it('leaves out links to itself, to missing notes, and notes without an id', () => {
@@ -28,7 +37,7 @@ describe('noteGraph', () => {
 
   it('resolves a link by id too', () => {
     const g = noteGraph([note('a', '# A\n\n[[b]]'), note('b', '# B')]);
-    expect(g.links).toEqual([{ source: 0, target: 1 }]);
+    expect(g.links).toEqual([{ source: 0, target: 1, both: false }]);
     expect([...neighborIds(g, 'b')]).toEqual(['a']);
     expect([...neighborIds(g, 'missing')]).toEqual([]);
   });

@@ -22,6 +22,7 @@ body {
   --nts-graph-node: #8e8ea6;
   --nts-graph-node-ring: var(--bg-color--default);
   --nts-graph-link: rgba(60, 60, 90, 0.2);
+  --nts-graph-arrow: rgba(60, 60, 90, 0.42);
   --nts-graph-label: var(--text-color--light);
 
   /* The editor's colors (js/editor/index.js reads these). */
@@ -64,6 +65,7 @@ body {
     --nts-graph-grid: rgba(255, 255, 255, 0.06);
     --nts-graph-node: #8a8aa0;
     --nts-graph-link: rgba(200, 200, 230, 0.2);
+    --nts-graph-arrow: rgba(200, 200, 230, 0.4);
   }
 }
 
@@ -598,15 +600,29 @@ main {
 }
 
 .graph-link {
+  transition: opacity 0.15s;
+}
+
+.graph-link line {
   stroke: var(--nts-graph-link);
   stroke-width: 1.2px;
   vector-effect: non-scaling-stroke;
-  transition: opacity 0.15s, stroke 0.15s;
+  transition: stroke 0.15s;
 }
 
-.graph-link.hover {
+/* The arrowhead at the note a link points to (js/graph-view.js). */
+.graph-arrow {
+  fill: var(--nts-graph-arrow);
+  transition: fill 0.15s;
+}
+
+.graph-link.hover line {
   stroke: var(--nts-accent);
   stroke-width: 1.6px;
+}
+
+.graph-link.hover .graph-arrow {
+  fill: var(--nts-accent);
 }
 
 .graph-link.dim {
