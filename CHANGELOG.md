@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.30.0](https://github.com/knownasilya/nomad/compare/v1.29.0...v1.30.0) (2026-10-31)
+
+
+### Features
+
+* **ai:** an AI page with the sidebar's chats, memory and setup ([4ec6765](https://github.com/knownasilya/nomad/commit/4ec676555e482632c9415939c8146261d720a998))
+* **ai:** secrets the AI and Jobs use by name, without seeing them ([1e68d26](https://github.com/knownasilya/nomad/commit/1e68d26887c9c99151b63b07e61e7895c9277ec9))
+* **jobs:** let AI Jobs change drives, Notes and Reader they were given ([f581b9b](https://github.com/knownasilya/nomad/commit/f581b9b34ddb2ff4c226c0914a98672ca7caee51))
+* **notes:** bring the Notes canvas to the phone ([747df07](https://github.com/knownasilya/nomad/commit/747df070c4db4bcf2d0e348b274e56f1715b087e))
+* **notes:** keep a new note in the current Space ([132515b](https://github.com/knownasilya/nomad/commit/132515b93b41a77f514a6f3da55fb69dfe76cc0b))
+* **notes:** show which way each link points on the canvas ([4edb874](https://github.com/knownasilya/nomad/commit/4edb8742594ffdcc8ead0274ed03fc75f36a7fd0))
+* **reader:** a canvas of saved articles around their AI topics, on desktop and phone ([222d0c3](https://github.com/knownasilya/nomad/commit/222d0c3fc033b78bd9f810042ae8760a2798f758))
+* **reader:** follow RSS and Atom feeds, and sort their posts into topics ([873409f](https://github.com/knownasilya/nomad/commit/873409f55378da36d67116cd7029224f09e35a56))
+* **reader:** save any web page, sort it into topics with AI, and read it in a minimal view ([2cf01d7](https://github.com/knownasilya/nomad/commit/2cf01d793a9fa5d549db2d4ed0c8da20e6900722))
+
+
+### Bug Fixes
+
+* **mobile:** keep bottom sheets above the keyboard on Android ([e2b6f76](https://github.com/knownasilya/nomad/commit/e2b6f760c2081fdfc56d0201c38e5eb25fb965a2))
+* **mobile:** the top bar keeps still and the address stays readable when tapped ([5ceeac3](https://github.com/knownasilya/nomad/commit/5ceeac361b93b9c8c141f6fbeb2030a5d5d00e6f))
+* **reader:** point the no-AI note at nomad://ai/setup, where the AI settings moved ([4a17047](https://github.com/knownasilya/nomad/commit/4a17047c195725a0737af92364d6598a754a48fa))
+* **sidebar:** show a tooltip with the site's name and address on pinned tiles ([69a90ce](https://github.com/knownasilya/nomad/commit/69a90cefa138b4681778b6eb3795d570fc56eb41))
+* **site-info:** let the name and ask-to-edit forms submit ([973fc61](https://github.com/knownasilya/nomad/commit/973fc616fe855fa28d925061c43f20492a1e1c17))
+
 ## [1.29.0](https://github.com/knownasilya/nomad/compare/v1.28.0...v1.29.0) (2026-10-31)
 
 
