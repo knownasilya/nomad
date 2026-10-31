@@ -348,6 +348,16 @@ nomad://history → Tabs From Other Devices (`nomad.vault.listDeviceTabs`). The 
 `mobile/app/index.tsx` over `RPC_APPS` `tabs` and lists them under the tab grid. `sync_open_tabs`
 (Settings → Devices) and the phone's Settings switch turn it off per Device and delete the record.
 
+### Pinned pages (ADR-0032)
+
+A Space's pinned pages are `/nomad/pins.json` in its Root Drive (its Space Library when shared), the
+file the phone's home shortcuts and the new tab page already use. Desktop draws them as icon tiles at
+the top of the sidebar (`fg/shell-window/sidebar.js`; closed pins also show in the top bar,
+`tabs.js`). `app/bg/ui/space-pins.js` keeps them per Space and watches the drive; a pinned tab is
+bound to its pin by `pinUrl`, and `reconcileSpacePins` in `bg/ui/tabs/manager.js` unpins, binds and
+adopts tabs when the pins change. Rules: `shared/pins.mjs` (tests `tests/unit/pins.test.js`). Pin
+through `togglePinned` / `spacePins`, never by setting `tab.isPinned` alone, or the pin won't sync.
+
 ### Updating a computer from the phone (ADR-0031)
 
 The phone can ask one of the user's computers to install the newest release and restart. The phone

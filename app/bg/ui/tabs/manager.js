@@ -38,6 +38,8 @@ import hyper from '../../hyper/index';
 import * as drafts from '../../hyper/drafts';
 import * as names from '../../hyper/names';
 import * as mods from '../mods';
+import * as spacePins from '../space-pins';
+import { isPinnable, normalizePinUrl, reconcileTabs } from '../../../../shared/pins.mjs';
 import * as vault from '../../hyper/vault';
 
 const X_POSITION = 0;
@@ -105,6 +107,8 @@ class Tab extends EventEmitter {
     this.isHidden = opts.isHidden; // is this tab hidden from the user? used for the preloaded tab and background tabs
     this.isActive = false; // is this the active tab in the window?
     this.isPinned = Boolean(opts.isPinned); // is this tab pinned?
+    // The Space pin (space-pins.js) this pinned tab belongs to; null until bound.
+    this.pinUrl = (this.isPinned && opts.pinUrl) || null;
     this.groupId = opts.groupId || null;
     this.spaceId = opts.spaceId || getWindowActiveSpaceId(win);
     const activeSpace =
@@ -133,6 +137,7 @@ class Tab extends EventEmitter {
     return Object.assign(state, {
       isActive: this.isActive,
       isPinned: this.isPinned,
+      pinUrl: this.pinUrl,
       groupId: this.groupId,
       paneLayout: this.layout.state,
     });
@@ -146,6 +151,7 @@ class Tab extends EventEmitter {
       isActive: this.isActive || undefined,
       isSpaceActive: lastActiveTabBySpace[winId]?.[this.spaceId] === this || undefined,
       isPinned: this.isPinned,
+      pinUrl: this.pinUrl || undefined,
       groupId: this.groupId,
       spaceId: this.spaceId,
       partition: this.partition,
@@ -163,6 +169,7 @@ class Tab extends EventEmitter {
     if (snapshot.spaceId) this.spaceId = snapshot.spaceId;
     if (snapshot.partition !== undefined) this.partition = snapshot.partition;
     if (snapshot.groupId) this.groupId = snapshot.groupId;
+    if (this.isPinned && snapshot.pinUrl) this.pinUrl = snapshot.pinUrl;
     var stacks = Array.isArray(snapshot.stacks) ? snapshot.stacks : [];
     for (let stackSnapshot of stacks) {
       let panes = Array.isArray(stackSnapshot.panes) ? stackSnapshot.panes : [];
@@ -663,6 +670,8 @@ class Tab extends EventEmitter {
 export async function setup() {
   // A Space another Device added to the Vault (hyper/vault.js) appears in every window's Space list.
   vault.events.on('spaces-synced', () => emitReplaceStateAllWindows());
+  // A Space's pinned pages changed, here or on another Device (space-pins.js).
+  spacePins.events.on('changed', ({ spaceId }) => reconcileSpacePins(spaceId));
   // defaultUrl stays as the hardcoded 'nomad://desktop/'.
   // Per-space new tab URLs are resolved at the RPC call site (createTab).
 
@@ -908,6 +917,7 @@ export function create(
     // create a new tab
     tab = new Tab(win, {
       isPinned: opts.isPinned,
+      pinUrl: opts.pinUrl,
       initialPanes: opts.initialPanes,
       fromSnapshot: opts.fromSnapshot,
       quietLoad: opts.quietLoad,
@@ -1022,6 +1032,7 @@ export async function minimizeToBg(win, tab) {
   app.emit('custom-background-tabs-update', backgroundTabs);
 
   tab.isPinned = false;
+  tab.pinUrl = null;
   tab.isHidden = true;
   tab.browserWindow = undefined;
 
@@ -1283,19 +1294,94 @@ export function transferTabToWindow(tab, targetWindow) {
   }
 }
 
-export function togglePinned(win, tab) {
+// Pin or unpin a tab. A pin belongs to the tab's Space and syncs to the user's other Devices
+// (space-pins.js): the tab is bound to it, and the pin stays when the tab is closed.
+export function togglePinned(win, tab, at) {
   win = getTopWindow(win);
-  // move tab to the "end" of the pinned tabs within its space
+  if (tab.isPinned) {
+    const href = tab.pinUrl;
+    setTabPinned(win, tab, false);
+    if (href) {
+      spacePins.unpin(tab.spaceId, href).catch((err) => showPinError(win, err));
+    }
+  } else {
+    const href = normalizePinUrl(tab.url);
+    setTabPinned(win, tab, true, href);
+    spacePins.pin(tab.spaceId, href, tab.title, at).catch((err) => {
+      showPinError(win, err);
+      // Not pinned in the Space, so don't keep it pinned here either.
+      if (tab.isPinned && tab.pinUrl === href) setTabPinned(win, tab, false);
+    });
+  }
+}
+
+// Move a tab in or out of its Space's pinned tabs (the start of the Space's tab list).
+function setTabPinned(win, tab, pinned, pinUrl = null) {
   var tabs = getAll(win);
   var oldIndex = tabs.indexOf(tab);
-  var newIndex = indexOfLastPinnedTabInSpace(win, tab.spaceId);
-  if (oldIndex < newIndex) newIndex--;
-  tabs.splice(oldIndex, 1);
-  tabs.splice(newIndex, 0, tab);
-
-  // update tab state
-  tab.isPinned = !tab.isPinned;
+  if (oldIndex !== -1 && tab.isPinned !== pinned) {
+    // move tab to the "end" of the pinned tabs within its space
+    var newIndex = indexOfLastPinnedTabInSpace(win, tab.spaceId);
+    if (oldIndex < newIndex) newIndex--;
+    tabs.splice(oldIndex, 1);
+    tabs.splice(newIndex, 0, tab);
+  }
+  tab.isPinned = pinned;
+  tab.pinUrl = pinned ? pinUrl : null;
   emitReplaceState(win);
+}
+
+function showPinError(win, err) {
+  console.warn('[space-pins]', err);
+  if (win && !win.isDestroyed()) {
+    dialog
+      .showMessageBox(win, { type: 'warning', message: 'Could not change this Space’s pinned pages', detail: err?.message || String(err) })
+      .catch(() => {});
+  }
+}
+
+// A Space's pins changed (here, or on another Device): bind, unpin and migrate its pinned tabs in
+// every window, then redraw.
+function reconcileSpacePins(spaceId) {
+  if (!spacePins.isLoaded(spaceId)) return;
+  const hrefs = spacePins.forSpace(spaceId).map((p) => p.href);
+  const adopt = [];
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!activeTabs[win.id]) continue;
+    const spaceTabs = getAll(win).filter((t) => t.spaceId === spaceId);
+    const plan = reconcileTabs(spaceTabs, hrefs);
+    // A Space this Device can only view: leave its own pinned tabs as they are (they show as tiles
+    // of their own), since it can't add them to the Space's pins.
+    if (!spacePins.canWrite(spaceId)) {
+      plan.unpin = plan.unpin.filter((i) => spaceTabs[i].pinUrl);
+      plan.bind = [];
+      plan.add = [];
+    }
+    for (const { index, href } of plan.bind) spaceTabs[index].pinUrl = href;
+    for (const href of plan.add) {
+      const t = spaceTabs.find((t) => t.pinUrl === href);
+      adopt.push({ url: href, title: t?.title });
+    }
+    for (const index of plan.unpin) setTabPinned(win, spaceTabs[index], false);
+    emitReplaceState(win);
+  }
+  // Tabs pinned before the pins were read (or before pins synced at all) become the Space's pins.
+  if (adopt.length && spacePins.canWrite(spaceId)) {
+    spacePins.pinAll(spaceId, adopt).catch((err) => console.warn('[space-pins] adopt failed', err));
+  }
+}
+
+// Open a Space pin: its tab if one is open in this window, else a new pinned tab for it.
+export function openPin(win, href, { setActive: activate = true } = {}) {
+  win = getTopWindow(win);
+  href = normalizePinUrl(href);
+  const spaceId = getWindowActiveSpaceId(win);
+  const existing = getVisibleTabs(win).find((t) => t.isPinned && t.pinUrl === href);
+  if (existing) {
+    if (activate) setActive(win, existing);
+    return existing;
+  }
+  return create(win, href, { isPinned: true, pinUrl: href, spaceId, setActive: activate });
 }
 
 export async function loadPins(win) {
@@ -1470,6 +1556,9 @@ export function emitReplaceState(win) {
     spaces: spacesDb.getCachedAll(),
     activeSpace: getWindowActiveSpace(win),
     groups: getTabGroups(win),
+    // The active Space's pinned pages, [{ href, title }], drawn as tiles (space-pins.js).
+    pins: spacePins.forSpace(getWindowActiveSpaceId(win)),
+    pinsWritable: spacePins.canWrite(getWindowActiveSpaceId(win)),
   };
   emit(win, 'replace-state', state);
   triggerSessionSnapshot(win);
@@ -1631,6 +1720,41 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     backgroundTabs.splice(index, 1);
   },
 
+  // Space pins (space-pins.js), drawn as tiles at the top of the sidebar.
+  async openPin(href) {
+    openPin(getWindow(this.sender), href);
+  },
+
+  async pinTab(index, at) {
+    var win = getWindow(this.sender);
+    var tab = getByIndex(win, index);
+    if (tab && !tab.isPinned) togglePinned(win, tab, at);
+  },
+
+  async movePin(href, to) {
+    var win = getWindow(this.sender);
+    spacePins.move(getWindowActiveSpaceId(win), href, to).catch((err) => showPinError(win, err));
+  },
+
+  // The menu for a pin whose tab isn't open (an open one uses the tab's menu).
+  async showPinContextMenu(href) {
+    var win = getWindow(this.sender);
+    var spaceId = getWindowActiveSpaceId(win);
+    href = normalizePinUrl(href);
+    var menu = Menu.buildFromTemplate([
+      { label: 'Open', click: () => openPin(win, href) },
+      { label: 'Open in New Tab', click: () => create(win, href, { setActive: true }) },
+      { label: 'Copy Link', click: () => clipboard.writeText(href) },
+      { type: 'separator' },
+      {
+        label: 'Unpin',
+        enabled: spacePins.canWrite(spaceId),
+        click: () => spacePins.unpin(spaceId, href).catch((err) => showPinError(win, err)),
+      },
+    ]);
+    menu.popup({ window: win });
+  },
+
   async showTabContextMenu(index) {
     var win = getWindow(this.sender);
     var tab = getByIndex(win, index);
@@ -1673,6 +1797,8 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     var menu = Menu.buildFromTemplate([
       {
         label: tab.isPinned ? 'Unpin Tab' : 'Pin Tab',
+        // A pin is the Space's, so a Space this Device can only view can't take one.
+        enabled: tab.isPinned || (spacePins.canWrite(tab.spaceId) && isPinnable(tab.url)),
         click: () => togglePinned(win, tab),
       },
       { label: 'Pop Out Tab', click: () => popOutTab(tab) },
