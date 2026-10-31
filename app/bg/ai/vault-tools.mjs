@@ -4,11 +4,12 @@
 //
 // Only a personal turn (the user's own AI: the AI Sidebar, the phone's AI panel, the loopback MCP)
 // sees these, and each asks its own permission: reading and writing Notes, reading and changing
-// Reader (ADR-0019), and reading and changing Mods (ADR-0023) are six grants.
+// Reader (ADR-0019), reading and changing Mods (ADR-0023) and Jobs (ADR-0030), and changing what
+// the AI remembers (ADR-0032) are nine grants.
 //
 // No Electron imports.
 
-import { noteTitle, noteSnippet, sortNotes, makeResolver, findLinks, driveRoot } from '../../../shared/vault-apps.mjs'
+import { noteTitle, noteSnippet, sortNotes, makeResolver, findLinks, driveRoot, feedUrl } from '../../../shared/vault-apps.mjs'
 import { PRESETS, normalizeSite, describeMod } from '../../../shared/mods.mjs'
 import { describeSchedule, describeWrites, writePermissions } from '../../../shared/jobs.mjs'
 
@@ -30,6 +31,10 @@ export const VAULT_TOOL_PERMS = {
   saveJob: 'jobsWrite',
   runJob: 'jobsWrite',
   deleteJob: 'jobsWrite',
+  // What the AI remembers about the user (ADR-0032). Reading needs no grant: every memory is in the
+  // personal turn's prompt already.
+  remember: 'memoryWrite',
+  forget: 'memoryWrite',
 }
 
 export const VAULT_PERMS = [
@@ -41,6 +46,7 @@ export const VAULT_PERMS = [
   'modsWrite',
   'jobsRead',
   'jobsWrite',
+  'memoryWrite',
 ]
 
 // A Job's turn runs with nobody to ask (ADR-0030). Making the Job was the user's yes to it reading
@@ -95,7 +101,11 @@ export function askOncePerTurn(permit) {
 }
 
 function askedOnce(permission) {
-  return VAULT_PERMS.includes(permission) || String(permission).startsWith('modifyDrive:')
+  return (
+    VAULT_PERMS.includes(permission) ||
+    String(permission).startsWith('modifyDrive:') ||
+    String(permission).startsWith('aiSecretUse:')
+  )
 }
 
 function siteOf(sender) {
@@ -203,7 +213,7 @@ export async function loadFeedPosts(url, { readText, listKeys }) {
  */
 export function findPosts(feeds, read, { query, feed, unread, limit } = {}) {
   const readSet = new Set(read || [])
-  const only = feed ? driveRoot(feed) : null
+  const only = feed ? feedUrl(feed) : null
   return feeds
     .flatMap((f) => f.posts || [])
     .filter((p) => !only || p.feedUrl === only)

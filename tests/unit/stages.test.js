@@ -9,12 +9,12 @@ const resolve = (drive) => (drive === 'blog' ? BLOG : drive)
 
 describe('stages', () => {
   it('gives only the user\'s own AI personal data, and only the sidebar and the phone a tab', () => {
-    expect(stageRules('page')).toEqual({ personal: false, tab: false })
-    expect(stageRules('sidebar')).toEqual({ personal: true, tab: true })
-    expect(stageRules('phone')).toEqual({ personal: true, tab: true })
-    expect(stageRules('outside')).toEqual({ personal: true, tab: false })
-    expect(stageRules('job')).toEqual({ personal: true, tab: false })
-    expect(stageRules('anything else')).toEqual({ personal: false, tab: false })
+    expect(stageRules('page')).toEqual({ personal: false, tab: false, secrets: false })
+    expect(stageRules('sidebar')).toEqual({ personal: true, tab: true, secrets: true })
+    expect(stageRules('phone')).toEqual({ personal: true, tab: true, secrets: true })
+    expect(stageRules('outside')).toEqual({ personal: true, tab: false, secrets: false })
+    expect(stageRules('job')).toEqual({ personal: true, tab: false, secrets: true })
+    expect(stageRules('anything else')).toEqual({ personal: false, tab: false, secrets: false })
   })
 
   it('lets a remote Device be the phone panel or a page, nothing else', () => {

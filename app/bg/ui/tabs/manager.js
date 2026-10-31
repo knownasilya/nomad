@@ -23,6 +23,7 @@ import {
   setSidebarWidth,
   toggleSidebarCollapsed,
   toggleAiSidebarOpen,
+  setAiSidebarOpen,
   setAiSidebarWidth,
 } from '../windows';
 import { examineLocationInput } from '../../../lib/urls';
@@ -41,6 +42,7 @@ import * as mods from '../mods';
 import * as spacePins from '../space-pins';
 import { isPinnable, normalizePinUrl, reconcileTabs } from '../../../../shared/pins.mjs';
 import * as vault from '../../hyper/vault';
+import * as saveToReader from '../save-to-reader';
 
 const X_POSITION = 0;
 const Y_POSITION = 75;
@@ -1531,6 +1533,24 @@ export function openOrFocusDownloadsPage(win) {
   setActive(win, downloadsTab);
 }
 
+// The AI page (nomad://ai/chats) opens a chat in the AI Sidebar of its window: the sidebar opens
+// and switches to `sessionId`, or to a new chat when it's null (fg/shell-window/ai-sidebar.js).
+export function openAiSidebarChat(win, sessionId = null) {
+  win = getTopWindow(win);
+  if (!win) return;
+  setAiSidebarOpen(win, true);
+  emit(win, 'ai-open-chat', { sessionId: sessionId || null });
+}
+
+// A chat was renamed or deleted on the AI page: every window's sidebar refreshes its list, and one
+// showing a deleted chat starts a new one.
+export function emitAiChatsChanged(change = {}) {
+  for (let win of BrowserWindow.getAllWindows()) {
+    if (win.getParentWindow()) continue;
+    emit(win, 'ai-chats-changed', change);
+  }
+}
+
 export function emitReplaceStateAllWindows() {
   for (let win of BrowserWindow.getAllWindows()) {
     emitReplaceState(win);
@@ -2015,6 +2035,12 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     drafts.setPreview(driveKey, !drafts.isPreview(driveKey));
     pane.emitUpdateState();
     pane.webContents.reload();
+  },
+
+  // Save the page this tab shows to Reader (ADR-0033), as a read article.
+  async saveToReader(index) {
+    const pane = getByIndex(getWindow(this.sender), index)?.primaryPane;
+    if (pane?.webContents) await saveToReader.saveWebContents(pane.webContents);
   },
 
   // { hasDraft, previewing, changes:[{path,op,conflict}] } for the Drive shown in this tab.

@@ -155,7 +155,8 @@ describe('sharing a Space', () => {
 
   it('files a follow under its host, like the Vault does', () => {
     expect(sl.followHost(`hyper://${key('3')}/posts/`)).toBe(key('3'))
-    expect(sl.followHost('https://example.com')).toBe(null)
+    expect(sl.followHost('https://example.com/feed.xml')).toMatch(/^web-[0-9a-f]{16}$/) // an RSS feed
+    expect(sl.followHost('nomad://reader/')).toBe(null)
   })
 })
 

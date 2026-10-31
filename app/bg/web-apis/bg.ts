@@ -14,8 +14,10 @@ import hyperdebugManifest from './manifests/internal/hyperdebug';
 import sitedataManifest from './manifests/internal/sitedata';
 import watchlistManifest from './manifests/internal/watchlist';
 import vaultManifest from './manifests/internal/vault';
+import secretsManifest from './manifests/internal/secrets';
 import webmcpDevtoolsManifest from './manifests/internal/webmcp';
 import aiShellManifest from './manifests/internal/ai-shell';
+import aiChatsManifest from './manifests/internal/ai-chats';
 
 // internal apis
 import { WEBAPI as loggerAPI } from '../logger';
@@ -29,8 +31,10 @@ import hyperdebugAPI from './bg/hyperdebug';
 import { WEBAPI as sitedataAPI } from '../dbs/sitedata';
 import watchlistAPI from './bg/watchlist';
 import vaultAPI from './bg/vault';
+import secretsAPI from './bg/secrets';
 import webmcpDevtoolsAPI from './bg/webmcp-devtools';
 import aiShellAPI from './bg/ai-shell';
+import aiChatsAPI from './bg/ai-chats';
 import { WEBAPI as downloadsAPI } from '../ui/downloads';
 import { WEBAPI as beakerBrowserAPI } from '../browser';
 
@@ -98,8 +102,10 @@ export const setup = function () {
   rpc.exportAPI('sitedata', sitedataManifest, sitedataAPI, internalOnly);
   rpc.exportAPI('watchlist', watchlistManifest, watchlistAPI, internalOnly);
   rpc.exportAPI('vault', vaultManifest, vaultAPI, internalOnly);
+  rpc.exportAPI('secrets', secretsManifest, secretsAPI, internalOnly);
   rpc.exportAPI('webmcp-devtools', webmcpDevtoolsManifest, webmcpDevtoolsAPI, internalOnly);
   rpc.exportAPI('ai-shell', aiShellManifest, aiShellAPI, internalOnly);
+  rpc.exportAPI('ai-chats', aiChatsManifest, aiChatsAPI, internalOnly);
 
   // external apis
   rpc.exportAPI('ai', aiManifest, aiAPI, secureOnly('ai'));

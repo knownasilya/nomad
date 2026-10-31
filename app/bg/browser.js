@@ -670,7 +670,7 @@ export async function getDaemonStatus() {
   return hyperDaemon.getDaemonStatus();
 }
 
-// Settings → AI surfaces this so a keep-awake hold that is paused (on battery) or inert (a Linux
+// The AI page (nomad://ai/setup) surfaces this so a keep-awake hold that is paused (on battery) or inert (a Linux
 // session with no inhibit backend) is visible, instead of looking like a broken phone.
 export async function getAiKeepAwakeStatus() {
   return aiAwake.getStatus();

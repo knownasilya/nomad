@@ -54,6 +54,31 @@ export function prefersDarkText (bg: Rgb): boolean {
   return contrast(bg, BLACK) >= contrast(bg, WHITE)
 }
 
+// rgba(ink, alpha) laid over a color, as the screen draws it.
+export function blend (under: Rgb, ink: string, alpha: number): Rgb {
+  const [r, g, b] = ink.split(',').map(Number)
+  const mix = (top: number, bottom: number) => Math.round(top * alpha + bottom * (1 - alpha))
+  return { r: mix(r, under.r), g: mix(g, under.g), b: mix(b, under.b) }
+}
+
+// The highlight for selected text in the field (the address is all selected on focus): one that
+// shows against the field and keeps the text on it at 4.5:1. The app's blue first, as elsewhere,
+// then a lighter or darker shade, whichever the text needs.
+function selectionOn (field: Rgb, text: Rgb, accent: Rgb | null): string {
+  const away = luminance(text) < 0.5 ? '255,255,255' : '0,0,0'
+  const toward = luminance(text) < 0.5 ? '0,0,0' : '255,255,255'
+  const candidates: [string, number][] = [
+    ...(accent ? [[`${accent.r},${accent.g},${accent.b}`, 0.3] as [string, number]] : []),
+    [away, 0.45],
+    [toward, 0.12]
+  ]
+  for (const [ink, alpha] of candidates) {
+    const under = blend(field, ink, alpha)
+    if (contrast(under, text) >= 4.5 && contrast(under, field) >= 1.12) return `rgba(${ink},${alpha})`
+  }
+  return `rgba(${toward},0.12)`
+}
+
 // The browser's Theme with the bar's colors swapped for the site's. Only what the top bar draws
 // with changes; the accent stays the app's, unless it would vanish into the site's color.
 export function tintTheme (base: Theme, color: unknown): Theme {
@@ -73,6 +98,7 @@ export function tintTheme (base: Theme, color: unknown): Theme {
     inputBg: `rgba(${ink},${darkText ? 0.07 : 0.16})`,
     border: `rgba(${ink},${darkText ? 0.12 : 0.22})`,
     ripple: `rgba(${ink},${darkText ? 0.1 : 0.16})`,
+    selection: selectionOn(blend(rgb, ink, darkText ? 0.07 : 0.16), darkText ? BLACK : WHITE, accent),
     accent: accent && contrast(rgb, accent) >= 3 ? base.accent : (darkText ? '#000000' : '#ffffff'),
     trustBg: `rgba(${ink},0.1)`
   }

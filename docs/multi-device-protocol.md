@@ -68,8 +68,13 @@ like §1.1. `<space>` is a Space's Root Drive key: subscriptions are per Space, 
 | Path | Payload (JSON, stored inline) |
 |------|--------------|
 | `/.vault/reader/<space>/follows/<host>.json` | `{ url: 'hyper://<host>/', addedAt }` — one per subscribed Feed |
-| `/.vault/reader/<space>/read.json` | `{ read: [postUrl] }` — posts marked read, sorted |
+| `/.vault/reader/<space>/follows/web-<hash>.json` | `{ url: 'https://…', addedAt, kind: 'web' }` — a subscribed RSS or Atom feed (ADR-0033); `<hash>` is 16 hex from the feed URL (`hashUrl` in `shared/vault-apps.mjs`) |
+| `/.vault/reader/<space>/read.json` | `{ read: [postUrl] }` — hyper:// posts marked read, sorted |
+| `/.vault/reader/<space>/web-read.json` | `{ read: { [feedUrl]: [itemUrl] } }` — RSS and Atom items marked read, per followed feed. Kept apart from `read.json` because older clients prune that one to hyper:// URLs |
+| `/.vault/reader/<space>/post-topics/<id>.json` | `{ type: 'nomad/reader-post-topics', id, url, topics, topicsBy, updatedAt }` — a feed post's topics, from the AI or the user (ADR-0033); `id` is `hashUrl(url)`. `topics: []` means the AI looked and found none |
 | `/.vault/reader/<space>/imported.json` | `{ importedAt }` — the Space's old Reader file was copied in |
+| `/.vault/reader/<space>/articles/<id>.json` | a saved article (ADR-0033): `{ type: 'nomad/reader-article', id, url, title, site, excerpt, byline?, image?, publishedAt?, words, savedAt, readAt, topics, topicsBy, updatedAt }`; `id` is 16 hex from the URL (`shared/reader-articles.mjs`) |
+| `/.vault/reader/<space>/article-text/<id>.json` | `{ id, text }` — the article's readable text, written when it is saved |
 | `/.vault/notes/<id>.json` | `{ type: 'nomad/note', id, body, createdAt, updatedAt, conflictOf? }` |
 | `/.vault/space-lib/<space>/notes/<id>.json` | the same Note, kept only in that Space (ADR-0029) |
 

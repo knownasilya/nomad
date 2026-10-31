@@ -8,13 +8,17 @@
 //   job     — one of the user's AI Jobs, run by this Device on its schedule or by hand (ADR-0030). The
 //             user's own AI with no tab and nobody watching. It reads (search-execute.mjs JOB_CAPS) and
 //             changes only what the Job was given (shared/jobs.mjs writes).
+//
+// `secrets`: the turn may use the user's secrets by name (ADR-0033): the sidebar and the phone after
+// asking, a Job with the user's grant. Never a page's turn, and never another program through the
+// loopback MCP.
 
 const RULES = {
-  page: { personal: false, tab: false },
-  sidebar: { personal: true, tab: true },
-  phone: { personal: true, tab: true },
-  outside: { personal: true, tab: false },
-  job: { personal: true, tab: false },
+  page: { personal: false, tab: false, secrets: false },
+  sidebar: { personal: true, tab: true, secrets: true },
+  phone: { personal: true, tab: true, secrets: true },
+  outside: { personal: true, tab: false, secrets: false },
+  job: { personal: true, tab: false, secrets: true },
 }
 
 export function stageRules(stage) {

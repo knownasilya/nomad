@@ -23,6 +23,7 @@ import b4a from 'b4a';
 import * as vault from '../hyper/vault';
 import * as logLib from '../logger';
 import * as jl from '../../../shared/jobs.mjs';
+import * as secretStore from './secret-store';
 
 const logger = logLib.get().child({ category: 'ai', subcategory: 'jobs' });
 
@@ -180,6 +181,8 @@ export function remove(id) {
       await vault.delAppRecord(jl.requestPath(id)).catch(() => {});
     }
     await vault.delAppRecord(jl.jobPath(id));
+    // The secrets this Job could use on this computer (ADR-0033) stop being its.
+    await secretStore.dropJob(id).catch(() => {});
     jobs.delete(id);
     runs.delete(id);
     events.emit('changed');

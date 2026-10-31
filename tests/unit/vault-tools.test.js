@@ -32,8 +32,9 @@ const NOTES = [
 describe('vault tools: permissions', () => {
   it('gives every Notes, Reader and Mods capability one of its permissions', () => {
     // openTab is the user's own AI's too, but opens a tab: no Vault data, no Vault permission.
+    // Secrets (listSecrets, httpRequest) aren't Vault data: they ask per secret (ADR-0033).
     const gated = CAPABILITIES.filter(
-      (c) => c.gates?.personal && !c.gates?.tab && !c.namedDescription && c.name !== 'openTab'
+      (c) => c.gates?.personal && !c.gates?.tab && !c.gates?.secrets && !c.namedDescription && c.name !== 'openTab'
     ).map((c) => c.name);
     expect(gated.sort()).toEqual(Object.keys(VAULT_TOOL_PERMS).sort());
     expect([...new Set(Object.values(VAULT_TOOL_PERMS))].sort()).toEqual([...VAULT_PERMS].sort());

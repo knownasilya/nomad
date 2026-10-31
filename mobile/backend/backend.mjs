@@ -639,6 +639,8 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'reader' && action === 'follow') value = await vaultApps.follow(vault, space, args.url)
     else if (app === 'reader' && action === 'unfollow') value = await vaultApps.unfollow(vault, space, args.url)
     else if (app === 'reader' && action === 'saveRead') value = await vaultApps.saveRead(vault, space, args.add, args.loaded)
+    else if (app === 'reader' && action === 'parseFeed') value = vaultApps.parseFeed(args.url, args.text)
+    else if (app === 'reader' && action === 'markArticle') value = await vaultApps.markArticle(vault, space, args.id, args.read !== false)
     else if (app === 'notes' && action === 'list') value = await vaultApps.listNotes(vault, space)
     else if (app === 'notes' && action === 'save') value = await vaultApps.saveNote(vault, { id: args.id, body: args.body, baseUpdatedAt: args.baseUpdatedAt, inSpace: !!args.inSpace, space })
     else if (app === 'notes' && action === 'delete') value = await vaultApps.deleteNote(vault, args.id, space)

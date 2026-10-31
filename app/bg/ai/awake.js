@@ -204,7 +204,7 @@ export function createAwakeController({
       syncPoll();
     },
 
-    // Shown in Settings → AI so a gate that fires is visible rather than looking broken from the
+    // Shown on the AI page (nomad://ai/setup) so a gate that fires is visible rather than looking broken from the
     // phone. `paused` means: the user asked for keep-awake, and the battery gate is holding it off.
     getStatus() {
       const wantedByUser = held.has(REASON_PROVIDER);
@@ -222,7 +222,7 @@ export function createAwakeController({
 // Singleton holder.
 //
 // web-apis/bg/ai.ts constructs the controller (it owns the `electron` import) and registers it
-// here. A consumer that only needs to READ the status — bg/browser.js, for Settings → AI — then
+// here. A consumer that only needs to READ the status — bg/browser.js, for the AI page — then
 // imports THIS module, which depends on nothing, instead of reaching into the AI layer. Importing
 // ai.ts from browser.js would close an import cycle: browser → ai → ui/tabs/manager → ui/tabs/pane
 // → browser.

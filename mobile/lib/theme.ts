@@ -25,6 +25,7 @@ export interface Theme {
   warn: string // caution text and borders (desktop's warning amber)
   onAccent: string
   ripple: string // Android press ripple on rows and icon buttons
+  selection: string // selected text's highlight: see-through, so the text under it stays readable
   backdrop: string // dim behind sheets and dialogs
 }
 
@@ -53,6 +54,7 @@ const light: Theme = {
   warn: '#b9770e',
   onAccent: '#ffffff',
   ripple: 'rgba(0,0,0,0.08)',
+  selection: 'rgba(29,89,199,0.25)',
   backdrop: 'rgba(0,0,0,0.4)'
 }
 
@@ -75,6 +77,7 @@ const dark: Theme = {
   warn: '#e2b206', // --text-color--cert--warning
   onAccent: '#ffffff',
   ripple: 'rgba(255,255,255,0.1)',
+  selection: 'rgba(93,128,255,0.4)',
   backdrop: 'rgba(0,0,0,0.6)'
 }
 

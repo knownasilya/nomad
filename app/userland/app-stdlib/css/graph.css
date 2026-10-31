@@ -1,0 +1,168 @@
+/* The canvas of dots and lines (app-stdlib/js/graph/view.js), for nomad://notes, nomad://reader and
+   the phone's canvas page. An app sets the --graph-* variables on body (the phone's page sets them
+   from the app's theme). Without them it follows the app-stdlib tokens in light and dark: those that
+   come from a token fall back to it where they're used, so a token changed for dark mode on body
+   still reaches them.
+
+   Put the view in an element with class graph-surface: it draws the dot grid, which the view moves
+   and scales with the canvas. */
+
+:root {
+  --graph-grid: rgba(0, 0, 0, 0.07);
+  --graph-node: #8e8ea6;
+  --graph-link: rgba(60, 60, 90, 0.2);
+  --graph-arrow: rgba(60, 60, 90, 0.42);
+  --graph-accent: #4040e7;
+  --graph-hub: #0f8a83; /* a Reader topic */
+  --graph-feed: #c2621a; /* a Reader feed */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --graph-grid: rgba(255, 255, 255, 0.06);
+    --graph-node: #8a8aa0;
+    --graph-link: rgba(200, 200, 230, 0.2);
+    --graph-arrow: rgba(200, 200, 230, 0.4);
+    --graph-accent: #7b9fff;
+    --graph-hub: #3cc4b9;
+    --graph-feed: #f0a060;
+  }
+}
+
+.graph-surface {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--graph-bg, var(--bg-color--default, #fff));
+  background-image: radial-gradient(circle, var(--graph-grid) 1px, transparent 1.2px);
+  background-size: 24px 24px;
+}
+
+.graph-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.graph-svg.panning {
+  cursor: grabbing;
+}
+
+.graph-link {
+  transition: opacity 0.15s;
+}
+
+.graph-link line {
+  stroke: var(--graph-link);
+  stroke-width: 1.2px;
+  vector-effect: non-scaling-stroke;
+  transition: stroke 0.15s;
+}
+
+/* The arrowhead at the node a link points to. */
+.graph-arrow {
+  fill: var(--graph-arrow);
+  transition: fill 0.15s;
+}
+
+.graph-link.hover line {
+  stroke: var(--graph-accent);
+  stroke-width: 1.6px;
+}
+
+.graph-link.hover .graph-arrow {
+  fill: var(--graph-accent);
+}
+
+.graph-link.dim {
+  opacity: 0.35;
+}
+
+.graph-node {
+  cursor: pointer;
+  outline: none;
+  transition: opacity 0.15s;
+}
+
+.graph-svg.dragging-node,
+.graph-svg.dragging-node .graph-node {
+  cursor: grabbing;
+}
+
+.graph-node circle {
+  fill: var(--graph-node);
+  stroke: var(--graph-node-ring, var(--graph-bg, var(--bg-color--default, #fff)));
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+  transition: fill 0.15s, opacity 0.15s;
+}
+
+.graph-node text {
+  display: none;
+  fill: var(--graph-label, var(--text-color--light, #555));
+  font-size: 11px;
+  paint-order: stroke;
+  stroke: var(--graph-bg, var(--bg-color--default, #fff));
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.graph-svg.labels .graph-node text,
+.graph-node.hub text,
+.graph-node.current text,
+.graph-node.hover text,
+.graph-node.near text {
+  display: block;
+}
+
+/* Hubs: a Reader topic or feed, with its articles or posts around it. */
+.graph-node.hub circle {
+  fill: var(--graph-hub);
+}
+
+.graph-node.kind-feed circle {
+  fill: var(--graph-feed);
+}
+
+.graph-node.hub text {
+  fill: var(--graph-label-strong, var(--text-color--default, #222));
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Something already read. */
+.graph-node.muted circle {
+  opacity: 0.4;
+}
+
+.graph-node.near circle {
+  fill: var(--graph-accent);
+  opacity: 0.7;
+}
+
+.graph-node.current circle,
+.graph-node.hover circle {
+  fill: var(--graph-accent);
+  opacity: 1;
+}
+
+.graph-node.current text,
+.graph-node.hover text {
+  fill: var(--graph-label-strong, var(--text-color--default, #222));
+  font-weight: 600;
+}
+
+.graph-node.selected circle,
+.graph-node:focus-visible circle {
+  stroke: var(--graph-accent);
+  stroke-width: 3px;
+}
+
+.graph-node.dim {
+  opacity: 0.18;
+}

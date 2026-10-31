@@ -11,7 +11,7 @@
 //   a name like "gmail" by what it says about itself.
 // - This Device's AI runtime only (ai.ts completeText): it never borrows another Device's AI.
 // - Only with a Vault: setting a name would otherwise make one in the background.
-// - Settings → AI → "Name sites I visit often" (`ai_auto_names`) turns it off.
+// - The AI page (nomad://ai/setup) → "Name sites I visit often" (`ai_auto_names`) turns it off.
 
 import * as logLib from '../logger';
 import * as settingsDb from '../dbs/settings';

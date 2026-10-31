@@ -1,4 +1,4 @@
-// The AI's Notes, Highlights, Reader, Mods and Jobs capabilities (search-execute.mjs CAPABILITIES,
+// The AI's Notes, Highlights, Reader, Mods, Jobs and memory capabilities (search-execute.mjs CAPABILITIES,
 // ADR-0019, ADR-0023, ADR-0030): the
 // Vault and Drive reads and writes behind them. ai.ts executeTool calls runVaultTool on a personal turn only
 // (the user's own AI); each capability first asks its permission (vault-tools.mjs VAULT_TOOL_PERMS).
@@ -12,10 +12,12 @@ import * as vaultApps from './vault-apps';
 import { highlightForAi, assertCanHighlight } from '../../ui/highlights';
 import * as mods from '../../ui/mods';
 import * as jobs from '../../ai/jobs';
+import * as memory from '../../ai/memory';
 import { driveTitle, readJobSource, resolveJobWrites } from './job-source';
 import * as vault from '../../hyper/vault';
 import { addedWrites, describeSchedule, describeWrites } from '../../../../shared/jobs.mjs';
 import fsAPI from './fs';
+import * as webFeeds from './web-feeds';
 import {
   VAULT_TOOL_PERMS,
   findNotes,
@@ -79,6 +81,7 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
         id: id || undefined,
         body,
         baseUpdatedAt,
+        inSpace: true, // a new Note is kept in the turn's Space, as in the Notes app
         space: await readerSpace().catch(() => null),
       });
       return json({
@@ -95,8 +98,9 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
       return json(await highlightForAi(ctx.sender, args));
 
     case 'listReaderPosts': {
-      const { follows, read } = await vaultApps.readerOf(await readerSpace());
-      const only = args.feed ? apps.driveRoot(args.feed) : null;
+      const { follows, read: hyperRead, webRead } = await vaultApps.readerOf(await readerSpace());
+      const read = [...hyperRead, ...apps.webReadUrls(webRead)];
+      const only = args.feed ? apps.feedUrl(args.feed) : null;
       if (args.feed && !follows.includes(only))
         throw new Error("The user doesn't follow that feed in Reader");
       const roots = only ? [only] : follows;
@@ -121,15 +125,15 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
     }
 
     case 'followFeed': {
-      const root = apps.driveRoot(args.url);
-      if (!root) throw new Error("Pass the feed's hyper:// URL");
+      const root = apps.feedUrl(args.url);
+      if (!root) throw new Error("Pass the feed's hyper:// URL, or an RSS or Atom feed's URL");
       await vaultApps.followIn(await readerSpace(), root);
       return `Following ${root} in Reader`;
     }
 
     case 'unfollowFeed': {
-      const root = apps.driveRoot(args.url);
-      if (!root) throw new Error("Pass the feed's hyper:// URL");
+      const root = apps.feedUrl(args.url);
+      if (!root) throw new Error("Pass the feed's hyper:// URL, or an RSS or Atom feed's URL");
       await vaultApps.unfollowIn(await readerSpace(), root);
       return `Stopped following ${root} in Reader`;
     }
@@ -137,7 +141,18 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
     case 'markPostsRead': {
       const urls = Array.isArray(args.urls) ? args.urls.filter((u) => typeof u === 'string') : [];
       if (!urls.length) throw new Error('Pass the post URLs as `urls`');
-      await vaultApps.saveReadIn(await readerSpace(), urls);
+      const space = await readerSpace();
+      // An RSS or Atom item's mark is kept under the feed that lists it, so load those feeds.
+      const loaded = {};
+      if (urls.some((u) => !apps.driveRoot(u))) {
+        const { follows } = await vaultApps.readerOf(space);
+        for (const f of follows.filter(apps.isWebFeed)) {
+          try {
+            loaded[f] = (await webFeeds.loadWebFeed(f, { session: ctx?.sender?.session })).posts.map((p) => p.url);
+          } catch {}
+        }
+      }
+      await vaultApps.saveReadIn(space, urls, loaded);
       return `Marked ${urls.length} post${urls.length === 1 ? '' : 's'} read`;
     }
 
@@ -223,6 +238,24 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
       await jobs.remove(job.id);
       return `Deleted the Job “${job.title}” (${describeSchedule(job.schedule).toLowerCase()})`;
     }
+
+    // What the AI remembers about the user (bg/ai/memory.js, ADR-0032). A new memory that says what
+    // one already says is not saved twice.
+    case 'remember': {
+      if (!(await memory.isEnabled())) throw new Error('The user turned AI memory off');
+      const id = typeof args.id === 'string' && args.id ? args.id : undefined;
+      if (id && !memory.get(id)) throw new Error('No memory with that id');
+      const rec: any = await memory.save({ id, text: args.text, by: 'ai' });
+      if (rec.existed) return `Already remembered [${rec.id}]: ${rec.text}`;
+      return `${id ? 'Changed' : 'Remembered'} [${rec.id}]: ${rec.text}`;
+    }
+
+    case 'forget': {
+      const m = memory.get(args.id);
+      if (!m) throw new Error('No memory with that id');
+      await memory.remove(m.id);
+      return `Forgot: ${m.text}`;
+    }
   }
   throw new Error(`Unknown capability ${name}`);
 }
@@ -241,6 +274,15 @@ function readText(ctx, root, path) {
 }
 
 async function loadFeed(ctx, root): Promise<LoadedFeed> {
+  if (apps.isWebFeed(root)) {
+    // An RSS or Atom feed (ADR-0033 amendment).
+    try {
+      const f = await webFeeds.loadWebFeed(root, { session: ctx?.sender?.session });
+      return { url: root, title: f.title, posts: f.posts };
+    } catch (err) {
+      return { url: root, title: root, posts: [], error: err?.message || String(err) };
+    }
+  }
   let timer;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error('The feed did not answer')), FEED_TIMEOUT_MS);

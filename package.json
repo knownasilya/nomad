@@ -1,6 +1,6 @@
 {
   "name": "nomad",
-  "version": "1.28.0",
+  "version": "1.29.0",
   "description": "A peer-to-peer/decentralized web browser",
   "main": "index.js",
   "private": true,
@@ -15,6 +15,7 @@
     "release-version": "standard-version",
     "build": "node scripts/build.js",
     "build:note-editor": "node scripts/build-note-editor.mjs",
+    "build:canvas": "node scripts/build-canvas.mjs",
     "build:drive-templates": "node scripts/build-drive-templates.mjs",
     "burnthemall": "node scripts/tasks/burnthemall.js",
     "rebuild": "node scripts/tasks/rebuild.js",

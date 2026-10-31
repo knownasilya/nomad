@@ -205,6 +205,20 @@ bundled into `notes/js/main.build.js` by `scripts/build.js`, and into the phone'
 `mobile/lib/noteEditorHtml.ts` (committed) by **`npm run build:note-editor`** — rerun that after
 changing the editor or `shared/vault-apps.mjs`.
 
+### The canvas in Notes and Reader
+
+Notes and Reader each have a List / Canvas switch: dots and lines laid out by a small force
+simulation, with an arrowhead at the end a link points to. The canvas is shared:
+`app/userland/app-stdlib/js/graph/layout.js` (the layout), `view.js` (SVG drawing, pan, wheel and
+two-finger pinch zoom, tap to select on touch) and `app-stdlib/css/graph.css` (the `--graph-*`
+colors). Each app only builds its graph: `notes/js/graph.js` (`noteGraph`, notes and their links)
+and `reader/js/graph.js` (`readerGraph`: saved articles around their topic hubs, posts around their
+feed, a post joined to a topic its tags name). nomad://reader is not bundled, so it imports both
+the first time the canvas shows. The phone draws the same canvas in a WebView
+(`mobile/components/Canvas.tsx`) from `mobile/lib/canvasHtml.ts` (committed), which
+**`npm run build:canvas`** bundles from `app-stdlib/js/graph/phone.js`: rerun it after changing the
+canvas or either graph.
+
 ### Names (ADR-0018)
 
 The user's short names for Drives, app folders and URLs live in the Vault (`/.vault/names/`, rules in
@@ -282,7 +296,7 @@ Names are managed in My Library → Names and the site-info panel; the URL bar s
 `navigate` (`mobile/app/index.tsx`), like `loadURL` on desktop (ADR-0018 amendment). The AI also names a site the user visits a third time
 (`app/bg/hyper/auto-names.js`, rules in `shared/names.mjs`: `siteOf`, `nameAnchors`, `autoNameError`).
 The name must be spelled from the site's host (or a drive's title), it runs on this Device's runtime
-only (`completeText` in `ai.ts`), and the `ai_auto_names` setting (Settings → AI) turns it off.
+only (`completeText` in `ai.ts`), and the `ai_auto_names` setting (the AI page, `nomad://ai/setup`) turns it off.
 Such a record has `auto: true` until the user keeps or edits it (ADR-0018 amendment).
 
 ### Highlights (ADR-0020)
@@ -404,6 +418,37 @@ run first (`runJobTurn`/`runJobModule` in `ai.ts`, files read by `bg/web-apis/bg
 user's own drives are live; anyone else's is copied into the record, and a newer version waits for the
 user in My Library (`checkJobSource`). The AI must not be able to take it for them.
 
+### The AI page, chats and memory (ADR-0032)
+
+`nomad://ai` (`app/userland/ai/`, in the browser menu) is the AI's own page: `/chats`, `/memory`,
+`/setup` (the old Settings → AI; Settings' AI item and `?view=ai` now open it), and a link to My
+Library → Jobs. Chats are the sidebar's sessions in `hyper://private/.ai-chat/` (`app/bg/ai/chat-store.js`;
+search helpers in `chat-search.mjs`); a user's name for a chat lives in `/.ai-chat/names.json` because
+the sidebar rewrites `title` on every save. The page uses the internal `nomad.aiChats`
+(`bg/web-apis/bg/ai-chats.ts`): list/search, load, rename, remove, and open in the window's sidebar
+(`openAiSidebarChat` in `tabs/manager.js` → the shell's `ai-open-chat` event → `ai-sidebar.js`
+`openChat`). Memories are Vault records `/.vault/ai-memory/<id>.json` (rules in `shared/ai-memory.mjs`,
+cache in `app/bg/ai/memory.js`, page API `nomad.vault.listMemories`/`saveMemory`/`deleteMemory`/
+`clearMemories`). Every personal turn gets `memoryPrompt()` in its system prompt; the model changes
+them with the `remember`/`forget` capabilities (`gates: { personal, memory }`, not in `JOB_CAPS`),
+behind the `memoryWrite` permission. The `ai_memory` setting turns it all off. A page's
+`nomad.ai.chat()` never sees memories.
+
+### Secrets (ADR-0033)
+
+API keys and tokens the user's AI and Jobs use by name, without seeing them. They live on this
+computer only, encrypted with `safeStorage` (`app/bg/ai/secret-store.js`, `<userData>/ai-secrets.json`),
+never in the Vault, a drive or a Space. Rules are `app/bg/ai/secrets.mjs` (tests
+`tests/unit/secrets.test.js`). The model calls `httpRequest` with `secrets: ['NAME']`, and
+`app/bg/ai/http-request.mjs` adds each value where the user set it (a header, the query, a body field,
+or the whole URL), only for the secret's hosts. It never connects to loopback, and reaches private
+addresses only with a secret for that host. `executeTool` in `ai.ts` redacts every known value from
+every tool result (`[secret NAME]`). The sidebar and phone ask `aiSecretUse:<NAME>` once per turn. A
+Job uses only the secrets ticked for it on the secret (the local `jobs` list, not the Job record).
+`stageRules().secrets` keeps them from page turns and the loopback MCP's other programs. UI is My
+Library → Secrets over the internal `nomad.secrets` API (writes only from `nomad://library`). Never
+add an API that returns a value.
+
 ## Look and feel: every UI supports dark mode and matches the rest
 
 Every new or changed screen must work in light **and** dark, and look like its neighbours.
@@ -449,6 +494,11 @@ lands under the back/home buttons.
 - For a bottom sheet, use `mobile/components/BottomSheet.tsx`. It owns the Modal, the backdrop,
   close-on-tap-outside, and the bottom inset. Don't hand-build `<Modal transparent>` + a
   `justifyContent: 'flex-end'` backdrop.
+- The keyboard: a Modal is its own Android window, so React Native's `Keyboard` events never fire
+  for an input inside one, and edge-to-edge means it isn't resized either. `BottomSheet` keeps the
+  sheet above the keyboard with `components/KeyboardInset.tsx`, which reads the keyboard inset of
+  its own window (`modules/nomad-keyboard-inset`). Use it for any other Modal with an input low on
+  the screen; `Keyboard` listeners only work outside a Modal (`AiPanel`).
 - Anything else pinned to an edge outside a `SafeAreaView` (an overlay like `AiPanel`, a centered
   dialog that can grow tall) must apply `useSafeAreaInsets()` itself.
 - A full-screen `Modal` is safe when its content sits in a `SafeAreaView` with the right `edges`

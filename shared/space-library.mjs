@@ -1,7 +1,7 @@
 // nomad/shared/space-library.mjs
 //
 // Shared Spaces (ADR-0029): a Space's library in its own Autobase, the Space Library, shared with
-// other people. The paths, record builders and role rules both apps use. Pure: no imports.
+// other people. The paths, record builders and role rules both apps use. Pure: no I/O.
 //
 // A Space Library is an Autobase with the Drive reducer (shared/fs-core.mjs). Its records are inline
 // JSON at these paths:
@@ -9,7 +9,7 @@
 //   /index.json                                  { type: 'nomad/space', name, icon, color, createdAt }
 //   /drives.json                                 { drives: [...] }, the Space's Drive Registry
 //   /bookmarks/<slug>.json                       a bookmark { href, title }
-//   /reader/follows/<host>.json                  a Reader feed (shared/vault-apps.mjs followRecord)
+//   /reader/follows/<name>.json                  a Reader feed (shared/vault-apps.mjs followRecord, followName)
 //   /notes/<id>.json                             a Note (shared/vault-apps.mjs)
 //   /names/<name>.json                           a Name (shared/names.mjs)
 //   /.space/members/<memberId>.json              a Member
@@ -17,6 +17,8 @@
 //
 // A member's own Vault record for the Space (/.vault/spaces/<rootDriveKey>.json) gains `library`
 // (the Space Library key), `role` and `memberId`. Read marks stay in each person's Vault.
+
+import { followName } from './vault-apps.mjs';
 
 export const SPACE_TYPE = 'nomad/space';
 export const MEMBER_TYPE = 'nomad/space-member';
@@ -262,10 +264,14 @@ export function isSpaceIndex(rec) {
   return !!rec && rec.type === SPACE_TYPE && typeof rec.name === 'string';
 }
 
-// The host a follow record is filed under (the same file name as /.vault/reader/<space>/follows/).
+// The name a follow record is filed under (the same file name as /.vault/reader/<space>/follows/):
+// a drive's host, or web-<hash> for an RSS or Atom feed. Null for a record that isn't a feed.
 export function followHost(url) {
-  const m = /^hyper:\/\/([^/?#]+)\/?/i.exec(String(url || ''));
-  return m ? m[1].toLowerCase() : null;
+  try {
+    return followName(url);
+  } catch {
+    return null;
+  }
 }
 
 // Invites (ADR-0029 §4)

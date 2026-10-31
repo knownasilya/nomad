@@ -10,6 +10,7 @@ import { runDrivePropertiesFlow } from './util';
 import { isHyperOrPearUrl } from '../../lib/urls';
 import * as highlights from './highlights';
 import * as mods from './mods';
+import * as saveToReader from './save-to-reader';
 
 // NOTE
 // subtle but important!!
@@ -85,6 +86,12 @@ export default function registerContextMenu() {
           label: 'Save Link As...',
           click: downloadPrompt('linkURL', '.html'),
         });
+        if (saveToReader.canSave(props.linkURL) && saveToReader.canSave(props.pageURL)) {
+          menuItems.push({
+            label: 'Save Link to Reader',
+            click: () => saveToReader.saveLink(webContents, props.linkURL),
+          });
+        }
         menuItems.push({ type: 'separator' });
         menuItems.push({
           label: 'Open in Pane Right',
@@ -311,6 +318,13 @@ export default function registerContextMenu() {
         menuItems.push(createMenuItem('forward', { webContents, tab: targetTab }));
         menuItems.push(createMenuItem('reload', { webContents, tab: targetTab }));
         menuItems.push({ type: 'separator' });
+        if (saveToReader.canSave(props.pageURL)) {
+          menuItems.push({
+            label: 'Save Page to Reader',
+            click: () => saveToReader.saveWebContents(webContents),
+          });
+          menuItems.push({ type: 'separator' });
+        }
       }
 
       if (getAddedWindowSettings(targetWindow).isShellInterfaceHidden) {

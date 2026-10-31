@@ -11,7 +11,9 @@ import hyperdebugManifest from '../manifests/internal/hyperdebug';
 import sitedataManifest from '../manifests/internal/sitedata';
 import watchlistManifest from '../manifests/internal/watchlist';
 import vaultManifest from '../manifests/internal/vault';
+import secretsManifest from '../manifests/internal/secrets';
 import webmcpDevtoolsManifest from '../manifests/internal/webmcp';
+import aiChatsManifest from '../manifests/internal/ai-chats';
 
 export const setup = function (rpc) {
   const internal: any = {};
@@ -28,7 +30,9 @@ export const setup = function (rpc) {
   const sitedataRPC = rpc.importAPI('sitedata', sitedataManifest, opts);
   const watchlistRPC = rpc.importAPI('watchlist', watchlistManifest, opts);
   const vaultRPC = rpc.importAPI('vault', vaultManifest, opts);
+  const secretsRPC = rpc.importAPI('secrets', secretsManifest, opts);
   const webmcpRPC = rpc.importAPI('webmcp-devtools', webmcpDevtoolsManifest, opts);
+  const aiChatsRPC = rpc.importAPI('ai-chats', aiChatsManifest, opts);
 
   // attach APIs
   internal.browser = Object.assign({}, beakerBrowserRPC);
@@ -51,8 +55,12 @@ export const setup = function (rpc) {
   internal.vault = Object.assign({}, vaultRPC);
   internal.vault.watchPendingRequests = () => fromEventStream(vaultRPC.watchPendingRequests());
   internal.vault.watchAppData = () => fromEventStream(vaultRPC.watchAppData());
+  internal.secrets = Object.assign({}, secretsRPC);
+  internal.secrets.watch = () => fromEventStream(secretsRPC.watch());
   internal.webmcp = Object.assign({}, webmcpRPC);
   internal.webmcp.watch = () => fromEventStream(webmcpRPC.watch());
+  // The AI Sidebar's saved chats, for nomad://ai/chats.
+  internal.aiChats = Object.assign({}, aiChatsRPC);
 
   // internal.drives
   internal.drives = new EventTarget();

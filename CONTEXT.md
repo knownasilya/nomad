@@ -229,6 +229,12 @@ _Avoid_: invite, share
 The private, identity-level Collaborative Drive that indexes a single user's Spaces (by Root Drive key) and trusted Devices, and holds that user's in-flight Drafts, Reader Follows, and Notes. It is the root of trust for multi-device: every Device the user owns is a Writer of the Vault, and a new Device joins by pairing into it. Because every Device already writes the Vault, it is also where Drafts, Follows, and Notes live, so they sync privately across a user's Devices. Distinct from a Space — the Vault is the parent that ties one user's Spaces and Devices together.
 _Avoid_: account, identity, profile, keyring, sync base
 
+**Secret**:
+An API key, token or webhook URL the user saves for their AI and Jobs to use by name (`GITHUB_TOKEN`),
+with the hosts it may go to and where it goes in a request. Kept on one Device only, encrypted with the
+OS keychain, never in the Vault (ADR-0033). Nobody reads a value back: Nomad adds it to a request.
+_Avoid_: credential, password, API key (for the stored thing), env var
+
 **Device**:
 A single installation of Nomad holding its own keypair. A user's trusted Devices are all Writers of that user's Vault and of every Drive the Vault indexes, so any Device can edit anything the user owns. A Device is added by pairing into the Vault (see Writer Keys).
 _Avoid_: machine, client, peer, node, seat

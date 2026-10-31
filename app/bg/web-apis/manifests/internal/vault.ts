@@ -38,10 +38,21 @@ export default {
   watchSpaceShare: 'readable', // 'changed'
 
   // Reader and Notes data (bg/vault-apps.ts)
-  readerState: 'promise', // -> { follows, read, writable, linked } for the caller's Space
+  readerState: 'promise', // -> { follows, read, webRead, articles, postTopics, ai, writable, linked } for the caller's Space
   readerFollow: 'promise',
   readerUnfollow: 'promise',
   readerSaveRead: 'promise',
+  // Saved articles (bg/reader-articles.ts, ADR-0033): any web page, with topics the AI picks
+  readerSaveArticle: 'promise', // (url, { read? }) -> { article, state }
+  readerUpdateArticle: 'promise', // (id, { topics?, read? }) -> state
+  readerDeleteArticle: 'promise', // (id) -> state
+  readerSuggestTopics: 'promise', // (ids?) -> state; asks the AI now (untagged ones when no ids)
+  readerArticle: 'promise', // (id) -> { article, text } for the reading view
+  readerRefetchArticle: 'promise', // (id) -> { article, text }, after loading the page again
+  readerAddLink: 'promise', // (url) -> { followed?, article?, feeds?, state }: follows a feed, saves a page
+  readerWebFeed: 'promise', // (url, { fresh? }) -> { url, title, siteUrl, posts } for a followed RSS/Atom feed
+  readerTagPosts: 'promise', // (posts, urls?) -> state; the AI sorts recent feed posts into topics
+  readerSetPostTopics: 'promise', // (url, topics) -> state
   listNotes: 'promise', // -> { notes, space, spaceName, writable, linked }; each note has `space` (key or null)
   saveNote: 'promise', // ({ id?, body, baseUpdatedAt?, inSpace? }) -> note (a conflict copy on a conflict)
   moveNote: 'promise', // ({ id, inSpace }) -> note, moved into the caller's Space or out to every Space
@@ -60,6 +71,12 @@ export default {
   listMods: 'promise', // -> { mods, presets: [{ id, label, description }] }
   saveMod: 'promise', // ({ id?, name?, site?, enabled?, presets?, hide?, css?, js? }) -> record
   deleteMod: 'promise',
+
+  // AI memory (bg/ai/memory.js, ADR-0032): nomad://ai/memory
+  listMemories: 'promise', // ({ query? }) -> { memories: [{ id, text, by, createdAt, updatedAt }], enabled, max }
+  saveMemory: 'promise', // ({ id?, text }) -> record; a user's edit, so `by` is 'user'
+  deleteMemory: 'promise', // (id)
+  clearMemories: 'promise', // () -> how many were deleted
 
   // AI Jobs (bg/ai/jobs.js, ADR-0030)
   listJobs: 'promise', // -> { jobs: [{ ...job, lastRun, nextRunAt, running, here, deviceName }] }
