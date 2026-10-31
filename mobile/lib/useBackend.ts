@@ -44,6 +44,7 @@ import {
   RPC_AI_PROMPT_RESULT,
   RPC_AI_STEER,
   RPC_AI_UNSTEER,
+  RPC_AI_STEER_NOW,
   RPC_AI_EVENT,
   RPC_APPS,
   RPC_APPS_RESULT,
@@ -230,11 +231,13 @@ export interface AiChatHandlers {
 }
 // steer: a message the user sent while the turn runs; the AI reads it at its next step. A message
 // that gets no onSteer before onDone (an older Provider, or the turn was ending) is the caller's to
-// send as the next turn. unsteer takes one back, if the AI hasn't read it yet.
+// send as the next turn. unsteer takes one back, if the AI hasn't read it yet. steerNow sends a
+// queued one now: the Provider stops the model call in flight and reads it at once.
 export interface AiChatHandle {
   cancel: () => void
   steer: (id: string, text: string) => void
   unsteer: (id: string) => void
+  steerNow: (id: string) => void
 }
 
 // Boots the Bare worklet (the P2P backend) once and wires up RPC. The returned
@@ -396,7 +399,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
   function aiChat (messages: unknown[], opts: Record<string, unknown>, h: AiChatHandlers): AiChatHandle {
     const rpc = rpcRef.current
     const reqId = `ai_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
-    if (!rpc) { h.onError?.('backend not ready'); return { cancel () {}, steer () {}, unsteer () {} } }
+    if (!rpc) { h.onError?.('backend not ready'); return { cancel () {}, steer () {}, unsteer () {}, steerNow () {} } }
 
     // A turn can legitimately run for minutes (model load, tool round-trips) and the user will
     // background the app mid-answer, so hold the backend awake until it settles.
@@ -440,6 +443,10 @@ export function useBackend (handlers: BackendHandlers): Backend {
       },
       unsteer (steerId: string) {
         const r = rpc.request(RPC_AI_UNSTEER)
+        r.send(b4a.from(JSON.stringify({ reqId, steerId })))
+      },
+      steerNow (steerId: string) {
+        const r = rpc.request(RPC_AI_STEER_NOW)
         r.send(b4a.from(JSON.stringify({ reqId, steerId })))
       }
     }

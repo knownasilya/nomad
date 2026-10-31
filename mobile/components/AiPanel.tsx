@@ -230,6 +230,12 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
     startTurn([...messages, userMsg])
   }
 
+  // Send now: the Provider stops the AI's current step, and it reads this message at once.
+  const sendNow = (id: string) => {
+    setQueued(queuedRef.current.map((q) => (q.id === id ? { ...q, now: true } : q)))
+    handleRef.current?.steerNow(id)
+  }
+
   const unqueue = (id: string) => {
     setQueued(queuedRef.current.filter((q) => q.id !== id))
     handleRef.current?.unsteer(id)
@@ -500,8 +506,27 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
                 <Text style={s.userText}>{q.text}</Text>
               </View>
               <View style={s.queuedRow}>
-                <Icon name='clock' regular size={11} color={t.textMuted} />
-                <Text style={s.queuedLabel}>Queued for the AI's next step</Text>
+                {q.now ? (
+                  <>
+                    <ActivityIndicator size='small' color={t.accent} />
+                    <Text style={s.queuedLabel}>Sending now…</Text>
+                  </>
+                ) : (
+                  <>
+                    <Icon name='clock' regular size={11} color={t.textMuted} />
+                    <Text style={s.queuedLabel}>Queued for the next step</Text>
+                    <Pressable
+                      style={({ pressed }) => [s.sendNowBtn, pressed && s.sendNowPressed]}
+                      onPress={() => sendNow(q.id)}
+                      hitSlop={8}
+                      accessibilityRole='button'
+                      accessibilityLabel='Send now. Stops what the AI is doing so it reads this at once.'
+                    >
+                      <Icon name='paper-plane' size={11} color={t.accent} />
+                      <Text style={s.sendNowText}>Send now</Text>
+                    </Pressable>
+                  </>
+                )}
                 <IconButton icon='times' label='Take back this message' size={12} color={t.textMuted} onPress={() => unqueue(q.id)} style={s.queuedRemove} />
               </View>
             </View>
@@ -696,6 +721,9 @@ function makeStyles (t: Theme) {
     queuedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     queuedLabel: { color: t.textMuted, fontSize: 12 },
     queuedRemove: { width: 40, height: 40, marginLeft: -8 },
+    sendNowBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 32, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: t.accent },
+    sendNowPressed: { backgroundColor: t.trustBg },
+    sendNowText: { color: t.accent, fontSize: 13, fontWeight: '600' },
     sendDisabled: { opacity: 0.4 }
   })
 }

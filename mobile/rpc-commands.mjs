@@ -41,6 +41,7 @@ export const RPC_AI_PROMPT_RESULT = 44 // { reqId, allow } answer a relayed modi
 // RPC_AI_EVENT kind 'steer' says when the Provider's loop read it.
 export const RPC_AI_STEER = 51 // { reqId, steerId, text }
 export const RPC_AI_UNSTEER = 52 // { reqId, steerId }
+export const RPC_AI_STEER_NOW = 53 // { reqId, steerId } send a queued message now (-> STEER_NOW)
 
 // UI -> backend: file-system ops on a writable drive you own (identified by ns).
 // `key` is the drive key hex; `path` is a drive-absolute path ('/a/b.txt').

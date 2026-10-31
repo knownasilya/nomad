@@ -4,7 +4,8 @@
 // Provider never read is sent as the next turn when this one ends.
 
 export interface SteerMsg { role: 'user' | 'assistant'; content: string; images?: string[]; reasoning?: string }
-export interface Queued { id: string; text: string }
+// now: the person pressed Send now, and the Provider is stopping the AI's current step for it.
+export interface Queued { id: string; text: string; now?: boolean }
 
 export function newSteerId (): string {
   return `s_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e9).toString(36)}`

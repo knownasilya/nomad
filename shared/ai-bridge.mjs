@@ -28,6 +28,8 @@
 //   Client → STEER { id, steerId, text }        (a message the user sent while the turn runs; the
 //                                             Provider's loop reads it at its next step)
 //   Client → UNSTEER { id, steerId }            (take it back, if the loop hasn't read it yet)
+//   Client → STEER_NOW { id, steerId }          (send it now: stop the model call in flight; an
+//                                             older Provider drops it and reads it next step)
 //   Provider → STEERED { id, ids, texts }       (the loop read these; sent before that turn's DONE)
 //                                             An older Provider drops STEER, so the Client sends
 //                                             a message that got no STEERED as the next turn.
@@ -56,8 +58,17 @@ export const FRAME = Object.freeze({
   HEARTBEAT: 'heartbeat', // Provider → Client keepalive while a turn is in flight (model load / slow first token)
   STEER: 'steer', // Client → Provider: steer the running turn (app/bg/ai/steering.mjs)
   UNSTEER: 'unsteer', // Client → Provider: take back a steer the loop hasn't read
+  STEER_NOW: 'steerNow', // Client → Provider: deliver a steer now, stopping the model call in flight
   STEERED: 'steered', // Provider → Client: the loop read these steers
 });
+
+// The frame a Client sends for request `id` when the user steers it: m is { type: 'steer', id,
+// text } | { type: 'unsteer', id } | { type: 'now', id } (app/bg/ai/steering.mjs forward()).
+export function steerFrame(id, m) {
+  if (m.type === 'steer') return { t: FRAME.STEER, id, steerId: m.id, text: m.text };
+  if (m.type === 'now') return { t: FRAME.STEER_NOW, id, steerId: m.id };
+  return { t: FRAME.UNSTEER, id, steerId: m.id };
+}
 
 // The single Protomux message slot carries these frames as JSON bytes. Encode/decode are the
 // ONLY place the wire bytes are produced, so both runtimes stay in lockstep.

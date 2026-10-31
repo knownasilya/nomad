@@ -62,7 +62,13 @@ import { closeTurn, openTurn } from '../../ai/localhost-mcp.mjs';
 import { startLocalhostMcp } from '../../ai/localhost-mcp-host.mjs';
 import { streamAgent } from '../../ai/agent-cli.mjs';
 import { newToolCallId, trackToolCall } from '../../ai/tool-events.mjs';
-import { addSteerMessages, deliverSteer, withSteer } from '../../ai/steering.mjs';
+import {
+  addSteerMessages,
+  deliverSteer,
+  runStep,
+  SKIPPED_FOR_STEER,
+  withSteer,
+} from '../../ai/steering.mjs';
 import { pickToolDrive, remoteStage, stageRules, tabSnapshot } from '../../ai/stages.mjs';
 import { openTabGroup, openTabUrl } from '../../ai/open-tab.mjs';
 import { isPageAction } from '../../ai/page-control.mjs';
@@ -757,17 +763,26 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
       if (signal?.aborted) break;
       // The user steered: their message goes in before the next model call.
       addSteerMessages(msgHistory, deliverSteer(steering, emitter));
-      const { finishReason, toolCalls, textContent }: any = cli
-        ? await streamAgent({ ...runtime, model }, msgHistory, emitter, signal, {
-            mcpUrl: mcpTurn ? `http://127.0.0.1:${mcpPort}/mcp` : null,
-            mcpTurn,
-          })
-        : await streamCompletion(runtime.baseUrl, model, msgHistory, tools, emitter, signal, {
-            think: opts.think,
-            effort: opts.effort,
-            token: runtime.accessToken,
-            maxTokens: opts.maxTokens,
-          });
+      // A message the user sends now stops this call (steering.mjs runStep): what the model wrote
+      // so far stays, and the loop reads the message before the next call.
+      const step: any = await runStep(steering, signal, emitter, (stepSignal) =>
+        cli
+          ? streamAgent({ ...runtime, model }, msgHistory, emitter, stepSignal, {
+              mcpUrl: mcpTurn ? `http://127.0.0.1:${mcpPort}/mcp` : null,
+              mcpTurn,
+            })
+          : streamCompletion(runtime.baseUrl, model, msgHistory, tools, emitter, stepSignal, {
+              think: opts.think,
+              effort: opts.effort,
+              token: runtime.accessToken,
+              maxTokens: opts.maxTokens,
+            })
+      );
+      if (step.interrupted) {
+        if (step.textContent) msgHistory.push({ role: 'assistant', content: step.textContent });
+        continue;
+      }
+      const { finishReason, toolCalls, textContent } = step;
 
       if (finishReason !== 'tool_calls' || toolCalls.length === 0) {
         // The model is done, unless the user sent something it hasn't read yet. Then its answer
@@ -790,6 +805,16 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
       // Execute each tool and append results
       for (const tc of toolCalls) {
         if (signal?.aborted) break;
+        // The user sent a message now: the tools still to run wait for the model to read it.
+        if (steering?.urgent) {
+          msgHistory.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            name: tc.function.name,
+            content: SKIPPED_FOR_STEER,
+          });
+          continue;
+        }
         let result;
         let args: any = {};
         try {

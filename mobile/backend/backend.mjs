@@ -54,6 +54,7 @@ import {
   RPC_AI_PROMPT_RESULT,
   RPC_AI_STEER,
   RPC_AI_UNSTEER,
+  RPC_AI_STEER_NOW,
   RPC_AI_EVENT,
   RPC_APPS,
   RPC_APPS_RESULT,
@@ -340,7 +341,9 @@ const rpc = new RPC(IPC, (req) => {
   else if (req.command === RPC_AI_CHAT) handleAiChat(msg)
   else if (req.command === RPC_AI_CANCEL) handleAiCancel(msg)
   else if (req.command === RPC_AI_PROMPT_RESULT) handleAiPromptResult(msg)
-  else if (req.command === RPC_AI_STEER || req.command === RPC_AI_UNSTEER) handleAiSteer(req.command === RPC_AI_STEER, msg)
+  else if (req.command === RPC_AI_STEER) handleAiSteer('steer', msg)
+  else if (req.command === RPC_AI_UNSTEER) handleAiSteer('unsteer', msg)
+  else if (req.command === RPC_AI_STEER_NOW) handleAiSteer('now', msg)
   else if (req.command === RPC_APPS) handleApps(msg)
   else if (req.command === RPC_LOGS) handleLogs(msg)
 })
@@ -481,16 +484,17 @@ function handleAiCancel ({ reqId }) {
   if (entry) entry.abort()
 }
 
-// A message sent while the turn runs. A turn that already ended drops it: the panel sends a message
-// that got no 'steer' event as the next turn.
-function handleAiSteer (add, { reqId, steerId, text }) {
+// A message sent while the turn runs ('steer'), taken back ('unsteer'), or sent now ('now'). A turn
+// that already ended drops it: the panel sends a message that got no 'steer' event as the next turn.
+// Before the REQUEST is out they wait in steer.queue, in order.
+function handleAiSteer (type, { reqId, steerId, text }) {
   const steer = aiTurns.get(reqId)?.steer
   if (!steer || typeof steerId !== 'string') return
-  if (add && (typeof text !== 'string' || !text.trim())) return
-  const m = add ? { type: 'steer', id: steerId, text } : { type: 'unsteer', id: steerId }
+  if (type === 'steer' && (typeof text !== 'string' || !text.trim())) return
+  const m = type === 'steer' ? { type, id: steerId, text } : { type, id: steerId }
   if (steer.send) steer.send(m)
-  else if (add) steer.queue.push(m)
-  else steer.queue = steer.queue.filter((q) => q.id !== steerId)
+  else if (type === 'unsteer') steer.queue = steer.queue.filter((q) => q.id !== steerId)
+  else steer.queue.push(m)
 }
 
 function handleAiPromptResult ({ reqId, allow }) {

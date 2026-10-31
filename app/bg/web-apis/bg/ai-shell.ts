@@ -151,6 +151,13 @@ export default {
     return steering ? steering.push(id, text) : false;
   },
 
+  // Sends a waiting message now: the model call in flight stops, and the turn reads the message
+  // before its next one (steering.mjs now()). false when the turn already read it.
+  async steerNow(turnId, id) {
+    const steering = steerings.get(steerKey(this.sender, turnId));
+    return steering ? steering.now(id) : false;
+  },
+
   // Takes back a message the turn hasn't read yet. false when it already has.
   async unsteer(turnId, id) {
     const steering = steerings.get(steerKey(this.sender, turnId));

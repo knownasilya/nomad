@@ -37,6 +37,7 @@ import {
   decodeFrame,
   makeChallenge,
   signChallenge,
+  steerFrame,
   verifyChallenge,
 } from '../../../shared/ai-bridge.mjs';
 
@@ -136,14 +137,7 @@ export async function requestRemoteChat({
       },
     });
     // The user steers this turn from here: each message goes to the Provider, after the REQUEST.
-    steering?.forward((m) =>
-      sendFrame(
-        peer,
-        m.type === 'steer'
-          ? { t: FRAME.STEER, id, steerId: m.id, text: m.text }
-          : { t: FRAME.UNSTEER, id, steerId: m.id }
-      )
-    );
+    steering?.forward((m) => sendFrame(peer, steerFrame(id, m)));
   }).finally(() => peer.clientReqs.delete(id));
 }
 
@@ -299,6 +293,7 @@ function onFrame(peer, data) {
       return onPromptResult(peer, f);
     case FRAME.STEER:
     case FRAME.UNSTEER:
+    case FRAME.STEER_NOW:
       return onSteer(peer, f);
     // --- client role (we are the Client) ---
     case FRAME.CHALLENGE:
@@ -446,6 +441,7 @@ function onSteer(peer, f) {
   const steering = peer.serveReqs.get(f.id)?.steering;
   if (!steering) return;
   if (f.t === FRAME.STEER) steering.push(f.steerId, f.text);
+  else if (f.t === FRAME.STEER_NOW) steering.now(f.steerId);
   else steering.remove(f.steerId);
 }
 

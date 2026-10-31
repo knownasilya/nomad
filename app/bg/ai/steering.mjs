@@ -13,6 +13,11 @@
 //
 // Every delivery emits a `steer` event ({ ids, texts }) on the turn's emitter, so the sidebar can
 // put the message in the transcript where the model read it.
+//
+// "Send now" (now()) doesn't wait for the next step. It aborts the model call in flight (runStep:
+// the text so far stays in the history), or, while tools run, lets the running one finish and
+// skips the rest of that round. The loop then reads the message before its next model call. A CLI
+// turn is stopped and started again with the history. Over the Bridge it is a STEER_NOW frame.
 
 export const MAX_STEER_CHARS = 20_000;
 export const MAX_STEER_QUEUE = 20;
@@ -21,6 +26,9 @@ export function createSteering() {
   const queue = [];
   let closed = false;
   let forwarder = null;
+  // Ids the user asked to send now, and the model call running now: { controller, interrupted }.
+  const urgent = new Set();
+  let step = null;
   return {
     get closed() {
       return closed;
@@ -50,9 +58,58 @@ export function createSteering() {
       const i = queue.findIndex((m) => m.id === id);
       if (i === -1) return false;
       queue.splice(i, 1);
+      urgent.delete(id);
       return true;
     },
+    // Send a waiting message now: stop the model call in flight so the loop reads it at once.
+    // false when the loop already read it (or never had it).
+    now(id) {
+      if (closed) return false;
+      if (forwarder) {
+        forwarder({ type: 'now', id });
+        return true;
+      }
+      if (!queue.some((m) => m.id === id)) return false;
+      urgent.add(id);
+      if (step && !step.controller.signal.aborted) {
+        step.interrupted = true;
+        step.controller.abort();
+      }
+      return true;
+    },
+    // A message waits that the user asked to send now: the loop skips the rest of its tools.
+    get urgent() {
+      return queue.some((m) => urgent.has(m.id));
+    },
+    // The model call in flight is being stopped for a message sent now.
+    get interrupting() {
+      return !!step?.interrupted;
+    },
+    // One model call. Its signal aborts with the turn's, or for a message sent now.
+    beginStep(parent) {
+      const controller = new AbortController();
+      const current = { controller, interrupted: false };
+      const onParent = () => controller.abort();
+      if (parent?.aborted) controller.abort();
+      else parent?.addEventListener?.('abort', onParent, { once: true });
+      step = current;
+      if (this.urgent) {
+        current.interrupted = true;
+        controller.abort();
+      }
+      return {
+        signal: controller.signal,
+        get interrupted() {
+          return current.interrupted;
+        },
+        end() {
+          parent?.removeEventListener?.('abort', onParent);
+          if (step === current) step = null;
+        },
+      };
+    },
     take() {
+      urgent.clear();
       return queue.splice(0, queue.length);
     },
     // The loop's last look before the turn ends: what's waiting, or, when nothing is, close so a
@@ -65,6 +122,7 @@ export function createSteering() {
     close() {
       closed = true;
       forwarder = null;
+      urgent.clear();
       return queue.splice(0, queue.length);
     },
     // The turn runs elsewhere: send what's waiting, and each later message, through `fn`.
@@ -121,8 +179,40 @@ export function steerNote(items) {
   );
 }
 
+// One model call of the loop, which a message sent now can stop. Resolves to the call's result,
+// or { interrupted: true, textContent } with the text it streamed before it stopped. A cancel of
+// the whole turn still throws.
+export async function runStep(steering, signal, emitter, call) {
+  if (!steering) return call(signal);
+  const step = steering.beginStep(signal);
+  let text = '';
+  const onChunk = (e) => {
+    text += e?.text || '';
+  };
+  emitter?.on?.('chunk', onChunk);
+  try {
+    // A message sent now was already waiting: skip the call.
+    if (step.interrupted) return { interrupted: true, textContent: '' };
+    // A call that finished anyway keeps its result; the loop skips its tools for the message.
+    return await call(step.signal);
+  } catch (err) {
+    if (step.interrupted && !signal?.aborted)
+      return { interrupted: true, textContent: text };
+    throw err;
+  } finally {
+    emitter?.off?.('chunk', onChunk);
+    step.end();
+  }
+}
+
+// The tool result for a call the loop skipped because the user sent a message now.
+export const SKIPPED_FOR_STEER =
+  'Not run: the user sent a new message first. Read it before you go on.';
+
 // A search/execute result with the waiting messages added, for a CLI turn's loopback MCP call.
+// Not while that CLI is being stopped for a message sent now: the loop gives it the message.
 export function withSteer(result, steering, emitter) {
+  if (steering?.interrupting) return result;
   const items = deliverSteer(steering, emitter);
   if (!items.length) return result;
   const note = steerNote(items);
