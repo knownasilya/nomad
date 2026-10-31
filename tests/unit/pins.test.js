@@ -11,6 +11,7 @@ import {
   titledPins,
   reconcileTabs,
   pinTiles,
+  pinTooltipUrl,
 } from '../../shared/pins.mjs';
 
 const KEY = 'a'.repeat(64);
@@ -156,5 +157,21 @@ describe('pinTiles', () => {
       { href: 'https://b.com/', title: 'B', index: 0 },
       { href: 'https://c.com/', title: 'C', index: 1 },
     ]);
+  });
+});
+
+describe('pinTooltipUrl', () => {
+  it('drops http(s)://, www. and a lone trailing slash', () => {
+    expect(pinTooltipUrl('https://www.example.com/')).toBe('example.com');
+    expect(pinTooltipUrl('http://example.com/a/b?c=1')).toBe('example.com/a/b?c=1');
+  });
+  it('keeps other schemes and cuts a hyper:// key short', () => {
+    expect(pinTooltipUrl('nomad://reader/')).toBe('nomad://reader');
+    expect(pinTooltipUrl(`hyper://${KEY}/posts/`)).toBe('hyper://aaaaaa…aaaa/posts/');
+    expect(pinTooltipUrl('hyper://blog/')).toBe('hyper://blog');
+  });
+  it('passes through what is not a URL', () => {
+    expect(pinTooltipUrl('about:blank')).toBe('about:blank');
+    expect(pinTooltipUrl(undefined)).toBe('');
   });
 });
