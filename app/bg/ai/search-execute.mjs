@@ -25,6 +25,7 @@ const GUIDE_IDS = [
   ['nomad.panes', 'nomad.panes'],
   ['nomad.peersockets', 'nomad.peersockets'],
   ['Page-provided tools', 'webmcp'],
+  ['Page control', 'page-control'],
   ['After using tools', 'after-tools'],
   ['Resolving which file', 'resolve-file'],
   ['Building an SPA', 'spa'],
@@ -32,7 +33,8 @@ const GUIDE_IDS = [
 ]
 
 const DOMAIN_COPY = {
-  capability: 'Read and write the current Drive, fetch an http(s) URL, read or screenshot the open page, and open a new tab.',
+  capability:
+    'Read and write the current Drive, fetch an http(s) URL, read or screenshot the open page, open a new tab, and in the AI Sidebar click and type on the page.',
   guide: 'Sections of the Nomad API reference. Open one with entity guide:<id>.',
   page: 'Tools the current page registered. Open one with entity page:<name>.',
   drive:
@@ -140,6 +142,106 @@ export const CAPABILITIES = [
       required: [],
     },
     gates: { personal: true, renderer: true },
+  },
+  // Page control (ADR-0028): click, type and scroll on the page in the user's tab, as the user's
+  // own mouse and keyboard would. The AI Sidebar only: `tab` leaves out the loopback MCP's other
+  // programs, and `renderer` the phone. The first action on a site asks the user, and their yes
+  // lasts 30 days for that site.
+  {
+    name: 'snapshotPage',
+    description:
+      "List the controls on the page in the user's tab, so you can use the page: buttons, links, text fields, " +
+      'checkboxes, dropdowns. Returns { url, title, headings, controls: [{ ref, role, name, value?, href?, checked?, ' +
+      "blocked?, offscreen? }] }. Pass a control's `ref` to clickElement, typeText, selectOption or scrollPage. Refs " +
+      "last until the page navigates. A control with `blocked` (a password, payment or file field) is the user's to fill in.",
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    gates: { personal: true, tab: true, renderer: true },
+  },
+  {
+    name: 'clickElement',
+    description:
+      'Click a control from snapshotPage, with a real click the user watches. Returns what you did and the controls ' +
+      'now on screen. A click that buys, sends, posts or deletes something asks the user first.',
+    inputSchema: {
+      type: 'object',
+      properties: { ref: { type: 'number', description: 'The control, from snapshotPage' } },
+      required: ['ref'],
+    },
+    gates: { personal: true, tab: true, renderer: true },
+  },
+  {
+    name: 'typeText',
+    description:
+      'Type into a text field from snapshotPage. It replaces what the field holds unless `clear` is false. With ' +
+      "`submit`, presses Enter after. You can't type into password or payment fields.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ref: { type: 'number', description: 'The text field, from snapshotPage' },
+        text: { type: 'string', description: 'The text to type' },
+        clear: { type: 'boolean', description: 'Optional. false adds the text after what the field holds' },
+        submit: { type: 'boolean', description: 'Optional. Press Enter after typing, e.g. to search' },
+      },
+      required: ['ref', 'text'],
+    },
+    gates: { personal: true, tab: true, renderer: true },
+  },
+  {
+    name: 'pressKey',
+    description:
+      'Press a key on the page, where the focus is: "Enter", "Escape", "Tab", "ArrowDown", "Backspace", a letter, or ' +
+      'with modifiers joined by +, like "Shift+Tab".',
+    inputSchema: {
+      type: 'object',
+      properties: { key: { type: 'string', description: 'The key, e.g. Enter or ArrowDown' } },
+      required: ['key'],
+    },
+    gates: { personal: true, tab: true, renderer: true },
+  },
+  {
+    name: 'selectOption',
+    description:
+      'Choose an option in a dropdown (a <select>) from snapshotPage, by its text or value. For a menu the page draws ' +
+      'itself, click it open with clickElement and click the option instead.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ref: { type: 'number', description: 'The dropdown, from snapshotPage' },
+        value: { type: 'string', description: "The option's text or value" },
+      },
+      required: ['ref', 'value'],
+    },
+    gates: { personal: true, tab: true, renderer: true },
+  },
+  {
+    name: 'scrollPage',
+    description:
+      'Scroll the page, or the scrolling area a control is in. `direction` is down (the default), up, left, right, top ' +
+      'or bottom. Returns the controls now on screen.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        direction: { type: 'string', description: 'Optional. down, up, left, right, top or bottom' },
+        ref: { type: 'number', description: 'Optional. A control inside the area to scroll' },
+      },
+      required: [],
+    },
+    gates: { personal: true, tab: true, renderer: true },
+  },
+  {
+    name: 'clickAt',
+    description:
+      'Click a point in your last screenshot (screenshotCurrentPage), for what snapshotPage has no ref for: a ' +
+      'canvas, a map, a picture. x and y are pixels in that screenshot. Prefer clickElement when there is a ref.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        x: { type: 'number', description: 'Pixels from the left of the screenshot' },
+        y: { type: 'number', description: 'Pixels from the top of the screenshot' },
+      },
+      required: ['x', 'y'],
+    },
+    gates: { personal: true, tab: true, renderer: true, vision: true },
   },
   // The user's Notes, Highlights and Reader (vault-tools.mjs). Only a personal turn sees them, and
   // each asks the user's permission: read Notes, write Notes, read Reader, change Reader (ADR-0019).

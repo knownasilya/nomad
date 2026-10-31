@@ -1872,6 +1872,17 @@ class ShellWindowAiSidebar extends LitElement {
             a.id === e.id ? { ...a, done: true, error: e.error || null } : a
           );
         }
+      } else if (e.phase === 'detail' && e.summary) {
+        // A page action names the control once it has found it ("Clicking button “Sign in”"):
+        // it replaces the step's first words.
+        if (isCurrent()) {
+          const last = this._activity[this._activity.length - 1];
+          this._activity = e.id
+            ? this._activity.map((a) => (a.id === e.id ? { ...a, summary: e.summary } : a))
+            : last && last.name === e.name
+              ? [...this._activity.slice(0, -1), { ...last, summary: e.summary }]
+              : this._activity;
+        }
       } else if (e.phase === 'write' && e.path) {
         // Each file keeps its drive: the assistant can write to any drive the user names.
         const msg = turnMessages[assistantIdx];

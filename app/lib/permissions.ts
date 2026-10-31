@@ -249,6 +249,17 @@ export const PERMS = {
     dangerous: true,
     promptTrusted: true,
   },
+  // The AI Sidebar clicking and typing on this site (ADR-0028). Not persisted by the prompt:
+  // bg/ui/page-control.js stores a yes as the time it ends, 30 days on. The site-info panel's
+  // Allow (1) and Deny (0) don't end.
+  aiPageControl: {
+    persist: false,
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+    promptTrusted: true,
+  },
   // The AI's access to the user's AI Jobs (ADR-0030). Changing them is dangerous: a Job runs a prompt
   // by itself, reads the user's Notes and Reader each time, and can notify their phone.
   jobsRead: {
@@ -261,6 +272,15 @@ export const PERMS = {
   jobsWrite: {
     persist: 'allow', // dont persist 'deny'
     idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+    promptTrusted: true,
+  },
+  // One click the AI makes that buys, sends, posts or deletes. Asked each time; the param numbers it.
+  aiPageAction: {
+    persist: false,
+    idempotent: false,
     alwaysDisallow: false,
     requiresRefresh: false,
     dangerous: true,
@@ -323,6 +343,8 @@ export const PERM_ICONS = {
   jobsWrite: 'fas fa-clock',
   privateRead: 'fas fa-lock',
   privateWrite: 'fas fa-lock',
+  aiPageControl: 'fas fa-mouse-pointer',
+  aiPageAction: 'fas fa-mouse-pointer',
 };
 
 export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
@@ -382,6 +404,10 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Let the AI assistant read your Mods (your styles and scripts for sites)';
     case 'modsWrite':
       return 'Let the AI assistant create and change your Mods, including scripts that run on those sites';
+    case 'aiPageControl':
+      return 'Let the AI assistant click, type and scroll on this site for 30 days';
+    case 'aiPageAction':
+      return `Let the AI assistant ${permOpts?.action || 'do this'}`;
     case 'jobsRead':
       return 'Let the AI assistant see your AI Jobs and their results';
     case 'jobsWrite':

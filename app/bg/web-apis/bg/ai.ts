@@ -30,6 +30,7 @@ import {
   STANDING_PROMPT,
   PERSONAL_PROMPT,
   DRAFT_PROMPT,
+  PAGE_CONTROL_PROMPT,
   JOB_PROMPT,
 } from '../../ai/api-reference.mjs';
 import { genuiPrompt } from '../../../lib/genui/library.mjs';
@@ -64,6 +65,8 @@ import { newToolCallId, trackToolCall } from '../../ai/tool-events.mjs';
 import { addSteerMessages, deliverSteer, withSteer } from '../../ai/steering.mjs';
 import { pickToolDrive, remoteStage, stageRules, tabSnapshot } from '../../ai/stages.mjs';
 import { openTabGroup, openTabUrl } from '../../ai/open-tab.mjs';
+import { isPageAction } from '../../ai/page-control.mjs';
+import * as pageControl from '../../ui/page-control';
 import {
   getActiveRuntime,
   listRuntimeCatalog,
@@ -686,6 +689,9 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   const cli = runtime.kind === 'claude' || runtime.kind === 'cursor';
   const offerTools = opts.tools !== false && runtime.kind !== 'cursor';
   const tools = offerTools && !cli ? MODEL_TOOLS : null;
+  // The AI Sidebar can click and type on the page in the user's tab (ADR-0028). The catalog says
+  // whether this turn can: not a page's own turn, the phone, or another program on this machine.
+  const canControlPage = catalog.capabilities.some((c) => isPageAction(c.name));
 
   // opts.context (from the AI Sidebar or the phone) says what the user is looking at. The
   // standing prompt no longer inlines the whole API reference — search loads a guide when the
@@ -695,6 +701,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     offerTools ? STANDING_PROMPT : '',
     offerTools && personal && !job ? PERSONAL_PROMPT : '',
     offerTools && job ? JOB_PROMPT : '',
+    offerTools && canControlPage ? PAGE_CONTROL_PROMPT : '',
     // A remote turn's writes stage into a Draft. Without this the model reads back the published
     // file, doubts its own edit and tells the user the phone can't edit.
     offerTools && opts.draft ? DRAFT_PROMPT : '',
@@ -707,7 +714,17 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   const fullMessages = [{ role: 'system', content: systemContent }, ...chatMessages];
 
   let msgHistory = fullMessages;
-  const signal = opts.signal || null;
+  // The turn's own stop: the caller's signal (the sidebar's Stop, a closed stream), or the Stop on
+  // the page the AI is controlling.
+  const turnStop = new AbortController();
+  if (opts.signal?.aborted) turnStop.abort();
+  opts.signal?.addEventListener?.('abort', () => turnStop.abort());
+  const signal = turnStop.signal;
+  // One page-control session a turn: it pins the tab the AI acts in and takes its cursor off the
+  // page when the turn ends.
+  const pageSession = canControlPage
+    ? pageControl.createSession({ requestPermission, stopTurn: () => turnStop.abort() })
+    : null;
 
   // Every tool call of this turn runs with these: the loop below, and a CLI's calls through the
   // loopback MCP, which finds them by the turn's token (ADR-0021).
@@ -723,6 +740,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     space: opts.remote ? opts.space : null,
     signal,
     catalog,
+    pageSession,
     job,
     // Messages the user sends while this turn runs (steering.mjs). A CLI's loopback MCP calls
     // carry them on their results.
@@ -823,6 +841,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   } finally {
     if (mcpTurn) closeTurn(mcpTurn);
     steering?.close();
+    pageSession?.end();
   }
 
   emitter.emit('done', { aborted: !!signal?.aborted });
@@ -893,6 +912,7 @@ async function executeTool(name, args, sender, opts: any = {}) {
     space = null,
     signal = null,
     catalog = null,
+    pageSession = null,
     job = null,
   } = opts;
   // WebMCP page tool — round-trip to the renderer that registered it. Access was already
@@ -948,6 +968,15 @@ async function executeTool(name, args, sender, opts: any = {}) {
     return runVaultTool(name, args || {}, { ctx, space, permit });
   }
 
+  // Clicking and typing on the page in the user's tab (ADR-0028): the AI Sidebar's turn only. The
+  // catalog leaves these out everywhere else; checked again here.
+  if (isPageAction(name)) {
+    if (!pageSession || !catalog?.personal || remote || !currentTab) {
+      throw new Error(`${name} is not available here`);
+    }
+    return pageSession.run(name, args || {}, { tab, emitter, id: opts.toolCallId });
+  }
+
   switch (name) {
     case 'search': {
       if (!catalog) throw new Error('search is not available in this context');
@@ -974,10 +1003,11 @@ async function executeTool(name, args, sender, opts: any = {}) {
         invoke: async (call) => {
           assertCallAllowed(call.target, call.name, catalog);
           const toolName = call.target === 'page' ? 'page_' + call.name : call.target;
+          const innerId = newToolCallId();
           const inner = await trackToolCall(
             emitter,
-            { parentId: opts.toolCallId, name: toolName, args: call.args },
-            () => executeTool(toolName, call.args || {}, sender, opts)
+            { id: innerId, parentId: opts.toolCallId, name: toolName, args: call.args },
+            () => executeTool(toolName, call.args || {}, sender, { ...opts, toolCallId: innerId })
           );
           if (inner && typeof inner === 'object' && inner.imageDataUrl)
             imageDataUrl = inner.imageDataUrl;
@@ -1124,15 +1154,19 @@ async function executeTool(name, args, sender, opts: any = {}) {
         throw new Error('Screenshots are not available for this request');
       }
       let dataUrl;
+      let size;
       try {
         let image = await sender.capturePage();
         const { width } = image.getSize();
         const MAX_WIDTH = 1280;
         if (width > MAX_WIDTH) image = image.resize({ width: MAX_WIDTH });
+        size = image.getSize();
         dataUrl = image.toDataURL();
       } catch (err) {
         throw new Error(`Could not capture this page: ${err.message}`);
       }
+      // clickAt's x and y are pixels in this picture.
+      if (pageSession) await pageControl.noteScreenshot(sender, size);
       // The model only ever gets a text description back from a tool call — it has no way to
       // "show" the image itself. Emit it separately so the chat UI can render it for the human,
       // the same way writeDriveFile's 'write' event drives the file-checkpoint UI above.
@@ -1143,7 +1177,10 @@ async function executeTool(name, args, sender, opts: any = {}) {
           imageDataUrl: dataUrl,
         });
       }
-      return { text: 'Screenshot captured (attached).', imageDataUrl: dataUrl };
+      const text = pageSession
+        ? `Screenshot captured (attached). It is ${size.width}×${size.height} pixels; clickAt takes x and y in them.`
+        : 'Screenshot captured (attached).';
+      return { text, imageDataUrl: dataUrl };
     }
     case 'openTab': {
       // The user's own AI only, and only on this Device: a phone turn's tab is on the phone, and
@@ -1164,6 +1201,8 @@ async function executeTool(name, args, sender, opts: any = {}) {
         : tabManager.create(win, url, tabOpts);
       const pane = opened?.primaryPane;
       if (!pane) throw new Error('Could not open a tab');
+      // A tab the AI opened can be the one it clicks and types in next.
+      pageSession?.noteOpened(pane.webContents);
       await waitForLoad(pane.webContents, signal);
       return JSON.stringify({ url: pane.url || url, title: pane.title || null, group: group?.name || null });
     }
