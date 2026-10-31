@@ -4,7 +4,7 @@ import { requireOptionalNativeModule, type NativeModule } from 'expo'
 // null on iOS and in Expo Go.
 
 declare class NomadWebViewInsetsModule extends NativeModule {
-  install (): void
+  install (): boolean
 }
 
 export default requireOptionalNativeModule<NomadWebViewInsetsModule>('NomadWebViewInsets')

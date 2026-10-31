@@ -31,9 +31,11 @@ class NomadWebViewInsetsModule : Module() {
     Name("NomadWebViewInsets")
 
     // Called once by the browser screen. Safe to call again: it moves to the current window.
+    // Returns false when there is no window yet; entering the foreground attaches then.
     Function("install") {
-      val activity = appContext.currentActivity ?: return@Function
-      activity.runOnUiThread { attach(activity) }
+      val activity = appContext.currentActivity
+      activity?.let { a -> a.runOnUiThread { attach(a) } }
+      activity != null
     }
 
     OnActivityEntersForeground {
