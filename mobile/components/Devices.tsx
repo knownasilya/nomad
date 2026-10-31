@@ -17,6 +17,7 @@ import { useTheme, radius, space, type Theme } from '../lib/theme'
 import type { Backend, DeviceSpace, DriveSync, VaultDevice, VaultMsg } from '../lib/useBackend'
 import type { Space } from '../lib/useSpaces'
 import { currentVersion } from '../lib/updater'
+import { useDesktopUpdates } from '../lib/deviceUpdates'
 
 const DEVICE_NAME_KEY = 'hb:deviceName'
 const DEFAULT_DEVICE_NAME = 'My phone'
@@ -28,6 +29,8 @@ interface Props {
   vaultStatus: Backend['vaultStatus']
   renameDevice: Backend['renameDevice']
   removeDevice: Backend['removeDevice']
+  // For asking a computer to update and restart (lib/deviceUpdates.ts).
+  apps: Backend['apps']
   // This phone's Spaces, so the sync status can line them up with the Vault's.
   spaces?: Space[]
   // Fired after this phone leaves the Vault (self-unlink succeeded), so the host can clean up the
@@ -38,7 +41,7 @@ interface Props {
 // Devices screen — link this phone to your identity's Vault so it can read and edit all your
 // spaces and drives. Mobile is a *candidate*: you enter an invite code generated on a trusted
 // (desktop) device, then approve the request there. See nomad/docs/multi-device-protocol.md.
-export default function Devices ({ visible, onClose, pair, vaultStatus: vaultStatusFor, renameDevice, removeDevice, spaces = [], onUnlinked }: Props) {
+export default function Devices ({ visible, onClose, pair, vaultStatus: vaultStatusFor, renameDevice, removeDevice, apps, spaces = [], onUnlinked }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
 
@@ -51,6 +54,7 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
   const vaultStatus = () => vaultStatusFor(ownSpacesRef.current.map((sp) => sp.rootDriveKey), ownSpacesRef.current)
 
   const [status, setStatus] = useState<VaultMsg | null>(null)
+  const updates = useDesktopUpdates(apps, visible && !!status?.hasVault)
   const [loading, setLoading] = useState(true)
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
@@ -289,7 +293,7 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
               </View>
             </View>
 
-            {error ? <Text style={s.error}>{error}</Text> : null}
+            {error || updates.error ? <Text style={s.error}>{error || updates.error}</Text> : null}
 
             {status?.hasVault ? (
               <>
@@ -355,6 +359,7 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
                                       ? <Text style={[s.tag, mismatch(d) && s.tagWarn]}>v{d.version}{mismatch(d) ? ' · different version' : ''}</Text>
                                       : <Text style={s.tag}>Version unknown</Text>}
                                   </View>
+                                  <DesktopUpdate update={updates.desktops.find((u) => u.key === d.key)} onUpdate={updates.request} s={s} t={t} />
                                 </View>
                                 <TouchableOpacity onPress={() => { setEditingKey(d.key); setEditName(d.name) }} hitSlop={8}>
                                   <Text style={s.link}>Rename</Text>
@@ -463,6 +468,23 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
 }
 
 type Styles = ReturnType<typeof makeStyles>
+
+// Under a computer that runs an older Nomad than this phone: ask it to update and restart, then
+// follow how it goes (the computer writes its progress to the Vault).
+function DesktopUpdate ({ update, onUpdate, s, t }: { update?: ReturnType<typeof useDesktopUpdates>['desktops'][number]; onUpdate: (key: string) => Promise<boolean>; s: Styles; t: Theme }) {
+  if (!update || (!update.behind && !update.message)) return null
+  return (
+    <View style={s.updateRow}>
+      {update.busy ? <ActivityIndicator size='small' color={t.accent} /> : null}
+      {update.message ? <Text style={[s.rowMeta, s.updateText]}>{update.message}</Text> : null}
+      {update.behind && !update.busy ? (
+        <TouchableOpacity onPress={() => onUpdate(update.key)} hitSlop={8} accessibilityRole='button'>
+          <Text style={s.link}>Update and restart</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  )
+}
 
 interface Chip { key: string; name: string; color?: string; warn?: string }
 
@@ -649,6 +671,8 @@ function makeStyles (t: Theme) {
     statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
     statusText: { marginTop: 0 },
     spacesNote: { fontSize: 12, color: t.textMuted, marginTop: space.sm },
+    updateRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.xs },
+    updateText: { flex: 1 },
     versionWarn: { fontSize: 13, lineHeight: 18, color: t.warn, marginBottom: space.sm },
     chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.sm },
     chip: {

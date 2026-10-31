@@ -24,6 +24,7 @@ import SpaceSwitcher from '../components/SpaceSwitcher'
 import Settings from '../components/Settings'
 import Logs from '../components/Logs'
 import UpdateBanner from '../components/UpdateBanner'
+import DesktopUpdateBanner from '../components/DesktopUpdateBanner'
 import DevTools from '../components/DevTools'
 import AiPanel from '../components/AiPanel'
 import Shortcuts from '../components/Shortcuts'
@@ -1058,6 +1059,7 @@ export default function Browser () {
       </View>
 
       <UpdateBanner />
+      <DesktopUpdateBanner apps={backend.apps} />
 
       {/* The bottom bar, in thumb reach: the Space, home, bookmark, the AI, the tab grid, the menu. */}
       <View style={s.toolbar}>
@@ -1137,6 +1139,7 @@ export default function Browser () {
         onOpenLogs={() => openScreen({ name: 'logs' })}
         shareTabs={shareTabs}
         onShareTabs={setShareTabs}
+        apps={backend.apps}
       />
 
       <Logs
@@ -1216,6 +1219,7 @@ export default function Browser () {
         vaultStatus={backend.vaultStatus}
         renameDevice={backend.renameDevice}
         removeDevice={backend.removeDevice}
+        apps={backend.apps}
         spaces={spacesApi.spaces}
         onUnlinked={handleUnlinked}
       />

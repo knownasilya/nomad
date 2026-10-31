@@ -27,6 +27,10 @@ class GeneralSettingsView extends LitElement {
     return this.settings && +this.settings.auto_update_enabled === 1;
   }
 
+  get isRemoteUpdateEnabled() {
+    return this.settings && +(this.settings.remote_update_enabled ?? 1) === 1;
+  }
+
   get isPrereleaseUpdateEnabled() {
     return this.settings && +this.settings.auto_update_prerelease === 1;
   }
@@ -170,6 +174,7 @@ class GeneralSettingsView extends LitElement {
 
             <p>${this.renderAutoUpdateCheckbox()}</p>
             <p>${this.renderPrereleaseCheckbox()}</p>
+            <p>${this.renderRemoteUpdateCheckbox()}</p>
           </div>
         </div>`;
 
@@ -188,6 +193,7 @@ class GeneralSettingsView extends LitElement {
 
             <p>${this.renderAutoUpdateCheckbox()}</p>
             <p>${this.renderPrereleaseCheckbox()}</p>
+            <p>${this.renderRemoteUpdateCheckbox()}</p>
           </div>
         </div>`;
 
@@ -205,6 +211,7 @@ class GeneralSettingsView extends LitElement {
             </p>
             <p>${this.renderAutoUpdateCheckbox()}</p>
             <p>${this.renderPrereleaseCheckbox()}</p>
+            <p>${this.renderRemoteUpdateCheckbox()}</p>
           </div>
         </div>`;
 
@@ -225,6 +232,7 @@ class GeneralSettingsView extends LitElement {
             </p>
             <p>${this.renderAutoUpdateCheckbox()}</p>
             <p>${this.renderPrereleaseCheckbox()}</p>
+            <p>${this.renderRemoteUpdateCheckbox()}</p>
           </div>
         </div>`;
     }
@@ -238,6 +246,21 @@ class GeneralSettingsView extends LitElement {
         @click=${this.onToggleAutoUpdate}
       />
       Check for updates automatically
+    </label>`;
+  }
+
+  renderRemoteUpdateCheckbox() {
+    return html`<label>
+      <input
+        type="checkbox"
+        ?checked=${this.isRemoteUpdateEnabled}
+        @click=${this.onToggleRemoteUpdate}
+      />
+      Let my other devices update and restart Nomad
+      <span class="hint"
+        >Your phone can ask this computer to install the newest version and restart. Only devices
+        linked to you can ask.</span
+      >
     </label>`;
   }
 
@@ -685,6 +708,16 @@ class GeneralSettingsView extends LitElement {
     if (this.settings.auto_update_prerelease) {
       nomad.browser.checkForUpdates();
     }
+  }
+
+  onToggleRemoteUpdate() {
+    this.settings.remote_update_enabled = this.isRemoteUpdateEnabled ? 0 : 1;
+    this.requestUpdate();
+    nomad.browser.setSetting(
+      'remote_update_enabled',
+      this.settings.remote_update_enabled
+    );
+    toast.create('Setting updated');
   }
 
   onToggleAutoUpdate() {

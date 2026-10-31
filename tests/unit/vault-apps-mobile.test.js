@@ -15,6 +15,7 @@ import { createFsCore, makeMetadata, AUTOBASE_OPTS } from '../../shared/fs-core.
 import * as apps from '../../shared/vault-apps.mjs'
 import * as names from '../../shared/names.mjs'
 import * as jl from '../../shared/jobs.mjs'
+import * as du from '../../shared/device-updates.mjs'
 import * as phone from '../../mobile/backend/lib/vault-apps.mjs'
 
 let Autobase, Hyperbee, Corestore, b4a
@@ -444,6 +445,44 @@ describe('phone in a shared Space (ADR-0029)', () => {
         await until(async () => !(await readJson(owner, '/notes/' + note.id + '.json')))
         await until(async () => !!(await readJson(devices.computer, apps.notePath(note.id))))
       })
+    })
+  }, 30000)
+})
+
+describe('phone asks a computer to update and restart', () => {
+  it('writes a request the computer accepts, and shows the computer’s progress', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      const computerKey = b4a.toString(computer.local.key, 'hex')
+      const phoneKey = b4a.toString(base.local.key, 'hex')
+      await computer.append(putJson(`/.vault/devices/${computerKey}.json`, { key: computerKey, name: 'MacBook', platform: 'desktop', version: '1.30.0' }))
+      await computer.append(putJson(`/.vault/devices/${phoneKey}.json`, { key: phoneKey, name: 'Pixel', platform: 'mobile', version: '1.31.0' }))
+      await computer.update()
+
+      await until(async () => (await phone.deviceUpdates(base, '1.31.0')).desktops.length === 1)
+      const [row] = (await phone.deviceUpdates(base, '1.31.0')).desktops
+      expect(row).toMatchObject({ key: computerKey, name: 'MacBook', version: '1.30.0', behind: true, busy: false, message: '' })
+
+      await phone.requestDeviceUpdate(base, { device: computerKey, version: '1.31.0' })
+      expect((await phone.deviceUpdates(base, '1.31.0')).desktops[0]).toMatchObject({ busy: true, message: expect.stringMatching(/Asked to update/) })
+
+      // The computer sees a request it should act on (desktop bg/remote-update.js judgeRequest).
+      await until(async () => !!(await readJson(computer, du.requestPath(computerKey))))
+      const req = await readJson(computer, du.requestPath(computerKey))
+      const devices = [{ key: computerKey }, { key: phoneKey }]
+      expect(du.judgeRequest(req, { ownKey: computerKey, devices })).toEqual({ ok: true })
+
+      // It takes the request and reports its download.
+      await computer.append({ op: 'del', path: du.requestPath(computerKey) })
+      await computer.append(putJson(du.statusPath(computerKey), du.makeStatus({ device: computerKey, state: 'downloading', version: '1.31.0', request: req })))
+      await computer.update()
+      await until(async () => (await phone.deviceUpdates(base, '1.31.0')).desktops[0].state === 'downloading')
+      expect((await phone.deviceUpdates(base, '1.31.0')).desktops[0]).toMatchObject({ busy: true, message: 'Downloading 1.31.0…' })
+    })
+  }, 30000)
+
+  it('refuses a device that isn’t linked', async () => {
+    await withDevices(async ({ phone: base }) => {
+      await expect(phone.requestDeviceUpdate(base, { device: 'e'.repeat(64), version: '1.31.0' })).rejects.toThrow(/isn’t linked/)
     })
   }, 30000)
 })

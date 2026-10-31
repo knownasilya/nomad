@@ -75,6 +75,7 @@ autoUpdater.autoDownload = false;
 // what's the updater doing?
 var updaterState = UPDATER_STATUS_IDLE;
 var updaterError = undefined; // has there been an error?
+var updaterVersion = undefined; // the version being downloaded, or downloaded
 
 // content-type tracker
 var resourceContentTypes = new LRU(100); // URL -> Content-Type
@@ -710,6 +711,67 @@ export async function checkForUpdates(opts = {}) {
   // results will be emitted
 }
 
+// For another of the user's Devices asking this one to update (remote-update.js): check, download,
+// and resolve with { downloaded: true, version } once an update is ready to install, or
+// { downloaded: false } when there is nothing newer. Rejects when the updater fails or this build
+// can't update itself (Linux, or run from source). A check already going is waited for, not doubled.
+export function downloadUpdateNow({ prerelease = false } = {}) {
+  if (!isBrowserUpdatesSupported) {
+    const err = new Error(
+      IS_FROM_SOURCE
+        ? 'This copy of Nomad runs from source, so it can’t update itself.'
+        : 'Nomad can’t update itself on Linux yet.'
+    );
+    err.code = 'unsupported';
+    return Promise.reject(err);
+  }
+  if (updaterState == UPDATER_STATUS_DOWNLOADED) {
+    return Promise.resolve({ downloaded: true, version: updaterVersion || null });
+  }
+  return new Promise((resolve, reject) => {
+    const off = () => {
+      browserEvents.removeListener('updater-downloaded', onDownloaded);
+      browserEvents.removeListener('updater-not-available', onNone);
+      browserEvents.removeListener('updater-error', onError);
+    };
+    const onDownloaded = ({ version }) => {
+      off();
+      resolve({ downloaded: true, version: version || null });
+    };
+    const onNone = () => {
+      off();
+      resolve({ downloaded: false, version: null });
+    };
+    const onError = (e) => {
+      off();
+      reject(new Error(e?.message || 'The updater failed'));
+    };
+    browserEvents.on('updater-downloaded', onDownloaded);
+    browserEvents.on('updater-not-available', onNone);
+    browserEvents.on('updater-error', onError);
+    if (updaterState == UPDATER_STATUS_IDLE) {
+      checkForUpdates({ prerelease }).catch(onError);
+    }
+  });
+}
+
+// Install a downloaded update and come back up, for an update asked for by another Device: silent,
+// and relaunched afterwards on every platform (Squirrel.Mac always relaunches; NSIS needs both flags).
+export function installUpdateAndRestart() {
+  if (updaterState != UPDATER_STATUS_DOWNLOADED) return false;
+  logger.info('[AUTO-UPDATE] Quitting and installing, asked for by another device.');
+  autoUpdater.quitAndInstall(true, true);
+  return true;
+}
+
+export function onUpdaterState(fn) {
+  browserEvents.on('updater-state-changed', fn);
+}
+
+export function offUpdaterState(fn) {
+  browserEvents.removeListener('updater-state-changed', fn);
+}
+
 export function restartBrowser() {
   if (updaterState == UPDATER_STATUS_DOWNLOADED) {
     // run the update installer
@@ -961,7 +1023,8 @@ function scheduledAutoUpdate() {
 // event handlers
 // =
 
-function onUpdateAvailable() {
+function onUpdateAvailable(info) {
+  updaterVersion = info?.version || undefined;
   logger.info('[AUTO-UPDATE] New version available. Downloading...');
   autoUpdater.downloadUpdate();
   setUpdaterState(UPDATER_STATUS_DOWNLOADING);
@@ -970,11 +1033,14 @@ function onUpdateAvailable() {
 function onUpdateNotAvailable() {
   logger.info('[AUTO-UPDATE] No browser update available.');
   setUpdaterState(UPDATER_STATUS_IDLE);
+  browserEvents.emit('updater-not-available', {});
 }
 
-function onUpdateDownloaded() {
+function onUpdateDownloaded(info) {
+  if (info?.version) updaterVersion = info.version;
   logger.info('[AUTO-UPDATE] New browser version downloaded. Ready to install.');
   setUpdaterState(UPDATER_STATUS_DOWNLOADED);
+  browserEvents.emit('updater-downloaded', { version: updaterVersion || null });
 }
 
 function onUpdateError(e) {

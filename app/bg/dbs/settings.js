@@ -22,6 +22,8 @@ const JSON_ENCODED_SETTINGS = [
 const GLOBAL_SETTINGS = new Set([
   'auto_update_enabled',
   'auto_update_prerelease',
+  'remote_update_enabled',
+  'remote_update_restarting',
   'run_background',
   'launch_on_startup',
   'analytics_enabled',
@@ -82,6 +84,9 @@ export const setup = async function (opts) {
     auto_update_enabled: 1,
     // Settings → Auto Updater → Beta releases: update to GitHub prereleases too (bg/browser.js).
     auto_update_prerelease: 0,
+    // Settings → Auto Updater: the user's other Devices (their phone) may update and restart Nomad
+    // here (bg/remote-update.js).
+    remote_update_enabled: 1,
     auto_redirect_to_dat: 1,
     custom_start_page: 'blank',
     new_tab: 'nomad://desktop/',
