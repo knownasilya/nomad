@@ -1957,6 +1957,8 @@ class ShellWindowAiSidebar extends LitElement {
           effort: this._think ? this._effort || undefined : undefined,
           allowVision: this._visionModel === true,
           turnId,
+          // A page-action confirm can allow similar clicks for the rest of this chat.
+          chatId: turnSessionId || undefined,
         })
       );
       eventTarget.addEventListener('tool', (e) => onToolEvent(e));

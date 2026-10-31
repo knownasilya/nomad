@@ -15,6 +15,7 @@ class PermPrompt extends LitElement {
     this.permParam = null;
     this.permOpts = null;
     this.isPermExperimental = false;
+    this.allowSimilar = false;
 
     // export interface
     window.isPromptActive = false;
@@ -45,6 +46,7 @@ class PermPrompt extends LitElement {
     this.permId = getPermId(permission);
     this.permParam = getPermParam(permission);
     this.permOpts = opts || {};
+    this.allowSimilar = false;
     const PERM = PERMS[this.permId];
     if (!PERM) return false;
     this.isPermExperimental = PERM.experimental;
@@ -96,6 +98,19 @@ class PermPrompt extends LitElement {
           })}
         </p>
 
+        ${this.permOpts?.similar
+          ? html`<label class="similar">
+              <input
+                type="checkbox"
+                .checked=${this.allowSimilar}
+                @change=${(e) => {
+                  this.allowSimilar = e.target.checked;
+                }}
+              />
+              <span>${this.permOpts.similar}</span>
+            </label>`
+          : ''}
+
         <div class="prompt-btns">
           <button class="btn prompt-reject" @click=${this.onClickDecision(false)}>Block</button>
           <button class="btn primary prompt-accept" @click=${this.onClickDecision(true)}>
@@ -126,8 +141,9 @@ class PermPrompt extends LitElement {
     e.preventDefault(); // disable context menu
   }
 
+  // Allow with "allow similar" checked answers 'similar' (page control, ADR-0028).
   onClickDecision(v) {
-    return (e) => this.resolve(v);
+    return (e) => this.resolve(v && this.allowSimilar ? 'similar' : v);
   }
 }
 PermPrompt.styles = [
@@ -180,6 +196,20 @@ PermPrompt.styles = [
       color: #335291;
       padding-right: 8px;
       padding-top: 5px;
+    }
+
+    .similar {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      margin: -4px 0 12px;
+      font-size: 12px;
+      line-height: 1.35;
+      cursor: pointer;
+    }
+
+    .similar input {
+      margin: 1px 0 0;
     }
 
     .prompt-btns {

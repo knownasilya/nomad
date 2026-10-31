@@ -52,8 +52,11 @@ work address". The rules are in `app/bg/ai/page-control.mjs`; the actions run in
    them `blocked` and never includes their value. A click on a control named to buy, pay, check
    out, place an order, subscribe, donate, send, post, publish, delete, remove, unsubscribe,
    transfer, withdraw, book or reserve, and Enter in a form whose submit button is named that way,
-   wait for the user's OK (`aiPageAction`, asked every time). nomad:// pages and `hyper://private/`
-   are off limits.
+   wait for the user's OK (`aiPageAction`, asked every time). The prompt can also allow clicks
+   like this one for the rest of the sidebar chat: the same site, the same action, and a control
+   with the same role and name, numbers aside (`similarKey`), so "Delete draft 3" covers
+   "Delete draft 4" but not "Delete account". That answer lives in memory only, so a restart asks
+   again. nomad:// pages and `hyper://private/` are off limits.
 8. **The user can always see it and stop it.** While the AI controls a page, the page has a blue
    border, the AI's cursor with a "Nomad AI" tag, and a "Nomad AI is using this page" bar with a
    Stop button, all in a closed shadow root that ignores the pointer except for Stop. They come back

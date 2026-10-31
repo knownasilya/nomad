@@ -16,6 +16,8 @@ import {
   refArg,
   riskyWords,
   screenshotPoint,
+  similarKey,
+  similarLabel,
   siteOf,
   snapshotForModel,
   storedGrant,
@@ -103,6 +105,33 @@ describe('clicks that wait for the user', () => {
     for (const name of ['Sign in', 'Next', 'Posts', 'Sender settings', 'Search', 'Add to list', '', null]) {
       expect(riskyWords(name), String(name)).toBeNull();
     }
+  });
+});
+
+describe('allowing similar clicks for a chat', () => {
+  const url = 'https://mail.example.com/drafts?page=2';
+  const del = (name, role = 'button') => similarKey(url, 'click', { role, name });
+
+  it('treats the same control on the same site as similar, numbers aside', () => {
+    expect(del('Delete draft 3')).toBe(del('Delete  draft 14'));
+    expect(del('Delete')).toBe(del('delete'));
+    expect(similarKey('https://mail.example.com/other', 'click', { role: 'button', name: 'Delete' })).toBe(del('Delete'));
+  });
+
+  it('keeps other controls, actions and sites apart', () => {
+    expect(del('Delete account')).not.toBe(del('Delete draft'));
+    expect(del('Delete', 'link')).not.toBe(del('Delete'));
+    expect(similarKey(url, 'submit the form with', { role: 'button', name: 'Delete' })).not.toBe(del('Delete'));
+    expect(similarKey('https://evil.example/', 'click', { role: 'button', name: 'Delete' })).not.toBe(del('Delete'));
+  });
+
+  it('says what it allows', () => {
+    expect(similarLabel(url, { role: 'button', name: 'Delete draft 3' })).toBe(
+      'Also allow buttons like “Delete draft …” on mail.example.com for the rest of this chat'
+    );
+    expect(similarLabel(url, { role: 'generic', name: '' })).toBe(
+      'Also allow elements like this on mail.example.com for the rest of this chat'
+    );
   });
 });
 
