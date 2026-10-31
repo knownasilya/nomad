@@ -494,6 +494,22 @@ The phone's navigation is a stack (`mobile/lib/navStack.ts`, tests in `tests/uni
 - Inside a screen, back steps back through its own trail first: folders in FileExplorer, linked
   notes in Notes.
 
+## Mobile: links and popups stay in Nomad
+
+A web tab never hands a web page to another browser.
+- **New windows:** `mobile/patches/react-native-webview+13.16.0.patch` (applied by `patch-package` on
+  `npm install` in `mobile/`) adds `RNCWebViewHooks`, which `mobile/modules/nomad-webview-windows`
+  answers. A window a script opens (a sign-in popup) is a real WebView shown over the tab
+  (`PopupWindow.kt`), so `window.opener`, `postMessage` and `popup.closed` work and the result gets
+  back to the page. A tap on a `target="_blank"` link opens a new tab (`onOpenTab`). Upgrading
+  react-native-webview means regenerating the patch (`npx patch-package react-native-webview`).
+- **Links:** the web tab's `onShouldStartLoadWithRequest` routes every link through `routeLink`
+  (`mobile/lib/webLinks.ts`, tests `tests/unit/mobile-web-links.test.js`): `feed:` links and RSS/Atom
+  downloads go to Reader's subscribe prompt (`onFeed`), an `intent://` link to a web page loads in the
+  tab, and only mail, phone and app links go out (`openExternal`, browsable activities only).
+- **Google sign-in:** web tabs and popups send `browserUserAgent()`, the WebView's user agent without
+  `; wv` and `Version/4.0`, and no `X-Requested-With` header; Google refuses sign-in otherwise.
+
 ## Mobile: safe areas on Android
 
 The mobile app (Expo 55) is **edge-to-edge** on Android: it draws behind the status bar and the

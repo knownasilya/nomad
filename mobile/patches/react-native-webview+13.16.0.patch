@@ -1,0 +1,68 @@
+diff --git a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
+index 07f73fd..2f215c9 100644
+--- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
++++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
+@@ -87,6 +87,10 @@ public class RNCWebChromeClient extends WebChromeClient implements LifecycleEven
+ 
+     @Override
+     public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
++        final RNCWebViewHooks.Hooks hooks = RNCWebViewHooks.hooks;
++        if (!mHasOnOpenWindowEvent && hooks != null && hooks.onCreateWindow(view, isDialog, isUserGesture, resultMsg)) {
++            return true;
++        }
+ 
+         final WebView newWebView = new WebView(view.getContext());
+ 
+diff --git a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewHooks.java b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewHooks.java
+new file mode 100644
+index 0000000..676595f
+--- /dev/null
++++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewHooks.java
+@@ -0,0 +1,23 @@
++package com.reactnativecommunity.webview;
++
++import android.os.Message;
++import android.webkit.WebView;
++
++/**
++ * Nomad: lets the app handle a page's new windows and downloads itself (mobile/modules/nomad-webview-windows).
++ * Without it, a window.open() or target="_blank" link went to another app (Chrome), which broke
++ * sign-in popups: the page that opened one never heard back from it.
++ */
++public final class RNCWebViewHooks {
++    public interface Hooks {
++        /** Return true when the hook created the window (and sent resultMsg). */
++        boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg);
++
++        /** Return true when the hook handled the download, so it isn't saved to Downloads. */
++        boolean onDownloadStart(WebView view, String url, String userAgent, String contentDisposition, String mimetype, long contentLength);
++    }
++
++    public static volatile Hooks hooks = null;
++
++    private RNCWebViewHooks() {}
++}
+diff --git a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt
+index f83033b..3ba4b06 100644
+--- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt
++++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt
+@@ -82,6 +82,11 @@ class RNCWebViewManagerImpl(private val newArch: Boolean = false) {
+         settings.allowFileAccessFromFileURLs = false
+         settings.allowUniversalAccessFromFileURLs = false
+         settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
++        // Nomad: no X-Requested-With header with the app's package name. Sites (Google sign-in among
++        // them) read it as "an app's embedded WebView" and refuse to work.
++        if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
++            WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
++        }
+ 
+         // Fixes broken full-screen modals/galleries due to body height being 0.
+         webView.layoutParams = ViewGroup.LayoutParams(
+@@ -92,6 +97,7 @@ class RNCWebViewManagerImpl(private val newArch: Boolean = false) {
+             WebView.setWebContentsDebuggingEnabled(true)
+         }
+         webView.setDownloadListener(DownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
++            if (RNCWebViewHooks.hooks?.onDownloadStart(webView, url, userAgent, contentDisposition, mimetype, contentLength) == true) return@DownloadListener
+             val module = webView.reactApplicationContext.getNativeModule(RNCWebViewModule::class.java) ?: return@DownloadListener
+             val request: DownloadManager.Request = try {
+                 DownloadManager.Request(Uri.parse(url))
