@@ -5,8 +5,10 @@
 // and mobile (mobile/backend/lib/vault-apps.mjs). Pure: no imports, no I/O. Each side stores these as
 // inline Vault control records with its own helpers. Layout: docs/multi-device-protocol.md §1.2.
 //
-//   /.vault/reader/<space>/follows/<host>.json   { url, addedAt }       one per subscribed Feed
-//   /.vault/reader/<space>/read.json             { read: [postUrl] }    posts marked read
+//   /.vault/reader/<space>/follows/<host>.json   { url, addedAt }       one per subscribed hyper:// Feed
+//   /.vault/reader/<space>/follows/web-<hash>.json { url, addedAt, kind: 'web' }  an RSS or Atom feed
+//   /.vault/reader/<space>/read.json             { read: [postUrl] }    hyper:// posts marked read
+//   /.vault/reader/<space>/web-read.json         { read: { feedUrl: [itemUrl] } }  RSS and Atom items read
 //   /.vault/reader/<space>/imported.json         { importedAt }         the Space's old file was copied in
 //   /.vault/notes/<id>.json                      { type, id, body, createdAt, updatedAt, conflictOf? }
 //   /.vault/space-lib/<space>/notes/<id>.json    the same Note, kept only in that Space (ADR-0029)
@@ -49,6 +51,9 @@ export function spaceLibPrefix(space) {
 
 export const followsPrefix = (space) => readerPrefix(space) + 'follows/';
 export const readPath = (space) => readerPrefix(space) + 'read.json';
+// RSS and Atom items have their own record: a Device from before web feeds prunes read.json to
+// hyper:// posts, and would drop these.
+export const webReadPath = (space) => readerPrefix(space) + 'web-read.json';
 export const importedPath = (space) => readerPrefix(space) + 'imported.json';
 
 // The root URL of the Drive a URL points into ('hyper://<host>/'), or null. Takes a bare 64-hex key.
@@ -68,16 +73,72 @@ export function driveRoot(url) {
   }
 }
 
-export function followPath(space, url) {
+// 16 hex characters from a URL: two 32-bit FNV-1a hashes. The same URL gives the same value on every
+// Device, so it can name a record.
+export function hashUrl(url) {
+  const s = String(url);
+  let a = 0x811c9dc5;
+  let b = 0x01000193 ^ s.length;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193) >>> 0;
+    b = Math.imul(b ^ c, 0x5bd1e995) >>> 0;
+    b ^= b >>> 15;
+  }
+  return a.toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0');
+}
+
+// An RSS or Atom feed's address as Reader keeps it: http(s), without its #fragment. feed:// and a
+// bare "example.com/feed.xml" become https://. Null for anything else.
+export function webFeedUrl(raw) {
+  let s = String(raw || '').trim();
+  if (!s || /^hyper:/i.test(s) || /^[0-9a-f]{64}$/i.test(s)) return null;
+  s = s.replace(/^feed:(\/\/)?/i, 'https://');
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) s = 'https://' + s;
+  try {
+    const u = new URL(s);
+    if (
+      !/^https?:$/.test(u.protocol) ||
+      !u.hostname ||
+      (!u.hostname.includes('.') && u.hostname !== 'localhost')
+    )
+      return null;
+    u.hash = '';
+    u.username = '';
+    u.password = '';
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+export const isWebFeed = (url) => /^https?:\/\//i.test(String(url || ''));
+
+// A feed's address as Reader keeps it: a drive's root, or an RSS/Atom URL. Null for anything else.
+export function feedUrl(url) {
+  return driveRoot(url) || webFeedUrl(url);
+}
+
+// The file a follow record is kept in, under a Space's follows/: the drive's host for a hyper://
+// feed, web-<hash> for an RSS or Atom feed.
+export function followName(url) {
   const root = driveRoot(url);
-  if (!root) throw new Error('Enter a hyper:// address');
-  return followsPrefix(space) + root.slice('hyper://'.length, -1) + '.json';
+  if (root) return root.slice('hyper://'.length, -1);
+  const web = webFeedUrl(url);
+  if (web) return 'web-' + hashUrl(web);
+  throw new Error('Enter a hyper:// address or an RSS feed’s link');
+}
+
+export function followPath(space, url) {
+  return followsPrefix(space) + followName(url) + '.json';
 }
 
 export function followRecord(url, now = new Date().toISOString()) {
   const root = driveRoot(url);
-  if (!root) throw new Error('Enter a hyper:// address');
-  return { url: root, addedAt: now };
+  if (root) return { url: root, addedAt: now };
+  const web = webFeedUrl(url);
+  if (web) return { url: web, addedAt: now, kind: 'web' };
+  throw new Error('Enter a hyper:// address or an RSS feed’s link');
 }
 
 // The Feed URLs in a list of follow records: valid, unique, oldest subscription first.
@@ -89,8 +150,8 @@ export function followUrls(records) {
     return ka < kb ? -1 : ka > kb ? 1 : 0;
   });
   for (const rec of sorted) {
-    const root = driveRoot(rec && rec.url);
-    if (root && !out.includes(root)) out.push(root);
+    const url = feedUrl(rec && rec.url);
+    if (url && !out.includes(url)) out.push(url);
   }
   return out;
 }
@@ -111,6 +172,31 @@ export function mergeReadState(current, add, follows, loaded = {}) {
     out.add(url);
   }
   return [...out].sort();
+}
+
+// The RSS and Atom read marks after adding `add` ([itemUrl]): { feedUrl: [itemUrl] }. `loaded` maps
+// each feed that just loaded to its item URLs. A mark is kept under the loaded feed that has the item;
+// a feed that loaded keeps only marks for items it still lists (a feed shows only its latest items);
+// one that didn't load keeps its marks; a feed no longer followed loses them.
+export function mergeWebRead(current, add, follows, loaded = {}) {
+  const out = {};
+  for (const feed of (follows || []).filter(isWebFeed)) {
+    const now = Array.isArray(loaded && loaded[feed]) ? new Set(loaded[feed]) : null;
+    const marks = new Set(((current && current[feed]) || []).filter((u) => typeof u === 'string'));
+    if (now) {
+      for (const u of add || []) if (now.has(u)) marks.add(u);
+      for (const u of marks) if (!now.has(u)) marks.delete(u);
+    }
+    if (marks.size) out[feed] = [...marks].sort();
+  }
+  return out;
+}
+
+// Every RSS/Atom item URL marked read, from a web-read record.
+export function webReadUrls(webRead) {
+  return Object.values(webRead || {})
+    .flat()
+    .filter((u) => typeof u === 'string');
 }
 
 // Notes

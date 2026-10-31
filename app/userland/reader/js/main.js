@@ -1,9 +1,11 @@
-// nomad://reader — an RSS-like reader for walled.garden/feed drives, and a reading log of any
+// nomad://reader — a reader for walled.garden/feed drives and RSS / Atom feeds, and a reading log of any
 // web page the user saves (ADR-0033), sorted into topics by the AI, with a minimal reading view.
 //
 // - Saved articles come with the Reader's state (bg/web-apis/bg/reader-articles.ts). A page is
 //   saved from its tab (context menu, site menu) or by pasting its link in the box on the left.
 //   The AI files each into topics in the background; the user can change them (then the AI won't).
+// - RSS and Atom feeds are fetched and parsed in bg (readerWebFeed, shared/web-feeds.mjs). Their read
+//   marks are kept per feed (web-read.json). The AI sorts recent feed posts into the same topics.
 // - Opening an article shows its readable text in the reading view (?read=<id>): no page scripts,
 //   no images, light / sepia / dark, adjustable size. "Open original" opens the page in a tab.
 // - Subscriptions and read marks come from nomad.vault (bg/web-apis/bg/vault-apps.ts, ADR-0017).
@@ -32,6 +34,8 @@ const state = {
   editing: null, // the id of the article whose topics are being edited
   reading: null, // { article, text, loading, error } while the reading view is open
   saving: false, // a pasted link is being fetched
+  postTopics: new Map(), // post URL -> { topics, topicsBy } (the AI's or the user's)
+  feedOffer: null, // { url, site } a page just saved links to this feed
   loading: true,
   addMsg: '',
   addDraft: '', // the feed address being typed; kept across re-renders
@@ -109,10 +113,13 @@ function applyState(s) {
   state.shared = !!s.shared
   state.canFollow = s.canFollow !== false
   // Keep marks made here that aren't saved yet.
-  state.readSet = new Set([...(s.read || []), ...pendingRead])
+  const webRead = Object.values(s.webRead || {}).flat()
+  state.readSet = new Set([...(s.read || []), ...webRead, ...pendingRead])
+  state.postTopics = new Map((s.postTopics || []).map((r) => [r.url, r]))
   state.articles = s.articles || []
   state.ai = s.ai || state.ai
-  if (state.filter.startsWith('hyper:') && !state.follows.includes(state.filter)) state.filter = 'all'
+  if (/^(hyper|https?):/.test(state.filter) && !state.follows.includes(state.filter)) state.filter = 'all'
+  if (state.feedOffer && state.follows.includes(state.feedOffer.url)) state.feedOffer = null
   if (state.filter.startsWith('topic:') && !topics().some((t) => 'topic:' + t.topic === state.filter)) state.filter = 'saved'
   if (state.reading?.article) {
     const now = state.articles.find((a) => a.id === state.reading.article.id)
@@ -141,7 +148,8 @@ function watchOtherDevices() {
 }
 
 // What the box on the left does with what was typed: a drive's root (or key) is a feed to follow;
-// any other address is a page to save.
+// a hyper:// page is saved; a web address is looked at first: an RSS or Atom feed is followed, a page
+// is saved (readerAddLink).
 function addKind(raw) {
   const v = String(raw || '').trim()
   if (!v) return null
@@ -154,28 +162,45 @@ function addKind(raw) {
       return 'feed'
     }
   }
-  return 'article'
+  return 'link'
 }
 
 async function addFromBox(raw) {
   if (addKind(raw) === 'feed') return addFeed(raw)
-  return saveArticle(raw)
+  return addLink(raw)
 }
 
-async function saveArticle(rawUrl) {
+async function addLink(rawUrl) {
   state.saving = true
   state.addMsg = ''
+  state.feedOffer = null
   render()
   try {
-    const { article, state: s } = await nomad.vault.readerSaveArticle(rawUrl)
-    applyState(s)
+    const res = await nomad.vault.readerAddLink(rawUrl)
+    applyState(res.state)
+    if (res.followed) {
+      state.filter = res.followed
+      state.saving = false
+      await refreshAll()
+      return
+    }
     state.filter = 'saved'
-    state.flash = article.id
+    state.flash = res.article.id
+    const feed = res.feeds?.[0]
+    if (feed && !state.follows.includes(feed.url)) state.feedOffer = { url: feed.url, site: res.article.site || feed.title }
   } catch (e) {
     state.addMsg = e.message
     state.addDraft = rawUrl
   }
   state.saving = false
+  render()
+}
+
+// Follow the RSS or Atom feed a saved page links to.
+async function followSiteFeed(url) {
+  state.feedOffer = null
+  await addFeed(url)
+  state.filter = url
   render()
 }
 
@@ -231,6 +256,7 @@ function markRead(postUrl) {
 
 function markAllRead() {
   if (isArticleView()) {
+    for (const p of visibleTopicPosts()) markRead(p.url)
     const unread = visibleArticles().filter((a) => !a.readAt)
     articleAction(async () => {
       let s
@@ -266,11 +292,11 @@ async function flushReadState() {
 
 // ── Data: feeds (via nomad.fs, the backend-agnostic bridge) ──────────────────
 
-async function refreshAll() {
+async function refreshAll({ fresh = false } = {}) {
   state.loading = true
   render()
   const follows = state.follows.slice()
-  const results = await Promise.allSettled(follows.map(loadFeed))
+  const results = await Promise.allSettled(follows.map((f) => loadFeed(f, { fresh })))
   state.feeds = results.map((r, i) =>
     r.status === 'fulfilled'
       ? r.value
@@ -281,9 +307,27 @@ async function refreshAll() {
   state.loading = false
   render()
   if (state.readSet.size) scheduleReadStateSave() // prune marks for posts that are gone
+  tagNewPosts()
 }
 
-async function loadFeed(root) {
+// Hand the recent posts the AI hasn't sorted yet to bg, which picks topics for a batch of them.
+function tagNewPosts() {
+  if (!state.ai.autoTopics) return
+  const since = Date.now() - 30 * 86400e3
+  const posts = state.posts
+    .filter((p) => !state.postTopics.has(p.url) && (!p.createdAt || Date.parse(p.createdAt) >= since))
+    .slice(0, 100)
+    .map(({ url, title, summary, feedTitle, createdAt }) => ({ url, title, summary, feedTitle, createdAt }))
+  if (!posts.length) return
+  nomad.vault.readerTagPosts(posts).then(applyState).then(render, (e) => console.warn('[reader] topics', e))
+}
+
+async function loadFeed(root, { fresh = false } = {}) {
+  if (/^https?:/i.test(root)) {
+    // An RSS or Atom feed: bg fetches and parses it.
+    const f = await nomad.vault.readerWebFeed(root, { fresh })
+    return { url: root, title: f.title || root, siteUrl: f.siteUrl, ok: true, error: null, posts: f.posts.map((p) => ({ ...p, web: true })) }
+  }
   const a = await openFeed(root)
   const feed = JSON.parse(await a.readText('/index.json'))
   const itemsPath = ensureDir(feed.itemsPath || '/posts/')
@@ -344,11 +388,22 @@ function visibleArticles() {
   return []
 }
 
-// Every topic in use, most used first: [{ topic, count }] (shared/reader-articles.mjs topicCounts).
+// Feed posts in the current topic.
+function visibleTopicPosts() {
+  if (!state.filter.startsWith('topic:')) return []
+  const k = state.filter.slice(6).toLowerCase()
+  return state.posts.filter((p) => postTopicsOf(p).some((t) => t.toLowerCase() === k))
+}
+
+const postTopicsOf = (p) => state.postTopics.get(p.url)?.topics || []
+
+// Every topic in use, saved articles' and feed posts', most used first: [{ topic, count }]
+// (shared/reader-articles.mjs topicCounts).
 function topics() {
   const counts = new Map()
-  for (const a of state.articles) {
-    for (const t of a.topics || []) {
+  const lists = [...state.articles.map((a) => a.topics || []), ...state.posts.map(postTopicsOf)]
+  for (const list of lists) {
+    for (const t of list) {
       const c = counts.get(t.toLowerCase()) || { topic: t, count: 0 }
       c.count++
       counts.set(t.toLowerCase(), c)
@@ -363,6 +418,32 @@ function unreadCount(posts) {
 
 const unreadArticles = (list) => list.filter((a) => !a.readAt).length
 const isTagging = (a) => state.ai.tagging.includes(a.id)
+
+// What the topic chips and editor work on: a saved article, or a feed post.
+function articleSubject(a) {
+  return {
+    key: 'a:' + a.id,
+    topics: a.topics || [],
+    topicsBy: a.topicsBy,
+    tagging: isTagging(a),
+    showAdd: true, // "Add topics" stays visible on a saved article; a post shows it on hover
+    save: (topics) => setArticleTopics(a, topics),
+    suggest: () => suggestTopics([a.id]),
+  }
+}
+
+function postSubject(p) {
+  const rec = state.postTopics.get(p.url)
+  const brief = { url: p.url, title: p.title, summary: p.summary, feedTitle: p.feedTitle, createdAt: p.createdAt }
+  return {
+    key: 'p:' + p.url,
+    topics: rec?.topics || [],
+    topicsBy: rec?.topicsBy || null,
+    tagging: (state.ai.taggingPosts || []).includes(p.url),
+    save: (topics) => articleAction(() => nomad.vault.readerSetPostTopics(p.url, topics)),
+    suggest: () => articleAction(() => nomad.vault.readerTagPosts([brief], [p.url])),
+  }
+}
 
 function render() {
   const app = document.getElementById('app')
@@ -390,7 +471,8 @@ function render() {
 
 function renderHeader() {
   const articles = isArticleView()
-  const unread = articles ? unreadArticles(visibleArticles()) : unreadCount(visiblePosts())
+  // A topic lists feed posts too, under its saved articles.
+  const unread = articles ? unreadArticles(visibleArticles()) + unreadCount(visibleTopicPosts()) : unreadCount(visiblePosts())
   return el('header', {}, [
     el('div', { class: 'brand' }, [el('img', { src: 'asset:favicon:nomad://reader/', alt: '' }), 'Reader']),
     el('div', { class: 'status' }, [!articles && state.loading ? 'Refreshing…' : `${unread} unread`]),
@@ -404,7 +486,7 @@ function renderHeader() {
         : null,
       el(
         'button',
-        { class: 'icon-btn', title: 'Refresh', 'aria-label': 'Refresh', disabled: state.loading, onclick: async () => { await loadState().catch(() => {}); refreshAll() } },
+        { class: 'icon-btn', title: 'Refresh', 'aria-label': 'Refresh', disabled: state.loading, onclick: async () => { await loadState().catch(() => {}); refreshAll({ fresh: true }) } },
         [icon('sync-alt')]
       ),
     ]),
@@ -422,7 +504,7 @@ function renderSidebar() {
       feedRow({
         name: f.title || f.url,
         title: f.error || f.url,
-        icon: feedIcon(f.url),
+        icon: feedIcon(f.siteUrl || f.url),
         count: f.ok ? unreadCount(f.posts) : null,
         current: state.filter === f.url,
         err: !f.ok,
@@ -623,13 +705,13 @@ function openFromCanvas(id) {
   setFilter(f)
 }
 
-// One box for both: a feed's hyper:// address subscribes, any other link is saved as an article.
+// One box for all: a feed (hyper://, RSS or Atom) subscribes, any other link is saved as an article.
 function renderAddFeed() {
   const canFeed = state.canFollow
   const input = el('input', {
     type: 'text',
-    placeholder: canFeed ? 'Paste a link or hyper:// feed' : 'Paste a link to save',
-    'aria-label': 'Link to save, or feed to subscribe to',
+    placeholder: canFeed ? 'Paste a link, RSS or hyper:// feed' : 'Paste a link to save',
+    'aria-label': 'A page to save, or a feed to follow (RSS, Atom or hyper://)',
     value: state.addDraft,
     disabled: state.saving,
     oninput: (e) => {
@@ -656,17 +738,25 @@ function renderAddFeed() {
     input.value = ''
     addFromBox(v)
   }
+  // A drive subscribes; a web link is looked at first (a feed is followed, a page saved).
   const submitBtn = () => {
-    const feed = addKind(state.addDraft) === 'feed'
+    const kind = addKind(state.addDraft)
     return el('button', { class: 'btn primary', onclick: submit, disabled: state.saving }, [
-      state.saving ? icon('circle-notch', 'fa-spin') : icon(feed ? 'plus' : 'bookmark'),
-      state.saving ? ' Saving…' : feed ? ' Subscribe' : ' Save to Reader',
+      state.saving ? icon('circle-notch', 'fa-spin') : icon(kind === 'feed' ? 'plus' : kind === 'article' ? 'bookmark' : 'plus'),
+      state.saving ? ' Adding…' : kind === 'feed' ? ' Subscribe' : kind === 'article' ? ' Save to Reader' : ' Add',
     ])
   }
   return el('div', { class: 'add-feed' }, [
     input,
     submitBtn(),
     state.addMsg ? el('div', { class: 'msg' }, [state.addMsg]) : null,
+    state.feedOffer && state.canFollow
+      ? el('div', { class: 'feed-offer' }, [
+          icon('rss'),
+          el('span', {}, [`${state.feedOffer.site} has a feed. `]),
+          el('button', { class: 'link-btn', onclick: () => followSiteFeed(state.feedOffer.url) }, ['Subscribe']),
+        ])
+      : null,
     syncNote(),
   ])
 }
@@ -703,7 +793,7 @@ function renderMain() {
   } else if (!state.follows.length) {
     wrap.append(
       notice('rss', 'No subscriptions yet', [
-        'Add a feed’s hyper:// address on the left, or find feeds in ',
+        'Paste a hyper:// feed, or an RSS or Atom feed’s link (or the site’s own), on the left, or find feeds in ',
         tabLink({}, 'nomad://search/', ['Search']),
         '. To keep any page you read, right-click it and choose Save Page to Reader.',
       ])
@@ -728,7 +818,8 @@ function renderMain() {
 
 function renderArticles(wrap) {
   const list = visibleArticles()
-  if (!state.articles.length) {
+  const posts = visibleTopicPosts()
+  if (!state.articles.length && !posts.length) {
     wrap.append(
       notice('bookmark', 'Nothing saved yet', [
         'Keep track of what you read: right-click a page and choose Save Page to Reader, use Save to Reader in the site menu, or paste a link on the left. ',
@@ -737,12 +828,15 @@ function renderArticles(wrap) {
     )
     return
   }
-  const untagged = state.articles.filter((a) => !a.topicsBy && !isTagging(a))
+  // Offered on the reading log and "No topic yet", not inside a topic.
+  const untagged = state.filter.startsWith('topic:') ? [] : state.articles.filter((a) => !a.topicsBy && !isTagging(a))
   const heading = state.filter.startsWith('topic:') ? state.filter.slice(6) : state.filter === 'untagged' ? 'No topic yet' : 'Reading log'
   wrap.append(
     el('div', { class: 'list-head' }, [
       el('h1', {}, [heading]),
-      el('span', { class: 'result-count' }, [plural(list.length, 'article')]),
+      el('span', { class: 'result-count' }, [
+        [list.length || !posts.length ? plural(list.length, 'saved article') : '', posts.length ? plural(posts.length, 'feed post') : ''].filter(Boolean).join(', '),
+      ]),
       untagged.length
         ? el('button', { class: 'btn', title: 'Ask this device’s AI to sort them into topics', onclick: () => suggestTopics() }, [
             icon('magic'),
@@ -755,20 +849,26 @@ function renderArticles(wrap) {
     wrap.append(
       el('p', { class: 'ai-note' }, [
         icon('info-circle'),
-        el('span', {}, ['No AI is set up on this device, so articles aren’t sorted into topics. Choose one in ', tabLink({}, 'nomad://settings/?view=ai', ['Settings → AI']), '.']),
+        el('span', {}, ['No AI is set up on this device, so articles aren’t sorted into topics. Choose one in ', tabLink({}, 'nomad://ai/setup', ['the AI page’s setup']), '.']),
       ])
     )
   }
-  if (!list.length) {
+  if (!list.length && !posts.length) {
     wrap.append(notice('inbox', 'No articles here', ['Articles you save appear here.']))
     return
   }
-  wrap.append(el('div', { class: 'posts' }, list.map(renderArticle)))
+  // A topic shows saved articles and feed posts together, newest first.
+  const items = [
+    ...list.map((a) => ({ at: a.savedAt || '', node: () => renderArticle(a) })),
+    ...posts.map((p) => ({ at: p.createdAt || '', node: () => renderPost(p) })),
+  ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
+  wrap.append(el('div', { class: 'posts' }, items.map((i) => i.node())))
 }
 
 function renderArticle(a) {
   const read = !!a.readAt
-  const editing = state.editing === a.id
+  const subject = articleSubject(a)
+  const editing = state.editing === subject.key
   return el('div', { class: 'post article' + (read ? ' read' : ''), 'data-id': a.id, onclick: (e) => { if (!e.target.closest('button, input, .tag, a')) openReading(a.id) } }, [
     el('span', { class: 'dot', 'aria-label': read ? null : 'Unread' }),
     el('div', { class: 'feed-name' }, [
@@ -781,8 +881,11 @@ function renderArticle(a) {
     ]),
     el('a', { class: 'title', href: a.url, onclick: (e) => { e.preventDefault(); openReading(a.id) } }, [a.title]),
     a.excerpt ? el('div', { class: 'summary' }, [a.excerpt]) : null,
-    editing ? renderTopicEditor(a) : renderTopics(a),
+    editing ? renderTopicEditor(subject) : renderTopics(subject),
     el('div', { class: 'row-actions' }, [
+      a.feed && !state.follows.includes(a.feed) && state.canFollow
+        ? actionBtn('rss', `Follow ${a.site || 'this site'}’s feed`, () => followSiteFeed(a.feed))
+        : null,
       actionBtn(read ? 'envelope' : 'check', read ? 'Mark unread' : 'Mark read', () => setArticleRead(a, !read)),
       actionBtn('external-link-alt', 'Open the original page', () => { setArticleRead(a, true); openInTab(a.url) }),
       actionBtn('trash', 'Remove from Reader', () => deleteArticle(a)),
@@ -792,22 +895,28 @@ function renderArticle(a) {
 
 function renderTopics(a) {
   const chips = (a.topics || []).map((t) =>
-    el('span', { class: 'tag', title: `Show ${t}`, onclick: () => setFilter('topic:' + t) }, [t])
+    el('span', { class: 'tag', title: `Show ${t}`, onclick: (e) => { e.stopPropagation(); setFilter('topic:' + t) } }, [t])
   )
-  if (isTagging(a)) chips.push(el('span', { class: 'tag pending' }, [icon('circle-notch', 'fa-spin'), ' Finding topics…']))
+  if (a.tagging) chips.push(el('span', { class: 'tag pending' }, [icon('circle-notch', 'fa-spin'), ' Finding topics…']))
   return el('div', { class: 'meta topics' }, [
     ...chips,
     a.topicsBy === 'ai' && (a.topics || []).length ? el('span', { class: 'by-ai', title: 'Picked by the AI' }, [icon('magic')]) : null,
     el(
       'button',
       {
-        class: 'topic-btn' + (chips.length ? '' : ' add'),
+        class: 'topic-btn' + (chips.length || !a.showAdd ? '' : ' add'),
         title: a.topicsBy === 'ai' ? 'Topics picked by the AI. Edit them' : 'Edit topics',
-        onclick: () => { state.editing = a.id; render(); document.querySelector('.topic-edit input')?.focus() },
+        onclick: (e) => { e.stopPropagation(); editTopics(a) },
       },
       [icon(chips.length ? 'pen' : 'plus'), chips.length ? '' : ' Add topics']
     ),
   ])
+}
+
+function editTopics(subject) {
+  state.editing = subject.key
+  render()
+  document.querySelector('.topic-edit input')?.focus()
 }
 
 function renderTopicEditor(a) {
@@ -825,13 +934,13 @@ function renderTopicEditor(a) {
   })
   const save = () => {
     state.editing = null
-    setArticleTopics(a, input.value.split(',').map((t) => t.trim()).filter(Boolean))
+    a.save(input.value.split(',').map((t) => t.trim()).filter(Boolean))
   }
-  return el('div', { class: 'topic-edit' }, [
+  return el('div', { class: 'topic-edit', onclick: (e) => e.stopPropagation() }, [
     input,
     el('datalist', { id: listId }, topics().map((t) => el('option', { value: t.topic }))),
     el('button', { class: 'btn primary', onclick: save }, ['Save']),
-    el('button', { class: 'btn', title: 'Ask the AI again', onclick: () => { state.editing = null; suggestTopics([a.id]) } }, [icon('magic'), ' Suggest']),
+    el('button', { class: 'btn', title: 'Ask the AI again', onclick: () => { state.editing = null; a.suggest() } }, [icon('magic'), ' Suggest']),
     el('button', { class: 'btn', onclick: () => { state.editing = null; render() } }, ['Cancel']),
   ])
 }
@@ -927,6 +1036,9 @@ function renderReading() {
       el('button', { class: 'icon-btn', title: 'Larger text', 'aria-label': 'Larger text', disabled: p.size >= 28, onclick: () => { p.size = Math.min(28, p.size + 1); saveReadPrefs() } }, [el('span', { class: 'a-large' }, ['A'])]),
       el('button', { class: 'icon-btn', title: p.font === 'serif' ? 'Sans-serif text' : 'Serif text', 'aria-label': 'Switch font', onclick: () => { p.font = p.font === 'serif' ? 'sans' : 'serif'; saveReadPrefs() } }, [icon('font')]),
       el('span', { class: 'tool-sep' }),
+      a?.feed && state.canFollow && !state.follows.includes(a.feed)
+        ? el('button', { class: 'btn', title: `Follow ${a.site || 'this site'}’s feed in Reader`, onclick: () => { closeReading(); followSiteFeed(a.feed) } }, [icon('rss'), ' Follow site'])
+        : null,
       a ? el('button', { class: 'btn', onclick: () => openInTab(a.url) }, [icon('external-link-alt'), ' Original']) : null,
     ]),
   ])
@@ -1007,18 +1119,29 @@ function minutes(words) {
 
 function renderPost(p) {
   const read = state.readSet.has(p.url)
-  return el('a', {
+  const subject = postSubject(p)
+  const editing = state.editing === subject.key
+  return el('div', {
     class: 'post' + (read ? ' read' : ''),
-    href: p.url,
-    onclick: (e) => { e.preventDefault(); openPost(p) },
+    'data-url': p.url,
+    onclick: (e) => { if (!e.target.closest('button, input, .tag, a')) openPost(p) },
   }, [
     el('span', { class: 'dot', 'aria-label': read ? null : 'Unread' }),
-    el('div', { class: 'feed-name' }, [p.feedTitle]),
-    el('div', { class: 'title' }, [p.title]),
-    p.summary ? el('div', { class: 'summary' }, [p.summary]) : null,
-    el('div', { class: 'meta' }, [
+    el('div', { class: 'feed-name' }, [
+      p.web ? icon('rss', 'site-icon') : null,
+      el('span', {}, [p.feedTitle]),
+      p.createdAt ? el('span', { class: 'sep' }, ['·']) : null,
       p.createdAt ? el('span', {}, [formatDate(p.createdAt)]) : null,
-      ...p.tags.map((t) => el('span', { class: 'tag' }, [t])),
+    ]),
+    el('a', { class: 'title', href: p.url, onclick: (e) => { e.preventDefault(); openPost(p) } }, [p.title]),
+    p.summary ? el('div', { class: 'summary' }, [p.summary]) : null,
+    // The author's own tags, then the topics.
+    p.tags.length ? el('div', { class: 'meta' }, p.tags.map((t) => el('span', { class: 'author-tag' }, ['#' + t]))) : null,
+    // A post with no topics yet gets "Add topics" with its other actions, on hover.
+    editing ? renderTopicEditor(subject) : subject.topics.length || subject.tagging ? renderTopics(subject) : null,
+    el('div', { class: 'row-actions' }, [
+      editing || subject.topics.length || subject.tagging ? null : actionBtn('tag', 'Add topics', () => editTopics(subject)),
+      read ? null : actionBtn('check', 'Mark read', () => { markRead(p.url); render() }),
     ]),
   ])
 }

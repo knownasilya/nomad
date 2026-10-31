@@ -323,6 +323,23 @@ export default {
     return vaultApps.refetchArticle(this, id);
   },
 
+  // RSS and Atom feeds (web-feeds.ts), and topics for feed posts
+  async readerAddLink(url) {
+    return vaultApps.addLink(this, url);
+  },
+
+  async readerWebFeed(url, opts) {
+    return vaultApps.webFeed(this, url, opts);
+  },
+
+  async readerTagPosts(posts, urls) {
+    return vaultApps.tagPosts(this, posts, urls);
+  },
+
+  async readerSetPostTopics(url, topics) {
+    return vaultApps.setPostTopics(this, url, topics);
+  },
+
   async listNotes() {
     return vaultApps.listNotes(this);
   },

@@ -3,7 +3,7 @@ import { Modal, View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, 
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme, radius, type Theme } from '../lib/theme'
-import type { Backend, Feed, FeedPost, ReaderState, SavedArticle } from '../lib/useBackend'
+import type { Backend, Feed, FeedPost, ReaderState, SavedArticle, WebFeed } from '../lib/useBackend'
 import ActionSheet from './ActionSheet'
 import LinkPhone from './LinkPhone'
 import ScreenHeader from './ScreenHeader'
@@ -13,6 +13,28 @@ const VIEW_KEY = 'nomad-reader-view' // 'list' or 'canvas', the last one used
 
 // One Feed's load state: posts once it loads, or why it didn't.
 interface FeedLoad { url: string; title: string; posts: FeedPost[]; loading: boolean; error?: string }
+
+const isWeb = (url: string) => /^(https?|feeds?):\/\//i.test(url)
+const MAX_FEED_BYTES = 5 * 1024 * 1024
+
+// The app fetches an RSS or Atom feed (the backend has no web fetch) and the backend parses it
+// (shared/web-feeds.mjs). For a web page, the backend answers with the feeds it links to.
+async function fetchWebFeed (call: Backend['apps'], url: string): Promise<{ ok: boolean; value?: WebFeed; message?: string }> {
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 20000)
+    const res = await fetch(url.replace(/^feeds?:\/\//i, 'https://'), {
+      signal: ctrl.signal,
+      headers: { Accept: 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.9, text/html;q=0.8, */*;q=0.5' }
+    }).finally(() => clearTimeout(timer))
+    if (!res.ok) return { ok: false, message: `The site answered ${res.status}` }
+    const text = (await res.text()).slice(0, MAX_FEED_BYTES)
+    const parsed = await call<WebFeed>('reader', 'parseFeed', { url, text })
+    return { ok: parsed.ok, value: parsed.value, message: parsed.message }
+  } catch (err: any) {
+    return { ok: false, message: err?.name === 'AbortError' ? 'The site took too long to answer' : 'Can’t reach that site' }
+  }
+}
 
 interface Props {
   visible: boolean
@@ -73,7 +95,10 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
       return next
     })
     for (const url of follows) {
-      call<Feed>('reader', 'feed', { url }).then((res) => {
+      const load: Promise<{ ok: boolean; value?: Feed; message?: string }> = isWeb(url)
+        ? fetchWebFeed(call, url).then((r) => (r.ok && r.value && !r.value.posts ? { ok: false, message: 'That address isn’t a feed' } : r))
+        : call<Feed>('reader', 'feed', { url })
+      load.then((res) => {
         if (gen !== generation.current) return
         setFeeds((prev) => ({
           ...prev,
@@ -120,21 +145,34 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
     })
   }, [visible, onVaultChange, call, refresh, loadFeeds, space])
 
-  const read = useMemo(() => new Set(state?.read || []), [state])
+  // hyper:// posts read, plus RSS and Atom items read (kept per feed in web-read.json).
+  const read = useMemo(() => new Set([...(state?.read || []), ...Object.values(state?.webRead || {}).flat()]), [state])
+  // Feed posts' topics, from a computer's AI or the user (shared/reader-articles.mjs post-topics).
+  const postTopics = useMemo(() => {
+    const m = new Map<string, string[]>()
+    for (const r of state?.postTopics || []) if (r.topics?.length) m.set(r.url, r.topics)
+    return m
+  }, [state])
   const allPosts = useMemo(() => {
     const posts = Object.values(feeds).flatMap((f) => f.posts)
     return posts.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
   }, [feeds])
   const savedView = filter === 'saved' || filter.startsWith('topic:')
   const articles = state?.articles || []
-  const topicList = useMemo(() => topicCounts(articles), [articles])
-  const shownArticles = filter === 'saved'
-    ? articles
-    : filter.startsWith('topic:')
-      ? articles.filter((a) => (a.topics || []).some((t) => t.toLowerCase() === filter.slice(6).toLowerCase()))
-      : []
+  // Topics count saved articles and the posts in the feeds that loaded.
+  const topicList = useMemo(
+    () => topicCounts([...articles.map((a) => a.topics || []), ...allPosts.map((p) => postTopics.get(p.url) || [])]),
+    [articles, allPosts, postTopics]
+  )
+  const topicName = filter.startsWith('topic:') ? filter.slice(6).toLowerCase() : ''
+  const hasTopic = (topics: string[] | undefined) => (topics || []).some((t) => t.toLowerCase() === topicName)
+  const shownArticles = filter === 'saved' ? articles : topicName ? articles.filter((a) => hasTopic(a.topics)) : []
+  // A topic shows feed posts too, under the articles.
+  const topicPosts = topicName ? allPosts.filter((p) => hasTopic(postTopics.get(p.url))) : []
   const posts = savedView ? [] : filter === 'all' ? allPosts : allPosts.filter((p) => p.feedUrl === filter)
-  const unread = savedView ? shownArticles.filter((a) => !a.readAt).length : posts.filter((p) => !read.has(p.url)).length
+  const unread = savedView
+    ? shownArticles.filter((a) => !a.readAt).length + topicPosts.filter((p) => !read.has(p.url)).length
+    : posts.filter((p) => !read.has(p.url)).length
   const loadingAny = Object.values(feeds).some((f) => f.loading)
 
   // Feeds that loaded hand over their current posts, so marks for deleted posts are dropped.
@@ -162,6 +200,8 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
   }
 
   const markAllArticles = async () => {
+    const posts = topicPosts.filter((p) => !read.has(p.url)).map((p) => p.url)
+    if (posts.length) saveRead(posts)
     for (const a of shownArticles.filter((x) => !x.readAt)) await markArticle(a, true)
   }
 
@@ -170,10 +210,18 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
     onOpenPost(p.url)
   }
 
+  // A hyper:// drive is followed as it is. A web address must be an RSS or Atom feed, or a page that
+  // links one (a blog's home page): then its first feed is followed.
   const subscribe = async () => {
-    const url = addUrl.trim()
+    let url = addUrl.trim()
     if (!url) return
+    if (/^[\w-]+(\.[\w-]+)+(\/|$)/.test(url)) url = 'https://' + url
     setAdding(true)
+    if (isWeb(url)) {
+      const found = await fetchWebFeed(call, url)
+      if (!found.ok || !found.value) { setAdding(false); return Alert.alert('Couldn’t subscribe', found.message || 'No RSS or Atom feed at that address') }
+      if (found.value.feeds?.length) url = found.value.feeds[0].url
+    }
     const res = await call<ReaderState>('reader', 'follow', { space, url })
     setAdding(false)
     if (!res.ok || !res.value) return Alert.alert('Couldn’t subscribe', res.message || 'Unknown error')
@@ -203,7 +251,7 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
   const current = filter === 'all' ? null : feeds[filter]
 
   // ── Canvas ──
-  const canvasData = useMemo(() => ({ articles, posts: allPosts, read: state?.read || [] }), [articles, allPosts, state])
+  const canvasData = useMemo(() => ({ articles, posts: allPosts, read: [...read] }), [articles, allPosts, read])
   // A chip picked while the canvas shows lights up its topic or feed there.
   const pick = (f: string) => {
     setFilter(f)
@@ -272,7 +320,7 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
             {feedList.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chips} contentContainerStyle={s.chipsContent}>
                 <Chip s={s} label='All' active={filter === 'all'} onPress={() => pick('all')} />
-                {articles.length > 0 && <Chip s={s} label={`Saved · ${articles.length}`} active={savedView} onPress={() => pick('saved')} />}
+                {(articles.length > 0 || topicList.length > 0) && <Chip s={s} label={articles.length ? `Saved · ${articles.length}` : 'Topics'} active={savedView} onPress={() => pick(articles.length ? 'saved' : 'topic:' + topicList[0].topic)} />}
                 {feedList.map((f) => (
                   <Chip
                     key={f.url}
@@ -344,18 +392,30 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
               {savedView && (
                 <>
                   <View style={s.countRow}>
-                    <Text style={s.countText}>{shownArticles.length} saved · {unread} unread</Text>
+                    <Text style={s.countText}>{topicName ? `${shownArticles.length + topicPosts.length} items` : `${shownArticles.length} saved`} · {unread} unread</Text>
                     {unread > 0 && (
                       <TouchableOpacity onPress={markAllArticles} hitSlop={8}>
                         <Text style={s.action}>Mark all read</Text>
                       </TouchableOpacity>
                     )}
                   </View>
-                  <View style={s.card}>
-                    {shownArticles.map((a, i) => (
-                      <ArticleRow key={a.id} a={a} divider={i > 0} s={s} onPress={() => openArticle(a)} onLongPress={() => setMenuFor(a)} onTopic={(t) => setFilter('topic:' + t)} />
-                    ))}
-                  </View>
+                  {shownArticles.length > 0 && (
+                    <View style={s.card}>
+                      {shownArticles.map((a, i) => (
+                        <ArticleRow key={a.id} a={a} divider={i > 0} s={s} onPress={() => openArticle(a)} onLongPress={() => setMenuFor(a)} onTopic={(t) => setFilter('topic:' + t)} />
+                      ))}
+                    </View>
+                  )}
+                  {topicPosts.length > 0 && (
+                    <>
+                      <Text style={s.sectionLabel}>From your feeds</Text>
+                      <View style={s.card}>
+                        {topicPosts.map((p, i) => (
+                          <PostRow key={p.url} p={p} topics={postTopics.get(p.url)} read={read.has(p.url)} divider={i > 0} s={s} onPress={() => openPost(p)} onTopic={(t) => setFilter('topic:' + t)} />
+                        ))}
+                      </View>
+                    </>
+                  )}
                   <Text style={s.addHint}>Save pages from Reader on your computer: right-click a page, Save Page to Reader. Long-press an article for more.</Text>
                 </>
               )}
@@ -374,11 +434,11 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
               {savedView ? null : posts.length > 0 ? (
                 <View style={s.card}>
                   {posts.map((p, i) => (
-                    <PostRow key={p.url} p={p} read={read.has(p.url)} divider={i > 0} s={s} onPress={() => openPost(p)} />
+                    <PostRow key={p.url} p={p} topics={postTopics.get(p.url)} read={read.has(p.url)} divider={i > 0} s={s} onPress={() => openPost(p)} onTopic={(t) => setFilter('topic:' + t)} />
                   ))}
                 </View>
               ) : feedList.length === 0 ? (
-                <Text style={s.empty}>No subscriptions yet. Add a feed’s hyper:// address below, or subscribe from nomad://reader on your computer.</Text>
+                <Text style={s.empty}>No subscriptions yet. Add a hyper:// feed or a site’s RSS link below, or subscribe from nomad://reader on your computer.</Text>
               ) : current?.error ? (
                 <Text style={s.empty}>Can’t load {current.title}. It may be offline.{'\n'}Long-press its name above to unsubscribe.</Text>
               ) : loadingAny ? (
@@ -397,11 +457,12 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
                     style={s.addInput}
                     value={addUrl}
                     onChangeText={setAddUrl}
-                    placeholder='hyper://…'
+                    placeholder='hyper://… or a site’s RSS link'
                     placeholderTextColor={t.textMuted}
                     autoCapitalize='none'
                     autoCorrect={false}
                     spellCheck={false}
+                    keyboardType='url'
                     onSubmitEditing={subscribe}
                     returnKeyType='done'
                   />
@@ -431,7 +492,7 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
   )
 }
 
-function PostRow ({ p, read, divider, s, onPress }: { p: FeedPost; read: boolean; divider: boolean; s: Styles; onPress: () => void }) {
+function PostRow ({ p, topics, read, divider, s, onPress, onTopic }: { p: FeedPost; topics?: string[]; read: boolean; divider: boolean; s: Styles; onPress: () => void; onTopic: (t: string) => void }) {
   const t = useTheme()
   return (
     <Pressable style={[s.post, divider && s.rowDivider]} android_ripple={{ color: t.ripple }} onPress={onPress}>
@@ -441,6 +502,15 @@ function PostRow ({ p, read, divider, s, onPress }: { p: FeedPost; read: boolean
         <Text numberOfLines={2} style={[s.postTitle, read && s.postTitleRead]}>{p.title}</Text>
         {!!p.summary && <Text numberOfLines={2} style={s.postSummary}>{p.summary}</Text>}
         {!!p.createdAt && <Text style={s.postDate}>{formatDate(p.createdAt)}</Text>}
+        {!!topics?.length && (
+          <View style={s.topicRow}>
+            {topics.map((topic) => (
+              <TouchableOpacity key={topic} onPress={() => onTopic(topic)} hitSlop={4} style={s.topic}>
+                <Text style={s.topicText}>{topic}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
     </Pressable>
   )
@@ -472,11 +542,11 @@ function ArticleRow ({ a, divider, s, onPress, onLongPress, onTopic }: { a: Save
 }
 
 // Every topic in use, most used first (shared/reader-articles.mjs topicCounts; mobile/ keeps its
-// React Native bundle to itself).
-function topicCounts (articles: SavedArticle[]): Array<{ topic: string; count: number }> {
+// React Native bundle to itself). One list of topics per article or post.
+function topicCounts (lists: string[][]): Array<{ topic: string; count: number }> {
   const counts = new Map<string, { topic: string; count: number }>()
-  for (const a of articles) {
-    for (const t of a.topics || []) {
+  for (const topics of lists) {
+    for (const t of topics) {
       const c = counts.get(t.toLowerCase()) || { topic: t, count: 0 }
       c.count++
       counts.set(t.toLowerCase(), c)
@@ -533,6 +603,7 @@ function makeStyles (t: Theme) {
     topicRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
     topic: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: t.trustBg },
     topicText: { color: t.trustText, fontSize: 11, fontWeight: '600' },
+    sectionLabel: { color: t.textMuted, fontSize: 12, fontWeight: '600', marginTop: 16, marginBottom: 8, paddingHorizontal: 2 },
     empty: { color: t.textMuted, fontSize: 13, textAlign: 'center', marginTop: 30, lineHeight: 19 },
     addCard: { backgroundColor: t.surface, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, padding: 16, marginTop: 24 },
     addLabel: { color: t.text, fontSize: 14, fontWeight: '700', marginBottom: 8 },

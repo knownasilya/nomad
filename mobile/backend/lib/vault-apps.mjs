@@ -2,6 +2,7 @@ import b4a from 'b4a'
 import { decodeInlineJson } from '../../../shared/fs-core.mjs'
 import * as apps from '../../../shared/vault-apps.mjs'
 import * as ra from '../../../shared/reader-articles.mjs'
+import { parseWebFeed, isFeedXml, findFeedLinks } from '../../../shared/web-feeds.mjs'
 import * as names from '../../../shared/names.mjs'
 import * as ot from '../../../shared/open-tabs.mjs'
 import * as jl from '../../../shared/jobs.mjs'
@@ -107,6 +108,10 @@ export async function readerState (base, space) {
   return {
     follows: apps.followUrls(await readPrefix(place.base, place.prefix)),
     read: (await readRecord(base, apps.readPath(space)))?.read || [],
+    // RSS and Atom items read, per feed.
+    webRead: (await readRecord(base, apps.webReadPath(space)))?.read || {},
+    // Topics the computer's AI (or the user) gave feed posts.
+    postTopics: (await readPrefix(base, ra.postTopicsPrefix(space))).filter(ra.isPostTopics),
     // Pages saved to Reader on a computer (ADR-0033): the user's own, always in the Vault.
     articles: ra.sortArticles(await readPrefix(base, ra.articlesPrefix(space))),
     writable: !!base.writable,
@@ -129,12 +134,27 @@ export async function unfollow (base, space, url) {
 }
 
 // Merges with what other Devices marked read; see mergeReadState for what it prunes.
+// RSS and Atom items go to web-read.json, under the loaded feed that lists them.
 export async function saveRead (base, space, add = [], loaded = {}) {
-  const { follows, read } = await readerState(base, space)
+  const { follows, read, webRead } = await readerState(base, space)
   const next = apps.mergeReadState(read, add, follows, loaded)
-  if (next.length === read.length && next.every((u, i) => u === read[i])) return readerState(base, space)
-  await putRecord(base, apps.readPath(space), { read: next })
+  if (!(next.length === read.length && next.every((u, i) => u === read[i]))) await putRecord(base, apps.readPath(space), { read: next })
+  if (follows.some(apps.isWebFeed)) {
+    const web = apps.mergeWebRead(webRead, add, follows, loaded)
+    if (JSON.stringify(web) !== JSON.stringify(webRead)) await putRecord(base, apps.webReadPath(space), { read: web })
+  }
   return readerState(base, space)
+}
+
+// An RSS or Atom feed's text, fetched by the app (the backend has no web fetch): the feed and its
+// posts. For a web page, the feeds it links to instead: { feeds: [{ url, title }] }.
+export function parseFeed (url, text) {
+  const key = apps.webFeedUrl(url)
+  if (!key) throw new Error('Not an RSS or Atom feed’s address')
+  if (isFeedXml(text)) return parseWebFeed(text, key)
+  const feeds = findFeedLinks(text, key)
+  if (!feeds.length) throw new Error('No RSS or Atom feed at that address')
+  return { feeds }
 }
 
 // Mark a saved article read or unread.
