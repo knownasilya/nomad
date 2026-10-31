@@ -5,7 +5,7 @@ import IconButton from './IconButton'
 import type { Backend } from '../lib/useBackend'
 import { dismissJustUpdated, useDesktopUpdates, useJustUpdated } from '../lib/deviceUpdates'
 
-// Right after the phone updated itself: a strip above the toolbar offering to update the user's
+// Right after the phone updated itself: a strip at the bottom of the browser offering to update the user's
 // computers that still run an older Nomad. Tapping Update asks each of them to install the newest
 // release and restart (lib/deviceUpdates.ts); the strip then follows how it goes until it is done.
 export default function DesktopUpdateBanner ({ apps }: { apps: Backend['apps'] }) {

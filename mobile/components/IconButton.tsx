@@ -13,13 +13,14 @@ interface Props {
   regular?: boolean
   size?: number
   color?: string
+  ripple?: string // the press ripple, for a button on a colored bar
   style?: StyleProp<ViewStyle>
   children?: ReactNode // drawn instead of `icon`, e.g. the tab count
 }
 
 // A round, 48dp icon button with Android's borderless ripple, the size Material asks for so a
 // thumb can hit it. iOS dims it while pressed instead.
-export default function IconButton ({ icon, label, onPress, onLongPress, disabled, active, regular, size = 20, color, style, children }: Props) {
+export default function IconButton ({ icon, label, onPress, onLongPress, disabled, active, regular, size = 20, color, ripple, style, children }: Props) {
   const t = useTheme()
   const tint = disabled ? t.border : active ? t.accent : color ?? t.textDim
   return (
@@ -30,7 +31,7 @@ export default function IconButton ({ icon, label, onPress, onLongPress, disable
       accessibilityRole='button'
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled, selected: !!active }}
-      android_ripple={{ color: t.ripple, borderless: true, radius: touch / 2 }}
+      android_ripple={{ color: ripple ?? t.ripple, borderless: true, radius: touch / 2 }}
       style={({ pressed }) => [s.btn, style, pressed && Platform.OS !== 'android' && s.pressed]}
     >
       {children ?? (icon ? <Icon name={icon} size={size} color={tint} regular={regular} /> : null)}

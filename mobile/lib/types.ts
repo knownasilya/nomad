@@ -98,6 +98,59 @@ export const FAVICON_JS = `(function(){
   true;
 })();`
 
+// Injected after load into every page WebView (with FAVICON_JS): reports the site's color for the
+// browser's top bar (lib/siteTheme.ts), as Chrome picks it. A <meta name="theme-color"> whose media
+// query matches (so a site's dark color in dark mode), else the web manifest's theme_color, else
+// none. The page's own CSS engine resolves the color, so the app gets rgb()/rgba(). It reports again
+// when a single-page app swaps the meta tag or the system turns dark or light, and only on a change.
+export const THEME_COLOR_JS = `(function(){
+  try {
+    if (window.__nomadThemeColor) return; window.__nomadThemeColor = true;
+    var last, manifest, fetching = false;
+    function post(color){
+      if (color === last) return; last = color;
+      try { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'theme-color', page: location.href, color: color })); } catch(e){}
+    }
+    function resolve(c){
+      if (!c || typeof c !== 'string') return null;
+      var el = document.createElement('i'); el.style.color = c;
+      if (!el.style.color) return null;
+      el.style.display = 'none'; (document.body || document.documentElement).appendChild(el);
+      var v = getComputedStyle(el).color; el.remove();
+      return v || null;
+    }
+    function fromMeta(){
+      var metas = document.querySelectorAll('meta[name="theme-color" i]');
+      for (var i = 0; i < metas.length; i++) {
+        var media = metas[i].getAttribute('media');
+        if (media && !window.matchMedia(media).matches) continue;
+        var c = resolve(metas[i].getAttribute('content'));
+        if (c) return c;
+      }
+      return null;
+    }
+    function update(){
+      var c = fromMeta();
+      if (c) return post(c);
+      if (manifest !== undefined) return post(manifest);
+      var link = document.querySelector('link[rel~="manifest" i]');
+      if (!link || !link.href) return post(null);
+      if (fetching) return; fetching = true;
+      fetch(link.href, { credentials: link.crossOrigin === 'use-credentials' ? 'include' : 'same-origin' })
+        .then(function(r){ return r.json(); })
+        .then(function(j){ manifest = resolve(j && j.theme_color); })
+        .catch(function(){ manifest = null; })
+        .then(function(){ fetching = false; update(); });
+    }
+    update();
+    if (window.MutationObserver && document.head) {
+      new MutationObserver(update).observe(document.head, { childList: true, subtree: true, attributes: true, attributeFilter: ['content', 'media'] });
+    }
+    try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', update); } catch(e){}
+  } catch (e) {}
+  true;
+})();`
+
 // Injected into drive WebViews so in-page `nomad.fs.*` calls (used by app frontends like the blog
 // template) work on mobile. Exposes the SAME `nomad.fs` surface as desktop (ADR-0010) — the method
 // list is the canonical shared/fs-manifest.mjs — over a postMessage bridge to the Bare backend
