@@ -88,7 +88,11 @@ export default function AddressBar (props: Props) {
             onBlur={() => { setFocused(false); onBlur?.() }}
             placeholder='Search or enter address'
             placeholderTextColor={t.textMuted}
-            selectionColor={tint ? t.text : undefined}
+            // The address is all selected on focus, so the highlight must stay see-through: a solid
+            // highlight in the text's own color hid the words. The cursor and handles stay solid.
+            selectionColor={t.selection}
+            cursorColor={t.text}
+            selectionHandleColor={t.accent}
             autoCapitalize='none'
             autoCorrect={false}
             keyboardType='url'
@@ -144,7 +148,9 @@ function makeStyles (t: Theme, tinted: boolean) {
       paddingRight: 0,
       paddingTop: 4,
       paddingBottom: 6,
-      minHeight: 54
+      // A fixed height: the 48dp buttons hide while the field has focus, and the bar must not
+      // shrink under the finger (it did by 4dp, pulling the page up with it).
+      height: 58
     },
     spaceBtn: { width: 44, height: 48, alignItems: 'center', justifyContent: 'center' },
     spaceRing: { width: 30, height: 30, borderRadius: radius.pill, backgroundColor: t.inputBg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, alignItems: 'center', justifyContent: 'center' },
@@ -157,14 +163,15 @@ function makeStyles (t: Theme, tinted: boolean) {
       alignItems: 'center',
       backgroundColor: t.inputBg,
       borderRadius: radius.pill,
-      borderWidth: tinted ? 0 : 1,
-      borderColor: t.border,
+      // Always 1dp, transparent on a site's color, so focusing (which colors it) moves nothing.
+      borderWidth: 1,
+      borderColor: tinted ? 'transparent' : t.border,
       paddingLeft: 14,
       marginLeft: 2,
       marginRight: 2,
       height: 44
     },
-    inputFocused: { borderWidth: 1, borderColor: t.accent, marginLeft: 8, marginRight: 8 },
+    inputFocused: { borderColor: t.accent, marginLeft: 8, marginRight: 8 },
     inputHyper: { borderColor: t.scheme === 'dark' ? t.border : t.trustBg },
     lead: { marginRight: 10, width: 16, textAlign: 'center' },
     nameTag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: t.secure, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 3, marginRight: 8, maxWidth: 140 },
