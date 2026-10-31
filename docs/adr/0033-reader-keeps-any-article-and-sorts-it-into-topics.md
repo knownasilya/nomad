@@ -35,7 +35,7 @@ stores and tags in `app/bg/web-apis/bg/reader-articles.ts`, reads pages with
 4. **The AI picks one to three topics after a save**, on this Device's runtime only (`completeText`,
    as auto-names), one article at a time, given the user's topics so far so it reuses them. The
    page's words go in as data to sort; the reply is only read as a short list of topic strings
-   (`pickTopics`). the AI page’s setup (nomad://ai/setup) → "Sort articles I save to Reader into topics"
+   (`pickTopics`). The AI page’s setup (nomad://ai/setup) → "Sort articles I save to Reader into topics"
    (`ai_reader_topics`) turns the automatic run off; Reader's "Suggest topics" still asks. A topic
    the user sets (`topicsBy: 'user'`) is never changed by the AI.
 5. **Reader shows them as a reading log**: Saved → Reading log, a Topics list with counts, and
