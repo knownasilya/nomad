@@ -334,7 +334,8 @@ input with `sendInputEvent`/`insertText`. `app/fg/webview-preload/page-control.j
 ref and draws the cursor, border and Stop bar in a closed shadow root, through
 `window.__nomadPageControl` in world 999. The grant is the `aiPageControl` permission, stored in
 sitedata as the time it ends; `aiPageAction` is the per-click confirm, whose prompt can allow similar
-clicks (`similarKey`) for the rest of the sidebar chat (`chatId` from the sidebar). The model-facing text is
+clicks (`similarKey`) for the rest of the sidebar chat (`chatId` from the sidebar); `aiPagePlan` approves a
+plan of clicks from `planPageActions` at once (`planBudget`). The model-facing text is
 `PAGE_CONTROL_PROMPT` and the `## Page control` guide in `api-reference.mjs`.
 
 ### Open tabs on other Devices (ADR-0024)

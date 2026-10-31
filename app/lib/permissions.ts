@@ -286,6 +286,16 @@ export const PERMS = {
     dangerous: true,
     promptTrusted: true,
   },
+  // A plan of clicks the AI will make (planPageActions): one yes covers the ones in it. Asked each
+  // time; the param numbers it.
+  aiPagePlan: {
+    persist: false,
+    idempotent: false,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+    promptTrusted: true,
+  },
   // One file or folder of the user's private drive (hyper://private/), for a limited time. The
   // param is the path. Not persisted here: private-drive-guard.ts keeps the grant and ends it.
   privateRead: {
@@ -345,6 +355,7 @@ export const PERM_ICONS = {
   privateWrite: 'fas fa-lock',
   aiPageControl: 'fas fa-mouse-pointer',
   aiPageAction: 'fas fa-mouse-pointer',
+  aiPagePlan: 'fas fa-list-ol',
 };
 
 export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
@@ -408,6 +419,21 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Let the AI assistant click, type and scroll on this site for 30 days';
     case 'aiPageAction':
       return `Let the AI assistant ${permOpts?.action || 'do this'}`;
+    case 'aiPagePlan': {
+      const steps = Array.isArray(permOpts?.steps) ? permOpts.steps : [];
+      return html`<span
+        >Let the AI assistant do this plan: ${permOpts?.goal || ''}
+        <ol class="plan-steps">
+          ${steps.map(
+            (s) =>
+              html`<li>
+                ${s.note ? html`${s.note} <span class="plan-what">(${s.what})</span>` : s.what}
+              </li>`
+          )}
+        </ol>
+        <span class="plan-note">Other clicks that buy, send, post or delete still ask.</span></span
+      >`;
+    }
     case 'jobsRead':
       return 'Let the AI assistant see your AI Jobs and their results';
     case 'jobsWrite':

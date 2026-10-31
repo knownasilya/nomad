@@ -19,6 +19,7 @@ import * as logLib from '../logger';
 import {
   PAGE_ACTION_PERM,
   PAGE_CONTROL_PERM,
+  PAGE_PLAN_PERM,
   blockedMessage,
   blockedReason,
   describeControl,
@@ -26,6 +27,8 @@ import {
   grantUntil,
   pageOffLimits,
   parseKey,
+  planArg,
+  planBudget,
   refArg,
   riskyWords,
   screenshotPoint,
@@ -81,6 +84,10 @@ export function createSession({ requestPermission, stopTurn, chat = null }) {
   let stopped = false;
   let tookOver = false;
   let confirms = 0;
+  let plans = 0;
+  // Clicks an approved plan lets through, by planBudget key -> how many are left.
+  const planned = new Map();
+  const snapControls = new WeakMap(); // tab -> its last snapshot's controls, by ref
   const opened = new WeakSet(); // tabs this turn opened (openTab)
   const answers = new Map(); // site -> Promise<boolean>, this turn's answers
   const snapLoad = new WeakMap(); // tab -> the page load its last snapshot was of
@@ -139,6 +146,11 @@ export function createSession({ requestPermission, stopTurn, chat = null }) {
   async function confirm(wc, verb, control) {
     const what = `${verb} ${describeControl(control)}`;
     const url = wc.getURL();
+    const left = planned.get(similarKey(url, 'plan', control)) || 0;
+    if (left > 0) {
+      planned.set(similarKey(url, 'plan', control), left - 1);
+      return;
+    }
     const key = chat ? similarKey(url, verb, control) : null;
     if (key && similarOk.get(chat)?.has(key)) return;
     const ok = await requestPermission(`${PAGE_ACTION_PERM}:${++confirms}`, wc, {
@@ -254,7 +266,10 @@ export function createSession({ requestPermission, stopTurn, chat = null }) {
 
   async function snapshot(wc) {
     const snap = await call(wc, 'snapshot()', 8000);
-    if (snap) snapLoad.set(wc, loads.get(wc));
+    if (snap) {
+      snapLoad.set(wc, loads.get(wc));
+      snapControls.set(wc, new Map((snap.controls || []).map((c) => [c.ref, c])));
+    }
     return snap;
   }
 
@@ -306,6 +321,45 @@ export function createSession({ requestPermission, stopTurn, chat = null }) {
       const before = wc.getURL();
 
       switch (name) {
+        case 'planPageActions': {
+          // The user approves the whole plan once; its clicks then don't ask one by one.
+          const plan = planArg(a);
+          if (snapLoad.get(wc) !== loads.get(wc)) {
+            throw new Error(
+              'The page changed since your last snapshot. Call snapshotPage again for fresh refs.'
+            );
+          }
+          const known = snapControls.get(wc);
+          const controls = plan.steps.map((s) => {
+            const c = known?.get(s.ref);
+            if (!c) {
+              throw new Error(
+                `Control ${s.ref} isn't in your last snapshot. Call snapshotPage, and plan with its refs.`
+              );
+            }
+            const blocked = blockedReason(c);
+            if (blocked) throw new Error(blockedMessage(blocked));
+            return c;
+          });
+          const ok = await requestPermission(`${PAGE_PLAN_PERM}:${++plans}`, wc, {
+            goal: plan.goal,
+            steps: plan.steps.map((s, i) => ({ what: describeControl(controls[i]), note: s.note })),
+          });
+          if (!ok) {
+            throw new Error(
+              "The user didn't approve the plan. Don't do it; ask them what they want instead."
+            );
+          }
+          for (const [key, n] of planBudget(before, controls)) {
+            planned.set(key, (planned.get(key) || 0) + n);
+          }
+          return JSON.stringify({
+            approved: true,
+            note:
+              "Go ahead. The plan's clicks won't ask the user again this turn. Anything else that " +
+              'buys, sends, posts or deletes still asks.',
+          });
+        }
         case 'clickElement': {
           const ref = refArg(a);
           const t = await targetOf(wc, ref);

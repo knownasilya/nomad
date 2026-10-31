@@ -212,6 +212,27 @@ PermPrompt.styles = [
       margin: 1px 0 0;
     }
 
+    .plan-steps {
+      margin: 6px 0;
+      padding-left: 22px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+
+    .plan-steps li {
+      margin: 2px 0;
+    }
+
+    .plan-what,
+    .plan-note {
+      color: #777;
+    }
+
+    .plan-note {
+      display: block;
+      font-size: 11.5px;
+    }
+
     .prompt-btns {
       text-align: right;
     }
