@@ -717,7 +717,7 @@ function renderArticles(wrap) {
     wrap.append(
       el('p', { class: 'ai-note' }, [
         icon('info-circle'),
-        el('span', {}, ['No AI is set up on this device, so articles aren’t sorted into topics. Choose one in ', tabLink({}, 'nomad://settings/?view=ai', ['Settings → AI']), '.']),
+        el('span', {}, ['No AI is set up on this device, so articles aren’t sorted into topics. Choose one in ', tabLink({}, 'nomad://ai/setup', ['the AI page’s setup']), '.']),
       ])
     )
   }

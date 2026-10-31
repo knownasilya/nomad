@@ -6,7 +6,7 @@
 // - The readable text comes from Readability (bg/lib/extract-article.mjs) over the tab's live DOM,
 //   or over the HTML of a pasted link, fetched with the caller's session (its cookies).
 // - Tagging runs in the background, one article at a time, on this Device's runtime only
-//   (ai.ts completeText, passed in by main.js as auto-names gets it). Settings → AI → "Sort
+//   (ai.ts completeText, passed in by main.js as auto-names gets it). the AI page’s setup (nomad://ai/setup) → "Sort
 //   articles I save to Reader into topics" (`ai_reader_topics`) turns the automatic run off; the
 //   Reader's "Suggest topics" still asks. Topics the user set are never changed by the AI.
 
