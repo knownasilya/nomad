@@ -38,13 +38,13 @@ rules are in `shared/jobs.mjs`; the desktop side is `app/bg/ai/jobs.js` (store, 
    time missed while the computer slept runs once when it wakes, not once per missed time. A
    one-time Job runs once at its time, however often it was run by hand before.
 4. **A run is a turn on a new `job` stage** (ADR-0021): the user's own AI, with no tab and nobody
-   watching. It reads and changes nothing: of the personal capabilities it gets only listNotes,
-   readNote, listReaderPosts, readReaderPost and notify (`JOB_CAPS`), plus the drive readers and
-   fetchUrl; writes are off and it asks no permission. The Notes and Reader reads are granted with
-   the Job (`jobPermit`): making it, through the `jobsWrite` permission or in My Library, is the
-   user's yes. A page's text a Job reads can't talk it into changing anything, because nothing it
-   can call changes anything. It runs on this computer's Runtime only, never another Device's over
-   the Bridge, and stops after 10 minutes.
+   watching. Of the personal capabilities it gets only listNotes, readNote, listReaderPosts,
+   readReaderPost and notify (`JOB_CAPS`), plus the drive readers and fetchUrl, and it changes only
+   what the Job was given (item 9). It asks no permission: `jobPermitFor` says yes to the Notes and
+   Reader reads, which making the Job granted (through the `jobsWrite` permission or in My
+   Library), and to the Job's own write grants, and no to everything else. A page's text a Job
+   reads can talk it into calling only what it was given. It runs on this computer's Runtime only,
+   never another Device's over the Bridge, and stops after 10 minutes.
 5. **Notifications.** `notify` on the Job is `always` (each run notifies with the start of its
    answer), `auto` (only when the run calls the `notify` capability, for "tell me if…" Jobs) or
    `never`. A failed run notifies too, once per streak of failures. The run record carries the
@@ -77,6 +77,25 @@ rules are in `shared/jobs.mjs`; the desktop side is `app/bg/ai/jobs.js` (store, 
      exactly what the user looked at. The AI can add a source but can't take a newer version of
      a copy.
 
+9. **A Job changes only what it was given (`writes`).** A Job may carry
+   `writes: { drives: [{ url, draft }], notes, reader }` (`shared/jobs.mjs` `normalizeWrites`):
+   - `drives`: up to 10 drives by key, each one this computer can write (`resolveJobWrites` resolves
+     the user's names and checks `writable`). A drive grant turns on `writeDriveFile` and grants
+     `modifyDrive:<key>` for exactly those keys. With `draft`, its writes stage in the drive's Draft
+     (ADR-0012) for the user to publish; without, they go live. This is how a Job "updates a web
+     page": the page is a hyper:// site, and the Job writes its files.
+   - `notes` adds `writeNote` (`notesWrite`); `reader` adds `followFeed`, `unfollowFeed` and
+     `markPostsRead` (`readerWrite`) (`WRITE_CAPS`).
+
+   The grants are chosen when the Job is made or edited, never at run time. In My Library the
+   user picks them in the editor ("What it can change"), so that is their yes. When the AI's
+   `saveJob` adds a grant (a new drive, a drive moved from its Draft to live, Notes or Reader;
+   `addedWrites`), the user is asked each time with the `jobWrites` permission, which names the Job
+   and lists what it may change; a no saves nothing. The same grants bound a `job.js` module.
+   Each run records what it changed (`changes`: the files it wrote, and each Note or Reader change),
+   kept even when the run fails partway, and My Library and the phone show them under the run.
+   Clicking and typing on web pages (ADR-0028) stays out: it needs a tab and the user watching.
+
 ## Consequences
 
 - **No push server.** The phone learns about a run when its Vault syncs: while the app is open, or
@@ -86,8 +105,10 @@ rules are in `shared/jobs.mjs`; the desktop side is `app/bg/ai/jobs.js` (store, 
 - **The computer must be awake.** A Job is due on a laptop that sleeps through 8:00 runs when it
   wakes. `ai_keep_awake` (ADR-0013 amendment) is the only thing that holds it awake, and only while
   AI sharing is on.
-- Reading only rules out "mark them read" and "save a Note" Jobs for now. Per-Job grants, chosen
-  when the Job is made, would open those up.
+- A Job with a live drive grant changes that drive with nobody watching, and replicates the change
+  to the drive's readers. A Draft grant is the safer default; the editor starts a new drive there.
+- Writing to an http(s) service needs credentials, which Jobs don't have yet. A secrets store can
+  add that as another grant of the same shape.
 - The run's prompt has no chat history, so the AI writes it as a complete instruction (the
   `saveJob` description and `PERSONAL_PROMPT` say so).
 - A copied source makes the Job record as big as its files (32,000 characters of module and 8,000

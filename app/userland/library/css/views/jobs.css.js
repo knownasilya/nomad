@@ -201,6 +201,83 @@ const cssStr = css`
     overflow-wrap: anywhere;
   }
 
+  .grant-checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    font-size: 13px;
+  }
+
+  .grant-checks .check,
+  .grant-drives .check {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .grant-drives,
+  .grants,
+  .changes ul {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    font-size: 13px;
+  }
+
+  .grant-drives li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    border-top: 1px solid var(--border-color--very-light);
+  }
+
+  .grant-drives .drive-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .grant-drives .check {
+    color: var(--text-color--light);
+    font-size: 12px;
+  }
+
+  input.add-drive {
+    flex: 1;
+    min-width: 260px;
+  }
+
+  .grants {
+    margin: 0 0 10px;
+  }
+
+  .grants li,
+  .changes li {
+    padding: 2px 0;
+    overflow-wrap: anywhere;
+  }
+
+  .grants a,
+  .changes a {
+    color: var(--text-color--link);
+  }
+
+  .grants .muted,
+  .changes .muted {
+    color: var(--text-color--pretty-light);
+  }
+
+  .changes {
+    margin-top: 8px;
+  }
+
+  .changes ul {
+    margin-top: 2px;
+  }
+
   button.icon[disabled] {
     cursor: default;
     opacity: 0.7;

@@ -39,6 +39,11 @@ const blank = () => ({
   title: '',
   prompt: '',
   source: '', // a drive URL or name; '' for none
+  // What the Job may change with nobody watching: drives ({ url, title, draft }), Notes, Reader.
+  drives: [],
+  addDrive: '', // the drive URL or name being typed
+  notes: false,
+  reader: false,
   kind: 'manual', // 'manual' | 'interval' | 'daily' | 'monthly' | 'once' | 'text'
   every: 1,
   unit: 'hours',
@@ -123,7 +128,8 @@ export class JobsView extends LitElement {
       <div class="intro">
         A Job is a prompt the AI runs by itself, by hand or on a schedule, like “every weekday at
         8:00, sum up my unread Reader posts”. It can read your Notes, Reader, drives and the web, and
-        it changes nothing. Its answers are kept here, and it can notify your phone. Ask the AI in the
+        it changes only what you let it: your Notes, your Reader, or drives you pick, live or in a
+        Draft for you to publish. Its answers and what it changed are kept here, and it can notify your phone. Ask the AI in the
         sidebar to make one, or make it here. A Job can also come from a drive with a
         <code>job.md</code> prompt and a <code>job.js</code> module. A Job runs on the computer that
         made it, while that computer is awake.
@@ -185,6 +191,7 @@ export class JobsView extends LitElement {
     if (!j.here) parts.push(`runs on ${j.deviceName}`);
     if (j.notify !== 'never') parts.push(j.notify === 'auto' ? 'notifies when it finds something' : 'notifies your phone');
     if (j.source?.changed) parts.push('a newer version is in its drive');
+    if (j.writes) parts.push('can change things');
     return parts.join(' · ');
   }
 
@@ -197,6 +204,7 @@ export class JobsView extends LitElement {
           ? html`<div class="label">${j.source ? 'More instructions' : 'Prompt'}</div>
               <div class="prompt">${j.prompt}</div>`
           : ''}
+        ${this.renderGrants(j)}
         ${j.here
           ? ''
           : html`<div class="elsewhere">
@@ -216,11 +224,53 @@ export class JobsView extends LitElement {
                   </summary>
                   ${r.error ? html`<div class="error">${r.error}</div>` : ''}
                   ${r.output ? html`<div class="output">${r.output}</div>` : ''}
+                  ${this.renderChanges(j, r)}
                 </details>
               `
             )}
       </div>
     `;
+  }
+
+  // What a Job may change on its own.
+  renderGrants(j) {
+    const w = j.writes;
+    if (!w) return '';
+    return html`
+      <div class="label">Can change</div>
+      <ul class="grants">
+        ${w.notes ? html`<li><span class="fas fa-fw fa-sticky-note"></span> Your Notes</li>` : ''}
+        ${w.reader ? html`<li><span class="fas fa-fw fa-rss"></span> Your Reader (follow, unfollow, mark read)</li>` : ''}
+        ${(w.drives || []).map(
+          (d) => html`<li>
+            <span class="fas fa-fw fa-hdd"></span>
+            <a href=${d.url} target="_blank">${d.title || d.url}</a>
+            ${d.draft ? html`<span class="muted">· in a Draft, for you to publish</span>` : ''}
+          </li>`
+        )}
+      </ul>
+    `;
+  }
+
+  // What a run changed: files it wrote, and Notes and Reader changes.
+  renderChanges(j, r) {
+    const changes = r.changes || [];
+    if (!changes.length) return '';
+    const title = (url) => (j.writes?.drives || []).find((d) => d.url === url)?.title || '';
+    return html`<div class="changes">
+      <div class="label">Changed</div>
+      <ul>
+        ${changes.map((c) =>
+          c.path
+            ? html`<li>
+                <span class="fas fa-fw fa-file-alt"></span>
+                <a href=${c.drive.replace(/\/$/, '') + c.path} target="_blank">${c.path}</a>
+                <span class="muted">in ${title(c.drive) || c.drive}${c.draft ? ' (Draft)' : ''}</span>
+              </li>`
+            : html`<li><span class="fas fa-fw fa-pen"></span> ${c.summary || c.tool}</li>`
+        )}
+      </ul>
+    </div>`;
   }
 
   // Where a drive Job comes from, its copy, and a newer version to take.
@@ -371,6 +421,8 @@ export class JobsView extends LitElement {
             : ''}
         </div>
 
+        ${this.renderWrites(e, set)}
+
         <div class="block">
           <div class="label">Notify my phone</div>
           <select .value=${e.notify} @change=${(ev) => set({ notify: ev.target.value })}>
@@ -387,6 +439,69 @@ export class JobsView extends LitElement {
           <button type="button" @click=${() => (this.editing = null)}>Cancel</button>
         </div>
       </form>
+    `;
+  }
+
+  // The editor's "What it can change" block: Notes, Reader, and drives the Job may write.
+  renderWrites(e, set) {
+    const add = () => {
+      const url = e.addDrive.trim();
+      if (!url) return;
+      if (e.drives.some((d) => d.url === url)) return set({ addDrive: '' });
+      set({ drives: [...e.drives, { url, title: '', draft: true }], addDrive: '' });
+    };
+    const put = (i, patch) => set({ drives: e.drives.map((d, k) => (k === i ? { ...d, ...patch } : d)) });
+    return html`
+      <div class="block">
+        <div class="label">What it can change <span class="hint">It runs with nobody to ask, so it can change only what you tick here. It can always read your Notes and Reader.</span></div>
+        <div class="grant-checks">
+          <label class="check">
+            <input type="checkbox" .checked=${e.notes} @change=${(ev) => set({ notes: ev.target.checked })} />
+            Write my Notes
+          </label>
+          <label class="check">
+            <input type="checkbox" .checked=${e.reader} @change=${(ev) => set({ reader: ev.target.checked })} />
+            Change my Reader (follow, unfollow, mark read)
+          </label>
+        </div>
+        ${e.drives.length
+          ? html`<ul class="grant-drives">
+              ${e.drives.map(
+                (d, i) => html`<li>
+                  <span class="fas fa-fw fa-hdd"></span>
+                  <span class="drive-name" title=${d.url}>${d.title || d.url}</span>
+                  <label class="check">
+                    <input type="checkbox" .checked=${d.draft} @change=${(ev) => put(i, { draft: ev.target.checked })} />
+                    Stage in a Draft
+                  </label>
+                  <button type="button" class="icon" title="Remove" aria-label="Stop letting it write ${d.title || d.url}" @click=${() => set({ drives: e.drives.filter((_, k) => k !== i) })}>
+                    <span class="fas fa-fw fa-times"></span>
+                  </button>
+                </li>`
+              )}
+            </ul>`
+          : ''}
+        <div class="when sub">
+          <input
+            class="add-drive"
+            placeholder="A drive it may write: hyper://… or one of your drive names"
+            .value=${e.addDrive}
+            @input=${(ev) => set({ addDrive: ev.target.value })}
+            @keydown=${(ev) => {
+              if (ev.key === 'Enter') {
+                ev.preventDefault();
+                add();
+              }
+            }}
+          />
+          <button type="button" @click=${add} ?disabled=${!e.addDrive.trim()}>Add drive</button>
+        </div>
+        ${e.drives.some((d) => d.draft)
+          ? html`<div class="hint-row">With “Stage in a Draft”, its changes wait in the drive’s Draft until you publish them.</div>`
+          : e.drives.length
+            ? html`<div class="hint-row">Its changes go live in the drive right away.</div>`
+            : ''}
+      </div>
     `;
   }
 
@@ -419,6 +534,9 @@ export class JobsView extends LitElement {
       title: j.title,
       prompt: j.prompt,
       source: j.source?.url || '',
+      drives: (j.writes?.drives || []).map((d) => ({ url: d.url, title: d.title || '', draft: !!d.draft })),
+      notes: !!j.writes?.notes,
+      reader: !!j.writes?.reader,
       notify: j.notify,
       enabled: j.enabled,
     };
@@ -527,6 +645,10 @@ export class JobsView extends LitElement {
         title: e.title,
         prompt: e.prompt,
         source,
+        writes:
+          e.notes || e.reader || e.drives.length
+            ? { notes: e.notes, reader: e.reader, drives: e.drives.map((d) => ({ url: d.url, draft: d.draft })) }
+            : null,
         schedule: this.schedule(e),
         notify: e.notify,
       });

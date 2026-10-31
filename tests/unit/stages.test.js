@@ -117,3 +117,32 @@ describe('openTab', () => {
     expect(() => openTabGroup('x'.repeat(61))).toThrow(/60/)
   })
 })
+
+describe('a Job’s catalog', () => {
+  const job = (extra = [], allowWrite = false) =>
+    buildCatalog({ personal: true, tab: false, remote: true, allowWrite, job: { extra } }).capabilities.map((c) => c.name)
+
+  it('reads only, unless the Job was given writes', () => {
+    const caps = job()
+    expect(caps).toContain('readNote')
+    expect(caps).toContain('notify')
+    expect(caps).not.toContain('writeNote')
+    expect(caps).not.toContain('followFeed')
+    expect(caps).not.toContain('writeDriveFile')
+    expect(caps).not.toContain('saveJob')
+  })
+
+  it('adds exactly the writes it was given', () => {
+    const caps = job(['writeNote'], true)
+    expect(caps).toContain('writeNote')
+    expect(caps).toContain('writeDriveFile')
+    expect(caps).not.toContain('followFeed')
+    expect(caps).not.toContain('saveMod')
+  })
+
+  it('never offers a Job the tab or page tools', () => {
+    const caps = job(['writeNote', 'clickElement', 'snapshotPage'], true)
+    expect(caps).not.toContain('clickElement')
+    expect(caps).not.toContain('snapshotPage')
+  })
+})

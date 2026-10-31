@@ -4,8 +4,8 @@
 // result can notify the user's phone. A Job and each of its runs are Vault records, so every linked
 // Device sees them:
 //
-//   /.vault/jobs/<id>.json                { type, id, title, prompt, source?, schedule, notify, enabled, device,
-//                                           space, createdAt, updatedAt, scheduleFrom }
+//   /.vault/jobs/<id>.json                { type, id, title, prompt, source?, writes?, schedule, notify, enabled,
+//                                           device, space, createdAt, updatedAt, scheduleFrom }
 //   /.vault/job-runs/<jobId>/<runId>.json { type, id, jobId, title, device, trigger, startedAt, finishedAt,
 //                                           status, output, error?, notification }
 //   /.vault/job-requests/<jobId>.json     { type, jobId, requestedAt, by }   "run it now", from a Device
@@ -36,6 +36,13 @@
 // a newer version the runner saw, and the user accepts it by adding the source again.
 //
 //   source: { url, live, module?, prompt?, hash?, copiedAt?, changed? }
+//
+// A Job reads and changes nothing unless it was given `writes` when it was made or edited: drives it
+// may write ({ url, draft } — `draft` stages its writes in the drive's Draft for the user to publish),
+// and whether it may write Notes and change Reader (follow, unfollow, mark read). Nothing else:
+// the runner offers only those write capabilities, and its permission check grants only those.
+//
+//   writes: { drives: [{ url: 'hyper://<key>/', draft }], notes, reader }
 //
 // `notify` is 'always' (every run sends its answer), 'auto' (only when the AI calls notify), or
 // 'never'. A failed run notifies too, once per streak of failures, unless 'never'.
@@ -693,6 +700,7 @@ export function makeJob(fields, prev = null, now = new Date()) {
   const notify = f.notify !== undefined ? f.notify : prev?.notify || 'always';
   if (!NOTIFY.includes(notify)) throw new Error('notify is "always", "auto" or "never"');
   const enabled = f.enabled !== undefined ? !!f.enabled : prev ? prev.enabled : true;
+  const writes = f.writes !== undefined ? normalizeWrites(f.writes) : prev?.writes || null;
 
   const device = f.device !== undefined ? f.device : prev?.device || null;
   if (device != null && !KEY_RE.test(device)) throw new Error('Not a Device key');
@@ -712,6 +720,7 @@ export function makeJob(fields, prev = null, now = new Date()) {
     title,
     prompt,
     ...(source ? { source } : {}),
+    ...(writes ? { writes } : {}),
     schedule,
     notify,
     enabled,
@@ -856,6 +865,105 @@ function sourceTitle(source) {
   return clip(name ? name.replace(/\.(js|md)$/i, '') : `Job from ${drive.slice(8, 14)}…`, 60);
 }
 
+// Writes
+// =
+
+export const MAX_WRITE_DRIVES = 10;
+const MAX_CHANGES = 50; // what one run changed, kept with the run
+// The capabilities each grant adds to a Job's turn. A drive grant adds writeDriveFile.
+export const WRITE_CAPS = {
+  notes: ['writeNote'],
+  reader: ['followFeed', 'unfollowFeed', 'markPostsRead'],
+};
+
+// A Job's `writes` as a form or the AI gives it, tidied: drives as hyper://<key>/ (names resolved
+// first), each with `draft`. Null when it grants nothing. Throws for a bad drive.
+export function normalizeWrites(input) {
+  if (!input) return null;
+  if (typeof input !== 'object') throw new Error('writes is { drives?, notes?, reader? }');
+  const drives = [];
+  for (const d of Array.isArray(input.drives) ? input.drives : []) {
+    const raw = typeof d === 'string' ? { url: d } : d || {};
+    const m = /^hyper:\/\/([0-9a-z]{52,64})(?:[/?#]|$)/i.exec(String(raw.url || '').trim());
+    if (!m)
+      throw new Error(`“${raw.url}” isn’t a drive a Job can write: give its hyper://<key>/ URL`);
+    const url = `hyper://${m[1].toLowerCase()}/`;
+    if (drives.some((x) => x.url === url)) continue;
+    drives.push({ url, draft: !!raw.draft });
+  }
+  if (drives.length > MAX_WRITE_DRIVES) {
+    throw new Error(`A Job can write at most ${MAX_WRITE_DRIVES} drives`);
+  }
+  const out = { drives, notes: !!input.notes, reader: !!input.reader };
+  return drives.length || out.notes || out.reader ? out : null;
+}
+
+// The capabilities a Job's writes add to its turn, besides writeDriveFile (which a drive grant
+// turns on).
+export function writeCaps(writes) {
+  if (!writes) return [];
+  return [...(writes.notes ? WRITE_CAPS.notes : []), ...(writes.reader ? WRITE_CAPS.reader : [])];
+}
+
+// The permissions a Job's writes grant its runs: notesWrite, readerWrite, modifyDrive:<key>.
+export function writePermissions(writes) {
+  if (!writes) return [];
+  return [
+    ...(writes.notes ? ['notesWrite'] : []),
+    ...(writes.reader ? ['readerWrite'] : []),
+    ...(writes.drives || []).map((d) => 'modifyDrive:' + d.url.slice(8, -1)),
+  ];
+}
+
+// Whether a drive's writes stage in its Draft (`base` is hyper://<key>, with or without the slash).
+export function writesInDraft(writes, base) {
+  const url = String(base || '').replace(/\/?$/, '/');
+  return !!writes?.drives?.some((d) => d.url === url && d.draft);
+}
+
+// What `next` grants that `prev` didn't: a Job's writes the user hasn't said yes to yet.
+export function addedWrites(prev, next) {
+  if (!next) return null;
+  // A drive is new, or went from staging in a Draft to writing live.
+  const had = new Map((prev?.drives || []).map((d) => [d.url, d.draft]));
+  return normalizeWrites({
+    drives: next.drives.filter((d) => !had.has(d.url) || (had.get(d.url) && !d.draft)),
+    notes: next.notes && !prev?.notes,
+    reader: next.reader && !prev?.reader,
+  });
+}
+
+// "your Notes", "your Reader", "hyper://1a2b3c…/ (in a Draft)": a Job's writes in words.
+export function describeWrites(writes, driveName = null) {
+  if (!writes) return [];
+  return [
+    ...(writes.notes ? ['your Notes'] : []),
+    ...(writes.reader ? ['your Reader (follow, unfollow, mark read)'] : []),
+    ...(writes.drives || []).map(
+      (d) =>
+        `${(driveName && driveName(d.url)) || d.url.slice(0, 16) + '…/'}${d.draft ? ' (in a Draft)' : ''}`
+    ),
+  ];
+}
+
+// What a run changed, tidied for its record: { drive, path, draft } for a file, { tool, summary }
+// for a Note or Reader change.
+function normalizeChanges(changes) {
+  const out = [];
+  for (const c of Array.isArray(changes) ? changes : []) {
+    if (c?.path && c.drive) {
+      out.push({
+        drive: String(c.drive).replace(/\/?$/, '/'),
+        path: String(c.path).slice(0, 300),
+        draft: !!c.draft,
+      });
+    } else if (c?.tool) {
+      out.push({ tool: String(c.tool), summary: clip(String(c.summary || ''), 200) });
+    }
+  }
+  return out.length > MAX_CHANGES ? out.slice(0, MAX_CHANGES) : out;
+}
+
 // Jobs A to Z by title.
 export function sortJobs(jobs) {
   return [...(jobs || [])]
@@ -921,7 +1029,9 @@ export function makeRun({
   output,
   error,
   notification,
+  changes = [],
 }) {
+  const changed = normalizeChanges(changes);
   return {
     type: RUN_TYPE,
     id,
@@ -935,6 +1045,7 @@ export function makeRun({
     output: clipOutput(output),
     ...(error ? { error: clip(String(error), MAX_ERROR) } : {}),
     notification: notification || null,
+    ...(changed.length ? { changes: changed } : {}),
   };
 }
 

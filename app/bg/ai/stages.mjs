@@ -6,7 +6,8 @@
 //   outside — another program on this machine, through the loopback MCP (callLocalTool). The user's
 //             own AI, on the focused tab.
 //   job     — one of the user's AI Jobs, run by this Device on its schedule or by hand (ADR-0030). The
-//             user's own AI with no tab, nobody watching, and reads only (search-execute.mjs JOB_CAPS).
+//             user's own AI with no tab and nobody watching. It reads (search-execute.mjs JOB_CAPS) and
+//             changes only what the Job was given (shared/jobs.mjs writes).
 
 const RULES = {
   page: { personal: false, tab: false },

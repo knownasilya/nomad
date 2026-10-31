@@ -46,7 +46,7 @@ const running = new Map(); // jobId -> AbortController
 const attempted = new Map(); // jobId -> ISO time
 let draining = false;
 
-/** @param {{ runTurn: (job: any, opts: { signal: AbortSignal, notify: (n: any) => void, trigger: string, lastRun: any }) => Promise<{ output: string, sourceHash?: string | null }> }} opts */
+/** @param {{ runTurn: (job: any, opts: { signal: AbortSignal, notify: (n: any) => void, trigger: string, lastRun: any, changes: any[] }) => Promise<{ output: string, sourceHash?: string | null }> }} opts */
 export function setup(opts) {
   runTurn = opts.runTurn;
   refresh();
@@ -152,7 +152,8 @@ export { ownKey };
 // runs on this Device and reads the Reader of `space`; `runHere` moves a Job's schedule to this
 // Device.
 // `source` is what job-source.ts read from a drive (shared/jobs.mjs makeSource), null to drop it.
-/** @param {{ id?: string, title?: string, prompt?: string, source?: any, schedule?: any, notify?: string, enabled?: boolean, space?: string, runHere?: boolean }} fields */
+// `writes` is what the Job may change (shared/jobs.mjs normalizeWrites), null for nothing.
+/** @param {{ id?: string, title?: string, prompt?: string, source?: any, writes?: any, schedule?: any, notify?: string, enabled?: boolean, space?: string, runHere?: boolean }} fields */
 export function save(fields) {
   const run = writes.then(async () => {
     const { runHere, ...rest } = fields;
@@ -245,6 +246,7 @@ async function runOne(job, trigger) {
   let notified = null;
   let output = '';
   let error = null;
+  const changes = [];
   logger.info('Running a Job', { id: job.id, trigger });
   try {
     if (!runTurn) throw new Error('The AI isn’t ready yet');
@@ -255,6 +257,7 @@ async function runOne(job, trigger) {
       },
       trigger,
       lastRun: prevRun,
+      changes,
     });
     output = res?.output || '';
     if (res?.sourceHash) noteSourceChange(job.id, res.sourceHash);
@@ -279,6 +282,7 @@ async function runOne(job, trigger) {
     output,
     error,
     notification: jl.finalNotification(job, { status, output, error, notified, prevRun }),
+    changes,
   });
   if (error) logger.warn('A Job failed', { id: job.id, error });
   try {
