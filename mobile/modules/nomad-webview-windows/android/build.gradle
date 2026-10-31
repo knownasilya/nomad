@@ -20,4 +20,7 @@ dependencies {
   compileOnly project(':react-native-webview')
   // The same androidx.webkit react-native-webview uses (its webkitVersion).
   implementation 'androidx.webkit:webkit:1.14.0'
+  // PopupWindow.kt draws edge-to-edge with WindowCompat / ViewCompat / WindowInsetsCompat.
+  // Gradle picks the app's newer androidx.core if it has one.
+  implementation 'androidx.core:core-ktx:1.13.1'
 }

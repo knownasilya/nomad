@@ -50,7 +50,7 @@ internal class PopupWindow (
   private val bar = if (dark) 0xFF1F1F1F.toInt() else 0xFFF5F5F5.toInt()
   private val surface = if (dark) 0xFF2B2B2B.toInt() else 0xFFFFFFFF.toInt()
   private val border = if (dark) 0xFF3A3A3A.toInt() else 0xFFE0E0E0.toInt()
-  private val text = if (dark) 0xFFEEEEEE.toInt() else 0xFF222222.toInt()
+  private val textColor = if (dark) 0xFFEEEEEE.toInt() else 0xFF222222.toInt()
   private val textMuted = if (dark) 0xFF8F8F8F.toInt() else 0xFF888891.toInt()
   private val accent = if (dark) 0xFF5D80FF.toInt() else 0xFF1D59C7.toInt()
   private val danger = if (dark) 0xFFFF6B6B.toInt() else 0xFFD11A1A.toInt()
@@ -249,7 +249,7 @@ internal class PopupWindow (
     }
     val closeBtn = ImageButton(activity).apply {
       setImageResource(R.drawable.nomad_window_close)
-      imageTintList = ColorStateList.valueOf(text)
+      imageTintList = ColorStateList.valueOf(textColor)
       contentDescription = "Close"
       background = TypedValue().let { tv ->
         activity.theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, tv, true)
@@ -264,7 +264,7 @@ internal class PopupWindow (
       setPadding(dp(8), 0, 0, 0)
     }
     titleView.apply {
-      setTextColor(text)
+      setTextColor(textColor)
       setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
       typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
       isSingleLine = true
