@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, Text, TextInput, Pressable, ScrollView, Image, StyleSheet, StatusBar, Alert, Keyboard, BackHandler, Platform, AppState } from 'react-native'
+import { View, Text, TextInput, Pressable, ScrollView, Image, StyleSheet, StatusBar, Alert, Keyboard, BackHandler, Platform, AppState, Linking } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WebView } from 'react-native-webview'
 import type { WebViewNavigation } from 'react-native-webview'
+import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes'
 import { router, useFocusEffect } from 'expo-router'
 import { captureRef } from 'react-native-view-shot'
 import * as Clipboard from 'expo-clipboard'
@@ -46,10 +47,18 @@ import { useShareOpenTabs, type DeviceTabsList, type SyncedSpace } from '../lib/
 import { checkForUpdate } from '../lib/updater'
 import { parseColor, tintTheme } from '../lib/siteTheme'
 import webViewInsets from '../modules/nomad-webview-insets'
+import webViewWindows from '../modules/nomad-webview-windows'
+import { routeLink, FEED_JS } from '../lib/webLinks'
 import { pushScreen, closeScreen, loadEntry, pageLoaded, planStep, type NavEntry as StackEntry, type TabHistory } from '../lib/navStack'
 
 // Thumbnails for the tab grid are scaled to this width; a grid card is about half a phone wide.
 const THUMB_WIDTH = 360
+
+// Web tabs and their popups say they are Chrome. Google refuses sign-in in a WebView that names
+// itself one ("; wv" in the user agent), so "Sign in with Google" failed (modules/nomad-webview-windows).
+const BROWSER_UA = (() => {
+  try { return webViewWindows?.browserUserAgent() || undefined } catch { return undefined }
+})()
 
 type Kind = 'home' | 'web' | 'hyper'
 
@@ -256,6 +265,16 @@ export default function Browser () {
   const openScreen = useCallback((screen: Screen) => setScreens((prev) => pushScreen(prev, screen)), [])
   const closeScreenNamed = useCallback((name: ScreenName) => setScreens((prev) => closeScreen(prev, name)), [])
   const isOpen = (name: ScreenName) => screens.some((sc) => sc.name === name)
+  // An RSS or Atom feed a page linked to: Reader opens and offers to subscribe to it, instead of the
+  // phone downloading it or handing it to Chrome. A feed the tab merely shows (as XML) is offered once.
+  const [feedToAdd, setFeedToAdd] = useState<string | null>(null)
+  const feedsOffered = useRef(new Set<string>())
+  const openFeed = useCallback((url: string, shown = false) => {
+    if (shown && feedsOffered.current.has(url)) return
+    feedsOffered.current.add(url)
+    setFeedToAdd(url)
+    openScreen({ name: 'reader' })
+  }, [openScreen])
   const libraryOpen = isOpen('library')
   const explorerScreen = screens.find((sc) => sc.name === 'explorer')
   const explorerDrive = explorerScreen?.name === 'explorer' ? explorerScreen.drive : null
@@ -559,6 +578,11 @@ export default function Browser () {
       let msg: any
       try { msg = JSON.parse(data) } catch { return }
       if (msg.type === 'navigate' && typeof msg.url === 'string') navigate(activeIdRef.current, msg.url)
+      // A web tab showing an RSS or Atom feed as XML (FEED_JS).
+      else if (msg.type === 'feed' && typeof msg.url === 'string' && /^https?:\/\//.test(msg.url)) {
+        const tab = tabsRef.current.find((tb) => tb.id === activeIdRef.current)
+        if (tab?.kind === 'web') openFeed(msg.url, true)
+      }
       else if (msg.type === 'console') setLogs((prev) => [...prev.slice(-199), { level: msg.level, text: msg.text, ts: Date.now() }])
       else if (msg.type === 'source') setSource(String(msg.html || ''))
       // A page's icon (FAVICON_JS). Kept per site. A drive page is served from the loopback gateway,
@@ -610,7 +634,7 @@ export default function Browser () {
         delete aiHandles.current[msg.payload.id]
       }
     },
-    [navigate, describeDrive, favicons.remember, patch]
+    [navigate, describeDrive, favicons.remember, patch, openFeed]
   )
 
   const viewSource = useCallback(() => {
@@ -798,6 +822,39 @@ export default function Browser () {
     setActiveId(tb.id)
     navigate(tb.id, url)
   }, [navigate])
+
+  // Links a web page follows stay in Nomad (lib/webLinks.ts). Only what no web page can stand for
+  // (mail, phone, an app's own link) goes to another app, and a link with a web fallback loads that
+  // when no app takes it. react-native-webview used to give every such link to Linking.
+  const openOutside = useCallback(async (id: string, url: string, fallback?: string) => {
+    const opened = webViewWindows
+      ? await webViewWindows.openExternal(url).catch(() => false)
+      : await Linking.openURL(url).then(() => true, () => false)
+    if (!opened && fallback) navigate(id, fallback)
+  }, [navigate])
+
+  const onWebRequest = useCallback((id: string, req: ShouldStartLoadRequest) => {
+    const route = routeLink(req.url)
+    if (route.to === 'page') return true
+    // A frame inside the page doesn't send the user anywhere. (Android doesn't say; iOS does.)
+    if (req.isTopFrame === false) return false
+    if (route.to === 'tab') navigate(id, route.url)
+    else if (route.to === 'reader') openFeed(route.url)
+    else openOutside(id, route.url, route.fallback)
+    return false
+  }, [navigate, openFeed, openOutside])
+
+  // A page's new windows (modules/nomad-webview-windows): a target="_blank" link opens a new tab, as
+  // in Chrome, and a feed it tried to download goes to Reader. A sign-in popup shows over the tab
+  // natively and needs nothing here.
+  useEffect(() => {
+    if (!webViewWindows) return
+    const subs = [
+      webViewWindows.addListener('onOpenTab', ({ url }) => openInNewTab(url)),
+      webViewWindows.addListener('onFeed', ({ url }) => openFeed(url))
+    ]
+    return () => subs.forEach((sub) => sub.remove())
+  }, [openInNewTab, openFeed])
 
   // Share this phone's open tabs, per Space, with the user's other Devices (shared/open-tabs.mjs).
   // A Space this phone hasn't switched to since launch has no tabs here, so it isn't listed. The
@@ -1078,6 +1135,7 @@ export default function Browser () {
           }}
           onNavigate={(url) => navigate(active.id, url)}
           onWebNav={(nav) => onWebNav(active.id, nav)}
+          onWebRequest={(req) => onWebRequest(active.id, req)}
           onHyperNav={(hyperUrl, canGoBack, canGoForward, title) => onHyperNav(active.id, hyperUrl, canGoBack, canGoForward, title)}
           onMessage={handleWebMessage}
           onClearHistory={persist.clearHistory}
@@ -1211,6 +1269,8 @@ export default function Browser () {
         space={spacesApi.activeSpace.rootDriveKey}
         onOpenPost={openFromReader}
         onOpenDevices={() => openScreen({ name: 'devices' })}
+        subscribeUrl={feedToAdd}
+        onSubscribeOffered={() => setFeedToAdd(null)}
       />
 
       <Notes
@@ -1301,6 +1361,7 @@ function TabPane ({
   home,
   onNavigate,
   onWebNav,
+  onWebRequest,
   onMessage,
   onClearHistory,
   onOpenLibrary,
@@ -1311,6 +1372,7 @@ function TabPane ({
   home: HomeData
   onNavigate: (url: string) => void
   onWebNav: (nav: WebViewNavigation) => void
+  onWebRequest: (req: ShouldStartLoadRequest) => boolean
   onMessage: (data: string) => void
   onClearHistory: () => void
   onOpenLibrary: () => void
@@ -1339,9 +1401,13 @@ function TabPane ({
       source={{ uri: tab.url }}
       style={{ flex: 1, backgroundColor: t.surface }}
       onNavigationStateChange={onWebNav}
+      // Every link and redirect is checked here (lib/webLinks.ts), so the whitelist lets all through.
+      originWhitelist={['*']}
+      onShouldStartLoadWithRequest={onWebRequest}
+      userAgent={BROWSER_UA}
       onMessage={(e) => onMessage(e.nativeEvent.data)}
       injectedJavaScriptBeforeContentLoaded={CONSOLE_SHIM}
-      injectedJavaScript={FAVICON_JS + THEME_COLOR_JS}
+      injectedJavaScript={FEED_JS + FAVICON_JS + THEME_COLOR_JS}
       webviewDebuggingEnabled
       allowsBackForwardNavigationGestures
     />

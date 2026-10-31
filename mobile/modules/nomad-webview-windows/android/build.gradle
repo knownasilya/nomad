@@ -1,0 +1,23 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.nomadwebviewwindows'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.nomadwebviewwindows"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // RNCWebViewHooks comes from mobile/patches/react-native-webview+13.16.0.patch. The app ships
+  // react-native-webview itself, so this module only compiles against it.
+  compileOnly project(':react-native-webview')
+  // The same androidx.webkit react-native-webview uses (its webkitVersion).
+  implementation 'androidx.webkit:webkit:1.14.0'
+}

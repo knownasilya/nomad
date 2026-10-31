@@ -44,6 +44,9 @@ interface Props {
   space?: string // the active Space's Root Drive key: each Space has its own subscriptions
   onOpenPost: (url: string) => void
   onOpenDevices: () => void
+  // A feed a web page linked to (an RSS link, feed://): Reader offers to subscribe to it.
+  subscribeUrl?: string | null
+  onSubscribeOffered?: () => void
 }
 
 // The phone's Reader (ADR-0017): the Feeds the active Space subscribes to, from any linked Device,
@@ -54,7 +57,7 @@ interface Props {
 // The header's Canvas button swaps the list for desktop's Reader canvas (Canvas.tsx): saved
 // articles gathered around their topics, posts around their feed. A chip lights up its topic or
 // feed there. Tap a dot to see it below; tap it again, or Open, to read it.
-export default function Reader ({ visible, onClose, apps, onVaultChange, space, onOpenPost, onOpenDevices }: Props) {
+export default function Reader ({ visible, onClose, apps, onVaultChange, space, onOpenPost, onOpenDevices, subscribeUrl, onSubscribeOffered }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   // backend.apps is a new function on every parent render. Calling through a ref keeps the effects
@@ -212,8 +215,9 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
 
   // A hyper:// drive is followed as it is. A web address must be an RSS or Atom feed, or a page that
   // links one (a blog's home page): then its first feed is followed.
-  const subscribe = async () => {
-    let url = addUrl.trim()
+  // `given` is a feed a web page linked to; otherwise the address typed below.
+  const subscribe = async (given?: string) => {
+    let url = (given ?? addUrl).trim()
     if (!url) return
     if (/^[\w-]+(\.[\w-]+)+(\/|$)/.test(url)) url = 'https://' + url
     setAdding(true)
@@ -225,10 +229,30 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
     const res = await call<ReaderState>('reader', 'follow', { space, url })
     setAdding(false)
     if (!res.ok || !res.value) return Alert.alert('Couldn’t subscribe', res.message || 'Unknown error')
-    setAddUrl('')
+    if (given === undefined) setAddUrl('')
     setState(res.value)
     loadFeeds(res.value.follows)
+    if (given !== undefined) setFilter(url)
   }
+
+  // A feed a web page linked to, once this Space's subscriptions are in: show it if it is followed
+  // already, otherwise ask. Without a Vault the address waits in the box for when there is one.
+  useEffect(() => {
+    if (!visible || !subscribeUrl || (!state && !noVault)) return
+    const url = subscribeUrl
+    onSubscribeOffered?.()
+    if (!state) { setAddUrl(url); return }
+    if (state.follows.includes(url)) { setFilter(url); return }
+    if (state.canFollow === false) {
+      Alert.alert('Can’t subscribe here', 'This Space is shared, and you can view it. People who can edit it choose its feeds.')
+      return
+    }
+    Alert.alert('Subscribe in Reader?', url, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Subscribe', onPress: () => { subscribe(url) } }
+    ])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, subscribeUrl, state, noVault])
 
   const unsubscribe = (f: FeedLoad) => {
     Alert.alert('Unsubscribe?', state?.shared ? `Stop following ${f.title} for everyone in this Space?` : `Stop following ${f.title} on all your devices?`, [
@@ -463,10 +487,10 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
                     autoCorrect={false}
                     spellCheck={false}
                     keyboardType='url'
-                    onSubmitEditing={subscribe}
+                    onSubmitEditing={() => subscribe()}
                     returnKeyType='done'
                   />
-                  <TouchableOpacity style={[s.addBtn, (adding || !addUrl.trim()) && s.addBtnOff]} onPress={subscribe} disabled={adding || !addUrl.trim()}>
+                  <TouchableOpacity style={[s.addBtn, (adding || !addUrl.trim()) && s.addBtnOff]} onPress={() => subscribe()} disabled={adding || !addUrl.trim()}>
                     <Text style={s.addBtnText}>{adding ? '…' : 'Subscribe'}</Text>
                   </TouchableOpacity>
                 </View>
