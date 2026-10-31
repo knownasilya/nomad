@@ -98,7 +98,11 @@ export function askOncePerTurn(permit) {
 }
 
 function askedOnce(permission) {
-  return VAULT_PERMS.includes(permission) || String(permission).startsWith('modifyDrive:')
+  return (
+    VAULT_PERMS.includes(permission) ||
+    String(permission).startsWith('modifyDrive:') ||
+    String(permission).startsWith('aiSecretUse:')
+  )
 }
 
 function siteOf(sender) {

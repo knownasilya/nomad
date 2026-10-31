@@ -36,6 +36,9 @@ import {
 } from '../../ai/api-reference.mjs';
 import { genuiPrompt } from '../../../lib/genui/library.mjs';
 import { askOncePerTurn, jobPermit } from '../../ai/vault-tools.mjs';
+import * as secretStore from '../../ai/secret-store';
+import { hostAllowed, permissionFor, redact, redactResult, secretForModel } from '../../ai/secrets.mjs';
+import { runHttpRequest } from '../../ai/http-request.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
 import { jobWork, promptWithResult } from '../../../../shared/jobs.mjs';
 import { readJobSource } from './job-source';
@@ -496,6 +499,7 @@ export async function runJobTurn(job, { signal, notify, trigger = 'manual', last
   let result = null;
   if (work.module) {
     result = await runJobModule(work.module, {
+      jobId: job.id,
       params: {
         job: { id: job.id, title: job.title, trigger },
         prompt: job.prompt || null,
@@ -531,7 +535,7 @@ export async function runJobTurn(job, { signal, notify, trigger = 'manual', last
     space,
     requestPermission: jobPermit,
     context: jobContext(job),
-    job: { notify },
+    job: { id: job.id, notify },
     signal,
   });
   return { output: answer.trim() || all.trim(), sourceHash: await newer };
@@ -539,7 +543,7 @@ export async function runJobTurn(job, { signal, notify, trigger = 'manual', last
 
 // A Job's job.js, run like the AI's execute code with the job turn's capabilities: reads only, no
 // tab, no page tools, and notify. Resolves what main() returned (text, or JSON for anything else).
-async function runJobModule(code, { params, space, notify, signal }) {
+async function runJobModule(code, { jobId, params, space, notify, signal }) {
   const sender = makeRemoteSender('nomad://jobs/');
   const catalog = buildCatalog({
     allowWrite: false,
@@ -548,6 +552,7 @@ async function runJobModule(code, { params, space, notify, signal }) {
     personal: true,
     tab: false,
     job: true,
+    secrets: true,
     names: names.list(space).filter((r) => !r.hidden),
   });
   const opts = {
@@ -559,7 +564,7 @@ async function runJobModule(code, { params, space, notify, signal }) {
     space,
     signal,
     catalog,
-    job: { notify },
+    job: { id: jobId, notify },
   };
   return executeInUtilityProcess({
     code,
@@ -684,6 +689,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     personal,
     tab: !!currentTab,
     job: !!job,
+    // The user's saved secrets, by name (ADR-0033): the sidebar, the phone and Jobs, never a page.
+    secrets: rules.secrets,
     // remember and forget, while AI memory is on (ADR-0032).
     memory: memoryOn,
     // The user's own names, and those of the Space the turn is in (ADR-0029).
@@ -936,7 +943,19 @@ async function resolveAiConfig(sender, driveUrl = null, { drive = true } = {}) {
   return { systemPrompt: null };
 }
 
+// Every tool result and error, on every turn, has the user's secret values taken out (ADR-0033), so
+// a page, a file or a response that holds one never shows it to the model or the chat. `execute`
+// calls back in here for each capability, so its inner results are cleaned too.
 async function executeTool(name, args, sender, opts: any = {}) {
+  try {
+    return redactResult(await executeToolInner(name, args, sender, opts), secretStore.knownValues());
+  } catch (err) {
+    if (err && typeof err.message === 'string') err.message = redact(err.message, secretStore.knownValues());
+    throw err;
+  }
+}
+
+async function executeToolInner(name, args, sender, opts: any = {}) {
   const {
     driveUrl = null,
     currentTab = null,
@@ -1088,6 +1107,69 @@ async function executeTool(name, args, sender, opts: any = {}) {
         throw new Error('Only http and https URLs are supported');
       }
       return fetchText(args.url);
+    }
+    case 'listSecrets': {
+      if (!hasCapability(catalog, 'listSecrets')) throw new Error('Secrets are not available here');
+      const usable = await usableSecrets({ job });
+      const list = (await secretStore.list()).map((s) => secretForModel(s, usable(s)));
+      return JSON.stringify(
+        list.length
+          ? list
+          : { secrets: [], note: 'The user has no secrets yet. They add one in My Library → Secrets.' },
+        null,
+        2
+      );
+    }
+    case 'httpRequest': {
+      if (!hasCapability(catalog, 'httpRequest')) throw new Error('httpRequest is not available here');
+      const usable = await usableSecrets({ job });
+      // A secret this turn may use: a Job's grant, or (the sidebar, the phone) the user's yes, asked
+      // once a turn per secret and naming the host. Checked before any value is read.
+      const mayUse = async (secretName, host) => {
+        const rec = await secretStore.get(secretName);
+        if (!rec) {
+          throw new Error(
+            `No secret called ${secretName}. listSecrets lists them; the user adds one in My Library → Secrets.`
+          );
+        }
+        if (!usable(rec)) {
+          throw new Error(
+            job
+              ? `This Job may not use ${secretName}. The user allows it in My Library → Secrets.`
+              : `${secretName} is only for Jobs. The user can change that in My Library → Secrets.`
+          );
+        }
+        // A yes covers the secret's own hosts for the rest of the turn, so the prompt names them all.
+        const prompt = { secret: secretName, host: rec.hosts.join(', ') || host };
+        if (!job && !(await permit(permissionFor(secretName), sender, prompt))) {
+          throw new Error(`The user didn't allow ${secretName} on this turn`);
+        }
+      };
+      // In a Job, a request that changes something on a site (not GET or HEAD) goes only with one of
+      // the Job's secrets, so a Job can't post the user's data to any site a page names.
+      const method = String(args?.method || 'GET').toUpperCase();
+      if (job && method !== 'GET' && method !== 'HEAD' && !(args?.secrets?.length || args?.secret)) {
+        throw new Error(
+          `A Job sends ${method} requests only with one of its secrets. The user allows one in My Library → Secrets.`
+        );
+      }
+      const res = await runHttpRequest(args || {}, {
+        resolveSecrets: async (wanted, host) => {
+          for (const n of wanted) await mayUse(n, host);
+          return secretStore.resolve(wanted);
+        },
+        saveSecret: async (secretName, value, host) => {
+          await mayUse(secretName, host);
+          const rec = await secretStore.get(secretName);
+          if (!hostAllowed(host, rec.hosts)) {
+            throw new Error(`${secretName} can only take a value from ${rec.hosts.join(', ')}`);
+          }
+          await secretStore.setValue(secretName, value, job ? 'job' : 'ai');
+        },
+        allSecrets: () => secretStore.knownValues(),
+        signal,
+      });
+      return JSON.stringify(res, null, 2);
     }
     case 'writeDriveFile': {
       const drive = driveFor(args.drive, true);
@@ -1326,6 +1408,20 @@ async function readTextOrNull(ctx, url, opts = {}) {
   } catch {
     return null;
   }
+}
+
+function hasCapability(catalog, name) {
+  return !!catalog?.capabilities?.some((c) => c.name === name);
+}
+
+// Which secrets this turn may use (ADR-0033): a Job, the ones the user let it use on this computer;
+// the sidebar and the phone, the ones the user didn't keep for Jobs only (and each asks first).
+async function usableSecrets({ job }) {
+  if (job) {
+    const granted = new Set(job.id ? await secretStore.jobGrants(job.id) : []);
+    return (s) => granted.has(s.name);
+  }
+  return (s) => !!s.chat;
 }
 
 function fetchText(url) {
@@ -1716,3 +1812,6 @@ function bootLocalhostMcp() {
 
 if (app.isReady()) bootLocalhostMcp();
 else app.whenReady().then(bootLocalhostMcp);
+
+// Secret values are read in at start, so tool output is redacted from the first turn (ADR-0033).
+app.whenReady().then(() => secretStore.load().catch(() => {}));

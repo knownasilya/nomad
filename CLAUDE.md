@@ -417,6 +417,21 @@ them with the `remember`/`forget` capabilities (`gates: { personal, memory }`, n
 behind the `memoryWrite` permission. The `ai_memory` setting turns it all off. A page's
 `nomad.ai.chat()` never sees memories.
 
+### Secrets (ADR-0033)
+
+API keys and tokens the user's AI and Jobs use by name, without seeing them. They live on this
+computer only, encrypted with `safeStorage` (`app/bg/ai/secret-store.js`, `<userData>/ai-secrets.json`),
+never in the Vault, a drive or a Space. Rules are `app/bg/ai/secrets.mjs` (tests
+`tests/unit/secrets.test.js`). The model calls `httpRequest` with `secrets: ['NAME']`, and
+`app/bg/ai/http-request.mjs` adds each value where the user set it (a header, the query, a body field,
+or the whole URL), only for the secret's hosts. It never connects to loopback, and reaches private
+addresses only with a secret for that host. `executeTool` in `ai.ts` redacts every known value from
+every tool result (`[secret NAME]`). The sidebar and phone ask `aiSecretUse:<NAME>` once per turn. A
+Job uses only the secrets ticked for it on the secret (the local `jobs` list, not the Job record).
+`stageRules().secrets` keeps them from page turns and the loopback MCP's other programs. UI is My
+Library → Secrets over the internal `nomad.secrets` API (writes only from `nomad://library`). Never
+add an API that returns a value.
+
 ## Look and feel: every UI supports dark mode and matches the rest
 
 Every new or changed screen must work in light **and** dark, and look like its neighbours.

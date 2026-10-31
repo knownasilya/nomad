@@ -30,11 +30,13 @@ const GUIDE_IDS = [
   ['Resolving which file', 'resolve-file'],
   ['Building an SPA', 'spa'],
   ['A Job in a drive', 'job-drive'],
+  ['Secrets', 'secrets'],
 ]
 
 const DOMAIN_COPY = {
   capability:
-    'Read and write the current Drive, fetch an http(s) URL, read or screenshot the open page, open a new tab, and in the AI Sidebar click and type on the page.',
+    'Read and write the current Drive, fetch an http(s) URL, read or screenshot the open page, open a new tab, and in the AI Sidebar click and type on the page. ' +
+    "For the user's own AI: their Notes, Reader, Mods and Jobs, and HTTP requests with their saved secrets (API keys, by name).",
   guide: 'Sections of the Nomad API reference. Open one with entity guide:<id>.',
   page: 'Tools the current page registered. Open one with entity page:<name>.',
   drive:
@@ -78,6 +80,52 @@ export const CAPABILITIES = [
       properties: { url: { type: 'string', description: 'The URL to fetch (http or https only)' } },
       required: ['url'],
     },
+  },
+  // Secrets (ADR-0033): the user's API keys and tokens, used by name. The value is added in the main
+  // process, only for the hosts the user allowed, and taken back out of everything that returns.
+  {
+    name: 'listSecrets',
+    description:
+      "List the user's secrets: API keys and tokens they saved for you to use by name (My Library → Secrets). " +
+      'You never see a value. Gives each one\'s name, note, the hosts it may go to, how it is sent, whether it ' +
+      'has a value yet, and whether you may use it on this turn.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    gates: { personal: true, secrets: true },
+  },
+  {
+    name: 'httpRequest',
+    description:
+      'Send an HTTP request: any method, headers, and a body (`body` text, `json` or `form`). Returns { status, ok, ' +
+      'url, headers, body }. With `secrets` (names from listSecrets), each secret is added where the user set it ' +
+      '(a header such as Authorization, a query parameter, a body field, or the whole URL for a webhook), and only ' +
+      'when the URL is on one of its hosts. You never see the value; an echo of one reads [secret NAME]. Never ask ' +
+      'the user to paste a key in chat: ask them to add a secret in My Library → Secrets. `saveToSecret` ' +
+      '({ NAME: "access_token" } or { NAME: "header:x-token" }) stores a value from a 2xx response into an existing ' +
+      'secret instead of showing it to you, for refreshing a token. In the AI Sidebar the first use of each secret ' +
+      'in a turn asks the user; a Job uses only the secrets the user let it use. This computer (localhost) is never ' +
+      'reachable, and the local network only with a secret for that host.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'The http(s) URL. Leave out for a secret that is the whole URL' },
+        method: { type: 'string', description: 'Optional. GET (default), HEAD, POST, PUT, PATCH or DELETE' },
+        headers: { type: 'object', description: 'Optional. Header names to values' },
+        body: { type: 'string', description: 'Optional. A text body' },
+        json: { description: 'Optional. A JSON body (sent with Content-Type: application/json)' },
+        form: { type: 'object', description: 'Optional. Form fields (sent as application/x-www-form-urlencoded)' },
+        secrets: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional. Names of the secrets to add, e.g. ["GITHUB_TOKEN"]',
+        },
+        saveToSecret: {
+          type: 'object',
+          description: 'Optional. { SECRET_NAME: "json.path" | "header:<name>" }: save a value from the response into that secret',
+        },
+      },
+      required: [],
+    },
+    gates: { personal: true, secrets: true },
   },
   {
     name: 'writeDriveFile',
@@ -480,7 +528,8 @@ export const CAPABILITIES = [
     description:
       'Create a Job (no `id`; `prompt` or `source` required) or change one (`id`; fields you leave out stay as they are). ' +
       "Each run, the AI gets `prompt` on its own, with no chat history and nobody watching, on this computer: write it as " +
-      'a complete instruction. A run can read the Notes, Reader, drives and the web, and change nothing; its answer is ' +
+      'a complete instruction. A run can read the Notes, Reader, drives and the web, and send requests with the ' +
+      'secrets the user lets it use (My Library → Secrets); it changes nothing in Nomad. Its answer is ' +
       'saved for the user, and it can notify their phone. A Job can also come from a drive (`source`): its job.js runs ' +
       'first (an execute-style module with the same capabilities, getting { job, prompt, lastRun }), then the AI gets ' +
       'job.md with what the module returned; with no job.md, the module\'s result is the answer. `prompt` then adds to ' +
@@ -599,8 +648,17 @@ export const CAPABILITIES = [
 
 // What a Job's turn may use (ADR-0030): it runs with nobody watching, so it reads and never changes
 // anything, and it never asks a permission (the Notes and Reader reads are granted with the Job).
+// It may send requests (httpRequest) with only the secrets the user let that Job use (ADR-0033).
 // Capabilities with no `personal` gate are filtered by the usual gates (no writes, no renderer).
-export const JOB_CAPS = new Set(['listNotes', 'readNote', 'listReaderPosts', 'readReaderPost', 'notify'])
+export const JOB_CAPS = new Set([
+  'listNotes',
+  'readNote',
+  'listReaderPosts',
+  'readReaderPost',
+  'notify',
+  'listSecrets',
+  'httpRequest',
+])
 
 const RUNTIME_IMPORT = /^import\s+\{\s*nomad\s*\}\s+from\s+['"]nomad:runtime['"]\s*;?/
 
@@ -645,6 +703,8 @@ const TAB_DRIVE_ARG = {
 // adds currentTab, and a write must name its drive.
 // `job`: the turn is one of the user's AI Jobs (ADR-0030). Of the personal capabilities it keeps only
 // JOB_CAPS, and it adds notify.
+// `secrets`: the turn may use the user's secrets (stages.mjs; ADR-0033). It adds listSecrets and
+// httpRequest.
 // `memory`: AI memory is on (the `ai_memory` setting, ADR-0032). It adds remember and forget.
 export function visibleCapabilities({
   allowWrite = true,
@@ -653,6 +713,7 @@ export function visibleCapabilities({
   personal = false,
   tab = false,
   job = false,
+  secrets = false,
   memory = false,
 } = {}) {
   return CAPABILITIES.filter((cap) => {
@@ -662,6 +723,7 @@ export function visibleCapabilities({
     if (cap.gates?.personal && !personal) return false
     if (cap.gates?.tab && !tab) return false
     if (cap.gates?.job && !job) return false
+    if (cap.gates?.secrets && !secrets) return false
     if (cap.gates?.memory && !memory) return false
     if (job && (cap.gates?.personal || cap.gates?.job) && !JOB_CAPS.has(cap.name)) return false
     return true
@@ -719,7 +781,7 @@ function guideRecord(id, title, markdown) {
 const GUIDES = splitGuides(API_REFERENCE)
 
 export function buildCatalog(opts) {
-  const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, tab, job, memory, names, ownerId } =
+  const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, tab, job, secrets, memory, names, ownerId } =
     opts || {}
   const caps = visibleCapabilities({
     allowWrite,
@@ -728,6 +790,7 @@ export function buildCatalog(opts) {
     personal: !!personal,
     tab: !!personal && !!tab,
     job: !!personal && !!job,
+    secrets: !!personal && !!secrets,
     memory: !!personal && !!memory,
   })
   return {

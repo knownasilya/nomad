@@ -65,6 +65,7 @@ export class JobsView extends LitElement {
       openId: { type: String }, // the Job whose runs show
       runs: { type: Array },
       newer: { type: Object }, // a newer version of the open Job's source: { jobId, url, module, prompt } or { jobId, error }
+      secrets: { type: Array }, // the user's secrets on this computer, without values
     };
   }
 
@@ -79,6 +80,7 @@ export class JobsView extends LitElement {
     this.editing = null;
     this.runs = [];
     this.newer = null;
+    this.secrets = [];
     this.openId = new URLSearchParams(location.search).get('id') || null;
     this.load();
     // Jobs change on other Devices, from the AI, and when a run starts or ends.
@@ -99,6 +101,12 @@ export class JobsView extends LitElement {
       this.jobs = (await nomad.vault.listJobs()).jobs;
     } catch {
       this.jobs = [];
+    }
+    // The secrets each Job may use on this computer (ADR-0033), granted in Secrets.
+    try {
+      this.secrets = (await nomad.secrets.list()).secrets;
+    } catch {
+      this.secrets = [];
     }
     if (this.openId) this.runs = await nomad.vault.listJobRuns(this.openId).catch(() => []);
   }
@@ -123,7 +131,8 @@ export class JobsView extends LitElement {
       <div class="intro">
         A Job is a prompt the AI runs by itself, by hand or on a schedule, like “every weekday at
         8:00, sum up my unread Reader posts”. It can read your Notes, Reader, drives and the web, and
-        it changes nothing. Its answers are kept here, and it can notify your phone. Ask the AI in the
+        it changes nothing. With a secret you let it use (in Secrets), it can call an API or a
+        webhook without seeing the key. Its answers are kept here, and it can notify your phone. Ask the AI in the
         sidebar to make one, or make it here. A Job can also come from a drive with a
         <code>job.md</code> prompt and a <code>job.js</code> module. A Job runs on the computer that
         made it, while that computer is awake.
@@ -203,6 +212,7 @@ export class JobsView extends LitElement {
               This Job runs on ${j.deviceName}.
               <button class="link" @click=${() => this.onRunHere(j)}>Run it on this computer instead</button>
             </div>`}
+        ${this.renderSecrets(j)}
         <div class="label">Runs</div>
         ${runs.length === 0
           ? html`<div class="hint-row">No runs yet. Click <span class="fas fa-play"></span> to run it now.</div>`
@@ -221,6 +231,19 @@ export class JobsView extends LitElement {
             )}
       </div>
     `;
+  }
+
+  // The secrets this Job may use on this computer. They're granted on the secret, in Secrets.
+  renderSecrets(j) {
+    if (!j.here) return '';
+    const mine = (this.secrets || []).filter((s) => (s.jobs || []).includes(j.id));
+    return html`<div class="label">Secrets</div>
+      <div class="hint-row">
+        ${mine.length
+          ? html`It can use ${mine.map((s, i) => html`${i ? ', ' : ''}<code>${s.name}</code>`)} for requests to their sites.`
+          : 'It uses no secrets.'}
+        <a href="/secrets">${mine.length ? 'Change in Secrets' : 'Let it use one in Secrets'}</a>
+      </div>`;
   }
 
   // Where a drive Job comes from, its copy, and a newer version to take.

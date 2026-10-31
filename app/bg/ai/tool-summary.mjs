@@ -34,6 +34,8 @@ const PURPOSES = {
   runJob: 'run a Job',
   deleteJob: 'delete a Job',
   notify: 'notify your phone',
+  listSecrets: 'look at your secrets',
+  httpRequest: 'send a request',
   remember: 'remember something about you',
   forget: 'forget something about you',
 };
@@ -64,6 +66,10 @@ export function toolSummary(name, args) {
       return `Writing ${inDrive(a.path || 'a file', a.drive)}`;
     case 'fetchUrl':
       return a.url ? `Fetching ${a.url}` : 'Fetching a web page';
+    case 'listSecrets':
+      return 'Listing your secrets';
+    case 'httpRequest':
+      return httpSummary(a);
     case 'currentTab':
       return 'Checking which tab you are on';
     case 'readCurrentPage':
@@ -197,4 +203,14 @@ function quote(text) {
 function listOf(items) {
   if (items.length < 2) return items[0] || '';
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+// "Sending POST https://api.github.com/… with GITHUB_TOKEN". Names only: a secret's value never
+// reaches the model, so it can't be in the arguments either.
+function httpSummary(a) {
+  const method = String(a.method || 'GET').toUpperCase()
+  const names = [...(Array.isArray(a.secrets) ? a.secrets : []), ...(a.secret ? [a.secret] : [])].map(String)
+  const target = a.url ? String(a.url).slice(0, 120) : names.length ? 'a saved URL' : 'a request'
+  const verb = method === 'GET' ? 'Requesting' : `Sending ${method} to`
+  return `${verb} ${target}${names.length ? ` with ${names.join(', ')}` : ''}`
 }
