@@ -42,6 +42,7 @@ const GLOBAL_SETTINGS = new Set([
   'ai_keep_awake',
   'ai_auto_names',
   'ai_memory',
+  'ai_reader_topics',
   'ai_sidebar_width',
   'cert_exceptions',
   'crawler_enabled',
@@ -130,6 +131,8 @@ export const setup = async function (opts) {
     // The user's assistant remembers things about them across chats (bg/ai/memory.js, ADR-0032).
     // nomad://ai/memory turns it off.
     ai_memory: 1,
+    // The AI sorts the articles saved to Reader into topics (bg/web-apis/bg/reader-articles.ts).
+    ai_reader_topics: 1,
     // Run the discovery crawler that nomad://search queries (bg/hyper/crawler-host.js). Synced to
     // the user's other Devices through the Vault (bg/hyper/synced-settings.js).
     crawler_enabled: 1,

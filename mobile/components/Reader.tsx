@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Modal, View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useTheme, radius, type Theme } from '../lib/theme'
-import type { Backend, Feed, FeedPost, ReaderState } from '../lib/useBackend'
+import type { Backend, Feed, FeedPost, ReaderState, SavedArticle } from '../lib/useBackend'
+import ActionSheet from './ActionSheet'
 import LinkPhone from './LinkPhone'
 import ScreenHeader from './ScreenHeader'
 
@@ -22,7 +23,8 @@ interface Props {
 // The phone's Reader (ADR-0017): the Feeds the active Space subscribes to, from any linked Device,
 // merged into one list, newest first. Subscriptions and read marks live in the Vault, per Space, so
 // they match desktop's nomad://reader. Another Device's change shows while this is open. Opening a
-// post closes this and loads the post in the current tab.
+// post closes this and loads the post in the current tab. Pages saved to Reader on a computer
+// (ADR-0033) show under Saved, by topic; opening one marks it read and loads it in the tab.
 export default function Reader ({ visible, onClose, apps, onVaultChange, space, onOpenPost, onOpenDevices }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
@@ -35,7 +37,9 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
   const [noVault, setNoVault] = useState(false)
   const [error, setError] = useState('')
   const [feeds, setFeeds] = useState<Record<string, FeedLoad>>({})
+  // 'all' | a feed's URL | 'saved' | 'topic:<name>'
   const [filter, setFilter] = useState<string>('all')
+  const [menuFor, setMenuFor] = useState<SavedArticle | null>(null)
   const [addUrl, setAddUrl] = useState('')
   const [adding, setAdding] = useState(false)
   // Bumped on every refresh, so a slow Feed from an older refresh can't overwrite a newer one.
@@ -90,7 +94,7 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
       if (!res.ok || !res.value) return
       setState({ ...res.value, read: [...new Set([...res.value.read, ...pendingRead.current])] })
       if (res.value.follows.join(' ') !== before.follows.join(' ')) {
-        setFilter((f) => (f === 'all' || res.value!.follows.includes(f) ? f : 'all'))
+        setFilter((f) => (f === 'all' || f === 'saved' || f.startsWith('topic:') || res.value!.follows.includes(f) ? f : 'all'))
         loadFeeds(res.value.follows)
       }
     })
@@ -101,8 +105,16 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
     const posts = Object.values(feeds).flatMap((f) => f.posts)
     return posts.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
   }, [feeds])
-  const posts = filter === 'all' ? allPosts : allPosts.filter((p) => p.feedUrl === filter)
-  const unread = posts.filter((p) => !read.has(p.url)).length
+  const savedView = filter === 'saved' || filter.startsWith('topic:')
+  const articles = state?.articles || []
+  const topicList = useMemo(() => topicCounts(articles), [articles])
+  const shownArticles = filter === 'saved'
+    ? articles
+    : filter.startsWith('topic:')
+      ? articles.filter((a) => (a.topics || []).some((t) => t.toLowerCase() === filter.slice(6).toLowerCase()))
+      : []
+  const posts = savedView ? [] : filter === 'all' ? allPosts : allPosts.filter((p) => p.feedUrl === filter)
+  const unread = savedView ? shownArticles.filter((a) => !a.readAt).length : posts.filter((p) => !read.has(p.url)).length
   const loadingAny = Object.values(feeds).some((f) => f.loading)
 
   // Feeds that loaded hand over their current posts, so marks for deleted posts are dropped.
@@ -116,6 +128,22 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
     for (const u of add) pendingRead.current.delete(u)
     if (res.ok && res.value) setState(res.value)
   }, [call, feeds, state, space])
+
+  const markArticle = useCallback(async (a: SavedArticle, isRead: boolean) => {
+    if (!state) return
+    setState({ ...state, articles: articles.map((x) => (x.id === a.id ? { ...x, readAt: isRead ? new Date().toISOString() : null } : x)) })
+    const res = await call<ReaderState>('reader', 'markArticle', { space, id: a.id, read: isRead })
+    if (res.ok && res.value) setState(res.value)
+  }, [call, state, articles, space])
+
+  const openArticle = (a: SavedArticle) => {
+    if (!a.readAt) markArticle(a, true)
+    onOpenPost(a.url)
+  }
+
+  const markAllArticles = async () => {
+    for (const a of shownArticles.filter((x) => !x.readAt)) await markArticle(a, true)
+  }
 
   const openPost = (p: FeedPost) => {
     if (!read.has(p.url)) saveRead([p.url])
@@ -171,9 +199,24 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
           <View style={s.center}><ActivityIndicator color={t.accent} /></View>
         ) : (
           <>
+            {feedList.length === 0 && articles.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chips} contentContainerStyle={s.chipsContent}>
+                <Chip s={s} label='Feeds' active={!savedView} onPress={() => setFilter('all')} />
+                <Chip s={s} label={`Saved · ${articles.length}`} active={savedView} onPress={() => setFilter('saved')} />
+              </ScrollView>
+            )}
+            {savedView && topicList.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chips} contentContainerStyle={s.chipsContent}>
+                <Chip s={s} label='Everything' active={filter === 'saved'} onPress={() => setFilter('saved')} />
+                {topicList.map((t) => (
+                  <Chip key={t.topic} s={s} label={`${t.topic} · ${t.count}`} active={filter.toLowerCase() === 'topic:' + t.topic.toLowerCase()} onPress={() => setFilter('topic:' + t.topic)} />
+                ))}
+              </ScrollView>
+            )}
             {feedList.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chips} contentContainerStyle={s.chipsContent}>
                 <Chip s={s} label='All' active={filter === 'all'} onPress={() => setFilter('all')} />
+                {articles.length > 0 && <Chip s={s} label={`Saved · ${articles.length}`} active={savedView} onPress={() => setFilter('saved')} />}
                 {feedList.map((f) => (
                   <Chip
                     key={f.url}
@@ -193,7 +236,26 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
                 <Text style={s.hint}>This phone can’t save changes to your Vault yet. Keep your other device online until it syncs.</Text>
               )}
 
-              {posts.length > 0 && (
+              {savedView && (
+                <>
+                  <View style={s.countRow}>
+                    <Text style={s.countText}>{shownArticles.length} saved · {unread} unread</Text>
+                    {unread > 0 && (
+                      <TouchableOpacity onPress={markAllArticles} hitSlop={8}>
+                        <Text style={s.action}>Mark all read</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <View style={s.card}>
+                    {shownArticles.map((a, i) => (
+                      <ArticleRow key={a.id} a={a} divider={i > 0} s={s} onPress={() => openArticle(a)} onLongPress={() => setMenuFor(a)} onTopic={(t) => setFilter('topic:' + t)} />
+                    ))}
+                  </View>
+                  <Text style={s.addHint}>Save pages from Reader on your computer: right-click a page, Save Page to Reader. Long-press an article for more.</Text>
+                </>
+              )}
+
+              {!savedView && posts.length > 0 && (
                 <View style={s.countRow}>
                   <Text style={s.countText}>{unread} unread</Text>
                   {unread > 0 && (
@@ -204,7 +266,7 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
                 </View>
               )}
 
-              {posts.length > 0 ? (
+              {savedView ? null : posts.length > 0 ? (
                 <View style={s.card}>
                   {posts.map((p, i) => (
                     <PostRow key={p.url} p={p} read={read.has(p.url)} divider={i > 0} s={s} onPress={() => openPost(p)} />
@@ -220,7 +282,7 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
                 <Text style={s.empty}>No posts yet.</Text>
               )}
 
-              {state.canFollow === false ? (
+              {savedView ? null : state.canFollow === false ? (
                 <Text style={s.hint}>This Space is shared, and you can view it. People who can edit it choose its feeds.</Text>
               ) : (
               <View style={s.addCard}>
@@ -248,6 +310,16 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
             </ScrollView>
           </>
         )}
+        <ActionSheet
+          visible={!!menuFor}
+          onClose={() => setMenuFor(null)}
+          title={menuFor?.title}
+          subtitle={menuFor?.site}
+          groups={[[
+            { label: 'Open', icon: 'external-link-alt', onPress: () => menuFor && openArticle(menuFor) },
+            { label: menuFor?.readAt ? 'Mark unread' : 'Mark read', icon: menuFor?.readAt ? 'envelope' : 'check', onPress: () => menuFor && markArticle(menuFor, !menuFor.readAt) }
+          ]]}
+        />
       </SafeAreaView>
     </Modal>
   )
@@ -266,6 +338,45 @@ function PostRow ({ p, read, divider, s, onPress }: { p: FeedPost; read: boolean
       </View>
     </Pressable>
   )
+}
+
+function ArticleRow ({ a, divider, s, onPress, onLongPress, onTopic }: { a: SavedArticle; divider: boolean; s: Styles; onPress: () => void; onLongPress: () => void; onTopic: (t: string) => void }) {
+  const t = useTheme()
+  const isRead = !!a.readAt
+  const minutes = a.words ? Math.max(1, Math.round(a.words / 230)) : 0
+  return (
+    <Pressable style={[s.post, divider && s.rowDivider]} android_ripple={{ color: t.ripple }} onPress={onPress} onLongPress={onLongPress}>
+      <View style={[s.unreadDot, isRead && s.dotRead]} />
+      <View style={s.postText}>
+        <Text numberOfLines={1} style={s.postFeed}>{[a.site, formatDate(a.savedAt), minutes ? `${minutes} min read` : ''].filter(Boolean).join(' · ')}</Text>
+        <Text numberOfLines={2} style={[s.postTitle, isRead && s.postTitleRead]}>{a.title}</Text>
+        {!!a.excerpt && <Text numberOfLines={2} style={s.postSummary}>{a.excerpt}</Text>}
+        {(a.topics || []).length > 0 && (
+          <View style={s.topicRow}>
+            {a.topics.map((topic) => (
+              <TouchableOpacity key={topic} onPress={() => onTopic(topic)} hitSlop={4} style={s.topic}>
+                <Text style={s.topicText}>{topic}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
+    </Pressable>
+  )
+}
+
+// Every topic in use, most used first (shared/reader-articles.mjs topicCounts; mobile/ keeps its
+// React Native bundle to itself).
+function topicCounts (articles: SavedArticle[]): Array<{ topic: string; count: number }> {
+  const counts = new Map<string, { topic: string; count: number }>()
+  for (const a of articles) {
+    for (const t of a.topics || []) {
+      const c = counts.get(t.toLowerCase()) || { topic: t, count: 0 }
+      c.count++
+      counts.set(t.toLowerCase(), c)
+    }
+  }
+  return [...counts.values()].sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic))
 }
 
 function Chip ({ label, active, error, onPress, onLongPress, s }: { label: string; active: boolean; error?: boolean; onPress: () => void; onLongPress?: () => void; s: Styles }) {
@@ -313,6 +424,9 @@ function makeStyles (t: Theme) {
     postTitleRead: { color: t.textDim, fontWeight: '500' },
     postSummary: { color: t.textDim, fontSize: 13, lineHeight: 18, marginTop: 2 },
     postDate: { color: t.textMuted, fontSize: 12, marginTop: 4 },
+    topicRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+    topic: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: t.trustBg },
+    topicText: { color: t.trustText, fontSize: 11, fontWeight: '600' },
     empty: { color: t.textMuted, fontSize: 13, textAlign: 'center', marginTop: 30, lineHeight: 19 },
     addCard: { backgroundColor: t.surface, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, padding: 16, marginTop: 24 },
     addLabel: { color: t.text, fontSize: 14, fontWeight: '700', marginBottom: 8 },
