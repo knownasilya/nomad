@@ -46,9 +46,8 @@ internal class PopupWindow (
   private val module: NomadWebViewWindowsModule
 ) {
   private val dark = (activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-  // mobile/lib/theme.ts: bg, surface, border, text, textMuted, accent, danger.
+  // mobile/lib/theme.ts: bg, border, text, textMuted, accent, danger.
   private val bar = if (dark) 0xFF1F1F1F.toInt() else 0xFFF5F5F5.toInt()
-  private val surface = if (dark) 0xFF2B2B2B.toInt() else 0xFFFFFFFF.toInt()
   private val border = if (dark) 0xFF3A3A3A.toInt() else 0xFFE0E0E0.toInt()
   private val text = if (dark) 0xFFEEEEEE.toInt() else 0xFF222222.toInt()
   private val textMuted = if (dark) 0xFF8F8F8F.toInt() else 0xFF888891.toInt()
@@ -106,7 +105,9 @@ internal class PopupWindow (
       WebSettingsCompat.setRequestedWithHeaderOriginAllowList(web.settings, emptySet())
     }
     CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
-    web.setBackgroundColor(surface)
+    // The page's canvas: white, as in Chrome (mobile/lib/siteTheme.ts PAGE_CANVAS). The app's dark
+    // surface here put a site's dark text on a dark page. A page that asks for dark still gets one.
+    web.setBackgroundColor(Color.WHITE)
 
     web.webViewClient = object : WebViewClient() {
       override fun shouldOverrideUrlLoading (view: WebView, request: WebResourceRequest): Boolean {
