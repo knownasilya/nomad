@@ -63,7 +63,10 @@ work address". The rules are in `app/bg/ai/page-control.mjs`; the actions run in
    nomad:// pages and `hyper://private/` are off limits.
 8. **The user can always see it and stop it.** While the AI controls a page, the page has a blue
    border, the AI's cursor with a "Nomad AI" tag, and a "Nomad AI is using this page" bar with a
-   Stop button, all in a closed shadow root that ignores the pointer except for Stop. They come back
+   Stop button, all in a closed shadow root that ignores the pointer except for Stop. They sit in
+   the top layer (a manual popover, shown again whenever the page opens a modal or popover of its
+   own), so a page's dialogs and menus never cover them. A page's modal makes the bar inert, so a
+   click on it is caught by position. They come back
    on each new page load until the turn ends, and go away when it does. Stop and Esc end the turn.
    A click or key press of the user's own in the page ends the AI's control for the rest of the
    turn: the next action fails, and the AI is told to say what it did and what's left.

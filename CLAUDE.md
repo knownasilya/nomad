@@ -345,7 +345,8 @@ the loopback MCP's other programs never get them. The rules (blocked password/pa
 clicks that need a confirm, the 30-day site grant, keys) are `app/bg/ai/page-control.mjs`; one session a
 turn (`createSession` in `app/bg/ui/page-control.js`, made in `runChat`) pins the tab and sends real
 input with `sendInputEvent`/`insertText`. `app/fg/webview-preload/page-control.js` lists controls by
-ref and draws the cursor, border and Stop bar in a closed shadow root, through
+ref and draws the cursor, border and Stop bar in a closed shadow root, in the top layer (a
+manual popover, raised again when the page opens a modal or popover) so nothing on the page covers it, through
 `window.__nomadPageControl` in world 999. The grant is the `aiPageControl` permission, stored in
 sitedata as the time it ends; `aiPageAction` is the per-click confirm, whose prompt can allow similar
 clicks (`similarKey`) for the rest of the sidebar chat (`chatId` from the sidebar); `aiPagePlan` approves a
