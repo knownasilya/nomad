@@ -20,7 +20,8 @@ import {
   FRAME,
   encodeFrame,
   decodeFrame,
-  signChallenge
+  signChallenge,
+  steerFrame
 } from '../../../shared/ai-bridge.mjs'
 
 const PAIRED_FLAG = '_nomadAiBridgePaired'
@@ -164,9 +165,7 @@ export function createAiBridge ({ swarm, getVault }) {
         }
       })
       if (steer) {
-        steer.send = (m) => sendFrame(peer, m.type === 'steer'
-          ? { t: FRAME.STEER, id, steerId: m.id, text: m.text }
-          : { t: FRAME.UNSTEER, id, steerId: m.id })
+        steer.send = (m) => sendFrame(peer, steerFrame(id, m))
         for (const m of steer.queue.splice(0, steer.queue.length)) steer.send(m)
       }
     }).finally(() => {

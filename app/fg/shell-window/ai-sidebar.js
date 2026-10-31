@@ -779,6 +779,13 @@ class ShellWindowAiSidebar extends LitElement {
       color: var(--ai-text-muted);
       font-size: 11px;
     }
+    .queued-note .send-now {
+      color: var(--ai-accent);
+      font-weight: 600;
+    }
+    .queued-note .send-now:hover {
+      color: var(--ai-accent--hover);
+    }
 
     /* — tools — */
 
@@ -1701,12 +1708,21 @@ class ShellWindowAiSidebar extends LitElement {
   }
 
   // A message sent while the assistant works, until its next step reads it.
+  // Send now stops what the assistant is doing at this moment, so it reads the message at once.
   _renderQueued(q) {
     return html`
       <div class="msg user queued">${q.text}</div>
       <div class="queued-note">
-        <span class="far fa-fw fa-clock"></span>
-        Queued for the assistant's next step
+        ${q.now
+          ? html`<span class="fas fa-fw fa-spinner fa-spin"></span> Sending now…`
+          : html`<span class="far fa-fw fa-clock"></span> Queued for the assistant's next step
+              <button
+                class="msg-action send-now"
+                title="Stop what the assistant is doing and send this now"
+                @click=${() => this._sendNow(q.id)}
+              >
+                <span class="fas fa-fw fa-paper-plane"></span> Send now
+              </button>`}
         <button class="msg-action" title="Take back this message" @click=${() => this._unqueue(q.id)}>
           <span class="fas fa-fw fa-times"></span>
         </button>
@@ -1804,6 +1820,15 @@ class ShellWindowAiSidebar extends LitElement {
       await bg.aiShell.steer(this._turnId, item.id, text);
     } catch (e) {
       console.warn('[ai-sidebar] steer failed', e);
+    }
+  }
+
+  async _sendNow(id) {
+    this._queued = this._queued.map((q) => (q.id === id ? { ...q, now: true } : q));
+    try {
+      await bg.aiShell.steerNow(this._turnId, id);
+    } catch (e) {
+      console.warn('[ai-sidebar] send now failed', e);
     }
   }
 

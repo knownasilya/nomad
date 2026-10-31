@@ -246,7 +246,11 @@ frames and the Provider's loop answers `STEERED` (`shared/ai-bridge.mjs`). Every
 (an older Provider, the turn was ending) is sent as the next turn; after Stop or an error it goes
 back in the input. The sidebar steers through `aiShell.steer`/`unsteer` by the `turnId` it passes
 to `chat`; the phone through `RPC_AI_STEER`/`RPC_AI_UNSTEER` (`mobile/lib/aiSteer.ts`). Page
-turns (`nomad.ai.chat()`) and Jobs never steer.
+turns (`nomad.ai.chat()`) and Jobs never steer. **Send now** on a queued message (`steering.now()`,
+`aiShell.steerNow`, `RPC_AI_STEER_NOW`, the `STEER_NOW` frame) stops the model call in flight
+(`runStep`: the text so far stays in the history, a CLI is stopped and run again) or, while tools
+run, lets the running one finish and skips the rest of that round (`SKIPPED_FOR_STEER`); the loop
+reads the message before its next call.
 
 ### Generated UI in the AI Sidebar (ADR-0027)
 

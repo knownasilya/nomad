@@ -8,6 +8,7 @@ export default {
   listTools: 'promise',
   steer: 'promise',
   unsteer: 'promise',
+  steerNow: 'promise',
   getActiveDriveInfo: 'promise',
   notifyAgentWroteFile: 'promise',
   listSessions: 'promise',
