@@ -45,7 +45,7 @@ import { CONSOLE_SHIM, FAVICON_JS, THEME_COLOR_JS, VIEW_SOURCE_JS, type ContentM
 import { publishTabs, setTabActions, type TabThumb } from '../lib/tabSwitcher'
 import { useShareOpenTabs, type DeviceTabsList, type SyncedSpace } from '../lib/openTabs'
 import { checkForUpdate } from '../lib/updater'
-import { parseColor, tintTheme } from '../lib/siteTheme'
+import { parseColor, tintTheme, PAGE_CANVAS } from '../lib/siteTheme'
 import webViewInsets from '../modules/nomad-webview-insets'
 import webViewWindows from '../modules/nomad-webview-windows'
 import { routeLink, FEED_JS } from '../lib/webLinks'
@@ -1379,7 +1379,6 @@ function TabPane ({
   registerWebView: (ref: WebView | null) => void
   onHyperNav: (hyperUrl: string, canGoBack: boolean, canGoForward: boolean, title?: string) => void
 }) {
-  const t = useTheme()
   if (tab.kind === 'home') {
     return (
       <Home
@@ -1399,7 +1398,8 @@ function TabPane ({
       key={tab.reloadToken}
       ref={registerWebView}
       source={{ uri: tab.url }}
-      style={{ flex: 1, backgroundColor: t.surface }}
+      // The page's own canvas, not the app's surface: see PAGE_CANVAS.
+      style={{ flex: 1, backgroundColor: PAGE_CANVAS }}
       onNavigationStateChange={onWebNav}
       // Every link and redirect is checked here (lib/webLinks.ts), so the whitelist lets all through.
       originWhitelist={['*']}

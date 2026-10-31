@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native'
 import { WebView } from 'react-native-webview'
+import { PAGE_CANVAS } from '../lib/siteTheme'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import { type DirEntry, CONSOLE_SHIM, FAVICON_JS, NOMAD_SHIM, THEME_COLOR_JS } from '../lib/types'
 import { shortKey } from '../lib/hyperUrl'
@@ -87,7 +88,7 @@ export default function HyperView ({ render, onNavigate, onMessage, registerWebV
         {...webProps}
         injectedJavaScriptBeforeContentLoaded={pageJs + CONSOLE_SHIM + NOMAD_SHIM}
         source={{ uri: render.uri }}
-        style={s.web}
+        style={s.page}
         setSupportMultipleWindows={false}
         // Same-drive navigation stays native (that's the point). Anything else — a hyper:// link to
         // another drive, or an external web link — routes through the app's navigation.
@@ -126,7 +127,7 @@ export default function HyperView ({ render, onNavigate, onMessage, registerWebV
         {...webProps}
         injectedJavaScriptBeforeContentLoaded={pageJs + CONSOLE_SHIM + NOMAD_SHIM}
         source={{ html: render.html, baseUrl: render.url }}
-        style={s.web}
+        style={s.page}
         setSupportMultipleWindows={false}
       />
     )
@@ -176,6 +177,8 @@ export default function HyperView ({ render, onNavigate, onMessage, registerWebV
 function makeStyles (t: Theme) {
   return StyleSheet.create({
     web: { flex: 1, backgroundColor: t.bg },
+    // A drive's own pages get a browser's white canvas, not the app's background (PAGE_CANVAS).
+    page: { flex: 1, backgroundColor: PAGE_CANVAS },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: t.bg },
     status: { color: t.text, marginTop: 16, fontSize: 15 },
     peers: { color: t.textMuted, marginTop: 6, fontSize: 13 },

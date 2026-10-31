@@ -6,6 +6,13 @@ import type { Theme } from './theme'
 // page's CSS engine to rgb()/rgba(); this file turns it into a Theme for the bar, picking dark or
 // light text by contrast so the address stays readable on any color.
 
+// The color behind a web page that paints no background of its own: white, as in Chrome. A WebView's
+// background color is not just the view behind the page, it is the page's canvas. In dark mode the
+// app's dark surface there put a site's dark text (which expects a white page) on a dark page, and
+// the site was unreadable. A page that asks for dark (color-scheme: dark) still gets a dark canvas
+// from the WebView itself. Use this for every WebView that shows a site, never a Theme color.
+export const PAGE_CANVAS = '#ffffff'
+
 export interface Rgb { r: number; g: number; b: number }
 
 // Accepts what the page reports: rgb(…)/rgba(…) or #rgb/#rrggbb. Anything see-through is ignored, as
