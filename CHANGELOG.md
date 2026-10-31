@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.28.0](https://github.com/knownasilya/nomad/compare/v1.27.0...v1.28.0) (2026-10-31)
+
+
+### Features
+
+* **mobile:** one top bar, pages flush to the bottom, site theme colors ([72963a2](https://github.com/knownasilya/nomad/commit/72963a20f88e9605f49e98203c907823619d5390))
+* **mobile:** touch and hold the tab count to open a new tab ([f785661](https://github.com/knownasilya/nomad/commit/f7856614afdd998de491c630cfd66b0731f17f49))
+
+
+### Bug Fixes
+
+* **mobile:** let the phone write Spaces synced from desktop ([b1c8686](https://github.com/knownasilya/nomad/commit/b1c8686ced07b1077a3864bd918103f663418ec7))
+* **mobile:** return a value from NomadWebViewInsets.install so the module compiles ([556a124](https://github.com/knownasilya/nomad/commit/556a1242ed503aecee8a5b056755c2ca6ca3b9e4))
+
 ## [1.27.0](https://github.com/knownasilya/nomad/compare/v1.26.3...v1.27.0) (2026-10-31)
 
 
