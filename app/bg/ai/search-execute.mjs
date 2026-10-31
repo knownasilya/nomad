@@ -170,6 +170,34 @@ export const CAPABILITIES = [
     gates: { personal: true, tab: true, renderer: true },
   },
   {
+    name: 'planPageActions',
+    description:
+      'Before several clicks that buy, send, post or delete (deleting every draft, say), show the user the plan ' +
+      'once instead of asking click by click. List each control you will click, in order, with refs from your ' +
+      'latest snapshotPage. If the user approves, those clicks (and as many like them as the plan lists) go ' +
+      "through this turn without asking; anything else still asks. If they don't, stop and ask what they want.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        goal: { type: 'string', description: 'What the plan does, in a few words for the user' },
+        steps: {
+          type: 'array',
+          description: 'Each control you will click, in order (at most 50)',
+          items: {
+            type: 'object',
+            properties: {
+              ref: { type: 'number', description: 'The control, from snapshotPage' },
+              note: { type: 'string', description: 'What this click does, e.g. "Delete the draft “Groceries”"' },
+            },
+            required: ['ref'],
+          },
+        },
+      },
+      required: ['goal', 'steps'],
+    },
+    gates: { personal: true, tab: true, renderer: true },
+  },
+  {
     name: 'typeText',
     description:
       'Type into a text field from snapshotPage. It replaces what the field holds unless `clear` is false. With ' +
