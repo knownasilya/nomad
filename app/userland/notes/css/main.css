@@ -2,6 +2,7 @@
    type, the 50px header, My Library's sidebar. Light and dark follow the OS. */
 @import 'nomad://app-stdlib/css/common.css';
 @import 'nomad://app-stdlib/css/fontawesome.css';
+@import 'nomad://app-stdlib/css/graph.css';
 
 body {
   --nts-search-bg: rgba(0, 0, 0, 0.055);
@@ -16,14 +17,9 @@ body {
   --nts-warn-bg: #fff7e6;
   --nts-warn-border: #f5d48a;
 
-  /* The canvas (js/graph-view.js). */
-  --nts-graph-bg: var(--bg-color--default);
-  --nts-graph-grid: rgba(0, 0, 0, 0.07);
-  --nts-graph-node: #8e8ea6;
-  --nts-graph-node-ring: var(--bg-color--default);
-  --nts-graph-link: rgba(60, 60, 90, 0.2);
-  --nts-graph-arrow: rgba(60, 60, 90, 0.42);
-  --nts-graph-label: var(--text-color--light);
+  /* The canvas (app-stdlib/css/graph.css): its grid, dots and lines keep their own defaults. */
+  --graph-bg: var(--bg-color--default);
+  --graph-accent: var(--nts-accent);
 
   /* The editor's colors (js/editor/index.js reads these). */
   --note-text: var(--text-color--default);
@@ -62,10 +58,6 @@ body {
     --nts-warn-border: #5c4a1f;
     --note-code-bg: rgba(255, 255, 255, 0.07);
     --note-selection: rgba(123, 159, 255, 0.28);
-    --nts-graph-grid: rgba(255, 255, 255, 0.06);
-    --nts-graph-node: #8a8aa0;
-    --nts-graph-link: rgba(200, 200, 230, 0.2);
-    --nts-graph-arrow: rgba(200, 200, 230, 0.4);
   }
 }
 
@@ -579,116 +571,6 @@ main {
   position: relative;
   display: block;
   min-height: 0;
-  overflow: hidden;
-  background-color: var(--nts-graph-bg);
-  /* A dot grid; js/graph-view.js moves and scales it with the canvas. */
-  background-image: radial-gradient(circle, var(--nts-graph-grid) 1px, transparent 1.2px);
-  background-size: 24px 24px;
-}
-
-.graph-svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-}
-
-.graph-svg.panning {
-  cursor: grabbing;
-}
-
-.graph-link {
-  transition: opacity 0.15s;
-}
-
-.graph-link line {
-  stroke: var(--nts-graph-link);
-  stroke-width: 1.2px;
-  vector-effect: non-scaling-stroke;
-  transition: stroke 0.15s;
-}
-
-/* The arrowhead at the note a link points to (js/graph-view.js). */
-.graph-arrow {
-  fill: var(--nts-graph-arrow);
-  transition: fill 0.15s;
-}
-
-.graph-link.hover line {
-  stroke: var(--nts-accent);
-  stroke-width: 1.6px;
-}
-
-.graph-link.hover .graph-arrow {
-  fill: var(--nts-accent);
-}
-
-.graph-link.dim {
-  opacity: 0.35;
-}
-
-.graph-node {
-  cursor: pointer;
-  outline: none;
-  transition: opacity 0.15s;
-}
-
-.graph-svg.dragging-node,
-.graph-svg.dragging-node .graph-node {
-  cursor: grabbing;
-}
-
-.graph-node circle {
-  fill: var(--nts-graph-node);
-  stroke: var(--nts-graph-node-ring);
-  stroke-width: 1.5px;
-  vector-effect: non-scaling-stroke;
-  transition: fill 0.15s;
-}
-
-.graph-node text {
-  display: none;
-  fill: var(--nts-graph-label);
-  font-size: 11px;
-  paint-order: stroke;
-  stroke: var(--nts-graph-bg);
-  stroke-width: 3px;
-  stroke-linejoin: round;
-  pointer-events: none;
-}
-
-.graph-svg.labels .graph-node text,
-.graph-node.current text,
-.graph-node.hover text,
-.graph-node.near text {
-  display: block;
-}
-
-.graph-node.near circle {
-  fill: var(--nts-accent);
-  opacity: 0.7;
-}
-
-.graph-node.current circle,
-.graph-node.hover circle {
-  fill: var(--nts-accent);
-}
-
-.graph-node.current text,
-.graph-node.hover text {
-  fill: var(--text-color--default);
-  font-weight: 600;
-}
-
-.graph-node:focus-visible circle {
-  stroke: var(--nts-accent);
-  stroke-width: 3px;
-}
-
-.graph-node.dim {
-  opacity: 0.18;
 }
 
 .graph-overlay {
