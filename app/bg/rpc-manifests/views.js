@@ -35,6 +35,7 @@ export default {
   stop: 'promise',
   reload: 'promise',
   toggleDraftPreview: 'promise',
+  saveToReader: 'promise',
   getDraftStatus: 'promise',
   publishDraft: 'promise',
   discardDraft: 'promise',

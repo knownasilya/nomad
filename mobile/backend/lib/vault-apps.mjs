@@ -1,6 +1,7 @@
 import b4a from 'b4a'
 import { decodeInlineJson } from '../../../shared/fs-core.mjs'
 import * as apps from '../../../shared/vault-apps.mjs'
+import * as ra from '../../../shared/reader-articles.mjs'
 import * as names from '../../../shared/names.mjs'
 import * as ot from '../../../shared/open-tabs.mjs'
 import * as jl from '../../../shared/jobs.mjs'
@@ -106,6 +107,8 @@ export async function readerState (base, space) {
   return {
     follows: apps.followUrls(await readPrefix(place.base, place.prefix)),
     read: (await readRecord(base, apps.readPath(space)))?.read || [],
+    // Pages saved to Reader on a computer (ADR-0033): the user's own, always in the Vault.
+    articles: ra.sortArticles(await readPrefix(base, ra.articlesPrefix(space))),
     writable: !!base.writable,
     shared: place.shared,
     canFollow: place.writable
@@ -131,6 +134,16 @@ export async function saveRead (base, space, add = [], loaded = {}) {
   const next = apps.mergeReadState(read, add, follows, loaded)
   if (next.length === read.length && next.every((u, i) => u === read[i])) return readerState(base, space)
   await putRecord(base, apps.readPath(space), { read: next })
+  return readerState(base, space)
+}
+
+// Mark a saved article read or unread.
+export async function markArticle (base, space, id, read = true) {
+  const path = ra.articlePath(space, id)
+  const rec = await readRecord(base, path)
+  if (!ra.isArticle(rec)) throw new Error('That article isn’t in Reader any more')
+  const next = ra.withRead(rec, read)
+  if (next !== rec) await putRecord(base, path, next)
   return readerState(base, space)
 }
 
