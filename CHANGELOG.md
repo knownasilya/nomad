@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.31.2](https://github.com/knownasilya/nomad/compare/v1.31.1...v1.31.2) (2026-10-31)
+
+
+### Bug Fixes
+
+* **mobile:** give web pages a white canvas in dark mode ([3a11168](https://github.com/knownasilya/nomad/commit/3a11168a535906b23d13168f8bbaacc9826c8440))
+
 ### [1.31.1](https://github.com/knownasilya/nomad/compare/v1.31.0...v1.31.1) (2026-10-31)
 
 
