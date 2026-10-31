@@ -40,6 +40,7 @@ import registerContextMenu from './bg/ui/context-menu';
 import * as highlights from './bg/ui/highlights';
 import * as mods from './bg/ui/mods';
 import * as aiMemory from './bg/ai/memory';
+import * as aiSkills from './bg/ai/skills';
 import * as pageControl from './bg/ui/page-control';
 import * as openTabs from './bg/ui/open-tabs';
 import * as remoteUpdate from './bg/remote-update';
@@ -193,6 +194,8 @@ app.on('ready', async function () {
   mods.setup();
   // What the user's assistant remembers about them, from the Vault (ADR-0032).
   aiMemory.setup();
+  // The instructions the user gives their assistant for kinds of tasks, from the Vault (ADR-0034).
+  aiSkills.setup();
   // The AI Sidebar's cursor on a page: the bar's Stop, and the user taking over.
   pageControl.setup();
   // This Device's open tabs, published to the Vault for the user's other Devices.

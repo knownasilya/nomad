@@ -78,6 +78,13 @@ export default {
   deleteMemory: 'promise', // (id)
   clearMemories: 'promise', // () -> how many were deleted
 
+  // AI skills (bg/ai/skills.js, ADR-0034): nomad://ai/skills
+  listSkills: 'promise', // ({ query? }) -> { skills: [{ id, name, description, instructions, enabled, createdAt, updatedAt }], max, limits }
+  saveSkill: 'promise', // ({ id?, name?, description?, instructions?, enabled? }) -> record
+  deleteSkill: 'promise', // (id)
+  parseSkillMd: 'promise', // (text) -> { name, description, instructions }
+  exportSkill: 'promise', // (id) -> SKILL.md text
+
   // AI Jobs (bg/ai/jobs.js, ADR-0030)
   listJobs: 'promise', // -> { jobs: [{ ...job, lastRun, nextRunAt, running, here, deviceName }] }
   listJobRuns: 'promise', // (id) -> runs, newest first

@@ -40,7 +40,7 @@ const DEVICES_PREFIX = '/.vault/devices/';
 const SETTINGS_PREFIX = '/.vault/settings/';
 // The user's own data a solo Vault brings along when this Device joins another Vault: Reader
 // subscriptions, Notes (ADR-0017), names (shared/names.mjs), Highlights (ADR-0020), Mods
-// (ADR-0023), AI memory (ADR-0032), each Space's own Notes and Names (ADR-0029), and Drafts (ADR-0012). The rest (meta, Spaces, Devices, settings) belongs to the Vault being joined.
+// (ADR-0023), AI memory (ADR-0032), AI skills (ADR-0034), each Space's own Notes and Names (ADR-0029), and Drafts (ADR-0012). The rest (meta, Spaces, Devices, settings) belongs to the Vault being joined.
 const READER_PREFIX = '/.vault/reader/';
 const NOTES_PREFIX = '/.vault/notes/';
 const NAMES_PREFIX = '/.vault/names/';
@@ -48,6 +48,8 @@ const HIGHLIGHTS_PREFIX = '/.vault/highlights/';
 const MODS_PREFIX = '/.vault/mods/';
 // What the user's assistant remembers about them (shared/ai-memory.mjs, ADR-0032).
 const AI_MEMORY_PREFIX = '/.vault/ai-memory/';
+// The instructions the user gives their assistant for kinds of tasks (shared/ai-skills.mjs, ADR-0034).
+const AI_SKILLS_PREFIX = '/.vault/ai-skills/';
 // Each Space's own Notes and Names (ADR-0029), keyed by its Root Drive key like the Reader's.
 const SPACE_LIB_PREFIX = '/.vault/space-lib/';
 const DRAFTS_PREFIX = '/.drafts/';
@@ -60,6 +62,7 @@ const CARRY_PREFIXES = [
   HIGHLIGHTS_PREFIX,
   MODS_PREFIX,
   AI_MEMORY_PREFIX,
+  AI_SKILLS_PREFIX,
   SPACE_LIB_PREFIX,
   DRAFTS_PREFIX,
 ];

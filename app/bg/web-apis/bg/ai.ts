@@ -21,6 +21,7 @@ import * as names from '../../hyper/names';
 import * as vaultApps from './vault-apps';
 import { isVaultTool, runVaultTool } from './ai-vault';
 import * as aiMemory from '../../ai/memory';
+import * as aiSkills from '../../ai/skills';
 import {
   createAwakeController,
   readLinuxAcState,
@@ -753,6 +754,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     secrets: rules.secrets,
     // remember and forget, while AI memory is on (ADR-0032).
     memory: memoryOn,
+    // The skills the user turned on (ADR-0034): search's skill domain.
+    skills: personal ? aiSkills.enabledList() : null,
     // The user's own names, and those of the Space the turn is in (ADR-0029).
     names: personal ? names.list(await turnSpaceKey(sender, opts)).filter((r) => !r.hidden) : null,
     ownerId: opts.ownerId,
@@ -781,6 +784,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     offerTools && job ? JOB_PROMPT : '',
     // Every memory, with the ids forget takes (ADR-0032).
     memoryOn ? aiMemory.memoryPromptText() : '',
+    // The user's skills by name and description; the model opens one with search (ADR-0034).
+    offerTools && personal ? aiSkills.promptText() : '',
     offerTools && canControlPage ? PAGE_CONTROL_PROMPT : '',
     // A remote turn's writes stage into a Draft. Without this the model reads back the published
     // file, doubts its own edit and tells the user the phone can't edit.
@@ -1845,6 +1850,7 @@ export async function callLocalTool(name, args, turn = null) {
     // A program on this machine driving the user's browser is the user's own AI (loopback only).
     personal: true,
     memory: await aiMemory.isEnabled(),
+    skills: aiSkills.enabledList(),
     names: names.list(await vaultApps.spaceKey({ sender }).catch(() => null)).filter((r) => !r.hidden),
   });
   return executeTool(name, args || {}, sender, {

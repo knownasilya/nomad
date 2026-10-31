@@ -1,6 +1,6 @@
 // nomad://ai — the user's AI in one place: the AI Sidebar's saved chats (/chats), what the assistant
-// remembers about them (/memory, ADR-0032), and the runtime and model it uses (/setup, moved here
-// from Settings). AI Jobs keep their page in My Library; the nav links there.
+// remembers about them (/memory, ADR-0032), the skills the user gives it (/skills, ADR-0034), and the
+// runtime and model it uses (/setup, moved here from Settings). AI Jobs keep their page in My Library; the nav links there.
 //
 // Vanilla Lit from app-stdlib (served as-is, no bundle), styled like My Library.
 
@@ -8,12 +8,14 @@ import { LitElement, html } from 'nomad://app-stdlib/vendor/lit-element/lit-elem
 import mainCSS from '../css/main.css.js';
 import './views/chats.js';
 import './views/memory.js';
+import './views/skills.js';
 import './views/setup.js';
 
 // [path, icon, label, search placeholder]
 const VIEWS = [
   ['chats', 'fas fa-comments', 'Chats', 'Search chats'],
   ['memory', 'fas fa-brain', 'Memory', 'Search memories'],
+  ['skills', 'fas fa-magic', 'Skills', 'Search skills'],
   ['setup', 'fas fa-sliders-h', 'Setup', ''],
 ];
 
@@ -109,6 +111,14 @@ class AiApp extends LitElement {
         <span class="fas fa-plus"></span> New chat
       </button>`;
     }
+    if (this.view === 'skills') {
+      return html`<button
+        class="new-action-btn"
+        @click=${() => this.shadowRoot.querySelector('ai-skills-view')?.startNew()}
+      >
+        <span class="fas fa-plus"></span> New skill
+      </button>`;
+    }
     return '';
   }
 
@@ -116,6 +126,8 @@ class AiApp extends LitElement {
     switch (this.view) {
       case 'memory':
         return html`<ai-memory-view .query=${this.query}></ai-memory-view>`;
+      case 'skills':
+        return html`<ai-skills-view .query=${this.query}></ai-skills-view>`;
       case 'setup':
         return html`<ai-setup-view></ai-setup-view>`;
       default:
