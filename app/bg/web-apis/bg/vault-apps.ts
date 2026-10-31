@@ -20,6 +20,7 @@ import * as apps from '../../../../shared/vault-apps.mjs';
 import { findWebContentsParentWindow } from '../../lib/electron';
 import * as tabManager from '../../ui/tabs/manager';
 import * as spaceLibrary from '../../hyper/space-library';
+import * as readerArticles from './reader-articles';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'vault-apps' });
 
@@ -97,11 +98,59 @@ async function vaultInfo() {
 // Reader
 // =
 
-// { follows: [feedUrl], read: [postUrl], writable, linked }, for the caller's Space.
+// { follows: [feedUrl], read: [postUrl], articles, ai, writable, linked }, for the caller's Space.
+// `articles` are the pages saved to Reader (reader-articles.ts), `ai` what the AI is doing with them.
 export async function readerState(ctx) {
   const space = await spaceKey(ctx);
   await importLegacy(ctx, space);
-  return { ...(await readerOf(space)), ...(await vaultInfo()) };
+  return {
+    ...(await readerOf(space)),
+    articles: await readerArticles.list(space),
+    ai: await readerArticles.aiState(space),
+    ...(await vaultInfo()),
+  };
+}
+
+// Saved articles (ADR-0033), in the caller's Space. Each returns the Reader's state, except
+// readerArticle, which returns { article, text } for the reading view.
+export async function saveArticle(ctx, url, { read = true }: { read?: boolean } = {}) {
+  const space = await spaceKey(ctx);
+  const article = await readerArticles.saveUrl(space, url, { session: ctx?.sender?.session, read });
+  return { article, state: await readerState(ctx) };
+}
+
+export async function updateArticle(ctx, id, changes = {}) {
+  await readerArticles.update(await spaceKey(ctx), id, changes);
+  return readerState(ctx);
+}
+
+export async function deleteArticle(ctx, id) {
+  await readerArticles.remove(await spaceKey(ctx), id);
+  return readerState(ctx);
+}
+
+export async function suggestTopics(ctx, ids = null) {
+  await readerArticles.suggestTopics(await spaceKey(ctx), ids);
+  return readerState(ctx);
+}
+
+export async function readArticle(ctx, id) {
+  const space = await spaceKey(ctx);
+  const article = await readerArticles.get(space, id);
+  if (!article) throw new Error('That article isn’t in Reader any more');
+  return { article, text: await readerArticles.getText(space, id) };
+}
+
+// Load the page again and keep its readable text, for an article saved without any.
+export async function refetchArticle(ctx, id) {
+  const space = await spaceKey(ctx);
+  const article = await readerArticles.get(space, id);
+  if (!article) throw new Error('That article isn’t in Reader any more');
+  await readerArticles.saveUrl(space, article.url, {
+    session: ctx?.sender?.session,
+    read: !!article.readAt,
+  });
+  return readArticle(ctx, id);
 }
 
 export async function follow(ctx, url) {
@@ -331,12 +380,15 @@ export function watch() {
   vault.events.on('changed', onSwitch);
   // A shared Space's Notes and feeds are in its Space Library (ADR-0029).
   spaceLibrary.events.on('changed', changed);
+  // The AI started or finished picking a saved article's topics.
+  readerArticles.events.on('changed', changed);
   attach();
   emitter.close = () => {
     emitter.closed = true;
     clearTimeout(timer);
     vault.events.removeListener('changed', onSwitch);
     spaceLibrary.events.removeListener('changed', changed);
+    readerArticles.events.removeListener('changed', changed);
     if (base) base.removeListener('update', changed);
   };
   return emitter;
