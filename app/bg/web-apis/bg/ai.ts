@@ -31,10 +31,13 @@ import {
   PERSONAL_PROMPT,
   DRAFT_PROMPT,
   PAGE_CONTROL_PROMPT,
+  JOB_PROMPT,
 } from '../../ai/api-reference.mjs';
 import { genuiPrompt } from '../../../lib/genui/library.mjs';
-import { askOncePerTurn } from '../../ai/vault-tools.mjs';
+import { askOncePerTurn, jobPermit } from '../../ai/vault-tools.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
+import { jobWork, promptWithResult } from '../../../../shared/jobs.mjs';
+import { readJobSource } from './job-source';
 import { completionStreamError } from '../../ai/stream-error.mjs';
 import { normalizeChatMessages } from '../../ai/chat-messages.mjs';
 import {
@@ -438,6 +441,132 @@ export { runChat };
 // active tab's own webContents) standing in for "the page this call is about".
 export { routeChat };
 
+// One run of an AI Job (ADR-0030; app/bg/ai/jobs.js runs it), on this Device only, never another
+// Device's over the Bridge. The user's own AI with no tab and nobody watching: it reads the Notes
+// and Reader of the Job's Space, drives and the web, changes nothing, and asks no permission
+// (jobPermit). `notify` gets what the Job sends with the notify capability.
+//
+// A Job from a drive (`source`) runs its job.js first, in the execute sandbox with the same
+// capabilities, then gives the AI its result with the prompt (job.md and the Job's own); with no
+// prompt, the module's result is the answer and no AI runs. A live source reads its files now; a
+// copied one runs its copy, and this looks whether the drive has a newer version.
+//
+// Resolves { output, sourceHash }: the answer the AI gave after its last tool call, and the hash
+// of the copied source's drive as it is now (null when unknown).
+export async function runJobTurn(job, { signal, notify, trigger = 'manual', lastRun = null }) {
+  const newer =
+    job.source && !job.source.live
+      ? readJobSource(job.source.url).then(
+          (r) => r.hash,
+          () => null
+        )
+      : Promise.resolve(null);
+  const files = job.source?.live ? await readJobSource(job.source.url) : null;
+  const work = jobWork(job, files);
+  if (work.prompt && !(await aiBridge.localRuntimeReachable())) {
+    throw new Error('The AI runtime on this computer isn’t reachable. Check Settings → AI.');
+  }
+  const space = isSpaceKey(job.space) ? job.space : null;
+
+  let result = null;
+  if (work.module) {
+    result = await runJobModule(work.module, {
+      params: {
+        job: { id: job.id, title: job.title, trigger },
+        prompt: job.prompt || null,
+        lastRun: lastRun
+          ? { finishedAt: lastRun.finishedAt, status: lastRun.status, output: lastRun.output }
+          : null,
+      },
+      space,
+      notify,
+      signal,
+    });
+    if (!work.prompt) return { output: moduleOutput(result), sourceHash: await newer };
+  }
+
+  const emitter = new EventEmitter();
+  let answer = '';
+  let all = '';
+  emitter.on('error', () => {});
+  emitter.on('chunk', (e) => {
+    answer += e?.text || '';
+    all += e?.text || '';
+  });
+  // Text before a tool call is the model thinking aloud; the answer is what comes after the last one.
+  emitter.on('tool', (e) => {
+    if (e?.phase === 'start') answer = '';
+  });
+  const content = work.module ? promptWithResult(work.prompt, result) : work.prompt;
+  await runChat([{ role: 'user', content }], makeRemoteSender('nomad://jobs/'), emitter, {
+    stage: 'job',
+    // No renderer and no tab: the page tools, openTab and the page readers stay out of the catalog.
+    remote: true,
+    allowWrite: false,
+    space,
+    requestPermission: jobPermit,
+    context: jobContext(job),
+    job: { notify },
+    signal,
+  });
+  return { output: answer.trim() || all.trim(), sourceHash: await newer };
+}
+
+// A Job's job.js, run like the AI's execute code with the job turn's capabilities: reads only, no
+// tab, no page tools, and notify. Resolves what main() returned (text, or JSON for anything else).
+async function runJobModule(code, { params, space, notify, signal }) {
+  const sender = makeRemoteSender('nomad://jobs/');
+  const catalog = buildCatalog({
+    allowWrite: false,
+    remote: true,
+    pageTools: null,
+    personal: true,
+    tab: false,
+    job: true,
+    names: names.list(space).filter((r) => !r.hidden),
+  });
+  const opts = {
+    driveUrl: null,
+    currentTab: null,
+    emitter: null,
+    requestPermission: askOncePerTurn(jobPermit),
+    remote: true,
+    space,
+    signal,
+    catalog,
+    job: { notify },
+  };
+  return executeInUtilityProcess({
+    code,
+    params,
+    signal,
+    invoke: async (call) => {
+      assertCallAllowed(call.target, call.name, catalog);
+      if (call.target === 'page') throw new Error('page tools are not available in a Job');
+      const value = await executeTool(call.target, call.args || {}, sender, opts);
+      // A screenshot's image can't go anywhere from here; its text can.
+      return value && typeof value === 'object' && 'imageDataUrl' in value ? value.text : value;
+    },
+  });
+}
+
+// A module's result as a run's answer: text as it is, JSON in a code block.
+function moduleOutput(result) {
+  const text = typeof result === 'string' ? result.trim() : JSON.stringify(result ?? '', null, 2);
+  return /^[[{]/.test(text) ? '```json\n' + text + '\n```' : text;
+}
+
+// What a Job's turn is told about the Job and its notification.
+function jobContext(job) {
+  const rule =
+    job.notify === 'never'
+      ? 'This Job sends no notifications, so don’t call notify.'
+      : job.notify === 'auto'
+        ? 'Call notify only when the result is something the Job’s prompt asks to hear about. Otherwise just answer: no notification is sent.'
+        : 'When you finish, the user is notified with the start of your answer. Call notify only to say something more specific.';
+  return `The Job: “${job.title}”. ${rule}`;
+}
+
 // One plain completion for Nomad's own background work (hyper/auto-names.js): no tools, no
 // standing prompt, no reasoning asked for. This Device's runtime only: it never borrows another
 // Device's AI over the Bridge. Resolves the reply text, or null when no runtime is reachable here.
@@ -468,6 +597,12 @@ export async function completeText(messages, { maxTokens = 400, timeoutMs = 60e3
 // Internal helpers
 // =
 
+// The Space a turn's names come from: the one another Device sent, or the caller's own.
+async function turnSpaceKey(sender, opts: any = {}) {
+  if (opts.remote) return isSpaceKey(opts.space) ? opts.space : null;
+  return vaultApps.spaceKey({ sender }).catch(() => null);
+}
+
 async function runChat(messages, sender, emitter, opts: any = {}) {
   const chatMessages = normalizeChatMessages(messages);
   // The turn's stage decides what it may do (ADR-0021). The user's own assistant (the AI Sidebar,
@@ -476,6 +611,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   const rules = stageRules(opts.stage);
   const personal = rules.personal;
   const currentTab = rules.tab ? opts.currentTab || null : null;
+  // One of the user's AI Jobs (runJobTurn): reads only, and may notify the user's phone.
+  const job = opts.stage === 'job' ? opts.job || {} : null;
   const driveUrl = currentTab ? null : opts.driveUrl || null;
   const allowWrite = opts.allowWrite !== false; // default true
   // Independent lookups — run concurrently rather than paying the sum of their latencies on
@@ -519,7 +656,9 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     // The user's own AI (see chat()): their names, Notes, Reader and other Drives.
     personal,
     tab: !!currentTab,
-    names: personal ? names.list() : null,
+    job: !!job,
+    // The user's own names, and those of the Space the turn is in (ADR-0029).
+    names: personal ? names.list(await turnSpaceKey(sender, opts)).filter((r) => !r.hidden) : null,
     ownerId: opts.ownerId,
   });
   // One answer per Notes, Reader or drive-edit permission per turn (vault-tools.mjs askOncePerTurn).
@@ -542,7 +681,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   const systemContent = [
     systemPrompt,
     offerTools ? STANDING_PROMPT : '',
-    offerTools && personal ? PERSONAL_PROMPT : '',
+    offerTools && personal && !job ? PERSONAL_PROMPT : '',
+    offerTools && job ? JOB_PROMPT : '',
     offerTools && canControlPage ? PAGE_CONTROL_PROMPT : '',
     // A remote turn's writes stage into a Draft. Without this the model reads back the published
     // file, doubts its own edit and tells the user the phone can't edit.
@@ -583,6 +723,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     signal,
     catalog,
     pageSession,
+    job,
   };
   const mcpTurn = cli && mcpPort ? openTurn({ sender, toolOpts }) : null;
 
@@ -739,6 +880,7 @@ async function executeTool(name, args, sender, opts: any = {}) {
     signal = null,
     catalog = null,
     pageSession = null,
+    job = null,
   } = opts;
   // WebMCP page tool — round-trip to the renderer that registered it. Access was already
   // consented per-origin in resolvePageTools(); running it can only do what page JS can do.
@@ -763,6 +905,8 @@ async function executeTool(name, args, sender, opts: any = {}) {
   const tab = currentTab ? await currentTab() : null;
   if (tab?.sender) sender = tab.sender;
   const ctx = { sender };
+  // Names resolve in the Space of the user's tab, or the Space another Device sent.
+  const nameSpace = isSpaceKey(space) ? space : await vaultApps.spaceKey(ctx).catch(() => null);
   // The drive a drive tool works on: `drive` (one of the user's names, hyper://<name>/, or a
   // hyper:// URL; hyper/names.js), else the turn's own Drive, or the drive in the user's current
   // tab. `url` names the drive the write permission is asked for. Only a personal turn
@@ -774,7 +918,7 @@ async function executeTool(name, args, sender, opts: any = {}) {
       personal: !!catalog?.personal,
       hasTab: !!currentTab,
       own: currentTab ? tab?.drive?.url || null : driveUrl || sender.getURL(),
-      resolve: names.resolveDrive,
+      resolve: (input) => names.resolveDrive(input, nameSpace),
     });
     return { ...picked, base: driveBaseUrl(picked.url) };
   };
@@ -922,6 +1066,13 @@ async function executeTool(name, args, sender, opts: any = {}) {
         );
       }
       return `File written successfully to ${where}`;
+    }
+    case 'notify': {
+      // A Job's turn only (ADR-0030). jobs.js saves it with the run, and the phone shows it.
+      if (!job) throw new Error('notify is only for Jobs');
+      if (typeof args?.body !== 'string' || !args.body.trim()) throw new Error('notify needs `body`');
+      job.notify?.({ title: args.title, body: args.body });
+      return 'The user will get this notification when the Job finishes.';
     }
     case 'currentTab': {
       if (!currentTab) throw new Error('currentTab is not available here');
@@ -1462,7 +1613,7 @@ export async function callLocalTool(name, args, turn = null) {
     pageTools: pageListed,
     // A program on this machine driving the user's browser is the user's own AI (loopback only).
     personal: true,
-    names: names.list(),
+    names: names.list(await vaultApps.spaceKey({ sender }).catch(() => null)).filter((r) => !r.hidden),
   });
   return executeTool(name, args || {}, sender, {
     driveUrl: drive.url || undefined,

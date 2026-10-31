@@ -13,6 +13,7 @@ describe('stages', () => {
     expect(stageRules('sidebar')).toEqual({ personal: true, tab: true })
     expect(stageRules('phone')).toEqual({ personal: true, tab: true })
     expect(stageRules('outside')).toEqual({ personal: true, tab: false })
+    expect(stageRules('job')).toEqual({ personal: true, tab: false })
     expect(stageRules('anything else')).toEqual({ personal: false, tab: false })
   })
 

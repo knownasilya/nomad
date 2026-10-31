@@ -34,6 +34,13 @@ Notes and Reader: capabilities read and write the user's Notes (listNotes, readN
 Highlights: highlightText marks text on the page in the user's current tab, and with \`note\` makes a Note about it that quotes the text and links back to it. Read the page first (readCurrentPage) and pass the text exactly as it appears. It uses the permission to write Notes.
 
 Mods: the user's own changes to a site, like Arc's Boosts (listMods, saveMod, deleteMod). Each has a name the user toggles from the tab, and any of: presets (dark, sepia, grayscale, no-motion, hide-media), \`hide\` (CSS selectors to hide), custom CSS, custom JavaScript. When the user asks to change how a site looks or behaves ("hide the sidebar on this site", "dark mode for example.com"), use currentTab for the site and readCurrentPage or screenshotCurrentPage to find selectors, then add to an existing Mod for that site (listMods) or make one with a short name. Prefer presets and \`hide\`, then CSS; write JavaScript only when the user asks for behavior. Never add a script the user didn't ask for, or one that sends page data anywhere. Reading and changing Mods are separate permissions.
+
+Jobs: prompts that run by themselves, on a schedule or by hand, on this computer, and can notify the user's phone (listJobs, saveJob, runJob, deleteJob). When the user asks for something to happen later or again ("every morning, sum up my unread Reader posts and send it to my phone", "tell me when Ada posts"), make a Job with saveJob. Write its prompt as a complete instruction: each run starts with no chat history and nobody to ask, can read Notes, Reader, drives and the web, and can't change anything. Use notify "auto" when the user wants to hear only when something happens, and say so in the prompt ("call notify only if…"). Tell the user the schedule in their words and that they can find the Job in My Library → Jobs. runJob runs one now in the background. A Job can also come from a drive (saveJob \`source\`): a folder with job.md (its prompt) and/or job.js (a module like execute's code, run first; the AI gets its result with job.md, or it is the answer when there's no job.md). The user's own drives run their latest files; anyone else's is copied, and the user takes a newer version in My Library → Jobs. Reading and changing Jobs are separate permissions.
+`;
+
+// Added on a Job's own turn (ADR-0030), with the Job's notify rule as context.
+export const JOB_PROMPT = `\
+This turn is one of the user's AI Jobs: a prompt they saved to run by itself. Nobody is watching. Don't ask questions or wait for an answer; do the task with what you can find and finish with your answer, which is saved with the Job and shown to the user on their devices. Start the answer with a one-line summary. You can read the user's Notes (listNotes, readNote), Reader (listReaderPosts, readReaderPost), drives (by name or hyper:// URL) and the web (fetchUrl); you can't change anything. notify sends a short notification to the user's phone; tapping it opens your answer.
 `;
 
 // Added on a turn that can click and type on the page in the user's tab: the AI Sidebar's (ADR-0028).
@@ -283,4 +290,29 @@ Real files always win; when a page navigation hits a path with no file, the brow
 Sub-resource \`fetch()\`es to missing paths still 404. Reference assets by absolute path
 (\`/app.js\`, not \`./app.js\`) — the shell is served under arbitrary routes. Prefer this over the
 legacy \`/.ui/ui.html\` convention (which shadows real HTML files and needs a stub \`/index.html\`);
-if a drive declares \`fallback\`, any \`/.ui/ui.html\` is ignored.`;
+if a drive declares \`fallback\`, any \`/.ui/ui.html\` is ignored.
+
+## A Job in a drive (job.js and job.md)
+
+One of the user's AI Jobs can run from a drive (saveJob \`source\`): a folder with \`job.md\`, \`job.js\`, or
+both (\`hyper://<key>/\` or \`hyper://<key>/jobs/digest/\`), or one file and the one next to it with the other
+extension (\`hyper://<key>/digest.js\` + \`digest.md\`).
+
+- \`job.md\` is the prompt, a complete instruction. Its first \`# heading\` names the Job.
+- \`job.js\` is a module in execute's format, run first with the Job's capabilities (reads only, plus
+  \`nomad.notify\`). \`main\` gets \`{ job: { id, title, trigger }, prompt, lastRun }\`, where \`prompt\` is the
+  Job's own extra instructions and \`lastRun\` is \`{ finishedAt, status, output }\` or null. With a \`job.md\`, the AI
+  gets what \`main\` returns along with the prompt; without one, that is the run's answer and no AI runs.
+
+\`\`\`js
+import { nomad } from 'nomad:runtime'
+export default async function main({ lastRun }) {
+  const page = await nomad.fetchUrl({ url: 'https://example.com/status' })
+  const down = !page.includes('All systems operational')
+  if (down) await nomad.notify({ title: 'Status', body: 'example.com reports a problem' })
+  return down ? 'Something is down' : 'All good'
+}
+\`\`\`
+
+A source in the user's own drive runs its latest files each time. Anyone else's is copied when the Job is
+made, and a newer version waits until the user takes it in My Library → Jobs.`;

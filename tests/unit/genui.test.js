@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import { genuiPrompt, genuiSchema, GENUI_FENCE } from '../../app/lib/genui/library.mjs';
 import { splitGenUi, hasGenUi } from '../../app/lib/genui/segments.mjs';
 import { parseGenUi as parse } from '../../app/lib/genui/parse.mjs';
@@ -187,5 +189,21 @@ describe('chart math', () => {
     expect(labelStride(30, 10)).toBe(3);
     expect(labelStride(5, 10)).toBe(1);
     expect(truncate('September', 4)).toBe('Sep…');
+  });
+});
+
+describe('genui map', () => {
+  // The shell window's bundle is its preload, which runs before the page has an <html> element.
+  // Leaflet reads document.documentElement as it loads, so importing it as a module threw there
+  // and the window started blank (1.26.1). map.js runs Leaflet's source on the first draw instead.
+  it('never imports Leaflet as a module in the shell window', () => {
+    const dir = path.join(__dirname, '../../app/fg/shell-window');
+    const files = fs
+      .readdirSync(dir, { recursive: true })
+      .filter((f) => f.endsWith('.js') && !f.endsWith('.build.js'));
+    for (const f of files) {
+      const src = fs.readFileSync(path.join(dir, f), 'utf8');
+      expect(src, f).not.toMatch(/(from|import\(|require\()\s*['"]leaflet(\/[^'"?]*)?['"]/);
+    }
   });
 });

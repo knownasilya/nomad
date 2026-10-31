@@ -306,7 +306,6 @@ class GeneralSettingsView extends LitElement {
 
   renderNavLayoutSettings() {
     const isSidebar = this.settings.tab_layout === 'sidebar';
-    const width = this.settings.sidebar_width || 220;
     return html`
       <div class="section">
         <p>Navigation layout:</p>
@@ -358,17 +357,7 @@ class GeneralSettingsView extends LitElement {
                   />
                   <label for="sidebarRight">Right</label>
                 </div>
-                <p style="margin: 10px 0 4px;">Sidebar width: <strong>${width}px</strong></p>
-                <input
-                  type="range"
-                  min="160"
-                  max="480"
-                  step="10"
-                  .value=${String(width)}
-                  @input=${this.onSidebarWidthChange}
-                  @change=${this.onSidebarWidthCommit}
-                  style="width: 220px;"
-                />
+                <p class="sidebar-hint">Drag the sidebar's edge to change its width.</p>
               </div>
             `
           : ''}
@@ -743,18 +732,6 @@ class GeneralSettingsView extends LitElement {
   onSidebarSideChange(e) {
     this.settings.sidebar_side = e.target.value;
     nomad.browser.setSetting('sidebar_side', this.settings.sidebar_side);
-    toast.create('Setting updated');
-    this.requestUpdate();
-  }
-
-  onSidebarWidthChange(e) {
-    this.settings.sidebar_width = Number(e.target.value);
-    this.requestUpdate();
-  }
-
-  onSidebarWidthCommit(e) {
-    this.settings.sidebar_width = Number(e.target.value);
-    nomad.browser.setSetting('sidebar_width', this.settings.sidebar_width);
     toast.create('Setting updated');
     this.requestUpdate();
   }

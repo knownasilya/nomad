@@ -28,6 +28,9 @@ const PENDING_ROOT_MOVE_SETTING = 'vault_pending_root_move';
 // The solo Vault this Device left to join another one, until its data is copied across.
 const CARRY_FROM_SETTING = 'vault_carry_from';
 const VAULT_VERSION = 1;
+// The Vault opens on the root store: a Device that joined by pairing was approved with its root
+// `local` core as its writer key (device-pairing.js submitInvite), and the first open must use it.
+const VAULT_OPEN = { root: true };
 
 const META_PATH = '/.vault/meta.json';
 const SPACES_PREFIX = '/.vault/spaces/';
@@ -37,12 +40,14 @@ const DEVICES_PREFIX = '/.vault/devices/';
 const SETTINGS_PREFIX = '/.vault/settings/';
 // The user's own data a solo Vault brings along when this Device joins another Vault: Reader
 // subscriptions, Notes (ADR-0017), names (shared/names.mjs), Highlights (ADR-0020), Mods
-// (ADR-0023), and Drafts (ADR-0012). The rest (meta, Spaces, Devices, settings) belongs to the Vault being joined.
+// (ADR-0023), each Space's own Notes and Names (ADR-0029), and Drafts (ADR-0012). The rest (meta, Spaces, Devices, settings) belongs to the Vault being joined.
 const READER_PREFIX = '/.vault/reader/';
 const NOTES_PREFIX = '/.vault/notes/';
 const NAMES_PREFIX = '/.vault/names/';
 const HIGHLIGHTS_PREFIX = '/.vault/highlights/';
 const MODS_PREFIX = '/.vault/mods/';
+// Each Space's own Notes and Names (ADR-0029), keyed by its Root Drive key like the Reader's.
+const SPACE_LIB_PREFIX = '/.vault/space-lib/';
 const DRAFTS_PREFIX = '/.drafts/';
 // Each Device's open tabs (shared/open-tabs.mjs). Not carried: they belong to the Device.
 const OPEN_TABS_PREFIX = '/.vault/tabs/';
@@ -52,6 +57,7 @@ const CARRY_PREFIXES = [
   NAMES_PREFIX,
   HIGHLIGHTS_PREFIX,
   MODS_PREFIX,
+  SPACE_LIB_PREFIX,
   DRAFTS_PREFIX,
 ];
 
@@ -75,7 +81,7 @@ export function hasVault() {
 // Idempotent: a second caller during creation reuses the persisted key.
 export async function ensureVault({ profileUrl } = {}) {
   const existing = await getVaultKey();
-  if (existing) return autobases.getOrLoadCollaborativeDrive(existing);
+  if (existing) return autobases.getOrLoadCollaborativeDrive(existing, VAULT_OPEN);
   return createVault({ profileUrl });
 }
 
@@ -84,7 +90,7 @@ let _carryWatched = false;
 export async function getVault() {
   const key = await getVaultKey();
   if (!key) return null;
-  const sess = await autobases.getOrLoadCollaborativeDrive(key);
+  const sess = await autobases.getOrLoadCollaborativeDrive(key, VAULT_OPEN);
   // A copy from a left Vault that a restart cut short: finish it once the Vault is writable.
   if (!_carryWatched && sess) {
     _carryWatched = true;
@@ -144,7 +150,7 @@ export async function adoptVault(vaultKey) {
     logger.info('Leaving a solo vault to join another', { from: existing, to: vaultKey });
   }
   await settingsDb.set(VAULT_KEY_SETTING, vaultKey);
-  const sess = await autobases.loadCollaborativeDrive(vaultKey);
+  const sess = await autobases.loadCollaborativeDrive(vaultKey, VAULT_OPEN);
   logger.info('Adopted vault', { key: vaultKey, writable: sess?.writable });
   if (leaving) {
     events.emit('changed', { key: vaultKey });
@@ -199,7 +205,8 @@ async function _carry() {
 async function _carryRecord(sess, path, value) {
   const have = await autobases.readJson(sess, path);
   if (have) {
-    if (path.startsWith(NOTES_PREFIX) && value?.updatedAt > have.updatedAt) {
+    const isNote = path.startsWith(NOTES_PREFIX) || (path.startsWith(SPACE_LIB_PREFIX) && path.includes('/notes/'));
+    if (isNote && value?.updatedAt > have.updatedAt) {
       await _putRecord(sess, path, value);
       return true;
     }
@@ -293,6 +300,29 @@ export async function putAppRecord(path, obj) {
 
 export async function delAppRecord(path) {
   await _delRecord(await _writableVault(), path);
+}
+
+// The paths of the records under `prefix`, for deleting them.
+export async function listAppRecordPaths(prefix) {
+  const sess = await getVault();
+  if (!sess) return [];
+  return (await _readPrefixEntries(sess, prefix)).map((r) => r.path);
+}
+
+// Set a Space's sharing fields on its Vault record (ADR-0029): `library`, `role`, `memberId`,
+// `confirmed`, `removed`. The user's other Devices read the Space's library from there.
+export async function putSpaceShare(rootDriveKey, fields) {
+  const sess = await _writableVault();
+  const path = `${SPACES_PREFIX}${rootDriveKey}.json`;
+  const existing = await _readRecord(sess, path);
+  if (!existing || existing.movedTo) throw new Error('This Space isn’t in your Vault');
+  await _putRecord(sess, path, { ...existing, ...fields });
+}
+
+// Forget a Space the user left: drop its record so their other Devices stop showing it.
+export async function removeSpace(rootDriveKey) {
+  const sess = await _writableVault();
+  await _delRecord(sess, `${SPACES_PREFIX}${rootDriveKey}.json`);
 }
 
 async function _writableVault() {
@@ -398,10 +428,13 @@ export async function moveSpaceRoot(fromKey, toKey) {
   }
   await _putRecord(sess, `${SPACES_PREFIX}${toKey}.json`, { ...old, rootDriveKey: toKey });
   await _putRecord(sess, `${SPACES_PREFIX}${fromKey}.json`, { rootDriveKey: fromKey, movedTo: toKey });
-  // The Space's Reader subscriptions are keyed by its Root Drive key (ADR-0017): move them too.
-  const readerFrom = `${READER_PREFIX}${fromKey}/`;
-  for (const { path, value } of await _readPrefixEntries(sess, readerFrom)) {
-    await _carryRecord(sess, `${READER_PREFIX}${toKey}/${path.slice(readerFrom.length)}`, value);
+  // The Space's Reader subscriptions (ADR-0017) and its own Notes and Names (ADR-0029) are keyed by
+  // its Root Drive key: move them too.
+  for (const prefix of [READER_PREFIX, SPACE_LIB_PREFIX]) {
+    const from = `${prefix}${fromKey}/`;
+    for (const { path, value } of await _readPrefixEntries(sess, from)) {
+      await _carryRecord(sess, `${prefix}${toKey}/${path.slice(from.length)}`, value);
+    }
   }
   await _addDevicesAsWriters(toKey);
   logger.info('Moved space root in vault', { fromKey, toKey });

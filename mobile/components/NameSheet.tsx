@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, Pressable, ActivityIndicator, StyleSheet } from 'react-native'
 import BottomSheet from './BottomSheet'
 import LinkPhone from './LinkPhone'
 import Icon from './Icon'
@@ -13,21 +13,24 @@ interface Props {
   names: Names
   url: string
   title: string
+  spaceName?: string // the active Space's name, when it can keep names of its own (ADR-0029)
   onOpenDevices: () => void
 }
 
 // Give the page in the active tab a short name (ADR-0018), like desktop's site-info panel: typing
 // the name in the address bar, or opening hyper://<name>/, comes here. A name the AI gave shows here
 // too; saving it keeps it, and from then on the address bar shows it. Names live in the Vault, so a
-// name made here shows on the other Devices.
-export default function NameSheet ({ visible, onClose, names, url, title, onOpenDevices }: Props) {
+// name made here shows on the other Devices. A name can be kept only in the active Space; the user's
+// own name wins over a Space's with the same word.
+export default function NameSheet ({ visible, onClose, names, url, title, spaceName, onOpenDevices }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const [info, setInfo] = useState<NamesForUrl | null>(null)
   const [noVault, setNoVault] = useState(false)
   const [error, setError] = useState('')
-  // { value, previous } while the name field is open.
-  const [editing, setEditing] = useState<{ value: string; previous?: string } | null>(null)
+  // { value, previous } while the name field is open. inSpace: keep it only in this Space, and
+  // previousInSpace: where `previous` is.
+  const [editing, setEditing] = useState<{ value: string; previous?: string; inSpace?: boolean; previousInSpace?: boolean } | null>(null)
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
@@ -51,17 +54,17 @@ export default function NameSheet ({ visible, onClose, names, url, title, onOpen
     if (!next || busy) return
     setBusy(true)
     setError('')
-    const r = await names.set({ name: next.value, url, title, previous: next.previous })
+    const r = await names.set({ name: next.value, url, title, previous: next.previous, inSpace: !!next.inSpace, previousInSpace: !!next.previousInSpace })
     setBusy(false)
     if (!r.ok) { setError(r.message || 'Couldn’t save the name'); return }
     setEditing(null)
     await load()
   }
 
-  const remove = async (name: string) => {
+  const remove = async (name: string, inSpace = false) => {
     setBusy(true)
     setError('')
-    const r = await names.remove(name)
+    const r = await names.remove(name, inSpace)
     setBusy(false)
     if (!r.ok) { setError(r.message || 'Couldn’t remove the name'); return }
     const v = await load()
@@ -97,6 +100,19 @@ export default function NameSheet ({ visible, onClose, names, url, title, onOpen
             />
             <Text style={s.affix}>/</Text>
           </View>
+          {spaceName ? (
+            <Pressable
+              style={s.check}
+              onPress={() => setEditing({ ...editing, inSpace: !editing.inSpace })}
+              disabled={busy}
+              accessibilityRole='checkbox'
+              accessibilityState={{ checked: !!editing.inSpace }}
+              android_ripple={{ color: t.ripple }}
+            >
+              <Icon name={editing.inSpace ? 'check-square' : 'square'} regular={!editing.inSpace} size={18} color={editing.inSpace ? t.accent : t.textMuted} />
+              <Text style={s.checkText}>Only in {spaceName}</Text>
+            </Pressable>
+          ) : null}
           {error ? <Text style={s.error}>{error}</Text> : null}
           <Text style={s.hint}>Then type the name in the address bar to come back here.</Text>
           <View style={s.actions}>
@@ -117,16 +133,17 @@ export default function NameSheet ({ visible, onClose, names, url, title, onOpen
             </View>
           </View>
           {named.auto ? <Text style={s.hint}>Named by the AI, as you visit often. Keep it to see it in the address bar.</Text> : null}
+          {named.space ? <Text style={s.hint}>Only in {spaceName || 'this Space'}.</Text> : null}
           {error ? <Text style={s.error}>{error}</Text> : null}
           <View style={s.actions}>
-            <TouchableOpacity style={s.btnGhost} onPress={() => remove(named.name)} disabled={busy}>
+            <TouchableOpacity style={s.btnGhost} onPress={() => remove(named.name, !!named.space)} disabled={busy}>
               <Text style={[s.btnGhostText, { color: t.danger }]}>Remove</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.btnGhost} onPress={() => setEditing({ value: named.name, previous: named.name })} disabled={busy}>
+            <TouchableOpacity style={s.btnGhost} onPress={() => setEditing({ value: named.name, previous: named.name, inSpace: !!named.space, previousInSpace: !!named.space })} disabled={busy}>
               <Text style={s.btnGhostText}>Rename</Text>
             </TouchableOpacity>
             {named.auto ? (
-              <TouchableOpacity style={s.btn} onPress={() => save({ value: named.name, previous: named.name })} disabled={busy}>
+              <TouchableOpacity style={s.btn} onPress={() => save({ value: named.name, previous: named.name, inSpace: !!named.space, previousInSpace: !!named.space })} disabled={busy}>
                 <Text style={s.btnText}>Keep</Text>
               </TouchableOpacity>
             ) : null}
@@ -165,6 +182,8 @@ function makeStyles (t: Theme) {
     tagAuto: { backgroundColor: t.surfaceAlt },
     tagAutoText: { color: t.textDim },
     hint: { color: t.textMuted, fontSize: 12, lineHeight: 17 },
+    check: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 44, borderRadius: radius.md },
+    checkText: { color: t.text, fontSize: 14 },
     error: { color: t.danger, fontSize: 13 },
     actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: space.sm },
     btnGhost: { minHeight: 40, justifyContent: 'center', paddingHorizontal: space.md, borderRadius: radius.pill },

@@ -4,7 +4,12 @@
 // a name in the URL bar, or opening hyper://<name>/ in a tab, goes to what it names; the AI can look
 // names up and read or write a named drive. One set per user, kept in the Vault so every Device has it:
 //
-//   /.vault/names/<name>.json   { name, url, title, auto?, createdAt, updatedAt }
+//   /.vault/names/<name>.json                    { name, url, title, auto?, createdAt, updatedAt }
+//   /.vault/space-lib/<space>/names/<name>.json  the same record, a name only in that Space
+//
+// A Space's names (ADR-0029) work only in that Space's tabs. Where a Space's name and one of the
+// user's own are the same word, the user's own wins (pickName), so a name in a Space someone shared
+// can't take over a word the user already uses.
 //
 // `auto` marks a name the AI gave a site the user keeps coming back to (see "Auto-names" below).
 // Saving the name again from the UI drops it: the name is the user's from then on.
@@ -57,10 +62,34 @@ export function nameError(name) {
   return null;
 }
 
-export function namePath(name) {
+// Where a Space's names are (`space` a Space's Root Drive key), or the user's (`space` null).
+export function namesPrefix(space = null) {
+  if (!space) return NAMES_PREFIX;
+  if (!/^[0-9a-f]{64}$/.test(space)) throw new Error('Not a Space key: ' + space);
+  return '/.vault/space-lib/' + space + '/names/';
+}
+
+export function namePath(name, space = null) {
   const err = nameError(name);
   if (err) throw new Error(err);
-  return NAMES_PREFIX + name + '.json';
+  return namesPrefix(space) + name + '.json';
+}
+
+// The names one Space sees, A to Z: the user's own (`space: null`) and the Space's (`space`: its
+// key). A Space's name that the user's own name hides is still listed, with `hidden: true`, so the
+// UI can say why it doesn't work.
+export function namesInSpace(own, spaceNames = [], space = null) {
+  const mine = new Set(own.map((r) => r.name));
+  return [
+    ...own.map((r) => ({ ...r, space: null })),
+    ...(space ? spaceNames.map((r) => ({ ...r, space, ...(mine.has(r.name) ? { hidden: true } : {}) })) : []),
+  ].sort((a, b) => a.name.localeCompare(b.name) || (a.space ? 1 : 0) - (b.space ? 1 : 0));
+}
+
+// The record `name` means in a Space: the user's own, else the Space's. `lookup(name, space)`
+// returns the stored record or null.
+export function pickName(name, space, lookup) {
+  return lookup(name, null) || (space ? lookup(name, space) : null) || null;
 }
 
 export function makeNameRecord({ name, url, title, auto }, prev = null, now = new Date().toISOString()) {

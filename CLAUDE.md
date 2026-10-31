@@ -328,6 +328,38 @@ nomad://history → Tabs From Other Devices (`nomad.vault.listDeviceTabs`). The 
 `mobile/app/index.tsx` over `RPC_APPS` `tabs` and lists them under the tab grid. `sync_open_tabs`
 (Settings → Devices) and the phone's Settings switch turn it off per Device and delete the record.
 
+### Shared Spaces (ADR-0029)
+
+A Space (not Personal) can be shared with other people as **Can view** or **Can edit**. Its library
+(Drive Registry, bookmarks, Reader feeds, Space-only Notes and Names) moves into a **Space Library**,
+its own Autobase; the Vault's space record gains `library`, `role`, `memberId`. Rules and paths are
+`shared/space-library.mjs`; desktop I/O is `app/bg/hyper/space-library.js` (share, invites over the
+shared `BlindPairing` instance, members, Space Writer grants, the `nomad/space-control` channel for a
+viewer's ask); the phone's is `mobile/backend/lib/space-library.mjs` (open, join, attach). Code that
+reads a Space's records must go through `spaceLibrary.records(space, kind)` (desktop) or
+`placeOf(base, space, kind)` (phone `vault-apps.mjs`), and the Drive Registry through
+`_registryDrive(space)` in `bg/filesystem/index.js`, never straight to the Vault or Root Drive, or a
+shared Space reads stale data. UI: My Library → Sharing (`library/js/views/sharing.js`), **Ask to
+edit** in site-info, **Join a shared space** in the phone's Space switcher.
+
+### AI Jobs and phone notifications (ADR-0030)
+
+A Job is a saved prompt the user's AI runs by itself, by hand or on a schedule; a run can notify
+the phone. Jobs, runs and the phone's "run now" requests are Vault records (`/.vault/jobs/`,
+`/.vault/job-runs/<jobId>/`, `/.vault/job-requests/`; rules, schedules and notification logic in
+`shared/jobs.mjs`, tests `tests/unit/jobs.test.js`). `app/bg/ai/jobs.js` keeps them in memory, runs
+the Jobs whose `device` is this one when due (and once on wake), and saves each run; `main.js`
+injects the turn (`runJobTurn` in `ai.ts`). A run is the `job` stage: personal, no tab, reads only
+(`JOB_CAPS` in `search-execute.mjs`), no permission prompts (`jobPermit`), this Device's runtime
+only. The AI gets `listJobs`/`saveJob`/`runJob`/`deleteJob` (`jobsRead`/`jobsWrite`) and, inside a
+Job, `notify`. Desktop UI is My Library → Jobs (`nomad.vault.listJobs`/…/`watchJobs`). The phone lists
+them (`mobile/components/Jobs.tsx`, `RPC_APPS` `jobs`) and posts local notifications with
+`expo-notifications` for new runs (`mobile/lib/useJobNotifications.ts`); there is no push server.
+A Job can come from a drive (`source`): `job.md` is its prompt and `job.js` an `execute`-format module
+run first (`runJobTurn`/`runJobModule` in `ai.ts`, files read by `bg/web-apis/bg/job-source.ts`). The
+user's own drives are live; anyone else's is copied into the record, and a newer version waits for the
+user in My Library (`checkJobSource`). The AI must not be able to take it for them.
+
 ## Look and feel: every UI supports dark mode and matches the rest
 
 Every new or changed screen must work in light **and** dark, and look like its neighbours.

@@ -57,16 +57,25 @@ class CreateDriveModal extends LitElement {
 
         .templates {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          /* minmax(0, …) lets a column shrink below its text's width, so the cards share the
+             modal's width instead of growing past it */
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 8px;
           margin-bottom: 12px;
         }
 
+        /* The cards are <button>s, so undo the modal button style (fixed 30px height, no
+           wrapping, centered) that pushed the description out under the card */
         .template {
           display: flex;
           align-items: flex-start;
+          justify-content: flex-start;
           gap: 10px;
+          height: auto;
+          min-width: 0;
           padding: 10px 12px;
+          white-space: normal;
+          box-shadow: none;
           border: 1px solid var(--m-border);
           border-radius: var(--m-radius);
           background: none;
@@ -99,9 +108,14 @@ class CreateDriveModal extends LitElement {
           font-weight: 600;
         }
 
+        .template-text {
+          min-width: 0;
+        }
+
         .template-desc {
           display: block;
           margin-top: 2px;
+          line-height: 1.35;
           font-size: 11px;
           color: var(--m-text-light);
         }
@@ -197,7 +211,7 @@ class CreateDriveModal extends LitElement {
                   @click=${() => this.selectTemplate(t.id)}
                 >
                   <span class="${t.icon} fa-fw"></span>
-                  <span>
+                  <span class="template-text">
                     <span class="template-title">${t.title}</span>
                     <span class="template-desc">${t.description}</span>
                   </span>

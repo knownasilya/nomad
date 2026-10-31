@@ -64,6 +64,11 @@ const invitePublicKeys = [];
 const pending = {}; // deviceKey(hex) -> { candidate, resolve, name, platform, ... }
 const approved = {}; // deviceKey(hex) -> true, so a re-request after approval auto-confirms
 
+// The one blind-pairing instance, which Space Library invites share (space-library.js, ADR-0029).
+export function instance() {
+  return _bp();
+}
+
 function _bp() {
   if (!bp) {
     const swarm = daemon.getSwarm();

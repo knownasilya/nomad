@@ -10,6 +10,7 @@ import {
   newNoteId,
   isNoteId,
   notePath,
+  notesPrefix,
   makeNote,
   isNote,
   isConflict,
@@ -101,6 +102,13 @@ describe('notes', () => {
     expect(isNoteId('../x')).toBe(false);
     expect(isNoteId('a/b')).toBe(false);
     expect(() => notePath('../x')).toThrow();
+  });
+  it('keeps a Space’s own notes under that Space (ADR-0029)', () => {
+    const space = 'c'.repeat(64);
+    expect(notesPrefix()).toBe('/.vault/notes/');
+    expect(notesPrefix(space)).toBe(`/.vault/space-lib/${space}/notes/`);
+    expect(notePath('n1', space)).toBe(`/.vault/space-lib/${space}/notes/n1.json`);
+    expect(() => notesPrefix('nope')).toThrow();
   });
   it('keeps createdAt across saves and stamps updatedAt', () => {
     const first = makeNote({ id: 'n1', body: 'Hi' }, null, 'T1');

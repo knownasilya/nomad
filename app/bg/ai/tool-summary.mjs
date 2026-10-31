@@ -28,6 +28,11 @@ const PURPOSES = {
   followFeed: 'follow a feed',
   unfollowFeed: 'unfollow a feed',
   markPostsRead: 'mark posts as read',
+  listJobs: 'look through your Jobs',
+  saveJob: 'save a Job',
+  runJob: 'run a Job',
+  deleteJob: 'delete a Job',
+  notify: 'notify your phone',
 };
 
 // search's domains, as a place to search in and as a list to show.
@@ -105,6 +110,17 @@ export function toolSummary(name, args) {
       const n = Array.isArray(a.urls) ? a.urls.length : 0;
       return n ? `Marking ${n} post${n === 1 ? '' : 's'} as read` : 'Marking posts as read';
     }
+    case 'listJobs':
+      return 'Listing your Jobs';
+    case 'saveJob':
+      if (a.title) return a.id ? `Saving the Job ${quote(a.title)}` : `Making the Job ${quote(a.title)}`;
+      return a.id ? 'Saving a Job' : 'Making a Job';
+    case 'runJob':
+      return 'Running a Job';
+    case 'deleteJob':
+      return 'Deleting a Job';
+    case 'notify':
+      return a.title ? `Notifying your phone: ${quote(a.title)}` : 'Notifying your phone';
     default:
       return tool ? `Using ${tool}` : 'Working…';
   }

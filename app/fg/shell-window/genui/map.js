@@ -3,7 +3,22 @@
 // the +/- buttons, a double-click and dragging move it.
 
 import { LitElement, html } from 'lit';
-import L from 'leaflet';
+import leafletSource from 'leaflet/dist/leaflet.js?raw';
+
+// Leaflet reads document.documentElement as it loads. This file is part of the shell window's
+// preload, which runs before the page has an <html> element, so importing Leaflet as a module (it
+// runs with the rest of the bundle) throws there and the whole window starts blank. The preload is
+// sandboxed, so it can't require() Leaflet later either. The bundle carries Leaflet's source as
+// text instead, and runs it the first time a map draws. tests/unit/genui.test.js guards this.
+let L = null;
+function leaflet() {
+  if (!L) {
+    const module = { exports: {} };
+    new Function('exports', 'module', leafletSource)(module.exports, module);
+    L = module.exports;
+  }
+  return L;
+}
 
 const TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const ATTRIBUTION =
@@ -65,6 +80,7 @@ export class GenUiMap extends LitElement {
     if (!this._map || this._el !== el) {
       this._destroy();
       this._el = el;
+      const L = leaflet();
       this._map = L.map(el, { scrollWheelZoom: false, attributionControl: true });
       L.tileLayer(TILES, { maxZoom: 19, attribution: ATTRIBUTION }).addTo(this._map);
       this._map.attributionControl.setPrefix(false);
@@ -76,6 +92,7 @@ export class GenUiMap extends LitElement {
   }
 
   _draw(markers) {
+    const L = leaflet();
     const map = this._map;
     const route = !!this.props?.route && markers.length > 1;
     this._layer.clearLayers();

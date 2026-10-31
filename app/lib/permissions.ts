@@ -260,6 +260,23 @@ export const PERMS = {
     dangerous: true,
     promptTrusted: true,
   },
+  // The AI's access to the user's AI Jobs (ADR-0030). Changing them is dangerous: a Job runs a prompt
+  // by itself, reads the user's Notes and Reader each time, and can notify their phone.
+  jobsRead: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    promptTrusted: true,
+  },
+  jobsWrite: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+    promptTrusted: true,
+  },
   // One click the AI makes that buys, sends, posts or deletes. Asked each time; the param numbers it.
   aiPageAction: {
     persist: false,
@@ -322,6 +339,8 @@ export const PERM_ICONS = {
   readerWrite: 'fas fa-rss',
   modsRead: 'fas fa-magic',
   modsWrite: 'fas fa-magic',
+  jobsRead: 'fas fa-clock',
+  jobsWrite: 'fas fa-clock',
   privateRead: 'fas fa-lock',
   privateWrite: 'fas fa-lock',
   aiPageControl: 'fas fa-mouse-pointer',
@@ -389,6 +408,10 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Let the AI assistant click, type and scroll on this site for 30 days';
     case 'aiPageAction':
       return `Let the AI assistant ${permOpts?.action || 'do this'}`;
+    case 'jobsRead':
+      return 'Let the AI assistant see your AI Jobs and their results';
+    case 'jobsWrite':
+      return 'Let the AI assistant create, change and run your AI Jobs, which run prompts on a schedule, read your Notes and Reader, and notify your phone';
     case 'privateRead':
     case 'privateWrite': {
       const verb = permId === 'privateWrite' ? 'Read and change' : 'Read';

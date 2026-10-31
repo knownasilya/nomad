@@ -14,6 +14,7 @@ import Suggestions from '../components/Suggestions'
 import Library from '../components/Library'
 import Reader from '../components/Reader'
 import Notes from '../components/Notes'
+import Jobs from '../components/Jobs'
 import ActionSheet from '../components/ActionSheet'
 import IconButton from '../components/IconButton'
 import SiteIcon from '../components/SiteIcon'
@@ -28,11 +29,12 @@ import AiPanel from '../components/AiPanel'
 import Shortcuts from '../components/Shortcuts'
 import FileExplorer, { type ExplorerDrive } from '../components/FileExplorer'
 import type { HyperRender } from '../components/HyperView'
-import { useBackend } from '../lib/useBackend'
+import { useBackend, type SpaceJoin } from '../lib/useBackend'
+import { useJobNotifications } from '../lib/useJobNotifications'
 import { syncHostingService } from '../lib/hostingService'
 import HostingSettings from '../components/HostingSettings'
 import { usePersistence, type SavedSite, type SavedDrive } from '../lib/usePersistence'
-import { useSpaces, PERSONAL_ID } from '../lib/useSpaces'
+import { useSpaces, PERSONAL_ID, SPACE_COLORS } from '../lib/useSpaces'
 import { useFavicons } from '../lib/useFavicons'
 import { useNames, useNamesForUrl, useNameMatches, mayBeName } from '../lib/useNames'
 import NameSheet from '../components/NameSheet'
@@ -54,6 +56,7 @@ type Kind = 'home' | 'web' | 'hyper'
 type Screen =
   | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' }
   | { name: 'notes'; noteId?: string } // noteId: the note to open, e.g. the one a followed link was in
+  | { name: 'jobs'; jobId?: string; runId?: string } // a tapped Job notification opens its run
   | { name: 'explorer'; drive: ExplorerDrive }
 type ScreenName = Screen['name']
 
@@ -163,7 +166,9 @@ const VAULT_PROMPTS: Record<string, { title: string; message: string }> = {
   readerRead: { title: 'Allow AI to read your Reader?', message: 'The AI running on your other device wants to read the feeds you follow and their posts.' },
   readerWrite: { title: 'Allow AI to change your Reader?', message: 'The AI running on your other device wants to follow or unfollow feeds, or mark posts read.' },
   modsRead: { title: 'Allow AI to read your Mods?', message: 'The AI running on your other device wants to read your Mods: your own styles and scripts for sites.' },
-  modsWrite: { title: 'Allow AI to change your Mods?', message: 'The AI running on your other device wants to create or change your Mods. A Mod can run a script on every page of its site.' }
+  modsWrite: { title: 'Allow AI to change your Mods?', message: 'The AI running on your other device wants to create or change your Mods. A Mod can run a script on every page of its site.' },
+  jobsRead: { title: 'Allow AI to see your Jobs?', message: 'The AI running on your other device wants to see your AI Jobs and their results.' },
+  jobsWrite: { title: 'Allow AI to change your Jobs?', message: 'The AI running on your other device wants to create, change or run your AI Jobs. A Job runs a prompt by itself, reads your Notes and Reader, and notifies this phone.' }
 }
 
 function confirmAiPermission (permission: string, drive?: { name: string; url: string }): Promise<boolean> {
@@ -237,6 +242,7 @@ export default function Browser () {
   const lastExplorerDrive = useRef<ExplorerDrive | null>(null)
   if (explorerDrive) lastExplorerDrive.current = explorerDrive
   const notesScreen = screens.find((sc) => sc.name === 'notes')
+  const jobsScreen = screens.find((sc) => sc.name === 'jobs')
   // The sheets over the browser, and the AI panel.
   const [spacesOpen, setSpacesOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -296,6 +302,9 @@ export default function Browser () {
     }
   })
 
+  // A notification from an AI Job for each new run that has one; a tap opens that run.
+  useJobNotifications(backend, ({ jobId, runId }) => openScreen({ name: 'jobs', jobId, runId }))
+
   // Spaces — each has its own Root Drive; bookmarks/history/drives are scoped to the active space.
   const spacesApi = useSpaces(backend)
   const persist = usePersistence(spacesApi.activeSpaceId, {
@@ -305,7 +314,7 @@ export default function Browser () {
     onError: (message) => Alert.alert('Couldn’t save', message)
   })
   const favicons = useFavicons()
-  const names = useNames(backend.apps)
+  const names = useNames(backend.apps, spacesApi.activeSpace.rootDriveKey || undefined)
   // The user's own name for the drive in the active tab: the address bar shows it in a green tag.
   const activeNames = useNamesForUrl(names, active.url, active.kind !== 'home')
   persistRef.current = persist
@@ -338,7 +347,23 @@ export default function Browser () {
     if (sp) tabsBySpace.current[sp.id] = { tabs: [fresh], activeId: fresh.id }
     setTabs([fresh])
     setActiveId(fresh.id)
+    return sp
   }, [spacesApi])
+
+  // Join a shared Space (ADR-0029) with a code from its owner. Once they approve, the phone makes a
+  // Space for it (its own Root Drive, as desktop does) and marks it in the Vault as that Space's
+  // Library, so the user's other Devices get it too. Throws with why not.
+  const onJoinSpace = useCallback(async ({ code, name }: { code: string; name: string }) => {
+    const res = await backend.apps<SpaceJoin>('spaces', 'join', { code, name: name || 'Someone' })
+    if (!res.ok || !res.value) throw new Error(res.message || 'Couldn’t join that Space')
+    const { library, memberId, index } = res.value
+    const created = await onCreateSpace({ name: index.name || 'Shared space', color: index.color || SPACE_COLORS[0] })
+    const rootDriveKey = created?.rootDriveKey
+    if (!rootDriveKey) throw new Error('Joined, but this phone couldn’t make the Space. Try again from your computer.')
+    const attached = await backend.apps('spaces', 'attach', { rootDriveKey, name: index.name, icon: index.icon, color: index.color, library, memberId })
+    if (!attached.ok) throw new Error(attached.message || 'Joined, but couldn’t save it to your Vault')
+    spacesApi.syncFromVault()
+  }, [backend, onCreateSpace, spacesApi])
 
   // After unlinking this phone from the Vault: drop the shared markers, then ask whether to also
   // remove the spaces that only existed here because of the Vault (keep = local-only copies).
@@ -1078,7 +1103,8 @@ export default function Browser () {
           [
             { label: 'My Library', icon: 'book', onPress: () => openScreen({ name: 'library' }) },
             { label: 'Reader', icon: 'rss', onPress: () => openScreen({ name: 'reader' }) },
-            { label: 'Notes', icon: 'sticky-note', onPress: () => openScreen({ name: 'notes' }) }
+            { label: 'Notes', icon: 'sticky-note', onPress: () => openScreen({ name: 'notes' }) },
+            { label: 'AI Jobs', icon: 'clock', onPress: () => openScreen({ name: 'jobs' }) }
           ],
           [
             // Only for a drive this phone owns, and hosting only for one it doesn't.
@@ -1099,6 +1125,7 @@ export default function Browser () {
         names={names}
         url={active.url}
         title={active.title}
+        spaceName={spacesApi.activeSpace.rootDriveKey ? spacesApi.activeSpace.name : undefined}
         onOpenDevices={() => { setNameSheetOpen(false); openScreen({ name: 'devices' }) }}
       />
 
@@ -1166,8 +1193,20 @@ export default function Browser () {
         openNoteId={notesScreen?.name === 'notes' ? notesScreen.noteId : undefined}
         apps={backend.apps}
         onVaultChange={backend.onVaultChange}
+        space={spacesApi.activeSpace.rootDriveKey || undefined}
+        spaceName={spacesApi.activeSpace.name}
         onOpenDevices={() => openScreen({ name: 'devices' })}
         onOpenUrl={openFromNotes}
+      />
+
+      <Jobs
+        visible={!!jobsScreen}
+        onClose={() => closeScreenNamed('jobs')}
+        openJobId={jobsScreen?.name === 'jobs' ? jobsScreen.jobId : undefined}
+        openRunId={jobsScreen?.name === 'jobs' ? jobsScreen.runId : undefined}
+        apps={backend.apps}
+        onVaultChange={backend.onVaultChange}
+        onOpenDevices={() => openScreen({ name: 'devices' })}
       />
 
       <Devices
@@ -1187,8 +1226,10 @@ export default function Browser () {
         spaces={spacesApi.spaces}
         activeSpaceId={spacesApi.activeSpaceId}
         vaultKeys={spacesApi.vaultKeys}
+        peopleKeys={spacesApi.peopleKeys}
         onSwitch={switchSpace}
         onCreate={onCreateSpace}
+        onJoin={onJoinSpace}
       />
 
       <FileExplorer

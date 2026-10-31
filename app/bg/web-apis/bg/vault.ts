@@ -12,12 +12,51 @@ import * as pairing from '../../hyper/device-pairing';
 import * as devicePresence from '../../hyper/device-presence';
 import * as vaultApps from './vault-apps';
 import * as names from '../../hyper/names';
+import * as driveWriters from '../../hyper/drive-writers';
+import * as spaceLibrary from '../../hyper/space-library';
+import * as filesystem from '../../filesystem/index';
+import * as spacesDb from '../../dbs/spaces';
+import { BrowserWindow } from 'electron';
+import { findWebContentsParentWindow } from '../../lib/electron';
+import * as tabManager from '../../ui/tabs/manager';
+
+// The caller's Space key, or null.
+const callerSpace = (ctx) => vaultApps.spaceKey(ctx).catch(() => null);
 import * as mods from '../../ui/mods';
 import * as openTabs from '../../ui/open-tabs';
+import * as jobs from '../../ai/jobs';
+import { readJobSource } from './job-source';
 import { PRESETS } from '../../../../shared/mods.mjs';
+import { describeSchedule, nextRunAt, normalizeSchedule } from '../../../../shared/jobs.mjs';
+
+// The Drive key of a hyper://<key>/ URL, or null.
+function driveKeyOf(url) {
+  const m = /^hyper:\/\/([0-9a-f]{64})(?:[/?#]|$)/i.exec(String(url || ''));
+  return m ? m[1].toLowerCase() : null;
+}
+
+// The caller's local Space id: its tab's Space, or the Space its window shows.
+function spaceIdOf(ctx) {
+  let id = ctx?.sender ? filesystem.getSpaceIdForWebContents(ctx.sender.id) : null;
+  if (!id && ctx?.sender) {
+    const win = findWebContentsParentWindow(ctx.sender);
+    if (win) id = tabManager.getWindowActiveSpaceId(win);
+  }
+  return Number(id) || 1;
+}
 
 function thisPlatform() {
   return 'desktop';
+}
+
+// The name a person goes by in a Space they share or join, until they type another.
+function defaultOwnName() {
+  try {
+    const u = os.userInfo().username || '';
+    return u ? u.charAt(0).toUpperCase() + u.slice(1) : 'Me';
+  } catch {
+    return 'Me';
+  }
 }
 
 function defaultDeviceName() {
@@ -141,6 +180,7 @@ export default {
     try {
       await vault.syncSpacesFromVault();
     } catch {}
+    driveWriters.watch();
     return res;
   },
 
@@ -149,7 +189,93 @@ export default {
   },
 
   async removeDevice(deviceKey) {
-    return vault.removeDevice(deviceKey);
+    await vault.removeDevice(deviceKey);
+    // Take its writer keys off the Drives this Device writes (bg/hyper/drive-writers.js).
+    driveWriters.sync().catch(() => {});
+  },
+
+  // Editing a Drive one of the user's other Devices can write (ADR-0026 §2, ADR-0029 step 2).
+  async driveEditStatus(url) {
+    return driveWriters.status(driveKeyOf(url));
+  },
+
+  async requestDriveEdit(url, opts: any = {}) {
+    return driveWriters.request(driveKeyOf(url), { note: typeof opts?.note === 'string' ? opts.note : '' });
+  },
+
+  // Shared Spaces (bg/hyper/space-library.js, ADR-0029). Each acts on the caller's Space.
+  async getSpaceShare() {
+    const spaceId = spaceIdOf(this);
+    const space = await spacesDb.get(spaceId);
+    const base = { spaceId, name: space?.name || 'Space', personal: spaceId === 1 };
+    if (spaceId === 1) return { ...base, shared: false };
+    const key = await vaultApps.spaceKey(this).catch(() => null);
+    const st = key ? await spaceLibrary.status(key) : { shared: false };
+    if (st.shared) return { ...base, ...st };
+    const preview = await filesystem.shareSpacePreview(spaceId).catch(() => null);
+    return { ...base, ...st, preview: preview?.summary || null, ownName: defaultOwnName() };
+  },
+
+  async shareSpace(opts: any = {}) {
+    const spaceId = spaceIdOf(this);
+    return filesystem.shareSpace(spaceId, { name: String(opts?.name || defaultOwnName()).slice(0, 100) });
+  },
+
+  async createSpaceInvite(role) {
+    return spaceLibrary.createInvite(await vaultApps.spaceKey(this), role);
+  },
+
+  async approveSpaceJoin(memberId) {
+    return spaceLibrary.approveJoin(await vaultApps.spaceKey(this), memberId);
+  },
+
+  async denySpaceJoin(memberId) {
+    return spaceLibrary.denyJoin(await vaultApps.spaceKey(this), memberId);
+  },
+
+  async setSpaceRole(memberId, role) {
+    return spaceLibrary.setRole(await vaultApps.spaceKey(this), memberId, role);
+  },
+
+  async removeSpaceMember(memberId) {
+    return spaceLibrary.removeMember(await vaultApps.spaceKey(this), memberId);
+  },
+
+  async answerSpaceRequest(opts: any = {}) {
+    return spaceLibrary.answerRequest(await vaultApps.spaceKey(this), opts.drive, opts.writerKey, !!opts.approve);
+  },
+
+  // Leave the caller's shared Space: close its tabs, drop it here and from the Vault.
+  async leaveSpace() {
+    const spaceId = spaceIdOf(this);
+    if (spaceId === 1) throw new Error('You can’t leave your Personal Space');
+    await filesystem.leaveSpace(spaceId);
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (tabManager.getWindowActiveSpaceId(win) === spaceId) await tabManager.setActiveSpace(win, 1).catch(() => {});
+      for (const tab of tabManager.getAll(win).filter((t) => t.spaceId === spaceId)) await tabManager.remove(win, tab);
+    }
+    await spacesDb.remove(spaceId);
+    vault.events.emit('spaces-synced', { removed: 1 });
+  },
+
+  // Join a shared Space with a code. Resolves once an owner approves; switches the caller's window
+  // to the new Space.
+  async joinSpace(code, opts: any = {}) {
+    const space = await filesystem.joinSpace(code, { name: String(opts?.name || defaultOwnName()).slice(0, 100) });
+    const win = this?.sender ? findWebContentsParentWindow(this.sender) : null;
+    if (win) await tabManager.setActiveSpace(win, space.id).catch(() => {});
+    return { spaceId: space.id, name: space.name };
+  },
+
+  // 'changed' when a shared Space's members, requests or library change.
+  watchSpaceShare() {
+    const emitter: any = new EventEmitter();
+    const onChange = () => emitter.emit('changed', {});
+    for (const ev of ['changed', 'join-request', 'join-resolved', 'removed']) spaceLibrary.events.on(ev, onChange);
+    emitter.close = () => {
+      for (const ev of ['changed', 'join-request', 'join-resolved', 'removed']) spaceLibrary.events.removeListener(ev, onChange);
+    };
+    return emitter;
   },
 
   // Reader and Notes data (vault-apps.ts), in the Vault. `this` is the RPC event, which carries the
@@ -171,11 +297,17 @@ export default {
   },
 
   async listNotes() {
-    return vaultApps.listNotes();
+    return vaultApps.listNotes(this);
   },
 
+  // ({ id?, body, baseUpdatedAt?, inSpace? }). `space` is only for the AI's turns from other Devices.
   async saveNote(note) {
-    return vaultApps.saveNote(this, note);
+    const { space, ...rest } = note || {};
+    return vaultApps.saveNote(this, rest);
+  },
+
+  async moveNote(change) {
+    return vaultApps.moveNote(this, change);
   },
 
   async deleteNote(id) {
@@ -190,25 +322,43 @@ export default {
     return vaultApps.watch();
   },
 
-  // Names (hyper/names.js): short words for drives, apps in a private drive, and any URL.
+  // Names (hyper/names.js): short words for drives, apps in a private drive, and any URL. The
+  // caller's Space's names come with the user's own; each record has `space` (a key, or null).
   async listNames() {
-    return names.list();
+    return names.list(await callerSpace(this));
+  },
+
+  // { space, spaceName }: the caller's Space, for My Library → Names' sections.
+  async getNamesSpace() {
+    const space = await callerSpace(this);
+    return { space, spaceName: space ? vaultApps.spaceNameOf(space) : null };
   },
 
   // The names that point to the page at `url`.
   async namesForUrl(url) {
-    return names.forUrl(url);
+    return names.forUrl(url, await callerSpace(this));
   },
 
-  // ({ name, url, title, previous? }) -> record. `previous` renames. A name saved here is the
-  // user's, so it drops the AI's `auto` mark.
+  // ({ name, url, title, inSpace?, previous?, previousInSpace? }) -> record. `previous` renames;
+  // `inSpace` keeps the name only in the caller's Space (ADR-0029), and `previousInSpace` says where
+  // the renamed or moved one was. A name saved here is the user's, so it drops the AI's `auto` mark.
   async setName(rec) {
-    const { name, url, title, previous } = rec || {};
-    return names.set({ name, url, title, previous });
+    const { name, url, title, previous, inSpace, previousInSpace } = rec || {};
+    const space = await callerSpace(this);
+    if ((inSpace || previousInSpace) && !space) throw new Error('This page has no Space');
+    return names.set({
+      name,
+      url,
+      title,
+      previous,
+      space: inSpace ? space : null,
+      previousSpace: previousInSpace ? space : null,
+    });
   },
 
-  async removeName(name) {
-    return names.remove(name);
+  // (name, { inSpace? }): remove the user's own name, or with inSpace, the caller's Space's.
+  async removeName(name, { inSpace = false } = {}) {
+    return names.remove(name, inSpace ? await callerSpace(this) : null);
   },
 
   // Mods (bg/ui/mods.js): My Library → Mods.
@@ -225,6 +375,94 @@ export default {
 
   async deleteMod(id) {
     await mods.remove(id);
+  },
+
+  // AI Jobs (bg/ai/jobs.js, ADR-0030): My Library → Jobs. Each Job comes with its newest run, when
+  // it next runs, whether it is running here now, and the name of the Device that runs it.
+  async listJobs() {
+    const [own, devices] = await Promise.all([
+      jobs.ownKey().catch(() => null),
+      vault.listDevices().catch(() => []),
+    ]);
+    const names = new Map((devices || []).map((d) => [d.key, d.name]));
+    return {
+      jobs: jobs.list().map((j) => ({
+        ...j,
+        when: describeSchedule(j.schedule),
+        here: !!own && j.device === own,
+        deviceName: j.device === own ? 'This computer' : names.get(j.device) || 'Another device',
+      })),
+    };
+  },
+
+  // A Job's saved runs, newest first.
+  async listJobRuns(id) {
+    return jobs.runsOf(id);
+  },
+
+  // ({ id?, title?, prompt?, source?, schedule?, notify?, enabled?, runHere? }) -> record. A new Job
+  // runs on this Device and reads the Reader of the calling page's Space. `source` is a drive URL
+  // to read now (the user's own drive stays live, anyone else's is copied), { url, module, prompt }
+  // for a newer version the user looked at (from checkJobSource) and took, or null to drop it.
+  async saveJob(fields) {
+    const f = fields || {};
+    let space;
+    if (!f.id) {
+      try {
+        space = await vaultApps.spaceKey(this);
+      } catch {}
+    }
+    const { id, title, prompt, schedule, notify, enabled, runHere } = f;
+    let source;
+    if (f.source === null) source = null;
+    else if (typeof f.source === 'string') source = await readJobSource(f.source);
+    else if (f.source && typeof f.source === 'object') {
+      const { url, module = null, prompt: text = null } = f.source;
+      source = { url, live: false, module, prompt: text };
+    }
+    return jobs.save({ id, title, prompt, source, schedule, notify, enabled, runHere: !!runHere, space });
+  },
+
+  // A schedule as the Jobs editor has it (an object, a phrase or cron), checked: { schedule, when,
+  // next: [ISO, …] } with its next few times from now. Throws with what's wrong.
+  async previewSchedule(input) {
+    const now = new Date();
+    const schedule = normalizeSchedule(input, now);
+    const next = [];
+    let after = now;
+    while (schedule && next.length < 3) {
+      const at = nextRunAt(schedule, after);
+      if (!at) break;
+      next.push(at.toISOString());
+      after = at;
+    }
+    return { schedule, when: describeSchedule(schedule), next };
+  },
+
+  // A Job's source as its drive has it now: { url, live, module, prompt, title, hash }, so the user
+  // can look at a newer version before taking it.
+  async checkJobSource(id) {
+    const job = jobs.get(id);
+    if (!job?.source) throw new Error('This Job doesn’t come from a drive');
+    return readJobSource(job.source.url);
+  },
+
+  async deleteJob(id) {
+    await jobs.remove(id);
+  },
+
+  // Run a Job now, on this Device.
+  async runJob(id) {
+    jobs.runNow(id);
+  },
+
+  // 'changed' when a Job or a run changes, here or on another Device, and when a run starts.
+  watchJobs() {
+    const emitter: any = new EventEmitter();
+    const changed = () => emitter.emit('changed', {});
+    jobs.events.on('changed', changed);
+    emitter.close = () => jobs.events.removeListener('changed', changed);
+    return emitter;
   },
 
   // Open tabs on the user's other Devices, the calling page's Space first (nomad://history).

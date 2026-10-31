@@ -85,6 +85,14 @@ Desktop can use the same records for drives it was paired into once it also open
 drives in a per-drive namespace (today it opens them on the root store, which is the §3 deadlock).
 That desktop change is out of scope here.
 
+*Amendment (ADR-0029 step 2):* desktop now does both. It opens a drive it has never opened in
+`autobase:<key>` (`_storeFor` in `autobases.js`), asks with these records from the site-info
+panel (**Edit on this device**), and grants them (`app/bg/hyper/drive-writers.js`). It asks for
+each Space Root Drive on its own, since every Device of the user should write those. Its Vault sync
+also handles revoking: a record whose `device` is no longer listed is taken off any drive the
+syncing desktop writes, so it doesn't matter which app removed the Device. A drive this desktop
+first opened on the root store keeps that key and can't be granted (spike S1 in ADR-0029).
+
 ### 3. Writes use whatever base is writable
 
 `DriveManager` drops the `ns`-required `_openOwned` for a `_openWritable(key)` that opens the drive in
@@ -244,3 +252,4 @@ it in a new tab. The phone writes it as the drive's creator, so no grant is need
   announcing, and saving before sleep.
 - **Phase 4: create and ask.** The template picker, and **Ask the owner** for other people's drives.
 - **Later:** desktop opens drives it was paired into in a per-drive namespace and uses the same grants.
+  Done in ADR-0029 step 2.

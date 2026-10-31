@@ -83,7 +83,11 @@ export interface DeviceSpace { rootDriveKey: string; name: string }
 // version: the Nomad version the Device runs, written by that Device (absent on older versions).
 export interface VaultDevice { key: string; name: string; platform: string; addedAt?: string; spaces?: DeviceSpace[]; version?: string }
 // movedTo: the Space's Root Drive got a new key; this record only points at it.
-export interface VaultSpace { rootDriveKey: string; name: string; icon?: string; color?: string; movedTo?: string }
+// library: a shared Space's Space Library (ADR-0029), with this person's role in it.
+export interface VaultSpace { rootDriveKey: string; name: string; icon?: string; color?: string; movedTo?: string; library?: string; role?: 'owner' | 'editor' | 'viewer'; memberId?: string; removed?: boolean }
+// A shared Space as the phone sees it (spaces/status), and what joining one gives back.
+export interface SpaceShare { shared: boolean; role?: 'owner' | 'editor' | 'viewer'; writable?: boolean; members?: Array<{ memberId: string; name: string; role: string; you: boolean }> }
+export interface SpaceJoin { library: string; memberId: string; index: { name?: string; icon?: string; color?: string } }
 // Replication state of one Autobase (the Vault, or a Space Root Drive). `loaded: false` means
 // this phone hasn't opened it yet, so the rest is unknown.
 export interface DriveSync {
@@ -159,17 +163,49 @@ export interface Backend {
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'reader' | 'notes' | 'names' | 'tabs'
+export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
-export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string }
-export interface ReaderState { follows: string[]; read: string[]; writable: boolean }
+// space: the Space's key when the note is kept only in that Space (ADR-0029), else null.
+export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string; space?: string | null }
+// The user's AI Jobs (shared/jobs.mjs, ADR-0030). A desktop runs them; the phone lists them, pauses
+// them, asks for a run, and notifies on a run that has a notification.
+// What the phone shows is `when` (the schedule in words), so the shapes are loose here.
+export type JobSchedule =
+  | null
+  | { kind: 'interval'; minutes: number; from?: string; to?: string; days?: number[] }
+  | { kind: 'daily'; times?: string[]; time?: string; days?: number[] }
+  | { kind: 'monthly'; dates: number[]; times: string[] }
+  | { kind: 'once'; at: string }
+  | { kind: 'cron'; expr: string }
+export interface JobRun {
+  type: 'nomad/job-run'; id: string; jobId: string; title: string; device: string | null
+  trigger: 'schedule' | 'manual'; startedAt: string; finishedAt: string; status: 'ok' | 'error'
+  output: string; error?: string; notification: { title: string; body: string } | null
+}
+export interface Job {
+  type: 'nomad/job'; id: string; title: string; prompt: string; schedule: JobSchedule
+  // A Job from a drive: live runs the user's own drive's latest files, otherwise a copy; newer: the
+  // drive has a version the user hasn't taken (on the computer, in My Library → Jobs).
+  source: { url: string; live: boolean; copiedAt: string | null; newer: boolean } | null
+  notify: 'always' | 'auto' | 'never'; enabled: boolean; device: string | null; space: string | null
+  createdAt: string; updatedAt: string
+  // Worked out by the backend: the newest run, when it next runs, the schedule in words, the name of
+  // the Device that runs it, and whether a "run now" from a phone is waiting for it.
+  lastRun: JobRun | null; nextRunAt: string | null; when: string; deviceName: string; requested: boolean
+}
+export interface JobsList { jobs: Job[]; writable: boolean }
+export interface JobNotifications { notify: { id: string; jobId: string; title: string; body: string }[]; since: string; wants: boolean }
+// shared: the Space is shared (ADR-0029); canFollow is false for someone who can only view it.
+export interface ReaderState { follows: string[]; read: string[]; writable: boolean; shared?: boolean; canFollow?: boolean }
 export interface FeedPost { title: string; summary: string; tags: string[]; createdAt: string; url: string; feedUrl: string; feedTitle: string }
 export interface Feed { url: string; title: string; posts: FeedPost[] }
 // A short name the user gave a drive or URL (shared/names.mjs). auto: the AI gave it and the user
 // hasn't kept it yet.
-export interface NameRecord { name: string; url: string; title: string; auto?: boolean; createdAt: string; updatedAt: string }
+// space: the Space's key for a name kept only in that Space (ADR-0029), else null. hidden: a Space
+// name the user's own name with the same word hides.
+export interface NameRecord { name: string; url: string; title: string; auto?: boolean; createdAt: string; updatedAt: string; space?: string | null; hidden?: boolean }
 // approved: the user's own name for the page, shown in the address bar. named: every name that
 // points to it. suggested: a name to offer for its title.
 export interface NamesForUrl { approved: NameRecord | null; named: NameRecord[]; suggested: string; writable: boolean }

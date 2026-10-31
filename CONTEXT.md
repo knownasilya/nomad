@@ -34,7 +34,7 @@ _Avoid_: author, contributor, collaborator
 A Vault record (`/.vault/drive-writers/<driveKey>/<writerKey>.json`) in which one of the user's
 Devices asks for its own per-drive writer key to be added to a Drive. Any of the user's Devices that
 can write that Drive adds it without a prompt, since only the user's Devices write the Vault
-(ADR-0026, proposed).
+(ADR-0026; on desktop since ADR-0029 step 2, where each Space Root Drive is asked for on its own).
 _Avoid_: invite, access request (those are for other people)
 
 ### Drafts
@@ -161,11 +161,11 @@ Subscribing to a Feed by recording its URL on the user's own side (outbound-only
 _Avoid_: followers list, subscriber list, friend
 
 **Note**:
-A private Markdown note the user writes in the built-in Notes app (`nomad://notes`, and Notes on the phone). Its first line is its title. Notes link to each other by title, the way Obsidian does (`[[Title]]`); a link to a missing Note creates it. Notes live in the Vault, so they follow the user to every linked Device (ADR-0017). A Note is not a Post: it is never published or replicated to anyone else.
+A private Markdown note the user writes in the built-in Notes app (`nomad://notes`, and Notes on the phone). Its first line is its title. Notes link to each other by title, the way Obsidian does (`[[Title]]`); a link to a missing Note creates it. Notes live in the Vault, so they follow the user to every linked Device (ADR-0017). A Note shows in every Space, or only in one Space when the user keeps it there (ADR-0029). A Note is not a Post: it is never published.
 _Avoid_: memo, document, page, post
 
 **Name**:
-A short word the user gives a Drive, an app folder inside a private drive, or any URL ("blog", "gh"). Typing it in the URL bar, or opening `hyper://<name>/`, goes to what it names; the AI can look names up and work in a named Drive. One set per user, kept in the Vault. `hyper://<name>/` is a shortcut the user's own navigation follows, not a second address: the page loads at its real URL (ADR-0018).
+A short word the user gives a Drive, an app folder inside a private drive, or any URL ("blog", "gh"). Typing it in the URL bar, or opening `hyper://<name>/`, goes to what it names; the AI can look names up and work in a named Drive. Kept in the Vault: the user's own work in every Space, and a Space's own only in that Space's tabs, where the user's own name wins on a clash (ADR-0029). `hyper://<name>/` is a shortcut the user's own navigation follows, not a second address: the page loads at its real URL (ADR-0018).
 _Avoid_: alias, nickname, petname, bookmark, keyword
 
 **Conflict copy**:
@@ -202,6 +202,28 @@ _Avoid_: tag, search term, meta keyword
 **Space**:
 A named user context with its own Root Drive and browser session isolation (separate cookies, localStorage, and Electron partition). The user can have multiple Spaces; one is active at a time. Spaces belong to a Vault.
 _Avoid_: profile, account, identity, workspace
+
+**Shared Space**:
+A Space its owner shared with other people. Its library (Drive Registry, Contacts, Bookmarks, Reader
+feeds, and its own Notes and Names) lives in a Space Library that every Member reads; each Member
+keeps their own Root Drive, read marks and everything else (ADR-0029, proposed).
+_Avoid_: team, group, workspace, shared folder
+
+**Space Library**:
+The Autobase that holds a Shared Space's library. Never browsed, never Listed, and distinct from the
+Root Drive (`hyper://private/`), which is never shared.
+_Avoid_: shared drive, space drive, team drive
+
+**Member**:
+A person in a Shared Space, with a role: owner, can edit (a Writer of the Space Library, and of each
+Drive in the Space on demand) or can view (reads only). Distinct from a Device, which is one of one
+person's installations.
+_Avoid_: collaborator, guest, user, participant
+
+**Space Writer grant**:
+A Space Library record that adds one Member's per-drive writer key to one Drive of the Space. Granted
+without a prompt for an editor, and only on approval for a viewer, which is an **access request**.
+_Avoid_: invite, share
 
 **Vault**:
 The private, identity-level Collaborative Drive that indexes a single user's Spaces (by Root Drive key) and trusted Devices, and holds that user's in-flight Drafts, Reader Follows, and Notes. It is the root of trust for multi-device: every Device the user owns is a Writer of the Vault, and a new Device joins by pairing into it. Because every Device already writes the Vault, it is also where Drafts, Follows, and Notes live, so they sync privately across a user's Devices. Distinct from a Space — the Vault is the parent that ties one user's Spaces and Devices together.
