@@ -7,9 +7,18 @@ const cssStr = css`
   ${inputsCSS}
 
 :host {
+    --history-danger: #c62828;
+    --history-selected: #eef3ff;
     display: block;
     overflow-y: auto;
     height: 100vh;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :host {
+      --history-danger: #ff6b6b;
+      --history-selected: #29324a;
+    }
   }
 
   header {
@@ -85,10 +94,59 @@ const cssStr = css`
     border-color: var(--border-color--light);
   }
 
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 28px;
+    margin-bottom: 6px;
+    padding-left: 17px;
+  }
+
+  input[type='checkbox'] {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--blue);
+    /* draw the unticked box dark in dark mode */
+    color-scheme: light dark;
+  }
+
+  input[type='checkbox'][disabled] {
+    cursor: default;
+  }
+
+  .toolbar .select-all {
+    display: flex;
+    align-items: center;
+    margin-right: 6px;
+  }
+
+  .toolbar .selection-count {
+    font-weight: 500;
+  }
+
+  .toolbar .delete-selected {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 10px;
+    color: var(--history-danger);
+  }
+
+  .toolbar .cancel-selection {
+    cursor: pointer;
+    color: var(--blue);
+  }
+
+  .toolbar .cancel-selection:hover {
+    text-decoration: underline;
+  }
+
   .clear-history {
     display: inline-block;
-    text-align: right;
-    margin-bottom: 10px;
     cursor: pointer;
     color: var(--blue);
   }
@@ -146,6 +204,20 @@ const cssStr = css`
 
   .row:hover {
     background: var(--bg-color--light);
+  }
+
+  .row.selected {
+    background: var(--history-selected);
+  }
+
+  .row .select {
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+    /* a wider hit target than the box itself */
+    margin-left: -15px;
+    padding: 0 12px 0 16px;
+    user-select: none;
   }
 
   .row .link {

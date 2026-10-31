@@ -36,10 +36,17 @@ export class HistoryApp extends LitElement {
     this.currentPeriodFilter = 'all';
     this.lastRenderedDate = undefined;
     this.isFetching = false;
+    // Bulk select: the URLs whose checkboxes are ticked (removeVisit deletes every visit to a URL,
+    // so every row of a selected URL shows as selected), and the row last clicked, for shift+click.
+    this.selected = new Set();
+    this.anchorIndex = undefined;
 
     if (this.view === 'devices') this.loadDeviceTabs();
     else this.fillPage();
     this.addEventListener('scroll', this.onScroll.bind(this));
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.selected.size) this.clearSelection();
+    });
     // Another Device's tabs change while this page is open.
     try {
       nomad.vault.watchAppData().addEventListener('changed', () => {
@@ -71,6 +78,7 @@ export class HistoryApp extends LitElement {
   // load history until the scroll bar is visible, or no more history is found
   async fillPage() {
     this.visits.length = 0; // reset
+    this.clearSelection();
     this.isAtEnd = false;
     do {
       await this.fetchMore();
@@ -279,6 +287,37 @@ export class HistoryApp extends LitElement {
     return rowEls;
   }
 
+  // The bar above the rows: a select-all checkbox, then either the selection's actions or the
+  // clear-history control.
+  renderToolbar() {
+    const n = this.selected.size;
+    const loaded = this.visits.length;
+    const selectedRows = n ? this.visits.filter((v) => this.selected.has(v.url)).length : 0;
+    const all = loaded > 0 && selectedRows === loaded;
+    return html`
+      <div class="toolbar ${n ? 'has-selection' : ''}">
+        <label class="select-all" title=${all ? 'Deselect all' : 'Select all loaded'}>
+          <input
+            type="checkbox"
+            .checked=${all}
+            .indeterminate=${n > 0 && !all}
+            ?disabled=${loaded === 0}
+            @change=${this.onToggleSelectAll}
+          />
+        </label>
+        ${n
+          ? html`
+              <span class="selection-count">${n} selected</span>
+              <button class="delete-selected" @click=${this.onClickDeleteSelected}>
+                <i class="far fa-trash-alt"></i> Delete
+              </button>
+              <a class="cancel-selection" @click=${() => this.clearSelection()}>Cancel</a>
+            `
+          : this.renderClearHistoryButton()}
+      </div>
+    `;
+  }
+
   renderClearHistoryButton() {
     return html`
       <span class="clear-history">
@@ -295,8 +334,23 @@ export class HistoryApp extends LitElement {
   }
 
   renderRow(row, i) {
+    const selected = this.selected.has(row.url);
     return html`
-      <div class="row">
+      <div class="row ${selected ? 'selected' : ''}">
+        <label
+          class="select"
+          title="Select (shift+click to select a range)"
+          @mousedown=${(e) => {
+            // keep shift+click from selecting the page's text
+            if (e.shiftKey) e.preventDefault();
+          }}
+        >
+          <input
+            type="checkbox"
+            .checked=${selected}
+            @click=${(e) => this.onClickRowCheckbox(e, i)}
+          />
+        </label>
         <a class="link" href=${row.url} title=${row.title}>
           <img class="favicon" src=${'asset:favicon:' + row.url} />
           <span class="title">${row.title.replace(/[^\x00-\x7F]/g, '')}</span>
@@ -335,7 +389,7 @@ export class HistoryApp extends LitElement {
         <i class="fa fa-search"></i>
       </div>
 
-      ${this.renderClearHistoryButton()}
+      ${this.renderToolbar()}
     `;
   }
 
@@ -376,13 +430,66 @@ export class HistoryApp extends LitElement {
   onClickDelete(e, i) {
     if (!confirm('Are you sure?')) return;
     var v = this.visits[i];
-    this.visits.splice(i, 1);
+    // removeVisit deletes every visit to the URL, so drop all of its rows
+    this.visits = this.visits.filter((r) => r.url !== v.url);
+    this.selected.delete(v.url);
+    this.anchorIndex = undefined;
     nomad.history.removeVisit(v.url);
     this.requestUpdate();
   }
 
+  // Tick or untick a row. With shift held, every row from the last clicked one to this one takes
+  // this row's new state.
+  onClickRowCheckbox(e, i) {
+    const checked = e.currentTarget.checked;
+    const anchor = this.anchorIndex;
+    const from = e.shiftKey && anchor != null && anchor < this.visits.length ? anchor : i;
+    for (let j = Math.min(from, i); j <= Math.max(from, i); j++) {
+      const url = this.visits[j].url;
+      if (checked) this.selected.add(url);
+      else this.selected.delete(url);
+    }
+    this.anchorIndex = i;
+    this.requestUpdate();
+  }
+
+  onToggleSelectAll(e) {
+    if (e.currentTarget.checked) {
+      for (const v of this.visits) this.selected.add(v.url);
+    } else {
+      this.selected.clear();
+    }
+    this.anchorIndex = undefined;
+    this.requestUpdate();
+  }
+
+  clearSelection() {
+    this.selected.clear();
+    this.anchorIndex = undefined;
+    this.requestUpdate();
+  }
+
+  async onClickDeleteSelected() {
+    const urls = [...this.selected];
+    if (!urls.length) return;
+    const what = urls.length === 1 ? 'this page' : `these ${urls.length} pages`;
+    if (!confirm(`Remove ${what} from your history?`)) return;
+    const gone = new Set(urls);
+    this.visits = this.visits.filter((v) => !gone.has(v.url));
+    this.clearSelection();
+    try {
+      for (const url of urls) await nomad.history.removeVisit(url);
+    } catch (err) {
+      alert(`Couldn't remove everything: ${err?.message || err}`);
+      return this.fillPage();
+    }
+    // fetch and render more visits if possible
+    this.fetchMore();
+  }
+
   onClickDeleteBulk() {
     if (!confirm('Are you sure?')) return;
+    this.clearSelection();
     var period = this.shadowRoot.querySelector('#delete-period').value;
 
     // clear all history
