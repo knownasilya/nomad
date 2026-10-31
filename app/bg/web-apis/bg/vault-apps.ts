@@ -296,19 +296,25 @@ export function spaceNameOf(space) {
   return s?.name || null;
 }
 
+// A viewer of a shared Space can't add to its Notes (ADR-0029).
+async function canWriteNotesIn(space) {
+  return (await spaceLibrary.records(space, 'notes').catch(() => ({ writable: false }))).writable;
+}
+
 // Create (no id) or update a Note, and return the stored Note. `baseUpdatedAt` is the updatedAt of
 // the version the editor started from. If another Device saved the Note since then, this edit is
 // kept as a new Note, a conflict copy, and that copy is returned (its id differs, conflictOf names
-// the original). A new Note is the caller's Space's when `inSpace` is true, else the user's; an
-// existing one stays where it is, and so does its conflict copy. `space` names the Space for a
-// caller with no page (the AI on another Device's turn).
+// the original). A new Note is the caller's Space's when `inSpace` is true and the user can write
+// the Space's Notes (not a viewer of a shared Space), else the user's; an existing one stays where
+// it is, and so does its conflict copy. `space` names the Space for a caller with no page (the AI
+// on another Device's turn).
 export async function saveNote(
   ctx,
   { id, body, baseUpdatedAt, inSpace = false, space = undefined }: { id?: string; body?: string; baseUpdatedAt?: string; inSpace?: boolean; space?: string | null } = {}
 ) {
   const callerSpace = space === undefined ? await spaceOrNull(ctx) : apps.isSpaceKey(space) ? space : null;
   const found = id ? await findStored(id, callerSpace) : { space: null, prev: null };
-  const where = found.prev ? found.space : inSpace && callerSpace ? callerSpace : null;
+  const where = found.prev ? found.space : inSpace && callerSpace && (await canWriteNotesIn(callerSpace)) ? callerSpace : null;
   const { note, write } = apps.planNoteSave({ id, body, baseUpdatedAt }, found.prev);
   if (write) await putNote(where, note);
   if (note.conflictOf && note.conflictOf === id) logger.info('Saved a note conflict copy', { id, copy: note.id });

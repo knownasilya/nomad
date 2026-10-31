@@ -92,13 +92,15 @@ class SiteInfoApp extends LitElement {
         nomad.browser.toggleSiteInfo(false);
       }
     });
+    // Only clicks on links: cancelling every click would also cancel a submit button's click,
+    // and with it the name and ask-to-edit forms (Enter submits through that click too).
     const globalAnchorClickHandler = (isPopup) => (e) => {
-      e.preventDefault();
       var a = (e.composedPath ? e.composedPath() : e.path || []).reduce(
         (acc, v) => acc || (v.tagName === 'A' ? v : undefined),
         undefined
       );
       if (a) {
+        e.preventDefault();
         var href = a.getAttribute('href');
         if (href && href !== '#' && !href.startsWith('nomad://')) {
           if (isPopup || e.metaKey || a.getAttribute('target') === '_blank') {
@@ -133,6 +135,8 @@ class SiteInfoApp extends LitElement {
     this.requestedPerms = undefined;
     this.forks = undefined;
     this.edit = undefined;
+    this.naming = null;
+    this.askingEdit = false;
     contextMenu.destroy();
   }
 

@@ -80,6 +80,7 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
         id: id || undefined,
         body,
         baseUpdatedAt,
+        inSpace: true, // a new Note is kept in the turn's Space, as in the Notes app
         space: await readerSpace().catch(() => null),
       });
       return json({
