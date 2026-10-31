@@ -44,6 +44,10 @@ Notes and Reader show both, in two sections: the Space's name ("Work") and **All
   the Space's. In a shared Space, a new Note goes to the Space and shows who can see it ("Shared
   with 2 people"), with **Keep private** to make it the user's. Names stay the user's by default
   everywhere, because a Name is a navigation shortcut.
+  *Amendment (2026-10-31):* a new Note now goes to the Space you are in, shared or not (the Personal
+  Space too), with **All Spaces** to make it the user's. Notes made in a Space are about that Space
+  far more often than not. A viewer of a shared Space still keeps a new Note to themselves, and a
+  Note from a Highlight stays the user's, because the Highlight shows in every Space.
 - **Always the user's:** Highlights, Mods, Drafts, settings and Reader read marks. Read marks are
   each person's own, even in a shared Space.
 - **Moving an item** between the Space and All Spaces is a menu action on the item.

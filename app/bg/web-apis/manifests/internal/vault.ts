@@ -72,6 +72,12 @@ export default {
   saveMod: 'promise', // ({ id?, name?, site?, enabled?, presets?, hide?, css?, js? }) -> record
   deleteMod: 'promise',
 
+  // AI memory (bg/ai/memory.js, ADR-0032): nomad://ai/memory
+  listMemories: 'promise', // ({ query? }) -> { memories: [{ id, text, by, createdAt, updatedAt }], enabled, max }
+  saveMemory: 'promise', // ({ id?, text }) -> record; a user's edit, so `by` is 'user'
+  deleteMemory: 'promise', // (id)
+  clearMemories: 'promise', // () -> how many were deleted
+
   // AI Jobs (bg/ai/jobs.js, ADR-0030)
   listJobs: 'promise', // -> { jobs: [{ ...job, lastRun, nextRunAt, running, here, deviceName }] }
   listJobRuns: 'promise', // (id) -> runs, newest first

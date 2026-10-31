@@ -106,6 +106,21 @@ export function fallbackTitle(href) {
   return host;
 }
 
+// A pin's address as its tile's tooltip shows it: no http(s):// or www., no lone trailing slash,
+// and a hyper:// key cut short like fallbackTitle.
+export function pinTooltipUrl(url) {
+  const s = String(url || '');
+  const m = /^([a-z][a-z0-9+.-]*):\/\/([^/?#]*)(.*)$/is.exec(s);
+  if (!m) return s;
+  const scheme = m[1].toLowerCase();
+  let host = m[2];
+  const rest = m[3] === '/' ? '' : m[3];
+  if (scheme === 'http' || scheme === 'https') return host.replace(/^www\./i, '') + rest;
+  if (scheme === 'hyper' && /^[0-9a-z]{52,64}$/i.test(host))
+    host = `${host.slice(0, 6)}…${host.slice(-4)}`;
+  return `${scheme}://${host}${rest}`;
+}
+
 // [{ href, title }] for `pins`, each titled by its bookmark (`bookmarks`: [{ href, title }]).
 export function titledPins(pins, bookmarks = []) {
   const titles = new Map();

@@ -42,7 +42,8 @@ const TOOLS: [string, string][] = [['heading', 'H'], ['bold', 'B'], ['italic', '
 // leave it. Retitling a note updates the links to it. Another Device's edits show while this is open.
 // Back from a note reached by a [[link]] returns to the note the link was in, then to the list.
 // A note is the user's, shown in every Space, or kept only in the active Space (ADR-0029): the list
-// shows the Space's first, and the pin in the editor moves a note between the two.
+// shows the Space's first, and the pin in the editor moves a note between the two. A new note is
+// kept in the active Space.
 export default function Notes ({ visible, onClose, apps, onVaultChange, space, spaceName, onOpenDevices, onOpenUrl, openNoteId }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
@@ -198,7 +199,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
   const openEditor = (note: Note | null, { body = '', heading = '' } = {}) => {
     draft.current = note
       ? { id: note.id, body: note.body, title: note.title, base: note.updatedAt, openedTitle: note.title, conflictOf: note.conflictOf || null, inSpace: !!note.space }
-      : { id: null, body, title: '', base: null, openedTitle: null, conflictOf: null, inSpace: !!space && shared && canWriteSpace }
+      : { id: null, body, title: '', base: null, openedTitle: null, conflictOf: null, inSpace: !!space && canWriteSpace } // a new note is kept in this Space
     setInSpace(draft.current.inSpace)
     dirty.current = !note && !!body
     pendingHeading.current = heading

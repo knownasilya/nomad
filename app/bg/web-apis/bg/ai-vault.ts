@@ -1,4 +1,4 @@
-// The AI's Notes, Highlights, Reader, Mods and Jobs capabilities (search-execute.mjs CAPABILITIES,
+// The AI's Notes, Highlights, Reader, Mods, Jobs and memory capabilities (search-execute.mjs CAPABILITIES,
 // ADR-0019, ADR-0023, ADR-0030): the
 // Vault and Drive reads and writes behind them. ai.ts executeTool calls runVaultTool on a personal turn only
 // (the user's own AI); each capability first asks its permission (vault-tools.mjs VAULT_TOOL_PERMS).
@@ -12,6 +12,7 @@ import * as vaultApps from './vault-apps';
 import { highlightForAi, assertCanHighlight } from '../../ui/highlights';
 import * as mods from '../../ui/mods';
 import * as jobs from '../../ai/jobs';
+import * as memory from '../../ai/memory';
 import { readJobSource } from './job-source';
 import * as vault from '../../hyper/vault';
 import { describeSchedule } from '../../../../shared/jobs.mjs';
@@ -80,6 +81,7 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
         id: id || undefined,
         body,
         baseUpdatedAt,
+        inSpace: true, // a new Note is kept in the turn's Space, as in the Notes app
         space: await readerSpace().catch(() => null),
       });
       return json({
@@ -220,6 +222,24 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
       if (!job) throw new Error('No Job with that id. Use listJobs to find it.');
       await jobs.remove(job.id);
       return `Deleted the Job “${job.title}” (${describeSchedule(job.schedule).toLowerCase()})`;
+    }
+
+    // What the AI remembers about the user (bg/ai/memory.js, ADR-0032). A new memory that says what
+    // one already says is not saved twice.
+    case 'remember': {
+      if (!(await memory.isEnabled())) throw new Error('The user turned AI memory off');
+      const id = typeof args.id === 'string' && args.id ? args.id : undefined;
+      if (id && !memory.get(id)) throw new Error('No memory with that id');
+      const rec: any = await memory.save({ id, text: args.text, by: 'ai' });
+      if (rec.existed) return `Already remembered [${rec.id}]: ${rec.text}`;
+      return `${id ? 'Changed' : 'Remembered'} [${rec.id}]: ${rec.text}`;
+    }
+
+    case 'forget': {
+      const m = memory.get(args.id);
+      if (!m) throw new Error('No memory with that id');
+      await memory.remove(m.id);
+      return `Forgot: ${m.text}`;
     }
   }
   throw new Error(`Unknown capability ${name}`);

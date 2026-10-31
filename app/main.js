@@ -39,6 +39,7 @@ import * as windowMenu from './bg/ui/window-menu';
 import registerContextMenu from './bg/ui/context-menu';
 import * as highlights from './bg/ui/highlights';
 import * as mods from './bg/ui/mods';
+import * as aiMemory from './bg/ai/memory';
 import * as pageControl from './bg/ui/page-control';
 import * as openTabs from './bg/ui/open-tabs';
 import * as remoteUpdate from './bg/remote-update';
@@ -190,6 +191,8 @@ app.on('ready', async function () {
   await highlights.setup();
   // The user's Mods (custom styles and scripts per site), from the Vault.
   mods.setup();
+  // What the user's assistant remembers about them, from the Vault (ADR-0032).
+  aiMemory.setup();
   // The AI Sidebar's cursor on a page: the bar's Stop, and the user taking over.
   pageControl.setup();
   // This Device's open tabs, published to the Vault for the user's other Devices.
@@ -211,7 +214,7 @@ app.on('ready', async function () {
   vault.syncSpacesToVault().catch((e) => log.warn('Could not sync spaces to the Vault', { error: e.toString() }));
   // The user's names (hyper://<name>/ and the URL bar), from the Vault.
   names.setup();
-  // The AI names sites the user visits often (Settings → AI turns it off).
+  // The AI names sites the user visits often (the AI page, nomad://ai/setup, turns it off).
   autoNames.setup({ complete: completeText });
   readerArticles.setup({ complete: completeText });
   // The user's AI Jobs: this Device runs the ones it owns when they're due (Vault records).

@@ -177,11 +177,23 @@ const VAULT_PROMPTS: Record<string, { title: string; message: string }> = {
   modsRead: { title: 'Allow AI to read your Mods?', message: 'The AI running on your other device wants to read your Mods: your own styles and scripts for sites.' },
   modsWrite: { title: 'Allow AI to change your Mods?', message: 'The AI running on your other device wants to create or change your Mods. A Mod can run a script on every page of its site.' },
   jobsRead: { title: 'Allow AI to see your Jobs?', message: 'The AI running on your other device wants to see your AI Jobs and their results.' },
-  jobsWrite: { title: 'Allow AI to change your Jobs?', message: 'The AI running on your other device wants to create, change or run your AI Jobs. A Job runs a prompt by itself, reads your Notes and Reader, and notifies this phone.' }
+  jobsWrite: { title: 'Allow AI to change your Jobs?', message: 'The AI running on your other device wants to create, change or run your AI Jobs. A Job runs a prompt by itself, reads your Notes and Reader, and notifies this phone.' },
+  memoryWrite: { title: 'Allow AI to remember things?', message: 'The AI running on your other device wants to remember something about you for later chats, or forget something. You can see and change what it remembers on the AI page on your computer.' }
+}
+
+// The AI using one of the user's secrets (ADR-0033): `aiSecretUse:<NAME>`. The secret stays on the
+// computer; the phone only says yes or no.
+function secretPrompt (permission: string): { title: string; message: string } | null {
+  const m = /^aiSecretUse:([A-Z][A-Z0-9_]{1,63})$/.exec(permission)
+  if (!m) return null
+  return {
+    title: `Allow AI to use ${m[1]}?`,
+    message: `The AI running on your other device wants to send requests with your secret ${m[1]}, to the sites you allowed for it. It never sees the secret itself.`
+  }
 }
 
 function confirmAiPermission (permission: string, drive?: { name: string; url: string }): Promise<boolean> {
-  const vaultPrompt = VAULT_PROMPTS[permission]
+  const vaultPrompt = VAULT_PROMPTS[permission] || secretPrompt(permission)
   const name = drive?.name || 'this drive'
   const url = drive?.url || ''
   const title = vaultPrompt ? vaultPrompt.title : 'Allow AI to edit?'

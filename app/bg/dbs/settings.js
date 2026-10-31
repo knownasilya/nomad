@@ -42,6 +42,7 @@ const GLOBAL_SETTINGS = new Set([
   'ai_keep_awake',
   'ai_auto_names',
   'ai_reader_topics',
+  'ai_memory',
   'ai_sidebar_width',
   'cert_exceptions',
   'crawler_enabled',
@@ -125,10 +126,13 @@ export const setup = async function (opts) {
     ai_space_default: '',
     ai_share_provider: 0, // opt-in (ADR-0013 §7): off until the user shares this Device's AI
     ai_keep_awake: 0, // opt-in: hold a powerSaveBlocker while sharing, so an idle Device stays reachable
-    // The AI names sites the user visits often (bg/hyper/auto-names.js). Settings → AI turns it off.
+    // The AI names sites the user visits often (bg/hyper/auto-names.js). The AI page turns it off.
     ai_auto_names: 1,
     // The AI sorts the articles saved to Reader into topics (bg/web-apis/bg/reader-articles.ts).
     ai_reader_topics: 1,
+    // The user's assistant remembers things about them across chats (bg/ai/memory.js, ADR-0032).
+    // nomad://ai/memory turns it off.
+    ai_memory: 1,
     // Run the discovery crawler that nomad://search queries (bg/hyper/crawler-host.js). Synced to
     // the user's other Devices through the Vault (bg/hyper/synced-settings.js).
     crawler_enabled: 1,

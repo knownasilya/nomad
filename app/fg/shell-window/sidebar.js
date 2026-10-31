@@ -4,10 +4,12 @@ import { repeat } from 'lit/directives/repeat.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import spinnerCSS from './spinner.css';
 import * as bg from './bg-process-rpc';
-import { pinTiles } from '../../../shared/pins.mjs';
+import { pinTiles, pinTooltipUrl } from '../../../shared/pins.mjs';
 
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 480;
+// How long the pointer rests on a pin tile before its tooltip shows (ms)
+const PIN_TIP_DELAY = 400;
 
 const SPACE_COLORS = [
   '#6c6cff',
@@ -38,6 +40,8 @@ class ShellWindowSidebar extends LitElement {
       isCreatingSpace: { type: Boolean },
       newSpaceName: { type: String },
       newSpaceColor: { type: String },
+      // The hovered pin tile's tooltip, { href, title, url }, while it shows
+      _pinTip: { state: true },
     };
   }
 
@@ -48,6 +52,8 @@ class ShellWindowSidebar extends LitElement {
     this.pinsWritable = true;
     // The pin tile being dragged (its href), while one is.
     this.draggedPinHref = null;
+    this._pinTip = null;
+    this._pinTipTimer = null;
     this.spaces = [];
     this.activeSpace = null;
     this.groups = [];
@@ -136,7 +142,7 @@ class ShellWindowSidebar extends LitElement {
             <span class="fas fa-chevron-${isLeft ? 'left' : 'right'}"></span>
           </button>
         </div>
-        <div class="sidebar-tabs">
+        <div class="sidebar-tabs" @scroll=${this._hidePinTip}>
           ${this._renderPins(tiles)}
           ${repeat(
             this._buildItems(),
@@ -159,7 +165,7 @@ class ShellWindowSidebar extends LitElement {
         ${this._renderSpacesDropdown()
           ? html` <div class="sidebar-footer">${this._renderSpacesDropdown()}</div> `
           : ''}
-        ${this._renderResizeHandle(isLeft)}
+        ${this._renderResizeHandle(isLeft)} ${this._renderPinTip()}
       </div>
     `;
   }
@@ -205,10 +211,11 @@ class ShellWindowSidebar extends LitElement {
     return html`
       <div
         class="${cls}"
-        title=${tile.title}
         role="button"
         aria-label=${tile.title}
         draggable=${this.pinsWritable ? 'true' : 'false'}
+        @mouseenter=${(e) => this._onMouseenterPin(e, tile)}
+        @mouseleave=${this._hidePinTip}
         @click=${() => this._onClickPin(tile)}
         @mousedown=${(e) => this._onMousedownPin(e, tile)}
         @contextmenu=${() => this._onContextmenuPin(tile)}
@@ -230,6 +237,24 @@ class ShellWindowSidebar extends LitElement {
         ${tab?.isCurrentlyAudible && !tab.isAudioMuted
           ? html`<span class="fas fa-volume-up pin-audio"></span>`
           : ''}
+      </div>
+    `;
+  }
+
+  // The hovered pin's name and address. A title attribute's native tooltip doesn't show here: the
+  // page's view has focus, not the shell window. The tip stays inside the sidebar, since the page's
+  // view covers the window beside it.
+  _renderPinTip() {
+    const tip = this._pinTip;
+    if (!tip) return '';
+    return html`
+      <div
+        class="pin-tip"
+        role="tooltip"
+        style=${styleMap({ maxWidth: `${this.sidebarWidth - 12}px` })}
+      >
+        <div class="pin-tip-title">${tip.title}</div>
+        ${tip.url ? html`<div class="pin-tip-url">${tip.url}</div>` : ''}
       </div>
     `;
   }
@@ -632,6 +657,54 @@ class ShellWindowSidebar extends LitElement {
 
   // pins
 
+  _onMouseenterPin(e, tile) {
+    this._hidePinTip();
+    const el = e.currentTarget;
+    this._pinTipTimer = setTimeout(() => this._showPinTip(el, tile), PIN_TIP_DELAY);
+  }
+
+  async _showPinTip(el, tile) {
+    this._pinTipTimer = null;
+    if (!el.isConnected || this.draggedPinHref || this.draggedTabIndex !== null) return;
+    const tab = tile.index >= 0 ? this.tabs[tile.index] : null;
+    const title = tile.title || tab?.title || '';
+    let url = pinTooltipUrl(tab?.url || tile.href);
+    if (url === title) url = '';
+    this._pinTip = {
+      href: tile.href,
+      title: title || url,
+      url: title ? url : '',
+    };
+    await this.updateComplete;
+    this._placePinTip(el);
+  }
+
+  // Below the tile (above it near the bottom of the window), centered on it but kept 6px inside the
+  // sidebar's edges.
+  _placePinTip(el) {
+    const tipEl = this.shadowRoot.querySelector('.pin-tip');
+    const sidebarEl = this.shadowRoot.querySelector('.sidebar');
+    if (!tipEl || !sidebarEl || !el.isConnected) return;
+    const tile = el.getBoundingClientRect();
+    const bar = sidebarEl.getBoundingClientRect();
+    const tip = tipEl.getBoundingClientRect();
+    const left = Math.max(
+      bar.left + 6,
+      Math.min(tile.left + tile.width / 2 - tip.width / 2, bar.right - 6 - tip.width)
+    );
+    let top = tile.bottom + 6;
+    if (top + tip.height > window.innerHeight - 6) top = tile.top - 6 - tip.height;
+    tipEl.style.left = `${left}px`;
+    tipEl.style.top = `${top}px`;
+    tipEl.classList.add('shown');
+  }
+
+  _hidePinTip() {
+    clearTimeout(this._pinTipTimer);
+    this._pinTipTimer = null;
+    if (this._pinTip) this._pinTip = null;
+  }
+
   _onClickPin(tile) {
     if (tile.index >= 0) bg.views.setActiveTab(tile.index);
     else bg.views.openPin(tile.href);
@@ -639,6 +712,7 @@ class ShellWindowSidebar extends LitElement {
 
   // Middle-click closes a pin's tab; the tile stays.
   _onMousedownPin(e, tile) {
+    this._hidePinTip();
     if (e.which === 2 && tile.index >= 0) bg.views.closeTab(tile.index);
   }
 
@@ -648,6 +722,7 @@ class ShellWindowSidebar extends LitElement {
   }
 
   _onDragstartPin(e, tile) {
+    this._hidePinTip();
     this.draggedPinHref = tile.href;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', tile.href);
@@ -959,6 +1034,46 @@ ShellWindowSidebar.styles = css`
   .pin .spinner {
     width: 14px;
     height: 14px;
+  }
+
+  /* the hovered pin's tooltip (_renderPinTip): lifted like the current tab */
+  .pin-tip {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 200;
+    box-sizing: border-box;
+    padding: 6px 9px;
+    background: var(--bg-color--tab--current);
+    border: 1px solid var(--border-color--tab);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  .pin-tip.shown {
+    visibility: visible;
+  }
+
+  .pin-tip-title,
+  .pin-tip-url {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .pin-tip-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-color--default, var(--text-color--tab--title));
+  }
+
+  .pin-tip-url {
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--text-color--tab--title);
+    opacity: 0.7;
   }
 
   .pin-audio {

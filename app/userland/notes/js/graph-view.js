@@ -1,4 +1,5 @@
-// The Notes canvas, drawn in SVG: one dot per note, a line per link (./graph.js lays them out).
+// The Notes canvas, drawn in SVG: one dot per note, a line per link with an arrowhead at the note
+// it links to (two when the notes link both ways). ./graph.js lays them out.
 // Drag the background to pan, scroll or pinch to zoom, drag a note to move it. Clicking a note (or
 // Enter on a focused one) calls onOpen(id). Hovering a note lights up its links. Colors come from
 // the --nts-graph-* variables in css/main.css, so it follows light and dark.
@@ -10,6 +11,9 @@ const MIN_SCALE = 0.15;
 const MAX_SCALE = 4;
 const LABEL_SCALE = 0.7; // below this zoom only the hovered and open notes keep a title
 const CLICK_SLOP = 4; // px a press can move and still count as a click
+const ARROW_LENGTH = 8; // the arrowhead, in canvas units (it zooms with the notes)
+const ARROW_HALF_WIDTH = 3.6;
+const ARROW_GAP = 1.5; // between the tip and the note's dot
 
 export function createGraphView({ parent, onOpen }) {
   const svg = svgEl('svg', { class: 'graph-svg', role: 'group', 'aria-label': 'Notes and their links' });
@@ -23,7 +27,8 @@ export function createGraphView({ parent, onOpen }) {
   let graph = { nodes: [], links: [] };
   let layout = createLayout(graph);
   let nodeEls = [];
-  let linkEls = [];
+  let linkEls = []; // per link: { g, line, arrows: [at target, at source?] }
+  let radii = [];
   let currentId = null;
   let query = '';
   let hoverId = null;
@@ -46,7 +51,9 @@ export function createGraphView({ parent, onOpen }) {
       next.nodes.length === graph.nodes.length &&
       next.links.length === graph.links.length &&
       next.nodes.every((n, i) => n.id === graph.nodes[i].id && n.title === graph.nodes[i].title) &&
-      next.links.every((l, i) => l.source === graph.links[i].source && l.target === graph.links[i].target);
+      next.links.every(
+        (l, i) => l.source === graph.links[i].source && l.target === graph.links[i].target && l.both === graph.links[i].both
+      );
     if (!same) {
       const fresh = next.nodes.some((n) => !prev.has(n.id));
       graph = next;
@@ -66,10 +73,17 @@ export function createGraphView({ parent, onOpen }) {
   // ── Drawing ──
 
   function build() {
-    linkEls = graph.links.map(() => svgEl('line', { class: 'graph-link' }));
-    linksG.replaceChildren(...linkEls);
-    nodeEls = graph.nodes.map((n) => {
-      const r = 4 + Math.sqrt(n.degree) * 2.6;
+    linkEls = graph.links.map((l) => {
+      const g = svgEl('g', { class: 'graph-link' });
+      const line = svgEl('line', {});
+      const arrows = (l.both ? [0, 1] : [0]).map(() => svgEl('path', { class: 'graph-arrow' }));
+      g.append(line, ...arrows);
+      return { g, line, arrows };
+    });
+    linksG.replaceChildren(...linkEls.map((el) => el.g));
+    radii = graph.nodes.map((n) => 4 + Math.sqrt(n.degree) * 2.6);
+    nodeEls = graph.nodes.map((n, i) => {
+      const r = radii[i];
       const g = svgEl('g', { class: 'graph-node', tabindex: '0', role: 'button', 'aria-label': n.title });
       g.append(svgEl('circle', { r: String(r) }), svgEl('text', { y: String(r + 13), 'text-anchor': 'middle' }));
       g.lastChild.textContent = n.title;
@@ -92,16 +106,41 @@ export function createGraphView({ parent, onOpen }) {
 
   function draw() {
     const pts = layout.points;
-    graph.links.forEach((l, i) => {
-      const s = pts[l.source];
-      const t = pts[l.target];
-      const line = linkEls[i];
-      line.setAttribute('x1', s.x.toFixed(1));
-      line.setAttribute('y1', s.y.toFixed(1));
-      line.setAttribute('x2', t.x.toFixed(1));
-      line.setAttribute('y2', t.y.toFixed(1));
-    });
+    graph.links.forEach((l, i) => drawLink(linkEls[i], pts[l.source], pts[l.target], radii[l.source], radii[l.target]));
     nodeEls.forEach((g, i) => g.setAttribute('transform', `translate(${pts[i].x.toFixed(1)},${pts[i].y.toFixed(1)})`));
+  }
+
+  // The line from s to t, with its arrowhead touching t's dot (and s's, when it points both ways).
+  // The line stops at the base of an arrowhead so the two don't overlap. Notes too close for an
+  // arrowhead get the plain line.
+  function drawLink({ line, arrows }, s, t, rs, rt) {
+    const dx = t.x - s.x;
+    const dy = t.y - s.y;
+    const d = Math.hypot(dx, dy);
+    const both = arrows.length > 1;
+    const room = d - rt - rs - ARROW_GAP * 2;
+    const fits = d > 0 && room > ARROW_LENGTH * arrows.length + 2;
+    const ux = fits ? dx / d : 0;
+    const uy = fits ? dy / d : 0;
+    const back = ARROW_GAP + ARROW_LENGTH - 0.5;
+    const x1 = fits && both ? s.x + ux * (rs + back) : s.x;
+    const y1 = fits && both ? s.y + uy * (rs + back) : s.y;
+    const x2 = fits ? t.x - ux * (rt + back) : t.x;
+    const y2 = fits ? t.y - uy * (rt + back) : t.y;
+    line.setAttribute('x1', x1.toFixed(1));
+    line.setAttribute('y1', y1.toFixed(1));
+    line.setAttribute('x2', x2.toFixed(1));
+    line.setAttribute('y2', y2.toFixed(1));
+    arrows.forEach((arrow, k) => {
+      if (!fits) return arrow.setAttribute('d', '');
+      // k 0 points at t, k 1 back at s.
+      const sign = k ? -1 : 1;
+      const end = k ? s : t;
+      const r = k ? rs : rt;
+      const vx = ux * sign;
+      const vy = uy * sign;
+      arrow.setAttribute('d', arrowPath(end.x - vx * (r + ARROW_GAP), end.y - vy * (r + ARROW_GAP), vx, vy));
+    });
   }
 
   // Classes for the open note, the hovered note and its links, and the search.
@@ -116,11 +155,11 @@ export function createGraphView({ parent, onOpen }) {
       g.classList.toggle('near', !!near && near.has(n.id));
       g.classList.toggle('dim', (!!near && n.id !== hoverId && !near.has(n.id)) || (!!q && !matchesBody(n.id, q)));
     });
-    linkEls.forEach((line, i) => {
+    linkEls.forEach(({ g }, i) => {
       const l = graph.links[i];
       const on = hoverIndex >= 0 && (l.source === hoverIndex || l.target === hoverIndex);
-      line.classList.toggle('hover', on);
-      line.classList.toggle('dim', (hoverIndex >= 0 && !on) || !!q);
+      g.classList.toggle('hover', on);
+      g.classList.toggle('dim', (hoverIndex >= 0 && !on) || !!q);
     });
     svg.classList.toggle('labels', view.k >= LABEL_SCALE);
   }
@@ -282,6 +321,17 @@ export function createGraphView({ parent, onOpen }) {
       svg.remove();
     },
   };
+}
+
+// An arrowhead with its tip at (x, y), pointing along the unit vector (vx, vy), notched at the back.
+function arrowPath(x, y, vx, vy) {
+  const bx = x - vx * ARROW_LENGTH;
+  const by = y - vy * ARROW_LENGTH;
+  const nx = -vy * ARROW_HALF_WIDTH;
+  const ny = vx * ARROW_HALF_WIDTH;
+  const notch = ARROW_LENGTH * 0.22;
+  const f = (v) => v.toFixed(1);
+  return `M${f(x)},${f(y)}L${f(bx + nx)},${f(by + ny)}L${f(bx + vx * notch)},${f(by + vy * notch)}L${f(bx - nx)},${f(by - ny)}Z`;
 }
 
 function svgEl(tag, attrs) {

@@ -23,6 +23,7 @@ import {
   setSidebarWidth,
   toggleSidebarCollapsed,
   toggleAiSidebarOpen,
+  setAiSidebarOpen,
   setAiSidebarWidth,
 } from '../windows';
 import { examineLocationInput } from '../../../lib/urls';
@@ -1530,6 +1531,24 @@ export function openOrFocusDownloadsPage(win) {
     downloadsTab = create(win, 'nomad://library/downloads');
   }
   setActive(win, downloadsTab);
+}
+
+// The AI page (nomad://ai/chats) opens a chat in the AI Sidebar of its window: the sidebar opens
+// and switches to `sessionId`, or to a new chat when it's null (fg/shell-window/ai-sidebar.js).
+export function openAiSidebarChat(win, sessionId = null) {
+  win = getTopWindow(win);
+  if (!win) return;
+  setAiSidebarOpen(win, true);
+  emit(win, 'ai-open-chat', { sessionId: sessionId || null });
+}
+
+// A chat was renamed or deleted on the AI page: every window's sidebar refreshes its list, and one
+// showing a deleted chat starts a new one.
+export function emitAiChatsChanged(change = {}) {
+  for (let win of BrowserWindow.getAllWindows()) {
+    if (win.getParentWindow()) continue;
+    emit(win, 'ai-chats-changed', change);
+  }
 }
 
 export function emitReplaceStateAllWindows() {
