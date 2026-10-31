@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.26.3](https://github.com/knownasilya/nomad/compare/v1.26.2...v1.26.3) (2026-10-31)
+
+
+### Bug Fixes
+
+* **create-drive:** keep the template cards inside the modal ([5e46a17](https://github.com/knownasilya/nomad/commit/5e46a17c1f3f1e393a28bae93d120ce59a47cb05))
+* **notes:** keep task lines as a checkbox while editing ([e3f65f7](https://github.com/knownasilya/nomad/commit/e3f65f7267c85de5c72c465e689544da1262f7c3))
+
 ### [1.26.2](https://github.com/knownasilya/nomad/compare/v1.26.1...v1.26.2) (2026-10-31)
 
 
