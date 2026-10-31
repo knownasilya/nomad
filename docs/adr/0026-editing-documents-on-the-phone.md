@@ -93,6 +93,14 @@ also handles revoking: a record whose `device` is no longer listed is taken off 
 syncing desktop writes, so it doesn't matter which app removed the Device. A drive this desktop
 first opened on the root store keeps that key and can't be granted (spike S1 in ADR-0029).
 
+*Amendment (Space Root Drives on the phone):* the phone asks the same way for each Space Root Drive
+it didn't create, since a Space synced from desktop holds its bookmarks, pins and drive list there.
+Pairing's fan-out adds the phone's Vault key, which a Root Drive opened in `autobase:<key>` doesn't
+use, so without this the Space stayed read-only on the phone. `openRoot` in `mobile/backend/backend.mjs`
+asks when it reads the Space (`askToEdit` in `mobile/backend/lib/space-library.mjs`), and
+`writableRoot` asks and waits a few seconds before a change, so with a computer online a pin goes
+through on the first tap.
+
 ### 3. Writes use whatever base is writable
 
 `DriveManager` drops the `ns`-required `_openOwned` for a `_openWritable(key)` that opens the drive in

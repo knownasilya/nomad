@@ -719,6 +719,47 @@ async function handleAddVaultSpace ({ reqId, rootDriveKey, name, icon, color }) 
   }
 }
 
+// A Space's Root Drive holds its bookmarks, pins and drive list, so each of the user's Devices
+// should write it. Desktop's pairing fan-out adds this phone's Vault key, but the phone opens a Root
+// Drive it didn't create in that drive's own namespace (ADR-0026 §1), whose key nobody added, so a
+// Space synced from desktop stayed read-only here. Ask the user's Devices for that key, as desktop
+// does for its own (askForSpaceRoots in app/bg/hyper/drive-writers.js); a computer that writes the
+// drive adds it. `ns` set means this phone created the Space and already writes it.
+const ROOT_ASK_EVERY = 60000
+const ROOT_GRANT_WAIT = 6000 // under the UI's 12 s request timeout
+const rootAskedAt = new Map() // rootDriveKey -> last time we checked for a request
+function askForRoot (rootDriveKey, base) {
+  rootAskedAt.set(rootDriveKey, Date.now())
+  return spaceLib.askToEdit({ vault }, rootDriveKey, base)
+    .catch((err) => { console.log('[drive-writers] ask failed', err && err.message); return false })
+}
+
+// Open a Space's Root Drive to read it, and ask for this phone's writer key when it can't write it.
+async function openRoot (rootDriveKey, ns) {
+  const entry = await manager.open(DRIVE_AUTOBASE, b4a.from(rootDriveKey, 'hex'), () => {}, ns)
+  if (!ns && vault && !entry.drive.writable && Date.now() - (rootAskedAt.get(rootDriveKey) || 0) > ROOT_ASK_EVERY) {
+    askForRoot(rootDriveKey, entry.drive)
+  }
+  return entry
+}
+
+// Before a change to a Space's Root Drive. When this phone can't write it yet, ask, and wait a few
+// seconds: with a computer online the grant usually lands in that time and the change goes through.
+async function writableRoot (rootDriveKey, ns) {
+  const entry = await manager.open(DRIVE_AUTOBASE, b4a.from(rootDriveKey, 'hex'), () => {}, ns)
+  const base = entry.drive
+  if (base.writable || ns || !vault) return entry // the manager reports a read-only drive itself
+  await askForRoot(rootDriveKey, base)
+  for (const end = Date.now() + ROOT_GRANT_WAIT; !base.writable && Date.now() < end;) {
+    await Promise.race([base.update().catch(() => {}), new Promise((resolve) => setTimeout(resolve, 1000))])
+    if (!base.writable) await new Promise((resolve) => setTimeout(resolve, 500))
+  }
+  if (!base.writable) {
+    throw new Error('This phone asked your computer for permission to change this space. Open Nomad on your computer, then try again.')
+  }
+  return entry
+}
+
 // Bookmarks and pinned shortcuts in a space's Root Drive. Every reply carries both lists, so the UI
 // stays in step from any call. 'pin' with `addBookmark` also writes the bookmark, because desktop
 // only shows a pin that has one; the UI decides, since it knows the bookmark hrefs.
@@ -728,6 +769,8 @@ async function handleBookmarks ({ reqId, action, rootDriveKey, ns = null, href, 
     const lib = await libraryOf(rootDriveKey).catch(() => null)
     if (lib && action !== 'list' && !lib.writable) throw new Error('You can view this Space, but not change it')
     if (lib) ns = null
+    else if (action === 'list') await openRoot(rootDriveKey, ns)
+    else await writableRoot(rootDriveKey, ns)
     const key = lib ? spaceLib.registryKey(lib) : b4a.from(rootDriveKey, 'hex')
     if (action === 'add') await manager.addBookmark(key, ns, { href, title })
     else if (action === 'remove') await manager.removeBookmark(key, ns, href)
@@ -747,6 +790,7 @@ async function handleSpaceDrives ({ reqId, rootDriveKey, ns = null }) {
   try {
     // A shared Space lists its drives in its Space Library (ADR-0029).
     const lib = await libraryOf(rootDriveKey).catch(() => null)
+    if (!lib) await openRoot(rootDriveKey, ns)
     const drives = lib
       ? await manager.readDriveRegistry(spaceLib.registryKey(lib), null)
       : await manager.readDriveRegistry(b4a.from(rootDriveKey, 'hex'), ns)
@@ -761,6 +805,7 @@ async function handleSpaceAddDrive ({ reqId, rootDriveKey, ns = null, key, type 
   try {
     const lib = await libraryOf(rootDriveKey).catch(() => null)
     if (lib && !lib.writable) throw new Error('You can view this Space, but not change it')
+    if (!lib) await writableRoot(rootDriveKey, ns)
     const drives = lib
       ? await manager.addDriveToRegistry(spaceLib.registryKey(lib), null, { key, type })
       : await manager.addDriveToRegistry(b4a.from(rootDriveKey, 'hex'), ns, { key, type })

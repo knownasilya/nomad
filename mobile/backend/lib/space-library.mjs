@@ -62,6 +62,26 @@ export function registryKey (lib) {
   return b4a.from(lib.library, 'hex')
 }
 
+// Ask the user's Devices to add this phone's writer key for the drive `drive` (its key, hex) to
+// that drive: the Vault drive-writers flow (ADR-0026 §2). `base` is the drive as this phone opened
+// it, in its own namespace (ADR-0026 §1), so its `local` core is the key to ask for. A Device that
+// writes the drive adds the key and `base` turns writable by itself. Asks once per key: returns
+// true when it wrote a request now, false when one is already there or it can't ask.
+export async function askToEdit ({ vault }, drive, base) {
+  if (!vault?.writable || !base || base.writable) return false
+  const writerKey = hex(base.local?.key)
+  const device = hex(vault.local?.key)
+  // The Vault's own key can't be granted: a second base can't share that core (ADR-0029 spike S1).
+  if (!writerKey || !device || writerKey === device) return false
+  const grants = await readPrefix(vault, grantsPrefix(drive)).catch(() => [])
+  if (requestState(grants, { drive, writerKey })) return false
+  const own = await readRecord(vault, `/.vault/devices/${device}.json`).catch(() => null)
+  await vault.append(inlineOp(grantPath(drive, writerKey), makeGrantRequest({ drive, writerKey, device, name: own?.name })))
+  await boundedUpdate(vault)
+  console.log('[drive-writers] asked to edit', drive.slice(0, 8), 'writerKey', writerKey.slice(0, 8))
+  return true
+}
+
 // Keep this phone's place in a shared Space it can edit: ask the user's Devices for a writer key
 // on the Library (the Vault drive-writers flow, ADR-0026 §2, which a Device that writes the
 // Library answers), and once it writes, list its key on its own member record so an owner can take
@@ -71,14 +91,7 @@ export async function keepWriter ({ vault }, lib) {
   const writerKey = hex(lib.base.local?.key)
   const device = hex(vault.local?.key)
   if (!writerKey || !device) return false
-  if (!lib.writable) {
-    const grants = await readPrefix(vault, grantsPrefix(lib.library)).catch(() => [])
-    if (requestState(grants, { drive: lib.library, writerKey })) return false
-    const own = await readRecord(vault, `/.vault/devices/${device}.json`).catch(() => null)
-    await vault.append(inlineOp(grantPath(lib.library, writerKey), makeGrantRequest({ drive: lib.library, writerKey, device, name: own?.name })))
-    await boundedUpdate(vault)
-    return true
-  }
+  if (!lib.writable) return askToEdit({ vault }, lib.library, lib.base)
   if (!lib.memberId) return false
   const me = await readRecord(lib.base, sl.memberPath(lib.memberId)).catch(() => null)
   if (!sl.isMember(me) || (me.writers || []).includes(writerKey)) return false
