@@ -4,7 +4,7 @@ import { useTheme, type Theme } from '../lib/theme'
 import IconButton from './IconButton'
 import { confirmInstall, dismissUpdate, installUpdate, useUpdateState } from '../lib/updater'
 
-// A strip above the toolbar while an update is available or installing (lib/updater.ts).
+// A strip at the bottom of the browser while an update is available or installing (lib/updater.ts).
 // Nothing shows when there is no update.
 export default function UpdateBanner () {
   const t = useTheme()

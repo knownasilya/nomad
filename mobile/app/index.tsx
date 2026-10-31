@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, Image, StyleSheet, StatusBar, Alert, Keyboard, BackHandler, Platform, AppState } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WebView } from 'react-native-webview'
 import type { WebViewNavigation } from 'react-native-webview'
 import { router, useFocusEffect } from 'expo-router'
@@ -16,7 +16,6 @@ import Reader from '../components/Reader'
 import Notes from '../components/Notes'
 import Jobs from '../components/Jobs'
 import ActionSheet from '../components/ActionSheet'
-import IconButton from '../components/IconButton'
 import SiteIcon from '../components/SiteIcon'
 import { ListSection, ListRow, ListEmpty } from '../components/List'
 import Devices from '../components/Devices'
@@ -41,10 +40,12 @@ import { useNames, useNamesForUrl, useNameMatches, mayBeName } from '../lib/useN
 import NameSheet from '../components/NameSheet'
 import { resolveAddress, isHyperUrl, shortKey, hyperKeyOf, type DriveType } from '../lib/hyperUrl'
 import { useTheme, radius, type Theme } from '../lib/theme'
-import { CONSOLE_SHIM, FAVICON_JS, VIEW_SOURCE_JS, type ContentMsg, type StatusMsg, type ErrorMsg, type LogEntry } from '../lib/types'
+import { CONSOLE_SHIM, FAVICON_JS, THEME_COLOR_JS, VIEW_SOURCE_JS, type ContentMsg, type StatusMsg, type ErrorMsg, type LogEntry } from '../lib/types'
 import { publishTabs, setTabActions, type TabThumb } from '../lib/tabSwitcher'
 import { useShareOpenTabs, type DeviceTabsList, type SyncedSpace } from '../lib/openTabs'
 import { checkForUpdate } from '../lib/updater'
+import { parseColor, tintTheme } from '../lib/siteTheme'
+import webViewInsets from '../modules/nomad-webview-insets'
 import { pushScreen, closeScreen, loadEntry, pageLoaded, planStep, type NavEntry as StackEntry, type TabHistory } from '../lib/navStack'
 
 // Thumbnails for the tab grid are scaled to this width; a grid card is about half a phone wide.
@@ -80,6 +81,7 @@ interface Tab extends TabHistory<Screen> {
   draftPreviewing?: boolean // this tab is rendering the merged draft
   webCanGoBack?: boolean // the WebView on screen has its own history to step back through
   webCanGoForward?: boolean
+  themeColor?: string | null // the site's color for the top bar (THEME_COLOR_JS), until it leaves the site
 }
 
 let seq = 0
@@ -104,6 +106,12 @@ function blankTab (): Tab {
     settled: true,
     pendingStep: false
   }
+}
+
+// Same scheme and host (a hyper:// drive is its key): a site keeps its color across its own pages.
+function sameSite (a: string, b: string): boolean {
+  const site = (u: string) => (/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i.exec(u || '')?.[0] || '').toLowerCase()
+  return !!site(a) && site(a) === site(b)
 }
 
 // `sameDrive` => navigating to another file in the drive that's already open:
@@ -409,7 +417,7 @@ export default function Browser () {
       const session = newSession()
       setTabs((prev) =>
         prev.map((tb) => (tb.id === id
-          ? { ...tb, ...fields, ...loadEntry(tb, entry, push, session, sp), webCanGoBack: false, webCanGoForward: false }
+          ? { ...tb, ...fields, ...loadEntry(tb, entry, push, session, sp), webCanGoBack: false, webCanGoForward: false, themeColor: entry.kind !== 'home' && sameSite(tb.url, entry.url) ? tb.themeColor : null }
           : tb))
       )
       if (entry.kind === 'hyper') backend.open(id, entry.url, entry.driveType, entry.ns, entry.detect ?? true)
@@ -571,6 +579,12 @@ export default function Browser () {
           if (dataUrl || href) favicons.remember(msg.page, (dataUrl || href)!)
         }
       }
+      // The site's color for the top bar (THEME_COLOR_JS). Only the active tab's page is mounted.
+      else if (msg.type === 'theme-color') {
+        const color = parseColor(msg.color) ? String(msg.color) : null
+        const tab = tabsRef.current.find((tb) => tb.id === activeIdRef.current)
+        if (tab && tab.kind !== 'home' && (tab.themeColor ?? null) !== color) patch(tab.id, { themeColor: color })
+      }
       else if (msg.type === 'nomad-rpc' && msg.payload && msg.payload.id) {
         const wv = webviews.current[activeIdRef.current]
         backendRef.current.nomad(msg.payload).then((result) => {
@@ -602,7 +616,7 @@ export default function Browser () {
         delete aiHandles.current[msg.payload.id]
       }
     },
-    [navigate, describeDrive, favicons.remember]
+    [navigate, describeDrive, favicons.remember, patch]
   )
 
   const viewSource = useCallback(() => {
@@ -837,6 +851,12 @@ export default function Browser () {
     return () => setTabActions(null)
   }, [closeTab, openTab, closeAllTabs, openInNewTab, backend, spacesApi.activeSpace.rootDriveKey])
 
+  // Touch and hold on the tab count: a new tab, ready to type an address in.
+  const openTabAndType = useCallback(() => {
+    openTab()
+    setTimeout(() => addressRef.current?.focus(), 100)
+  }, [openTab])
+
   useFocusEffect(
     useCallback(() => {
       if (!focusAddressOnReturn.current) return
@@ -856,7 +876,10 @@ export default function Browser () {
 
   const onWebNav = useCallback(
     (id: string, nav: WebViewNavigation) => {
-      const fields = { url: nav.url, input: nav.url, title: nav.title || nav.url, loading: nav.loading, webCanGoBack: nav.canGoBack, webCanGoForward: nav.canGoForward }
+      const fields: Partial<Tab> = { url: nav.url, input: nav.url, title: nav.title || nav.url, loading: nav.loading, webCanGoBack: nav.canGoBack, webCanGoForward: nav.canGoForward }
+      // A link to another site drops the last site's color; the new page reports its own.
+      const prev = tabsRef.current.find((tb) => tb.id === id)
+      if (prev && !sameSite(prev.url, nav.url)) fields.themeColor = null
       if (nav.loading) return patch(id, fields)
       settlePage(id, nav.url, fields)
       persist.recordVisit(nav.url, nav.title || nav.url)
@@ -901,6 +924,11 @@ export default function Browser () {
   const canBack = active.sp > 0
   const canForward = active.sp < active.stack.length - 1
   const bookmarked = persist.isBookmarked(active.url)
+  const onHome = active.kind === 'home'
+  // The site's color for the top bar (and the status bar behind it); the app's own on a new tab.
+  const barTint = active.kind === 'home' ? undefined : active.themeColor ?? undefined
+  const barTheme = useMemo(() => tintTheme(t, barTint), [t, barTint])
+  const insets = useSafeAreaInsets()
   // Load the active space's drive registry (its drives, incl. ones added on other devices). A
   // shared space's /drives.json replicates a beat after the space record itself, so a single fetch
   // often comes back empty — retry a few times and keep the largest result, the same way the Vault
@@ -978,6 +1006,10 @@ export default function Browser () {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Keep the status and navigation bars' insets away from page WebViews, so a site that pads its own
+  // bars by env(safe-area-inset-bottom) sits flush with the bottom as in Chrome (modules/nomad-webview-insets).
+  useEffect(() => { webViewInsets?.install() }, [])
+
   // Look for a new release on launch and each time the app comes back to the front
   // (lib/updater.ts limits this to once an hour).
   useEffect(() => {
@@ -988,8 +1020,10 @@ export default function Browser () {
 
   return (
     <>
-    <SafeAreaView style={s.root} edges={['top', 'bottom']}>
-      <StatusBar barStyle={t.scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={t.bg} />
+    {/* The bar paints behind the status bar itself (topInset), so the site's color reaches the top
+        of the screen as in Chrome; the bottom edge keeps pages clear of the navigation bar. */}
+    <SafeAreaView style={s.root} edges={['bottom']}>
+      <StatusBar barStyle={barTheme.scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={barTheme.bg} />
       <AddressBar
         value={active.input}
         onChangeText={(text) => patch(active.id, { input: text })}
@@ -998,10 +1032,6 @@ export default function Browser () {
         loading={active.kind === 'hyper' && active.render?.type === 'loading'}
         isHyper={isHyperUrl(active.input)}
         driveType={active.driveType}
-        canBack={canBack}
-        canForward={canForward}
-        onBack={goBackActive}
-        onForward={() => { step(active.id, 1) }}
         onFocus={onUrlFocus}
         onBlur={onUrlBlur}
         hasDraft={!!active.hasDraft}
@@ -1010,6 +1040,15 @@ export default function Browser () {
         siteName={!urlFocused && activeNames?.approved ? activeNames.approved.name : ''}
         inputRef={addressRef}
         canReload={active.kind !== 'home'}
+        tint={barTint}
+        topInset={insets.top}
+        space={{ name: spacesApi.activeSpace.name, color: spacesApi.activeSpace.color, onPress: () => { spacesApi.syncFromVault(); setSpacesOpen(true) } }}
+        aiOpen={aiOpen}
+        onAi={() => setAiOpen(true)}
+        tabCount={tabs.length}
+        onTabs={openTabGrid}
+        onNewTab={openTabAndType}
+        onMenu={() => setMenuOpen(true)}
       />
 
       {/* Only the active tab is mounted: keeping inactive panes in an absolute
@@ -1061,47 +1100,32 @@ export default function Browser () {
       <UpdateBanner />
       <DesktopUpdateBanner apps={backend.apps} />
 
-      {/* The bottom bar, in thumb reach: the Space, home, bookmark, the AI, the tab grid, the menu. */}
-      <View style={s.toolbar}>
-        <Pressable
-          style={s.spaceChip}
-          onPress={() => { spacesApi.syncFromVault(); setSpacesOpen(true) }}
-          android_ripple={{ color: t.ripple, borderless: true }}
-          accessibilityRole='button'
-          accessibilityLabel={`Space: ${spacesApi.activeSpace.name}. Switch space`}
-        >
-          <View style={[s.spaceDot, { backgroundColor: spacesApi.activeSpace.color }]} />
-          <Text style={s.spaceChipText} numberOfLines={1}>{spacesApi.activeSpace.name}</Text>
-        </Pressable>
-        <IconButton icon='home' label='Home' onPress={() => goHome(active.id)} />
-        <IconButton
-          icon='star'
-          regular={!bookmarked}
-          label={bookmarked ? 'Remove bookmark' : 'Bookmark this page'}
-          active={bookmarked}
-          disabled={!active.url}
-          onPress={() => persist.toggleBookmark(active.url, active.title)}
-        />
-        <IconButton icon='robot' label='AI assistant' active={aiOpen} onPress={() => setAiOpen(true)} />
-        <TabCountButton count={tabs.length} onPress={openTabGrid} />
-        <IconButton icon='ellipsis-v' label='Menu' onPress={() => setMenuOpen(true)} />
-      </View>
-
       <ActionSheet
         visible={menuOpen}
         onClose={() => setMenuOpen(false)}
         title={active.kind === 'home' ? undefined : active.title}
         subtitle={active.kind === 'home' ? undefined : active.url}
         // A new tab has nothing to reload, copy, name or pin, so its menu starts at the list.
-        quick={active.kind === 'home' ? undefined : [
-          { label: 'Reload', icon: 'redo-alt', onPress: reload },
-          { label: 'Copy link', icon: 'link', disabled: !active.url, onPress: copyLink },
-          { label: activeNames?.named.length ? 'Rename' : 'Name', icon: 'tag', disabled: !active.url, onPress: () => setNameSheetOpen(true) },
-          persist.isPinned(active.url)
-            ? { label: 'On home', icon: 'thumbtack', active: true, onPress: () => persist.setPinned(active.url, '', false) }
-            : { label: 'Add to home', icon: 'thumbtack', disabled: !active.url, onPress: () => persist.setPinned(active.url, active.title, true) }
+        // What the bottom bar used to hold (home, bookmark) is here now, with forward and reload, as
+        // in Chrome's menu.
+        // A new tab has nothing to reload, copy or name: its menu starts at the list, with Forward
+        // only when Home was a step back from a page.
+        quick={[
+          // Android has a system back; iOS gets one here.
+          { label: 'Back', icon: 'arrow-left', hidden: Platform.OS === 'android' || onHome, disabled: !canBack, onPress: goBackActive },
+          { label: 'Forward', icon: 'arrow-right', hidden: onHome && !canForward, disabled: !canForward, onPress: () => { step(active.id, 1) } },
+          { label: 'Reload', icon: 'redo-alt', hidden: onHome, onPress: reload },
+          { label: bookmarked ? 'Bookmarked' : 'Bookmark', icon: 'star', hidden: onHome, regular: !bookmarked, active: bookmarked, disabled: !active.url, onPress: () => persist.toggleBookmark(active.url, active.title) },
+          { label: 'Copy link', icon: 'link', hidden: onHome, disabled: !active.url, onPress: copyLink },
+          { label: activeNames?.named.length ? 'Rename' : 'Name', icon: 'tag', hidden: onHome, disabled: !active.url, onPress: () => setNameSheetOpen(true) },
+          { label: 'Home', icon: 'home', hidden: onHome, onPress: () => goHome(active.id) }
         ]}
         groups={[
+          [
+            persist.isPinned(active.url)
+              ? { label: 'Remove from home shortcuts', icon: 'thumbtack', active: true, hidden: onHome, onPress: () => persist.setPinned(active.url, '', false) }
+              : { label: 'Add to home shortcuts', icon: 'thumbtack', hidden: onHome, disabled: !active.url, onPress: () => persist.setPinned(active.url, active.title, true) }
+          ],
           [
             { label: 'My Library', icon: 'book', onPress: () => openScreen({ name: 'library' }) },
             { label: 'Reader', icon: 'rss', onPress: () => openScreen({ name: 'reader' }) },
@@ -1318,7 +1342,7 @@ function TabPane ({
       onNavigationStateChange={onWebNav}
       onMessage={(e) => onMessage(e.nativeEvent.data)}
       injectedJavaScriptBeforeContentLoaded={CONSOLE_SHIM}
-      injectedJavaScript={FAVICON_JS}
+      injectedJavaScript={FAVICON_JS + THEME_COLOR_JS}
       webviewDebuggingEnabled
       allowsBackForwardNavigationGestures
     />
@@ -1384,20 +1408,6 @@ function Home ({
   )
 }
 
-// Chrome's tab switcher button: the open-tab count in a rounded square. Past 99 it gives up and
-// grins, as Chrome does.
-function TabCountButton ({ count, onPress }: { count: number; onPress: () => void }) {
-  const t = useTheme()
-  const s = useMemo(() => makeStyles(t), [t])
-  return (
-    <IconButton onPress={onPress} label={`${count} open ${count === 1 ? 'tab' : 'tabs'}`}>
-      <View style={s.tabCount}>
-        <Text style={s.tabCountText}>{count > 99 ? ':D' : count}</Text>
-      </View>
-    </IconButton>
-  )
-}
-
 function makeStyles (t: Theme) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: t.bg },
@@ -1406,31 +1416,6 @@ function makeStyles (t: Theme) {
     // layout — Android WebViews ignore zIndex and otherwise paint over the
     // active tab. Components stay mounted, so tab state is preserved.
     hidden: { display: 'none' },
-    toolbar: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      height: 56,
-      paddingHorizontal: 6,
-      backgroundColor: t.bg,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: t.border
-    },
-    spaceChip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      maxWidth: 124,
-      height: 36,
-      paddingHorizontal: 12,
-      marginRight: 2,
-      borderRadius: radius.pill,
-      backgroundColor: t.surfaceAlt
-    },
-    spaceDot: { width: 10, height: 10, borderRadius: radius.pill },
-    spaceChipText: { color: t.text, fontSize: 13, fontWeight: '600', flexShrink: 1 },
-    tabCount: { minWidth: 22, height: 22, paddingHorizontal: 3, borderRadius: 6, borderWidth: 2, borderColor: t.textDim, alignItems: 'center', justifyContent: 'center' },
-    tabCountText: { color: t.textDim, fontSize: 11, fontWeight: '700' },
     home: { flex: 1, backgroundColor: t.bg },
     homeContent: { padding: 20, paddingBottom: 40 },
     brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 },
