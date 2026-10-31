@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Modal, View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { Backend, Note } from '../lib/useBackend'
@@ -10,8 +11,10 @@ import ScreenHeader from './ScreenHeader'
 import IconButton from './IconButton'
 import Icon from './Icon'
 import { ListSection } from './List'
+import Canvas, { type CanvasHandle, type CanvasSnapshot } from './Canvas'
 
 const SAVE_DELAY = 800
+const VIEW_KEY = 'nomad-notes-view' // 'list' or 'canvas', the last one used
 
 interface Props {
   visible: boolean
@@ -44,6 +47,9 @@ const TOOLS: [string, string][] = [['heading', 'H'], ['bold', 'B'], ['italic', '
 // A note is the user's, shown in every Space, or kept only in the active Space (ADR-0029): the list
 // shows the Space's first, and the pin in the editor moves a note between the two. A new note is
 // kept in the active Space.
+// The header's Canvas button swaps the list for desktop's canvas (Canvas.tsx): every note a dot, a
+// line with an arrowhead for each link. Tap a note to light up its links and see it below; tap it
+// again, or Open, to edit it. Back from the note returns to the canvas as it was.
 export default function Notes ({ visible, onClose, apps, onVaultChange, space, spaceName, onOpenDevices, onOpenUrl, openNoteId }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
@@ -70,6 +76,21 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
   const [canWriteSpace, setCanWriteSpace] = useState(true)
   // The open note can be changed: the Vault writes, and a Space note needs the Space to, too.
   const editable = writable && (!inSpace || canWriteSpace)
+
+  // The list, or the canvas of notes and their links. The last one used comes back next time.
+  const [view, setView] = useState<'list' | 'canvas'>('list')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const canvasRef = useRef<CanvasHandle>(null)
+  const snapshot = useRef<CanvasSnapshot | null>(null)
+  useEffect(() => {
+    AsyncStorage.getItem(VIEW_KEY).then((v) => { if (v === 'canvas') setView('canvas') }).catch(() => {})
+  }, [])
+  const switchView = () => {
+    const next = view === 'list' ? 'canvas' : 'list'
+    setView(next)
+    setSelectedId(null)
+    AsyncStorage.setItem(VIEW_KEY, next).catch(() => {})
+  }
 
   const notesRef = useRef<Note[]>([])
   const draft = useRef<Draft | null>(null)
@@ -210,9 +231,10 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
     if (dirty.current) save()
   }
 
-  // A note opened from the list (or the New note button) starts a new trail.
+  // A note opened from the list, the canvas (or the New note button) starts a new trail.
   const openFromList = (note: Note | null) => {
     trail.current = []
+    setSelectedId(null)
     openEditor(note)
   }
 
@@ -352,6 +374,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
           { title: shared ? 'Only yours' : 'All Spaces', notes: shown.filter((n) => !n.space) }
         ].filter((sec) => sec.notes.length)
       : [{ title: null, notes: shown }]
+  const selected = view === 'canvas' && selectedId ? (notes || []).find((n) => n.id === selectedId) || null : null
   const conflictOf = draft.current?.conflictOf
   const original = conflictOf ? notesRef.current.find((n) => n.id === conflictOf) : null
 
@@ -421,7 +444,11 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
           </KeyboardAvoidingView>
         ) : (
           <>
-            <ScreenHeader title='Notes' onBack={closeAll} />
+            <ScreenHeader
+              title='Notes'
+              onBack={closeAll}
+              actions={notes && !noVault && !error ? [view === 'list' ? { icon: 'project-diagram', label: 'Canvas', onPress: switchView } : { icon: 'list-ul', label: 'List', onPress: switchView }] : undefined}
+            />
 
             {noVault ? (
               <LinkPhone what='Notes' onOpenDevices={onOpenDevices} />
@@ -429,6 +456,52 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
               <View style={s.page}><Text style={s.errText}>{error}</Text></View>
             ) : !notes ? (
               <View style={s.center}><ActivityIndicator color={t.accent} /></View>
+            ) : view === 'canvas' ? (
+              <View style={s.root}>
+                <View style={s.canvasSearch}>
+                  <View style={[s.toolRow, s.toolRowFlat]}>
+                    <Icon name='search' size={14} color={t.textMuted} />
+                    <TextInput
+                      style={s.search}
+                      value={query}
+                      onChangeText={setQuery}
+                      placeholder='Search notes'
+                      placeholderTextColor={t.textMuted}
+                      autoCorrect={false}
+                      clearButtonMode='while-editing'
+                    />
+                  </View>
+                </View>
+                {notes.length === 0 ? (
+                  <Text style={[s.empty, s.page]}>No notes yet. Tap New note to write one. Your notes and the links between them show here.</Text>
+                ) : (
+                  <Canvas
+                    ref={canvasRef}
+                    kind='notes'
+                    data={notes}
+                    query={query}
+                    info={({ nodes, links }) => `${nodes} ${nodes === 1 ? 'note' : 'notes'} · ${links} ${links === 1 ? 'link' : 'links'}`}
+                    snapshot={snapshot.current}
+                    onSnapshot={(snap) => { snapshot.current = snap }}
+                    onSelect={setSelectedId}
+                    onOpen={(id) => { const n = notesRef.current.find((x) => x.id === id); if (n) openFromList(n) }}
+                  />
+                )}
+                {selected ? (
+                  <View style={s.picked}>
+                    <Pressable style={s.pickedText} onPress={() => openFromList(selected)} android_ripple={{ color: t.ripple }}>
+                      <Text numberOfLines={1} style={s.rowTitle}>{selected.title}</Text>
+                      <Text numberOfLines={2} style={s.rowSub}>
+                        <Text style={s.rowDate}>{relativeDate(selected.updatedAt)}</Text>
+                        {selected.snippet ? `  ${selected.snippet}` : ''}
+                      </Text>
+                    </Pressable>
+                    <Pressable style={s.openBtn} onPress={() => openFromList(selected)} android_ripple={{ color: t.ripple }} accessibilityRole='button'>
+                      <Text style={s.openBtnText}>Open</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
             ) : (
               <ScrollView contentContainerStyle={s.page} keyboardShouldPersistTaps='handled'>
                 <View style={s.toolRow}>
@@ -466,7 +539,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
               </ScrollView>
             )}
             {/* Material's extended floating action button: the one thing this page is for. */}
-            {notes && !noVault && !error ? (
+            {notes && !noVault && !error && !selected ? (
               <Pressable
                 // Absolute, so the SafeAreaView's padding doesn't lift it: add the inset itself.
                 style={[s.fab, { bottom: 16 + insets.bottom }, !writable && s.fabOff]}
@@ -531,6 +604,30 @@ function makeStyles (t: Theme) {
       borderColor: t.border
     },
     search: { flex: 1, color: t.text, fontSize: 15, padding: 0 },
+    canvasSearch: { paddingHorizontal: 16, paddingBottom: 8 },
+    toolRowFlat: { marginBottom: 0 },
+    // The note picked on the canvas, over its bottom edge.
+    picked: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginHorizontal: 12,
+      marginVertical: 10,
+      paddingRight: 10,
+      borderRadius: radius.lg,
+      backgroundColor: t.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: t.border,
+      overflow: 'hidden',
+      elevation: 3,
+      shadowColor: '#000',
+      shadowOpacity: 0.12,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 }
+    },
+    pickedText: { flex: 1, paddingHorizontal: 16, paddingVertical: 12, minHeight: 64, justifyContent: 'center' },
+    openBtn: { height: 40, paddingHorizontal: 18, borderRadius: radius.pill, backgroundColor: t.accent, justifyContent: 'center', overflow: 'hidden' },
+    openBtnText: { color: t.onAccent, fontSize: 14, fontWeight: '600' },
     fab: {
       position: 'absolute',
       right: 16,

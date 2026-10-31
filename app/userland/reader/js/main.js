@@ -17,6 +17,10 @@
 // - Read marks are saved debounced, merged with other Devices' marks, and pruned to posts that exist.
 // - Hybrid rendering: an aggregated post list; opening a post opens its canonical URL in a new tab
 //   (rendered in the feed's own origin).
+// - The header's List / Canvas switch swaps the post list for a canvas (./graph.js, drawn by
+//   app-stdlib's canvas, like nomad://notes): saved articles gathered around their topics, posts
+//   around their feed. Picking a topic or feed on the left lights it up there. Clicking an article
+//   reads it, a post opens it, a topic or feed shows its list. The last choice is remembered.
 //
 // Vanilla JS (served as-is, no bundle), styled with the app-stdlib tokens like nomad://search.
 
@@ -41,6 +45,14 @@ const state = {
 };
 
 let pendingRead = new Set() // marked read here since the last save
+
+const VIEW_KEY = 'nomad-reader-view'
+let view = storedView() // 'list' or 'canvas'
+let graph = null // the canvas (app-stdlib/js/graph/view.js), made the first time it shows
+let graphLib = null // { createGraphView, readerGraph, readerTexts }, imported then
+let graphPane = null // kept across renders, so the canvas keeps its place
+let graphInfo = null
+let graphHint = null
 let saveReadTimer = null
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
@@ -436,6 +448,7 @@ function postSubject(p) {
 function render() {
   const app = document.getElementById('app')
   if (state.reading) {
+    showCanvas(false)
     const scroller = app.querySelector('.reading')
     const top = scroller?.dataset.id === state.reading.article?.id ? scroller.scrollTop : 0
     app.replaceChildren(renderReading())
@@ -445,8 +458,10 @@ function render() {
   const scroll = app.querySelector('main')?.scrollTop || 0
   const active = document.activeElement
   const typing = active?.matches('.add-feed input') ? '.add-feed input' : active?.matches('.topic-edit input') ? '.topic-edit input' : null
-  app.replaceChildren(renderHeader(), el('div', { class: 'layout' }, [renderSidebar(), renderMain()]))
-  app.querySelector('main').scrollTop = scroll
+  const canvas = view === 'canvas'
+  app.replaceChildren(renderHeader(), el('div', { class: 'layout' }, [renderSidebar(), canvas ? renderCanvasPane() : renderMain()]))
+  if (!canvas) app.querySelector('main').scrollTop = scroll
+  showCanvas(canvas)
   if (typing) app.querySelector(typing)?.focus() // feeds finishing loading mustn't steal it
   if (state.flash) {
     app.querySelector(`[data-id="${state.flash}"]`)?.scrollIntoView({ block: 'nearest' })
@@ -462,6 +477,10 @@ function renderHeader() {
     el('div', { class: 'brand' }, [el('img', { src: 'asset:favicon:nomad://reader/', alt: '' }), 'Reader']),
     el('div', { class: 'status' }, [!articles && state.loading ? 'Refreshing…' : `${unread} unread`]),
     el('div', { class: 'header-actions' }, [
+      el('div', { class: 'view-switch', role: 'group', 'aria-label': 'View' }, [
+        viewButton('list', 'list-ul', 'List'),
+        viewButton('canvas', 'project-diagram', 'Canvas'),
+      ]),
       unread > 0
         ? el('button', { class: 'btn', onclick: markAllRead }, [icon('check-double'), ' Mark all read'])
         : null,
@@ -571,6 +590,119 @@ function setFilter(f) {
   state.filter = f
   state.editing = null
   render()
+  if (view === 'canvas') graph?.select(canvasIdFor(f), { center: true })
+}
+
+// ── Canvas ───────────────────────────────────────────────────────────────────
+
+function storedView() {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'canvas' ? 'canvas' : 'list'
+  } catch {
+    return 'list'
+  }
+}
+
+function setView(v) {
+  if (v === view) return
+  view = v
+  try {
+    localStorage.setItem(VIEW_KEY, v)
+  } catch {}
+  render()
+  if (v === 'canvas') graph?.select(canvasIdFor(state.filter))
+}
+
+function viewButton(v, ic, label) {
+  return el('button', { class: 'view-btn' + (view === v ? ' active' : ''), title: label, 'aria-pressed': String(view === v), onclick: () => setView(v) }, [icon(ic), el('span', {}, [label])])
+}
+
+// The canvas node a sidebar filter lights up: a topic or a feed. Null for the rest.
+function canvasIdFor(f) {
+  if (f.startsWith('topic:')) return 'topic:' + f.slice(6).toLowerCase()
+  if (f.startsWith('hyper:')) return 'feed:' + f
+  return null
+}
+
+function renderCanvasPane() {
+  if (!graphPane) {
+    graphInfo = el('span', { class: 'graph-info' })
+    graphHint = el('div', { class: 'graph-hint' })
+    graphPane = el('section', { class: 'graph-pane graph-surface', 'aria-label': 'Canvas' }, [
+      el('div', { class: 'graph-overlay top' }, [
+        graphInfo,
+        el('span', { class: 'graph-legend' }, [
+          el('span', { class: 'key key-topic' }, ['Topic']),
+          el('span', { class: 'key key-feed' }, ['Feed']),
+          el('span', { class: 'key key-item' }, ['Article or post']),
+        ]),
+      ]),
+      graphHint,
+      el('div', { class: 'graph-overlay bottom' }, [
+        el('button', { class: 'icon-btn', title: 'Zoom in', 'aria-label': 'Zoom in', onclick: () => graph?.zoomIn() }, [icon('plus')]),
+        el('button', { class: 'icon-btn', title: 'Zoom out', 'aria-label': 'Zoom out', onclick: () => graph?.zoomOut() }, [icon('minus')]),
+        el('button', { class: 'icon-btn', title: 'Fit everything', 'aria-label': 'Fit everything', onclick: () => graph?.fit() }, [icon('compress-arrows-alt')]),
+      ]),
+    ])
+  }
+  return graphPane
+}
+
+// Show or hide the canvas, loading it the first time. It only animates while it shows.
+async function showCanvas(on) {
+  if (!on) return graph?.setVisible(false)
+  if (!graph) {
+    if (!graphLib) {
+      const [viewMod, graphMod] = await Promise.all([import('nomad://app-stdlib/js/graph/view.js'), import('/js/graph.js')])
+      graphLib = { createGraphView: viewMod.createGraphView, readerGraph: graphMod.readerGraph, readerTexts: graphMod.readerTexts }
+    }
+    if (graph || view !== 'canvas' || state.reading) return renderGraph()
+    graph = graphLib.createGraphView({ parent: graphPane, onOpen: openFromCanvas, label: 'Articles by topic, and feeds' })
+    renderGraph()
+    graph.select(canvasIdFor(state.filter))
+  }
+  graph.setVisible(true)
+  renderGraph()
+}
+
+function renderGraph() {
+  if (!graph || view !== 'canvas') return
+  const data = { articles: state.articles, posts: state.posts, read: state.readSet }
+  graph.update(graphLib.readerGraph(data), { texts: graphLib.readerTexts(data) })
+  const topicCount = topics().length
+  const parts = [plural(state.articles.length, 'article'), plural(topicCount, 'topic')]
+  if (state.feeds.length) parts.push(plural(state.feeds.length, 'feed'))
+  graphInfo.textContent = parts.join(' · ')
+  if (!state.articles.length && !state.posts.length) {
+    graphHint.replaceChildren(
+      notice('project-diagram', state.loading ? 'Loading…' : 'Nothing here yet', [
+        'Pages you save gather around their topics here, and posts around their feeds. Right-click a page and choose Save Page to Reader, or paste a link on the left.',
+      ])
+    )
+  } else if (state.articles.length && !topicCount) {
+    graphHint.replaceChildren(el('p', { class: 'graph-tip' }, [icon('magic'), 'No topics yet. The AI sorts saved pages into topics, or add them from the list.']))
+  } else graphHint.replaceChildren()
+}
+
+// A click on the canvas: read an article, open a post, or list a topic's articles or a feed's posts.
+function openFromCanvas(id) {
+  if (id.startsWith('article:')) return openReading(id.slice(8))
+  if (id.startsWith('post:')) {
+    const p = state.posts.find((x) => x.url === id.slice(5))
+    if (p) openPost(p)
+    return
+  }
+  let f = null
+  if (id.startsWith('topic:')) {
+    const t = topics().find((x) => x.topic.toLowerCase() === id.slice(6))
+    if (t) f = 'topic:' + t.topic
+  } else if (id.startsWith('feed:')) f = id.slice(5)
+  if (!f) return
+  view = 'list'
+  try {
+    localStorage.setItem(VIEW_KEY, view)
+  } catch {}
+  setFilter(f)
 }
 
 // One box for all: a feed (hyper://, RSS or Atom) subscribes, any other link is saved as an article.

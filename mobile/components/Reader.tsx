@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Modal, View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { Backend, Feed, FeedPost, ReaderState, SavedArticle, WebFeed } from '../lib/useBackend'
 import ActionSheet from './ActionSheet'
 import LinkPhone from './LinkPhone'
 import ScreenHeader from './ScreenHeader'
+import Canvas, { type CanvasHandle, type CanvasSnapshot } from './Canvas'
+
+const VIEW_KEY = 'nomad-reader-view' // 'list' or 'canvas', the last one used
 
 // One Feed's load state: posts once it loads, or why it didn't.
 interface FeedLoad { url: string; title: string; posts: FeedPost[]; loading: boolean; error?: string }
@@ -47,6 +51,9 @@ interface Props {
 // they match desktop's nomad://reader. Another Device's change shows while this is open. Opening a
 // post closes this and loads the post in the current tab. Pages saved to Reader on a computer
 // (ADR-0033) show under Saved, by topic; opening one marks it read and loads it in the tab.
+// The header's Canvas button swaps the list for desktop's Reader canvas (Canvas.tsx): saved
+// articles gathered around their topics, posts around their feed. A chip lights up its topic or
+// feed there. Tap a dot to see it below; tap it again, or Open, to read it.
 export default function Reader ({ visible, onClose, apps, onVaultChange, space, onOpenPost, onOpenDevices }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
@@ -64,6 +71,19 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
   const [menuFor, setMenuFor] = useState<SavedArticle | null>(null)
   const [addUrl, setAddUrl] = useState('')
   const [adding, setAdding] = useState(false)
+  // The list, or the canvas. The last one used comes back next time.
+  const [view, setView] = useState<'list' | 'canvas'>('list')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const canvasRef = useRef<CanvasHandle>(null)
+  const snapshot = useRef<CanvasSnapshot | null>(null)
+  useEffect(() => {
+    AsyncStorage.getItem(VIEW_KEY).then((v) => { if (v === 'canvas') setView('canvas') }).catch(() => {})
+  }, [])
+  const showView = (next: 'list' | 'canvas') => {
+    setView(next)
+    setSelectedId(null)
+    AsyncStorage.setItem(VIEW_KEY, next).catch(() => {})
+  }
   // Bumped on every refresh, so a slow Feed from an older refresh can't overwrite a newer one.
   const generation = useRef(0)
 
@@ -230,13 +250,49 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
   const feedList = (state?.follows || []).map((url) => feeds[url]).filter(Boolean) as FeedLoad[]
   const current = filter === 'all' ? null : feeds[filter]
 
+  // ── Canvas ──
+  const canvasData = useMemo(() => ({ articles, posts: allPosts, read: [...read] }), [articles, allPosts, read])
+  // A chip picked while the canvas shows lights up its topic or feed there.
+  const pick = (f: string) => {
+    setFilter(f)
+    if (view !== 'canvas') return
+    const id = f.startsWith('topic:') ? 'topic:' + f.slice(6).toLowerCase() : feeds[f] ? 'feed:' + f : null
+    setSelectedId(id)
+    canvasRef.current?.select(id, true)
+  }
+  // What a canvas dot is: an article, a post, a topic or a feed.
+  const nodeOf = (id: string | null) => {
+    if (!id) return null
+    if (id.startsWith('article:')) { const a = articles.find((x) => x.id === id.slice(8)); return a ? { kind: 'article' as const, a } : null }
+    if (id.startsWith('post:')) { const p = allPosts.find((x) => x.url === id.slice(5)); return p ? { kind: 'post' as const, p } : null }
+    if (id.startsWith('topic:')) { const tp = topicList.find((x) => x.topic.toLowerCase() === id.slice(6)); return tp ? { kind: 'topic' as const, topic: tp.topic, count: tp.count } : null }
+    if (id.startsWith('feed:')) { const f = feeds[id.slice(5)]; return f ? { kind: 'feed' as const, f } : null }
+    return null
+  }
+  const openNode = (id: string) => {
+    const n = nodeOf(id)
+    if (!n) return
+    setSelectedId(null)
+    if (n.kind === 'article') openArticle(n.a)
+    else if (n.kind === 'post') openPost(n.p)
+    else {
+      // A topic or a feed: its list.
+      showView('list')
+      setFilter(n.kind === 'topic' ? 'topic:' + n.topic : n.f.url)
+    }
+  }
+  const selected = view === 'canvas' ? nodeOf(selectedId) : null
+
   return (
     <Modal visible={visible} animationType='slide' onRequestClose={onClose} presentationStyle='fullScreen'>
       <SafeAreaView style={s.root} edges={['top', 'bottom']}>
         <ScreenHeader
           title='Reader'
           onBack={onClose}
-          actions={state ? [{ icon: 'redo-alt', label: 'Refresh', onPress: refresh, busy: loadingAny }] : undefined}
+          actions={state ? [
+            view === 'list' ? { icon: 'project-diagram', label: 'Canvas', onPress: () => showView('canvas') } : { icon: 'list-ul', label: 'List', onPress: () => showView('list') },
+            { icon: 'redo-alt', label: 'Refresh', onPress: refresh, busy: loadingAny }
+          ] : undefined}
         />
 
         {noVault ? (
@@ -249,22 +305,22 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
           <>
             {feedList.length === 0 && articles.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chips} contentContainerStyle={s.chipsContent}>
-                <Chip s={s} label='Feeds' active={!savedView} onPress={() => setFilter('all')} />
-                <Chip s={s} label={`Saved · ${articles.length}`} active={savedView} onPress={() => setFilter('saved')} />
+                <Chip s={s} label='Feeds' active={!savedView} onPress={() => pick('all')} />
+                <Chip s={s} label={`Saved · ${articles.length}`} active={savedView} onPress={() => pick('saved')} />
               </ScrollView>
             )}
-            {savedView && topicList.length > 0 && (
+            {(savedView || view === 'canvas') && topicList.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chips} contentContainerStyle={s.chipsContent}>
-                <Chip s={s} label='Everything' active={filter === 'saved'} onPress={() => setFilter('saved')} />
+                <Chip s={s} label='Everything' active={filter === 'saved'} onPress={() => pick('saved')} />
                 {topicList.map((t) => (
-                  <Chip key={t.topic} s={s} label={`${t.topic} · ${t.count}`} active={filter.toLowerCase() === 'topic:' + t.topic.toLowerCase()} onPress={() => setFilter('topic:' + t.topic)} />
+                  <Chip key={t.topic} s={s} label={`${t.topic} · ${t.count}`} active={filter.toLowerCase() === 'topic:' + t.topic.toLowerCase()} onPress={() => pick('topic:' + t.topic)} />
                 ))}
               </ScrollView>
             )}
             {feedList.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chips} contentContainerStyle={s.chipsContent}>
-                <Chip s={s} label='All' active={filter === 'all'} onPress={() => setFilter('all')} />
-                {(articles.length > 0 || topicList.length > 0) && <Chip s={s} label={articles.length ? `Saved · ${articles.length}` : 'Topics'} active={savedView} onPress={() => setFilter(articles.length ? 'saved' : 'topic:' + topicList[0].topic)} />}
+                <Chip s={s} label='All' active={filter === 'all'} onPress={() => pick('all')} />
+                {(articles.length > 0 || topicList.length > 0) && <Chip s={s} label={articles.length ? `Saved · ${articles.length}` : 'Topics'} active={savedView} onPress={() => pick(articles.length ? 'saved' : 'topic:' + topicList[0].topic)} />}
                 {feedList.map((f) => (
                   <Chip
                     key={f.url}
@@ -272,13 +328,62 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
                     label={f.title}
                     active={filter === f.url}
                     error={!!f.error}
-                    onPress={() => setFilter(f.url)}
+                    onPress={() => pick(f.url)}
                     onLongPress={state.canFollow === false ? undefined : () => unsubscribe(f)}
                   />
                 ))}
               </ScrollView>
             )}
 
+            {view === 'canvas' ? (
+              <View style={s.root}>
+                {articles.length === 0 && allPosts.length === 0 ? (
+                  loadingAny
+                    ? <View style={s.loadingRow}><ActivityIndicator color={t.accent} /><Text style={s.countText}>Loading feeds…</Text></View>
+                    : <Text style={[s.empty, s.page]}>Nothing here yet. Pages you save on your computer gather around their topics here, and posts around their feeds.</Text>
+                ) : (
+                  <Canvas
+                    ref={canvasRef}
+                    kind='reader'
+                    data={canvasData}
+                    info={() => [`${articles.length} saved`, `${topicList.length} ${topicList.length === 1 ? 'topic' : 'topics'}`, feedList.length ? `${feedList.length} ${feedList.length === 1 ? 'feed' : 'feeds'}` : ''].filter(Boolean).join(' · ')}
+                    snapshot={snapshot.current}
+                    onSnapshot={(snap) => { snapshot.current = snap }}
+                    onSelect={setSelectedId}
+                    onOpen={openNode}
+                  />
+                )}
+                {selected ? (
+                  <View style={s.picked}>
+                    <Pressable style={s.pickedText} onPress={() => selectedId && openNode(selectedId)} android_ripple={{ color: t.ripple }}>
+                      {selected.kind === 'article' ? (
+                        <>
+                          <Text numberOfLines={1} style={s.postFeed}>{[selected.a.site, selected.a.readAt ? 'Read' : 'Unread'].filter(Boolean).join(' · ')}</Text>
+                          <Text numberOfLines={2} style={s.postTitle}>{selected.a.title}</Text>
+                          {(selected.a.topics || []).length > 0 && <Text numberOfLines={1} style={s.pickedTopics}>{selected.a.topics.join(' · ')}</Text>}
+                        </>
+                      ) : selected.kind === 'post' ? (
+                        <>
+                          <Text numberOfLines={1} style={s.postFeed}>{[selected.p.feedTitle, formatDate(selected.p.createdAt)].filter(Boolean).join(' · ')}</Text>
+                          <Text numberOfLines={2} style={s.postTitle}>{selected.p.title}</Text>
+                        </>
+                      ) : (
+                        <>
+                          <Text numberOfLines={1} style={s.postFeed}>{selected.kind === 'topic' ? 'Topic' : 'Feed'}</Text>
+                          <Text numberOfLines={1} style={s.postTitle}>{selected.kind === 'topic' ? selected.topic : selected.f.title}</Text>
+                          <Text style={s.pickedTopics}>
+                            {selected.kind === 'topic' ? `${selected.count} saved ${selected.count === 1 ? 'article' : 'articles'}` : `${selected.f.posts.length} ${selected.f.posts.length === 1 ? 'post' : 'posts'}`}
+                          </Text>
+                        </>
+                      )}
+                    </Pressable>
+                    <Pressable style={s.openBtn} onPress={() => selectedId && openNode(selectedId)} android_ripple={{ color: t.ripple }} accessibilityRole='button'>
+                      <Text style={s.openBtnText}>{selected.kind === 'topic' || selected.kind === 'feed' ? 'List' : 'Open'}</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+            ) : (
             <ScrollView contentContainerStyle={s.page} keyboardShouldPersistTaps='handled'>
               {!state.writable && (
                 <Text style={s.hint}>This phone can’t save changes to your Vault yet. Keep your other device online until it syncs.</Text>
@@ -369,6 +474,7 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
               </View>
               )}
             </ScrollView>
+            )}
           </>
         )}
         <ActionSheet
@@ -506,6 +612,29 @@ function makeStyles (t: Theme) {
     addBtn: { backgroundColor: t.accent, borderRadius: radius.pill, paddingHorizontal: 18, height: 40, justifyContent: 'center' },
     addBtnOff: { opacity: 0.4 },
     addBtnText: { color: t.onAccent, fontSize: 14, fontWeight: '600' },
-    addHint: { color: t.textMuted, fontSize: 12, marginTop: 8 }
+    addHint: { color: t.textMuted, fontSize: 12, marginTop: 8 },
+    // The dot picked on the canvas, over its bottom edge.
+    picked: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginHorizontal: 12,
+      marginVertical: 10,
+      paddingRight: 10,
+      borderRadius: radius.lg,
+      backgroundColor: t.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: t.border,
+      overflow: 'hidden',
+      elevation: 3,
+      shadowColor: '#000',
+      shadowOpacity: 0.12,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 }
+    },
+    pickedText: { flex: 1, paddingHorizontal: 16, paddingVertical: 12, minHeight: 64, justifyContent: 'center' },
+    pickedTopics: { color: t.trustText, fontSize: 12, fontWeight: '600', marginTop: 4 },
+    openBtn: { height: 40, paddingHorizontal: 18, borderRadius: radius.pill, backgroundColor: t.accent, justifyContent: 'center', overflow: 'hidden' },
+    openBtnText: { color: t.onAccent, fontSize: 14, fontWeight: '600' }
   })
 }

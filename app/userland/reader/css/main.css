@@ -2,6 +2,7 @@
    type, the 50px header, Library's sidebar. Light and dark follow the OS. */
 @import 'nomad://app-stdlib/css/common.css';
 @import 'nomad://app-stdlib/css/fontawesome.css';
+@import 'nomad://app-stdlib/css/graph.css';
 
 body {
   --rdr-search-bg: rgba(0, 0, 0, 0.055);
@@ -14,6 +15,10 @@ body {
   --rdr-row-hover: #f5f5fb;
   --rdr-unread: #4040e7;
   --rdr-err: #dc2626;
+
+  /* The canvas (app-stdlib/css/graph.css): its grid, dots and lines keep their own defaults. */
+  --graph-bg: var(--bg-color--default);
+  --graph-accent: var(--rdr-accent);
 
   margin: 0;
   font-size: 13px;
@@ -121,6 +126,44 @@ header .status {
 .icon-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* List / Canvas */
+.view-switch {
+  display: inline-flex;
+  padding: 2px;
+  margin-right: 4px;
+  border-radius: 7px;
+  background: var(--rdr-search-bg);
+}
+
+.view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-color--light);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.view-btn:hover {
+  color: var(--text-color--default);
+}
+
+.view-btn.active {
+  background: var(--bg-color--default);
+  color: var(--text-color--default);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.view-btn .fas {
+  font-size: 11px;
 }
 
 /* buttons */
@@ -948,7 +991,101 @@ main {
   line-height: 1.5;
 }
 
+/* canvas: saved articles around their topics, posts around their feeds (js/main.js showCanvas) */
+
+.graph-pane {
+  min-height: 0;
+}
+
+.graph-overlay {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.graph-overlay.top {
+  top: 12px;
+  left: 14px;
+  gap: 14px;
+  pointer-events: none;
+}
+
+.graph-overlay.bottom {
+  right: 14px;
+  bottom: 14px;
+  padding: 3px;
+  border: 1px solid var(--border-color--semi-light);
+  border-radius: 8px;
+  background: var(--rdr-header-bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.graph-info,
+.graph-legend {
+  font-size: 12px;
+  color: var(--text-color--pretty-light);
+}
+
+.graph-legend {
+  display: flex;
+  gap: 10px;
+}
+
+.graph-legend .key::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: -0.5px;
+  background: var(--graph-node);
+}
+
+.graph-legend .key-topic::before {
+  background: var(--graph-hub);
+}
+
+.graph-legend .key-feed::before {
+  background: var(--graph-feed);
+}
+
+.graph-hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.graph-hint:empty {
+  display: none;
+}
+
+.graph-hint .notice {
+  margin-top: 60px;
+  width: 440px;
+}
+
+.graph-tip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 28px 0 0;
+  padding: 7px 12px;
+  border: 1px solid var(--border-color--semi-light);
+  border-radius: 999px;
+  background: var(--rdr-header-bg);
+  font-size: 12px;
+  color: var(--text-color--light);
+  white-space: nowrap;
+}
+
 @media (max-width: 700px) {
+  .view-btn span,
+  .graph-legend {
+    display: none;
+  }
   header {
     grid-template-columns: 170px 1fr auto;
   }

@@ -17,12 +17,13 @@
 //
 // Each note has its own address, nomad://notes/<id>, so back and forward move between notes.
 // The header's List / Canvas switch swaps the list and the editor for a canvas of every note and
-// the links between them (./graph-view.js); ?view=canvas in the address keeps it across back and
+// the links between them (./graph.js, drawn by app-stdlib's canvas); ?view=canvas in the address keeps it across back and
 // forward, and the last choice is remembered for the next visit.
 // Bundled (scripts/build.js → js/main.build.js), styled with the app-stdlib tokens like nomad://reader.
 
 import { createNoteEditor } from './editor/index.js';
-import { createGraphView } from './graph-view.js';
+import { createGraphView } from '../../app-stdlib/js/graph/view.js';
+import { noteGraph } from './graph.js';
 import { noteTitle, noteSnippet, makeResolver, linkedIds } from '../../../../shared/vault-apps.mjs';
 
 const SAVE_DELAY = 700;
@@ -415,7 +416,7 @@ function renderShell() {
   mainEl = el('main', {});
   graphInfo = el('span', { class: 'graph-info' });
   graphHint = el('div', { class: 'graph-hint' });
-  graphPane = el('section', { class: 'graph-pane', 'aria-label': 'Canvas' }, [
+  graphPane = el('section', { class: 'graph-pane graph-surface', 'aria-label': 'Canvas' }, [
     el('div', { class: 'graph-overlay top' }, [graphInfo]),
     graphHint,
     el('div', { class: 'graph-overlay bottom' }, [
@@ -443,7 +444,7 @@ function applyView() {
     b.setAttribute('aria-pressed', String(v === view));
   }
   if (canvas) {
-    if (!graph) graph = createGraphView({ parent: graphPane, onOpen: openFromCanvas });
+    if (!graph) graph = createGraphView({ parent: graphPane, onOpen: openFromCanvas, label: 'Notes and their links' });
     renderGraph();
     graph.setVisible(true);
   } else {
@@ -455,13 +456,16 @@ function applyView() {
 // The canvas shows what's typed in the open note, like the list does.
 function renderGraph() {
   if (!graph || view !== 'canvas' || !state.loaded) return;
-  graph.update(
-    liveNotes().filter((n) => n.id),
-    { currentId: draft?.id || null, query: state.query }
-  );
-  const { notes, links } = graph.count;
-  graphInfo.textContent = `${notes} ${notes === 1 ? 'note' : 'notes'} · ${links} ${links === 1 ? 'link' : 'links'}`;
-  if (!notes) {
+  const notes = liveNotes().filter((n) => n.id);
+  graph.update(noteGraph(notes), {
+    currentId: draft?.id || null,
+    query: state.query,
+    // Search matches a note's text, like the list does.
+    texts: new Map(notes.map((n) => [n.id, String(n.body || '').toLowerCase()])),
+  });
+  const { nodes: count, links } = graph.count;
+  graphInfo.textContent = `${count} ${count === 1 ? 'note' : 'notes'} · ${links} ${links === 1 ? 'link' : 'links'}`;
+  if (!count) {
     const action = state.writable ? el('button', { class: 'btn primary', onclick: () => newNote() }, [icon('plus'), ' New note']) : null;
     graphHint.replaceChildren(notice('project-diagram', 'No notes yet', ['Your notes and the links between them appear here.'], action));
   } else if (!links) {
