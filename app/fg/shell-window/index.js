@@ -52,6 +52,8 @@ class ShellWindowUI extends LitElement {
     this.hasBgTabs = false;
     this.hasLocationExpanded = false;
     this.spaces = [];
+    this.pins = [];
+    this.pinsWritable = true;
     this.activeSpace = null;
     this.groups = [];
     this.activeTabIndex = -1;
@@ -101,6 +103,8 @@ class ShellWindowUI extends LitElement {
       if (state.spaces) this.spaces = state.spaces;
       if (state.activeSpace) this.activeSpace = state.activeSpace;
       if (state.groups) this.groups = state.groups;
+      this.pins = state.pins || [];
+      this.pinsWritable = state.pinsWritable !== false;
       if (state.tabLayout) this.tabLayout = state.tabLayout;
       if (state.sidebarSide) this.sidebarSide = state.sidebarSide;
       if (state.sidebarWidth) this.sidebarWidth = state.sidebarWidth;
@@ -231,6 +235,8 @@ class ShellWindowUI extends LitElement {
               ? html`
                   <shell-window-sidebar
                     .tabs=${this.tabs}
+                    .pins=${this.pins}
+                    .pinsWritable=${this.pinsWritable}
                     .spaces=${this.spaces}
                     .activeSpace=${this.activeSpace}
                     .groups=${this.groups}
@@ -242,6 +248,7 @@ class ShellWindowUI extends LitElement {
                 ? html`
                     <shell-window-tabs
                       .tabs=${this.tabs}
+                      .pins=${this.pins}
                       .spaces=${this.spaces}
                       .activeSpace=${this.activeSpace}
                       .groups=${this.groups}

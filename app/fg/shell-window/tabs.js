@@ -6,6 +6,7 @@ import { styleMap } from 'lit/directives/style-map.js';
 import spinnerCSS from './spinner.css';
 import * as bg from './bg-process-rpc';
 import { isHyperOrPearUrl } from '../../lib/urls';
+import { pinTiles, normalizePinUrl } from '../../../shared/pins.mjs';
 
 const ANIMATIONS_ENABLED = false;
 
@@ -13,6 +14,8 @@ class ShellWindowTabs extends LitElement {
   static get properties() {
     return {
       tabs: { type: Array },
+      // The active Space's pinned pages (bg/ui/space-pins.js), [{ href, title }]
+      pins: { type: Array },
       spaces: { type: Array },
       activeSpace: { type: Object },
       groups: { type: Array },
@@ -26,6 +29,7 @@ class ShellWindowTabs extends LitElement {
   constructor() {
     super();
     this.tabs = [];
+    this.pins = [];
     this.spaces = [];
     this.activeSpace = null;
     this.groups = [];
@@ -80,6 +84,7 @@ class ShellWindowTabs extends LitElement {
     const items = [];
     let lastGroupId = null;
     tabs.forEach((tab, index) => {
+      if (tab.isPinned) return; // drawn first, in the Space's pin order (render)
       if (tab.groupId && tab.groupId !== lastGroupId) {
         const group = (this.groups || []).find((g) => g.id === tab.groupId);
         if (group) items.push({ type: 'group-header', group });
@@ -100,6 +105,8 @@ class ShellWindowTabs extends LitElement {
       fullscreen: this.isFullscreen,
     });
     const items = this.buildItems(this.tabsState);
+    // Pinned tabs first, one per Space pin; a pin whose tab is closed still shows (renderPinStub).
+    const tiles = pinTiles(this.pins, this.tabsState);
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div
@@ -109,6 +116,14 @@ class ShellWindowTabs extends LitElement {
       >
         <div class="tabs">
           ${this.backgroundTrayBtn}
+          ${repeat(
+            tiles,
+            (t) => `pin:${t.href}`,
+            (t) =>
+              t.index >= 0
+                ? this.renderTab(this.tabsState[t.index], t.index)
+                : this.renderPinStub(t)
+          )}
           ${repeat(
             items,
             (item) => (item.type === 'group-header' ? `grp:${item.group.id}` : `tab:${item.index}`),
@@ -247,6 +262,20 @@ class ShellWindowTabs extends LitElement {
                   `
                 : ''}
             `}
+      </div>
+    `;
+  }
+
+  // A Space pin whose tab isn't open: its icon, which opens it.
+  renderPinStub(tile) {
+    return html`
+      <div
+        class="tab pinned unloaded"
+        title=${tile.title}
+        @click=${() => bg.views.openPin(tile.href)}
+        @contextmenu=${() => bg.views.showPinContextMenu(tile.href)}
+      >
+        <div class="tab-favicon"><img src="asset:favicon:${tile.href}" /></div>
       </div>
     `;
   }
@@ -438,7 +467,16 @@ class ShellWindowTabs extends LitElement {
       return false;
     }
     if (this.draggedTabIndex !== null && this.canDrop(index)) {
-      bg.views.reorderTab(this.draggedTabIndex, index);
+      const from = this.tabsState[this.draggedTabIndex];
+      const to = this.tabsState[index];
+      if (from?.isPinned && from.pinUrl && to?.pinUrl) {
+        // Pinned tabs go in the Space's pin order, which syncs.
+        const rest = (this.pins || []).map((p) => p.href).filter((h) => h !== from.pinUrl);
+        const at = rest.indexOf(normalizePinUrl(to.pinUrl));
+        if (at !== -1) bg.views.movePin(from.pinUrl, at);
+      } else {
+        bg.views.reorderTab(this.draggedTabIndex, index);
+      }
     }
     this.draggedTabIndex = null;
     return false;
@@ -648,6 +686,21 @@ ShellWindowTabs.styles = css`
 
   .tab.pinned {
     flex: 0 0 45px;
+  }
+
+  /* a Space pin whose tab is closed */
+  .tab.pinned.unloaded .tab-favicon img {
+    opacity: 0.55;
+    filter: saturate(0.6);
+  }
+
+  .tab.pinned.unloaded:hover .tab-favicon img {
+    opacity: 1;
+    filter: none;
+  }
+
+  .tab.pinned.unloaded .tab-favicon::after {
+    display: none;
   }
 
   .tab-favicon {
