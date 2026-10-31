@@ -102,7 +102,7 @@ export class JobsView extends LitElement {
     } catch {
       this.jobs = [];
     }
-    // The secrets each Job may use on this computer (ADR-0032), granted in Secrets.
+    // The secrets each Job may use on this computer (ADR-0033), granted in Secrets.
     try {
       this.secrets = (await nomad.secrets.list()).secrets;
     } catch {

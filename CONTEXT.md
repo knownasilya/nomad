@@ -232,7 +232,7 @@ _Avoid_: account, identity, profile, keyring, sync base
 **Secret**:
 An API key, token or webhook URL the user saves for their AI and Jobs to use by name (`GITHUB_TOKEN`),
 with the hosts it may go to and where it goes in a request. Kept on one Device only, encrypted with the
-OS keychain, never in the Vault (ADR-0032). Nobody reads a value back: Nomad adds it to a request.
+OS keychain, never in the Vault (ADR-0033). Nobody reads a value back: Nomad adds it to a request.
 _Avoid_: credential, password, API key (for the stored thing), env var
 
 **Device**:

@@ -78,7 +78,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (Settings → AI, or a per-site pick in the AI sidebar), never something a drive can set.",
+            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (the AI page, nomad://ai/setup, or the model picker in the AI sidebar), never something a drive can set.",
             "oneOf": [
               {
                 "type": "boolean",
@@ -182,7 +182,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (Settings → AI, or a per-site pick in the AI sidebar), never something a drive can set.",
+            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (the AI page, nomad://ai/setup, or the model picker in the AI sidebar), never something a drive can set.",
             "oneOf": [
               {
                 "type": "boolean",
@@ -312,7 +312,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (Settings → AI, or a per-site pick in the AI sidebar), never something a drive can set.",
+            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (the AI page, nomad://ai/setup, or the model picker in the AI sidebar), never something a drive can set.",
             "oneOf": [
               {
                 "type": "boolean",
@@ -440,7 +440,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (Settings → AI, or a per-site pick in the AI sidebar), never something a drive can set.",
+            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (the AI page, nomad://ai/setup, or the model picker in the AI sidebar), never something a drive can set.",
             "oneOf": [
               {
                 "type": "boolean",
@@ -559,7 +559,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (Settings → AI, or a per-site pick in the AI sidebar), never something a drive can set.",
+            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (the AI page, nomad://ai/setup, or the model picker in the AI sidebar), never something a drive can set.",
             "oneOf": [
               {
                 "type": "boolean",
@@ -676,7 +676,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (Settings → AI, or a per-site pick in the AI sidebar), never something a drive can set.",
+            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (the AI page, nomad://ai/setup, or the model picker in the AI sidebar), never something a drive can set.",
             "oneOf": [
               {
                 "type": "boolean",
@@ -777,7 +777,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (Settings → AI, or a per-site pick in the AI sidebar), never something a drive can set.",
+            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (the AI page, nomad://ai/setup, or the model picker in the AI sidebar), never something a drive can set.",
             "oneOf": [
               {
                 "type": "boolean",
@@ -884,7 +884,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (Settings → AI, or a per-site pick in the AI sidebar), never something a drive can set.",
+            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (the AI page, nomad://ai/setup, or the model picker in the AI sidebar), never something a drive can set.",
             "oneOf": [
               {
                 "type": "boolean",
@@ -993,7 +993,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (Settings → AI, or a per-site pick in the AI sidebar), never something a drive can set.",
+            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (the AI page, nomad://ai/setup, or the model picker in the AI sidebar), never something a drive can set.",
             "oneOf": [
               {
                 "type": "boolean",
@@ -1126,7 +1126,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
             "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
           },
           "ai": {
-            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (Settings → AI, or a per-site pick in the AI sidebar), never something a drive can set.",
+            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (the AI page, nomad://ai/setup, or the model picker in the AI sidebar), never something a drive can set.",
             "oneOf": [
               {
                 "type": "boolean",

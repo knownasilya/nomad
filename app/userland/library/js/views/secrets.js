@@ -8,7 +8,7 @@ import modsCSS from '../../css/views/mods.css.js';
 import jobsCSS from '../../css/views/jobs.css.js';
 import secretsCSS from '../../css/views/secrets.css.js';
 
-// The user's secrets (bg/ai/secret-store.js, ADR-0032): API keys and tokens the AI and Jobs use by
+// The user's secrets (bg/ai/secret-store.js, ADR-0033): API keys and tokens the AI and Jobs use by
 // name, without seeing them. A value is typed once and never shown again, here or anywhere: this
 // page can replace it, not read it. Each secret goes only to the hosts listed, in the place set
 // here (a header, the query, a body field, or the whole URL), and only on this computer.

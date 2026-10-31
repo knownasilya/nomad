@@ -1,5 +1,5 @@
 //
-// Internal web API: nomad.secrets — My Library → Secrets (ADR-0032). Available only to nomad://
+// Internal web API: nomad.secrets — My Library → Secrets (ADR-0033). Available only to nomad://
 // pages, and its writes only to nomad://library. A value goes in through save() and never comes back
 // out: the AI's httpRequest (ai.ts) is the only reader.
 

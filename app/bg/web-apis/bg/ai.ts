@@ -20,6 +20,7 @@ import * as aiBridge from '../../hyper/ai-bridge';
 import * as names from '../../hyper/names';
 import * as vaultApps from './vault-apps';
 import { isVaultTool, runVaultTool } from './ai-vault';
+import * as aiMemory from '../../ai/memory';
 import {
   createAwakeController,
   readLinuxAcState,
@@ -102,7 +103,7 @@ export default {
       if (/\b(401|403)\b/.test(error)) {
         error += token
           ? ' — an access token was sent but rejected; double-check it.'
-          : ' — no access token is set for this runtime (Settings → AI); this server may require one.';
+          : ' — no access token is set for this runtime (on the AI page, nomad://ai/setup); this server may require one.';
       }
       return { ok: false, error };
     }
@@ -491,7 +492,7 @@ export async function runJobTurn(job, { signal, notify, trigger = 'manual', last
   const files = job.source?.live ? await readJobSource(job.source.url) : null;
   const work = jobWork(job, files);
   if (work.prompt && !(await aiBridge.localRuntimeReachable())) {
-    throw new Error('The AI runtime on this computer isn’t reachable. Check Settings → AI.');
+    throw new Error('The AI runtime on this computer isn’t reachable. Check the AI page (nomad://ai/setup).');
   }
   const space = isSpaceKey(job.space) ? job.space : null;
 
@@ -646,10 +647,12 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   const allowWrite = opts.allowWrite !== false; // default true
   // Independent lookups — run concurrently rather than paying the sum of their latencies on
   // every single chat turn.
-  const [resolved, active] = await Promise.all([
+  const [resolved, active, memoryOn] = await Promise.all([
     // A Drive's AI Config is for that Drive's own app, so the user's assistant skips it.
     resolveAiConfig(sender, driveUrl, { drive: !currentTab }),
     getActiveRuntime(),
+    // What the user's assistant remembers about them (ADR-0032): a personal turn only.
+    personal ? aiMemory.isEnabled() : false,
   ]);
   const systemPrompt = resolved.systemPrompt;
   const runtime = active.runtime;
@@ -660,13 +663,13 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   if (!runtime || runtime.available === false) {
     throw new Error(
       runtime?.available === false
-        ? `${runtime.name} is not available on this computer. Choose another runtime in Settings → AI.`
-        : 'No AI runtime configured. Choose one in Settings → AI.'
+        ? `${runtime.name} is not available on this computer. Choose another runtime on the AI page (nomad://ai/setup).`
+        : 'No AI runtime configured. Choose one on the AI page (nomad://ai/setup).'
     );
   }
   if (!model) {
     throw new Error(
-      'No AI model configured. Set a default model in Settings → AI, or pick one in the AI sidebar.'
+      'No AI model configured. Set a default model on the AI page (nomad://ai/setup), or pick one in the AI sidebar.'
     );
   }
 
@@ -686,8 +689,10 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     personal,
     tab: !!currentTab,
     job: !!job,
-    // The user's saved secrets, by name (ADR-0032): the sidebar, the phone and Jobs, never a page.
+    // The user's saved secrets, by name (ADR-0033): the sidebar, the phone and Jobs, never a page.
     secrets: rules.secrets,
+    // remember and forget, while AI memory is on (ADR-0032).
+    memory: memoryOn,
     // The user's own names, and those of the Space the turn is in (ADR-0029).
     names: personal ? names.list(await turnSpaceKey(sender, opts)).filter((r) => !r.hidden) : null,
     ownerId: opts.ownerId,
@@ -714,6 +719,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     offerTools ? STANDING_PROMPT : '',
     offerTools && personal && !job ? PERSONAL_PROMPT : '',
     offerTools && job ? JOB_PROMPT : '',
+    // Every memory, with the ids forget takes (ADR-0032).
+    memoryOn ? aiMemory.memoryPromptText() : '',
     offerTools && canControlPage ? PAGE_CONTROL_PROMPT : '',
     // A remote turn's writes stage into a Draft. Without this the model reads back the published
     // file, doubts its own edit and tells the user the phone can't edit.
@@ -936,7 +943,7 @@ async function resolveAiConfig(sender, driveUrl = null, { drive = true } = {}) {
   return { systemPrompt: null };
 }
 
-// Every tool result and error, on every turn, has the user's secret values taken out (ADR-0032), so
+// Every tool result and error, on every turn, has the user's secret values taken out (ADR-0033), so
 // a page, a file or a response that holds one never shows it to the model or the chat. `execute`
 // calls back in here for each capability, so its inner results are cleaned too.
 async function executeTool(name, args, sender, opts: any = {}) {
@@ -1407,7 +1414,7 @@ function hasCapability(catalog, name) {
   return !!catalog?.capabilities?.some((c) => c.name === name);
 }
 
-// Which secrets this turn may use (ADR-0032): a Job, the ones the user let it use on this computer;
+// Which secrets this turn may use (ADR-0033): a Job, the ones the user let it use on this computer;
 // the sidebar and the phone, the ones the user didn't keep for Jobs only (and each asks first).
 async function usableSecrets({ job }) {
   if (job) {
@@ -1720,8 +1727,8 @@ function runtimeError(status, body, tools, hasToken) {
   let msg = `AI Runtime error ${status}` + (detail ? `: ${detail}` : '');
   if (status === 401 || status === 403) {
     msg += hasToken
-      ? ' — the access token was sent but rejected; check it in Settings → AI.'
-      : ' — no access token is set for this runtime (Settings → AI); it may require one.';
+      ? ' — the access token was sent but rejected; check it on the AI page (nomad://ai/setup).'
+      : ' — no access token is set for this runtime (on the AI page, nomad://ai/setup); it may require one.';
   }
   // NOT a bare \brole\b — a plain "messages.N.role" enum-validation error (e.g. an invalid role
   // slipping into history) matches that and wrongly blames tool support instead of the real bug.
@@ -1775,6 +1782,7 @@ export async function callLocalTool(name, args, turn = null) {
     pageTools: pageListed,
     // A program on this machine driving the user's browser is the user's own AI (loopback only).
     personal: true,
+    memory: await aiMemory.isEnabled(),
     names: names.list(await vaultApps.spaceKey({ sender }).catch(() => null)).filter((r) => !r.hidden),
   });
   return executeTool(name, args || {}, sender, {
@@ -1805,5 +1813,5 @@ function bootLocalhostMcp() {
 if (app.isReady()) bootLocalhostMcp();
 else app.whenReady().then(bootLocalhostMcp);
 
-// Secret values are read in at start, so tool output is redacted from the first turn (ADR-0032).
+// Secret values are read in at start, so tool output is redacted from the first turn (ADR-0033).
 app.whenReady().then(() => secretStore.load().catch(() => {}));

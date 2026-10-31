@@ -180,7 +180,7 @@ export function remove(id) {
       await vault.delAppRecord(jl.requestPath(id)).catch(() => {});
     }
     await vault.delAppRecord(jl.jobPath(id));
-    // The secrets this Job could use on this computer (ADR-0032) stop being its.
+    // The secrets this Job could use on this computer (ADR-0033) stop being its.
     await secretStore.dropJob(id).catch(() => {});
     jobs.delete(id);
     runs.delete(id);

@@ -27,6 +27,8 @@ import * as openTabs from '../../ui/open-tabs';
 import * as jobs from '../../ai/jobs';
 import { readJobSource } from './job-source';
 import { PRESETS } from '../../../../shared/mods.mjs';
+import { searchMemories, MAX_MEMORIES } from '../../../../shared/ai-memory.mjs';
+import * as aiMemory from '../../ai/memory';
 import { describeSchedule, nextRunAt, normalizeSchedule } from '../../../../shared/jobs.mjs';
 
 // The Drive key of a hyper://<key>/ URL, or null.
@@ -375,6 +377,28 @@ export default {
 
   async deleteMod(id) {
     await mods.remove(id);
+  },
+
+  // AI memory (bg/ai/memory.js, ADR-0032): nomad://ai/memory.
+  async listMemories({ query = '' } = {}) {
+    return {
+      memories: searchMemories(aiMemory.list(), query),
+      enabled: await aiMemory.isEnabled(),
+      max: MAX_MEMORIES,
+    };
+  },
+
+  async saveMemory(fields) {
+    const { id, text } = fields || {};
+    return aiMemory.save({ id: id || undefined, text, by: 'user' });
+  },
+
+  async deleteMemory(id) {
+    await aiMemory.remove(id);
+  },
+
+  async clearMemories() {
+    return aiMemory.clear();
   },
 
   // AI Jobs (bg/ai/jobs.js, ADR-0030): My Library → Jobs. Each Job comes with its newest run, when

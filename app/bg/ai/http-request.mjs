@@ -1,4 +1,4 @@
-// The AI's httpRequest capability (ADR-0032): one HTTP request from the main process, with the
+// The AI's httpRequest capability (ADR-0033): one HTTP request from the main process, with the
 // user's secrets added by name (secrets.mjs applySecrets) and every value taken back out of what
 // returns (redact). The model and the execute sandbox only ever hold names.
 //

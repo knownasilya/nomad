@@ -107,7 +107,7 @@ export class NamesView extends LitElement {
         <code>hyper://name/</code>, to go there, and ask the AI to use it ("add a post to my blog").
         Names sync to your linked devices. You can also name a page from its site info.
         The AI names sites you visit often; those are marked <span class="auto-badge">AI</span>
-        until you keep or edit them (turn it off in Settings → AI).
+        until you keep or edit them (turn it off in <a href="nomad://ai/setup">AI → Setup</a>).
         ${this.spaceName
           ? html`A name in <strong>${this.spaceName}</strong> works only in that Space's tabs.`
           : ''}

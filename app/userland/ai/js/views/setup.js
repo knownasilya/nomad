@@ -1,11 +1,11 @@
-import {
-  LitElement,
-  html,
-} from 'lit';
-import viewCSS from '../../css/views/ai.css.js';
-import * as toast from '../../../app-stdlib/js/com/toast.js';
+import { LitElement, html } from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import viewCSS from '../../css/views/setup.css.js';
+import * as toast from 'nomad://app-stdlib/js/com/toast.js';
 
-class AiSettingsView extends LitElement {
+// The AI's setup: which runtime and model chat uses, OpenAI-compatible servers, sharing this
+// device's AI with the user's other devices, and naming sites. It was Settings → AI; Settings now
+// points here (settings/js/main.js).
+class AiSetupView extends LitElement {
   static get properties() {
     return {
       settings: { type: Object },
@@ -29,6 +29,7 @@ class AiSettingsView extends LitElement {
     this.catalog = null; // { active, model, runtimes } from nomad.ai.listRuntimes()
     this.draft = { name: '', baseUrl: '', accessToken: '' };
     this.keepAwakeStatus = null; // {holding, paused, onBattery, unsupported} from bg/ai/awake.js
+    this.load();
   }
 
   async load() {
@@ -66,11 +67,8 @@ class AiSettingsView extends LitElement {
     const servers = Array.isArray(this.settings.ai_servers) ? this.settings.ai_servers : [];
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
+      <h2>Setup <span class="badge-experimental">Experimental</span></h2>
       <div class="form-group">
-        <h2>
-          AI
-          <span class="badge-experimental">Experimental</span>
-        </h2>
         <div class="section">
           <p>
             Nomad uses one runtime at a time. Claude and Cursor show up here when
@@ -461,4 +459,4 @@ class AiSettingsView extends LitElement {
   }
 }
 
-customElements.define('ai-settings-view', AiSettingsView);
+customElements.define('ai-setup-view', AiSetupView);

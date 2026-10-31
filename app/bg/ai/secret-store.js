@@ -1,4 +1,4 @@
-// Secrets (ADR-0032): the user's API keys and tokens, kept on this computer only, each value
+// Secrets (ADR-0033): the user's API keys and tokens, kept on this computer only, each value
 // encrypted with the OS keychain (Electron safeStorage: Keychain on macOS, DPAPI on Windows,
 // libsecret/kwallet on Linux). Not in the Vault, not in a drive, not in hyper://private/: those
 // replicate to the user's other Devices and into shared Spaces as plain data.

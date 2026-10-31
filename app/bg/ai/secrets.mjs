@@ -1,4 +1,4 @@
-// Secrets (ADR-0032): API keys and tokens the user saves for their own AI and Jobs to use without
+// Secrets (ADR-0033): API keys and tokens the user saves for their own AI and Jobs to use without
 // anyone seeing them again: not the model, not a page, not Nomad's own UI. The pure rules live here;
 // app/bg/ai/secret-store.js keeps them encrypted on this computer, and app/bg/ai/http-request.mjs
 // sends the requests.

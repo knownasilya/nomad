@@ -524,6 +524,17 @@ async function nomadProtocol(request) {
         { CSP: SEARCH_CSP, fallbackToIndexHTML: true }
       );
     }
+    // The user's AI: its chats, memory and setup (userland/ai). /chats, /memory and /setup are
+    // routes of one page.
+    if (requestUrl === 'nomad://ai' || requestUrl.startsWith('nomad://ai/')) {
+      return serveAppAsset(
+        requestUrl,
+        path.join(__dirname, 'userland', 'ai'),
+        cb,
+        // @ts-ignore
+        { fallbackToIndexHTML: true }
+      );
+    }
     if (requestUrl === 'nomad://settings' || requestUrl.startsWith('nomad://settings/')) {
       return serveAppAsset(requestUrl, path.join(__dirname, 'userland', 'settings'), cb);
     }
