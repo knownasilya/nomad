@@ -277,6 +277,15 @@ export const PERMS = {
     dangerous: true,
     promptTrusted: true,
   },
+  // The AI changing what it remembers about the user (ADR-0032). Every personal turn reads the
+  // memories, so a memory a hostile page talked it into would follow the user around: ask.
+  memoryWrite: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    promptTrusted: true,
+  },
   // One click the AI makes that buys, sends, posts or deletes. Asked each time; the param numbers it.
   aiPageAction: {
     persist: false,
@@ -351,6 +360,7 @@ export const PERM_ICONS = {
   modsWrite: 'fas fa-magic',
   jobsRead: 'fas fa-clock',
   jobsWrite: 'fas fa-clock',
+  memoryWrite: 'fas fa-brain',
   privateRead: 'fas fa-lock',
   privateWrite: 'fas fa-lock',
   aiPageControl: 'fas fa-mouse-pointer',
@@ -438,6 +448,8 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Let the AI assistant see your AI Jobs and their results';
     case 'jobsWrite':
       return 'Let the AI assistant create, change and run your AI Jobs, which run prompts on a schedule, read your Notes and Reader, and notify your phone';
+    case 'memoryWrite':
+      return 'Let the AI assistant remember things about you for later chats, and forget them';
     case 'privateRead':
     case 'privateWrite': {
       const verb = permId === 'privateWrite' ? 'Read and change' : 'Read';

@@ -1,0 +1,45 @@
+/* nomad://ai — styled like My Library and nomad://reader: the app-stdlib tokens for color and type,
+   the 50px header, Library's sidebar. Light and dark follow the OS. */
+@import 'nomad://app-stdlib/css/common.css';
+@import 'nomad://app-stdlib/css/fontawesome.css';
+
+body {
+  --ai-search-bg: rgba(0, 0, 0, 0.055);
+  --ai-nav-active-bg: rgba(64, 64, 231, 0.09);
+  --ai-nav-active-text: #4040e7;
+  --ai-nav-hover-bg: var(--bg-color--semi-light);
+  --ai-row-hover-bg: #f5f5fb;
+  --ai-header-bg: #fff;
+  --ai-sidebar-bg: #fff;
+  --ai-fill: #4f46e5; /* solid buttons: white text reads on it in both modes */
+  --ai-accent: #4040e7;
+  --ai-accent-soft: rgba(64, 64, 231, 0.09);
+  --ai-mark-bg: rgba(250, 204, 21, 0.35);
+  --ai-err: #dc2626;
+  --ai-ok: #15803d;
+  --ai-warn: #b45309;
+
+  margin: 0;
+  font-size: 13px;
+  background: var(--bg-color--secondary);
+  color: var(--text-color--default);
+  color-scheme: light dark;
+  overflow: hidden;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    --ai-search-bg: rgba(255, 255, 255, 0.07);
+    --ai-nav-active-bg: rgba(93, 128, 255, 0.13);
+    --ai-nav-active-text: #7b9fff;
+    --ai-row-hover-bg: #2a2a34;
+    --ai-header-bg: #1e1e24;
+    --ai-sidebar-bg: #1e1e24;
+    --ai-accent: #7b9fff;
+    --ai-accent-soft: rgba(93, 128, 255, 0.13);
+    --ai-mark-bg: rgba(250, 204, 21, 0.25);
+    --ai-err: #f87171;
+    --ai-ok: #4ade80;
+    --ai-warn: #fbbf24;
+  }
+}

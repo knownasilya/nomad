@@ -34,6 +34,8 @@ const PURPOSES = {
   runJob: 'run a Job',
   deleteJob: 'delete a Job',
   notify: 'notify your phone',
+  remember: 'remember something about you',
+  forget: 'forget something about you',
 };
 
 // search's domains, as a place to search in and as a list to show.
@@ -124,6 +126,10 @@ export function toolSummary(name, args) {
       return 'Deleting a Job';
     case 'notify':
       return a.title ? `Notifying your phone: ${quote(a.title)}` : 'Notifying your phone';
+    case 'remember':
+      return a.text ? `Remembering ${quote(a.text)}` : 'Remembering something about you';
+    case 'forget':
+      return 'Forgetting something about you';
     default:
       return tool ? `Using ${tool}` : 'Working…';
   }

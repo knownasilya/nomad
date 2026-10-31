@@ -4,7 +4,8 @@
 //
 // Only a personal turn (the user's own AI: the AI Sidebar, the phone's AI panel, the loopback MCP)
 // sees these, and each asks its own permission: reading and writing Notes, reading and changing
-// Reader (ADR-0019), and reading and changing Mods (ADR-0023) are six grants.
+// Reader (ADR-0019), reading and changing Mods (ADR-0023) and Jobs (ADR-0030), and changing what
+// the AI remembers (ADR-0032) are nine grants.
 //
 // No Electron imports.
 
@@ -30,6 +31,10 @@ export const VAULT_TOOL_PERMS = {
   saveJob: 'jobsWrite',
   runJob: 'jobsWrite',
   deleteJob: 'jobsWrite',
+  // What the AI remembers about the user (ADR-0032). Reading needs no grant: every memory is in the
+  // personal turn's prompt already.
+  remember: 'memoryWrite',
+  forget: 'memoryWrite',
 }
 
 export const VAULT_PERMS = [
@@ -41,6 +46,7 @@ export const VAULT_PERMS = [
   'modsWrite',
   'jobsRead',
   'jobsWrite',
+  'memoryWrite',
 ]
 
 // A Job's turn runs with nobody to ask (ADR-0030). Making the Job was the user's yes to it reading

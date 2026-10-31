@@ -317,6 +317,30 @@ class ShellWindowAiSidebar extends LitElement {
       letter-spacing: 0.04em;
       color: var(--ai-text-muted);
     }
+    .sessions-manage {
+      padding: 2px 6px 8px;
+    }
+
+    .link-btn {
+      background: none;
+      border: 0;
+      padding: 4px 6px;
+      font: inherit;
+      font-size: 12px;
+      color: var(--text-color--link, #4040e7);
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    .link-btn:hover {
+      text-decoration: underline;
+    }
+
+    .link-btn .fas {
+      font-size: 10px;
+      margin-left: 2px;
+    }
+
     .session-row {
       display: flex;
       align-items: center;
@@ -1022,7 +1046,34 @@ class ShellWindowAiSidebar extends LitElement {
     // whatever tab is open.
     this._loadModels();
     this._loadPrefs();
-    this._loadSession();
+    // Resolves once the last chat is loaded, so openChat() from the AI page lands after it.
+    this._sessionReady = this._loadSession();
+  }
+
+  // The AI page (nomad://ai/chats) opened a chat here: switch to it, or to a new chat for null.
+  async openChat(sessionId) {
+    await this._sessionReady;
+    if (this.streaming) return;
+    if (sessionId) await this._switchToSession(sessionId);
+    else await this._newSession();
+    this._sessionsOpen = false;
+    this.requestUpdate();
+  }
+
+  // A chat was renamed or deleted on the AI page. A deleted chat that is open here starts a new one,
+  // so the next save doesn't bring it back.
+  async onChatsChanged(change = {}) {
+    await this._sessionReady;
+    if (change.deleted && change.deleted === this.sessionId && !this.streaming) {
+      await this._newSession();
+    }
+    if (this._sessionsOpen) {
+      try {
+        this._sessions = await bg.aiShell.listSessions();
+      } catch {
+        this._sessions = [];
+      }
+    }
   }
 
   get _driveBase() {
@@ -1173,8 +1224,9 @@ class ShellWindowAiSidebar extends LitElement {
       return;
     }
     const data = await bg.aiShell.loadSession(id);
+    if (!data) return;
     this.sessionId = id;
-    this.messages = data?.messages || [];
+    this.messages = data.messages || [];
     this._draftDrives = new Set();
     this._sessionsOpen = false;
   }
@@ -1370,6 +1422,12 @@ class ShellWindowAiSidebar extends LitElement {
     }
     return html`
       <div class="sessions">
+        <div class="sessions-manage">
+          <button class="link-btn" @click=${() => bg.views.createTab('nomad://ai/chats', { setActive: true })}>
+            Search, rename and manage chats on the AI page
+            <span class="fas fa-fw fa-external-link-alt"></span>
+          </button>
+        </div>
         ${this._sessions.map(
           (s) => html`
             <div
