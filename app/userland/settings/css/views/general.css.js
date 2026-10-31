@@ -155,6 +155,12 @@ ${spinnerCSS}
     color: var(--text-color--light);
   }
 
+  .sidebar-hint {
+    margin: 8px 0 0;
+    font-size: 12px;
+    color: var(--text-color--light);
+  }
+
   .search-settings-list {
     margin-bottom: 10px;
   }
