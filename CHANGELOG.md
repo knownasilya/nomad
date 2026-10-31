@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.27.0](https://github.com/knownasilya/nomad/compare/v1.26.3...v1.27.0) (2026-10-31)
+
+
+### Features
+
+* **ai:** let the AI Sidebar click, type and scroll on the page ([12c3dfe](https://github.com/knownasilya/nomad/commit/12c3dfef226014a75ec4a03c467315a6513028be))
+* **ai:** steer the AI sidebar and the phone's AI panel while they work ([6be106e](https://github.com/knownasilya/nomad/commit/6be106e8d6efa52123e8c41a08ed1eac3184c572))
+* **history:** select rows with checkboxes and delete them together ([6cd021d](https://github.com/knownasilya/nomad/commit/6cd021dbebe2c5c9f6ac04f87b147fb4ea8bc8bb))
+* **updates:** update and restart a computer from the phone ([f6a56b4](https://github.com/knownasilya/nomad/commit/f6a56b47318f6bd21e5380d51aa20dbf62d69bb3))
+
 ### [1.26.3](https://github.com/knownasilya/nomad/compare/v1.26.2...v1.26.3) (2026-10-31)
 
 
