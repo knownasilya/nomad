@@ -38,7 +38,8 @@ function toggleWrap(markText) {
 }
 
 // Change the start of every selected line. `re` matches the prefix a line may already have. A line
-// whose prefix is of the same kind (`same`) loses it; any other gets `prefix` in place of it.
+// whose prefix is of the same kind (`same`) loses it; any other gets `prefix` in place of it. A
+// cursor at the start of the line ends up after the new prefix (after the checkbox, for a task).
 function toggleLinePrefix(prefix, same, re = LIST_PREFIX) {
   return (view) => {
     const { state } = view;
@@ -58,7 +59,8 @@ function toggleLinePrefix(prefix, same, re = LIST_PREFIX) {
         else changes.push({ from, to: from + (m ? m[0].length : 0), insert: prefix });
       }
     }
-    view.dispatch({ changes });
+    const changeSet = state.changes(changes);
+    view.dispatch({ changes: changeSet, selection: state.selection.map(changeSet, 1) });
     view.focus();
     return true;
   };

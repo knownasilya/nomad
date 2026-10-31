@@ -4,6 +4,10 @@
 // show for the whole line the cursor is on; inline marks (**, `, links) for the element it's in.
 // Without focus, all of it shows formatted.
 //
+// A task line is the exception: "- [ ] " stays a checkbox on the line the cursor is on, and the
+// cursor steps over it as one piece, so it is never hidden inside the "- " (a selection across the
+// "[ ]" still shows the source).
+//
 // Note links ([[Title]], [[Title#Heading|text]], or a relative [text](Title.md)) render as links.
 // A link to a note that doesn't exist yet renders faded; following it creates the note.
 
@@ -112,6 +116,8 @@ function buildDecorations(view) {
   const resolve = state.field(notesField);
   const tree = syntaxTree(state);
   const decos = [];
+  // The "- [ ] " of each task drawn as a checkbox: the cursor moves over it as one piece.
+  const atoms = [];
 
   for (const { from, to } of view.visibleRanges) {
     // Wikilinks first: Markdown reads [[Title]] as holding a link [Title], so syntax inside a
@@ -215,12 +221,17 @@ function buildDecorations(view) {
         }
         if (name === 'ListMark') {
           const item = node.node.parent;
-          if (item?.parent?.name === 'OrderedList' || onActiveLine(node.from)) return;
-          const isTask = !!item?.getChild('Task');
-          if (isTask) {
+          if (item?.parent?.name === 'OrderedList') return;
+          const marker = item?.getChild('Task')?.getChild('TaskMarker');
+          if (marker) {
+            // The checkbox stands in for the whole "- [ ] ", even on the line being edited, unless a
+            // selection reaches into the "[ ]" and shows its source.
+            if (touches(marker.from, marker.to)) return;
             const end = doc.sliceString(node.to, node.to + 1) === ' ' ? node.to + 1 : node.to;
             decos.push(hide.range(node.from, end));
-          } else {
+            const textFrom = doc.sliceString(marker.to, marker.to + 1) === ' ' ? marker.to + 1 : marker.to;
+            atoms.push(hide.range(node.from, textFrom));
+          } else if (!onActiveLine(node.from)) {
             decos.push(Decoration.replace({ widget: new BulletWidget() }).range(node.from, node.to));
           }
           return;
@@ -242,13 +253,13 @@ function buildDecorations(view) {
       },
     });
   }
-  return Decoration.set(decos, true);
+  return { decorations: Decoration.set(decos, true), atoms: Decoration.set(atoms, true) };
 }
 
 export const livePreview = ViewPlugin.fromClass(
   class {
     constructor(view) {
-      this.decorations = buildDecorations(view);
+      ({ decorations: this.decorations, atoms: this.atoms } = buildDecorations(view));
     }
     update(u) {
       if (
@@ -259,11 +270,14 @@ export const livePreview = ViewPlugin.fromClass(
         syntaxTree(u.startState) !== syntaxTree(u.state) ||
         u.transactions.some((tr) => tr.effects.some((e) => e.is(setNotes)))
       ) {
-        this.decorations = buildDecorations(u.view);
+        ({ decorations: this.decorations, atoms: this.atoms } = buildDecorations(u.view));
       }
     }
   },
-  { decorations: (v) => v.decorations }
+  {
+    decorations: (v) => v.decorations,
+    provide: (plugin) => EditorView.atomicRanges.of((view) => view.plugin(plugin)?.atoms || Decoration.none),
+  }
 );
 
 // Clicks on the rendered parts: tick a task, follow a link. `onOpenLink` gets
