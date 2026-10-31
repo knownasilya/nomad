@@ -25,6 +25,12 @@
 //   Provider → PROMPT { id, permission } ↔ Client → PROMPT_RESULT { id, allow }   (reverse consent)
 //   Provider → DONE { id } | ERROR { id, message }   (terminal for that id)
 //   Client → CANCEL { id }                      (abort an in-flight turn)
+//   Client → STEER { id, steerId, text }        (a message the user sent while the turn runs; the
+//                                             Provider's loop reads it at its next step)
+//   Client → UNSTEER { id, steerId }            (take it back, if the loop hasn't read it yet)
+//   Provider → STEERED { id, ids, texts }       (the loop read these; sent before that turn's DONE)
+//                                             An older Provider drops STEER, so the Client sends
+//                                             a message that got no STEERED as the next turn.
 // ──────────────────────────────────────────────────────────────────────────────
 
 export const AI_BRIDGE_PROTOCOL = 'nomad/ai-bridge';
@@ -48,6 +54,9 @@ export const FRAME = Object.freeze({
   ERROR: 'error',
   CANCEL: 'cancel',
   HEARTBEAT: 'heartbeat', // Provider → Client keepalive while a turn is in flight (model load / slow first token)
+  STEER: 'steer', // Client → Provider: steer the running turn (app/bg/ai/steering.mjs)
+  UNSTEER: 'unsteer', // Client → Provider: take back a steer the loop hasn't read
+  STEERED: 'steered', // Provider → Client: the loop read these steers
 });
 
 // The single Protomux message slot carries these frames as JSON bytes. Encode/decode are the

@@ -42,6 +42,8 @@ import {
   RPC_AI_CHAT,
   RPC_AI_CANCEL,
   RPC_AI_PROMPT_RESULT,
+  RPC_AI_STEER,
+  RPC_AI_UNSTEER,
   RPC_AI_EVENT,
   RPC_APPS,
   RPC_APPS_RESULT,
@@ -221,10 +223,19 @@ export interface AiChatHandlers {
   onTool?: (event: unknown) => void
   onReasoning?: (text: string) => void // the model's reasoning, streamed (desktop Providers since this release)
   onPrompt?: (permission: string) => boolean | Promise<boolean> // relayed modifyDrive consent
+  // The Provider's loop read these messages the user sent mid-turn (handle.steer).
+  onSteer?: (event: { ids: string[]; texts: string[] }) => void
   onDone?: () => void
   onError?: (message: string) => void
 }
-export interface AiChatHandle { cancel: () => void }
+// steer: a message the user sent while the turn runs; the AI reads it at its next step. A message
+// that gets no onSteer before onDone (an older Provider, or the turn was ending) is the caller's to
+// send as the next turn. unsteer takes one back, if the AI hasn't read it yet.
+export interface AiChatHandle {
+  cancel: () => void
+  steer: (id: string, text: string) => void
+  unsteer: (id: string) => void
+}
 
 // Boots the Bare worklet (the P2P backend) once and wires up RPC. The returned
 // `open`/`close` functions post commands to the backend; responses are routed
@@ -385,7 +396,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
   function aiChat (messages: unknown[], opts: Record<string, unknown>, h: AiChatHandlers): AiChatHandle {
     const rpc = rpcRef.current
     const reqId = `ai_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
-    if (!rpc) { h.onError?.('backend not ready'); return { cancel () {} } }
+    if (!rpc) { h.onError?.('backend not ready'); return { cancel () {}, steer () {}, unsteer () {} } }
 
     // A turn can legitimately run for minutes (model load, tool round-trips) and the user will
     // background the app mid-answer, so hold the backend awake until it settles.
@@ -403,6 +414,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
       if (msg.kind === 'chunk') h.onChunk?.(msg.text)
       else if (msg.kind === 'tool') h.onTool?.(msg.event)
       else if (msg.kind === 'reasoning') h.onReasoning?.(msg.text)
+      else if (msg.kind === 'steer') h.onSteer?.({ ids: msg.ids || [], texts: msg.texts || [] })
       else if (msg.kind === 'prompt') {
         Promise.resolve(h.onPrompt ? h.onPrompt(msg.permission) : false).then((allow) => {
           const r = rpc.request(RPC_AI_PROMPT_RESULT)
@@ -421,6 +433,14 @@ export function useBackend (handlers: BackendHandlers): Backend {
         const r = rpc.request(RPC_AI_CANCEL)
         r.send(b4a.from(JSON.stringify({ reqId })))
         cleanup()
+      },
+      steer (steerId: string, text: string) {
+        const r = rpc.request(RPC_AI_STEER)
+        r.send(b4a.from(JSON.stringify({ reqId, steerId, text })))
+      },
+      unsteer (steerId: string) {
+        const r = rpc.request(RPC_AI_UNSTEER)
+        r.send(b4a.from(JSON.stringify({ reqId, steerId })))
       }
     }
   }

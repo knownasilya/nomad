@@ -6,6 +6,8 @@ export default {
   listModels: 'promise',
   modelInfo: 'promise',
   listTools: 'promise',
+  steer: 'promise',
+  unsteer: 'promise',
   getActiveDriveInfo: 'promise',
   notifyAgentWroteFile: 'promise',
   listSessions: 'promise',
