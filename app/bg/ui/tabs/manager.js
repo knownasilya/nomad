@@ -42,6 +42,7 @@ import * as mods from '../mods';
 import * as spacePins from '../space-pins';
 import { isPinnable, normalizePinUrl, reconcileTabs } from '../../../../shared/pins.mjs';
 import * as vault from '../../hyper/vault';
+import * as saveToReader from '../save-to-reader';
 
 const X_POSITION = 0;
 const Y_POSITION = 75;
@@ -2034,6 +2035,12 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     drafts.setPreview(driveKey, !drafts.isPreview(driveKey));
     pane.emitUpdateState();
     pane.webContents.reload();
+  },
+
+  // Save the page this tab shows to Reader (ADR-0033), as a read article.
+  async saveToReader(index) {
+    const pane = getByIndex(getWindow(this.sender), index)?.primaryPane;
+    if (pane?.webContents) await saveToReader.saveWebContents(pane.webContents);
   },
 
   // { hasDraft, previewing, changes:[{path,op,conflict}] } for the Drive shown in this tab.

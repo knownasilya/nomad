@@ -184,8 +184,30 @@ class AiSetupView extends LitElement {
             only.
           </p>
         </div>
+        <div class="section">
+          <label>
+            <input
+              type="checkbox"
+              ?checked=${!!this.settings.ai_reader_topics}
+              @change=${this.onReaderTopicsChange}
+            />
+            Sort articles I save to Reader into topics
+          </label>
+          <p class="description">
+            When you save a page to Reader, this device's AI reads its title and opening
+            and files it under one to three topics, reusing the topics you already have.
+            Change an article's topics in Reader at any time; the AI leaves those alone.
+          </p>
+        </div>
       </div>
     `;
+  }
+
+  onReaderTopicsChange(e) {
+    const on = e.currentTarget.checked ? 1 : 0;
+    this.settings.ai_reader_topics = on;
+    nomad.browser.setSetting('ai_reader_topics', on);
+    toast.create(on ? 'The AI will sort saved articles into topics' : 'The AI won’t sort saved articles any more');
   }
 
   onAutoNamesChange(e) {

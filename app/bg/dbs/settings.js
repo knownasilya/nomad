@@ -41,6 +41,7 @@ const GLOBAL_SETTINGS = new Set([
   'ai_share_provider',
   'ai_keep_awake',
   'ai_auto_names',
+  'ai_reader_topics',
   'ai_memory',
   'ai_sidebar_width',
   'cert_exceptions',
@@ -127,6 +128,8 @@ export const setup = async function (opts) {
     ai_keep_awake: 0, // opt-in: hold a powerSaveBlocker while sharing, so an idle Device stays reachable
     // The AI names sites the user visits often (bg/hyper/auto-names.js). The AI page turns it off.
     ai_auto_names: 1,
+    // The AI sorts the articles saved to Reader into topics (bg/web-apis/bg/reader-articles.ts).
+    ai_reader_topics: 1,
     // The user's assistant remembers things about them across chats (bg/ai/memory.js, ADR-0032).
     // nomad://ai/memory turns it off.
     ai_memory: 1,

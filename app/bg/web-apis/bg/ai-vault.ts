@@ -17,6 +17,7 @@ import { readJobSource } from './job-source';
 import * as vault from '../../hyper/vault';
 import { describeSchedule } from '../../../../shared/jobs.mjs';
 import fsAPI from './fs';
+import * as webFeeds from './web-feeds';
 import {
   VAULT_TOOL_PERMS,
   findNotes,
@@ -97,8 +98,9 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
       return json(await highlightForAi(ctx.sender, args));
 
     case 'listReaderPosts': {
-      const { follows, read } = await vaultApps.readerOf(await readerSpace());
-      const only = args.feed ? apps.driveRoot(args.feed) : null;
+      const { follows, read: hyperRead, webRead } = await vaultApps.readerOf(await readerSpace());
+      const read = [...hyperRead, ...apps.webReadUrls(webRead)];
+      const only = args.feed ? apps.feedUrl(args.feed) : null;
       if (args.feed && !follows.includes(only))
         throw new Error("The user doesn't follow that feed in Reader");
       const roots = only ? [only] : follows;
@@ -123,15 +125,15 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
     }
 
     case 'followFeed': {
-      const root = apps.driveRoot(args.url);
-      if (!root) throw new Error("Pass the feed's hyper:// URL");
+      const root = apps.feedUrl(args.url);
+      if (!root) throw new Error("Pass the feed's hyper:// URL, or an RSS or Atom feed's URL");
       await vaultApps.followIn(await readerSpace(), root);
       return `Following ${root} in Reader`;
     }
 
     case 'unfollowFeed': {
-      const root = apps.driveRoot(args.url);
-      if (!root) throw new Error("Pass the feed's hyper:// URL");
+      const root = apps.feedUrl(args.url);
+      if (!root) throw new Error("Pass the feed's hyper:// URL, or an RSS or Atom feed's URL");
       await vaultApps.unfollowIn(await readerSpace(), root);
       return `Stopped following ${root} in Reader`;
     }
@@ -139,7 +141,18 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
     case 'markPostsRead': {
       const urls = Array.isArray(args.urls) ? args.urls.filter((u) => typeof u === 'string') : [];
       if (!urls.length) throw new Error('Pass the post URLs as `urls`');
-      await vaultApps.saveReadIn(await readerSpace(), urls);
+      const space = await readerSpace();
+      // An RSS or Atom item's mark is kept under the feed that lists it, so load those feeds.
+      const loaded = {};
+      if (urls.some((u) => !apps.driveRoot(u))) {
+        const { follows } = await vaultApps.readerOf(space);
+        for (const f of follows.filter(apps.isWebFeed)) {
+          try {
+            loaded[f] = (await webFeeds.loadWebFeed(f, { session: ctx?.sender?.session })).posts.map((p) => p.url);
+          } catch {}
+        }
+      }
+      await vaultApps.saveReadIn(space, urls, loaded);
       return `Marked ${urls.length} post${urls.length === 1 ? '' : 's'} read`;
     }
 
@@ -238,6 +251,15 @@ function readText(ctx, root, path) {
 }
 
 async function loadFeed(ctx, root): Promise<LoadedFeed> {
+  if (apps.isWebFeed(root)) {
+    // An RSS or Atom feed (ADR-0033 amendment).
+    try {
+      const f = await webFeeds.loadWebFeed(root, { session: ctx?.sender?.session });
+      return { url: root, title: f.title, posts: f.posts };
+    } catch (err) {
+      return { url: root, title: root, posts: [], error: err?.message || String(err) };
+    }
+  }
   let timer;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error('The feed did not answer')), FEED_TIMEOUT_MS);

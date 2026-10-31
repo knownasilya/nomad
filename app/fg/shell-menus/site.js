@@ -3,6 +3,7 @@ import * as bg from './bg-process-rpc';
 import commonCSS from './common.css';
 import { writeToClipboard } from '../lib/event-handlers';
 import { isHyperOrPearUrl } from '../../lib/urls';
+import { articleUrl } from '../../../shared/reader-articles.mjs';
 
 class SiteMenu extends LitElement {
   static get properties() {
@@ -39,6 +40,20 @@ class SiteMenu extends LitElement {
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
+        ${articleUrl(this.url)
+          ? html`
+              <div class="section">
+                <div
+                  class="menu-item"
+                  @click=${this.onSaveToReader}
+                  title="Keep this page in Reader. The AI sorts it into topics."
+                >
+                  <i class="fas fa-bookmark"></i>
+                  <span class="label">Save to Reader</span>
+                </div>
+              </div>
+            `
+          : ''}
         ${this.mods ? this.renderModsItem() : ''}
         ${this.driveInfo
           ? html`
@@ -106,6 +121,12 @@ class SiteMenu extends LitElement {
   onOpenPage(e, url) {
     bg.shellMenus.createTab(url);
     bg.shellMenus.close();
+  }
+
+  // Reader's saved articles (ADR-0033): bg reads the tab and shows a toast.
+  onSaveToReader() {
+    bg.shellMenus.close();
+    bg.views.saveToReader('active');
   }
 
   onOpenMods() {

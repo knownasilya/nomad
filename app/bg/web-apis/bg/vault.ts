@@ -298,6 +298,48 @@ export default {
     return vaultApps.saveRead(this, add, loaded);
   },
 
+  // Saved articles (reader-articles.ts, ADR-0033)
+  async readerSaveArticle(url, opts) {
+    return vaultApps.saveArticle(this, url, opts);
+  },
+
+  async readerUpdateArticle(id, changes) {
+    return vaultApps.updateArticle(this, id, changes);
+  },
+
+  async readerDeleteArticle(id) {
+    return vaultApps.deleteArticle(this, id);
+  },
+
+  async readerSuggestTopics(ids) {
+    return vaultApps.suggestTopics(this, ids);
+  },
+
+  async readerArticle(id) {
+    return vaultApps.readArticle(this, id);
+  },
+
+  async readerRefetchArticle(id) {
+    return vaultApps.refetchArticle(this, id);
+  },
+
+  // RSS and Atom feeds (web-feeds.ts), and topics for feed posts
+  async readerAddLink(url) {
+    return vaultApps.addLink(this, url);
+  },
+
+  async readerWebFeed(url, opts) {
+    return vaultApps.webFeed(this, url, opts);
+  },
+
+  async readerTagPosts(posts, urls) {
+    return vaultApps.tagPosts(this, posts, urls);
+  },
+
+  async readerSetPostTopics(url, topics) {
+    return vaultApps.setPostTopics(this, url, topics);
+  },
+
   async listNotes() {
     return vaultApps.listNotes(this);
   },

@@ -13,6 +13,7 @@ import os from 'os'
 import fs from 'fs'
 import { createFsCore, makeMetadata, AUTOBASE_OPTS } from '../../shared/fs-core.mjs'
 import * as apps from '../../shared/vault-apps.mjs'
+import * as ra from '../../shared/reader-articles.mjs'
 import * as names from '../../shared/names.mjs'
 import * as jl from '../../shared/jobs.mjs'
 import * as du from '../../shared/device-updates.mjs'
@@ -119,6 +120,61 @@ describe('phone Reader and Notes over a shared Vault (ADR-0017)', () => {
       expect((await readJson(computer, apps.readPath(SPACE))).read).toEqual([FEED + 'posts/1/'])
     })
   }, 30000)
+
+  it('lists the articles the computer saved, and marks one read (ADR-0033)', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      const a = ra.makeArticle({ url: 'https://example.com/a', title: 'Sourdough', text: 'flour water' }, null, { read: false, now: '2026-10-01T00:00:00.000Z' })
+      const b = ra.withTopics(ra.makeArticle({ url: 'https://example.com/b', title: 'Stars' }, null, { now: '2026-10-02T00:00:00.000Z' }), ['Space'])
+      await computer.append(putJson(ra.articlePath(SPACE, a.id), a))
+      await computer.append(putJson(ra.articleTextPath(SPACE, a.id), ra.articleText(a.id, 'flour water')))
+      await computer.append(putJson(ra.articlePath(SPACE, b.id), b))
+      await computer.update()
+
+      await until(async () => (await phone.readerState(base, SPACE)).articles.length === 2)
+      const { articles } = await phone.readerState(base, SPACE)
+      expect(articles.map((x) => x.title)).toEqual(['Stars', 'Sourdough']) // newest first, no text records
+      expect(articles[0].topics).toEqual(['Space'])
+      expect((await phone.readerState(base, 'd'.repeat(64))).articles).toEqual([]) // another Space
+
+      const after = await phone.markArticle(base, SPACE, a.id, true)
+      expect(after.articles.find((x) => x.id === a.id).readAt).toBeTruthy()
+      await until(async () => !!(await readJson(computer, ra.articlePath(SPACE, a.id)))?.readAt)
+      expect((await readJson(computer, ra.articlePath(SPACE, a.id))).title).toBe('Sourdough')
+      await expect(phone.markArticle(base, SPACE, '0000000000000000', true)).rejects.toThrow()
+    })
+  }, 30000)
+
+  it('follows an RSS feed, keeps its read marks apart, and reads post topics (ADR-0033)', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      const RSS = 'https://ana.example/feed.xml'
+      const POST = 'https://ana.example/2024/newer'
+      const tags = ra.makePostTopics(POST, ['Gardening'], 'ai')
+      await computer.append(putJson(ra.postTopicsPath(SPACE, POST), tags))
+      await computer.update()
+
+      await phone.follow(base, SPACE, FEED)
+      await phone.follow(base, SPACE, RSS)
+      await phone.saveRead(base, SPACE, [POST, FEED + 'posts/1/'], { [RSS]: [POST] })
+      const state = await phone.readerState(base, SPACE)
+      expect(state.follows.sort()).toEqual([FEED, RSS].sort())
+      expect(state.read).toEqual([FEED + 'posts/1/']) // older clients prune read.json to hyper URLs
+      expect(state.webRead).toEqual({ [RSS]: [POST] })
+      await until(async () => (await phone.readerState(base, SPACE)).postTopics.length === 1)
+      expect((await phone.readerState(base, SPACE)).postTopics[0]).toMatchObject({ url: POST, topics: ['Gardening'] })
+      await until(async () => !!(await readJson(computer, apps.webReadPath(SPACE))))
+      expect((await readJson(computer, apps.webReadPath(SPACE))).read).toEqual({ [RSS]: [POST] })
+      expect(await readJson(computer, apps.followPath(SPACE, RSS))).toMatchObject({ url: RSS, kind: 'web' })
+    })
+  }, 30000)
+
+  it('parses the feed text the app fetched, or finds the feed a page links', () => {
+    const xml = '<rss><channel><title>Ana</title><item><title>Hi</title><link>/hi</link></item></channel></rss>'
+    expect(phone.parseFeed('https://ana.example/feed.xml', xml)).toMatchObject({ title: 'Ana', posts: [{ url: 'https://ana.example/hi' }] })
+    const html = '<html><head><link rel="alternate" type="application/rss+xml" href="/feed.xml"></head></html>'
+    expect(phone.parseFeed('https://ana.example/', html)).toEqual({ feeds: [{ url: 'https://ana.example/feed.xml', title: '' }] })
+    expect(() => phone.parseFeed('https://ana.example/', '<html></html>')).toThrow(/No RSS/)
+    expect(() => phone.parseFeed('hyper://x/', xml)).toThrow()
+  })
 
   it('updates and deletes a note, and unsubscribes', async () => {
     await withDevices(async ({ phone: base }) => {
