@@ -1,6 +1,6 @@
-// The runtime Settings → AI has selected: saved servers plus whatever Claude,
+// The runtime the AI page (nomad://ai/setup) has selected: saved servers plus whatever Claude,
 // Cursor, Ollama, or LM Studio is actually present. Reads settings on each call
-// so a change in the settings page applies to the next chat turn.
+// so a change on the AI page applies to the next chat turn.
 
 import { execFile, spawn } from 'child_process';
 import * as settingsDb from '../dbs/settings';

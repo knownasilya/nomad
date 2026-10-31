@@ -663,7 +663,7 @@ function anyServing() {
 
 function noProviderError() {
   const err = new Error(
-    'No AI Device is online — start a local AI runtime and check Settings → AI (base URL, access token), or pair with another Nomad device that has one running.'
+    'No AI Device is online — start a local AI runtime and check the AI page, nomad://ai/setup (base URL, access token), or pair with another Nomad device that has one running.'
   );
   err.name = 'NoAiProviderError';
   return err;

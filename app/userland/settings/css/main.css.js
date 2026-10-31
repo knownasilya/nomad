@@ -44,6 +44,13 @@ ${emptyCSS}
     margin-right: 5px;
   }
 
+  .subnav .item .moved {
+    float: right;
+    margin-top: 2px;
+    font-size: 9px;
+    color: var(--text-color--pretty-light);
+  }
+
   .subnav .item:hover {
     background: var(--bg-color--subnav-item--hover);
   }

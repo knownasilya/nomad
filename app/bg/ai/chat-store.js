@@ -6,6 +6,10 @@
 // Layout:
 //   /.ai-chat/sessions/<sessionId>.json   { id, title, messages, updatedAt }
 //   /.ai-chat/last-session.json           { sessionId }
+//   /.ai-chat/names.json                  { [sessionId]: name }   names the user gave on the AI page
+//
+// A session's `title` is its first message, rewritten on every save. A name the user gives a chat
+// (nomad://ai/chats) is kept apart, in names.json, so the sidebar's next save can't overwrite it.
 //
 // Older builds kept sessions and model preferences per site, in /.ai-chat/<hash of origin>/. Those
 // folders are left where they are and not read. The model choice now lives in the settings DB
@@ -18,10 +22,13 @@
 // permitted the same way it is for any other privileged nomad:// UI.
 
 import fsAPI from '../web-apis/bg/fs';
+import { searchWords, previewOf, matchSession } from './chat-search.mjs';
 
 const ROOT = 'hyper://private/.ai-chat';
 const SESSIONS = `${ROOT}/sessions`;
 const LAST_SESSION = `${ROOT}/last-session.json`;
+const NAMES = `${ROOT}/names.json`;
+const MAX_NAME = 80;
 const sessionUrl = (id) => `${SESSIONS}/${id}.json`;
 
 async function readJson(ctx, url) {
@@ -42,7 +49,11 @@ export function newSessionId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-export async function listSessions(sender) {
+// Every session, newest first: { id, title, named, updatedAt, messageCount, preview }. `title` is
+// the user's name for it when they gave one (named: true), else its first message. With `query`,
+// only the sessions whose name or messages have every word of it, each with a `snippet` around the
+// first match.
+export async function listSessions(sender, { query = '' } = {}) {
   const ctx = { sender };
   let entries;
   try {
@@ -59,11 +70,32 @@ export async function listSessions(sender) {
   }
   // Independent reads — fire them concurrently rather than one Drive round trip at a time, so
   // opening the history panel doesn't cost O(sessions) sequential latency.
-  const sessions = await Promise.all(ids.map((id) => readJson(ctx, sessionUrl(id))));
+  const [sessions, names] = await Promise.all([
+    Promise.all(ids.map((id) => readJson(ctx, sessionUrl(id)))),
+    readNames(ctx),
+  ]);
+  const words = searchWords(query);
   const out = [];
   sessions.forEach((data, i) => {
     if (!data) return;
-    out.push({ id: ids[i], title: data.title || '', updatedAt: data.updatedAt || 0 });
+    const id = ids[i];
+    const messages = Array.isArray(data.messages) ? data.messages : [];
+    const named = typeof names[id] === 'string' && names[id] ? names[id] : '';
+    const row = {
+      id,
+      title: named || data.title || '',
+      named: !!named,
+      updatedAt: data.updatedAt || 0,
+      messageCount: messages.filter((m) => m && (m.role === 'user' || m.role === 'assistant'))
+        .length,
+      preview: previewOf(messages),
+    };
+    if (words.length) {
+      const snippet = matchSession(row.title, messages, words);
+      if (snippet === null) return;
+      row.snippet = snippet;
+    }
+    out.push(row);
   });
   out.sort((a, b) => b.updatedAt - a.updatedAt);
   return out;
@@ -87,9 +119,37 @@ export async function deleteSession(sender, sessionId) {
   } catch {
     /* already gone */
   }
+  const ctx = { sender };
+  const names = await readNames(ctx);
+  if (sessionId in names) {
+    delete names[sessionId];
+    await writeJson(ctx, NAMES, names).catch(() => {});
+  }
+}
+
+// Name a session, or with '' go back to its first message as its title. Returns the title shown.
+export async function renameSession(sender, sessionId, name) {
+  const ctx = { sender };
+  const data = await readJson(ctx, sessionUrl(sessionId));
+  if (!data) throw new Error('No chat with that id');
+  const clean = String(name ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_NAME);
+  const names = await readNames(ctx);
+  if (clean) names[sessionId] = clean;
+  else delete names[sessionId];
+  await writeJson(ctx, NAMES, names);
+  return clean || data.title || '';
 }
 
 export async function getLastSessionId(sender) {
   const rec = await readJson({ sender }, LAST_SESSION);
   return rec?.sessionId || null;
+}
+
+// The user's names for sessions, { [id]: name }.
+async function readNames(ctx) {
+  const v = await readJson(ctx, NAMES);
+  return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
 }

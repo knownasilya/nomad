@@ -1,18 +1,27 @@
-import { css } from 'lit';
-import colorsCSS from '../../../app-stdlib/css/colors.css.js';
-import buttonsCSS from '../../../app-stdlib/css/buttons2.css.js';
+import { css } from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
+import buttonsCSS from 'nomad://app-stdlib/css/buttons2.css.js';
 
 const cssStr = css`
-  ${colorsCSS}
   ${buttonsCSS}
 
   :host {
     display: block;
-    max-width: 600px;
+    color: var(--text-color--default);
+  }
+
+  :host > * {
+    max-width: 680px;
+  }
+
+  h2 {
+    margin: 0 0 12px;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
   }
 
   a {
-    color: var(--blue);
+    color: var(--ai-accent);
     text-decoration: none;
   }
 
@@ -21,10 +30,11 @@ const cssStr = css`
   }
 
   .form-group {
-    border: 1px solid var(--border-color--semi-light);
-    border-radius: 4px;
-    padding: 10px 12px;
+    border: 1px solid var(--border-color--very-light);
+    border-radius: 10px;
+    padding: 0 12px 10px;
     margin-bottom: 16px;
+    background: var(--bg-color--default);
   }
 
   .form-group h2 {
@@ -60,36 +70,47 @@ const cssStr = css`
   }
 
   input[type='text'],
-  input[type='password'] {
-    height: 24px;
-    padding: 0 7px;
-    border-radius: 4px;
-    color: rgba(51, 51, 51, 0.95);
-    border: 1px solid #d9d9d9;
-    box-shadow: inset 0 1px 2px #0001;
+  input[type='password'],
+  select {
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color--light);
+    background: var(--bg-color--secondary);
+    color: var(--text-color--default);
+    font: inherit;
+    font-size: 13px;
+    box-sizing: border-box;
   }
 
   input[type='text']:focus,
-  input[type='password']:focus {
-    outline: 0;
-    border: 1px solid rgba(41, 95, 203, 0.8);
-    box-shadow: 0 0 0 2px rgba(41, 95, 203, 0.2);
-  }
-
-  select {
-    height: 26px;
-    padding: 0 6px;
-    border-radius: 4px;
-    color: rgba(51, 51, 51, 0.95);
-    border: 1px solid #d9d9d9;
-    box-shadow: inset 0 1px 2px #0001;
-    background: #fff;
-  }
-
+  input[type='password']:focus,
   select:focus {
     outline: 0;
-    border: 1px solid rgba(41, 95, 203, 0.8);
-    box-shadow: 0 0 0 2px rgba(41, 95, 203, 0.2);
+    border-color: var(--ai-accent);
+    box-shadow: 0 0 0 3px var(--ai-accent-soft);
+  }
+
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: var(--ai-fill);
+  }
+
+  .btn {
+    height: 28px;
+    padding: 0 12px;
+    border: 1px solid var(--border-color--light);
+    border-radius: 6px;
+    background: var(--bg-color--default);
+    color: var(--text-color--default);
+    box-shadow: none;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .btn:hover {
+    background: var(--ai-row-hover-bg);
   }
 
   .server-add,
@@ -139,11 +160,11 @@ const cssStr = css`
   }
 
   .test-status.ok {
-    color: var(--green, #3b8b3b);
+    color: var(--ai-ok);
   }
 
   .test-status.err {
-    color: var(--red, #c0392b);
+    color: var(--ai-err);
   }
 
   /* The keep-awake sub-setting, indented under "Share this device's AI". */
@@ -167,11 +188,11 @@ const cssStr = css`
   }
 
   .keep-awake-status.ok {
-    color: var(--green, #3b8b3b);
+    color: var(--ai-ok);
   }
 
   .keep-awake-status.warn {
-    color: var(--yellow-dark, #b8860b);
+    color: var(--ai-warn);
   }
 
   .badge-experimental {
@@ -179,7 +200,7 @@ const cssStr = css`
     font-weight: 500;
     padding: 2px 7px;
     border-radius: 10px;
-    background: var(--blue, #4a7fcb);
+    background: var(--ai-fill);
     color: #fff;
     vertical-align: middle;
     letter-spacing: 0.3px;

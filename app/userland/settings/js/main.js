@@ -8,7 +8,6 @@ import css from '../css/main.css.js';
 import './views/general.js';
 import './views/url-routing.js';
 import './views/blocking.js';
-import './views/ai.js';
 import './views/security.js';
 import './views/devices.js';
 import './views/info.js';
@@ -16,6 +15,12 @@ import './views/network.js';
 import './views/fs-audit-log.js';
 import './views/daemon-log.js';
 import './views/log.js';
+
+// Sub-pages that live elsewhere now: the nav item opens the page instead.
+const MOVED = {
+  // The AI's setup moved to its own page, with its chats and memory (nomad://ai).
+  ai: 'nomad://ai/setup',
+};
 
 // [id, icon, label] for each sub-page; null draws a divider
 const SUBVIEWS = [
@@ -47,6 +52,11 @@ class SettingsApp extends LitElement {
   constructor() {
     super();
     this.currentSubview = QP.getParam('view') || 'general';
+    // An old link to Settings → AI.
+    if (MOVED[this.currentSubview]) {
+      location.replace(MOVED[this.currentSubview]);
+      return;
+    }
     // back/forward between sub-pages
     window.addEventListener('popstate', () => {
       const view = QP.getParam('view') || 'general';
@@ -101,6 +111,9 @@ class SettingsApp extends LitElement {
       return html`
         <div class=${cls} @click=${(e) => this.onClickSubview(e, id)}>
           <span class="fa-fw ${icon}"></span> ${label}
+          ${MOVED[id]
+            ? html`<span class="moved fas fa-external-link-alt" title="Opens the AI page"></span>`
+            : ''}
         </div>
       `;
     };
@@ -115,8 +128,6 @@ class SettingsApp extends LitElement {
         return html`<url-routing-settings-view loadable></url-routing-settings-view>`;
       case 'blocking':
         return html`<blocking-settings-view loadable></blocking-settings-view>`;
-      case 'ai':
-        return html`<ai-settings-view loadable></ai-settings-view>`;
       case 'security':
         return html`<security-settings-view loadable></security-settings-view>`;
       case 'devices':
@@ -143,6 +154,10 @@ class SettingsApp extends LitElement {
   // =
 
   onClickSubview(e, id) {
+    if (MOVED[id]) {
+      location.href = MOVED[id];
+      return;
+    }
     this.currentSubview = id;
     QP.setParams({ view: id });
     this.load();

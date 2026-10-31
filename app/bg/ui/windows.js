@@ -533,6 +533,13 @@ export function toggleAiSidebarOpen(win) {
   win.emit('resize');
 }
 
+export function setAiSidebarOpen(win, open) {
+  if (!!getAddedWindowSettings(win).aiSidebarOpen === !!open) return;
+  updateAddedWindowSettings(win, { aiSidebarOpen: !!open });
+  tabManager.emitReplaceState(win);
+  win.emit('resize');
+}
+
 export async function initSidebarSettings(win, settingsDb) {
   const [tabLayout, sidebarSide, sidebarWidth, aiSidebarWidth] = await Promise.all([
     settingsDb.get('tab_layout'),
