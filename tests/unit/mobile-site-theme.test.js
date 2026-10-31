@@ -71,7 +71,7 @@ describe('tintTheme', () => {
     expect(tintTheme(base, 'rgb(255, 255, 255)').scheme).toBe('light')
   })
 
-  it('keeps selected text readable: a see-through highlight in a shade of the text color', () => {
+  it('keeps selected text readable on its see-through highlight', () => {
     // The address is all selected on focus. Blend the highlight over the bar and check the text on it.
     const blend = (bg, rgba) => {
       const m = /rgba\((\d+),(\d+),(\d+),([\d.]+)\)/.exec(rgba)
