@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.31.0](https://github.com/knownasilya/nomad/compare/v1.30.0...v1.31.0) (2026-10-31)
+
+
+### Features
+
+* **ai:** manage skills on the AI page ([196d659](https://github.com/knownasilya/nomad/commit/196d6590c2b0bca25c7d736aa8bc8b5cc9befc35))
+
+
+### Bug Fixes
+
+* **mobile:** keep sign-in popups, new-window links and feeds inside Nomad ([195ac01](https://github.com/knownasilya/nomad/commit/195ac0189ffbbc9667164d6c33a2511285edc654))
+
 ## [1.30.0](https://github.com/knownasilya/nomad/compare/v1.29.0...v1.30.0) (2026-10-31)
 
 
