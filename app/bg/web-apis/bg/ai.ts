@@ -729,7 +729,11 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   // One page-control session a turn: it pins the tab the AI acts in and takes its cursor off the
   // page when the turn ends.
   const pageSession = canControlPage
-    ? pageControl.createSession({ requestPermission, stopTurn: () => turnStop.abort() })
+    ? pageControl.createSession({
+        requestPermission,
+        stopTurn: () => turnStop.abort(),
+        chat: opts.pageChat || null,
+      })
     : null;
 
   // Every tool call of this turn runs with these: the loop below, and a CLI's calls through the

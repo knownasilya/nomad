@@ -29,6 +29,8 @@ import {
   refArg,
   riskyWords,
   screenshotPoint,
+  similarKey,
+  similarLabel,
   siteOf,
   snapshotForModel,
   storedGrant,
@@ -49,6 +51,20 @@ const shownIn = new Map();
 const loads = new WeakMap();
 // Each tab's last screenshot, for clickAt: { url, load, width, height, cssWidth, cssHeight }.
 const shots = new WeakMap();
+// The clicks the user allowed "and others like it" in each sidebar chat: chat -> Set of
+// similarKey. In memory only, so a restart asks again. The oldest chats drop off first.
+const similarOk = new Map();
+const MAX_CHATS = 50;
+
+function allowSimilar(chat, key) {
+  let keys = similarOk.get(chat);
+  if (!keys) {
+    keys = new Set();
+    similarOk.set(chat, keys);
+    if (similarOk.size > MAX_CHATS) similarOk.delete(similarOk.keys().next().value);
+  }
+  keys.add(key);
+}
 
 export function setup() {
   ipcMain.on('nomad-page-control:user', (e, kind) => {
@@ -58,8 +74,9 @@ export function setup() {
 }
 
 // One turn's page control. `requestPermission` is the turn's permission function; `stopTurn`
-// ends the turn (the bar's Stop and Esc).
-export function createSession({ requestPermission, stopTurn }) {
+// ends the turn (the bar's Stop and Esc). `chat` names the sidebar chat the turn is in, so a
+// confirm can offer to allow similar clicks for the rest of it; without one it asks every time.
+export function createSession({ requestPermission, stopTurn, chat = null }) {
   let pinned = null;
   let stopped = false;
   let tookOver = false;
@@ -116,9 +133,19 @@ export function createSession({ requestPermission, stopTurn }) {
     return !!ok;
   }
 
-  // The user's OK for one click that spends, sends, posts or deletes.
-  async function confirm(wc, what) {
-    const ok = await requestPermission(`${PAGE_ACTION_PERM}:${++confirms}`, wc, { action: what });
+  // The user's OK for one click that spends, sends, posts or deletes. With a chat, the prompt
+  // also offers to allow clicks like this one (similarKey) until the chat ends; the answer is then
+  // 'similar'.
+  async function confirm(wc, verb, control) {
+    const what = `${verb} ${describeControl(control)}`;
+    const url = wc.getURL();
+    const key = chat ? similarKey(url, verb, control) : null;
+    if (key && similarOk.get(chat)?.has(key)) return;
+    const ok = await requestPermission(`${PAGE_ACTION_PERM}:${++confirms}`, wc, {
+      action: what,
+      ...(key ? { similar: similarLabel(url, control) } : {}),
+    });
+    if (ok === 'similar' && key) allowSimilar(chat, key);
     if (!ok) {
       throw new Error(
         `The user said no to: ${what}. Don't do it; ask them what they want instead.`
@@ -128,7 +155,7 @@ export function createSession({ requestPermission, stopTurn }) {
 
   async function checkRisk(wc, control, verb = 'click') {
     const words = riskyWords(control?.name);
-    if (words) await confirm(wc, `${verb} ${describeControl(control)}`);
+    if (words) await confirm(wc, verb, control);
   }
 
   // A control's spot, after checking the ref is from this page and the control can be used.

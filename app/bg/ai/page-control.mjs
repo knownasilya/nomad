@@ -158,6 +158,32 @@ export function describeControl(control) {
   return name ? `${role} “${name}”` : role
 }
 
+// Clicks that are "similar" for the confirm's "allow similar actions in this chat": the same
+// site, the same kind of action, and a control with the same role and name. Numbers in the name
+// don't count, so "Delete draft 3" is like "Delete draft 4"; "Delete account" is not like
+// "Delete draft".
+export function similarKey(url, verb, control) {
+  const c = control || {}
+  const name = String(c.name || '')
+    .toLowerCase()
+    .replace(/\d+/g, '#')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return [siteOf(url), String(verb || ''), c.role || 'generic', name].join('\n')
+}
+
+// The confirm's option for those, in words the user can check.
+export function similarLabel(url, control) {
+  let host = ''
+  try {
+    host = new URL(String(url)).host
+  } catch {}
+  const name = clip(String(control?.name || '').trim(), 60).replace(/\d+/g, '…')
+  const role = control?.role && control.role !== 'generic' ? control.role : 'element'
+  const what = name ? `${role}s like “${name}”` : `${role}s like this`
+  return `Also allow ${what}${host ? ` on ${host}` : ''} for the rest of this chat`
+}
+
 const KEYS = {
   enter: 'Enter',
   return: 'Enter',

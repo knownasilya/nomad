@@ -250,7 +250,8 @@ export default async function main({ query }) {
   \`scrollPage({ direction?, ref? })\` scrolls the page, or the area a control is in.
 - \`clickAt({ x, y })\` clicks a point in your last screenshotCurrentPage picture, for a canvas or map.
 - A control with \`blocked\` (password, payment, file) can't be typed in or clicked: ask the user.
-  A click on a control whose name buys, sends, posts or deletes asks the user first.
+  A click on a control whose name buys, sends, posts or deletes asks the user first. The user can allow
+  clicks like it for the rest of the chat; then the same kind of click on that site doesn't ask again.
 - The first action on a site asks the user; a yes lasts 30 days for that site. If the user clicks or types in
   the page, or presses Stop or Esc, the AI's control ends for the turn.
 

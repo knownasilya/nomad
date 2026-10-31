@@ -81,12 +81,13 @@ function cleanPrefs(prefs: any = {}) {
 }
 
 export default {
-  // opts: { model, think, effort, allowVision, turnId } — the sidebar's own choices, and the id it
-  // steers this turn by. The rest of a turn's options are set here: the stage, the tab lookup and
+  // opts: { model, think, effort, allowVision, turnId, chatId } — the sidebar's own choices, the
+  // id it steers this turn by, and the chat (session) it's in. The rest of a turn's options are set here: the stage, the tab lookup and
   // the context.
   chat(messages, opts: any = {}) {
     const shell = this.sender;
     const turnId = typeof opts.turnId === 'string' && opts.turnId ? opts.turnId : null;
+    const chatId = typeof opts.chatId === 'string' && opts.chatId ? opts.chatId : null;
     const pane = activePane(shell);
     if (!pane) {
       return createChatStream(async () => {
@@ -139,6 +140,8 @@ export default {
         context,
         signal,
         steering,
+        // Page control remembers "allow similar" per chat, in this window.
+        pageChat: chatId ? `${shell.id}:${chatId}` : null,
       });
     }
   },
