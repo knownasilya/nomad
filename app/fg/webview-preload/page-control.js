@@ -534,11 +534,38 @@ export function setupPageControl() {
     });
     bar.append(dot, label, stop);
 
-    layer.append(edge, cursor, bar);
+    // The layer goes in the top layer (a manual popover), so it draws over the page's modals,
+    // popovers and menus, whatever their z-index. `raise()` puts it back on top when the page
+    // opens one of its own later.
+    const top = document.createElement('div');
+    top.className = 'top';
+    top.setAttribute('popover', 'manual');
+    top.append(edge, cursor, bar);
+    layer.append(top);
     document.documentElement.append(host);
-    parts = { edge, cursor, bar, label, stop };
+    parts = { top, edge, cursor, bar, label, stop };
+    raise();
     if (cursorAt) placeCursor(cursorAt.x, cursorAt.y, false);
     return parts;
+  }
+
+  // The top layer draws in the order its elements opened: show ours again to be last.
+  function raise() {
+    const top = parts?.top;
+    if (!top || typeof top.showPopover !== 'function') return;
+    try {
+      if (top.matches(':popover-open')) top.hidePopover();
+      top.showPopover();
+    } catch {}
+  }
+
+  // A modal or popover the page opens goes over ours. `toggle` doesn't bubble, but it does pass
+  // through the capture phase.
+  function onPageToggle(e) {
+    if (!layer || !parts || e.newState !== 'open') return;
+    const host = layer.host;
+    if (e.composedPath().includes(host)) return;
+    raise();
   }
 
   function placeCursor(x, y, glide = true) {
@@ -554,6 +581,8 @@ export function setupPageControl() {
   function moveCursor(x, y) {
     const from = cursorAt;
     if (!shown) show();
+    // A menu opened by hover or by a script fires no toggle.
+    raise();
     // The first move starts from the middle of the page, so the user sees where it goes.
     if (!from) placeCursor(window.innerWidth / 2, window.innerHeight / 2, false);
     return new Promise((resolve) => {
@@ -569,7 +598,7 @@ export function setupPageControl() {
     const dot = document.createElement('div');
     dot.className = 'ripple';
     dot.style.transform = `translate(${Math.round(cursorAt.x)}px, ${Math.round(cursorAt.y)}px)`;
-    layer.append(dot);
+    (parts?.top || layer).append(dot);
     setTimeout(() => dot.remove(), 600);
     return true;
   }
@@ -599,10 +628,37 @@ export function setupPageControl() {
     return true;
   }
 
+  // A modal dialog the page opens makes everything else inert, the bar too, so a click on the
+  // bar reaches the page. It's drawn over the page, so the click was meant for the bar.
+  let swallowClick = false;
+  function onBar(e) {
+    if (!parts || e.type !== 'pointerdown') return false;
+    const inside = (el) => {
+      const r = el.getBoundingClientRect();
+      return (
+        e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
+      );
+    };
+    if (!inside(parts.bar)) return false;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    swallowClick = true;
+    if (inside(parts.stop)) ipcRenderer.send('nomad-page-control:user', 'stop');
+    return true;
+  }
+  function onClick(e) {
+    if (!swallowClick) return;
+    swallowClick = false;
+    if (layer && e.composedPath().includes(layer.host)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+
   function onUserInput(e) {
     if (!shown || !e.isTrusted || Date.now() < actingUntil) return;
     // The Stop button is the user's too, and says so itself.
     if (layer && e.composedPath().includes(layer.host)) return;
+    if (onBar(e)) return;
     if (e.type === 'keydown' && e.key === 'Escape') {
       ipcRenderer.send('nomad-page-control:user', 'stop');
       return;
@@ -611,6 +667,8 @@ export function setupPageControl() {
     hide();
   }
   window.addEventListener('pointerdown', onUserInput, true);
+  window.addEventListener('click', onClick, true);
+  window.addEventListener('toggle', onPageToggle, true);
   window.addEventListener('keydown', onUserInput, true);
 
   Object.defineProperty(window, '__nomadPageControl', {
@@ -661,6 +719,12 @@ const LAYER_CSS = `
 @media (prefers-color-scheme: dark) {
   :host { --accent: #5b8def; --accent-soft: rgba(91, 141, 239, 0.4); --bar-bg: #2b2d31; --bar-fg: #e9e9ec; --bar-border: rgba(233, 233, 236, 0.18); }
 }
+.top {
+  all: initial; display: block; position: fixed; inset: 0; width: 100%; height: 100%;
+  margin: 0; padding: 0; border: 0; background: transparent; overflow: visible;
+  pointer-events: none;
+}
+.top::backdrop { display: none; }
 .edge {
   position: absolute; inset: 0; display: none;
   box-shadow: inset 0 0 0 2px var(--accent), inset 0 0 18px var(--accent-soft);
