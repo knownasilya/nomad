@@ -205,6 +205,20 @@ bundled into `notes/js/main.build.js` by `scripts/build.js`, and into the phone'
 `mobile/lib/noteEditorHtml.ts` (committed) by **`npm run build:note-editor`** — rerun that after
 changing the editor or `shared/vault-apps.mjs`.
 
+### The canvas in Notes and Reader
+
+Notes and Reader each have a List / Canvas switch: dots and lines laid out by a small force
+simulation, with an arrowhead at the end a link points to. The canvas is shared:
+`app/userland/app-stdlib/js/graph/layout.js` (the layout), `view.js` (SVG drawing, pan, wheel and
+two-finger pinch zoom, tap to select on touch) and `app-stdlib/css/graph.css` (the `--graph-*`
+colors). Each app only builds its graph: `notes/js/graph.js` (`noteGraph`, notes and their links)
+and `reader/js/graph.js` (`readerGraph`: saved articles around their topic hubs, posts around their
+feed, a post joined to a topic its tags name). nomad://reader is not bundled, so it imports both
+the first time the canvas shows. The phone draws the same canvas in a WebView
+(`mobile/components/Canvas.tsx`) from `mobile/lib/canvasHtml.ts` (committed), which
+**`npm run build:canvas`** bundles from `app-stdlib/js/graph/phone.js`: rerun it after changing the
+canvas or either graph.
+
 ### Names (ADR-0018)
 
 The user's short names for Drives, app folders and URLs live in the Vault (`/.vault/names/`, rules in
