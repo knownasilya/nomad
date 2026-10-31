@@ -277,6 +277,17 @@ export const PERMS = {
     dangerous: true,
     promptTrusted: true,
   },
+  // The AI using one of the user's secrets (ADR-0032) for requests to the hosts the user allowed.
+  // The param is the secret's name. Asked once a turn per secret, never kept: a yes for one
+  // conversation shouldn't become a standing grant to a key.
+  aiSecretUse: {
+    persist: false,
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+    promptTrusted: true,
+  },
   // One click the AI makes that buys, sends, posts or deletes. Asked each time; the param numbers it.
   aiPageAction: {
     persist: false,
@@ -345,6 +356,7 @@ export const PERM_ICONS = {
   privateWrite: 'fas fa-lock',
   aiPageControl: 'fas fa-mouse-pointer',
   aiPageAction: 'fas fa-mouse-pointer',
+  aiSecretUse: 'fas fa-key',
 };
 
 export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
@@ -408,6 +420,13 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Let the AI assistant click, type and scroll on this site for 30 days';
     case 'aiPageAction':
       return `Let the AI assistant ${permOpts?.action || 'do this'}`;
+    case 'aiSecretUse': {
+      const host = permOpts?.host ? ` to ${permOpts.host}` : '';
+      return html`<span
+        >Let the AI assistant send requests${host} with your secret <code>${permParam}</code>. It never
+        sees the secret itself.</span
+      >`;
+    }
     case 'jobsRead':
       return 'Let the AI assistant see your AI Jobs and their results';
     case 'jobsWrite':

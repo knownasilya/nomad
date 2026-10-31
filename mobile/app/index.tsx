@@ -180,8 +180,19 @@ const VAULT_PROMPTS: Record<string, { title: string; message: string }> = {
   jobsWrite: { title: 'Allow AI to change your Jobs?', message: 'The AI running on your other device wants to create, change or run your AI Jobs. A Job runs a prompt by itself, reads your Notes and Reader, and notifies this phone.' }
 }
 
+// The AI using one of the user's secrets (ADR-0032): `aiSecretUse:<NAME>`. The secret stays on the
+// computer; the phone only says yes or no.
+function secretPrompt (permission: string): { title: string; message: string } | null {
+  const m = /^aiSecretUse:([A-Z][A-Z0-9_]{1,63})$/.exec(permission)
+  if (!m) return null
+  return {
+    title: `Allow AI to use ${m[1]}?`,
+    message: `The AI running on your other device wants to send requests with your secret ${m[1]}, to the sites you allowed for it. It never sees the secret itself.`
+  }
+}
+
 function confirmAiPermission (permission: string, drive?: { name: string; url: string }): Promise<boolean> {
-  const vaultPrompt = VAULT_PROMPTS[permission]
+  const vaultPrompt = VAULT_PROMPTS[permission] || secretPrompt(permission)
   const name = drive?.name || 'this drive'
   const url = drive?.url || ''
   const title = vaultPrompt ? vaultPrompt.title : 'Allow AI to edit?'
