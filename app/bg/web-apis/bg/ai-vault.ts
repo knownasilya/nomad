@@ -12,9 +12,9 @@ import * as vaultApps from './vault-apps';
 import { highlightForAi, assertCanHighlight } from '../../ui/highlights';
 import * as mods from '../../ui/mods';
 import * as jobs from '../../ai/jobs';
-import { readJobSource } from './job-source';
+import { driveTitle, readJobSource, resolveJobWrites } from './job-source';
 import * as vault from '../../hyper/vault';
-import { describeSchedule } from '../../../../shared/jobs.mjs';
+import { addedWrites, describeSchedule, describeWrites } from '../../../../shared/jobs.mjs';
 import fsAPI from './fs';
 import {
   VAULT_TOOL_PERMS,
@@ -181,12 +181,27 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
       let kept = false;
       if (args.source === null) source = null;
       else if (args.source !== undefined) {
-        const read = await readJobSource(String(args.source));
+        const read = await readJobSource(String(args.source), await readerSpace().catch(() => null));
         kept = !!prev?.source && !prev.source.live && !read.live && prev.source.url === read.url;
         if (!kept) source = read;
       }
+      // New write grants ask the user, here and now: the Job will use them with nobody watching.
+      let writes;
+      if (args.writes !== undefined) {
+        writes = await resolveJobWrites(args.writes, await readerSpace().catch(() => null));
+        const added = addedWrites(prev?.writes, writes);
+        if (added) {
+          const titles = new Map();
+          for (const d of added.drives) titles.set(d.url, await driveTitle(d.url));
+          const ok = await permit(`jobWrites:${++jobWriteAsks}`, ctx.sender, {
+            title: title || prev?.title || clipTitle(prompt) || 'this Job',
+            grants: describeWrites(added, (url) => titles.get(url) || null),
+          });
+          if (!ok) throw new Error("The user didn't let this Job change those. Save it without `writes`, or ask them.");
+        }
+      }
       const space = id ? undefined : await readerSpace().catch(() => null);
-      const rec = await jobs.save({ id, title, prompt, source, schedule, notify, enabled, space });
+      const rec = await jobs.save({ id, title, prompt, source, writes, schedule, notify, enabled, space });
       const row = jobs.list().find((j) => j.id === rec.id) || rec;
       return json({
         ...jobForModel(row, await deviceNamer()),
@@ -210,6 +225,14 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
     }
   }
   throw new Error(`Unknown capability ${name}`);
+}
+
+// Each ask to give a Job writes is its own prompt (the permission isn't kept).
+let jobWriteAsks = 0;
+
+function clipTitle(prompt) {
+  const line = String(prompt || '').split('\n')[0].trim();
+  return line.length > 60 ? line.slice(0, 59) + '…' : line;
 }
 
 // The Feed's published files, as the Reader reads them (never this Device's Draft of it).

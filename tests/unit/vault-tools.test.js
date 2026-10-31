@@ -6,6 +6,7 @@ import {
   VAULT_TOOL_PERMS,
   VAULT_PERMS,
   askOncePerTurn,
+  jobPermitFor,
   findNotes,
   findNote,
   noteForModel,
@@ -214,5 +215,22 @@ describe('vault tools: mods', () => {
     expect(b).toMatchObject({ id: 'b2', site: 'docs.example.com', enabled: true, hide: ['.ad'], summary: '1 hidden, JS' });
     expect(b.js.length).toBeLessThan(30000);
     expect(b.js).toContain('[Cut at');
+  });
+});
+
+describe('jobPermitFor', () => {
+  const A = 'a'.repeat(64);
+  it('says yes to the reads and exactly the writes a Job was given, and asks nobody', async () => {
+    const permit = jobPermitFor({ drives: [{ url: `hyper://${A}/`, draft: false }], notes: true, reader: false });
+    expect(await permit('notesRead')).toBe(true);
+    expect(await permit('readerRead')).toBe(true);
+    expect(await permit('notesWrite')).toBe(true);
+    expect(await permit(`modifyDrive:${A}`)).toBe(true);
+    expect(await permit('readerWrite')).toBe(false);
+    expect(await permit(`modifyDrive:${'b'.repeat(64)}`)).toBe(false);
+    expect(await permit('modsWrite')).toBe(false);
+    const none = jobPermitFor(null);
+    expect(await none('notesWrite')).toBe(false);
+    expect(await none('notesRead')).toBe(true);
   });
 });

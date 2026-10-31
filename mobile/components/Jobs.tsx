@@ -141,6 +141,11 @@ export default function Jobs ({ visible, onClose, apps, onVaultChange, openJobId
                 <Text style={s.prompt}>{job.prompt}</Text>
               </ListSection>
             )}
+            {job.canChange?.length > 0 && (
+              <ListSection title='Can change' footer='It changes these on its own when it runs. Change this in My Library → Jobs on your computer.'>
+                <Text style={s.prompt}>{job.canChange.join('\n')}</Text>
+              </ListSection>
+            )}
             <ListSection footer={`Runs on ${job.deviceName}${job.notify === 'never' ? '. Doesn’t notify.' : job.notify === 'auto' ? '. Notifies when the AI finds something.' : '. Notifies this phone after each run.'}`}>
               <ListRow
                 title={job.requested ? 'Run asked for' : 'Run now'}
@@ -220,6 +225,16 @@ function RunRow ({ r, s, t, divider, open, onToggle }: { r: JobRun; s: Styles; t
       {open && !!r.output && (
         <View style={s.output}>
           <Markdown text={r.output} />
+        </View>
+      )}
+      {open && !!r.changes?.length && (
+        <View style={s.output}>
+          <Text style={s.runTitle}>Changed</Text>
+          {r.changes.map((c, i) => (
+            <Text key={i} style={s.runSub} selectable>
+              {'path' in c ? `${c.path}${c.draft ? ' (in a Draft)' : ''}` : c.summary || c.tool}
+            </Text>
+          ))}
         </View>
       )}
     </View>

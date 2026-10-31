@@ -10,7 +10,7 @@
 
 import { noteTitle, noteSnippet, sortNotes, makeResolver, findLinks, driveRoot } from '../../../shared/vault-apps.mjs'
 import { PRESETS, normalizeSite, describeMod } from '../../../shared/mods.mjs'
-import { describeSchedule } from '../../../shared/jobs.mjs'
+import { describeSchedule, describeWrites, writePermissions } from '../../../shared/jobs.mjs'
 
 // Capability -> the permission it asks for.
 export const VAULT_TOOL_PERMS = {
@@ -47,8 +47,11 @@ export const VAULT_PERMS = [
 // their Notes and Reader; anything else is refused without a prompt.
 export const JOB_GRANTS = ['notesRead', 'readerRead']
 
-export function jobPermit(permission) {
-  return Promise.resolve(JOB_GRANTS.includes(permission))
+// A Job's permission check with its write grants (shared/jobs.mjs writePermissions): the reads
+// above, plus exactly the writes the user gave it. Anything else is no, with nobody to ask.
+export function jobPermitFor(writes) {
+  const granted = new Set([...JOB_GRANTS, ...writePermissions(writes)])
+  return (permission) => Promise.resolve(granted.has(String(permission)))
 }
 
 const DEFAULT_LIMIT = 20
@@ -314,6 +317,9 @@ export function jobForModel(j, deviceName = () => 'another device') {
           },
         }
       : {}),
+    // What it may change; it reads and changes nothing else.
+    writes: j.writes || null,
+    canChange: describeWrites(j.writes),
     schedule: j.schedule,
     when: describeSchedule(j.schedule),
     notify: j.notify,
@@ -326,6 +332,7 @@ export function jobForModel(j, deviceName = () => 'another device') {
           status: last.status,
           answer: clip(last.output, 2000),
           ...(last.error ? { error: last.error } : {}),
+          ...(last.changes?.length ? { changed: last.changes } : {}),
         }
       : null,
   }
