@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.29.0](https://github.com/knownasilya/nomad/compare/v1.28.0...v1.29.0) (2026-10-31)
+
+
+### Features
+
+* **ai:** let the AI show a plan of page clicks the user approves once ([ae4a93c](https://github.com/knownasilya/nomad/commit/ae4a93cf708a0a1264d4c3bafe54087be26199e8))
+* **ai:** let the user allow similar page clicks for the rest of a chat ([5acce51](https://github.com/knownasilya/nomad/commit/5acce51f9bd14124562ebf1456af3eb826a5eb15))
+* **ai:** send a queued message to the assistant now ([59ba997](https://github.com/knownasilya/nomad/commit/59ba997023025238e1ae668714abb06d082e174f))
+* **mobile:** recent-sites card instead of the address bar dropdown ([4810471](https://github.com/knownasilya/nomad/commit/4810471206fb96d37b9623dc03972af3b0688af1))
+* **pins:** sync a Space's pinned pages and show them as icon tiles ([b367b47](https://github.com/knownasilya/nomad/commit/b367b47d9095ece8609575fac0133ebd1a68f9b6))
+
 ## [1.28.0](https://github.com/knownasilya/nomad/compare/v1.27.0...v1.28.0) (2026-10-31)
 
 
