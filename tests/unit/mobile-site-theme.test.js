@@ -71,6 +71,20 @@ describe('tintTheme', () => {
     expect(tintTheme(base, 'rgb(255, 255, 255)').scheme).toBe('light')
   })
 
+  it('keeps selected text readable on its see-through highlight', () => {
+    // The address is all selected on focus. Blend the highlight over the bar and check the text on it.
+    const blend = (bg, rgba) => {
+      const m = /rgba\((\d+),(\d+),(\d+),([\d.]+)\)/.exec(rgba)
+      const [r, g, b, a] = m.slice(1).map(Number)
+      return { r: Math.round(r * a + bg.r * (1 - a)), g: Math.round(g * a + bg.g * (1 - a)), b: Math.round(b * a + bg.b * (1 - a)) }
+    }
+    for (const color of ['rgb(255, 255, 255)', 'rgb(0, 0, 0)', 'rgb(29, 161, 242)', 'rgb(255, 213, 79)', 'rgb(21, 32, 43)', 'rgb(29, 89, 199)']) {
+      const th = tintTheme(base, color)
+      const under = blend(blend(parseColor(th.bg), th.inputBg), th.selection)
+      expect(contrast(under, parseColor(th.text))).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
   it('drops the accent when it would vanish into the site color', () => {
     expect(tintTheme(base, 'rgb(255, 255, 255)').accent).toBe(base.accent)
     expect(tintTheme(base, 'rgb(29, 89, 199)').accent).toBe('#ffffff')
