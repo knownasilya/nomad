@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.32.0](https://github.com/knownasilya/nomad/compare/v1.31.3...v1.32.0) (2026-11-01)
+
+
+### Features
+
+* **notes:** topics on notes, sorted by the AI, as hubs on the canvas ([5818619](https://github.com/knownasilya/nomad/commit/58186191279dea164eb5a7e42e7e7f1323355b40))
+
 ### [1.31.3](https://github.com/knownasilya/nomad/compare/v1.31.2...v1.31.3) (2026-11-01)
 
 
