@@ -123,17 +123,20 @@ function siteOf(sender) {
 // The Notes that match, newest first, as list rows.
 /**
  * @param {any[]} notes
- * @param {{ query?: string, limit?: number }} [opts]
+ * @param {{ query?: string, topic?: string, limit?: number }} [opts]
  */
-export function findNotes(notes, { query, limit } = {}) {
+export function findNotes(notes, { query, topic, limit } = {}) {
+  const want = topic ? String(topic).trim().toLowerCase() : '';
   return sortNotes(notes)
-    .filter((n) => matches(query, [n.body]))
+    .filter((n) => matches(query, [n.body, ...(n.topics || [])]))
+    .filter((n) => !want || (n.topics || []).some((t) => t.toLowerCase() === want))
     .slice(0, clampLimit(limit))
     .map((n) => ({
       id: n.id,
       title: noteTitle(n.body),
       snippet: noteSnippet(n.body),
       updatedAt: n.updatedAt,
+      ...(n.topics?.length ? { topics: n.topics } : {}),
       ...(n.space ? { inSpace: true } : {}),
     }))
 }
@@ -159,6 +162,7 @@ export function noteForModel(note) {
     title: noteTitle(note.body),
     body: clip(note.body),
     links: [...new Set(findLinks(note.body).map((l) => l.target))],
+    topics: note.topics || [],
     createdAt: note.createdAt,
     updatedAt: note.updatedAt,
     ...(note.conflictOf ? { conflictOf: note.conflictOf } : {}),

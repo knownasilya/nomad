@@ -19,8 +19,9 @@ interface Props {
   // notes: the notes. reader: { articles, posts, read }.
   data: unknown
   query?: string
-  // A line over the top left, e.g. "12 notes · 9 links".
-  info?: (count: { nodes: number; links: number }) => string
+  // A line over the top left, e.g. "12 notes · 9 links". For notes, nodes counts the notes and
+  // topics the topic hubs.
+  info?: (count: { nodes: number; links: number; topics?: number }) => string
   snapshot?: CanvasSnapshot | null
   onSnapshot?: (s: CanvasSnapshot) => void
   // A tap selects a node, a second tap on it opens it.
@@ -38,7 +39,7 @@ export default function Canvas ({ kind, data, query = '', info, snapshot, onSnap
   const s = useMemo(() => makeStyles(t), [t])
   const web = useRef<WebView>(null)
   const ready = useRef(false)
-  const [count, setCount] = useState<{ nodes: number; links: number } | null>(null)
+  const [count, setCount] = useState<{ nodes: number; links: number; topics?: number } | null>(null)
   // The latest props, for the page's 'ready' and for the effects below.
   const latest = useRef({ data, query, snapshot, theme: t, kind })
   latest.current = { data, query, snapshot, theme: t, kind }
@@ -70,7 +71,7 @@ export default function Canvas ({ kind, data, query = '', info, snapshot, onSnap
       ready.current = true
       load()
     } else if (msg.type === 'count') {
-      setCount({ nodes: msg.nodes, links: msg.links })
+      setCount({ nodes: msg.nodes, links: msg.links, topics: msg.topics })
     } else if (msg.type === 'select') {
       onSelect?.(msg.id || null)
     } else if (msg.type === 'open' && msg.id) {

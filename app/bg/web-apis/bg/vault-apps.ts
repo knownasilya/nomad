@@ -17,6 +17,7 @@ import * as spacesDb from '../../dbs/spaces';
 import * as logLib from '../../logger';
 import fsAPI from './fs';
 import * as apps from '../../../../shared/vault-apps.mjs';
+import * as nt from '../../../../shared/note-topics.mjs';
 import { findWebContentsParentWindow } from '../../lib/electron';
 import * as tabManager from '../../ui/tabs/manager';
 import * as spaceLibrary from '../../hyper/space-library';
@@ -91,7 +92,7 @@ async function copyLegacy(ctx, space) {
 // What both apps show about where the data is: `writable` is false while a Device that just joined
 // waits for the Vault (no Vault at all is writable: the first write makes one); `linked` is true
 // once another Device shares the Vault.
-async function vaultInfo() {
+export async function vaultInfo() {
   const sess = await vault.getVault();
   return { writable: !sess || !!sess.writable, linked: (await vault.otherDeviceCount()) > 0 };
 }
@@ -281,16 +282,16 @@ function noteFile(id) {
   return id + '.json';
 }
 
-async function notesIn(space = null) {
+export async function notesIn(space = null) {
   const list = space ? await (await spaceLibrary.records(space, 'notes')).list() : await vault.listAppRecords(apps.notesPrefix());
   return list.filter(apps.isNote).map(withSpace(space));
 }
 
-async function getNote(space, id) {
+export async function getNote(space, id) {
   return space ? (await spaceLibrary.records(space, 'notes')).get(noteFile(id)) : vault.readAppRecord(apps.notePath(id));
 }
 
-async function putNote(space, note) {
+export async function putNote(space, note) {
   if (space) return (await spaceLibrary.records(space, 'notes')).put(noteFile(note.id), note);
   return vault.putAppRecord(apps.notePath(note.id), note);
 }
@@ -303,6 +304,19 @@ async function delNote(space, id) {
 // The Notes a Space sees, newest first: the user's, and the Space's own when `space` is given.
 export async function allNotes(space = null) {
   return apps.sortNotes([...(await notesIn(null)), ...(space ? await notesIn(space) : [])]);
+}
+
+// Every Space this Device knows, by Root Drive key: where Space-only Notes can be.
+export async function knownSpaceKeys(): Promise<string[]> {
+  const out = [];
+  for (const sp of spacesDb.getCachedAll()) {
+    if (!sp.root_drive_url) continue;
+    const key = await Promise.resolve()
+      .then(() => drives.fromURLToKey(sp.root_drive_url, true))
+      .catch(() => null);
+    if (apps.isSpaceKey(key) && !out.includes(key)) out.push(key);
+  }
+  return out;
 }
 
 // The caller's Space key, or null when it has none (a page outside any tab).
@@ -354,7 +368,7 @@ export function spaceNameOf(space) {
 }
 
 // A viewer of a shared Space can't add to its Notes (ADR-0029).
-async function canWriteNotesIn(space) {
+export async function canWriteNotesIn(space) {
   return (await spaceLibrary.records(space, 'notes').catch(() => ({ writable: false }))).writable;
 }
 
@@ -395,6 +409,22 @@ export async function moveNote(ctx, { id, inSpace }: { id?: string; inSpace?: bo
   await delNote(space, id);
   logger.info('Moved a note', { id, toSpace: !!to });
   return withSpace(to)(prev);
+}
+
+// Set a Note's topics by hand (ADR-0035): the AI leaves them alone after this. Doesn't change its
+// updatedAt, so an edit on another Device isn't taken for a conflict. Returns the Note.
+// `space` names the Space for a caller with no page (the AI on another Device's turn).
+export async function setNoteTopics(
+  ctx,
+  { id, topics, space: given = undefined }: { id?: string; topics?: string[] | string; space?: string | null } = {}
+) {
+  const space = given === undefined ? await spaceOrNull(ctx) : apps.isSpaceKey(given) ? given : null;
+  const found = await findStored(id, space); // notePath validates the id
+  if (!found.prev) throw new Error('No note with that id');
+  if (found.space && !(await canWriteNotesIn(found.space))) throw new Error('You can only view this Space’s notes');
+  const note = nt.withNoteTopics(found.prev, topics, 'user', nt.knownNoteTopics(await allNotes(space)));
+  await putNote(found.space, note);
+  return withSpace(found.space)(note);
 }
 
 // A Note's title changed from `from` to `to` (the editor tells us when the user leaves the Note).

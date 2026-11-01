@@ -199,6 +199,23 @@ class AiSetupView extends LitElement {
             Change an article's topics in Reader at any time; the AI leaves those alone.
           </p>
         </div>
+        <div class="section">
+          <label>
+            <input
+              type="checkbox"
+              ?checked=${!!this.settings.ai_note_topics}
+              @change=${this.onNoteTopicsChange}
+            />
+            Sort my notes into topics
+          </label>
+          <p class="description">
+            Once a note has a few lines and you've stopped editing it for a couple of
+            minutes, this device's AI files it under one to three topics, reusing the
+            topics your notes already have. Notes from your phone are sorted too. The
+            Notes canvas gathers notes around their topics. Change a note's topics at
+            any time; the AI leaves those alone.
+          </p>
+        </div>
       </div>
     `;
   }
@@ -208,6 +225,13 @@ class AiSetupView extends LitElement {
     this.settings.ai_reader_topics = on;
     nomad.browser.setSetting('ai_reader_topics', on);
     toast.create(on ? 'The AI will sort saved articles into topics' : 'The AI won’t sort saved articles any more');
+  }
+
+  onNoteTopicsChange(e) {
+    const on = e.currentTarget.checked ? 1 : 0;
+    this.settings.ai_note_topics = on;
+    nomad.browser.setSetting('ai_note_topics', on);
+    toast.create(on ? 'The AI will sort your notes into topics' : 'The AI won’t sort your notes any more');
   }
 
   onAutoNamesChange(e) {

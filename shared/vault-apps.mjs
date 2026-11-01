@@ -10,7 +10,8 @@
 //   /.vault/reader/<space>/read.json             { read: [postUrl] }    hyper:// posts marked read
 //   /.vault/reader/<space>/web-read.json         { read: { feedUrl: [itemUrl] } }  RSS and Atom items read
 //   /.vault/reader/<space>/imported.json         { importedAt }         the Space's old file was copied in
-//   /.vault/notes/<id>.json                      { type, id, body, createdAt, updatedAt, conflictOf? }
+//   /.vault/notes/<id>.json                      { type, id, body, createdAt, updatedAt, conflictOf?,
+//                                                  topics?, topicsBy? }
 //   /.vault/space-lib/<space>/notes/<id>.json    the same Note, kept only in that Space (ADR-0029)
 //
 // <space> is the Space's Root Drive key (hex): each Space has its own subscriptions. Notes belong to
@@ -21,6 +22,9 @@
 // A Note's body is Markdown. Its first line with text is its title. Notes link to each other the
 // way Obsidian does: [[Title]], [[Title|shown text]], [[Title#Heading]], or a relative Markdown link
 // [text](Title.md). A link names a title (or a note id); see makeResolver.
+//
+// A Note can have topics (ADR-0035), set by the user or picked by this Device's AI. They are on the
+// Note record, and a save keeps them (makeNote). Rules: shared/note-topics.mjs.
 
 export const READER_PREFIX = '/.vault/reader/';
 export const NOTES_PREFIX = '/.vault/notes/';
@@ -239,6 +243,11 @@ export function makeNote({ id, body, conflictOf }, prev = null, now = new Date()
   };
   const of = conflictOf || (prev && prev.conflictOf);
   if (of) note.conflictOf = of;
+  // Its topics (ADR-0035) stay with it. A conflict copy is a new Note, without them.
+  if (prev && !conflictOf && Array.isArray(prev.topics)) {
+    note.topics = prev.topics;
+    if (prev.topicsBy) note.topicsBy = prev.topicsBy;
+  }
   return note;
 }
 

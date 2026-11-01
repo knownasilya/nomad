@@ -4,13 +4,14 @@
 // app-stdlib/css/graph.css, so it follows light and dark.
 //
 // update(graph, opts) shows a graph: { nodes: [{ id, title, degree, kind?, hub?, muted?, size? }],
-// links: [{ source, target, both?, directed? }] }.
+// links: [{ source, target, both?, directed?, kind? }] }.
 //   kind   a class on the node (kind-<kind>), for its color
 //   hub    always labelled and drawn larger: a Reader topic or feed
 //   muted  drawn faint: an article already read
 //   size   the dot's radius; by default it grows with the node's links
 // A link is a line from source to target with an arrowhead at the target (and at the source too
-// when `both`, for two notes that link to each other); `directed: false` draws a plain line.
+// when `both`, for two notes that link to each other); `directed: false` draws a plain line, and a
+// link's `kind` is a class on it (kind-<kind>): a note's line to its topic is dashed.
 //
 // Drag the background to pan; scroll, pinch on a trackpad or with two fingers to zoom; drag a node to
 // move it. A click on a node (or Enter on a focused one) calls onOpen(id). Hovering a node lights up
@@ -93,7 +94,7 @@ export function createGraphView({ parent, onOpen, onSelect = null, label = 'Canv
   }
 
   function sameLink(a, b) {
-    return a.source === b.source && a.target === b.target && !!a.both === !!b.both && a.directed === b.directed;
+    return a.source === b.source && a.target === b.target && !!a.both === !!b.both && a.directed === b.directed && a.kind === b.kind;
   }
 
   function setQuery(q) {
@@ -110,7 +111,7 @@ export function createGraphView({ parent, onOpen, onSelect = null, label = 'Canv
 
   function build() {
     linkEls = graph.links.map((l) => {
-      const g = svgEl('g', { class: 'graph-link' });
+      const g = svgEl('g', { class: 'graph-link' + (l.kind ? ' kind-' + l.kind : '') });
       const line = svgEl('line', {});
       const arrows = l.directed === false ? [] : (l.both ? [0, 1] : [0]).map(() => svgEl('path', { class: 'graph-arrow' }));
       g.append(line, ...arrows);

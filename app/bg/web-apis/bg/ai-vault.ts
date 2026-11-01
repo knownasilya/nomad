@@ -67,7 +67,7 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
     }
 
     case 'writeNote': {
-      const { id, body, baseUpdatedAt } = args;
+      const { id, body, baseUpdatedAt, topics } = args;
       if (typeof body !== 'string') throw new Error('writeNote needs the whole note as `body`');
       if (id) {
         if (!baseUpdatedAt) {
@@ -77,17 +77,23 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
         }
         if (!findNote(await notes(), { id })) throw new Error('No note with that id');
       }
-      const note = await vaultApps.saveNote(ctx, {
+      const turnSpace = await readerSpace().catch(() => null);
+      let note = await vaultApps.saveNote(ctx, {
         id: id || undefined,
         body,
         baseUpdatedAt,
         inSpace: true, // a new Note is kept in the turn's Space, as in the Notes app
-        space: await readerSpace().catch(() => null),
+        space: turnSpace,
       });
+      // Topics the user's AI sets count as the user's (ADR-0035): the background sort leaves them.
+      if (Array.isArray(topics)) {
+        note = await vaultApps.setNoteTopics(ctx, { id: note.id, topics: topics.filter((t) => typeof t === 'string'), space: turnSpace });
+      }
       return json({
         id: note.id,
         title: apps.noteTitle(note.body),
         updatedAt: note.updatedAt,
+        topics: note.topics || [],
         // It changed on another Device since it was read: this text is a new Note beside it.
         conflictCopy: !!id && note.id !== id,
       });

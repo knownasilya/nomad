@@ -19,11 +19,16 @@
 // The header's List / Canvas switch swaps the list and the editor for a canvas of every note and
 // the links between them (./graph.js, drawn by app-stdlib's canvas); ?view=canvas in the address keeps it across back and
 // forward, and the last choice is remembered for the next visit.
+//
+// A note can have topics (ADR-0035): the bar above its text shows them, adds and removes them, and
+// asks the AI to suggest some. This Device's AI also sorts notes by itself once they settle
+// (bg/web-apis/bg/note-topics.ts). The topic chips above the list show one topic's notes, and on
+// the canvas every topic is a hub with its notes around it; clicking a hub lists its notes.
 // Bundled (scripts/build.js → js/main.build.js), styled with the app-stdlib tokens like nomad://reader.
 
 import { createNoteEditor } from './editor/index.js';
 import { createGraphView } from '../../app-stdlib/js/graph/view.js';
-import { noteGraph } from './graph.js';
+import { noteGraph, noteTexts, noteGraphCounts, topicNodeId } from './graph.js';
 import { noteTitle, noteSnippet, makeResolver, linkedIds } from '../../../../shared/vault-apps.mjs';
 
 const SAVE_DELAY = 700;
@@ -40,6 +45,9 @@ const state = {
   shared: false, // this Space is shared with other people (ADR-0029)
   canWriteSpace: true, // false for a person who can only view the shared Space
   members: 0,
+  topic: null, // the topic whose notes the list shows, or null for all
+  // What the AI is doing with topics: { autoTopics, tagging: [noteId], noRuntime }.
+  ai: { autoTopics: false, tagging: [], noRuntime: false },
 };
 
 // The note in the editor: { id: string | null, body, base, openedTitle, conflictOf, inSpace }. id
@@ -57,7 +65,7 @@ let view = 'list'; // 'list' (the list and the open note) or 'canvas' (the notes
 let graph = null; // the canvas, made the first time it's shown
 
 const app = document.getElementById('app');
-let listEl, mainEl, searchInput, newBtn, savedEl, layoutEl, graphPane, graphInfo, graphHint;
+let listEl, topicsEl, mainEl, searchInput, newBtn, savedEl, layoutEl, graphPane, graphInfo, graphHint;
 const viewBtns = new Map();
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
@@ -153,6 +161,9 @@ async function loadNotes() {
   state.shared = !!res.shared;
   state.canWriteSpace = res.canWriteSpace !== false;
   state.members = res.members || 0;
+  state.ai = { autoTopics: false, tagging: [], noRuntime: false, ...(res.ai || {}) };
+  // The topic shown may have gone (its last note lost it, on this Device or another).
+  if (state.topic && !topicCounts().some((t) => t.topic.toLowerCase() === state.topic.toLowerCase())) state.topic = null;
   editor?.setNotes(state.notes);
 }
 
@@ -230,7 +241,10 @@ async function save() {
     } else if (!wasId) {
       target.id = note.id;
       target.openedTitle = noteTitle(note.body);
-      if (draft === target) setUrl(note.id, false);
+      if (draft === target) {
+        setUrl(note.id, false);
+        renderAround(); // the topic bar, now that it has an id
+      }
     }
     target.base = note.updatedAt;
     setSaveMsg('saved', 'Saved');
@@ -247,6 +261,11 @@ async function save() {
 function upsert(note) {
   state.notes = [note, ...state.notes.filter((n) => n.id !== note.id)];
   editor?.setNotes(state.notes);
+}
+
+// A note whose topics changed: its place in the list stays (its updatedAt didn't change).
+function replaceNote(note) {
+  state.notes = state.notes.map((n) => (n.id === note.id ? note : n));
 }
 
 async function newNote(body = '') {
@@ -347,12 +366,24 @@ async function deleteCurrent() {
 // The notes with the open note's unsaved text in place of its stored text.
 function liveNotes() {
   if (!draft) return state.notes;
+  const stored = draft.id ? state.notes.find((n) => n.id === draft.id) : null;
   const others = state.notes.filter((n) => n.id !== draft.id);
-  return [{ id: draft.id || '', body: draft.body, updatedAt: '￿' }, ...others];
+  return [{ ...(stored || {}), id: draft.id || '', body: draft.body, updatedAt: '￿' }, ...others];
 }
 
-// A note picked on the canvas opens in the list view; back returns to the canvas.
+// A note picked on the canvas opens in the list view; back returns to the canvas. A topic's hub
+// lists that topic's notes.
 async function openFromCanvas(id) {
+  if (id.startsWith('topic:')) {
+    const t = topicCounts().find((x) => topicNodeId(x.topic) === id);
+    if (!t) return;
+    state.topic = t.topic;
+    view = 'list';
+    setUrl(draft?.id || null, true);
+    applyView();
+    renderList();
+    return;
+  }
   view = 'list';
   if (draft && draft.id === id) {
     setUrl(id, true);
@@ -412,12 +443,16 @@ function renderShell() {
     el('div', { class: 'header-actions' }, [switcher, newBtn]),
   ]);
   listEl = el('div', { class: 'notes' });
-  const nav = el('nav', {}, [listEl, el('footer', {}, [])]);
+  topicsEl = el('div', { class: 'topic-filter', role: 'group', 'aria-label': 'Topics' });
+  const nav = el('nav', {}, [topicsEl, listEl, el('footer', {}, [])]);
   mainEl = el('main', {});
   graphInfo = el('span', { class: 'graph-info' });
   graphHint = el('div', { class: 'graph-hint' });
   graphPane = el('section', { class: 'graph-pane graph-surface', 'aria-label': 'Canvas' }, [
-    el('div', { class: 'graph-overlay top' }, [graphInfo]),
+    el('div', { class: 'graph-overlay top' }, [
+      graphInfo,
+      el('span', { class: 'graph-legend' }, [el('span', { class: 'key key-topic' }, ['Topic']), el('span', { class: 'key key-note' }, ['Note'])]),
+    ]),
     graphHint,
     el('div', { class: 'graph-overlay bottom' }, [
       el('button', { class: 'icon-btn', title: 'Zoom in', 'aria-label': 'Zoom in', onclick: () => graph?.zoomIn() }, [icon('plus')]),
@@ -444,9 +479,12 @@ function applyView() {
     b.setAttribute('aria-pressed', String(v === view));
   }
   if (canvas) {
-    if (!graph) graph = createGraphView({ parent: graphPane, onOpen: openFromCanvas, label: 'Notes and their links' });
+    const made = !graph;
+    if (!graph) graph = createGraphView({ parent: graphPane, onOpen: openFromCanvas, label: 'Notes, their links and their topics' });
     renderGraph();
     graph.setVisible(true);
+    // The topic the list showed lights up on the canvas.
+    if (made || state.topic) graph.select(state.topic ? topicNodeId(state.topic) : null);
   } else {
     graph?.setVisible(false);
     editor?.view.requestMeasure();
@@ -457,19 +495,23 @@ function applyView() {
 function renderGraph() {
   if (!graph || view !== 'canvas' || !state.loaded) return;
   const notes = liveNotes().filter((n) => n.id);
-  graph.update(noteGraph(notes), {
+  const data = noteGraph(notes);
+  graph.update(data, {
     currentId: draft?.id || null,
     query: state.query,
-    // Search matches a note's text, like the list does.
-    texts: new Map(notes.map((n) => [n.id, String(n.body || '').toLowerCase()])),
+    // Search matches a note's text and topics, like the list does.
+    texts: noteTexts(notes),
   });
-  const { nodes: count, links } = graph.count;
-  graphInfo.textContent = `${count} ${count === 1 ? 'note' : 'notes'} · ${links} ${links === 1 ? 'link' : 'links'}`;
+  const { notes: count, links, topics } = noteGraphCounts(data);
+  const parts = [plural(count, 'note'), plural(links, 'link')];
+  if (topics) parts.push(plural(topics, 'topic'));
+  graphInfo.textContent = parts.join(' · ');
+  graphPane.classList.toggle('has-topics', topics > 0);
   if (!count) {
     const action = state.writable ? el('button', { class: 'btn primary', onclick: () => newNote() }, [icon('plus'), ' New note']) : null;
     graphHint.replaceChildren(notice('project-diagram', 'No notes yet', ['Your notes and the links between them appear here.'], action));
-  } else if (!links) {
-    graphHint.replaceChildren(el('p', { class: 'graph-tip' }, [icon('link'), 'No links yet. Link notes with [[ and a note’s title.']));
+  } else if (!links && !topics) {
+    graphHint.replaceChildren(el('p', { class: 'graph-tip' }, [icon('link'), 'No links yet. Link notes with [[ and a note’s title, or give them topics.']));
   } else graphHint.replaceChildren();
 }
 
@@ -485,11 +527,66 @@ function renderAll({ keepEditor = false } = {}) {
 
 function visibleNotes() {
   const q = state.query.trim().toLowerCase();
-  if (!q) return state.notes;
-  return state.notes.filter((n) => n.body.toLowerCase().includes(q));
+  const topic = state.topic ? state.topic.toLowerCase() : null;
+  return state.notes.filter(
+    (n) =>
+      (!q || n.body.toLowerCase().includes(q) || topicsOf(n).some((t) => t.toLowerCase().includes(q))) &&
+      (!topic || topicsOf(n).some((t) => t.toLowerCase() === topic))
+  );
+}
+
+const topicsOf = (n) => (n && Array.isArray(n.topics) ? n.topics : []);
+
+// Every topic the notes use, most used first (shared/note-topics.mjs noteTopicCounts).
+function topicCounts() {
+  const counts = new Map();
+  for (const n of state.notes) {
+    for (const t of topicsOf(n)) {
+      const c = counts.get(t.toLowerCase()) || { topic: t, count: 0 };
+      c.count++;
+      counts.set(t.toLowerCase(), c);
+    }
+  }
+  return [...counts.values()].sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic));
+}
+
+function setTopic(topic) {
+  state.topic = topic && state.topic?.toLowerCase() === topic.toLowerCase() ? null : topic;
+  if (view === 'canvas') graph?.select(state.topic ? topicNodeId(state.topic) : null, { center: !!state.topic });
+  renderList();
+}
+
+// The chips above the list: all notes, or one topic's. The AI's offer to sort the notes that have
+// no topic yet, when it doesn't do so by itself.
+function renderTopicFilter() {
+  const all = topicCounts();
+  const untagged = state.notes.filter((n) => !n.topicsBy && n.body.trim() && !state.ai.tagging.includes(n.id));
+  const offer = state.writable && !state.ai.autoTopics && untagged.length
+    ? el('button', { class: 'topic-chip suggest', title: 'Ask this device’s AI to sort them into topics', onclick: () => suggestTopics(null) }, [
+        icon('magic'),
+        ` Sort ${plural(untagged.length, 'note')} into topics`,
+      ])
+    : null;
+  if (!all.length && !offer) {
+    topicsEl.replaceChildren();
+    topicsEl.hidden = true;
+    return;
+  }
+  topicsEl.hidden = false;
+  const chip = (label, count, on, onclick, title) =>
+    el('button', { class: 'topic-chip' + (on ? ' on' : ''), 'aria-pressed': String(on), title, onclick }, [
+      label,
+      count != null ? el('span', { class: 'n' }, [String(count)]) : null,
+    ]);
+  topicsEl.replaceChildren(
+    ...(all.length ? [chip('All', null, !state.topic, () => setTopic(null), 'Every note')] : []),
+    ...all.map((t) => chip(t.topic, t.count, state.topic?.toLowerCase() === t.topic.toLowerCase(), () => setTopic(t.topic), `Notes about ${t.topic}`)),
+    ...(offer ? [offer] : [])
+  );
 }
 
 function renderList() {
+  renderTopicFilter();
   if (!state.loaded) {
     listEl.replaceChildren(el('div', { class: 'list-msg' }, ['Loading…']));
     return;
@@ -510,7 +607,7 @@ function renderList() {
   }
   items.push(...everywhere.map(item));
   if (!items.length) {
-    items.push(el('div', { class: 'list-msg' }, [state.query ? 'No notes match.' : 'No notes yet.']));
+    items.push(el('div', { class: 'list-msg' }, [state.query || state.topic ? 'No notes match.' : 'No notes yet.']));
   }
   listEl.replaceChildren(...items);
 }
@@ -527,6 +624,7 @@ function noteItem(n) {
         el('span', { class: 'date' }, [n.updatedAt ? relativeDate(n.updatedAt) : 'Now']),
         snippet ? el('span', { class: 'snippet' }, [snippet]) : null,
       ]),
+      topicsOf(n).length ? el('div', { class: 'item-topics' }, topicsOf(n).map((t) => el('span', { class: 'tag' }, [t]))) : null,
     ]
   );
 }
@@ -562,7 +660,7 @@ function renderEditor() {
         [icon('trash')]
       ),
     ]),
-    el('div', { class: 'page' }, [el('div', { class: 'banner-slot' }), host, el('div', { class: 'backlinks-slot' })])
+    el('div', { class: 'page' }, [el('div', { class: 'banner-slot' }), el('div', { class: 'topic-slot' }), host, el('div', { class: 'backlinks-slot' })])
   );
   editor = createNoteEditor({
     parent: host,
@@ -696,6 +794,103 @@ function renderAround() {
   } else bannerSlot.replaceChildren();
 
   backSlot.replaceChildren(renderBacklinks());
+  renderNoteTopics();
+}
+
+// The open note's topics, above its text: each one shows its notes, × takes it off; type to add
+// one (Enter or a comma), or ask the AI to suggest some. Redrawn when the topics change, keeping a
+// half-typed topic.
+function renderNoteTopics() {
+  const slot = mainEl.querySelector('.topic-slot');
+  if (!slot) return;
+  const stored = draft?.id ? state.notes.find((n) => n.id === draft.id) : null;
+  if (!stored) return slot.replaceChildren();
+  const topics = topicsOf(stored);
+  const canEdit = state.writable && (!stored.space || state.canWriteSpace);
+  const tagging = state.ai.tagging.includes(stored.id);
+  const old = slot.querySelector('input');
+  const typed = old ? old.value : '';
+  const hadFocus = !!old && document.activeElement === old;
+  const known = topicCounts().map((t) => t.topic).filter((t) => !topics.some((x) => x.toLowerCase() === t.toLowerCase()));
+  const input = canEdit
+    ? el('input', {
+        type: 'text',
+        class: 'topic-input',
+        placeholder: topics.length || tagging ? 'Add a topic' : 'Add a topic, like Garden or Work',
+        'aria-label': 'Add a topic',
+        list: 'note-topics-known',
+        value: typed,
+        onkeydown: (e) => {
+          const v = e.target.value.trim();
+          if ((e.key === 'Enter' || e.key === ',') && v) {
+            e.preventDefault();
+            e.target.value = '';
+            setNoteTopics(stored, [...topics, ...v.split(',')]);
+          } else if (e.key === 'Backspace' && !e.target.value && topics.length) {
+            setNoteTopics(stored, topics.slice(0, -1));
+          } else if (e.key === 'Escape') {
+            e.target.value = '';
+            editor?.focus();
+          }
+        },
+        onchange: (e) => {
+          // A topic picked from the suggestions.
+          const v = e.target.value.trim();
+          if (v && known.some((t) => t.toLowerCase() === v.toLowerCase())) {
+            e.target.value = '';
+            setNoteTopics(stored, [...topics, v]);
+          }
+        },
+      })
+    : null;
+  slot.replaceChildren(
+    el('div', { class: 'note-topics' }, [
+      el('span', { class: 'label', title: 'Topics' }, [icon('tag')]),
+      ...topics.map((t) =>
+        el('span', { class: 'tag' }, [
+          el('button', { class: 'tag-name', title: `Show notes about ${t}`, onclick: () => setTopic(t) }, [t]),
+          canEdit ? el('button', { class: 'tag-x', title: `Remove ${t}`, 'aria-label': `Remove ${t}`, onclick: () => setNoteTopics(stored, topics.filter((x) => x !== t)) }, [icon('times')]) : null,
+        ])
+      ),
+      stored.topicsBy === 'ai' && topics.length ? el('span', { class: 'by-ai', title: 'Picked by the AI. Change them as you like' }, [icon('magic')]) : null,
+      tagging ? el('span', { class: 'tag pending' }, [icon('circle-notch fa-spin'), ' Finding topics…']) : null,
+      input,
+      input ? el('datalist', { id: 'note-topics-known' }, known.map((t) => el('option', { value: t }))) : null,
+      canEdit && !tagging && stored.body.trim()
+        ? el('button', { class: 'topic-suggest', title: state.ai.noRuntime ? 'No AI is set up on this device' : 'Ask the AI to suggest topics', onclick: () => suggestTopics([stored.id]) }, [icon('magic'), ' Suggest'])
+        : null,
+      state.ai.noRuntime && !topics.length
+        ? el('span', { class: 'no-ai' }, ['No AI is set up on this device. ', tabLink({}, 'nomad://ai/setup', ['Set one up'])])
+        : null,
+    ])
+  );
+  if (hadFocus) slot.querySelector('input')?.focus();
+}
+
+async function setNoteTopics(note, topics) {
+  try {
+    const next = await nomad.vault.setNoteTopics({ id: note.id, topics });
+    replaceNote(next);
+  } catch (e) {
+    setSaveMsg('error', 'Topics not saved: ' + (e.message || e));
+    return;
+  }
+  renderList();
+  renderNoteTopics();
+  renderGraph();
+}
+
+// Ask this Device's AI for topics: for these notes, or every note with none yet.
+async function suggestTopics(ids) {
+  try {
+    await nomad.vault.suggestNoteTopics(ids);
+    await loadNotes();
+  } catch (e) {
+    setSaveMsg('error', 'Couldn’t ask the AI: ' + (e.message || e));
+    return;
+  }
+  renderList();
+  renderNoteTopics();
 }
 
 // Linked mentions: the other notes that link to this one. Closed until the user opens it.
@@ -769,6 +964,8 @@ function notice(iconName, heading, body, action) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+const plural = (n, word) => `${n} ${n === 1 ? word : word + 's'}`;
 
 function relativeDate(iso) {
   const d = new Date(iso);

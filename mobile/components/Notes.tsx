@@ -12,6 +12,7 @@ import IconButton from './IconButton'
 import Icon from './Icon'
 import { ListSection } from './List'
 import Canvas, { type CanvasHandle, type CanvasSnapshot } from './Canvas'
+import NoteTopicsSheet from './NoteTopicsSheet'
 
 const SAVE_DELAY = 800
 const VIEW_KEY = 'nomad-notes-view' // 'list' or 'canvas', the last one used
@@ -50,6 +51,9 @@ const TOOLS: [string, string][] = [['heading', 'H'], ['bold', 'B'], ['italic', '
 // The header's Canvas button swaps the list for desktop's canvas (Canvas.tsx): every note a dot, a
 // line with an arrowhead for each link. Tap a note to light up its links and see it below; tap it
 // again, or Open, to edit it. Back from the note returns to the canvas as it was.
+// A note can have topics (ADR-0035): the row under the editor's tools shows them and opens a sheet
+// to change them; a computer's AI also sorts notes into topics by itself. The chips above the list
+// show one topic's notes, and on the canvas each topic is a hub with its notes around it.
 export default function Notes ({ visible, onClose, apps, onVaultChange, space, spaceName, onOpenDevices, onOpenUrl, openNoteId }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
@@ -80,6 +84,10 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
   // The list, or the canvas of notes and their links. The last one used comes back next time.
   const [view, setView] = useState<'list' | 'canvas'>('list')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // The topic whose notes the list shows, or null for all; the open note (for its topics); the sheet.
+  const [topic, setTopic] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [topicsOpen, setTopicsOpen] = useState(false)
   const canvasRef = useRef<CanvasHandle>(null)
   const snapshot = useRef<CanvasSnapshot | null>(null)
   useEffect(() => {
@@ -189,6 +197,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
         Object.assign(target, { id: note.id, openedTitle: note.title })
         if (draft.current === target) send({ type: 'setId', id: note.id })
       }
+      if (draft.current === target) setOpenId(note.id)
       target.base = note.updatedAt
       const list = [note, ...notesRef.current.filter((n) => n.id !== note.id)]
       keepNotes(list)
@@ -222,6 +231,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
       ? { id: note.id, body: note.body, title: note.title, base: note.updatedAt, openedTitle: note.title, conflictOf: note.conflictOf || null, inSpace: !!note.space }
       : { id: null, body, title: '', base: null, openedTitle: null, conflictOf: null, inSpace: !!space && canWriteSpace } // a new note is kept in this Space
     setInSpace(draft.current.inSpace)
+    setOpenId(note ? note.id : null)
     dirty.current = !note && !!body
     pendingHeading.current = heading
     setStatus('')
@@ -364,8 +374,34 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
     onClose()
   }, [editorOpen, closeEditor, onClose])
 
+  // Every topic the notes use, most used first (shared/note-topics.mjs noteTopicCounts).
+  const topicList = useMemo(() => topicCounts(notes || []), [notes])
+  const topicKey = topic && topicList.some((x) => x.topic.toLowerCase() === topic.toLowerCase()) ? topic.toLowerCase() : null
   const q = query.trim().toLowerCase()
-  const shown = (notes || []).filter((n) => !q || n.body.toLowerCase().includes(q))
+  const shown = (notes || []).filter((n) =>
+    (!q || n.body.toLowerCase().includes(q) || (n.topics || []).some((x) => x.toLowerCase().includes(q))) &&
+    (!topicKey || (n.topics || []).some((x) => x.toLowerCase() === topicKey)))
+  const openNote = openId ? (notes || []).find((n) => n.id === openId) || null : null
+
+  // A note's topics, set by hand: the AI on a computer leaves them alone after this.
+  const saveTopics = async (list: string[]) => {
+    const target = openNote
+    if (!target) return
+    const res = await call<Note>('notes', 'setTopics', { id: target.id, topics: list })
+    if (!res.ok || !res.value) return Alert.alert('Couldn’t change the topics', res.message || 'Unknown error')
+    const note = res.value
+    const next = notesRef.current.map((n) => (n.id === note.id ? note : n))
+    keepNotes(next)
+  }
+
+  // A topic hub picked on the canvas lists that topic's notes.
+  const showTopic = (id: string) => {
+    const hub = topicList.find((x) => 'topic:' + x.topic.toLowerCase() === id)
+    if (!hub) return
+    setTopic(hub.topic)
+    setSelectedId(null)
+    setView('list')
+  }
   // The Space's own notes first, under its name, when it has any.
   const sections: { title: string | null; notes: Note[] }[] =
     space && shown.some((n) => n.space)
@@ -375,6 +411,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
         ].filter((sec) => sec.notes.length)
       : [{ title: null, notes: shown }]
   const selected = view === 'canvas' && selectedId ? (notes || []).find((n) => n.id === selectedId) || null : null
+  const selectedTopic = view === 'canvas' && selectedId?.startsWith('topic:') ? topicList.find((x) => 'topic:' + x.topic.toLowerCase() === selectedId) || null : null
   const conflictOf = draft.current?.conflictOf
   const original = conflictOf ? notesRef.current.find((n) => n.id === conflictOf) : null
 
@@ -428,6 +465,21 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
                 </TouchableOpacity>
               ))}
             </ScrollView>
+            {openNote ? (
+              <Pressable style={s.topicBar} onPress={() => setTopicsOpen(true)} android_ripple={{ color: t.ripple }} accessibilityRole='button' accessibilityLabel='Topics'>
+                <Icon name='tag' size={12} color={t.textMuted} />
+                {(openNote.topics || []).length ? (
+                  <View style={s.topicRow}>
+                    {(openNote.topics || []).map((x) => (
+                      <View key={x} style={s.topic}><Text numberOfLines={1} style={s.topicText}>{x}</Text></View>
+                    ))}
+                    {openNote.topicsBy === 'ai' ? <Icon name='magic' size={10} color={t.textMuted} /> : null}
+                  </View>
+                ) : (
+                  <Text style={s.topicAdd}>{editable ? 'Add a topic' : 'No topics'}</Text>
+                )}
+              </Pressable>
+            ) : null}
             <WebView
               ref={web}
               style={s.web}
@@ -480,13 +532,29 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
                     kind='notes'
                     data={notes}
                     query={query}
-                    info={({ nodes, links }) => `${nodes} ${nodes === 1 ? 'note' : 'notes'} · ${links} ${links === 1 ? 'link' : 'links'}`}
+                    info={({ nodes, links, topics }) => [plural(nodes, 'note'), plural(links, 'link'), topics ? plural(topics, 'topic') : ''].filter(Boolean).join(' · ')}
                     snapshot={snapshot.current}
                     onSnapshot={(snap) => { snapshot.current = snap }}
                     onSelect={setSelectedId}
-                    onOpen={(id) => { const n = notesRef.current.find((x) => x.id === id); if (n) openFromList(n) }}
+                    onOpen={(id) => {
+                      if (id.startsWith('topic:')) return showTopic(id)
+                      const n = notesRef.current.find((x) => x.id === id)
+                      if (n) openFromList(n)
+                    }}
                   />
                 )}
+                {selectedTopic ? (
+                  <View style={s.picked}>
+                    <Pressable style={s.pickedText} onPress={() => showTopic(selectedId!)} android_ripple={{ color: t.ripple }}>
+                      <Text numberOfLines={1} style={s.rowDate}>Topic</Text>
+                      <Text numberOfLines={1} style={s.rowTitle}>{selectedTopic.topic}</Text>
+                      <Text style={s.rowSub}>{plural(selectedTopic.count, 'note')}</Text>
+                    </Pressable>
+                    <Pressable style={s.openBtn} onPress={() => showTopic(selectedId!)} android_ripple={{ color: t.ripple }} accessibilityRole='button'>
+                      <Text style={s.openBtnText}>List</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
                 {selected ? (
                   <View style={s.picked}>
                     <Pressable style={s.pickedText} onPress={() => openFromList(selected)} android_ripple={{ color: t.ripple }}>
@@ -516,11 +584,19 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
                     clearButtonMode='while-editing'
                   />
                 </View>
+                {topicList.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chips} contentContainerStyle={s.chipsContent}>
+                    <Chip s={s} label='All' active={!topicKey} onPress={() => setTopic(null)} />
+                    {topicList.map((x) => (
+                      <Chip key={x.topic} s={s} label={`${x.topic} · ${x.count}`} active={topicKey === x.topic.toLowerCase()} onPress={() => setTopic(topicKey === x.topic.toLowerCase() ? null : x.topic)} />
+                    ))}
+                  </ScrollView>
+                )}
                 {!writable && (
                   <Text style={s.hint}>This phone can’t save changes to your Vault yet. Keep your other device online until it syncs.</Text>
                 )}
                 {shown.length === 0 ? (
-                  <Text style={s.empty}>{q ? 'No notes match.' : 'No notes yet. Tap New note to write one. It shows on your computer too.'}</Text>
+                  <Text style={s.empty}>{q || topicKey ? 'No notes match.' : 'No notes yet. Tap New note to write one. It shows on your computer too.'}</Text>
                 ) : (
                   sections.map((sec) => (
                     <ListSection key={sec.title || 'all'} title={sec.title || undefined}>
@@ -531,6 +607,15 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
                               <Text style={s.rowDate}>{relativeDate(n.updatedAt)}</Text>
                               {n.snippet ? `  ${n.snippet}` : ''}
                             </Text>
+                            {(n.topics || []).length > 0 && (
+                              <View style={[s.topicRow, s.rowTopics]}>
+                                {(n.topics || []).map((x) => (
+                                  <TouchableOpacity key={x} style={s.topic} onPress={() => setTopic(x)} hitSlop={4}>
+                                    <Text numberOfLines={1} style={s.topicText}>{x}</Text>
+                                  </TouchableOpacity>
+                                ))}
+                              </View>
+                            )}
                           </Pressable>
                         ))}
                     </ListSection>
@@ -539,7 +624,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
               </ScrollView>
             )}
             {/* Material's extended floating action button: the one thing this page is for. */}
-            {notes && !noVault && !error && !selected ? (
+            {notes && !noVault && !error && !selected && !selectedTopic ? (
               <Pressable
                 // Absolute, so the SafeAreaView's padding doesn't lift it: add the inset itself.
                 style={[s.fab, { bottom: 16 + insets.bottom }, !writable && s.fabOff]}
@@ -555,7 +640,42 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
           </>
         )}
       </SafeAreaView>
+      <NoteTopicsSheet
+        visible={topicsOpen && !!openNote}
+        onClose={() => setTopicsOpen(false)}
+        topics={openNote?.topics || []}
+        byAi={openNote?.topicsBy === 'ai'}
+        known={topicList.map((x) => x.topic)}
+        editable={editable}
+        onChange={saveTopics}
+      />
     </Modal>
+  )
+}
+
+const plural = (n: number, word: string) => `${n} ${n === 1 ? word : word + 's'}`
+
+// Every topic the notes use, most used first (shared/note-topics.mjs noteTopicCounts; mobile/ keeps
+// its React Native bundle to itself).
+function topicCounts (notes: Note[]): Array<{ topic: string; count: number }> {
+  const counts = new Map<string, { topic: string; count: number }>()
+  for (const n of notes) {
+    for (const x of n.topics || []) {
+      const c = counts.get(x.toLowerCase()) || { topic: x, count: 0 }
+      c.count++
+      counts.set(x.toLowerCase(), c)
+    }
+  }
+  return [...counts.values()].sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic))
+}
+
+type Styles = ReturnType<typeof makeStyles>
+
+function Chip ({ label, active, onPress, s }: { label: string; active: boolean; onPress: () => void; s: Styles }) {
+  return (
+    <TouchableOpacity style={[s.chip, active && s.chipActive]} onPress={onPress} accessibilityState={{ selected: active }}>
+      <Text numberOfLines={1} style={[s.chipText, active && s.chipTextActive]}>{label}</Text>
+    </TouchableOpacity>
   )
 }
 
@@ -656,6 +776,19 @@ function makeStyles (t: Theme) {
     rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
     rowTitle: { color: t.text, fontSize: 15, fontWeight: '600' },
     rowSub: { color: t.textMuted, fontSize: 13, marginTop: 2 },
-    rowDate: { color: t.textDim }
+    rowDate: { color: t.textDim },
+    // Topics (ADR-0035): the filter chips, a note's tags, and the editor's topic row.
+    chips: { flexGrow: 0, marginHorizontal: -16, marginTop: -4, marginBottom: 12 },
+    chipsContent: { paddingHorizontal: 16, gap: 8 },
+    chip: { height: 34, justifyContent: 'center', paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: t.border, maxWidth: 200 },
+    chipActive: { backgroundColor: t.trustBg, borderColor: t.trustBg },
+    chipText: { color: t.textDim, fontSize: 13, fontWeight: '500' },
+    chipTextActive: { color: t.trustText, fontWeight: '700' },
+    topicRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, flex: 1 },
+    rowTopics: { marginTop: 6, flex: 0 },
+    topic: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: t.trustBg, maxWidth: 160 },
+    topicText: { color: t.trustText, fontSize: 11, fontWeight: '600' },
+    topicBar: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 40, paddingHorizontal: 16, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border, backgroundColor: t.surface },
+    topicAdd: { color: t.textMuted, fontSize: 13 }
   })
 }

@@ -326,13 +326,14 @@ export const CAPABILITIES = [
   {
     name: 'listNotes',
     description:
-      "Find the user's Notes (nomad://notes): id, title and a short preview, newest first. " +
+      "Find the user's Notes (nomad://notes): id, title, a short preview and their topics, newest first. " +
       'Notes kept only in the current Space are marked `inSpace`. ' +
-      'Pass `query` to search their text. Asks permission to read Notes.',
+      'Pass `query` to search their text, `topic` for one topic\'s notes. Asks permission to read Notes.',
     inputSchema: {
       type: 'object',
       properties: {
         query: { type: 'string', description: 'Optional. Words that must all be in the note' },
+        topic: { type: 'string', description: 'Optional. Only the notes with this topic' },
         limit: { type: 'number', description: 'Optional. How many, up to 100 (default 20)' },
       },
       required: [],
@@ -342,7 +343,7 @@ export const CAPABILITIES = [
   {
     name: 'readNote',
     description:
-      "Read one of the user's Notes in full: its Markdown, the titles it links to, and its updatedAt " +
+      "Read one of the user's Notes in full: its Markdown, the titles it links to, its topics, and its updatedAt " +
       '(pass that to writeNote to edit it). Find it by `id` or `title`. Asks permission to read Notes.',
     inputSchema: {
       type: 'object',
@@ -360,13 +361,16 @@ export const CAPABILITIES = [
       'Create a Note (no `id`), or replace the text of one (`id`, and the updatedAt readNote gave as ' +
       '`baseUpdatedAt`). A new Note is kept only in the current Space; the user can show it in every Space. ' +
       'The first line is its title; link Notes with [[Title]]. If the Note changed ' +
-      'since you read it, your text is kept as a conflict copy. Asks permission to write Notes.',
+      'since you read it, your text is kept as a conflict copy. Pass `topics` to set the Note\'s topics ' +
+      '(1 to 3 words each, Title Case, reusing the user\'s topics where one fits); leave it out to keep them. ' +
+      'Asks permission to write Notes.',
     inputSchema: {
       type: 'object',
       properties: {
         body: { type: 'string', description: 'The whole note, in Markdown' },
         id: { type: 'string', description: 'Optional. The note to replace' },
         baseUpdatedAt: { type: 'string', description: 'Required with id: the updatedAt from readNote' },
+        topics: { type: 'array', items: { type: 'string' }, description: 'Optional. The note\'s topics, replacing the ones it has' },
       },
       required: ['body'],
     },

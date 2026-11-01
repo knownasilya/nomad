@@ -2,6 +2,7 @@ import b4a from 'b4a'
 import { decodeInlineJson } from '../../../shared/fs-core.mjs'
 import * as apps from '../../../shared/vault-apps.mjs'
 import * as ra from '../../../shared/reader-articles.mjs'
+import * as nt from '../../../shared/note-topics.mjs'
 import { parseWebFeed, isFeedXml, findFeedLinks } from '../../../shared/web-feeds.mjs'
 import * as names from '../../../shared/names.mjs'
 import * as ot from '../../../shared/open-tabs.mjs'
@@ -315,6 +316,17 @@ export async function moveNote (base, { id, inSpace = false, space = null } = {}
   await putNote(base, id, to, found.prev)
   await delNote(base, id, found.space)
   return withPreview(withSpace(to)(found.prev))
+}
+
+// Set a Note's topics by hand (ADR-0035, shared/note-topics.mjs): the AI on a computer leaves them
+// alone after this. Its updatedAt stays, so it isn't taken for an edit. Returns the Note.
+export async function setNoteTopics (base, { id, topics, space = null } = {}) {
+  space = spaceOrNull(space)
+  const found = await findStored(base, id, space) // notePath validates the id
+  if (!found.prev) throw new Error('No note with that id')
+  const note = nt.withNoteTopics(found.prev, topics, 'user', nt.knownNoteTopics(await allNotes(base, space)))
+  await putNote(base, id, found.space, note)
+  return withPreview(withSpace(found.space)(note))
 }
 
 // A Note's title changed: point the other Notes' links at the new title. Returns how many changed.

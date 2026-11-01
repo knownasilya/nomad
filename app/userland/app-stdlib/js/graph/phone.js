@@ -4,18 +4,18 @@
 //
 // React Native → page: window.__canvas(msg), sent with injectJavaScript.
 //   { type: 'load', theme, kind, data, query, snapshot }  show a canvas
-//        kind 'notes': data is the notes; kind 'reader': data is { articles, posts }
+//        kind 'notes': data is the notes (with their topics); kind 'reader': data is { articles, posts }
 //   { type: 'data', data }           what to show changed
 //   { type: 'query', query }         dim what doesn't match
 //   { type: 'select', id, center }   light up a node (null clears), and pan to it
 //   { type: 'fit' } · { type: 'zoomIn' } · { type: 'zoomOut' }
 // Page → React Native: window.ReactNativeWebView.postMessage(JSON)
-//   { type: 'ready' } · { type: 'count', nodes, links }
+//   { type: 'ready' } · { type: 'count', nodes, links, topics? } (notes: notes, links between them, topics)
 //   { type: 'select', id } (null when cleared) · { type: 'open', id }
 //   { type: 'snapshot', snapshot }: where everything is, to give back in the next 'load'
 
 import { createGraphView } from './view.js';
-import { noteGraph } from '../../../notes/js/graph.js';
+import { noteGraph, noteTexts, noteGraphCounts } from '../../../notes/js/graph.js';
 import { readerGraph, readerTexts } from '../../../reader/js/graph.js';
 
 const post = (msg) => window.ReactNativeWebView?.postMessage(JSON.stringify(msg));
@@ -27,9 +27,13 @@ let snapTimer = 0;
 // The graph and the text the search matches, for each kind of canvas.
 const KINDS = {
   notes: {
-    label: 'Notes and their links',
+    label: 'Notes, their links and their topics',
     graph: (notes) => noteGraph(notes || []),
-    texts: (notes) => new Map((notes || []).map((n) => [n.id, String(n.body || '').toLowerCase()])),
+    texts: (notes) => noteTexts(notes || []),
+    count: (graph) => {
+      const c = noteGraphCounts(graph);
+      return { nodes: c.notes, links: c.links, topics: c.topics };
+    },
   },
   reader: {
     label: 'Articles by topic',
@@ -60,9 +64,9 @@ function applyTheme(t = {}) {
 
 function show(data, opts = {}) {
   const k = KINDS[kind];
-  view.update(k.graph(data), { texts: k.texts(data), ...opts });
-  const { nodes, links } = view.count;
-  post({ type: 'count', nodes, links });
+  const graph = k.graph(data);
+  view.update(graph, { texts: k.texts(data), ...opts });
+  post({ type: 'count', ...(k.count ? k.count(graph) : view.count) });
 }
 
 // Tell React Native where everything is a moment after it last moved, so the canvas comes back the

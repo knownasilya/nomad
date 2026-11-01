@@ -100,6 +100,14 @@ describe('vault tools: Notes', () => {
     expect(findNotes(NOTES, { limit: 1 })).toHaveLength(1);
   });
 
+  it('lists a note’s topics, and finds one topic’s notes (ADR-0035)', () => {
+    const tagged = [{ ...NOTES[0], topics: ['Garden'] }, { ...NOTES[1], topics: ['garden', 'Plans'] }, NOTES[2]];
+    expect(findNotes(tagged, { topic: 'GARDEN' }).map((n) => n.id)).toEqual(['b2', 'a1']);
+    expect(findNotes(tagged, { topic: 'plans' })[0].topics).toEqual(['garden', 'Plans']);
+    expect(findNotes(tagged, { query: 'plans' }).map((n) => n.id)).toContain('b2');
+    expect(noteForModel(tagged[0]).topics).toEqual(['Garden']);
+  });
+
   it('finds one note by id or exact title', () => {
     expect(findNote(NOTES, { id: 'c3' }).id).toBe('c3');
     expect(findNote(NOTES, { title: 'seed order' }).id).toBe('a1');
@@ -114,6 +122,7 @@ describe('vault tools: Notes', () => {
       title: 'Seed order',
       body: NOTES[0].body,
       links: ['Garden plan'],
+      topics: [],
       createdAt: NOTES[0].createdAt,
       updatedAt: NOTES[0].updatedAt,
     });

@@ -214,7 +214,16 @@ two-finger pinch zoom, tap to select on touch) and `app-stdlib/css/graph.css` (t
 colors). Each app only builds its graph: `notes/js/graph.js` (`noteGraph`, notes and their links)
 and `reader/js/graph.js` (`readerGraph`: saved articles around their topic hubs, posts around their
 feed, a post joined to a topic its tags name). nomad://reader is not bundled, so it imports both
-the first time the canvas shows. The phone draws the same canvas in a WebView
+the first time the canvas shows.
+
+### Topics on Notes (ADR-0035)
+
+A Note can have `topics` and `topicsBy` ('user' | 'ai') on its record (`shared/note-topics.mjs`, on
+Reader's topic rules). `makeNote` keeps them on every save, and setting them never changes
+`updatedAt` (so it is never a conflict). This Device's AI tags settled Notes in the background
+(`app/bg/web-apis/bg/note-topics.ts`, `ai_note_topics` setting); the user sets them with
+`nomad.vault.setNoteTopics`, the phone with `notes`/`setTopics`. On the canvas each topic is a hub
+(`topic:<topic>`) tied to its notes by a dashed `kind: 'topic'` line. The phone draws the same canvas in a WebView
 (`mobile/components/Canvas.tsx`) from `mobile/lib/canvasHtml.ts` (committed), which
 **`npm run build:canvas`** bundles from `app-stdlib/js/graph/phone.js`: rerun it after changing the
 canvas or either graph.

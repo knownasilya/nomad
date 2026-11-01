@@ -43,6 +43,7 @@ const GLOBAL_SETTINGS = new Set([
   'ai_auto_names',
   'ai_memory',
   'ai_reader_topics',
+  'ai_note_topics',
   'ai_sidebar_width',
   'cert_exceptions',
   'crawler_enabled',
@@ -133,6 +134,8 @@ export const setup = async function (opts) {
     ai_memory: 1,
     // The AI sorts the articles saved to Reader into topics (bg/web-apis/bg/reader-articles.ts).
     ai_reader_topics: 1,
+    // The AI sorts Notes into topics (bg/web-apis/bg/note-topics.ts, ADR-0035).
+    ai_note_topics: 1,
     // Run the discovery crawler that nomad://search queries (bg/hyper/crawler-host.js). Synced to
     // the user's other Devices through the Vault (bg/hyper/synced-settings.js).
     crawler_enabled: 1,
