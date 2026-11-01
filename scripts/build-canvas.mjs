@@ -39,8 +39,7 @@ const css = `${graphCss}
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--graph-bg); -webkit-text-size-adjust: 100%; }
 body { font-family: -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Segoe UI', sans-serif; }
 #canvas { position: fixed; inset: 0; }
-.graph-node text { font-size: 12px; }
-.graph-node.hub text { font-size: 13px; }
+:root { --graph-label-size: 12px; --graph-hub-label-size: 13px; }
 `.replace(/<\/style/gi, '<\\/style');
 
 const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"><style>${css}</style></head><body><div id="canvas" class="graph-surface"></div><script>${js}</script></body></html>`;

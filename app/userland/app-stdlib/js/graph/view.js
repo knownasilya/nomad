@@ -14,7 +14,8 @@
 // link's `kind` is a class on it (kind-<kind>): a note's line to its topic is dashed.
 //
 // Drag the background to pan; scroll, pinch on a trackpad or with two fingers to zoom; drag a node to
-// move it. A click on a node (or Enter on a focused one) calls onOpen(id). Hovering a node lights up
+// move it. Titles grow as you zoom in, but slower than the canvas does (labelScale), so a tight
+// cluster spreads out under its titles and they stop overlapping. A click on a node (or Enter on a focused one) calls onOpen(id). Hovering a node lights up
 // its links. With onSelect (the phone, which has no hover), a tap selects a node instead, lighting up
 // its links until another tap; onSelect(id) is told, onSelect(null) when a tap on the background
 // clears it, and a second tap on the selected node opens it.
@@ -23,12 +24,21 @@ import { neighborIds, createLayout } from './layout.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const MIN_SCALE = 0.15;
-const MAX_SCALE = 4;
+const MAX_SCALE = 8;
 const LABEL_SCALE = 0.7; // below this zoom only hubs and the hovered, selected and open nodes keep a title
 const CLICK_SLOP = 6; // px a press can move and still count as a click
 const ARROW_LENGTH = 8; // the arrowhead, in canvas units (it zooms with the nodes)
 const ARROW_HALF_WIDTH = 3.6;
 const ARROW_GAP = 1.5; // between the tip and the node's dot
+const MIN_LABEL_ZOOM = 0.85; // a title is drawn at least this big on screen (× its size at zoom 1)
+
+// How much bigger a title is drawn than its size at zoom 1, in canvas units, at zoom k. On screen
+// it grows with the square root of the zoom: 2× at 4×, against 4× for the space between dots. So
+// zooming in on a tight cluster pulls its titles apart, and zooming out keeps a hub's or a hovered
+// node's title readable.
+export function labelScale(k) {
+  return Math.max(MIN_LABEL_ZOOM, Math.sqrt(k)) / k;
+}
 
 export function createGraphView({ parent, onOpen, onSelect = null, label = 'Canvas' }) {
   const svg = svgEl('svg', { class: 'graph-svg', role: 'group', 'aria-label': label });
@@ -123,7 +133,8 @@ export function createGraphView({ parent, onOpen, onSelect = null, label = 'Canv
       const r = radii[i];
       const cls = ['graph-node', n.kind ? 'kind-' + n.kind : '', n.hub ? 'hub' : '', n.muted ? 'muted' : ''].filter(Boolean).join(' ');
       const g = svgEl('g', { class: cls, tabindex: '0', role: 'button', 'aria-label': n.title });
-      g.append(svgEl('circle', { r: String(r) }), svgEl('text', { y: String(r + 13), 'text-anchor': 'middle' }));
+      // dy is in em, so the title's gap below the dot grows with its size (labelScale).
+      g.append(svgEl('circle', { r: String(r) }), svgEl('text', { y: String(r), dy: '1.2em', 'text-anchor': 'middle' }));
       g.lastChild.textContent = n.title;
       g.dataset.id = n.id;
       g.addEventListener('pointerenter', (e) => e.pointerType === 'mouse' && setHover(n.id));
@@ -236,6 +247,7 @@ export function createGraphView({ parent, onOpen, onSelect = null, label = 'Canv
     const step = 24 * view.k;
     parent.style.backgroundSize = `${step}px ${step}px`;
     parent.style.backgroundPosition = `${view.x}px ${view.y}px`;
+    svg.style.setProperty('--graph-text-scale', labelScale(view.k).toFixed(4));
     svg.classList.toggle('labels', view.k >= LABEL_SCALE);
   }
 
