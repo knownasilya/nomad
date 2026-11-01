@@ -12,6 +12,7 @@
 // Page → React Native: window.ReactNativeWebView.postMessage(JSON)
 //   { type: 'ready' } · { type: 'count', nodes, links, topics? } (notes: notes, links between them, topics)
 //   { type: 'select', id } (null when cleared) · { type: 'open', id }
+//   { type: 'matches', count }: how many notes, articles or posts match the search (null without one)
 //   { type: 'snapshot', snapshot }: where everything is, to give back in the next 'load'
 
 import { createGraphView } from './view.js';
@@ -91,6 +92,7 @@ window.__canvas = (msg) => {
         post({ type: 'open', id });
       },
       onSelect: (id) => post({ type: 'select', id }),
+      onMatches: (count) => post({ type: 'matches', count }),
     });
     view.setVisible(true);
     const snap = msg.snapshot || {};

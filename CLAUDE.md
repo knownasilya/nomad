@@ -216,6 +216,12 @@ and `reader/js/graph.js` (`readerGraph`: saved articles around their topic hubs,
 feed, a post joined to a topic its tags name). nomad://reader is not bundled, so it imports both
 the first time the canvas shows.
 
+Search in Notes and Reader (lists and canvas, desktop and phone) follows one rule: every word typed,
+in any order, ignoring case and accents. It is `app-stdlib/js/search-match.js` (used by `view.js`,
+Notes' bundle, and nomad://reader, which imports it at start); the phone keeps a copy in
+`mobile/lib/search.ts` because its bundle can't reach `app/`. Change both together:
+`tests/unit/search-match.test.js` runs the same cases on each.
+
 ### Topics on Notes (ADR-0035)
 
 A Note can have `topics` and `topicsBy` ('user' | 'ai') on its record (`shared/note-topics.mjs`, on

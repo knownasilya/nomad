@@ -33,13 +33,16 @@ interface Props {
 // The canvas desktop's nomad://notes and nomad://reader draw (app-stdlib/js/graph/), bundled into a
 // page (lib/canvasHtml.ts, from app-stdlib/js/graph/phone.js) and run in a WebView: dots and lines,
 // laid out by a small force simulation. Drag to pan, pinch to zoom, drag a dot to move it. A tap
-// selects a dot and lights up its links; tapping it again opens it.
+// selects a dot and lights up its links; tapping it again opens it. A search lights up the dots that
+// match and fades the rest; the line over the top left counts them, and Fit fits them.
 export default function Canvas ({ kind, data, query = '', info, snapshot, onSnapshot, onSelect, onOpen, ref }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const web = useRef<WebView>(null)
   const ready = useRef(false)
   const [count, setCount] = useState<{ nodes: number; links: number; topics?: number } | null>(null)
+  // How many dots match the search, while there is one; the line over the top left says so.
+  const [matches, setMatches] = useState<number | null>(null)
   // The latest props, for the page's 'ready' and for the effects below.
   const latest = useRef({ data, query, snapshot, theme: t, kind })
   latest.current = { data, query, snapshot, theme: t, kind }
@@ -72,6 +75,8 @@ export default function Canvas ({ kind, data, query = '', info, snapshot, onSnap
       load()
     } else if (msg.type === 'count') {
       setCount({ nodes: msg.nodes, links: msg.links, topics: msg.topics })
+    } else if (msg.type === 'matches') {
+      setMatches(typeof msg.count === 'number' ? msg.count : null)
     } else if (msg.type === 'select') {
       onSelect?.(msg.id || null)
     } else if (msg.type === 'open' && msg.id) {
@@ -95,13 +100,17 @@ export default function Canvas ({ kind, data, query = '', info, snapshot, onSnap
         // Nothing on the canvas is a link; never let the page itself go anywhere.
         onShouldStartLoadWithRequest={(req) => !/^(https?|hyper):/i.test(req.url)}
       />
-      {count && info ? (
+      {matches != null && query.trim() ? (
+        <View style={s.info} pointerEvents='none'>
+          <Text style={s.infoText}>{matches ? `${matches} ${matches === 1 ? 'match' : 'matches'}` : 'Nothing matches'}</Text>
+        </View>
+      ) : count && info ? (
         <View style={s.info} pointerEvents='none'>
           <Text style={s.infoText}>{info(count)}</Text>
         </View>
       ) : null}
       <View style={s.tools}>
-        <IconButton icon='compress-arrows-alt' label='Fit everything' onPress={() => send({ type: 'fit' })} size={16} />
+        <IconButton icon='compress-arrows-alt' label={matches ? 'Fit what matches' : 'Fit everything'} onPress={() => send({ type: 'fit' })} size={16} />
       </View>
     </View>
   )

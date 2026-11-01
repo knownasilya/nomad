@@ -127,7 +127,8 @@
 .graph-node.hub text,
 .graph-node.current text,
 .graph-node.hover text,
-.graph-node.near text {
+.graph-node.near text,
+.graph-node.match text {
   display: block;
 }
 
@@ -176,4 +177,15 @@
 
 .graph-node.dim {
   opacity: 0.18;
+}
+
+/* What the search found: lit up, with its title at any zoom. */
+.graph-node.match circle {
+  fill: var(--graph-accent);
+  opacity: 1;
+}
+
+.graph-node.match text {
+  fill: var(--graph-label-strong, var(--text-color--default, #222));
+  font-weight: 600;
 }

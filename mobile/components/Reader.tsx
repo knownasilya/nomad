@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Modal, View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { Backend, Feed, FeedPost, ReaderState, SavedArticle, WebFeed } from '../lib/useBackend'
@@ -10,6 +10,9 @@ import IconButton from './IconButton'
 import LinkPhone from './LinkPhone'
 import ScreenHeader from './ScreenHeader'
 import Canvas, { type CanvasHandle, type CanvasSnapshot } from './Canvas'
+import SearchField, { Marked } from './SearchField'
+import KeyboardInset from './KeyboardInset'
+import { queryWords, matchesWords } from '../lib/search'
 
 const VIEW_KEY = 'nomad-reader-view' // 'list' or 'canvas', the last one used
 const PAGE = 25 // rows the list shows at first, and adds on each Load more
@@ -60,6 +63,9 @@ interface Props {
 // The header's Canvas button swaps the list for desktop's Reader canvas (Canvas.tsx): saved
 // articles gathered around their topics, posts around their feed. A chip lights up its topic or
 // feed there. Tap a dot to see it below; tap it again, or Open, to read it.
+// The search box under the header narrows the list to what has every word typed, in its title,
+// summary, site, feed or topics (lib/search.ts, desktop's rules), and lights it up on the canvas.
+// Under All it looks in saved articles too.
 export default function Reader ({ visible, onClose, apps, onVaultChange, space, onOpenPost, onOpenDevices, subscribeUrl, onSubscribeOffered }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
@@ -76,12 +82,17 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
   const [filter, setFilter] = useState<string>('all')
   const [menuFor, setMenuFor] = useState<SavedArticle | null>(null)
   const [addUrl, setAddUrl] = useState('')
+  const [query, setQuery] = useState('')
+  const words = useMemo(() => queryWords(query), [query])
+  // How far the keyboard covers the list, so its last rows can still scroll into view.
+  const [keyboard, setKeyboard] = useState(0)
+  const insets = useSafeAreaInsets()
   const [adding, setAdding] = useState(false)
   // The Add feed sheet, opened from the header's + (or the empty list).
   const [addOpen, setAddOpen] = useState(false)
   // How many rows the list shows; Load more adds PAGE. Each filter starts over.
   const [limit, setLimit] = useState(PAGE)
-  useEffect(() => { setLimit(PAGE) }, [filter])
+  useEffect(() => { setLimit(PAGE) }, [filter, query])
   // The list, or the canvas. The last one used comes back next time.
   const [view, setView] = useState<'list' | 'canvas'>('list')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -177,13 +188,19 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
   )
   const topicName = filter.startsWith('topic:') ? filter.slice(6).toLowerCase() : ''
   const hasTopic = (topics: string[] | undefined) => (topics || []).some((t) => t.toLowerCase() === topicName)
-  const shownArticles = filter === 'saved' ? articles : topicName ? articles.filter((a) => hasTopic(a.topics)) : []
+  // What a search looks in.
+  const postMatches = (p: FeedPost) => matchesWords([p.title, p.summary, p.feedTitle, ...(postTopics.get(p.url) || [])].join('\n'), words)
+  const articleMatches = (a: SavedArticle) => matchesWords([a.title, a.site, a.url, a.excerpt, ...(a.topics || [])].join('\n'), words)
+  const searching = words.length > 0
+  const shownArticles = (filter === 'saved' ? articles : topicName ? articles.filter((a) => hasTopic(a.topics)) : []).filter(articleMatches)
   // A topic shows feed posts too, under the articles.
-  const topicPosts = topicName ? allPosts.filter((p) => hasTopic(postTopics.get(p.url))) : []
-  const posts = savedView ? [] : filter === 'all' ? allPosts : allPosts.filter((p) => p.feedUrl === filter)
+  const topicPosts = topicName ? allPosts.filter((p) => hasTopic(postTopics.get(p.url)) && postMatches(p)) : []
+  const posts = (savedView ? [] : filter === 'all' ? allPosts : allPosts.filter((p) => p.feedUrl === filter)).filter(postMatches)
+  // Under All a search looks in saved articles too.
+  const foundArticles = searching && filter === 'all' ? articles.filter(articleMatches) : []
   const unread = savedView
     ? shownArticles.filter((a) => !a.readAt).length + topicPosts.filter((p) => !read.has(p.url)).length
-    : posts.filter((p) => !read.has(p.url)).length
+    : posts.filter((p) => !read.has(p.url)).length + foundArticles.filter((a) => !a.readAt).length
   const loadingAny = Object.values(feeds).some((f) => f.loading)
   // The page of each list. A topic shows its articles first, then its posts, within one limit.
   const pagedArticles = shownArticles.slice(0, limit)
@@ -219,6 +236,13 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
     const posts = topicPosts.filter((p) => !read.has(p.url)).map((p) => p.url)
     if (posts.length) saveRead(posts)
     for (const a of shownArticles.filter((x) => !x.readAt)) await markArticle(a, true)
+  }
+
+  // Mark all read in a feed, or under All: with a search, what it found (saved articles too).
+  const markAllShown = async () => {
+    const urls = posts.filter((p) => !read.has(p.url)).map((p) => p.url)
+    if (urls.length) saveRead(urls)
+    for (const a of foundArticles.filter((x) => !x.readAt)) await markArticle(a, true)
   }
 
   const openPost = (p: FeedPost) => {
@@ -342,6 +366,11 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
           <View style={s.center}><ActivityIndicator color={t.accent} /></View>
         ) : (
           <>
+            {(articles.length > 0 || feedList.length > 0) && (
+              <View style={s.searchRow}>
+                <SearchField value={query} onChangeText={setQuery} placeholder='Search Reader' onSubmit={() => view === 'canvas' && canvasRef.current?.fit()} />
+              </View>
+            )}
             {feedList.length === 0 && articles.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chips} contentContainerStyle={s.chipsContent}>
                 <Chip s={s} label='Feeds' active={!savedView} onPress={() => pick('all')} />
@@ -385,6 +414,7 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
                     ref={canvasRef}
                     kind='reader'
                     data={canvasData}
+                    query={query}
                     info={() => [`${articles.length} saved`, `${topicList.length} ${topicList.length === 1 ? 'topic' : 'topics'}`, feedList.length ? `${feedList.length} ${feedList.length === 1 ? 'feed' : 'feeds'}` : ''].filter(Boolean).join(' · ')}
                     snapshot={snapshot.current}
                     onSnapshot={(snap) => { snapshot.current = snap }}
@@ -423,7 +453,7 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
                 ) : null}
               </View>
             ) : (
-            <ScrollView contentContainerStyle={s.page} keyboardShouldPersistTaps='handled'>
+            <ScrollView contentContainerStyle={[s.page, keyboard > insets.bottom && { paddingBottom: 16 + keyboard - insets.bottom }]} keyboardShouldPersistTaps='handled'>
               {!state.writable && (
                 <Text style={s.hint}>This phone can’t save changes to your Vault yet. Keep your other device online until it syncs.</Text>
               )}
@@ -431,7 +461,7 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
               {savedView && (
                 <>
                   <View style={s.countRow}>
-                    <Text style={s.countText}>{topicName ? `${shownArticles.length + topicPosts.length} items` : `${shownArticles.length} saved`} · {unread} unread</Text>
+                    <Text style={s.countText}>{searching ? `${shownArticles.length + topicPosts.length} found` : topicName ? `${shownArticles.length + topicPosts.length} items` : `${shownArticles.length} saved`} · {unread} unread</Text>
                     {unread > 0 && (
                       <TouchableOpacity onPress={markAllArticles} hitSlop={8}>
                         <Text style={s.action}>Mark all read</Text>
@@ -441,16 +471,19 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
                   {pagedArticles.length > 0 && (
                     <View style={s.card}>
                       {pagedArticles.map((a, i) => (
-                        <ArticleRow key={a.id} a={a} divider={i > 0} s={s} onPress={() => openArticle(a)} onLongPress={() => setMenuFor(a)} onTopic={(t) => setFilter('topic:' + t)} />
+                        <ArticleRow key={a.id} a={a} words={words} divider={i > 0} s={s} onPress={() => openArticle(a)} onLongPress={() => setMenuFor(a)} onTopic={(t) => setFilter('topic:' + t)} />
                       ))}
                     </View>
+                  )}
+                  {searching && shownArticles.length === 0 && topicPosts.length === 0 && (
+                    <Text style={s.empty}>Nothing matches “{query.trim()}”.{'\n'}Search looks for every word in titles, summaries, sites and topics.</Text>
                   )}
                   {pagedTopicPosts.length > 0 && (
                     <>
                       <Text style={s.sectionLabel}>From your feeds</Text>
                       <View style={s.card}>
                         {pagedTopicPosts.map((p, i) => (
-                          <PostRow key={p.url} p={p} topics={postTopics.get(p.url)} read={read.has(p.url)} divider={i > 0} s={s} onPress={() => openPost(p)} onTopic={(t) => setFilter('topic:' + t)} />
+                          <PostRow key={p.url} p={p} words={words} topics={postTopics.get(p.url)} read={read.has(p.url)} divider={i > 0} s={s} onPress={() => openPost(p)} onTopic={(t) => setFilter('topic:' + t)} />
                         ))}
                       </View>
                     </>
@@ -460,23 +493,36 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
                 </>
               )}
 
-              {!savedView && posts.length > 0 && (
+              {!savedView && (posts.length > 0 || foundArticles.length > 0) && (
                 <View style={s.countRow}>
-                  <Text style={s.countText}>{unread} unread</Text>
+                  <Text style={s.countText}>{searching ? `${posts.length + foundArticles.length} found · ` : ''}{unread} unread</Text>
                   {unread > 0 && (
-                    <TouchableOpacity onPress={() => saveRead(posts.filter((p) => !read.has(p.url)).map((p) => p.url))} hitSlop={8}>
+                    <TouchableOpacity onPress={markAllShown} hitSlop={8}>
                       <Text style={s.action}>Mark all read</Text>
                     </TouchableOpacity>
                   )}
                 </View>
               )}
 
+              {!savedView && foundArticles.length > 0 && (
+                <>
+                  <Text style={[s.sectionLabel, s.sectionFirst]}>Saved</Text>
+                  <View style={s.card}>
+                    {foundArticles.map((a, i) => (
+                      <ArticleRow key={a.id} a={a} words={words} divider={i > 0} s={s} onPress={() => openArticle(a)} onLongPress={() => setMenuFor(a)} onTopic={(t) => setFilter('topic:' + t)} />
+                    ))}
+                  </View>
+                  {posts.length > 0 && <Text style={s.sectionLabel}>From your feeds</Text>}
+                </>
+              )}
               {savedView ? null : posts.length > 0 ? (
                 <View style={s.card}>
                   {pagedPosts.map((p, i) => (
-                    <PostRow key={p.url} p={p} topics={postTopics.get(p.url)} read={read.has(p.url)} divider={i > 0} s={s} onPress={() => openPost(p)} onTopic={(t) => setFilter('topic:' + t)} />
+                    <PostRow key={p.url} p={p} words={words} topics={postTopics.get(p.url)} read={read.has(p.url)} divider={i > 0} s={s} onPress={() => openPost(p)} onTopic={(t) => setFilter('topic:' + t)} />
                   ))}
                 </View>
+              ) : foundArticles.length > 0 ? null : searching && (allPosts.length > 0 || !loadingAny) ? (
+                <Text style={s.empty}>Nothing matches “{query.trim()}”{current ? ` in ${current.title}` : ''}.{'\n'}Search looks for every word in titles, summaries, sites, feeds and topics.</Text>
               ) : feedList.length === 0 ? (
                 <View style={s.emptyBox}>
                   <Text style={s.emptyText}>No subscriptions yet. Add a hyper:// feed or a site’s RSS link, or subscribe from nomad://reader on your computer.</Text>
@@ -542,6 +588,7 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
             </>
           )}
         </BottomSheet>
+        <KeyboardInset onChange={setKeyboard} />
         <ActionSheet
           visible={!!menuFor}
           onClose={() => setMenuFor(null)}
@@ -557,21 +604,21 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
   )
 }
 
-function PostRow ({ p, topics, read, divider, s, onPress, onTopic }: { p: FeedPost; topics?: string[]; read: boolean; divider: boolean; s: Styles; onPress: () => void; onTopic: (t: string) => void }) {
+function PostRow ({ p, words, topics, read, divider, s, onPress, onTopic }: { p: FeedPost; words: string[]; topics?: string[]; read: boolean; divider: boolean; s: Styles; onPress: () => void; onTopic: (t: string) => void }) {
   const t = useTheme()
   return (
     <Pressable style={[s.post, divider && s.rowDivider]} android_ripple={{ color: t.ripple }} onPress={onPress}>
       <View style={[s.unreadDot, read && s.dotRead]} />
       <View style={s.postText}>
-        <Text numberOfLines={1} style={s.postFeed}>{p.feedTitle}</Text>
-        <Text numberOfLines={2} style={[s.postTitle, read && s.postTitleRead]}>{p.title}</Text>
-        {!!p.summary && <Text numberOfLines={2} style={s.postSummary}>{p.summary}</Text>}
+        <Text numberOfLines={1} style={s.postFeed}><Marked text={p.feedTitle} words={words} /></Text>
+        <Text numberOfLines={2} style={[s.postTitle, read && s.postTitleRead]}><Marked text={p.title} words={words} /></Text>
+        {!!p.summary && <Text numberOfLines={2} style={s.postSummary}><Marked text={p.summary} words={words} /></Text>}
         {!!p.createdAt && <Text style={s.postDate}>{formatDate(p.createdAt)}</Text>}
         {!!topics?.length && (
           <View style={s.topicRow}>
             {topics.map((topic) => (
               <TouchableOpacity key={topic} onPress={() => onTopic(topic)} hitSlop={4} style={s.topic}>
-                <Text style={s.topicText}>{topic}</Text>
+                <Text style={s.topicText}><Marked text={topic} words={words} /></Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -581,7 +628,7 @@ function PostRow ({ p, topics, read, divider, s, onPress, onTopic }: { p: FeedPo
   )
 }
 
-function ArticleRow ({ a, divider, s, onPress, onLongPress, onTopic }: { a: SavedArticle; divider: boolean; s: Styles; onPress: () => void; onLongPress: () => void; onTopic: (t: string) => void }) {
+function ArticleRow ({ a, words, divider, s, onPress, onLongPress, onTopic }: { a: SavedArticle; words: string[]; divider: boolean; s: Styles; onPress: () => void; onLongPress: () => void; onTopic: (t: string) => void }) {
   const t = useTheme()
   const isRead = !!a.readAt
   const minutes = a.words ? Math.max(1, Math.round(a.words / 230)) : 0
@@ -590,13 +637,13 @@ function ArticleRow ({ a, divider, s, onPress, onLongPress, onTopic }: { a: Save
       <View style={[s.unreadDot, isRead && s.dotRead]} />
       <View style={s.postText}>
         <Text numberOfLines={1} style={s.postFeed}>{[a.site, formatDate(a.savedAt), minutes ? `${minutes} min read` : ''].filter(Boolean).join(' · ')}</Text>
-        <Text numberOfLines={2} style={[s.postTitle, isRead && s.postTitleRead]}>{a.title}</Text>
-        {!!a.excerpt && <Text numberOfLines={2} style={s.postSummary}>{a.excerpt}</Text>}
+        <Text numberOfLines={2} style={[s.postTitle, isRead && s.postTitleRead]}><Marked text={a.title} words={words} /></Text>
+        {!!a.excerpt && <Text numberOfLines={2} style={s.postSummary}><Marked text={a.excerpt} words={words} /></Text>}
         {(a.topics || []).length > 0 && (
           <View style={s.topicRow}>
             {a.topics.map((topic) => (
               <TouchableOpacity key={topic} onPress={() => onTopic(topic)} hitSlop={4} style={s.topic}>
-                <Text style={s.topicText}>{topic}</Text>
+                <Text style={s.topicText}><Marked text={topic} words={words} /></Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -678,6 +725,8 @@ function makeStyles (t: Theme) {
     topic: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: t.trustBg },
     topicText: { color: t.trustText, fontSize: 11, fontWeight: '600' },
     sectionLabel: { color: t.textMuted, fontSize: 12, fontWeight: '600', marginTop: 16, marginBottom: 8, paddingHorizontal: 2 },
+    sectionFirst: { marginTop: 0 },
+    searchRow: { paddingHorizontal: 16, paddingBottom: 10 },
     empty: { color: t.textMuted, fontSize: 13, textAlign: 'center', marginTop: 30, lineHeight: 19 },
     emptyBox: { alignItems: 'center', gap: 16, marginTop: 30, paddingHorizontal: 12 },
     emptyText: { color: t.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 19 },
