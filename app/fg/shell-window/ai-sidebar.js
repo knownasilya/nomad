@@ -5,82 +5,9 @@ import { fromEventStream } from '../../bg/web-apis/fg/event-target';
 import { streamToAsyncIterator } from '../../bg/web-apis/fg/ai-stream';
 import { splitGenUi } from '../../lib/genui/segments.mjs';
 import { mergeUserTurns } from '../../bg/ai/steering.mjs';
+import { parseItemLink } from '../../../shared/item-links.mjs';
+import { mdToHtml } from './ai-markdown.js';
 import './genui/index.js';
-
-// Minimal markdown -> HTML (headings, lists, code fences, inline emphasis/code). Mirrors the
-// renderer chat-bubble/ai-sidebar used before the two were unified into this component.
-function mdToHtml(text) {
-  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const inline = (s) =>
-    s
-      .replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>')
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
-      .replace(/`([^`]+)`/g, '<code>$1</code>');
-
-  const tokens = [];
-  const lines = text.split('\n');
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    if (line.startsWith('```')) {
-      const codeLines = [];
-      i++;
-      while (i < lines.length && !lines[i].startsWith('```')) {
-        codeLines.push(lines[i]);
-        i++;
-      }
-      tokens.push({ type: 'code', code: codeLines.join('\n') });
-      i++;
-      continue;
-    }
-    const hm = line.match(/^(#{1,3}) (.+)/);
-    if (hm) {
-      tokens.push({ type: 'heading', level: hm[1].length, text: hm[2] });
-      i++;
-      continue;
-    }
-    if (line.match(/^[-*] /)) {
-      const items = [];
-      while (i < lines.length && lines[i].match(/^[-*] /)) {
-        items.push(lines[i].slice(2));
-        i++;
-      }
-      tokens.push({ type: 'list', items });
-      continue;
-    }
-    if (line.trim() === '') {
-      tokens.push({ type: 'blank' });
-      i++;
-      continue;
-    }
-    const paraLines = [];
-    while (
-      i < lines.length &&
-      lines[i].trim() !== '' &&
-      !lines[i].startsWith('```') &&
-      !lines[i].match(/^[-*] /) &&
-      !lines[i].match(/^#{1,3} /)
-    ) {
-      paraLines.push(lines[i]);
-      i++;
-    }
-    tokens.push({ type: 'para', lines: paraLines });
-  }
-
-  const parts = tokens.map((t) => {
-    if (t.type === 'code') return `<pre><code>${esc(t.code)}</code></pre>`;
-    if (t.type === 'heading') {
-      const tag = `h${t.level}`;
-      return `<${tag}>${inline(esc(t.text))}</${tag}>`;
-    }
-    if (t.type === 'list')
-      return `<ul>${t.items.map((s) => `<li>${inline(esc(s))}</li>`).join('')}</ul>`;
-    if (t.type === 'para') return `<p>${t.lines.map((l) => inline(esc(l))).join('<br>')}</p>`;
-    return '';
-  });
-  return parts.join('') || `<p>${inline(esc(text))}</p>`;
-}
 
 // Puts text on the clipboard. Falls back to a selected textarea + execCommand('copy') if the
 // async Clipboard API is refused (as app-stdlib/js/clipboard.js does).
@@ -561,6 +488,18 @@ class ShellWindowAiSidebar extends LitElement {
     .msg code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 12px;
+    }
+    .msg.assistant a {
+      color: var(--ai-accent);
+      text-decoration: underline;
+      text-decoration-color: color-mix(in srgb, var(--ai-accent) 45%, transparent);
+      text-underline-offset: 2px;
+      cursor: pointer;
+      overflow-wrap: anywhere;
+    }
+    .msg.assistant a:hover {
+      color: var(--ai-accent--hover);
+      text-decoration-color: currentColor;
     }
     .msg.assistant code {
       background: var(--ai-inline-code-bg);
@@ -1653,7 +1592,11 @@ class ShellWindowAiSidebar extends LitElement {
         : ''}
       ${m.role === 'assistant' && !(m.content || '').trim()
         ? ''
-        : html`<div class="msg ${m.role}${streamingLast ? ' streaming' : ''}">${body}</div>`}
+        : html`<div
+            class="msg ${m.role}${streamingLast ? ' streaming' : ''}"
+            @click=${this._onAnswerClick}
+            @auxclick=${this._onAnswerClick}
+          >${body}</div>`}
       ${!streamingLast && (m.content || '').trim()
         ? html`<div
             class="msg-actions ${m.role}${this._isLatestAnswer(i) ? ' latest' : ''}${this
@@ -1693,20 +1636,27 @@ class ShellWindowAiSidebar extends LitElement {
     );
   }
 
+  // A link in an answer: a page opens in a new tab next to this one, a Note, Job, Mod or the AI's
+  // memory opens its nomad:// page (shared/item-links.mjs). The shell window never navigates itself.
+  // A middle click opens it without leaving the tab the user is on.
+  _onAnswerClick(e) {
+    const a = e.composedPath().find((el) => el.tagName === 'A');
+    if (!a || !this.renderRoot.contains(a)) return;
+    e.preventDefault();
+    if (e.type === 'auxclick' && e.button !== 1) return;
+    const link = parseItemLink(a.getAttribute('href'));
+    if (!link) return;
+    bg.views.createTab(link.url, { setActive: e.type === 'click' && !e.metaKey && !e.ctrlKey });
+  }
+
   // A Button or link in a drawn answer. @ToAssistant sends its message as the user's next one;
-  // @OpenUrl opens a web or hyper:// page in a new tab. Only on a click, and never mid-turn.
+  // @OpenUrl opens a web or hyper:// page, or a link to one of the user's things, in a new tab. Only on a click, and never mid-turn.
   async _onGenUiAction(e) {
     for (const step of e.detail?.steps || []) {
       if (step.type === 'open_url') {
-        let url;
-        try {
-          url = new URL(step.url);
-        } catch {
-          continue;
-        }
-        if (['http:', 'https:', 'hyper:'].includes(url.protocol)) {
-          bg.views.createTab(url.href, { setActive: true });
-        }
+        // A web or hyper:// page, or one of the user's things (a Note, a Job, …).
+        const link = parseItemLink(step.url);
+        if (link) bg.views.createTab(link.url, { setActive: true });
       } else if (step.type === 'continue_conversation' && step.message.trim()) {
         if (this.streaming) return;
         this.draft = step.message.trim();

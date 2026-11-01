@@ -291,16 +291,18 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
     openEditor(null, { body: `# ${title}\n\n` })
   }
 
-  // Open the note Notes was asked for, once each time it opens, after the list has loaded.
+  // Open the note Notes was asked for, once each time it opens, after the list has loaded. A note
+  // the AI just wrote on the computer may reach this phone a moment later: it opens when it arrives.
   const openedFor = useRef<string | null>(null)
   useEffect(() => {
     if (!visible) { openedFor.current = null; return }
     if (!openNoteId || !listLoaded || openedFor.current === openNoteId) return
-    openedFor.current = openNoteId
     const note = notesRef.current.find((n) => n.id === openNoteId)
-    if (note && !draft.current) openEditor(note)
+    if (!note) return
+    openedFor.current = openNoteId
+    if (!draft.current) openEditor(note)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, openNoteId, listLoaded])
+  }, [visible, openNoteId, listLoaded, notes])
 
   const onMessage = (e: WebViewMessageEvent) => {
     let msg: any

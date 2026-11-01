@@ -405,7 +405,7 @@ export const genuiLibrary = createLibrary({
       components: ['Button', 'Buttons'],
       notes: [
         '- Offer next steps as Buttons: Button("Compare prices", @ToAssistant("Compare their prices")).',
-        '- Link out with @OpenUrl("https://…"); it opens in a new tab when the user clicks.',
+        '- Link out with @OpenUrl("https://…"); it opens in a new tab when the user clicks. A Note, Job or Mod a tool gave a nomad:// url for opens the same way.',
       ],
     },
   ],

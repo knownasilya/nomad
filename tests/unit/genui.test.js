@@ -141,6 +141,16 @@ describe('cards', () => {
     expect(linkOf('not a url')).toBe(null);
   });
 
+  it("opens a link to one of the user's things as the URL Nomad builds", () => {
+    expect(linkOf('nomad://notes/abc-123')).toMatchObject({ href: 'nomad://notes/abc-123', label: 'Notes' });
+    expect(linkOf('nomad://library/jobs?id=job-abc123&x=1')).toMatchObject({
+      href: 'nomad://library/jobs?id=job-abc123',
+      label: 'My Library → Jobs',
+    });
+    expect(linkOf('nomad://reader/?subscribe=https://evil.example/feed')).toMatchObject({ href: 'nomad://reader/' });
+    expect(linkOf('nomad://settings')).toBe(null);
+  });
+
   it('reads a YYYY-MM-DD date, and nothing else', () => {
     expect(dateParts('2026-11-04')).toMatchObject({ day: '4' });
     expect(dateParts('2026-02-30')).toBe(null);

@@ -93,7 +93,7 @@ describe('vault tools: permissions', () => {
 describe('vault tools: Notes', () => {
   it('lists notes newest first, and searches their text', () => {
     expect(findNotes(NOTES).map((n) => n.id)).toEqual(['b2', 'c3', 'a1']);
-    expect(findNotes(NOTES)[0]).toEqual({ id: 'b2', title: 'Garden plan', snippet: 'Beds by the fence', updatedAt: NOTES[1].updatedAt });
+    expect(findNotes(NOTES)[0]).toEqual({ id: 'b2', title: 'Garden plan', url: 'nomad://notes/b2', snippet: 'Beds by the fence', updatedAt: NOTES[1].updatedAt });
     expect(findNotes(NOTES, { query: 'garden' }).map((n) => n.id)).toEqual(['b2', 'a1']);
     expect(findNotes(NOTES, { query: 'GARDEN fence' }).map((n) => n.id)).toEqual(['b2']);
     expect(findNotes(NOTES, { query: 'nothing' })).toEqual([]);
@@ -120,6 +120,7 @@ describe('vault tools: Notes', () => {
     expect(noteForModel(NOTES[0])).toEqual({
       id: 'a1',
       title: 'Seed order',
+      url: 'nomad://notes/a1',
       body: NOTES[0].body,
       links: ['Garden plan'],
       topics: [],

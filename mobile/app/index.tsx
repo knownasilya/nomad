@@ -49,6 +49,7 @@ import { parseColor, tintTheme, PAGE_CANVAS } from '../lib/siteTheme'
 import webViewInsets from '../modules/nomad-webview-insets'
 import webViewWindows from '../modules/nomad-webview-windows'
 import { routeLink, FEED_JS } from '../lib/webLinks'
+import type { ItemLink } from '../lib/itemLinks'
 import { pushScreen, closeScreen, loadEntry, pageLoaded, planStep, type NavEntry as StackEntry, type TabHistory } from '../lib/navStack'
 
 // Thumbnails for the tab grid are scaled to this width; a grid card is about half a phone wide.
@@ -823,6 +824,33 @@ export default function Browser () {
     navigate(tb.id, url)
   }, [navigate])
 
+  // A link in the AI's answer (lib/itemLinks.ts). A Note, a Job, Reader or My Library opens its
+  // screen over the AI panel, so back comes to the chat again. A page opens in a new tab, and the
+  // panel closes to show it. The rest (Mods, the AI's memory and skills) are only on the computer.
+  const openAiLink = useCallback((link: ItemLink) => {
+    switch (link.kind) {
+      case 'page':
+        setAiOpen(false)
+        openInNewTab(link.url)
+        return
+      case 'note':
+        openScreen({ name: 'notes', noteId: link.id })
+        return
+      case 'job':
+        openScreen({ name: 'jobs', jobId: link.id })
+        return
+      case 'reader':
+        openScreen({ name: 'reader' })
+        return
+      case 'library':
+        if (link.view === 'drives' || link.view === 'bookmarks') {
+          openScreen({ name: 'library' })
+          return
+        }
+    }
+    Alert.alert('On your computer', `This is in ${link.place} in Nomad on your computer.`)
+  }, [openInNewTab, openScreen])
+
   // Links a web page follows stay in Nomad (lib/webLinks.ts). Only what no web page can stand for
   // (mail, phone, an app's own link) goes to another app, and a link with a web fallback loads that
   // when no app takes it. react-native-webview used to give every such link to Linking.
@@ -1340,6 +1368,7 @@ export default function Browser () {
       aiChat={backend.aiChat}
       onPrompt={(permission) => confirmAiPermission(permission, describeDrive(permission))}
       onPreviewDraft={onPreviewDraft}
+      onOpenLink={openAiLink}
     />
     </>
   )

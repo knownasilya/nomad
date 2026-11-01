@@ -1277,13 +1277,14 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
         });
       }
       const where = drive.current ? cleanPath : target;
+      // The full URL too, so the answer can link the file (shared/item-links.mjs).
       if (staged) {
         return (
           `Staged ${where} in the drive's Draft. It is not live yet: the user previews the Draft, ` +
-          'then publishes or discards it. Reading the file now returns this version.'
+          `then publishes or discards it. Reading the file now returns this version. Link: ${target}`
         );
       }
-      return `File written successfully to ${where}`;
+      return `File written successfully to ${where}. Link: ${target}`;
     }
     case 'notify': {
       // A Job's turn only (ADR-0030). jobs.js saves it with the run, and the phone shows it.
