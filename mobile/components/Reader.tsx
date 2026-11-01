@@ -5,11 +5,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { Backend, Feed, FeedPost, ReaderState, SavedArticle, WebFeed } from '../lib/useBackend'
 import ActionSheet from './ActionSheet'
+import BottomSheet from './BottomSheet'
+import IconButton from './IconButton'
 import LinkPhone from './LinkPhone'
 import ScreenHeader from './ScreenHeader'
 import Canvas, { type CanvasHandle, type CanvasSnapshot } from './Canvas'
 
 const VIEW_KEY = 'nomad-reader-view' // 'list' or 'canvas', the last one used
+const PAGE = 25 // rows the list shows at first, and adds on each Load more
 
 // One Feed's load state: posts once it loads, or why it didn't.
 interface FeedLoad { url: string; title: string; posts: FeedPost[]; loading: boolean; error?: string }
@@ -74,6 +77,11 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
   const [menuFor, setMenuFor] = useState<SavedArticle | null>(null)
   const [addUrl, setAddUrl] = useState('')
   const [adding, setAdding] = useState(false)
+  // The Add feed sheet, opened from the header's + (or the empty list).
+  const [addOpen, setAddOpen] = useState(false)
+  // How many rows the list shows; Load more adds PAGE. Each filter starts over.
+  const [limit, setLimit] = useState(PAGE)
+  useEffect(() => { setLimit(PAGE) }, [filter])
   // The list, or the canvas. The last one used comes back next time.
   const [view, setView] = useState<'list' | 'canvas'>('list')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -177,6 +185,11 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
     ? shownArticles.filter((a) => !a.readAt).length + topicPosts.filter((p) => !read.has(p.url)).length
     : posts.filter((p) => !read.has(p.url)).length
   const loadingAny = Object.values(feeds).some((f) => f.loading)
+  // The page of each list. A topic shows its articles first, then its posts, within one limit.
+  const pagedArticles = shownArticles.slice(0, limit)
+  const pagedTopicPosts = topicPosts.slice(0, Math.max(0, limit - pagedArticles.length))
+  const pagedPosts = posts.slice(0, limit)
+  const left = savedView ? shownArticles.length + topicPosts.length - limit : posts.length - limit
 
   // Feeds that loaded hand over their current posts, so marks for deleted posts are dropped.
   const saveRead = useCallback(async (add: string[]) => {
@@ -230,9 +243,10 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
     setAdding(false)
     if (!res.ok || !res.value) return Alert.alert('Couldn’t subscribe', res.message || 'Unknown error')
     if (given === undefined) setAddUrl('')
+    setAddOpen(false)
     setState(res.value)
     loadFeeds(res.value.follows)
-    if (given !== undefined) setFilter(url)
+    setFilter(url)
   }
 
   // A feed a web page linked to, once this Space's subscriptions are in: show it if it is followed
@@ -314,6 +328,7 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
           title='Reader'
           onBack={onClose}
           actions={state ? [
+            ...(state.canFollow === false ? [] : [{ icon: 'plus' as const, label: 'Add feed', onPress: () => setAddOpen(true) }]),
             view === 'list' ? { icon: 'project-diagram', label: 'Canvas', onPress: () => showView('canvas') } : { icon: 'list-ul', label: 'List', onPress: () => showView('list') },
             { icon: 'redo-alt', label: 'Refresh', onPress: refresh, busy: loadingAny }
           ] : undefined}
@@ -423,23 +438,24 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
                       </TouchableOpacity>
                     )}
                   </View>
-                  {shownArticles.length > 0 && (
+                  {pagedArticles.length > 0 && (
                     <View style={s.card}>
-                      {shownArticles.map((a, i) => (
+                      {pagedArticles.map((a, i) => (
                         <ArticleRow key={a.id} a={a} divider={i > 0} s={s} onPress={() => openArticle(a)} onLongPress={() => setMenuFor(a)} onTopic={(t) => setFilter('topic:' + t)} />
                       ))}
                     </View>
                   )}
-                  {topicPosts.length > 0 && (
+                  {pagedTopicPosts.length > 0 && (
                     <>
                       <Text style={s.sectionLabel}>From your feeds</Text>
                       <View style={s.card}>
-                        {topicPosts.map((p, i) => (
+                        {pagedTopicPosts.map((p, i) => (
                           <PostRow key={p.url} p={p} topics={postTopics.get(p.url)} read={read.has(p.url)} divider={i > 0} s={s} onPress={() => openPost(p)} onTopic={(t) => setFilter('topic:' + t)} />
                         ))}
                       </View>
                     </>
                   )}
+                  {left > 0 && <LoadMore s={s} left={left} onPress={() => setLimit((n) => n + PAGE)} />}
                   <Text style={s.addHint}>Save pages from Reader on your computer: right-click a page, Save Page to Reader. Long-press an article for more.</Text>
                 </>
               )}
@@ -457,50 +473,75 @@ export default function Reader ({ visible, onClose, apps, onVaultChange, space, 
 
               {savedView ? null : posts.length > 0 ? (
                 <View style={s.card}>
-                  {posts.map((p, i) => (
+                  {pagedPosts.map((p, i) => (
                     <PostRow key={p.url} p={p} topics={postTopics.get(p.url)} read={read.has(p.url)} divider={i > 0} s={s} onPress={() => openPost(p)} onTopic={(t) => setFilter('topic:' + t)} />
                   ))}
                 </View>
               ) : feedList.length === 0 ? (
-                <Text style={s.empty}>No subscriptions yet. Add a hyper:// feed or a site’s RSS link below, or subscribe from nomad://reader on your computer.</Text>
+                <View style={s.emptyBox}>
+                  <Text style={s.emptyText}>No subscriptions yet. Add a hyper:// feed or a site’s RSS link, or subscribe from nomad://reader on your computer.</Text>
+                  {state.canFollow !== false && (
+                    <TouchableOpacity style={s.addBtn} onPress={() => setAddOpen(true)} accessibilityRole='button'>
+                      <Text style={s.addBtnText}>Add a feed</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               ) : current?.error ? (
-                <Text style={s.empty}>Can’t load {current.title}. It may be offline.{'\n'}Long-press its name above to unsubscribe.</Text>
+                <Text style={s.empty}>Can’t load {current.title}. It may be offline.{'\n'}Tap + at the top to unsubscribe from it.</Text>
               ) : loadingAny ? (
                 <View style={s.loadingRow}><ActivityIndicator color={t.accent} /><Text style={s.countText}>Loading feeds…</Text></View>
               ) : (
                 <Text style={s.empty}>No posts yet.</Text>
               )}
 
-              {savedView ? null : state.canFollow === false ? (
-                <Text style={s.hint}>This Space is shared, and you can view it. People who can edit it choose its feeds.</Text>
-              ) : (
-              <View style={s.addCard}>
-                <Text style={s.addLabel}>Add a feed</Text>
-                <View style={s.addRow}>
-                  <TextInput
-                    style={s.addInput}
-                    value={addUrl}
-                    onChangeText={setAddUrl}
-                    placeholder='hyper://… or a site’s RSS link'
-                    placeholderTextColor={t.textMuted}
-                    autoCapitalize='none'
-                    autoCorrect={false}
-                    spellCheck={false}
-                    keyboardType='url'
-                    onSubmitEditing={() => subscribe()}
-                    returnKeyType='done'
-                  />
-                  <TouchableOpacity style={[s.addBtn, (adding || !addUrl.trim()) && s.addBtnOff]} onPress={() => subscribe()} disabled={adding || !addUrl.trim()}>
-                    <Text style={s.addBtnText}>{adding ? '…' : 'Subscribe'}</Text>
-                  </TouchableOpacity>
-                </View>
-                {feedList.length > 0 && <Text style={s.addHint}>Long-press a feed’s name to unsubscribe.</Text>}
-              </View>
+              {!savedView && left > 0 && <LoadMore s={s} left={left} onPress={() => setLimit((n) => n + PAGE)} />}
+
+              {!savedView && state.canFollow === false && (
+                <Text style={[s.hint, s.hintBelow]}>This Space is shared, and you can view it. People who can edit it choose its feeds.</Text>
               )}
             </ScrollView>
             )}
           </>
         )}
+        <BottomSheet visible={addOpen} onClose={() => setAddOpen(false)} style={s.sheet}>
+          <Text style={s.sheetTitle}>Add a feed</Text>
+          <View style={s.addRow}>
+            <TextInput
+              style={s.addInput}
+              value={addUrl}
+              onChangeText={setAddUrl}
+              placeholder='hyper://… or a site’s address'
+              placeholderTextColor={t.textMuted}
+              autoCapitalize='none'
+              autoCorrect={false}
+              spellCheck={false}
+              keyboardType='url'
+              autoFocus
+              onSubmitEditing={() => subscribe()}
+              returnKeyType='done'
+            />
+            <TouchableOpacity style={[s.addBtn, (adding || !addUrl.trim()) && s.addBtnOff]} onPress={() => subscribe()} disabled={adding || !addUrl.trim()}>
+              {adding ? <ActivityIndicator color={t.onAccent} /> : <Text style={s.addBtnText}>Subscribe</Text>}
+            </TouchableOpacity>
+          </View>
+          <Text style={s.addHint}>A blog’s home page works too: Reader follows the first RSS or Atom feed it links to.</Text>
+          {feedList.length > 0 && (
+            <>
+              <Text style={s.sheetLabel}>Your feeds</Text>
+              <ScrollView style={s.sheetFeeds} keyboardShouldPersistTaps='handled'>
+                {feedList.map((f, i) => (
+                  <View key={f.url} style={[s.sheetFeed, i > 0 && s.rowDivider]}>
+                    <View style={s.postText}>
+                      <Text numberOfLines={1} style={[s.sheetFeedTitle, !!f.error && s.chipTextErr]}>{f.title}</Text>
+                      <Text numberOfLines={1} style={s.postFeed}>{f.error ? f.error : f.url}</Text>
+                    </View>
+                    <IconButton icon='times' label={`Unsubscribe from ${f.title}`} size={15} color={t.textMuted} onPress={() => unsubscribe(f)} />
+                  </View>
+                ))}
+              </ScrollView>
+            </>
+          )}
+        </BottomSheet>
         <ActionSheet
           visible={!!menuFor}
           onClose={() => setMenuFor(null)}
@@ -587,6 +628,15 @@ function Chip ({ label, active, error, onPress, onLongPress, s }: { label: strin
   )
 }
 
+function LoadMore ({ left, onPress, s }: { left: number; onPress: () => void; s: Styles }) {
+  return (
+    <TouchableOpacity style={s.more} onPress={onPress} accessibilityRole='button'>
+      <Text style={s.moreText}>Load more</Text>
+      <Text style={s.moreCount}>{left} more</Text>
+    </TouchableOpacity>
+  )
+}
+
 function formatDate (iso: string): string {
   const d = new Date(iso)
   if (isNaN(d.getTime())) return ''
@@ -599,7 +649,7 @@ function makeStyles (t: Theme) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: t.bg },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    chips: { flexGrow: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border },
+    chips: { flexGrow: 0, flexShrink: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border },
     chipsContent: { paddingHorizontal: 16, paddingBottom: 10, gap: 8 },
     chip: { height: 34, justifyContent: 'center', paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: t.border, maxWidth: 200 },
     chipActive: { backgroundColor: t.trustBg, borderColor: t.trustBg },
@@ -629,11 +679,21 @@ function makeStyles (t: Theme) {
     topicText: { color: t.trustText, fontSize: 11, fontWeight: '600' },
     sectionLabel: { color: t.textMuted, fontSize: 12, fontWeight: '600', marginTop: 16, marginBottom: 8, paddingHorizontal: 2 },
     empty: { color: t.textMuted, fontSize: 13, textAlign: 'center', marginTop: 30, lineHeight: 19 },
-    addCard: { backgroundColor: t.surface, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, padding: 16, marginTop: 24 },
-    addLabel: { color: t.text, fontSize: 14, fontWeight: '700', marginBottom: 8 },
+    emptyBox: { alignItems: 'center', gap: 16, marginTop: 30, paddingHorizontal: 12 },
+    emptyText: { color: t.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 19 },
+    hintBelow: { marginTop: 16, textAlign: 'center' },
+    more: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48, marginTop: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: t.border, backgroundColor: t.surface },
+    moreText: { color: t.accent, fontSize: 14, fontWeight: '600' },
+    moreCount: { color: t.textMuted, fontSize: 12 },
+    sheet: { backgroundColor: t.surface, paddingHorizontal: 24, paddingBottom: 24 },
+    sheetTitle: { fontSize: 16, fontWeight: '600', color: t.text, marginBottom: 12 },
+    sheetLabel: { color: t.textMuted, fontSize: 12, fontWeight: '600', marginTop: 20, marginBottom: 4 },
+    sheetFeeds: { maxHeight: 240 },
+    sheetFeed: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6 },
+    sheetFeedTitle: { color: t.text, fontSize: 15, fontWeight: '600' },
     addRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     addInput: { flex: 1, height: 44, color: t.text, fontSize: 14, backgroundColor: t.bg, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, paddingHorizontal: 12 },
-    addBtn: { backgroundColor: t.accent, borderRadius: radius.pill, paddingHorizontal: 18, height: 40, justifyContent: 'center' },
+    addBtn: { backgroundColor: t.accent, borderRadius: radius.pill, paddingHorizontal: 18, height: 40, minWidth: 104, alignItems: 'center', justifyContent: 'center' },
     addBtnOff: { opacity: 0.4 },
     addBtnText: { color: t.onAccent, fontSize: 14, fontWeight: '600' },
     addHint: { color: t.textMuted, fontSize: 12, marginTop: 8 },
