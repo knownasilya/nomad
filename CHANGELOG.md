@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.31.3](https://github.com/knownasilya/nomad/compare/v1.31.2...v1.31.3) (2026-11-01)
+
+
+### Bug Fixes
+
+* **ai:** keep the AI cursor above the page's modals and menus ([bfdcb27](https://github.com/knownasilya/nomad/commit/bfdcb277d05969479cedf30bec08719f1bc85a8e))
+
 ### [1.31.2](https://github.com/knownasilya/nomad/compare/v1.31.1...v1.31.2) (2026-10-31)
 
 
