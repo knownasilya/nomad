@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect } from 'react'
+import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
 import { View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, ActivityIndicator, Image, Alert, Keyboard, Platform, StyleSheet } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -8,6 +8,7 @@ import { pickImages } from '../lib/pickImages'
 import { applyToolEvent, finishSteps as finishedSteps, type Step } from '../lib/aiSteps'
 import { applySteer, mergeUserTurns, newSteerId, type Queued } from '../lib/aiSteer'
 import Markdown from './Markdown'
+import { parseItemLink, type ItemLink } from '../lib/itemLinks'
 import ScreenHeader from './ScreenHeader'
 import IconButton from './IconButton'
 import Icon from './Icon'
@@ -105,13 +106,16 @@ interface Props {
   onPrompt?: (permission: string) => boolean | Promise<boolean>
   // Render the current Drive's Draft in the tab (set preview + reload + close the panel).
   onPreviewDraft?: (url: string) => void
+  // A link in an answer: a Note, a Job, Reader, a page (lib/itemLinks.ts). Links that aren't one
+  // of these do nothing.
+  onOpenLink?: (link: ItemLink) => void
 }
 
 // A toggleable AI chat for the CURRENTLY OPEN tab. The turn runs on the user's desktop (the AI
 // Provider) — this phone has no local runtime — and is scoped to the tab's Drive so the Provider
 // resolves that Drive's AI Config. The Client owns the transcript (ADR-0013 §5): each send ships
 // the full history, so the panel keeps `messages` and forwards them.
-export default function AiPanel ({ visible, onClose, url, title, space, aiChat, onPrompt, onPreviewDraft }: Props) {
+export default function AiPanel ({ visible, onClose, url, title, space, aiChat, onPrompt, onPreviewDraft, onOpenLink }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const insets = useSafeAreaInsets()
@@ -292,6 +296,11 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
 
   const stop = () => { handleRef.current?.cancel(); endTurn(); returnQueued() }
 
+  const openLink = useCallback((href: string) => {
+    const link = parseItemLink(href)
+    if (link) onOpenLink?.(link)
+  }, [onOpenLink])
+
   // An answer is copied as the Markdown it arrived in, a prompt as typed.
   const copy = (text: string, index?: number) => {
     Clipboard.setStringAsync(text).catch((err) => setError(err?.message || String(err)))
@@ -463,7 +472,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
                       onLongPress={() => openCopy(shown, 'assistant')}
                       accessibilityHint='Long-press to copy the answer'
                     >
-                      <Markdown text={shown} />
+                      <Markdown text={shown} onLink={openLink} />
                     </Pressable>}
                     {!streaming && !!shown && (
                       <IconButton

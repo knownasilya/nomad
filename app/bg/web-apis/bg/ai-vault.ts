@@ -16,6 +16,7 @@ import * as memory from '../../ai/memory';
 import { driveTitle, readJobSource, resolveJobWrites } from './job-source';
 import * as vault from '../../hyper/vault';
 import { addedWrites, describeSchedule, describeWrites } from '../../../../shared/jobs.mjs';
+import { noteLink, jobLink, MEMORY_LINK, READER_LINK } from '../../../../shared/item-links.mjs';
 import fsAPI from './fs';
 import * as webFeeds from './web-feeds';
 import {
@@ -92,6 +93,7 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
       return json({
         id: note.id,
         title: apps.noteTitle(note.body),
+        url: noteLink(note.id),
         updatedAt: note.updatedAt,
         topics: note.topics || [],
         // It changed on another Device since it was read: this text is a new Note beside it.
@@ -134,7 +136,7 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
       const root = apps.feedUrl(args.url);
       if (!root) throw new Error("Pass the feed's hyper:// URL, or an RSS or Atom feed's URL");
       await vaultApps.followIn(await readerSpace(), root);
-      return `Following ${root} in Reader`;
+      return `Following ${root} in Reader (${READER_LINK})`;
     }
 
     case 'unfollowFeed': {
@@ -235,7 +237,7 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
       const job = jobs.get(args.id);
       if (!job) throw new Error('No Job with that id. Use listJobs to find it.');
       jobs.runNow(job.id);
-      return `Started “${job.title}” in the background. Its answer is saved with the Job (My Library → Jobs).`;
+      return `Started “${job.title}” in the background. Its answer is saved with the Job: ${jobLink(job.id)}`;
     }
 
     case 'deleteJob': {
@@ -252,8 +254,8 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
       const id = typeof args.id === 'string' && args.id ? args.id : undefined;
       if (id && !memory.get(id)) throw new Error('No memory with that id');
       const rec: any = await memory.save({ id, text: args.text, by: 'ai' });
-      if (rec.existed) return `Already remembered [${rec.id}]: ${rec.text}`;
-      return `${id ? 'Changed' : 'Remembered'} [${rec.id}]: ${rec.text}`;
+      if (rec.existed) return `Already remembered [${rec.id}]: ${rec.text} (${MEMORY_LINK})`;
+      return `${id ? 'Changed' : 'Remembered'} [${rec.id}]: ${rec.text} (${MEMORY_LINK})`;
     }
 
     case 'forget': {

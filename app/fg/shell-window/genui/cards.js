@@ -1,9 +1,11 @@
 // Cards for a purpose (ADR-0027): EntityCard, LinkCard, ProductCard, EventCard, QuoteCard,
 // ProsCons, Timeline and CardGrid. `ui` is the <nomad-genui> drawing them: its _fire() sends a
 // click's steps to the sidebar, and _tag() / _button() / _children() draw what cards share.
-// A url opens only on a click, and only an http(s) or hyper:// one (the sidebar checks again).
+// A url opens only on a click, and only an http(s) or hyper:// one, or a link to one of the user's
+// things in Nomad (shared/item-links.mjs; the sidebar checks again).
 
 import { html, nothing } from 'lit';
+import { parseItemLink } from '../../../../shared/item-links.mjs';
 
 const isEl = (v) => v && typeof v === 'object' && v.type === 'element';
 const list = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
@@ -11,8 +13,10 @@ const str = (v) => (v == null ? '' : typeof v === 'object' ? '' : String(v));
 const VARIANTS = ['neutral', 'info', 'success', 'warning', 'danger'];
 
 // { href, label } for a url a card may open, or null. The label is what the card shows: the
-// host for the web, a shortened key for a drive.
+// host for the web, a shortened key for a drive, where it is for a Note, a Job or a Mod.
 export function linkOf(url) {
+  const item = /^nomad:/i.test(str(url).trim()) ? parseItemLink(str(url)) : null;
+  if (item) return { href: item.url, label: item.place, hyper: false };
   let u;
   try {
     u = new URL(str(url));

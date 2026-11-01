@@ -12,6 +12,7 @@
 import { noteTitle, noteSnippet, sortNotes, makeResolver, findLinks, driveRoot, feedUrl } from '../../../shared/vault-apps.mjs'
 import { PRESETS, normalizeSite, describeMod } from '../../../shared/mods.mjs'
 import { describeSchedule, describeWrites, writePermissions } from '../../../shared/jobs.mjs'
+import { noteLink, jobLink, modLink } from '../../../shared/item-links.mjs'
 
 // Capability -> the permission it asks for.
 export const VAULT_TOOL_PERMS = {
@@ -134,6 +135,7 @@ export function findNotes(notes, { query, topic, limit } = {}) {
     .map((n) => ({
       id: n.id,
       title: noteTitle(n.body),
+      url: noteLink(n.id),
       snippet: noteSnippet(n.body),
       updatedAt: n.updatedAt,
       ...(n.topics?.length ? { topics: n.topics } : {}),
@@ -160,6 +162,7 @@ export function noteForModel(note) {
   return {
     id: note.id,
     title: noteTitle(note.body),
+    url: noteLink(note.id),
     body: clip(note.body),
     links: [...new Set(findLinks(note.body).map((l) => l.target))],
     topics: note.topics || [],
@@ -286,6 +289,7 @@ export function modForModel(b) {
   return {
     id: b.id,
     name: b.name,
+    url: modLink(b.id),
     site: b.site,
     enabled: b.enabled,
     summary: describeMod(b).join(', ') || 'empty',
@@ -320,6 +324,7 @@ export function jobForModel(j, deviceName = () => 'another device') {
   return {
     id: j.id,
     title: j.title,
+    url: jobLink(j.id),
     prompt: clip(j.prompt),
     ...(j.source
       ? {

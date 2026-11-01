@@ -275,6 +275,20 @@ turns (`nomad.ai.chat()`) and Jobs never steer. **Send now** on a queued message
 run, lets the running one finish and skips the rest of that round (`SKIPPED_FOR_STEER`); the loop
 reads the message before its next call.
 
+### Links to the user's things in AI answers
+
+When the user's AI makes or changes something, it links it in its answer (`Links:` in
+`PERSONAL_PROMPT`). The tools give the links: `url` on Notes, Jobs and Mods (`nomad://notes/<id>`,
+`nomad://library/jobs?id=`, `nomad://library/mods?id=`), `Link:` after a `writeDriveFile`, the memory
+and Reader pages in `remember`/`followFeed`. `shared/item-links.mjs` `parseItemLink` decides what a
+link in an answer may open, and rebuilds every nomad:// link from its id, so a query the model wrote
+(`nomad://reader/?subscribe=…`) never runs on a click. The sidebar renders links in
+`fg/shell-window/ai-markdown.js` and opens them in a new tab (`_onAnswerClick`); GenUI cards use the
+same check. The phone keeps a copy in `mobile/lib/itemLinks.ts` (`tests/unit/item-links.test.js` keeps
+them equal): `AiPanel` passes `onLink` to `Markdown`, and `openAiLink` in `mobile/app/index.tsx` opens
+Notes, Jobs and Reader on their screens and pages in a new tab. A new kind of item needs a link
+builder and a `parseItemLink` case in both files, and its tool result needs the `url`.
+
 ### Generated UI in the AI Sidebar (ADR-0027)
 
 The sidebar's assistant can answer with charts, maps, tables, stats, buttons and cards for a purpose
