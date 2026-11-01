@@ -107,10 +107,11 @@ export function webFeedUrl(raw) {
       (!u.hostname.includes('.') && u.hostname !== 'localhost')
     )
       return null;
-    u.hash = '';
-    u.username = '';
-    u.password = '';
-    return u.toString();
+    // Put together from its parts, which drops the #fragment and any user:password@. Not with
+    // the URL setters: the phone's runtime (bare-url in Bare Kit) adds an "@" when it clears an
+    // empty username, so the address changed each time it went through here and an RSS feed's
+    // posts no longer matched the feed they came from.
+    return u.protocol + '//' + u.host.toLowerCase() + u.pathname + u.search;
   } catch {
     return null;
   }
@@ -131,6 +132,21 @@ export function followName(url) {
   const web = webFeedUrl(url);
   if (web) return 'web-' + hashUrl(web);
   throw new Error('Enter a hyper:// address or an RSS feed’s link');
+}
+
+// The files under a Space's follows/ to delete to unfollow `url`: its own, and any record for the
+// same feed kept under another spelling of its address (the phone once kept RSS addresses as
+// https://:@host/…, see webFeedUrl). A record's file is named from the address it holds.
+export function unfollowFiles(records, url) {
+  const target = feedUrl(url);
+  if (!target) return [];
+  const files = new Set([followName(target) + '.json']);
+  for (const rec of records || []) {
+    const raw = rec && rec.url;
+    if (typeof raw === 'string' && isWebFeed(raw) && feedUrl(raw) === target)
+      files.add('web-' + hashUrl(raw) + '.json');
+  }
+  return [...files];
 }
 
 export function followPath(space, url) {
@@ -186,7 +202,11 @@ export function mergeWebRead(current, add, follows, loaded = {}) {
   const out = {};
   for (const feed of (follows || []).filter(isWebFeed)) {
     const now = Array.isArray(loaded && loaded[feed]) ? new Set(loaded[feed]) : null;
-    const marks = new Set(((current && current[feed]) || []).filter((u) => typeof u === 'string'));
+    // Marks kept under another spelling of the feed's address (see webFeedUrl) count for it too.
+    const kept = Object.entries(current || {})
+      .filter(([k]) => k === feed || webFeedUrl(k) === feed)
+      .flatMap(([, v]) => (Array.isArray(v) ? v : []));
+    const marks = new Set(kept.filter((u) => typeof u === 'string'));
     if (now) {
       for (const u of add || []) if (now.has(u)) marks.add(u);
       for (const u of marks) if (!now.has(u)) marks.delete(u);

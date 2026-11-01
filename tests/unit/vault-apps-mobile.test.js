@@ -188,6 +188,15 @@ describe('phone Reader and Notes over a shared Vault (ADR-0017)', () => {
 
       await phone.follow(base, SPACE, FEED)
       expect((await phone.unfollow(base, SPACE, FEED)).follows).toEqual([])
+
+      // An RSS feed the phone once kept as https://:@host/… (see webFeedUrl): it reads as the feed,
+      // and unsubscribing removes that record too.
+      const RSS = 'https://ana.example/feed.xml'
+      const OLD = 'https://:@ana.example/feed.xml'
+      await base.append(putJson(apps.followsPrefix(SPACE) + 'web-' + apps.hashUrl(OLD) + '.json', { url: OLD, addedAt: 'T', kind: 'web' }))
+      await base.update()
+      expect((await phone.readerState(base, SPACE)).follows).toEqual([RSS])
+      expect((await phone.unfollow(base, SPACE, RSS)).follows).toEqual([])
     })
   }, 30000)
 
