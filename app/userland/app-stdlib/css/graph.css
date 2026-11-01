@@ -5,7 +5,11 @@
    still reaches them.
 
    Put the view in an element with class graph-surface: it draws the dot grid, which the view moves
-   and scales with the canvas. */
+   and scales with the canvas.
+
+   A title's size is --graph-label-size (a hub's --graph-hub-label-size) at zoom 1. The view sets
+   --graph-text-scale on the svg as you zoom (view.js labelScale), so titles grow slower than the
+   canvas and a tight cluster's titles come apart when you zoom in on it. */
 
 :root {
   --graph-grid: rgba(0, 0, 0, 0.07);
@@ -15,6 +19,8 @@
   --graph-accent: #4040e7;
   --graph-hub: #0f8a83; /* a topic: Reader's, or a note's */
   --graph-feed: #c2621a; /* a Reader feed */
+  --graph-label-size: 11px;
+  --graph-hub-label-size: 12px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -109,10 +115,10 @@
 .graph-node text {
   display: none;
   fill: var(--graph-label, var(--text-color--light, #555));
-  font-size: 11px;
+  font-size: calc(var(--graph-label-size) * var(--graph-text-scale, 1));
   paint-order: stroke;
   stroke: var(--graph-bg, var(--bg-color--default, #fff));
-  stroke-width: 3px;
+  stroke-width: calc(3px * var(--graph-text-scale, 1));
   stroke-linejoin: round;
   pointer-events: none;
 }
@@ -136,7 +142,7 @@
 
 .graph-node.hub text {
   fill: var(--graph-label-strong, var(--text-color--default, #222));
-  font-size: 12px;
+  font-size: calc(var(--graph-hub-label-size) * var(--graph-text-scale, 1));
   font-weight: 600;
 }
 
