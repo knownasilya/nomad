@@ -13,7 +13,7 @@
   --graph-link: rgba(60, 60, 90, 0.2);
   --graph-arrow: rgba(60, 60, 90, 0.42);
   --graph-accent: #4040e7;
-  --graph-hub: #0f8a83; /* a Reader topic */
+  --graph-hub: #0f8a83; /* a topic: Reader's, or a note's */
   --graph-feed: #c2621a; /* a Reader feed */
 }
 
@@ -61,6 +61,11 @@
   stroke-width: 1.2px;
   vector-effect: non-scaling-stroke;
   transition: stroke 0.15s;
+}
+
+/* A note's line to its topic (nomad://notes): dashed, so it reads apart from a link between notes. */
+.graph-link.kind-topic line {
+  stroke-dasharray: 3 3;
 }
 
 /* The arrowhead at the node a link points to. */

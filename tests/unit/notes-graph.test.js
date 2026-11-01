@@ -76,3 +76,28 @@ describe('createLayout', () => {
     expect(layout.running).toBe(true);
   });
 });
+
+describe('noteGraph topics (ADR-0035)', () => {
+  it('makes a hub for each topic, tied to its notes by a plain line', async () => {
+    const { noteTexts, noteGraphCounts, topicNodeId } = await import('../../app/userland/notes/js/graph.js');
+    const notes = [
+      { ...note('a', '# Beds\n\n[[Seeds]]'), topics: ['Garden', 'garden'] },
+      { ...note('b', '# Seeds'), topics: ['Garden', 'Shopping'] },
+      note('c', '# Tools'),
+    ];
+    const g = noteGraph(notes);
+    expect(g.nodes.map((n) => n.id)).toEqual(['a', 'b', 'c', 'topic:garden', 'topic:shopping']);
+    expect(g.nodes[3]).toMatchObject({ title: 'Garden', kind: 'topic', hub: true, degree: 2 });
+    expect(g.links).toEqual([
+      { source: 0, target: 1, both: false },
+      { source: 0, target: 3, directed: false, kind: 'topic', distance: 60 },
+      { source: 1, target: 3, directed: false, kind: 'topic', distance: 60 },
+      { source: 1, target: 4, directed: false, kind: 'topic', distance: 60 },
+    ]);
+    expect(noteGraphCounts(g)).toEqual({ notes: 3, links: 1, topics: 2 });
+    expect(topicNodeId('Home Projects')).toBe('topic:home projects');
+    const texts = noteTexts(notes);
+    expect(texts.get('b')).toContain('shopping');
+    expect(texts.get('topic:shopping')).toBe('shopping');
+  });
+});

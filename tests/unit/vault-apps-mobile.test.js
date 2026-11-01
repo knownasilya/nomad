@@ -191,6 +191,20 @@ describe('phone Reader and Notes over a shared Vault (ADR-0017)', () => {
     })
   }, 30000)
 
+  it('sets a note’s topics without counting it as an edit, and a later edit keeps them', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      const first = await phone.saveNote(base, { body: 'Beds\nby the fence' })
+      const tagged = await phone.setNoteTopics(base, { id: first.id, topics: ['garden', 'Garden', ' Plans '] })
+      expect(tagged.topics).toEqual(['garden', 'Plans'])
+      expect(tagged.topicsBy).toBe('user')
+      expect(tagged.updatedAt).toBe(first.updatedAt)
+      const edited = await phone.saveNote(base, { id: first.id, body: 'Beds\nby the fence, and a pond', baseUpdatedAt: first.updatedAt })
+      expect(edited.id).toBe(first.id) // not a conflict copy
+      expect(edited.topics).toEqual(['garden', 'Plans'])
+      await until(async () => (await readJson(computer, apps.notePath(first.id)))?.topics?.length === 2)
+    })
+  }, 30000)
+
   it('keeps both edits when two devices change the same note at once', async () => {
     await withDevices(async ({ computer, phone: base }) => {
       const first = await phone.saveNote(base, { body: 'Plan\nv1' })

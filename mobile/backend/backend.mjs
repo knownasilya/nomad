@@ -647,6 +647,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'notes' && action === 'move') value = await vaultApps.moveNote(vault, { id: args.id, inSpace: !!args.inSpace, space })
     else if (app === 'tabs' && action === 'publish') value = await vaultApps.publishTabs(vault, args.spaces, !!args.off)
     else if (app === 'tabs' && action === 'list') value = await vaultApps.listDeviceTabs(vault, space, presence.connectedDevices())
+    else if (app === 'notes' && action === 'setTopics') value = await vaultApps.setNoteTopics(vault, { id: args.id, topics: Array.isArray(args.topics) ? args.topics : [], space })
     else if (app === 'notes' && action === 'renameLinks') value = await vaultApps.renameNoteLinks(vault, { id: args.id, from: args.from, to: args.to, space })
     else if (app === 'names' && action === 'list') value = await vaultApps.listNames(vault, space)
     else if (app === 'names' && action === 'resolve') value = await vaultApps.resolveName(vault, args.input, space)

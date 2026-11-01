@@ -11,6 +11,7 @@ import * as vault from '../../hyper/vault';
 import * as pairing from '../../hyper/device-pairing';
 import * as devicePresence from '../../hyper/device-presence';
 import * as vaultApps from './vault-apps';
+import * as noteTopics from './note-topics';
 import * as names from '../../hyper/names';
 import * as driveWriters from '../../hyper/drive-writers';
 import * as spaceLibrary from '../../hyper/space-library';
@@ -350,8 +351,9 @@ export default {
     return vaultApps.setPostTopics(this, url, topics);
   },
 
+  // `ai` is what the AI is doing with the Notes' topics (note-topics.ts, ADR-0035).
   async listNotes() {
-    return vaultApps.listNotes(this);
+    return { ...(await vaultApps.listNotes(this)), ai: await noteTopics.aiState() };
   },
 
   // ({ id?, body, baseUpdatedAt?, inSpace? }). `space` is only for the AI's turns from other Devices.
@@ -372,8 +374,27 @@ export default {
     return vaultApps.renameNoteLinks(this, change);
   },
 
+  // A Note's topics, by hand (ADR-0035): ({ id, topics }) -> note.
+  async setNoteTopics(change) {
+    return vaultApps.setNoteTopics(this, change);
+  },
+
+  // Ask the AI for topics now: for `ids`, or every Note with none yet. -> how many it will look at.
+  async suggestNoteTopics(ids) {
+    return noteTopics.suggest(this, Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : null);
+  },
+
   watchAppData() {
-    return vaultApps.watch();
+    const watcher = vaultApps.watch();
+    // The AI started or finished picking a Note's topics.
+    const changed = () => watcher.emit('changed', {});
+    noteTopics.events.on('changed', changed);
+    const close = watcher.close;
+    watcher.close = () => {
+      noteTopics.events.removeListener('changed', changed);
+      close();
+    };
+    return watcher;
   },
 
   // Names (hyper/names.js): short words for drives, apps in a private drive, and any URL. The

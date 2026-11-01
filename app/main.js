@@ -27,6 +27,7 @@ import * as vault from './bg/hyper/vault';
 import * as names from './bg/hyper/names';
 import * as autoNames from './bg/hyper/auto-names';
 import * as readerArticles from './bg/web-apis/bg/reader-articles';
+import * as noteTopics from './bg/web-apis/bg/note-topics';
 import { completeText, runJobTurn } from './bg/web-apis/bg/ai';
 import * as aiJobs from './bg/ai/jobs';
 import * as crawlerHost from './bg/hyper/crawler-host';
@@ -220,6 +221,8 @@ app.on('ready', async function () {
   // The AI names sites the user visits often (the AI page, nomad://ai/setup, turns it off).
   autoNames.setup({ complete: completeText });
   readerArticles.setup({ complete: completeText });
+  // The AI sorts Notes into topics (the AI page turns it off).
+  noteTopics.setup({ complete: completeText });
   // The user's AI Jobs: this Device runs the ones it owns when they're due (Vault records).
   aiJobs.setup({ runTurn: runJobTurn });
   log.info('Starting the discovery crawler');

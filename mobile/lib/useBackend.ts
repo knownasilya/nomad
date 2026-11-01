@@ -171,7 +171,8 @@ export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boo
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
 // space: the Space's key when the note is kept only in that Space (ADR-0029), else null.
-export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string; space?: string | null }
+// topics: the Note's topics (ADR-0035), set by the user or a computer's AI (topicsBy).
+export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string; space?: string | null; topics?: string[]; topicsBy?: 'ai' | 'user' }
 // The user's AI Jobs (shared/jobs.mjs, ADR-0030). A desktop runs them; the phone lists them, pauses
 // them, asks for a run, and notifies on a run that has a notification.
 // What the phone shows is `when` (the schedule in words), so the shapes are loose here.

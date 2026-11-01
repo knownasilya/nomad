@@ -16,6 +16,9 @@ body {
   --nts-err: #dc2626;
   --nts-warn-bg: #fff7e6;
   --nts-warn-border: #f5d48a;
+  /* A topic, the color of its hub on the canvas (app-stdlib/css/graph.css --graph-hub). */
+  --nts-topic: #0d7a74;
+  --nts-topic-soft: rgba(15, 138, 131, 0.1);
 
   /* The canvas (app-stdlib/css/graph.css): its grid, dots and lines keep their own defaults. */
   --graph-bg: var(--bg-color--default);
@@ -56,6 +59,8 @@ body {
     --nts-err: #f87171;
     --nts-warn-bg: #2e2717;
     --nts-warn-border: #5c4a1f;
+    --nts-topic: #5ed1c7;
+    --nts-topic-soft: rgba(60, 196, 185, 0.14);
     --note-code-bg: rgba(255, 255, 255, 0.07);
     --note-selection: rgba(123, 159, 255, 0.28);
   }
@@ -336,6 +341,85 @@ nav .notes {
   text-overflow: ellipsis;
 }
 
+/* Topics (ADR-0035): the chips above the list show one topic's notes. */
+.topic-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-height: 92px;
+  padding: 10px 12px 9px;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border-color--very-light);
+}
+
+.topic-filter[hidden] {
+  display: none;
+}
+
+.topic-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  max-width: 100%;
+  padding: 0 9px;
+  overflow: hidden;
+  border: 1px solid var(--border-color--light);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-color--light);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.topic-chip:hover {
+  background: var(--nts-nav-hover-bg);
+  color: var(--text-color--default);
+}
+
+.topic-chip .n {
+  font-size: 11px;
+  color: var(--text-color--pretty-light);
+}
+
+.topic-chip.on {
+  border-color: transparent;
+  background: var(--nts-accent-soft);
+  color: var(--nts-accent);
+  font-weight: 600;
+}
+
+.topic-chip.on .n {
+  color: inherit;
+}
+
+.topic-chip.suggest {
+  border-style: dashed;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--nts-topic-soft);
+  color: var(--nts-topic);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.note-item .item-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+  overflow: hidden;
+  max-height: 18px;
+}
+
 nav .list-section {
   display: flex;
   align-items: center;
@@ -377,6 +461,111 @@ nav footer {
 }
 
 /* editor */
+
+/* The open note's topics, above its text. */
+.note-topics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 16px var(--note-gutter) 0;
+  font-size: 12px;
+  color: var(--text-color--pretty-light);
+}
+
+.note-topics .label {
+  font-size: 11px;
+}
+
+.note-topics .tag {
+  padding: 0;
+  font-size: 12px;
+  line-height: 22px;
+}
+
+.note-topics .tag button {
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.note-topics .tag-name {
+  padding: 0 4px 0 9px;
+}
+
+.note-topics .tag-name:hover {
+  text-decoration: underline;
+}
+
+.note-topics .tag-x {
+  padding: 0 7px 0 2px;
+  font-size: 10px !important;
+  opacity: 0.6;
+}
+
+.note-topics .tag-x:hover {
+  opacity: 1;
+}
+
+.note-topics .tag.pending {
+  gap: 5px;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--text-color--pretty-light);
+}
+
+.note-topics .by-ai {
+  font-size: 10px;
+}
+
+.topic-input {
+  flex: 0 1 230px;
+  min-width: 120px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-color--default);
+  font-size: 12px;
+  outline: none;
+}
+
+.topic-input::-webkit-calendar-picker-indicator {
+  display: none !important;
+}
+
+.topic-input:hover {
+  background: var(--nts-search-bg);
+}
+
+.topic-input:focus {
+  border-color: var(--nts-accent);
+  background: var(--bg-color--default);
+  box-shadow: 0 0 0 3px var(--nts-accent-soft);
+}
+
+.topic-suggest {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-color--pretty-light);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.topic-suggest:hover {
+  background: var(--nts-search-bg);
+  color: var(--text-color--default);
+}
+
+.note-topics .no-ai {
+  font-size: 11px;
+}
 
 main {
   display: flex;
@@ -596,9 +785,36 @@ main {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.graph-info {
+.graph-info,
+.graph-legend {
   font-size: 12px;
   color: var(--text-color--pretty-light);
+}
+
+/* The key, once some note has a topic. */
+.graph-legend {
+  display: none;
+  gap: 10px;
+  margin-left: 12px;
+}
+
+.graph-pane.has-topics .graph-legend {
+  display: flex;
+}
+
+.graph-legend .key::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: -0.5px;
+  background: var(--graph-node);
+}
+
+.graph-legend .key-topic::before {
+  background: var(--graph-hub);
 }
 
 .graph-hint {

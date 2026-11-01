@@ -53,11 +53,13 @@ export default {
   readerWebFeed: 'promise', // (url, { fresh? }) -> { url, title, siteUrl, posts } for a followed RSS/Atom feed
   readerTagPosts: 'promise', // (posts, urls?) -> state; the AI sorts recent feed posts into topics
   readerSetPostTopics: 'promise', // (url, topics) -> state
-  listNotes: 'promise', // -> { notes, space, spaceName, writable, linked }; each note has `space` (key or null)
+  listNotes: 'promise', // -> { notes, space, spaceName, writable, linked, ai }; each note has `space` (key or null)
   saveNote: 'promise', // ({ id?, body, baseUpdatedAt?, inSpace? }) -> note (a conflict copy on a conflict)
   moveNote: 'promise', // ({ id, inSpace }) -> note, moved into the caller's Space or out to every Space
   deleteNote: 'promise',
   renameNoteLinks: 'promise', // ({ id, from, to }) -> number of notes changed
+  setNoteTopics: 'promise', // ({ id, topics }) -> note, its topics set by hand (ADR-0035)
+  suggestNoteTopics: 'promise', // (ids?) -> how many notes the AI will sort into topics
   watchAppData: 'readable', // 'changed' when the Vault changes
 
   // Names (bg/hyper/names.js)
