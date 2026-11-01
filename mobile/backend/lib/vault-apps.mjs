@@ -130,7 +130,8 @@ export async function follow (base, space, url) {
 
 export async function unfollow (base, space, url) {
   const place = await placeOf(base, space, 'follows')
-  await delAt(place, apps.followPath(space, url))
+  const prefix = apps.followsPrefix(space)
+  for (const file of apps.unfollowFiles(await readPrefix(place.base, place.prefix), url)) await delAt(place, prefix + file)
   return readerState(base, space)
 }
 

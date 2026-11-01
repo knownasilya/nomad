@@ -9,6 +9,8 @@ import {
   mergeReadState,
   mergeWebRead,
   webReadUrls,
+  webFeedUrl,
+  unfollowFiles,
   newNoteId,
   isNoteId,
   notePath,
@@ -82,6 +84,43 @@ describe('follow records', () => {
     });
     expect(next).toEqual({ [F]: ['https://a.example/1', 'https://a.example/2'], [G]: ['https://b.example/x'] });
     expect(webReadUrls(next).length).toBe(3);
+  });
+  // The phone's runtime (bare-url in Bare Kit) adds an "@" when it clears an empty username, so an
+  // address built with the setters came out as https://:@host/… and again as https://%40:@host/…:
+  // a feed's posts never matched the feed, and picking it in the phone's Reader showed nothing.
+  it('spells an RSS address the same way every time, without the URL setters', () => {
+    const Real = globalThis.URL;
+    class NoSetters extends Real {
+      set hash(v) { throw new Error('setter used'); }
+      set username(v) { throw new Error('setter used'); }
+      set password(v) { throw new Error('setter used'); }
+    }
+    globalThis.URL = NoSetters;
+    try {
+      for (const raw of ['https://example.com/feed.xml', 'feed://Example.com/rss?x=1#top', 'example.com', 'https://u:p@example.com:8080/a']) {
+        const once = webFeedUrl(raw);
+        expect(once).toMatch(/^https:\/\/example\.com(:8080)?\//);
+        expect(webFeedUrl(once)).toBe(once);
+      }
+      expect(webFeedUrl('feed://Example.com/rss?x=1#top')).toBe('https://example.com/rss?x=1');
+      expect(webFeedUrl('example.com')).toBe('https://example.com/');
+    } finally {
+      globalThis.URL = Real;
+    }
+  });
+  it('reads an address the phone spelled with :@ as the feed it is', () => {
+    const F = 'https://example.com/feed.xml';
+    expect(webFeedUrl('https://:@example.com/feed.xml')).toBe(F);
+    expect(webFeedUrl('https://%40:@example.com/feed.xml')).toBe(F);
+    expect(followUrls([{ url: 'https://:@example.com/feed.xml', addedAt: '1' }, { url: F, addedAt: '2' }])).toEqual([F]);
+    // Unfollowing deletes the old record too: its file is named from the address it holds.
+    const files = unfollowFiles([{ url: 'https://:@example.com/feed.xml' }, { url: F }, { url: 'https://other.example/rss' }], F);
+    expect(files).toHaveLength(2);
+    expect(files).toContain(followPath(SPACE, F).slice(followsPrefix(SPACE).length));
+    expect(unfollowFiles([], `hyper://${KEY}/posts/x/`)).toEqual([`${KEY}.json`]);
+    expect(unfollowFiles([], 'nope')).toEqual([]);
+    // Read marks kept under the old spelling still count.
+    expect(mergeWebRead({ 'https://:@example.com/feed.xml': ['https://example.com/1'] }, [], [F], {})).toEqual({ [F]: ['https://example.com/1'] });
   });
   it('lists unique, valid feed URLs, oldest first', () => {
     expect(

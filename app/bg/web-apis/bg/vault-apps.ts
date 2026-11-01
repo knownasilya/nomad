@@ -251,7 +251,8 @@ export async function followIn(space, url) {
 
 export async function unfollowIn(space, url) {
   if (!apps.feedUrl(url)) return;
-  await (await spaceLibrary.records(space, 'follows')).del(followFile(space, url));
+  const store = await spaceLibrary.records(space, 'follows');
+  for (const file of apps.unfollowFiles(await store.list(), url)) await store.del(file);
 }
 
 // Marks for hyper:// posts go to read.json; RSS and Atom items to web-read.json, under the feed in
