@@ -255,7 +255,9 @@ revocation is an event.
   Sessions. The Spaces menu gets "Persona for this Space".
 - **Always visible at window level:** the Spaces button shows the current Persona's thumb. An
   identity that's always on screen helps against phishing, and the window is where a Persona
-  actually varies.
+  actually varies. Clicking that picture (not the rest of the button) opens the same Persona
+  menu as the location bar's icon. With no Session on the tab's site, the menu shows the Space's
+  Persona and says a site learns who you are only after you log in.
 - **Per site only when there's a Session:** an icon in the location bar, like the Draft pen-nib
   (`renderDraftBtn`), that opens its own Persona menu (`fg/shell-menus/persona.js`): who you are
   here, what it can do, Open profile, Manage Personas and Log out, and nothing else of site info.

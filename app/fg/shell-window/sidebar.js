@@ -491,7 +491,7 @@ class ShellWindowSidebar extends LitElement {
       <button class="spaces-btn" title="Switch space" @click=${this._onClickSpaces}>
         <span class="space-dot" style="background:${space?.color || '#6c6cff'}"></span>
         <span class="space-name">${space?.name || 'Spaces'}</span>
-        ${personaAvatar(this.activePersona)}
+        ${personaAvatar(this.activePersona, (e) => this._onClickPersona(e))}
       </button>
     `;
   }
@@ -527,6 +527,20 @@ class ShellWindowSidebar extends LitElement {
       // Close when clicking outside
       setTimeout(() => window.addEventListener('click', this._boundClosePopup), 0);
     }
+  }
+
+  // The Persona picture opens the Persona menu (fg/shell-menus/persona.js) above the button, not
+  // the Spaces popup. The menu view has a 10px margin, so the bounds step back by it.
+  async _onClickPersona(e) {
+    e.stopPropagation();
+    // A click that just closed the menu (by blurring it) shouldn't open it again.
+    if (Date.now() - (this.lastPersonaMenuClose || 0) < 100) return;
+    if (this.spacesPopupOpen) this._closeSpacesPopup();
+    const rect = e.currentTarget.closest('.spaces-btn').getClientRects()[0];
+    await bg.views.toggleMenu('persona', {
+      bounds: { left: (rect.left | 0) - 10, bottom: (rect.top | 0) + 6 },
+    });
+    this.lastPersonaMenuClose = Date.now();
   }
 
   _closeSpacesPopup() {

@@ -3,13 +3,16 @@ import * as bg from './bg-process-rpc';
 import commonCSS from './common.css';
 import * as nomadPermissions from '../../lib/permissions';
 
-// Persona menu (ADR-0031 §11), opened from the Persona icon in the location bar. Only who you are on
-// this site: the Persona, what its Session lets the site do, and Log out. It acts on the ACTIVE tab's
-// Session through bg.views (bg/ui/tabs/manager.js); site info keeps its own Session tab.
+// Persona menu (ADR-0031 §11), opened from the Persona icon in the location bar and from the Persona
+// picture on the Spaces button. Only who you are: the Persona, and when the active tab's site holds a
+// Session, what it lets the site do and Log out. With no Session there, it shows the Persona the
+// Space uses. It acts on the ACTIVE tab through bg.views (bg/ui/tabs/manager.js); site info keeps its
+// own Session tab.
 class PersonaMenu extends LitElement {
   static get properties() {
     return {
       session: { type: Object },
+      spacePersona: { type: Object },
       loaded: { type: Boolean },
       busy: { type: Boolean },
     };
@@ -22,6 +25,7 @@ class PersonaMenu extends LitElement {
 
   reset() {
     this.session = null;
+    this.spacePersona = null;
     this.loaded = false;
     this.busy = false;
   }
@@ -31,27 +35,37 @@ class PersonaMenu extends LitElement {
   }
 
   async load() {
-    try {
-      this.session = await bg.views.getSiteSession('active');
-    } catch (e) {
-      console.debug(e);
-      this.session = null;
-    }
+    const [session, spacePersona] = await Promise.all([
+      bg.views.getSiteSession('active').catch((e) => (console.debug(e), null)),
+      bg.views.getSpacePersona('active').catch((e) => (console.debug(e), null)),
+    ]);
+    this.session = session;
+    this.spacePersona = spacePersona;
     this.loaded = true;
+  }
+
+  // The Persona shown: the Session's (it is the Space's, ADR-0031 §4), else the Space's.
+  get persona() {
+    return this.session ? this.session.persona : this.spacePersona;
   }
 
   render() {
     if (!this.loaded) return html`<div class="wrapper"></div>`;
     const s = this.session;
-    if (!s) {
+    const p = this.persona;
+    if (!s && !p) {
       return html`
         <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
         <div class="wrapper">
-          <div class="section"><div class="empty">You’re not logged in to this site.</div></div>
+          <div class="section">
+            <div class="empty">
+              You have no Personas yet. Make one to log in to sites as yourself.
+            </div>
+          </div>
+          <div class="section">${this.renderManageItem()}</div>
         </div>
       `;
     }
-    const p = s.persona;
     const name = p ? p.title || p.label : 'A deleted Persona';
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
@@ -67,26 +81,7 @@ class PersonaMenu extends LitElement {
             </div>
           </div>
         </div>
-        <div class="section">
-          <div class="subhead" title=${s.origin}>
-            Logged in to <strong>${s.site}</strong> since
-            ${new Date(s.createdAt).toLocaleDateString()}${s.expiresAt
-              ? html`, until ${new Date(s.expiresAt).toLocaleDateString()}`
-              : ''}
-          </div>
-          <ul class="perms">
-            <li>
-              <i class="fas fa-fw fa-fingerprint"></i>
-              <span>Knows it’s you each time, by a random ID made only for this site</span>
-            </li>
-            ${s.perms.map(
-              (t) =>
-                html`<li>
-                  <i class="fas fa-fw fa-check"></i><span>${this.permSentence(t, name, p)}</span>
-                </li>`
-            )}
-          </ul>
-        </div>
+        <div class="section">${s ? this.renderSession(s, name, p) : this.renderNoSession()}</div>
         <div class="section">
           ${p?.profileUrl
             ? html`
@@ -96,15 +91,59 @@ class PersonaMenu extends LitElement {
                 </div>
               `
             : ''}
-          <div class="menu-item" @click=${this.onManagePersonas}>
-            <i class="fas fa-user-cog"></i>
-            <span class="label">Manage Personas…</span>
-          </div>
-          <div class="menu-item ${this.busy ? 'disabled' : ''}" @click=${this.onLogOut}>
-            <i class="fas fa-sign-out-alt"></i>
-            <span class="label">Log out of ${s.site}</span>
-          </div>
+          ${this.renderManageItem()}
+          ${s
+            ? html`
+                <div class="menu-item ${this.busy ? 'disabled' : ''}" @click=${this.onLogOut}>
+                  <i class="fas fa-sign-out-alt"></i>
+                  <span class="label">Log out of ${s.site}</span>
+                </div>
+              `
+            : ''}
         </div>
+      </div>
+    `;
+  }
+
+  renderSession(s, name, p) {
+    return html`
+      <div class="subhead" title=${s.origin}>
+        Logged in to <strong>${s.site}</strong> since
+        ${new Date(s.createdAt).toLocaleDateString()}${s.expiresAt
+          ? html`, until ${new Date(s.expiresAt).toLocaleDateString()}`
+          : ''}
+      </div>
+      <ul class="perms">
+        <li>
+          <i class="fas fa-fw fa-fingerprint"></i>
+          <span>Knows it’s you each time, by a random ID made only for this site</span>
+        </li>
+        ${s.perms.map(
+          (t) =>
+            html`<li>
+              <i class="fas fa-fw fa-check"></i><span>${this.permSentence(t, name, p)}</span>
+            </li>`
+        )}
+      </ul>
+    `;
+  }
+
+  renderNoSession() {
+    const sp = this.spacePersona;
+    const where = sp.spaceName ? html`the <strong>${sp.spaceName}</strong> space` : 'this space';
+    return html`
+      <div class="subhead">
+        You use this Persona in ${where}${sp.from === 'default' ? ' (your default)' : ''}. A site
+        learns who you are only after you log in to it.
+      </div>
+    `;
+  }
+
+  renderManageItem() {
+    return html`
+      <div class="menu-item" @click=${this.onManagePersonas}>
+        <i class="fas fa-user-cog"></i>
+        <span class="label">Manage Personas…</span>
       </div>
     `;
   }
@@ -133,7 +172,7 @@ class PersonaMenu extends LitElement {
   }
 
   onOpenProfile() {
-    bg.shellMenus.createTab(this.session.persona.profileUrl);
+    bg.shellMenus.createTab(this.persona.profileUrl);
   }
 
   onManagePersonas() {
