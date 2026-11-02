@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.37.0](https://github.com/knownasilya/nomad/compare/v1.36.0...v1.37.0) (2026-11-02)
+
+
+### Features
+
+* **sidebar:** put New tab and new tabs at the top of the tab list ([38ac832](https://github.com/knownasilya/nomad/commit/38ac832aa8e23d8104677599ad0bc6b2c76e2a8c))
+* **split:** drag tabs into a split view, and pick a tab for one ([70d933a](https://github.com/knownasilya/nomad/commit/70d933af9680981aa1f9b4fca8905bedf083d7d2))
+* **split:** pick a tab to split with from the pane menu, not a new button ([849e448](https://github.com/knownasilya/nomad/commit/849e4488f45560d26bd41523f6e72f519ebfba72))
+* **tabs:** show a speaker on tabs playing sound, click it to mute ([849a154](https://github.com/knownasilya/nomad/commit/849a15410675893bbc3f0d6f5854bbde64d95a2b))
+
+
+### Bug Fixes
+
+* **library:** name the open page, and the open item, in the tab title ([9674de6](https://github.com/knownasilya/nomad/commit/9674de6d2ed8ee0838e6ff7662307024a1d9c87a))
+* **menus:** close the Spaces menu and other popups on a press outside them ([9b2174a](https://github.com/knownasilya/nomad/commit/9b2174afe95eb7adfae86171443632c630ab7e94))
+
 ## [1.36.0](https://github.com/knownasilya/nomad/compare/v1.35.0...v1.36.0) (2026-11-02)
 
 
