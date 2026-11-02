@@ -50,6 +50,28 @@ jobs:
       - name: Generate android project
         run: npx expo prebuild --platform android --no-install
 
+      # Install the NDKs before Gradle does. Gradle downloads a missing NDK once and fails the
+      # build when that download comes back broken ("Archive is not a ZIP archive"); here a broken
+      # download is retried. React Native's NDK is read from its version catalog; the other is the
+      # Android Gradle Plugin's default, used by native modules that don't set ndkVersion
+      # (react-native-b4a). Bump AGP_DEFAULT_NDK when the build names another one.
+      - name: Install Android NDKs
+        env:
+          AGP_DEFAULT_NDK: 27.0.12077973
+        run: |
+          rn_ndk=$(grep -oE '^ndkVersion = "[0-9.]+"' node_modules/react-native/gradle/libs.versions.toml | grep -oE '[0-9.]+[0-9]')
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          for v in $(printf '%s\n' "$rn_ndk" "$AGP_DEFAULT_NDK" | sort -u); do
+            for try in 1 2 3 4; do
+              if [ -f "$ANDROID_HOME/ndk/$v/source.properties" ]; then echo "NDK $v is installed"; break; fi
+              if (yes || true) | "$sdkmanager" --install "ndk;$v" > /dev/null; then echo "Installed NDK $v"; break; fi
+              rm -rf "$ANDROID_HOME/ndk/$v"
+              if [ "$try" = 4 ]; then echo "::error::Could not install NDK $v"; exit 1; fi
+              echo "NDK $v download failed (try $try), retrying"
+              sleep $((try * 15))
+            done
+          done
+
       # One ABI is enough to know the native code compiles, and much faster than four.
       - name: Build debug APK
         run: |

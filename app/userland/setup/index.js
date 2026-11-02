@@ -2,6 +2,7 @@ import './background-run.js';
 import './intro.js';
 import './license.js';
 import './migrating.js';
+import './persona.js';
 
 function isStageDone(key) {
   var url = new URL(location.toString());
@@ -19,6 +20,8 @@ customElements.define(
         this.stages.push('intro-view');
         this.stages.push('license-view');
         this.stages.push('background-run-view');
+        // Last of the profile stages: it marks profileSetup done, made or skipped.
+        this.stages.push('persona-view');
         document.body.style.background = '#334';
         document.body.style.transition = 'background 0.5s';
       }
@@ -39,7 +42,7 @@ customElements.define(
     }
 
     async onNext() {
-      document.body.style.background = '#fff'; // switch away from dark bg after first stage
+      document.body.style.background = ''; // switch away from the intro's dark bg (index.html's colors)
       this.stage++;
       this.render();
     }

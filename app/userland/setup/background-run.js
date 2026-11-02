@@ -5,7 +5,6 @@ customElements.define(
   class extends BaseSlideView {
     constructor() {
       super();
-      nomad.browser.updateSetupState({ profileSetup: 1 });
       var checkbox = this.shadowRoot.querySelector('input');
       checkbox.checked = true;
       checkbox.addEventListener('change', (e) => {

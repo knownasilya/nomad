@@ -52,12 +52,18 @@ let vaultReady = false;
 let deviceKeys = [];
 let ownDeviceKey = null;
 let writerAsks = []; // Vault writer asks for Profile Drives (shared/personas.mjs)
+let loaded = false; // refresh() has read the Vault once
 const recheckTries = new Map(); // Persona id -> looks while a granted ask waits on its Drive
 let watchedBase = null;
 let timer = null;
 let lastStamp = '';
 /** @type {Promise<any>} */
 let writes = Promise.resolve();
+
+// Read the Vault now if setup() hasn't yet: the onboarding window (userland/setup) runs before it.
+export async function ensureLoaded() {
+  if (!loaded) await refresh();
+}
 
 export function setup() {
   refresh();
@@ -83,6 +89,7 @@ export async function refresh() {
     watchedBase = sess.base;
     watchedBase.on('update', scheduleRefresh);
   }
+  loaded = true;
   hasVault = !!sess;
   vaultReady = !!sess?.writable;
   ownDeviceKey = sess?.base?.local?.key ? b4a.toString(sess.base.local.key, 'hex') : null;

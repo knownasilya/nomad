@@ -537,7 +537,10 @@ Spaces menu; the phone's Personas screen (`mobile/components/Personas.tsx`, `RPC
 Personas (`NewPersona.tsx`, `createPersona`/`updatePersona` in `backend.mjs`). Every one of the user's
 Devices writes every Profile Drive: a Device that can't asks through the Vault
 (`/.vault/persona-writers/`, `writerAsksToGrant` in `shared/personas.mjs`) and one that can adds it
-(`syncWriters` in `bg/ui/personas.js`, `syncPersonaWriters` on the phone). `nomad.session` in the
+(`syncWriters` in `bg/ui/personas.js`, `syncPersonaWriters` on the phone). Onboarding offers the first Persona, which becomes the default and so
+the first Space's (skippable): desktop's setup window (`app/userland/setup/persona.js`, the last profile
+stage, marks `profileSetup`) and, once the phone is linked and the Vault has none, the phone
+(`mobile/lib/usePersonaOnboarding.ts` + `NewPersona`'s `onboarding` mode). `nomad.session` in the
 phone's WebView is not built yet. It is a public API, so the sync triad applies.
 
 ## Look and feel: every UI supports dark mode and matches the rest
