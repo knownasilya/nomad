@@ -17,6 +17,7 @@ import Reader from '../components/Reader'
 import Notes from '../components/Notes'
 import Jobs from '../components/Jobs'
 import Personas from '../components/Personas'
+import NewPersona from '../components/NewPersona'
 import ActionSheet from '../components/ActionSheet'
 import SiteIcon from '../components/SiteIcon'
 import { ListSection, ListRow, ListEmpty } from '../components/List'
@@ -33,6 +34,7 @@ import FileExplorer, { type ExplorerDrive } from '../components/FileExplorer'
 import type { HyperRender } from '../components/HyperView'
 import { useBackend, type SpaceJoin } from '../lib/useBackend'
 import { useJobNotifications } from '../lib/useJobNotifications'
+import { usePersonaOnboarding } from '../lib/usePersonaOnboarding'
 import { syncHostingService } from '../lib/hostingService'
 import HostingSettings from '../components/HostingSettings'
 import { usePersistence, type SavedSite, type SavedDrive } from '../lib/usePersistence'
@@ -363,6 +365,8 @@ export default function Browser () {
 
   // Spaces — each has its own Root Drive; bookmarks/history/drives are scoped to the active space.
   const spacesApi = useSpaces(backend)
+  // Onboarding: once this phone is linked and the user has no Persona, offer to make the first one.
+  const personaStep = usePersonaOnboarding(backend.apps, backend.onVaultChange, spacesApi.activeSpace.rootDriveKey || null)
   const persist = usePersistence(spacesApi.activeSpaceId, {
     backend,
     rootDriveKey: spacesApi.activeSpace.rootDriveKey,
@@ -1346,6 +1350,17 @@ export default function Browser () {
         space={spacesApi.activeSpace.rootDriveKey || null}
         spaceName={spacesApi.activeSpace.name}
         onOpenDevices={() => openScreen({ name: 'devices' })}
+      />
+
+      <NewPersona
+        visible={personaStep.visible}
+        onClose={personaStep.finish}
+        onMade={(made) => {
+          personaStep.finish()
+          Alert.alert('Persona made', `“${made}” is who you are when a site asks you to log in. Change it or make more in Personas.`)
+        }}
+        apps={backend.apps}
+        onboarding={{ spaceName: spacesApi.spaces[0]?.name || 'Personal', onSkip: personaStep.finish }}
       />
 
       <Devices

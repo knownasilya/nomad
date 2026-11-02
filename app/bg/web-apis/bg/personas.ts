@@ -20,6 +20,7 @@ function spaceIdOf(ctx) {
 
 export default {
   async list() {
+    await personas.ensureLoaded();
     return { ...personas.state(), currentSpaceId: spaceIdOf(this) };
   },
 

@@ -30,7 +30,8 @@ export class BaseSlideView extends HTMLElement {
     left: 0;
     height: 100vh;
     width: 100vw;
-    background: #fff;
+    background: var(--bg-color--default, #fff);
+    color: var(--text-color--default, #333);
     padding: 0 20px;
     box-sizing: border-box;
   }
@@ -45,14 +46,14 @@ export class BaseSlideView extends HTMLElement {
   }
   hr {
     border: 0;
-    border-top: 1px solid #ccd;
+    border-top: 1px solid var(--border-color--light, #ccd);
   }
   a {
     position: fixed;
     left: 50%;
     bottom: 30px;
     transform: translateX(-50%);
-    color: #2864dc;
+    color: var(--text-color--link, #2864dc);
     font-size: 21px;
     -webkit-app-region: no-drag;
   }

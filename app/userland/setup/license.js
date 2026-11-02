@@ -27,7 +27,7 @@ h1 strong {
 .license {
   -webkit-app-region: no-drag;
   max-height: calc(100vh - 150px);
-  border: 1px solid #ccc;
+  border: 1px solid var(--border-color--light, #ccc);
   border-radius: 4px;
   padding: 0 10px;
   overflow-y: scroll;

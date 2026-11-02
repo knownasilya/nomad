@@ -15,6 +15,9 @@ interface Props {
   onMade: (label: string) => void
   apps: Backend['apps']
   editId?: string | null // edit this Persona instead of making one
+  // The onboarding step (lib/usePersonaOnboarding.ts): the user's first Persona, which their first
+  // Space uses. No back arrow; Skip (and the back button) closes it for good.
+  onboarding?: { spaceName: string; onSkip: () => void }
 }
 
 interface PersonaDetail {
@@ -40,7 +43,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 // The form is a full-screen Modal, so React Native's Keyboard events never reach it on Android and
 // the window isn't resized (edge-to-edge). KeyboardInset reads the keyboard's height in this window;
 // the ScrollView gets that much padding at the bottom, and the focused field is scrolled above it.
-export default function NewPersona ({ visible, onClose, onMade, apps, editId = null }: Props) {
+export default function NewPersona ({ visible, onClose, onMade, apps, editId = null, onboarding }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const [title, setTitle] = useState('')
@@ -58,6 +61,7 @@ export default function NewPersona ({ visible, onClose, onMade, apps, editId = n
   const scroll = useRef<ScrollView>(null)
   const fieldY = useRef<Partial<Record<Field, number>>>({})
   const editing = !!editId
+  const close = onboarding ? onboarding.onSkip : onClose
   const profileLocked = editing && !!orig && !orig.writable
 
   const load = async () => {
@@ -144,10 +148,26 @@ export default function NewPersona ({ visible, onClose, onMade, apps, editId = n
   )
 
   return (
-    <Modal visible={visible} animationType='slide' onRequestClose={busy ? () => {} : onClose} presentationStyle='fullScreen'>
+    <Modal visible={visible} animationType='slide' onRequestClose={busy ? () => {} : close} presentationStyle='fullScreen'>
       <SafeAreaView style={s.root} edges={['top', 'bottom']}>
         <KeyboardInset onChange={setKeyboard} />
-        <ScreenHeader title={editing ? 'Edit Persona' : 'New Persona'} onBack={busy ? undefined : onClose} />
+        <ScreenHeader
+          title={editing ? 'Edit Persona' : onboarding ? 'Your Persona' : 'New Persona'}
+          onBack={busy || onboarding ? undefined : onClose}
+          right={onboarding
+            ? (
+              <Pressable
+                onPress={onboarding.onSkip}
+                disabled={busy}
+                style={s.skip}
+                android_ripple={{ color: t.ripple }}
+                accessibilityRole='button'
+              >
+                <Text style={[s.skipText, busy && s.off]}>Skip</Text>
+              </Pressable>
+              )
+            : undefined}
+        />
         <ScrollView
           ref={scroll}
           contentContainerStyle={[s.page, { paddingBottom: space.xl + keyboard }]}
@@ -164,6 +184,14 @@ export default function NewPersona ({ visible, onClose, onMade, apps, editId = n
                 <Text style={s.noticeLink} onPress={busy ? undefined : load}>Check again</Text>
               </View>
             ) : null
+          ) : onboarding ? (
+            <View style={s.welcome}>
+              <Text style={s.welcomeTitle}>Who are you online?</Text>
+              <Text style={s.intro}>
+                Make a Persona: the name and picture a site sees when it asks you to log in and you say yes. It’s who
+                you are in your {onboarding.spaceName} space and any new one, on all your devices.
+              </Text>
+            </View>
           ) : (
             <Text style={s.intro}>
               A Persona is who you are when a site asks you to log in. This phone makes a profile drive for it: the
@@ -264,7 +292,9 @@ export default function NewPersona ({ visible, onClose, onMade, apps, editId = n
           <Text style={[s.hint, s.footer]}>
             {editing
               ? 'Changes reach your other devices and the sites you let see your profile.'
-              : 'Keep this phone online for a while after, so your computer can get the new profile drive.'}
+              : onboarding
+                ? 'Not now? Skip it, and make one later in Personas. Keep this phone online for a while after making one, so your computer gets it.'
+                : 'Keep this phone online for a while after, so your computer can get the new profile drive.'}
           </Text>
         </ScrollView>
         <ActionSheet
@@ -287,6 +317,10 @@ function makeStyles (t: Theme) {
     root: { flex: 1, backgroundColor: t.bg },
     page: { padding: space.lg },
     intro: { color: t.textDim, fontSize: 14, lineHeight: 20, marginBottom: space.lg },
+    welcome: { gap: space.xs },
+    welcomeTitle: { color: t.text, fontSize: 22, fontWeight: '700' },
+    skip: { minHeight: touch, minWidth: touch, paddingHorizontal: space.md, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, overflow: 'hidden' },
+    skipText: { color: t.accent, fontSize: 15, fontWeight: '600' },
     pictureRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg, marginBottom: space.lg },
     avatarBtn: { borderRadius: radius.pill },
     avatar: { width: 72, height: 72, borderRadius: 36 },

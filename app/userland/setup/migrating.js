@@ -46,7 +46,7 @@ h1 {
   width: 18px;
   margin-right: 5px;
   animation: rotate 1s infinite linear;
-  color: #000;
+  color: currentColor;
   border: 2px solid;
   border-right-color: transparent;
   border-radius: 50%;
