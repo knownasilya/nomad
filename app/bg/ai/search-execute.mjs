@@ -32,6 +32,7 @@ const GUIDE_IDS = [
   ['Building an SPA', 'spa'],
   ['A Job in a drive', 'job-drive'],
   ['Secrets', 'secrets'],
+  ['Requests after private data', 'private-data'],
 ]
 
 const DOMAIN_COPY = {
@@ -106,7 +107,8 @@ export const CAPABILITIES = [
       '({ NAME: "access_token" } or { NAME: "header:x-token" }) stores a value from a 2xx response into an existing ' +
       'secret instead of showing it to you, for refreshing a token. In the AI Sidebar the first use of each secret ' +
       'in a turn asks the user; a Job uses only the secrets the user let it use. This computer (localhost) is never ' +
-      'reachable, and the local network only with a secret for that host.',
+      'reachable, and the local network only with a secret for that host. Once the chat has read the user\'s ' +
+      'private data, a host the user didn\'t name asks them first (guide:private-data).',
     inputSchema: {
       type: 'object',
       properties: {

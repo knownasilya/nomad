@@ -30,6 +30,14 @@ export default css`
     cursor: pointer !important;
   }
 
+  @media (prefers-color-scheme: dark) {
+    .btn {
+      background: #445;
+      color: #ccd;
+      border-color: #668;
+    }
+  }
+
   .btn.small {
     height: 24px;
     line-height: 20px;
@@ -111,6 +119,12 @@ export default css`
   .btn:hover {
     text-decoration: none;
     background: #eee;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .btn:hover {
+      background: #556;
+    }
   }
 
   .btn[disabled='disabled'],

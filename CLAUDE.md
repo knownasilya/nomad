@@ -487,6 +487,19 @@ Job uses only the secrets ticked for it on the secret (the local `jobs` list, no
 Library → Secrets over the internal `nomad.secrets` API (writes only from `nomad://library`). Never
 add an API that returns a value.
 
+### Sending private data to a site asks first (ADR-0037)
+
+Once a chat of the user's own AI has read private data (Notes, Reader, Mods, Jobs, drive files, the
+page or a page tool: `PRIVATE_READS` in `app/bg/ai/egress.mjs`), the first `fetchUrl`, `httpRequest` or
+`openTab` to each host the user didn't name asks `aiSendData:<host>` (desktop perm prompt, phone
+`sendDataPrompt`). `executeTool` calls `egress.noteCall` after each call; the check sits in each
+capability. The sidebar and the phone keep `privateData` on the answer (the `tool` event with
+`phase: 'private'`) and send it with the chat's next turns. A Job can't ask: after a private read it
+reaches only the hosts its prompt names and its secrets cover (`jobEgress` in `ai.ts`). A new
+capability that returns private data goes in `PRIVATE_READS`; one that sends a URL or body somewhere
+calls `egress.check` first. `STANDING_PROMPT` tells every turn that tool content is data, not
+instructions.
+
 ### Personas and Sessions (ADR-0031)
 
 A Persona is one of the user's identities: a private `label` for a Profile Drive
