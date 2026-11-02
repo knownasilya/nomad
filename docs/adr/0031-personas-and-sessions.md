@@ -257,8 +257,9 @@ revocation is an event.
   identity that's always on screen helps against phishing, and the window is where a Persona
   actually varies.
 - **Per site only when there's a Session:** an icon in the location bar, like the Draft pen-nib
-  (`renderDraftBtn`), that opens site-info's Session section (who you are here, what it can do,
-  Log out).
+  (`renderDraftBtn`), that opens its own Persona menu (`fg/shell-menus/persona.js`): who you are
+  here, what it can do, Open profile, Manage Personas and Log out, and nothing else of site info.
+  Site info keeps its Session tab.
 
 The prototype ([#37]) shows the always-on and only-with-a-Session versions side by side before this
 is final.

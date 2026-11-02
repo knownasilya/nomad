@@ -36,6 +36,7 @@ class NavbarLocation extends LitElement {
       isShareMenuOpen: { type: Boolean },
       isPeersMenuOpen: { type: Boolean },
       isSiteMenuOpen: { type: Boolean },
+      isPersonaMenuOpen: { type: Boolean },
       isDonateMenuOpen: { type: Boolean },
       isBookmarked: { type: Boolean, attribute: 'is-bookmarked' },
       hasDraft: { type: Boolean, attribute: 'has-draft' },
@@ -68,6 +69,7 @@ class NavbarLocation extends LitElement {
     this.isShareMenuOpen = false;
     this.isPeersMenuOpen = false;
     this.isSiteMenuOpen = false;
+    this.isPersonaMenuOpen = false;
     this.isDonateMenuOpen = false;
     this.isBookmarked = false;
     this.hasDraft = false;
@@ -372,14 +374,16 @@ class NavbarLocation extends LitElement {
     `;
   }
 
-  // Personas (ADR-0031 §11): shown only while the site holds a Session. Opens site-info's Session
-  // section (who you are here, what it can do, Log out).
+  // Personas (ADR-0031 §11): shown only while the site holds a Session. Opens the Persona menu
+  // (fg/shell-menus/persona.js): who you are here, what the site can do, Log out. Site info keeps
+  // its own Session tab, but this button no longer opens site info.
   renderSessionBtn() {
     const s = this.session;
     if (!s) return '';
     const name = s.title || s.label;
+    var cls = classMap({ session: true, pressed: this.isPersonaMenuOpen });
     return html`
-      <button class="session" @click=${this.onClickSession} title=${`Logged in as ${name} (your Persona “${s.label}”)`}>
+      <button class=${cls} @click=${this.onClickSession} title=${`Logged in as ${name} (your Persona “${s.label}”)`}>
         ${s.thumbUrl
           ? html`<img class="session-avatar" src=${s.thumbUrl} alt="" />`
           : html`<span class="session-avatar initial">${name.slice(0, 1).toUpperCase()}</span>`}
@@ -387,12 +391,18 @@ class NavbarLocation extends LitElement {
     `;
   }
 
-  async onClickSession(e) {
-    var rect = e.currentTarget.getClientRects()[0];
-    await bg.views.toggleSiteInfo({
-      bounds: { top: rect.bottom | 0, left: rect.left | 0 },
-      params: { view: 'session' },
+  async onClickSession() {
+    if (Date.now() - (this.lastPersonaMenuClick || 0) < 100) {
+      return;
+    }
+    this.isPersonaMenuOpen = true;
+    var rect = this.shadowRoot.querySelector('button.session').getClientRects()[0];
+    await bg.views.toggleMenu('persona', {
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0, top: (rect.bottom | 0) + 2 },
+      params: { url: this.url },
     });
+    this.isPersonaMenuOpen = false;
+    this.lastPersonaMenuClick = Date.now();
   }
 
   renderShareBtn() {
