@@ -207,7 +207,7 @@ export interface Job {
 }
 export interface JobsList { jobs: Job[]; writable: boolean }
 // Personas (ADR-0031): the user's identities and the sites logged in with them, for the active Space.
-export interface PersonaSummary { id: string; label: string; profileUrl: string; isDefault: boolean; sessions: number }
+export interface PersonaSummary { id: string; label: string; email: string; profileUrl: string; isDefault: boolean; sessions: number }
 export interface PersonaSession { path: string; origin: string; site: string; personaLabel: string; spaceName: string; thisSpace: boolean; perms: string[]; createdAt: string; expiresAt: string | null; expired: boolean }
 export interface PersonasList { personas: PersonaSummary[]; defaultId: string | null; spacePersonaId: string | null; resolvedId: string | null; spaceKnown: boolean; sessions: PersonaSession[]; writable: boolean }
 export interface JobNotifications { notify: { id: string; jobId: string; title: string; body: string }[]; since: string; wants: boolean }

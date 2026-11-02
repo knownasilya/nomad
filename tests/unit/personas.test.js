@@ -10,6 +10,7 @@ import {
   newPersonaId,
   newSessionId,
   normalizeLabel,
+  normalizeEmail,
   makePersona,
   isPersona,
   makeDefault,
@@ -319,6 +320,67 @@ describe('Sessions (ADR-0031 §8, §10)', () => {
     expect(sortSessions([a, b]).map((s) => s.id)).toEqual(['b', 'a']);
     expect(shortOrigin('https://example.com')).toBe('example.com');
     expect(shortOrigin(`hyper://${K1}`)).toBe('hyper://aaaaaa…aaaa');
+  });
+});
+
+describe('email (ADR-0031 amendment)', () => {
+  const now = new Date('2026-10-31T12:00:00.000Z');
+  const base = {
+    id: 'k3v',
+    origin: 'https://example.com',
+    personaId: 'workwork',
+    space: SPACE,
+    now,
+  };
+
+  it('normalizes an address and refuses what isn’t one', () => {
+    expect(normalizeEmail('  Ada.L+site@Example.ORG ')).toBe('Ada.L+site@example.org');
+    expect(normalizeEmail('')).toBeNull();
+    expect(normalizeEmail(null)).toBeNull();
+    for (const bad of [
+      'ada',
+      '@example.org',
+      'ada@',
+      'ada@localhost',
+      'a da@x.org',
+      'ada@x..org',
+      '<a>@x.org',
+    ])
+      expect(() => normalizeEmail(bad), bad).toThrow(/email/);
+    expect(() => normalizeEmail(`${'a'.repeat(250)}@x.org`)).toThrow(/at most/);
+  });
+
+  it('keeps the email on the Persona record, and clears it when emptied', () => {
+    const p = persona('abcd1234', 'Work', K1, { email: 'ada@example.org' });
+    expect(p.email).toBe('ada@example.org');
+    expect(makePersona({ label: 'Job' }, p).email).toBe('ada@example.org');
+    expect(makePersona({ email: '' }, p)).not.toHaveProperty('email');
+    expect(persona('abcd1234', 'Work')).not.toHaveProperty('email');
+  });
+
+  it('asks for email on its own, without the profile', () => {
+    expect(requestedPerms(['email'], K1)).toEqual(['email']);
+    expect(requestedPerms(['profile', 'email'], K1)).toEqual(['profile', 'email']);
+    expect(() => requestedPerms(['email:x'], K1)).toThrow(/can’t grant/);
+    expect(grantedPerms(['profile', 'email'], ['email'])).toEqual(['email']);
+    expect(grantedPerms(['profile', 'email'], ['profile', 'email'], { hasEmail: false })).toEqual([
+      'profile',
+    ]);
+  });
+
+  it('shows a page the email only with `email`', () => {
+    const profile = { url: `hyper://${K1}/`, title: 'Ada' };
+    const s = makeSession({ ...base, perms: ['email'] });
+    expect(sessionView(s, profile, 'ada@example.org')).toEqual({
+      id: 'k3v',
+      perms: ['email'],
+      createdAt: s.createdAt,
+      email: 'ada@example.org',
+    });
+    const p = makeSession({ ...base, perms: ['profile'] });
+    expect(sessionView(p, profile, 'ada@example.org')).not.toHaveProperty('email');
+    expect(sessionView(s, profile, null)).not.toHaveProperty('email');
+    expect(sessionGrants(s, 'email', now)).toBe(true);
   });
 });
 

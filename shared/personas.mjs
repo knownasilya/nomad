@@ -24,6 +24,8 @@ export const SESSION_TYPE = 'nomad/session';
 export const SPACES_PREFIX = '/.vault/spaces/';
 
 export const MAX_LABEL = 40;
+// RFC 5321's limit on a forward path.
+export const MAX_EMAIL = 254;
 // The most a page may ask for with requestLogin({ maxAge }), in seconds: ten years.
 export const MAX_AGE_LIMIT = 10 * 365 * 24 * 60 * 60;
 
@@ -126,6 +128,27 @@ export function normalizeLabel(label) {
   return s;
 }
 
+// The Persona's email, for sites the user lets see it (the `email` permission). Kept on the
+// Vault record only, never in the Profile Drive, which anyone with its URL can read. Nomad can't
+// prove the address is the user's; a site that needs that sends its own code. '' or null clears it.
+export function normalizeEmail(email) {
+  const s = String(email ?? '').trim();
+  if (!s) return null;
+  if (s.length > MAX_EMAIL) throw new Error(`An email can be at most ${MAX_EMAIL} characters`);
+  const at = s.lastIndexOf('@');
+  const local = s.slice(0, at);
+  const domain = s.slice(at + 1).toLowerCase();
+  if (
+    at < 1 ||
+    /\s/.test(s) ||
+    !/^[^@<>()[\],;:"]+$/.test(local) ||
+    !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(domain)
+  ) {
+    throw new Error('That doesn’t look like an email address');
+  }
+  return `${local}@${domain}`;
+}
+
 // A Persona record from the fields given and the one stored (prev). `creator` is the Profile Drive's
 // key when this Device made the Drive: the writer the Drive started with is then the user's own
 // (see profileState).
@@ -135,6 +158,7 @@ export function makePersona(fields, prev = null, now = new Date().toISOString())
   const profileUrl = normalizeProfileUrl(fields.profileUrl ?? prev?.profileUrl);
   const label = normalizeLabel(fields.label ?? prev?.label);
   const creator = fields.creator !== undefined ? fields.creator : prev?.creator;
+  const email = fields.email !== undefined ? normalizeEmail(fields.email) : prev?.email || null;
   const rec = {
     type: PERSONA_TYPE,
     id,
@@ -144,6 +168,7 @@ export function makePersona(fields, prev = null, now = new Date().toISOString())
     updatedAt: now,
   };
   if (creator && HEX64.test(creator) && creator === driveKeyOf(profileUrl)) rec.creator = creator;
+  if (email) rec.email = email;
   return rec;
 }
 
@@ -255,8 +280,9 @@ export function profileState({
 // =
 
 // The permissions a page may ask a Session for. `modifyDrive` is write access to the Persona's own
-// Profile Drive and comes only with `profile` (a page can't write a drive it can't name).
-export const SESSION_PERMS = ['profile', 'modifyDrive'];
+// Profile Drive and comes only with `profile` (a page can't write a drive it can't name). `email` is
+// the Persona's email (ADR-0031 amendment), on its own: it doesn't need `profile`, nor give it.
+export const SESSION_PERMS = ['profile', 'modifyDrive', 'email'];
 
 // The tokens a page asked for, checked: known names only, `modifyDrive` (or
 // `modifyDrive:<profileKey>`) turned into the token for the Persona's own drive. Throws on any other
@@ -268,9 +294,9 @@ export function requestedPerms(perms, profileKey = null) {
   for (const raw of perms) {
     const p = String(raw || '');
     const [name, param] = [p.split(':')[0], p.split(':').slice(1).join(':')];
-    if (!SESSION_PERMS.includes(name) || (name === 'profile' && param)) {
+    if (!SESSION_PERMS.includes(name) || ((name === 'profile' || name === 'email') && param)) {
       throw new TypeError(
-        `nomad.session can’t grant “${p}”. It grants ${SESSION_PERMS.join(' and ')}.`
+        `nomad.session can’t grant “${p}”. It grants ${SESSION_PERMS.slice(0, -1).join(', ')} and ${SESSION_PERMS.at(-1)}.`
       );
     }
     if (name === 'modifyDrive' && param && param.toLowerCase() !== profileKey) {
@@ -284,11 +310,13 @@ export function requestedPerms(perms, profileKey = null) {
   return out;
 }
 
-// What the user left checked, cut to what was asked: a partial grant is normal, and writing needs
-// the profile.
-export function grantedPerms(requested, checked) {
-  const keep = requested.filter((t) => checked.includes(t));
-  return keep.includes('profile') ? keep : keep.filter((t) => !t.startsWith('modifyDrive:'));
+// What the user left checked, cut to what was asked: a partial grant is normal, writing needs the
+// profile, and `email` needs an email on the Persona (hasEmail).
+export function grantedPerms(requested, checked, { hasEmail = true } = {}) {
+  let keep = requested.filter((t) => checked.includes(t));
+  if (!keep.includes('profile')) keep = keep.filter((t) => !t.startsWith('modifyDrive:'));
+  if (!hasEmail) keep = keep.filter((t) => t !== 'email');
+  return keep;
 }
 
 export function normalizeMaxAge(maxAge) {
@@ -357,9 +385,10 @@ export function sessionGrants(session, token, now = Date.now()) {
   return session.perms.includes(t);
 }
 
-// What a page sees of its Session: the id always (tier 1), and the profile only with `profile`
-// (tier 2). `perms` are the names the page asked with.
-export function sessionView(session, profile = null) {
+// What a page sees of its Session: the id always (tier 1), the profile only with `profile` (tier 2),
+// and the Persona's email only with `email`. `perms` are the names the page asked with. The email
+// is read from the Persona each time, so a changed address reaches the site (and fires `change`).
+export function sessionView(session, profile = null, email = null) {
   if (!session) return null;
   const perms = session.perms.map((t) => t.split(':')[0]);
   const view = { id: session.id, perms, createdAt: session.createdAt };
@@ -371,6 +400,7 @@ export function sessionView(session, profile = null) {
       ...(profile.thumb ? { thumb: profile.thumb } : {}),
     };
   }
+  if (perms.includes('email') && email) view.email = email;
   return view;
 }
 

@@ -608,6 +608,8 @@ class SiteInfoApp extends LitElement {
       const permId = nomadPermissions.getPermId(token);
       if (permId === 'profile') return nomadPermissions.renderPermDesc({ html, bg: null, url: this.url, permId, permParam: '', permOpts: { title: name } });
       if (permId === 'modifyDrive') return 'Change files in your profile drive';
+      if (permId === 'email')
+        return p?.email ? html`See your email, <strong>${p.email}</strong>` : 'See your email';
       return token;
     };
     return html`

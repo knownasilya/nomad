@@ -305,9 +305,11 @@ declare namespace Nomad {
   interface Session {
     /** Random, made for this site, Persona and Space. The same each visit until the user logs out. */
     id: string;
-    /** What the user granted: 'profile' and/or 'modifyDrive'. A partial grant is normal. */
-    perms: Array<'profile' | 'modifyDrive'>;
+    /** What the user granted: 'profile', 'modifyDrive' and/or 'email'. A partial grant is normal. */
+    perms: Array<'profile' | 'modifyDrive' | 'email'>;
     profile?: { url: string; title: string; thumb?: string };
+    /** The Persona's email, only with 'email'. Not verified by Nomad. */
+    email?: string;
     createdAt: string;
     expiresAt?: string;
   }
@@ -322,10 +324,11 @@ declare namespace Nomad {
   interface SessionApi {
     /**
      * Show the login prompt. Rejects with UserDeniedError on a cancel, a "no", or no Persona.
-     * perms: 'profile' (the Persona's drive URL, name and picture), 'modifyDrive' (write that drive).
+     * perms: 'profile' (the Persona's drive URL, name and picture), 'modifyDrive' (write that drive),
+     * 'email' (the Persona's email, which Nomad doesn't verify).
      * maxAge: seconds until the Session ends (no expiry by default).
      */
-    requestLogin(opts?: { perms?: Array<'profile' | 'modifyDrive'>; maxAge?: number }): Promise<Session>;
+    requestLogin(opts?: { perms?: Array<'profile' | 'modifyDrive' | 'email'>; maxAge?: number }): Promise<Session>;
     /** The Session the prompt already made, or null. Never prompts. */
     getCurrent(): Promise<Session | null>;
     /** Log out. */

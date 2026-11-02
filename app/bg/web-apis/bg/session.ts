@@ -134,7 +134,16 @@ export default {
 
     let personaId = res.personaId;
     if (res.create)
-      personaId = (await personas.create({ label: res.create.label, title: res.create.title })).id;
+      personaId = (
+        await personas.create({
+          label: res.create.label,
+          title: res.create.title,
+          email: res.email || undefined,
+        })
+      ).id;
+    // An email typed in the prompt for a Persona that had none is saved on the Persona.
+    else if (res.email && !personas.get(personaId)?.email)
+      await personas.update(personaId, { email: res.email });
     const p = personas.get(personaId);
     if (!p || !personas.isUsable(personaId))
       throw new PermissionsError('That Persona can’t log in right now. See My Library → Personas.');
@@ -150,7 +159,8 @@ export default {
     const requested = P.requestedPerms(o.perms, key);
     const perms = P.grantedPerms(
       requested,
-      P.requestedPerms(Array.isArray(res.perms) ? res.perms : [], key)
+      P.requestedPerms(Array.isArray(res.perms) ? res.perms : [], key),
+      { hasEmail: !!p.email }
     );
     await personas.grant({ origin, spaceKey, personaId, perms, maxAge });
     return personas.sessionViewFor(url, spaceId);

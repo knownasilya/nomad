@@ -680,6 +680,7 @@ export async function listPersonas (base, space) {
     personas: personas.map((p) => ({
       id: p.id,
       label: p.label,
+      email: p.email || '',
       profileUrl: p.profileUrl,
       isDefault: p.id === defaultId,
       sessions: live.filter(({ rec }) => rec.personaId === p.id).length
