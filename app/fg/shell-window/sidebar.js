@@ -38,6 +38,8 @@ class ShellWindowSidebar extends LitElement {
       spacesMenuOpen: { type: Boolean },
       // The hovered pin tile's tooltip, { href, title, url }, while it shows
       _pinTip: { state: true },
+      // The tab list is scrolled down: a line marks where it slides under the pinned tiles
+      _tabsScrolled: { state: true },
     };
   }
 
@@ -50,6 +52,7 @@ class ShellWindowSidebar extends LitElement {
     this.draggedPinHref = null;
     this._pinTip = null;
     this._pinTipTimer = null;
+    this._tabsScrolled = false;
     this.spaces = [];
     this.activeSpace = null;
     this.groups = [];
@@ -134,7 +137,7 @@ class ShellWindowSidebar extends LitElement {
             <span class="fas fa-chevron-${isLeft ? 'left' : 'right'}"></span>
           </button>
         </div>
-        <div class="sidebar-tabs" @scroll=${this._hidePinTip}>
+        <div class="sidebar-top">
           ${this._renderPins(tiles)}
           <button
             class="new-tab-inline"
@@ -147,6 +150,11 @@ class ShellWindowSidebar extends LitElement {
             <span class="new-tab-icon fas fa-plus"></span>
             <span class="new-tab-label">New tab</span>
           </button>
+        </div>
+        <div
+          class="sidebar-tabs ${this._tabsScrolled ? 'scrolled' : ''}"
+          @scroll=${this._onScrollTabs}
+        >
           ${repeat(
             this._buildItems(),
             (item) => (item.group ? `grp:${item.group.id}` : `tab:${item.index}`),
@@ -174,6 +182,7 @@ class ShellWindowSidebar extends LitElement {
     return html`
       <div
         class="pins ${tiles.length ? '' : 'empty'}"
+        @scroll=${this._hidePinTip}
         @dragover=${(e) => this._onDragoverPins(e)}
         @dragleave=${this._onDragleave}
         @drop=${(e) => this._onDropPins(e, tiles.length)}
@@ -633,6 +642,12 @@ class ShellWindowSidebar extends LitElement {
     tipEl.classList.add('shown');
   }
 
+  _onScrollTabs(e) {
+    this._hidePinTip();
+    const scrolled = e.currentTarget.scrollTop > 0;
+    if (scrolled !== this._tabsScrolled) this._tabsScrolled = scrolled;
+  }
+
   _hidePinTip() {
     clearTimeout(this._pinTipTimer);
     this._pinTipTimer = null;
@@ -863,18 +878,32 @@ ShellWindowSidebar.styles = css`
     background: var(--bg-color--tab--hover);
   }
 
+  /* The pinned tiles and New tab stay put at the top; only the tab list below them scrolls. */
+
+  .sidebar-top {
+    flex-shrink: 0;
+    padding: 4px 6px 0;
+  }
+
   /* tab list */
 
   .sidebar-tabs {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 4px 6px;
+    padding: 0 6px 4px;
     min-height: 0;
+    border-top: 1px solid transparent;
+    transition: border-color 0.15s;
+  }
+
+  .sidebar-tabs.scrolled {
+    border-top-color: var(--border-color--tab);
   }
 
   /* Thin scrollbars in the chrome's colors (design-tokens.css), so they follow light and dark. */
-  .sidebar-tabs {
+  .sidebar-tabs,
+  .pins {
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   }
@@ -887,6 +916,10 @@ ShellWindowSidebar.styles = css`
     gap: 6px;
     padding: 2px 0 4px;
     border-radius: 10px;
+    /* a long list of pins scrolls on its own, so the tabs below always have room */
+    max-height: 40vh;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .pins.drop-into {
