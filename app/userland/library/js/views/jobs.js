@@ -48,6 +48,7 @@ const blank = () => ({
   addDrive: '', // the drive URL or name being typed
   notes: false,
   reader: false,
+  newDrives: false, // make new drives (createDrive), and write the ones it makes
   kind: 'manual', // 'manual' | 'interval' | 'daily' | 'monthly' | 'once' | 'text'
   every: 1,
   unit: 'hours',
@@ -326,6 +327,7 @@ export class JobsView extends LitElement {
       <ul class="grants">
         ${w.notes ? html`<li><span class="fas fa-fw fa-sticky-note"></span> Your Notes</li>` : ''}
         ${w.reader ? html`<li><span class="fas fa-fw fa-rss"></span> Your Reader (follow, unfollow, mark read)</li>` : ''}
+        ${w.newDrives ? html`<li><span class="fas fa-fw fa-plus-square"></span> New drives it makes</li>` : ''}
         ${(w.drives || []).map(
           (d) => html`<li>
             <span class="fas fa-fw fa-hdd"></span>
@@ -337,11 +339,15 @@ export class JobsView extends LitElement {
     `;
   }
 
-  // What a run changed: files it wrote, and Notes and Reader changes.
+  // What a run changed: drives it made, files it wrote, and Notes and Reader changes.
   renderChanges(j, r) {
     const changes = r.changes || [];
     if (!changes.length) return '';
-    const title = (url) => (j.writes?.drives || []).find((d) => d.url === url)?.title || '';
+    // A drive the run made has its title in the change that made it.
+    const title = (url) =>
+      (j.writes?.drives || []).find((d) => d.url === url)?.title ||
+      changes.find((c) => c.tool === 'createDrive' && c.drive === url)?.title ||
+      '';
     return html`<div class="changes">
       <div class="label">Changed</div>
       <ul>
@@ -352,7 +358,12 @@ export class JobsView extends LitElement {
                 <a href=${c.drive.replace(/\/$/, '') + c.path} target="_blank">${c.path}</a>
                 <span class="muted">in ${title(c.drive) || c.drive}${c.draft ? ' (Draft)' : ''}</span>
               </li>`
-            : html`<li><span class="fas fa-fw fa-pen"></span> ${c.summary || c.tool}</li>`
+            : c.drive
+              ? html`<li>
+                  <span class="fas fa-fw fa-hdd"></span>
+                  <a href=${c.drive} target="_blank">${c.summary || c.drive}</a>
+                </li>`
+              : html`<li><span class="fas fa-fw fa-pen"></span> ${c.summary || c.tool}</li>`
         )}
       </ul>
     </div>`;
@@ -561,6 +572,10 @@ export class JobsView extends LitElement {
             <input type="checkbox" .checked=${e.reader} @change=${(ev) => set({ reader: ev.target.checked })} />
             Change my Reader (follow, unfollow, mark read)
           </label>
+          <label class="check">
+            <input type="checkbox" .checked=${e.newDrives} @change=${(ev) => set({ newDrives: ev.target.checked })} />
+            Make new drives
+          </label>
         </div>
         ${e.drives.length
           ? html`<ul class="grant-drives">
@@ -635,6 +650,7 @@ export class JobsView extends LitElement {
       drives: (j.writes?.drives || []).map((d) => ({ url: d.url, title: d.title || '', draft: !!d.draft })),
       notes: !!j.writes?.notes,
       reader: !!j.writes?.reader,
+      newDrives: !!j.writes?.newDrives,
       notify: j.notify,
       enabled: j.enabled,
     };
@@ -746,8 +762,13 @@ export class JobsView extends LitElement {
         prompt: e.prompt,
         source,
         writes:
-          e.notes || e.reader || e.drives.length
-            ? { notes: e.notes, reader: e.reader, drives: e.drives.map((d) => ({ url: d.url, draft: d.draft })) }
+          e.notes || e.reader || e.newDrives || e.drives.length
+            ? {
+                notes: e.notes,
+                reader: e.reader,
+                newDrives: e.newDrives,
+                drives: e.drives.map((d) => ({ url: d.url, draft: d.draft })),
+              }
             : null,
         schedule: this.schedule(e),
         notify: e.notify,

@@ -24,6 +24,13 @@ export function createFsWriteGuard(deps) {
 
     if (isWcTrusted(sender)) return;
 
+    // The AI's writeDriveFile asks the user for this drive itself, once a turn (bg/ai/vault-tools.mjs
+    // askOncePerTurn), or holds a Job's grant, or made the drive on this turn. Its yes covers this
+    // write; asking again here would prompt twice, or refuse a turn with no window to ask in (a Job,
+    // the phone over the Bridge). Only main-process code builds this ctx: an RPC call's ctx is the
+    // server's { sender }.
+    if (permId === 'modifyDrive' && ctx.approvedDrive && ctx.approvedDrive === baseKey) return;
+
     const ownKey = await senderDriveKey(sender);
     if (ownKey && ownKey === baseKey) return; // writing/managing your own drive is always free
 

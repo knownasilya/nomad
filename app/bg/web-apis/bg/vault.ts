@@ -583,7 +583,7 @@ export default {
   // new Job runs on this Device and reads the Reader of the calling page's Space. `source` is a drive
   // URL to read now (the user's own drive stays live, anyone else's is copied), { url, module, prompt }
   // for a newer version the user looked at (from checkJobSource) and took, or null to drop it.
-  // `writes` is what the Job may change ({ drives: [url | { url, draft }], notes, reader }, null for
+  // `writes` is what the Job may change ({ drives: [url | { url, draft }], notes, reader, newDrives }, null for
   // nothing); the user sets it here, in their own Library, so it isn't asked again.
   async saveJob(fields) {
     const f = fields || {};

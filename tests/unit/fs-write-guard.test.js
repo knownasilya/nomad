@@ -92,4 +92,14 @@ describe('fs-write-guard', () => {
     await guard.assertManage({ sender }, OWN_KEY)
     expect(requests).toEqual([])
   })
+
+  // The AI's writeDriveFile asked the user itself (or holds a Job's grant, or made the drive this
+  // turn); its yes covers the write, so the guard doesn't ask again.
+  it('takes the AI\'s own yes for that drive, and only for writes to it', async () => {
+    const { guard, sender } = build()
+    await guard.assertWrite({ sender, approvedDrive: OTHER_KEY }, OTHER_KEY)
+    expect(requests).toEqual([])
+    await expect(guard.assertWrite({ sender, approvedDrive: 'c'.repeat(64) }, OTHER_KEY)).rejects.toMatchObject({ name: 'UserDeniedError' })
+    await expect(guard.assertManage({ sender, approvedDrive: OTHER_KEY }, OTHER_KEY)).rejects.toMatchObject({ name: 'UserDeniedError' })
+  })
 })

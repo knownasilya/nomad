@@ -13,6 +13,10 @@ const AI_ASKS = {
     lead: 'The AI assistant wants to:',
     caution: "Only click 'Allow' if you asked the assistant to use this site.",
   },
+  // createDrive (bg/ai/create-drive.mjs): the drive goes in the user's library, not the site's.
+  aiCreateDrive: {
+    lead: 'The AI assistant wants to:',
+  },
 };
 
 class PermPrompt extends LitElement {

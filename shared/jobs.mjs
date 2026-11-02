@@ -888,17 +888,19 @@ function sourceTitle(source) {
 
 export const MAX_WRITE_DRIVES = 10;
 const MAX_CHANGES = 50; // what one run changed, kept with the run
-// The capabilities each grant adds to a Job's turn. A drive grant adds writeDriveFile.
+// The capabilities each grant adds to a Job's turn. A drive grant adds writeDriveFile, and so does
+// newDrives, for the drives the run makes.
 export const WRITE_CAPS = {
   notes: ['writeNote'],
   reader: ['followFeed', 'unfollowFeed', 'markPostsRead'],
+  newDrives: ['createDrive'],
 };
 
 // A Job's `writes` as a form or the AI gives it, tidied: drives as hyper://<key>/ (names resolved
 // first), each with `draft`. Null when it grants nothing. Throws for a bad drive.
 export function normalizeWrites(input) {
   if (!input) return null;
-  if (typeof input !== 'object') throw new Error('writes is { drives?, notes?, reader? }');
+  if (typeof input !== 'object') throw new Error('writes is { drives?, notes?, reader?, newDrives? }');
   const drives = [];
   for (const d of Array.isArray(input.drives) ? input.drives : []) {
     const raw = typeof d === 'string' ? { url: d } : d || {};
@@ -913,22 +915,30 @@ export function normalizeWrites(input) {
     throw new Error(`A Job can write at most ${MAX_WRITE_DRIVES} drives`);
   }
   const out = { drives, notes: !!input.notes, reader: !!input.reader };
-  return drives.length || out.notes || out.reader ? out : null;
+  // Only when granted, so a Job saved before this grant existed keeps the same record.
+  if (input.newDrives) out.newDrives = true;
+  return drives.length || out.notes || out.reader || out.newDrives ? out : null;
 }
 
 // The capabilities a Job's writes add to its turn, besides writeDriveFile (which a drive grant
 // turns on).
 export function writeCaps(writes) {
   if (!writes) return [];
-  return [...(writes.notes ? WRITE_CAPS.notes : []), ...(writes.reader ? WRITE_CAPS.reader : [])];
+  return [
+    ...(writes.notes ? WRITE_CAPS.notes : []),
+    ...(writes.reader ? WRITE_CAPS.reader : []),
+    ...(writes.newDrives ? WRITE_CAPS.newDrives : []),
+  ];
 }
 
-// The permissions a Job's writes grant its runs: notesWrite, readerWrite, modifyDrive:<key>.
+// The permissions a Job's writes grant its runs: notesWrite, readerWrite, aiCreateDrive,
+// modifyDrive:<key>. A drive the run makes is its to write for the rest of the run (ai.ts createDrive).
 export function writePermissions(writes) {
   if (!writes) return [];
   return [
     ...(writes.notes ? ['notesWrite'] : []),
     ...(writes.reader ? ['readerWrite'] : []),
+    ...(writes.newDrives ? ['aiCreateDrive'] : []),
     ...(writes.drives || []).map((d) => 'modifyDrive:' + d.url.slice(8, -1)),
   ];
 }
@@ -948,6 +958,7 @@ export function addedWrites(prev, next) {
     drives: next.drives.filter((d) => !had.has(d.url) || (had.get(d.url) && !d.draft)),
     notes: next.notes && !prev?.notes,
     reader: next.reader && !prev?.reader,
+    newDrives: next.newDrives && !prev?.newDrives,
   });
 }
 
@@ -957,6 +968,7 @@ export function describeWrites(writes, driveName = null) {
   return [
     ...(writes.notes ? ['your Notes'] : []),
     ...(writes.reader ? ['your Reader (follow, unfollow, mark read)'] : []),
+    ...(writes.newDrives ? ['new drives it makes'] : []),
     ...(writes.drives || []).map(
       (d) =>
         `${(driveName && driveName(d.url)) || d.url.slice(0, 16) + '…/'}${d.draft ? ' (in a Draft)' : ''}`
@@ -965,7 +977,7 @@ export function describeWrites(writes, driveName = null) {
 }
 
 // What a run changed, tidied for its record: { drive, path, draft } for a file, { tool, summary }
-// for a Note or Reader change.
+// for a Note or Reader change, and { tool: 'createDrive', summary, drive, title } for a drive it made.
 function normalizeChanges(changes) {
   const out = [];
   for (const c of Array.isArray(changes) ? changes : []) {
@@ -976,7 +988,12 @@ function normalizeChanges(changes) {
         draft: !!c.draft,
       });
     } else if (c?.tool) {
-      out.push({ tool: String(c.tool), summary: clip(String(c.summary || ''), 200) });
+      const made = /^hyper:\/\/[0-9a-z]{52,64}\/?$/i.exec(String(c.drive || ''));
+      out.push({
+        tool: String(c.tool),
+        summary: clip(String(c.summary || ''), 200),
+        ...(made ? { drive: made[0].replace(/\/?$/, '/'), title: clip(String(c.title || ''), 100) } : {}),
+      });
     }
   }
   return out.length > MAX_CHANGES ? out.slice(0, MAX_CHANGES) : out;

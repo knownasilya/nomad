@@ -190,6 +190,7 @@ const VAULT_PROMPTS: Record<string, { title: string; message: string }> = {
   modsWrite: { title: 'Allow AI to change your Mods?', message: 'The AI running on your other device wants to create or change your Mods. A Mod can run a script on every page of its site.' },
   jobsRead: { title: 'Allow AI to see your Jobs?', message: 'The AI running on your other device wants to see your AI Jobs and their results.' },
   jobsWrite: { title: 'Allow AI to change your Jobs?', message: 'The AI running on your other device wants to create, change or run your AI Jobs. A Job runs a prompt by itself, reads your Notes and Reader, and notifies this phone.' },
+  aiCreateDrive: { title: 'Allow AI to make a drive?', message: 'The AI running on your other device wants to make a new drive in your library on that computer.' },
   memoryWrite: { title: 'Allow AI to remember things?', message: 'The AI running on your other device wants to remember something about you for later chats, or forget something. You can see and change what it remembers on the AI page on your computer.' }
 }
 
