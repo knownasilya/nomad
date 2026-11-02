@@ -6,6 +6,15 @@ import buttonsCSS from './buttons.css';
 
 const IS_DRIVE_KEY_REGEX = /^[0-9a-f]{64}$/i;
 
+// A prompt the site didn't ask for: the user's own AI wants it (ADR-0037). The site in the tab may
+// even be the one trying to talk the AI into it, so the usual "trust this page" line would mislead.
+const AI_ASKS = {
+  aiSendData: {
+    lead: 'The AI assistant wants to:',
+    caution: "Only click 'Allow' if you asked the assistant to use this site.",
+  },
+};
+
 class PermPrompt extends LitElement {
   constructor() {
     super();
@@ -85,7 +94,7 @@ class PermPrompt extends LitElement {
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper" @contextmenu=${this.onContextMenu}>
-        <p>This site wants to:</p>
+        <p>${AI_ASKS[this.permId]?.lead || 'This site wants to:'}</p>
         <p class="perm">
           <i class="${PERM_ICONS[this.permId]}"></i>
           ${renderPermDesc({
@@ -130,7 +139,9 @@ class PermPrompt extends LitElement {
         ${this.isPermDangerous
           ? html` <div class="perm-experimental">
               <i class="fa fa-info-circle"></i>
-              <span>Only click 'Allow' if you trust this page.</span>
+              <span
+                >${AI_ASKS[this.permId]?.caution || "Only click 'Allow' if you trust this page."}</span
+              >
             </div>`
           : ''}
       </div>
@@ -235,6 +246,28 @@ PermPrompt.styles = [
 
     .prompt-btns {
       text-align: right;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      a {
+        color: #8ab4f8;
+      }
+
+      p.perm i,
+      .plan-what,
+      .plan-note {
+        color: #aaa;
+      }
+
+      .perm-experimental,
+      .perm-experimental i {
+        background: #2a3550;
+        color: #b9c9ee;
+      }
+
+      code {
+        color: #ddd;
+      }
     }
 
     .prompt-btns button {

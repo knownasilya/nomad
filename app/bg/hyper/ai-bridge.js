@@ -134,6 +134,8 @@ export async function requestRemoteChat({
         space: opts.space || null,
         // The user's tab ({ url, title }), for the Provider's currentTab (ADR-0021).
         tab: opts.tab || null,
+        // An earlier turn of this chat read the user's private data (ADR-0037).
+        privateData: opts.privateData === true,
       },
     });
     // The user steers this turn from here: each message goes to the Provider, after the REQUEST.

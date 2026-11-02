@@ -161,7 +161,10 @@ export function createAiBridge ({ swarm, getVault }) {
           // the user is on, for the Provider's currentTab (ADR-0021).
           personal: opts.personal === true,
           space: opts.space || null,
-          tab: opts.tab || null
+          tab: opts.tab || null,
+          // An earlier turn of this chat read the user's private data, so requests to sites the
+          // user didn't name ask first from the start (ADR-0037).
+          privateData: opts.privateData === true
         }
       })
       if (steer) {

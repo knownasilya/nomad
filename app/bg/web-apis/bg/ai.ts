@@ -39,6 +39,7 @@ import { genuiPrompt } from '../../../lib/genui/library.mjs';
 import { askOncePerTurn, jobPermitFor } from '../../ai/vault-tools.mjs';
 import * as secretStore from '../../ai/secret-store';
 import { hostAllowed, permissionFor, redact, redactResult, secretForModel } from '../../ai/secrets.mjs';
+import { createEgressGuard, hostsIn, sendPermission, userText } from '../../ai/egress.mjs';
 import { runHttpRequest } from '../../ai/http-request.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
 import {
@@ -303,6 +304,8 @@ async function routeChat(messages, sender, emitter, opts) {
       space: rules.personal ? await vaultApps.spaceKey({ sender }).catch(() => null) : null,
       // The tab the user is on, for the Provider's currentTab (ADR-0021).
       tab: tab ? tabSnapshot(tab) : null,
+      // An earlier turn of this chat read the user's private data (ADR-0037).
+      privateData: opts.privateData === true,
     },
     signal: opts.signal,
     onChunk: (text) => emitter.emit('chunk', { text }),
@@ -383,6 +386,9 @@ aiBridge.setServeChat(
       remote: true, // no reachable renderer here — disables WebMCP page tools
       // The Client's user steers this turn (STEER frames); never anything from opts.
       steering: steering || null,
+      // The Provider makes the turn's egress guard; a frame can only say the chat read private data.
+      egress: null,
+      privateData: opts?.privateData === true,
     });
   }
 );
@@ -506,6 +512,10 @@ export async function runJobTurn(job, { signal, notify, trigger = 'manual', last
   const space = isSpaceKey(job.space) ? job.space : null;
   const grants = jobGrants(job);
   const { emitter, changes } = jobEmitter(into);
+  // Nobody is watching a Job, so once it has read private data it reaches only the hosts its
+  // prompt names and the hosts of the secrets it may use (ADR-0037). One guard for job.js and the
+  // turn: what the module read comes to the turn with its result.
+  const egress = await jobEgress(job, work);
 
   let result = null;
   if (work.module) {
@@ -523,6 +533,7 @@ export async function runJobTurn(job, { signal, notify, trigger = 'manual', last
       signal,
       grants,
       emitter,
+      egress,
     });
     if (!work.prompt) return { output: moduleOutput(result), sourceHash: await newer, changes };
   }
@@ -548,9 +559,23 @@ export async function runJobTurn(job, { signal, notify, trigger = 'manual', last
     requestPermission: grants.permit,
     context: jobContext(job),
     job: { id: job.id, notify, extra: grants.extra },
+    egress,
     signal,
   });
   return { output: answer.trim() || all.trim(), sourceHash: await newer, changes };
+}
+
+// A Job's egress guard: the hosts its prompt names (job.md for a Job from a drive) and the hosts of
+// the secrets the user lets it use. Never the module's result, which can hold anything a page said.
+async function jobEgress(job, work) {
+  const usable = await usableSecrets({ job });
+  const secretHosts = (await secretStore.list().catch(() => []))
+    .filter((s) => usable(s))
+    .flatMap((s) => s.hosts || []);
+  return createEgressGuard({
+    interactive: false,
+    trustedHosts: [...hostsIn(work.prompt || job.prompt || ''), ...secretHosts],
+  });
 }
 
 // What a Job's writes turn on for its turn: writeDriveFile (allowWrite) for a drive grant, the Note
@@ -587,7 +612,7 @@ function jobEmitter(changes = []) {
 // A Job's job.js, run like the AI's execute code with the job turn's capabilities: no tab, no page
 // tools, notify, and the writes the Job was given. Resolves what main() returned (text, or JSON for
 // anything else).
-async function runJobModule(code, { jobId, params, space, notify, signal, grants, emitter }) {
+async function runJobModule(code, { jobId, params, space, notify, signal, grants, emitter, egress }) {
   const sender = makeRemoteSender('nomad://jobs/');
   const catalog = buildCatalog({
     allowWrite: grants.allowWrite,
@@ -610,6 +635,7 @@ async function runJobModule(code, { jobId, params, space, notify, signal, grants
     signal,
     catalog,
     job: { id: jobId, notify },
+    egress,
   };
   return executeInUtilityProcess({
     code,
@@ -762,6 +788,23 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   });
   // One answer per Notes, Reader or drive-edit permission per turn (vault-tools.mjs askOncePerTurn).
   const requestPermission = askOncePerTurn(opts.requestPermission || permissions.requestPermission);
+  // Once the user's own AI holds their private data, a request to a host they didn't name asks
+  // them first (egress.mjs, ADR-0037). A Job brings its own guard, shared with its job.js and
+  // limited to the hosts its prompt names. The sidebar and the phone say whether an earlier turn
+  // of the chat read private data (`privateData`), and the user's messages name the hosts the AI
+  // may reach without asking. A message steered in mid-turn names more.
+  const egress =
+    (typeof opts.egress?.check === 'function' ? opts.egress : null) ||
+    (opts.stage === 'sidebar' || opts.stage === 'phone'
+      ? createEgressGuard({
+          privateData: opts.privateData === true,
+          trustedHosts: hostsIn(userText(chatMessages)),
+          interactive: true,
+          // The chat remembers it on this answer, and says so on its next turn.
+          onPrivate: () => emitter.emit('tool', { phase: 'private' }),
+        })
+      : null);
+  if (egress) emitter.on('steer', (e) => egress.trust(hostsIn((e?.texts || []).join('\n'))));
   // tools:false is a plain completion: no search/execute, and no standing prompt telling the
   // model to call them. A local runtime that injects its own tool contract (MTPLX) otherwise
   // spends the free memory on that contract before it writes a single token.
@@ -831,6 +874,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     catalog,
     pageSession,
     job,
+    // Where a request may go once the turn holds private data (egress.mjs).
+    egress,
     // Messages the user sends while this turn runs (steering.mjs). A CLI's loopback MCP calls
     // carry them on their results.
     steering: opts.steering || null,
@@ -1011,9 +1056,12 @@ async function resolveAiConfig(sender, driveUrl = null, { drive = true } = {}) {
 // Every tool result and error, on every turn, has the user's secret values taken out (ADR-0033), so
 // a page, a file or a response that holds one never shows it to the model or the chat. `execute`
 // calls back in here for each capability, so its inner results are cleaned too.
+// A call that read the user's private data turns the turn's egress guard on (ADR-0037).
 async function executeTool(name, args, sender, opts: any = {}) {
   try {
-    return redactResult(await executeToolInner(name, args, sender, opts), secretStore.knownValues());
+    const result = await executeToolInner(name, args, sender, opts);
+    opts.egress?.noteCall(name);
+    return redactResult(result, secretStore.knownValues());
   } catch (err) {
     if (err && typeof err.message === 'string') err.message = redact(err.message, secretStore.knownValues());
     throw err;
@@ -1034,6 +1082,7 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
     catalog = null,
     pageSession = null,
     job = null,
+    egress = null,
   } = opts;
   // WebMCP page tool — round-trip to the renderer that registered it. Access was already
   // consented per-origin in resolvePageTools(); running it can only do what page JS can do.
@@ -1080,6 +1129,9 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
   // turns it on). The drive tools then read the Draft too, so the AI reads back what it wrote. A
   // Job's `draft` is per drive (a function of the drive's base URL), as its grants say.
   const draftFor = (base) => (typeof draft === 'function' ? !!draft(base) : !!draft);
+  // The user's yes to a request to `host` on this turn, after the turn read private data. Asked on
+  // the tab's site, and on the phone over the Bridge (`aiSendData:<host>`).
+  const askToSend = (host) => permit(sendPermission(host), sender, { host });
   const stagesInDraft = (base) =>
     writeStagesInDraft(ctx, base, draftFor(base) ? { draft: true } : {}).catch(() => false);
   const readOpts = (staged) => (staged ? { draft: true } : {});
@@ -1173,6 +1225,7 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
       if (urlp.protocol !== 'http:' && urlp.protocol !== 'https:') {
         throw new Error('Only http and https URLs are supported');
       }
+      await egress?.check(urlp.href, { ask: askToSend });
       return fetchText(args.url);
     }
     case 'listSecrets': {
@@ -1219,6 +1272,14 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
         throw new Error(
           `A Job sends ${method} requests only with one of its secrets. The user allows one in My Library → Secrets.`
         );
+      }
+      // After a private read, a host the user didn't name asks first, unless a secret this request
+      // names covers it: the user chose that secret's hosts. A Job can't ask, so it is refused.
+      if (egress && args?.url) {
+        const named = [...(Array.isArray(args.secrets) ? args.secrets : []), ...(args.secret ? [args.secret] : [])];
+        const recs = await Promise.all(named.map((n) => secretStore.get(String(n)).catch(() => null)));
+        const secretHosts = recs.filter((r) => r && usable(r)).flatMap((r) => r.hosts || []);
+        await egress.check(String(args.url), { ask: askToSend, secretHosts });
       }
       const res = await runHttpRequest(args || {}, {
         resolveSecrets: async (wanted, host) => {
@@ -1373,6 +1434,13 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
       // the catalog leaves openTab out there (renderer gate). Checked again here.
       if (!catalog?.personal || remote) throw new Error('openTab is not available here');
       const url = openTabUrl(args.url);
+      // Opening a page sends its URL to the site. hyper://<one of the user's names>/ is theirs.
+      if (url && egress) {
+        const host = new URL(url).hostname.toLowerCase();
+        const own =
+          url.startsWith('hyper://') && names.list(nameSpace).some((r) => String(r.name).toLowerCase() === host);
+        await egress.check(url, { ask: askToSend, trusted: own });
+      }
       const groupName = openTabGroup(args.group);
       // Next to the tab the user is on, in its window; the focused window when that tab is gone.
       const win =

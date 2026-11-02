@@ -17,7 +17,8 @@ import ActionSheet from './ActionSheet'
 // `images` are data:image URLs — nomad.ai.chat's short form, which the Provider expands into
 // image_url parts (app/bg/ai/chat-messages.mjs).
 // `reasoning` is what the model thought before it answered (shown as Thoughts, never sent back).
-interface ChatMsg { role: 'user' | 'assistant'; content: string; images?: string[]; reasoning?: string }
+// `privateData`: the turn that wrote this answer read the user's private data (ADR-0037).
+interface ChatMsg { role: 'user' | 'assistant'; content: string; images?: string[]; reasoning?: string; privateData?: boolean }
 
 const MAX_IMAGES = 4
 // The Bridge sends the whole transcript every turn, as one frame. Past this many data-URL
@@ -74,6 +75,13 @@ function unwrapReply (text: string, partial = false): string {
 }
 
 // Leaves the oldest photos out of the request once the transcript's photos pass IMAGE_BUDGET.
+// The answer being written now read the user's private data: it keeps that for the chat's next turn.
+function markPrivate (msgs: ChatMsg[]): ChatMsg[] {
+  const i = msgs.length - 1
+  if (i < 0 || msgs[i].role !== 'assistant' || msgs[i].privateData) return msgs
+  return [...msgs.slice(0, i), { ...msgs[i], privateData: true }]
+}
+
 function fitImages (history: ChatMsg[]): ChatMsg[] {
   const size = (m: ChatMsg) => (m.images || []).reduce((n, url) => n + url.length, 0)
   let total = history.reduce((n, m) => n + size(m), 0)
@@ -263,10 +271,17 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
     // Reader (ADR-0018, ADR-0019). It is not tied to a tab: `tab` is what the person is looking at
     // now, for the Provider's currentTab (ADR-0021).
     const tab = url ? { url, title: title || '' } : null
-    handleRef.current = aiChat(fitImages(mergeUserTurns(history)), { context: describeContext(url, title), personal: true, space, tab }, {
+    // An earlier answer read the user's private data: requests to sites they didn't name ask first
+    // from the start of this turn (ADR-0037).
+    const privateData = history.some((m) => m.privateData === true)
+    handleRef.current = aiChat(fitImages(mergeUserTurns(history)), { context: describeContext(url, title), personal: true, space, tab, privateData }, {
       onChunk: (chunk) => { finishSteps(); appendToLast(chunk) },
       onReasoning: appendReasoning,
       onTool: (event: any) => {
+        if (event?.phase === 'private') {
+          setMessages((prev) => markPrivate(prev))
+          return
+        }
         setSteps((prev) => applyToolEvent(prev, event))
         // A staged write → track it for its Drive's draft review banner.
         const drive = driveOf(event?.drive) || sendDrive

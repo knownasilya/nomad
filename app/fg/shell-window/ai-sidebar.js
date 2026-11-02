@@ -1916,6 +1916,14 @@ class ShellWindowAiSidebar extends LitElement {
               ? [...this._activity.slice(0, -1), { ...last, summary: e.summary }]
               : this._activity;
         }
+      } else if (e.phase === 'private') {
+        // The turn read the user's private data (ADR-0037): the answer keeps it, so the chat's next
+        // turn asks before sending a request to a site the user didn't name from its start.
+        const msg = turnMessages[assistantIdx];
+        if (msg && !msg.privateData) {
+          turnMessages = [...turnMessages];
+          turnMessages[assistantIdx] = { ...msg, privateData: true };
+        }
       } else if (e.phase === 'write' && e.path) {
         // Each file keeps its drive: the assistant can write to any drive the user names.
         const msg = turnMessages[assistantIdx];
@@ -1992,6 +2000,8 @@ class ShellWindowAiSidebar extends LitElement {
           turnId,
           // A page-action confirm can allow similar clicks for the rest of this chat.
           chatId: turnSessionId || undefined,
+          // An earlier turn read the user's private data (ADR-0037).
+          privateData: turnMessages.slice(0, assistantIdx).some((m) => m.privateData === true),
         })
       );
       eventTarget.addEventListener('tool', (e) => onToolEvent(e));

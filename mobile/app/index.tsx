@@ -204,8 +204,19 @@ function secretPrompt (permission: string): { title: string; message: string } |
   }
 }
 
+// The AI sending a request to a site after it read the user's private data in this chat (ADR-0037):
+// `aiSendData:<host>`. The request could carry that data there.
+function sendDataPrompt (permission: string): { title: string; message: string } | null {
+  const m = /^aiSendData:([^\s]{1,300})$/.exec(permission)
+  if (!m) return null
+  return {
+    title: `Allow AI to contact ${m[1]}?`,
+    message: `The AI running on your other device wants to send a request to ${m[1]}. It has read your private data in this chat (your Notes, Reader, files or a page), and the request could carry some of it there. Allow only if you asked it to use this site.`
+  }
+}
+
 function confirmAiPermission (permission: string, drive?: { name: string; url: string }): Promise<boolean> {
-  const vaultPrompt = VAULT_PROMPTS[permission] || secretPrompt(permission)
+  const vaultPrompt = VAULT_PROMPTS[permission] || secretPrompt(permission) || sendDataPrompt(permission)
   const name = drive?.name || 'this drive'
   const url = drive?.url || ''
   const title = vaultPrompt ? vaultPrompt.title : 'Allow AI to edit?'
