@@ -14,19 +14,33 @@ interface Props {
   onClose: () => void
   onMade: (label: string) => void
   apps: Backend['apps']
+  editId?: string | null // edit this Persona instead of making one
+}
+
+interface PersonaDetail {
+  id: string
+  label: string
+  email: string
+  title: string
+  description: string
+  thumb: string | null
+  loaded: boolean
+  writable: boolean
 }
 
 type Field = 'title' | 'label' | 'about' | 'email'
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-// Make a Persona on the phone (ADR-0031 amendment): a new profile drive this phone writes, with a
-// name, a picture and a few words, plus a private label and email on the Vault record.
+// Make or edit a Persona on the phone (ADR-0031 amendment). A new one is a profile drive this phone
+// writes, with a name, a picture and a few words, plus a private label and email on the Vault record.
+// Editing changes the same fields; the profile's are in its drive, which every one of the user's
+// devices writes once the device that made it has added this phone (until then they are locked).
 //
 // The form is a full-screen Modal, so React Native's Keyboard events never reach it on Android and
 // the window isn't resized (edge-to-edge). KeyboardInset reads the keyboard's height in this window;
 // the ScrollView gets that much padding at the bottom, and the focused field is scrolled above it.
-export default function NewPersona ({ visible, onClose, onMade, apps }: Props) {
+export default function NewPersona ({ visible, onClose, onMade, apps, editId = null }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const [title, setTitle] = useState('')
@@ -39,13 +53,29 @@ export default function NewPersona ({ visible, onClose, onMade, apps }: Props) {
   const [error, setError] = useState('')
   const [keyboard, setKeyboard] = useState(0)
   const [focus, setFocus] = useState<Field | null>(null)
+  const [orig, setOrig] = useState<PersonaDetail | null>(null)
+  const [loading, setLoading] = useState(false)
   const scroll = useRef<ScrollView>(null)
   const fieldY = useRef<Partial<Record<Field, number>>>({})
+  const editing = !!editId
+  const profileLocked = editing && !!orig && !orig.writable
+
+  const load = async () => {
+    if (!editId) return
+    setLoading(true)
+    const res = await apps<PersonaDetail>('personas', 'get', { id: editId })
+    setLoading(false)
+    if (!res.ok || !res.value) { setError(res.message || 'Couldn’t load the Persona'); return }
+    const p = res.value
+    setOrig(p)
+    setTitle(p.title); setLabel(p.label); setAbout(p.description); setEmail(p.email); setThumb(p.thumb)
+  }
 
   useEffect(() => {
     if (!visible) return
-    setTitle(''); setLabel(''); setAbout(''); setEmail(''); setThumb(null); setError(''); setBusy(false)
-  }, [visible])
+    setTitle(''); setLabel(''); setAbout(''); setEmail(''); setThumb(null); setError(''); setBusy(false); setOrig(null)
+    if (editId) load()
+  }, [visible, editId])
 
   // Keep the field being typed in above the keyboard.
   useEffect(() => {
@@ -56,7 +86,9 @@ export default function NewPersona ({ visible, onClose, onMade, apps }: Props) {
 
   const at = (f: Field) => (e: LayoutChangeEvent) => { fieldY.current[f] = e.nativeEvent.layout.y }
   const badEmail = !!email.trim() && !EMAIL.test(email.trim())
-  const canMake = !!title.trim() && !badEmail && !busy
+  const canMake = editing
+    ? !!orig && !!label.trim() && (profileLocked || !!title.trim()) && !badEmail && !busy
+    : !!title.trim() && !badEmail && !busy
 
   const pick = async (source: 'camera' | 'library') => {
     setPicking(false)
@@ -68,10 +100,25 @@ export default function NewPersona ({ visible, onClose, onMade, apps }: Props) {
     }
   }
 
+  const save = async () => {
+    if (!orig) return
+    const args: Record<string, unknown> = { id: orig.id, label: label.trim(), email: email.trim() }
+    if (!profileLocked) {
+      if (title.trim() !== orig.title) args.title = title.trim()
+      if (about.trim() !== orig.description) args.description = about.trim()
+      if (thumb !== orig.thumb) args.thumb = thumb
+    }
+    const res = await apps<{ id: string; label: string }>('personas', 'update', args)
+    setBusy(false)
+    if (!res.ok || !res.value) { setError(res.message || 'Couldn’t save the Persona'); return }
+    onMade(res.value.label)
+  }
+
   const make = async () => {
     if (!canMake) return
     setBusy(true)
     setError('')
+    if (editing) return save()
     const res = await apps<{ id: string; label: string }>('personas', 'create', {
       title: title.trim(),
       label: label.trim() || 'Me',
@@ -84,12 +131,13 @@ export default function NewPersona ({ visible, onClose, onMade, apps }: Props) {
     onMade(res.value.label)
   }
 
+  const locked = (f: Field) => profileLocked && (f === 'title' || f === 'about')
   const input = (f: Field, props: React.ComponentProps<typeof TextInput>) => (
     <TextInput
       {...props}
-      style={[s.input, props.multiline && s.multiline, focus === f && s.inputFocus, f === 'email' && badEmail && s.inputBad]}
+      style={[s.input, props.multiline && s.multiline, focus === f && s.inputFocus, f === 'email' && badEmail && s.inputBad, locked(f) && s.inputLocked]}
       placeholderTextColor={t.textMuted}
-      editable={!busy}
+      editable={!busy && !locked(f) && !loading}
       onFocus={() => setFocus(f)}
       onBlur={() => setFocus((x) => (x === f ? null : x))}
     />
@@ -99,21 +147,34 @@ export default function NewPersona ({ visible, onClose, onMade, apps }: Props) {
     <Modal visible={visible} animationType='slide' onRequestClose={busy ? () => {} : onClose} presentationStyle='fullScreen'>
       <SafeAreaView style={s.root} edges={['top', 'bottom']}>
         <KeyboardInset onChange={setKeyboard} />
-        <ScreenHeader title='New Persona' onBack={busy ? undefined : onClose} />
+        <ScreenHeader title={editing ? 'Edit Persona' : 'New Persona'} onBack={busy ? undefined : onClose} />
         <ScrollView
           ref={scroll}
           contentContainerStyle={[s.page, { paddingBottom: space.xl + keyboard }]}
           keyboardShouldPersistTaps='handled'
         >
-          <Text style={s.intro}>
-            A Persona is who you are when a site asks you to log in. This phone makes a profile drive for it: the
-            name, picture and words sites see when you let them.
-          </Text>
+          {editing ? (
+            loading ? <ActivityIndicator color={t.accent} style={s.loading} /> : profileLocked ? (
+              <View style={s.notice}>
+                <Text style={s.noticeText}>
+                  {orig?.loaded
+                    ? 'This phone can’t change the name, picture or words yet. Keep the device that made this Persona online for a minute and it adds this phone. You can change the label and email now.'
+                    : 'This phone hasn’t got the profile drive yet. Keep the device that made this Persona online. You can change the label and email now.'}
+                </Text>
+                <Text style={s.noticeLink} onPress={busy ? undefined : load}>Check again</Text>
+              </View>
+            ) : null
+          ) : (
+            <Text style={s.intro}>
+              A Persona is who you are when a site asks you to log in. This phone makes a profile drive for it: the
+              name, picture and words sites see when you let them.
+            </Text>
+          )}
 
           <View style={s.pictureRow}>
             <Pressable
               onPress={() => setPicking(true)}
-              disabled={busy}
+              disabled={busy || profileLocked || loading}
               style={s.avatarBtn}
               android_ripple={{ color: t.ripple, borderless: true }}
               accessibilityLabel={thumb ? 'Change picture' : 'Add a picture'}
@@ -127,7 +188,7 @@ export default function NewPersona ({ visible, onClose, onMade, apps }: Props) {
                   </View>}
             </Pressable>
             <View style={s.pictureText}>
-              <Text style={s.pictureLink} onPress={busy ? undefined : () => setPicking(true)}>
+              <Text style={[s.pictureLink, (profileLocked || loading) && s.off]} onPress={busy || profileLocked || loading ? undefined : () => setPicking(true)}>
                 {thumb ? 'Change picture' : 'Add a picture'}
               </Text>
               <Text style={s.hint}>Optional. Sites you let see your profile show it.</Text>
@@ -198,10 +259,12 @@ export default function NewPersona ({ visible, onClose, onMade, apps }: Props) {
             style={[s.primary, !canMake && s.primaryOff]}
             android_ripple={{ color: t.ripple }}
           >
-            {busy ? <ActivityIndicator color={t.onAccent} /> : <Text style={s.primaryText}>Make Persona</Text>}
+            {busy ? <ActivityIndicator color={t.onAccent} /> : <Text style={s.primaryText}>{editing ? 'Save' : 'Make Persona'}</Text>}
           </Pressable>
           <Text style={[s.hint, s.footer]}>
-            Keep this phone online for a while after, so your computer can get the new profile drive.
+            {editing
+              ? 'Changes reach your other devices and the sites you let see your profile.'
+              : 'Keep this phone online for a while after, so your computer can get the new profile drive.'}
           </Text>
         </ScrollView>
         <ActionSheet
@@ -250,6 +313,20 @@ function makeStyles (t: Theme) {
     multiline: { minHeight: 88, paddingTop: space.md },
     inputFocus: { borderColor: t.accent },
     inputBad: { borderColor: t.warn },
+    inputLocked: { opacity: 0.55 },
+    off: { opacity: 0.45 },
+    loading: { marginVertical: space.lg },
+    notice: {
+      borderRadius: radius.md,
+      borderWidth: StyleSheet.hairlineWidth * 2,
+      borderColor: t.border,
+      backgroundColor: t.surface,
+      padding: space.md,
+      marginBottom: space.lg,
+      gap: space.sm
+    },
+    noticeText: { color: t.textDim, fontSize: 13, lineHeight: 19 },
+    noticeLink: { color: t.accent, fontSize: 14, fontWeight: '600' },
     error: { color: t.danger, fontSize: 14, marginBottom: space.md },
     primary: {
       minHeight: touch,

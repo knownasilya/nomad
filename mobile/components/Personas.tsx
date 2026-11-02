@@ -20,10 +20,10 @@ interface Props {
   onOpenDevices: () => void
 }
 
-// The phone's Personas (ADR-0031): who you are when a site asks you to log in. The user makes one
-// here (NewPersona: a profile drive this phone writes) or on a computer, picks this Space's Persona
-// and the default, and sees and ends the logins sites hold, on every device at once. The records are
-// in the Vault.
+// The phone's Personas (ADR-0031): who you are when a site asks you to log in. The user makes, edits
+// and deletes them here as on a computer (NewPersona; every device writes every profile drive), picks
+// this Space's Persona and the default, and sees and ends the logins sites hold, on every device at
+// once. The records are in the Vault.
 export default function Personas ({ visible, onClose, apps, onVaultChange, space, spaceName, onOpenDevices }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
@@ -36,6 +36,7 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
   const [busy, setBusy] = useState(false)
   const [sheet, setSheet] = useState<'space' | PersonaSummary | PersonaSession | null>(null)
   const [making, setMaking] = useState(false)
+  const [editId, setEditId] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     setError('')
@@ -65,6 +66,14 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
     ])
   }
 
+  const remove = (p: PersonaSummary) => {
+    const sites = p.sessions ? ` It’s logged in on ${p.sessions} site${p.sessions === 1 ? '' : 's'}; they’re logged out.` : ''
+    Alert.alert(`Delete “${p.label}”?`, `It goes from all your devices.${sites} Its profile drive stays.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => act('remove', { id: p.id }, 'Couldn’t delete it') }
+    ])
+  }
+
   const byId = (id: string | null) => list?.personas.find((p) => p.id === id) || null
   const current = list ? byId(list.resolvedId) : null
   const def = list ? byId(list.defaultId) : null
@@ -91,7 +100,13 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
     return {
       title: sheet.label,
       subtitle: sheet.email ? `${sheet.email} · ${sheet.profileUrl}` : sheet.profileUrl,
-      groups: [[{ label: sheet.isDefault ? 'Your default Persona' : 'Make default', icon: 'star', active: sheet.isDefault, disabled: sheet.isDefault, onPress: () => act('setDefault', { id: sheet.id }, 'Couldn’t change it') }]]
+      groups: [
+        [
+          { label: 'Edit', icon: 'pen', onPress: () => { setSheet(null); setEditId(sheet.id) } },
+          { label: sheet.isDefault ? 'Your default Persona' : 'Make default', icon: 'star', active: sheet.isDefault, disabled: sheet.isDefault, onPress: () => act('setDefault', { id: sheet.id }, 'Couldn’t change it') }
+        ],
+        [{ label: 'Delete', icon: 'trash', destructive: true, onPress: () => { setSheet(null); remove(sheet) } }]
+      ]
     }
   }
   const sp = sheetProps()
@@ -135,7 +150,7 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
                     onPress={() => setSheet('space')}
                   />
                 </ListSection>
-                <ListSection title='Your Personas' footer='A Persona’s name and picture change on the device that made it. Rename and delete them on your computer in My Library → Personas.'>
+                <ListSection title='Your Personas' footer='Change a Persona on any of your devices: its name, picture and words, and the label and email only you see.'>
                   {list.personas.map((p, i) => (
                     <ListRow
                       key={p.id}
@@ -175,6 +190,13 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
           onClose={() => setMaking(false)}
           apps={call}
           onMade={(made) => { setMaking(false); refresh(); Alert.alert('Persona made', `“${made}” is ready. Keep this phone online for a bit so your computer gets its profile drive.`) }}
+        />
+        <NewPersona
+          visible={!!editId}
+          editId={editId}
+          onClose={() => setEditId(null)}
+          apps={call}
+          onMade={() => { setEditId(null); refresh() }}
         />
         <ActionSheet
           visible={!!sp}

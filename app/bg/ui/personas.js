@@ -50,6 +50,9 @@ let profiles = new Map(); // Persona id -> { title, description, thumb, writable
 let hasVault = false;
 let vaultReady = false;
 let deviceKeys = [];
+let ownDeviceKey = null;
+let writerAsks = []; // Vault writer asks for Profile Drives (shared/personas.mjs)
+const recheckTries = new Map(); // Persona id -> looks while a granted ask waits on its Drive
 let watchedBase = null;
 let timer = null;
 let lastStamp = '';
@@ -82,21 +85,23 @@ export async function refresh() {
   }
   hasVault = !!sess;
   vaultReady = !!sess?.writable;
+  ownDeviceKey = sess?.base?.local?.key ? b4a.toString(sess.base.local.key, 'hex') : null;
   if (!sess) {
-    apply([], null, [], [], []);
+    apply([], null, [], [], [], []);
     return;
   }
-  const [recs, def, spaces, sess2, devices] = await Promise.all([
+  const [recs, def, spaces, sess2, devices, asks] = await Promise.all([
     vault.listAppRecords(P.PERSONAS_PREFIX),
     vault.readAppRecord(P.DEFAULT_PATH),
     vault.listSpaces(),
     vault.listAppRecords(P.SESSIONS_PREFIX),
     vault.listDevices(),
-  ]).catch(() => [[], null, [], [], []]);
-  apply(recs, def, spaces, sess2, devices);
+    vault.listAppRecords(P.WRITERS_PREFIX),
+  ]).catch(() => [[], null, [], [], [], []]);
+  apply(recs, def, spaces, sess2, devices, asks);
 }
 
-function apply(recs, def, spaces, sessRecs, devices) {
+function apply(recs, def, spaces, sessRecs, devices, asks = []) {
   const nextPersonas = new Map(recs.filter(P.isPersona).map((r) => [r.id, r]));
   const nextDefault = def && def.type === P.DEFAULT_TYPE ? def.personaId || null : null;
   const nextOverrides = new Map(
@@ -110,6 +115,7 @@ function apply(recs, def, spaces, sessRecs, devices) {
       .map((r) => [P.sessionPath(r.space, r.personaId, hashOrigin(r.origin)), r])
   );
   deviceKeys = devices.map((d) => d && d.key).filter(Boolean);
+  writerAsks = asks.filter(P.isWriterAsk);
   const stamp = JSON.stringify([
     [...nextPersonas.values()].map((p) => [p.id, p.updatedAt]),
     nextDefault,
@@ -117,6 +123,7 @@ function apply(recs, def, spaces, sessRecs, devices) {
     [...nextSessions.values()].map((s) => [s.space, s.personaId, s.origin, s.id, s.perms]),
     vaultReady,
     deviceKeys,
+    writerAsks.map((a) => [a.drive, a.writerKey, a.device, !!a.grantedBy]),
   ]);
   if (stamp === lastStamp) return;
   lastStamp = stamp;
@@ -181,13 +188,17 @@ export async function checkProfile(persona) {
       info = { ...prev, ...P.profileState({ persona, vaultReady, loaded: false }) };
     } else {
       const manifest = await autobases.readJson(sess, '/index.json').catch(() => null);
-      const writers = await writerKeys(sess).catch(() => null);
+      let writers = await writerKeys(sess).catch(() => null);
+      if (writers && (await syncWriters(persona, sess, writers)))
+        writers = await writerKeys(sess).catch(() => null);
+      const driveKey = P.driveKeyOf(persona.profileUrl);
+      const ownWriters = P.ownWriterKeys(writerAsks, { driveKey, deviceKeys });
       info = {
         title: String(manifest?.title || ''),
         description: String(manifest?.description || ''),
         thumb: typeof manifest?.thumb === 'string' ? manifest.thumb : '',
         writable: !!sess.writable,
-        ...P.profileState({ persona, vaultReady, deviceKeys, writers }),
+        ...P.profileState({ persona, vaultReady, deviceKeys, writers, ownWriters }),
       };
     }
   } catch (e) {
@@ -197,10 +208,74 @@ export async function checkProfile(persona) {
       reason: 'This device couldn’t read the Persona’s profile drive.',
     };
   }
+  // Granted but not a writer here yet: the Drive hasn't caught up with the addWriter. Look again.
+  const driveKey = P.driveKeyOf(persona.profileUrl);
+  const waiting =
+    info.writable === false &&
+    writerAsks.some((a) => a.drive === driveKey && a.device === ownDeviceKey && a.grantedBy);
+  const tries = recheckTries.get(persona.id) || 0;
+  if (waiting && tries < 12) {
+    recheckTries.set(persona.id, tries + 1);
+    setTimeout(() => {
+      const p = personas.get(persona.id);
+      if (p) checkProfile(p).catch(() => {});
+    }, 5000).unref?.();
+  } else if (!waiting) recheckTries.delete(persona.id);
   const same = JSON.stringify(prev) === JSON.stringify(info);
   profiles.set(persona.id, info);
   if (!same) events.emit('changed');
   return info;
+}
+
+// Every Device writes every Profile Drive (ADR-0031 amendment). Only for a Drive one of the user's
+// Devices made (`creator`): this Device asks to write it, or, when it writes it, adds the Devices
+// that asked and takes off the ones that left the Vault. Returns true when it changed the writers.
+async function syncWriters(persona, sess, writers) {
+  const driveKey = P.driveKeyOf(persona.profileUrl);
+  if (!vaultReady || !ownDeviceKey || !driveKey || persona.creator !== driveKey) return false;
+  const asks = writerAsks.filter((a) => a.drive === driveKey);
+  if (!sess.writable) {
+    const writerKey = sess.base?.local?.key ? b4a.toString(sess.base.local.key, 'hex') : null;
+    if (!writerKey || asks.some((a) => a.writerKey === writerKey)) return false;
+    try {
+      const ask = P.makeWriterAsk({ drive: driveKey, writerKey, device: ownDeviceKey });
+      await vault.putAppRecord(P.writerAskPath(driveKey, writerKey), ask);
+      logger.info('Asked to write a Profile Drive', { drive: driveKey.slice(0, 8) });
+    } catch (e) {
+      logger.warn('Could not ask to write a Profile Drive', { error: String(e) });
+    }
+    return false;
+  }
+  let changed = false;
+  for (const ask of P.writerAsksToGrant(asks, { driveKey, deviceKeys, writers })) {
+    try {
+      if (!writers.includes(ask.writerKey)) {
+        await sess.base.append({ addWriter: ask.writerKey });
+        changed = true;
+      }
+      await vault.putAppRecord(
+        P.writerAskPath(driveKey, ask.writerKey),
+        P.markWriterAskGranted(ask, ownDeviceKey)
+      );
+      logger.info('Added a Device to a Profile Drive', { drive: driveKey.slice(0, 8) });
+    } catch (e) {
+      logger.warn('Could not add a Device to a Profile Drive', { error: String(e) });
+    }
+  }
+  for (const ask of P.writerAsksToRevoke(asks, { driveKey, deviceKeys })) {
+    try {
+      if (writers.includes(ask.writerKey)) {
+        await sess.base.append({ removeWriter: ask.writerKey });
+        changed = true;
+      }
+      await vault.delAppRecord(P.writerAskPath(driveKey, ask.writerKey));
+      logger.info('Took a Device that left off a Profile Drive', { drive: driveKey.slice(0, 8) });
+    } catch (e) {
+      logger.warn('Could not take a Device off a Profile Drive', { error: String(e) });
+    }
+  }
+  if (changed) await sess.base.update().catch(() => {});
+  return changed;
 }
 
 async function checkAll() {
@@ -409,6 +484,7 @@ export function create({ label, title, description, thumb, profileUrl, email } =
         vaultReady: true,
         deviceKeys: devices,
         writers: await writerKeys(sess),
+        ownWriters: P.ownWriterKeys(writerAsks, { driveKey: sess.keyStr, deviceKeys: devices }),
       });
       if (st.state !== 'usable') throw new Error(st.reason);
     } else {
@@ -454,7 +530,7 @@ export function update(id, { label, title, description, thumb, email } = {}) {
       const sess = await openProfile(prev.profileUrl);
       if (!sess?.writable)
         throw new Error(
-          'This device can’t change that profile. Change it on the device that made it.'
+          'This device can’t change that profile yet. Keep the device that made it online for a minute so it can add this one, then try again.'
         );
       const patch = {};
       if (title !== undefined) patch.title = String(title).trim().slice(0, 280) || rec.label;
@@ -486,7 +562,17 @@ export function remove(id) {
     }
     const def = await vault.readAppRecord(P.DEFAULT_PATH);
     if (def?.personaId === id) await vault.putAppRecord(P.DEFAULT_PATH, P.makeDefault(null));
+    const gone = await vault.readAppRecord(P.personaPath(id));
     await vault.delAppRecord(P.personaPath(id));
+    // Its Profile Drive's writer asks, unless another Persona uses the same Drive.
+    const driveKey = P.driveKeyOf(gone?.profileUrl);
+    if (
+      driveKey &&
+      ![...personas.values()].some((p) => p.id !== id && P.driveKeyOf(p.profileUrl) === driveKey)
+    ) {
+      for (const path of await vault.listAppRecordPaths(P.writersPrefix(driveKey)))
+        await vault.delAppRecord(path);
+    }
     logger.info('Deleted a Persona', { id });
     await refresh();
   });

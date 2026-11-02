@@ -32,6 +32,13 @@ import {
   shortOrigin,
   base32,
   MAX_AGE_LIMIT,
+  writerAskPath,
+  makeWriterAsk,
+  isWriterAsk,
+  markWriterAskGranted,
+  writerAsksToGrant,
+  writerAsksToRevoke,
+  ownWriterKeys,
 } from '../../shared/personas.mjs';
 
 const K1 = 'a'.repeat(64);
@@ -383,6 +390,72 @@ describe('email (ADR-0031 amendment)', () => {
     expect(sessionView(p, profile, 'ada@example.org')).not.toHaveProperty('email');
     expect(sessionView(s, profile, null)).not.toHaveProperty('email');
     expect(sessionGrants(s, 'email', now)).toBe(true);
+  });
+});
+
+describe('every Device writes every Profile Drive (ADR-0031 amendment)', () => {
+  const W1 = '1'.repeat(64);
+  const W2 = '2'.repeat(64);
+  const T = '2026-11-02T00:00:00.000Z';
+  const ask = (writerKey, device, drive = K1) => makeWriterAsk({ drive, writerKey, device }, T);
+
+  it('keeps an ask under its drive and writer key, and checks its keys', () => {
+    expect(writerAskPath(K1, W1)).toBe(`/.vault/persona-writers/${K1}/${W1}.json`);
+    expect(ask(W1, DEV1)).toEqual({
+      type: 'nomad/persona-writer',
+      drive: K1,
+      writerKey: W1,
+      device: DEV1,
+      requestedAt: T,
+    });
+    expect(isWriterAsk(ask(W1, DEV1))).toBe(true);
+    expect(isWriterAsk({ ...ask(W1, DEV1), device: 'nope' })).toBe(false);
+    expect(() => makeWriterAsk({ drive: K1, writerKey: 'x', device: DEV1 })).toThrow();
+    expect(() => makeWriterAsk({ drive: K1, writerKey: W1, device: '' })).toThrow();
+  });
+
+  it('grants asks from the user’s Devices, once', () => {
+    const asks = [ask(W1, DEV1), ask(W2, FOREIGN), ask(W1, DEV1, K2)];
+    expect(
+      writerAsksToGrant(asks, { driveKey: K1, deviceKeys: [DEV1, DEV2], writers: [] })
+    ).toEqual([asks[0]]);
+    const granted = markWriterAskGranted(asks[0], DEV2, T);
+    expect(granted).toMatchObject({ grantedBy: DEV2, grantedAt: T });
+    expect(
+      writerAsksToGrant([granted], { driveKey: K1, deviceKeys: [DEV1, DEV2], writers: [W1] })
+    ).toEqual([]);
+    // Marked granted but not a writer (the addWriter was lost): grant it again.
+    expect(
+      writerAsksToGrant([granted], { driveKey: K1, deviceKeys: [DEV1, DEV2], writers: [] })
+    ).toEqual([granted]);
+  });
+
+  it('takes off a Device that left the Vault', () => {
+    const asks = [markWriterAskGranted(ask(W1, DEV1), DEV2, T), ask(W2, DEV2)];
+    expect(writerAsksToRevoke(asks, { driveKey: K1, deviceKeys: [DEV2] })).toEqual([asks[0]]);
+    expect(writerAsksToRevoke(asks, { driveKey: K1, deviceKeys: [DEV1, DEV2] })).toEqual([]);
+  });
+
+  it('counts a granted writer of a listed Device as the user’s own', () => {
+    const p = persona('workwork', 'Work');
+    const asks = [markWriterAskGranted(ask(W1, DEV1), DEV2, T), ask(W2, DEV2)];
+    const own = ownWriterKeys(asks, { driveKey: K1, deviceKeys: [DEV1, DEV2] });
+    expect(own).toEqual([W1]);
+    expect(
+      profileState({ persona: p, deviceKeys: [DEV1, DEV2], writers: [W1], ownWriters: own }).state
+    ).toBe('usable');
+    // Without the grant, or once its Device left, the same writer is foreign.
+    expect(profileState({ persona: p, deviceKeys: [DEV1, DEV2], writers: [W1] }).state).toBe(
+      'foreign-writers'
+    );
+    expect(
+      profileState({
+        persona: p,
+        deviceKeys: [DEV2],
+        writers: [W1],
+        ownWriters: ownWriterKeys(asks, { driveKey: K1, deviceKeys: [DEV2] }),
+      }).state
+    ).toBe('foreign-writers');
   });
 });
 
