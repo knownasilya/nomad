@@ -7,6 +7,14 @@ import spinnerCSS from './spinner.css';
 import * as bg from './bg-process-rpc';
 import { isHyperOrPearUrl } from '../../lib/urls';
 import { pinTiles, normalizePinUrl } from '../../../shared/pins.mjs';
+import {
+  startTabDrag,
+  endTabDrag,
+  canSplitWith,
+  tabDropZone,
+  isSplit,
+  tabTooltip,
+} from './split-drop';
 
 const ANIMATIONS_ENABLED = false;
 
@@ -215,7 +223,7 @@ class ShellWindowTabs extends LitElement {
       <div
         class="${cls}"
         style=${tabStyle}
-        title=${tab.title || tab.url}
+        title=${tabTooltip(tab)}
         draggable="true"
         @click=${(e) => this.onClickTab(e, index)}
         @contextmenu=${(e) => this.onContextmenuTab(e, index)}
@@ -248,7 +256,11 @@ class ShellWindowTabs extends LitElement {
         ${tab.isPinned
           ? ''
           : html`
-              <div class="tab-title">${tab.title || tab.url}</div>
+              <div class="tab-title">
+                ${isSplit(tab)
+                  ? html`<span class="fas fa-columns tab-split"></span>`
+                  : ''}${tab.title || tab.url}
+              </div>
               ${tab.isAudioMuted
                 ? html`<span class="fas fa-volume-mute"></span>`
                 : tab.isCurrentlyAudible
@@ -413,10 +425,25 @@ class ShellWindowTabs extends LitElement {
   onDragstartTab(e, index) {
     this.draggedTabIndex = index;
     e.dataTransfer.effectAllowed = 'move';
+    // the page shows drop zones for a split while the tab is dragged (panes.js)
+    startTabDrag(index, this.tabsState[index]);
   }
 
   onDragendTab(e, index) {
-    // TODO needed?
+    this.draggedTabIndex = null;
+    endTabDrag();
+  }
+
+  // Dropped on the leading quarter of a tab, a dragged tab moves in front of it; on the rest, the
+  // two open side by side in a split (split-drop.js).
+  dropZone(e, index) {
+    const from = this.tabsState[this.draggedTabIndex];
+    const to = this.tabsState[index];
+    if (this.draggedTabIndex !== null && index < this.tabsState.length && canSplitWith(from, to)) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      if (tabDropZone(rect, e.clientX, e.clientY) === 'split') return 'split';
+    }
+    return this.canDrop(index) ? 'before' : null;
   }
 
   onDragoverTab(e, index) {
@@ -434,17 +461,16 @@ class ShellWindowTabs extends LitElement {
       return false;
     }
 
-    if (!this.canDrop(index)) {
-      return false;
-    }
-
-    e.currentTarget.classList.add('drag-hover');
+    const zone = this.dropZone(e, index);
+    e.currentTarget.classList.toggle('drag-hover', zone === 'before');
+    e.currentTarget.classList.toggle('drop-split', zone === 'split');
+    if (!zone) return false;
     e.dataTransfer.dropEffect = 'move';
     return false;
   }
 
   onDragleaveTab(e, index) {
-    e.currentTarget.classList.remove('drag-hover');
+    e.currentTarget.classList.remove('drag-hover', 'drop-split');
   }
 
   onDropTab(e, index) {
@@ -452,7 +478,14 @@ class ShellWindowTabs extends LitElement {
       return; // allow toplevel event-handler to handle
     }
     e.stopPropagation();
-    e.currentTarget.classList.remove('drag-hover');
+    e.currentTarget.classList.remove('drag-hover', 'drop-split');
+
+    if (this.draggedTabIndex !== null && this.dropZone(e, index) === 'split') {
+      bg.views.moveTabIntoSplit(this.draggedTabIndex, index);
+      this.draggedTabIndex = null;
+      endTabDrag();
+      return false;
+    }
 
     // Group dropped on unused space — move to end (beforeGroupId = null)
     if (this.draggedGroupId !== null) {
@@ -481,6 +514,7 @@ class ShellWindowTabs extends LitElement {
       }
     }
     this.draggedTabIndex = null;
+    endTabDrag();
     return false;
   }
 
@@ -865,6 +899,21 @@ ShellWindowTabs.styles = css`
 
   .tab.drag-hover {
     background: var(--bg-color--tab--dragover);
+    box-shadow: inset 2px 0 0 var(--border-color--split-drop);
+  }
+
+  /* a dragged tab dropped here opens beside this one in a split (split-drop.js) */
+  .tab.drop-split {
+    background: var(--bg-color--split-drop);
+    box-shadow: inset 0 0 0 2px var(--border-color--split-drop);
+    border-radius: 6px;
+  }
+
+  /* a tab whose page is split with others */
+  .tab-title .tab-split {
+    font-size: 9px;
+    margin-right: 5px;
+    opacity: 0.65;
   }
 
   .tab.tab-add-btn {
