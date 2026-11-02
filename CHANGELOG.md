@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.38.0](https://github.com/knownasilya/nomad/compare/v1.37.0...v1.38.0) (2026-11-02)
+
+
+### Features
+
+* **sidebar:** keep pinned tiles and New tab in view while tabs scroll ([24c5eb3](https://github.com/knownasilya/nomad/commit/24c5eb3edebabca98ca595186e3a0bcf1df39b36))
+* **ui:** give every icon-only button a tooltip, and check for it ([78799ee](https://github.com/knownasilya/nomad/commit/78799ee6fef471e9179b40632f1e594707718301))
+
 ## [1.37.0](https://github.com/knownasilya/nomad/compare/v1.36.0...v1.37.0) (2026-11-02)
 
 
