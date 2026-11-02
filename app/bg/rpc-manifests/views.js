@@ -41,6 +41,7 @@ export default {
   discardDraft: 'promise',
   getSiteSession: 'promise',
   endSiteSession: 'promise',
+  getSpacePersona: 'promise',
   getMods: 'promise',
   setModEnabled: 'promise',
   toggleModPreset: 'promise',

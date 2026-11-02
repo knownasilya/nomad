@@ -27,7 +27,7 @@ class ShellWindowSpacesDropdown extends LitElement {
       >
         <span class="dot" style="background:${space?.color || '#6c6cff'}"></span>
         <span class="name">${space?.name || 'Spaces'}</span>
-        ${personaAvatar(this.persona)}
+        ${personaAvatar(this.persona, (e) => this.onClickPersona(e))}
         <span class="caret">▾</span>
       </button>
     `;
@@ -36,18 +36,57 @@ class ShellWindowSpacesDropdown extends LitElement {
   async onToggle() {
     await bg.views.toggleMenu('spaces');
   }
+
+  // The Persona picture opens the Persona menu (fg/shell-menus/persona.js), not the Spaces menu.
+  async onClickPersona(e) {
+    e.stopPropagation();
+    // A click that just closed the menu (by blurring it) shouldn't open it again.
+    if (Date.now() - (this.lastPersonaMenuClose || 0) < 100) return;
+    const rect = e.currentTarget.getClientRects()[0];
+    await bg.views.toggleMenu('persona', {
+      bounds: { rightOffset: (window.innerWidth - rect.right) | 0, top: (rect.bottom | 0) + 6 },
+    });
+    this.lastPersonaMenuClose = Date.now();
+  }
 }
 
 // The Persona on the Spaces button: its picture, or its first letter. Always on screen, so the user
-// sees who they are before a site asks (ADR-0031 §11).
-export function personaAvatar(p) {
+// sees who they are before a site asks (ADR-0031 §11). With `onClick`, the picture is its own
+// button inside the Spaces button, and opens the Persona menu.
+export function personaAvatar(p, onClick) {
   if (!p) return '';
-  return p.thumbUrl
+  const pic = p.thumbUrl
     ? html`<img class="persona" src=${p.thumbUrl} alt="" />`
     : html`<span class="persona initial">${(p.title || p.label || '?').slice(0, 1).toUpperCase()}</span>`;
+  if (!onClick) return pic;
+  return html`<span
+    class="persona-btn"
+    role="button"
+    title=${`You are ${p.title || p.label} (your Persona “${p.label}”)`}
+    @click=${onClick}
+    >${pic}</span
+  >`;
 }
 
 export const personaAvatarCSS = css`
+  .persona-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    margin: -3px;
+    padding: 3px;
+    border-radius: 50%;
+  }
+
+  .persona-btn:hover {
+    background: var(--bg-color--tab--hover, rgba(0, 0, 0, 0.08));
+  }
+
+  .persona-btn:hover .persona {
+    box-shadow: 0 0 0 1.5px #2864dc;
+  }
+
   .persona {
     flex: 0 0 16px;
     width: 16px;

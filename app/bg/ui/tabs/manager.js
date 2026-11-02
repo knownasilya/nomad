@@ -2100,6 +2100,17 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     return s ? { ...s, site: shortOrigin(s.origin) } : null;
   },
 
+  // The Persona the tab's Space uses, for the same menu opened from the Spaces button's picture,
+  // and that Space's name. Null when the user has no Persona yet.
+  async getSpacePersona(index) {
+    const tab = getByIndex(getWindow(this.sender), index);
+    if (!tab) return null;
+    const p = personas.shellPersona(tab.spaceId);
+    if (!p) return null;
+    const space = spacesDb.getCachedAll().find((s) => s.id === tab.spaceId);
+    return { ...p, spaceName: space?.name || '' };
+  },
+
   async endSiteSession(index) {
     const tab = getByIndex(getWindow(this.sender), index);
     const url = tab?.primaryPane?.url;

@@ -140,12 +140,15 @@ export function reposition(parentWindow) {
         height: 320,
       });
     } else if (view.menuId === 'persona') {
-      setBounds({
-        x: view.boundsOpt.rightOffset,
-        y: view.boundsOpt.top ?? 72,
-        width: 280,
-        height: 260,
-      });
+      // Under the location bar's Persona icon (rightOffset + top), or above the sidebar's Spaces
+      // button (left + bottom: the menu grows upward from there).
+      const bo = view.boundsOpt || {};
+      const b = { x: bo.left ?? bo.rightOffset ?? 10, y: bo.top ?? 72, width: 280, height: 260 };
+      if (view.currentDimensions) Object.assign(b, view.currentDimensions);
+      else adjustDimensions(b);
+      if (bo.bottom !== undefined) b.y = Math.max(0, bo.bottom - b.height);
+      adjustPosition(b, view, parentWindow);
+      view.setBounds(b);
     } else if (view.menuId === 'spaces') {
       const bo = view.boundsOpt;
       if (bo?.left !== undefined) {
