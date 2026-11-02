@@ -134,11 +134,11 @@ _Avoid_: snapshot, restore point, undo step
 ### Social data
 
 **Profile Drive**:
-A Drive with `type: "walled.garden/person"` in its `/index.json`. Represents a user's public social identity — name, avatar, bio, and a structured links array. Distinct from the Root Drive, which is always private. Referenced in the Drive Registry under a `profile` tag.
+A Drive with `type: "walled.garden/person"` in its `/index.json`. Represents a user's public social identity — name, avatar, bio, and a structured links array. Distinct from the Root Drive, which is always private. Referenced in the Drive Registry under a `contact` tag. A Persona points at one (ADR-0031, proposed).
 _Avoid_: identity drive, person drive, social profile
 
 **Writer Keys**:
-The set of a user's Device keys. The Vault is their canonical source; they are also published as `/.data/walled.garden/writer-keys.json` inside the Profile Drive so other peers can resolve multiple Device writers back to one identity.
+The set of a user's Device keys. The Vault is their canonical source. ADR-0007 also published them as `/.data/walled.garden/writer-keys.json` inside the Profile Drive so other peers could resolve multiple Device writers back to one identity; ADR-0010 Phase 4 deleted that code, and ADR-0031 does not bring it back.
 
 **Feed**:
 A Drive that declares `type: "walled.garden/feed"` in its `/index.json`, advertising channel metadata (title, description, author, icon, language) and where its items live (`itemsPath`, `itemType`). The unit a Reader subscribes to.
@@ -201,7 +201,23 @@ _Avoid_: tag, search term, meta keyword
 
 **Space**:
 A named user context with its own Root Drive and browser session isolation (separate cookies, localStorage, and Electron partition). The user can have multiple Spaces; one is active at a time. Spaces belong to a Vault.
-_Avoid_: profile, account, identity, workspace
+_Avoid_: profile (as a word for a Space; Profile Drive is fine), account, identity, workspace
+
+**Persona**:
+A browser-level identity that points at one Profile Drive, is bound to Spaces, and owns the Sessions
+granted to sites. A user may have several; the Vault has a default, and a Space may set its own. A
+Vault record, so it reaches the user's own Devices and nobody else, and a page can never list the
+user's Personas. The Profile Drive is the identity; the Persona is the browser's binding and consent
+state for it (ADR-0031, proposed).
+_Avoid_: account, login, user, identity (unqualified), profile (see Profile Drive)
+
+**Session**:
+The grant a site holds after the user approves a login with a Persona, one per origin, Persona and
+Space. Made only by `nomad.session.requestLogin()`, through a prompt the page can't draw; nothing
+makes one silently. Carries the permissions the user approved, which may be fewer than asked for.
+Ended by the page (`nomad.session.revoke()`) or the user. Distinct from a Prompt Session (ADR-0031,
+proposed).
+_Avoid_: login, token, credential, sign-in, auth
 
 **Shared Space**:
 A Space its owner shared with other people. Its library (Drive Registry, Contacts, Bookmarks, Reader
