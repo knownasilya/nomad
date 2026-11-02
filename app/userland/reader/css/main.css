@@ -10,6 +10,7 @@ body {
   --rdr-sidebar-bg: #fff;
   --rdr-accent: #4040e7;
   --rdr-accent-soft: rgba(64, 64, 231, 0.09);
+  --rdr-mark: rgba(250, 204, 21, 0.38); /* a searched word */
   --rdr-fill: #4f46e5; /* solid buttons: white text reads on it in both modes */
   --rdr-nav-hover-bg: var(--bg-color--semi-light);
   --rdr-row-hover: #f5f5fb;
@@ -35,6 +36,7 @@ body {
     --rdr-sidebar-bg: #1e1e24;
     --rdr-accent: #7b9fff;
     --rdr-accent-soft: rgba(93, 128, 255, 0.13);
+    --rdr-mark: rgba(250, 204, 21, 0.28);
     --rdr-row-hover: #2a2a34;
     --rdr-unread: #7b9fff;
     --rdr-err: #f87171;
@@ -69,7 +71,7 @@ input {
 
 header {
   display: grid;
-  grid-template-columns: 220px 1fr auto;
+  grid-template-columns: 220px minmax(0, 420px) 1fr auto;
   align-items: center;
   gap: 10px;
   height: 50px;
@@ -99,6 +101,42 @@ header .brand img {
 header .status {
   font-size: 12px;
   color: var(--text-color--pretty-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Search: filters the list and lights up what matches on the canvas. */
+.search-ctrl {
+  position: relative;
+}
+
+.search-ctrl .fa-search {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--text-color--pretty-light);
+  pointer-events: none;
+}
+
+.search-ctrl input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px 0 34px;
+  background: var(--rdr-search-bg);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text-color--default);
+  outline: none;
+}
+
+.search-ctrl input:focus {
+  background: var(--bg-color--default);
+  border-color: var(--rdr-accent);
+  box-shadow: 0 0 0 3px var(--rdr-accent-soft);
 }
 
 .header-actions {
@@ -1087,7 +1125,7 @@ main {
     display: none;
   }
   header {
-    grid-template-columns: 170px 1fr auto;
+    grid-template-columns: 170px minmax(0, 1fr) 0 auto;
   }
   .layout {
     grid-template-columns: 170px 1fr;
@@ -1099,4 +1137,11 @@ main {
   .reading-tools .tool-sep {
     display: none;
   }
+}
+
+/* A searched word in a result. */
+mark {
+  background: var(--rdr-mark);
+  color: inherit;
+  border-radius: 2px;
 }

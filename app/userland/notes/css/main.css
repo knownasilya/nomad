@@ -10,6 +10,7 @@ body {
   --nts-sidebar-bg: #fff;
   --nts-accent: #4040e7;
   --nts-accent-soft: rgba(64, 64, 231, 0.09);
+  --nts-mark: rgba(250, 204, 21, 0.38); /* a searched word */
   --nts-fill: #4f46e5; /* solid buttons: white text reads on it in both modes */
   --nts-nav-hover-bg: var(--bg-color--semi-light);
   --nts-row-hover: #f5f5fb;
@@ -55,6 +56,7 @@ body {
     --nts-sidebar-bg: #1e1e24;
     --nts-accent: #7b9fff;
     --nts-accent-soft: rgba(93, 128, 255, 0.13);
+    --nts-mark: rgba(250, 204, 21, 0.28);
     --nts-row-hover: #2a2a34;
     --nts-err: #f87171;
     --nts-warn-bg: #2e2717;
@@ -885,4 +887,11 @@ main {
   .view-btn span {
     display: none;
   }
+}
+
+/* A searched word in a result. */
+mark {
+  background: var(--nts-mark);
+  color: inherit;
+  border-radius: 2px;
 }

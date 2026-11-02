@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Modal, View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native'
+import { Modal, View, Text, TouchableOpacity, Pressable, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
@@ -13,6 +13,9 @@ import Icon from './Icon'
 import { ListSection } from './List'
 import Canvas, { type CanvasHandle, type CanvasSnapshot } from './Canvas'
 import NoteTopicsSheet from './NoteTopicsSheet'
+import SearchField, { Marked } from './SearchField'
+import KeyboardInset from './KeyboardInset'
+import { queryWords, matchesWords, matchSnippet } from '../lib/search'
 
 const SAVE_DELAY = 800
 const VIEW_KEY = 'nomad-notes-view' // 'list' or 'canvas', the last one used
@@ -54,6 +57,9 @@ const TOOLS: [string, string][] = [['heading', 'H'], ['bold', 'B'], ['italic', '
 // A note can have topics (ADR-0035): the row under the editor's tools shows them and opens a sheet
 // to change them; a computer's AI also sorts notes into topics by itself. The chips above the list
 // show one topic's notes, and on the canvas each topic is a hub with its notes around it.
+// The search box finds notes with every word typed, in their text or topics, in any order and
+// ignoring accents (lib/search.ts, desktop's rules): the list shows the line that matched with the
+// words marked, and the canvas lights up the notes that match.
 export default function Notes ({ visible, onClose, apps, onVaultChange, space, spaceName, onOpenDevices, onOpenUrl, openNoteId }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
@@ -70,6 +76,8 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
   const [noVault, setNoVault] = useState(false)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
+  // How far the keyboard covers the list, so its last notes can still scroll into view.
+  const [keyboard, setKeyboard] = useState(0)
   const [editorOpen, setEditorOpen] = useState(false)
   const [status, setStatus] = useState('')
   const [banner, setBanner] = useState<string | null>(null)
@@ -379,9 +387,10 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
   // Every topic the notes use, most used first (shared/note-topics.mjs noteTopicCounts).
   const topicList = useMemo(() => topicCounts(notes || []), [notes])
   const topicKey = topic && topicList.some((x) => x.topic.toLowerCase() === topic.toLowerCase()) ? topic.toLowerCase() : null
-  const q = query.trim().toLowerCase()
+  const words = useMemo(() => queryWords(query), [query])
+  const q = words.length > 0
   const shown = (notes || []).filter((n) =>
-    (!q || n.body.toLowerCase().includes(q) || (n.topics || []).some((x) => x.toLowerCase().includes(q))) &&
+    matchesWords([n.body, ...(n.topics || [])].join('\n'), words) &&
     (!topicKey || (n.topics || []).some((x) => x.toLowerCase() === topicKey)))
   const openNote = openId ? (notes || []).find((n) => n.id === openId) || null : null
 
@@ -513,18 +522,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
             ) : view === 'canvas' ? (
               <View style={s.root}>
                 <View style={s.canvasSearch}>
-                  <View style={[s.toolRow, s.toolRowFlat]}>
-                    <Icon name='search' size={14} color={t.textMuted} />
-                    <TextInput
-                      style={s.search}
-                      value={query}
-                      onChangeText={setQuery}
-                      placeholder='Search notes'
-                      placeholderTextColor={t.textMuted}
-                      autoCorrect={false}
-                      clearButtonMode='while-editing'
-                    />
-                  </View>
+                  <SearchField value={query} onChangeText={setQuery} placeholder='Search notes' onSubmit={() => canvasRef.current?.fit()} />
                 </View>
                 {notes.length === 0 ? (
                   <Text style={[s.empty, s.page]}>No notes yet. Tap New note to write one. Your notes and the links between them show here.</Text>
@@ -573,19 +571,8 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
                 ) : null}
               </View>
             ) : (
-              <ScrollView contentContainerStyle={s.page} keyboardShouldPersistTaps='handled'>
-                <View style={s.toolRow}>
-                  <Icon name='search' size={14} color={t.textMuted} />
-                  <TextInput
-                    style={s.search}
-                    value={query}
-                    onChangeText={setQuery}
-                    placeholder='Search notes'
-                    placeholderTextColor={t.textMuted}
-                    autoCorrect={false}
-                    clearButtonMode='while-editing'
-                  />
-                </View>
+              <ScrollView contentContainerStyle={[s.page, keyboard > insets.bottom && { paddingBottom: 96 + keyboard - insets.bottom }]} keyboardShouldPersistTaps='handled'>
+                <SearchField value={query} onChangeText={setQuery} placeholder='Search notes' style={s.searchField} />
                 {topicList.length > 0 && (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chips} contentContainerStyle={s.chipsContent}>
                     <Chip s={s} label='All' active={!topicKey} onPress={() => setTopic(null)} />
@@ -604,16 +591,16 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
                     <ListSection key={sec.title || 'all'} title={sec.title || undefined}>
                         {sec.notes.map((n, i) => (
                           <Pressable key={n.id} style={[s.row, i > 0 && s.rowDivider]} android_ripple={{ color: t.ripple }} onPress={() => openFromList(n)}>
-                            <Text numberOfLines={1} style={s.rowTitle}>{n.title}</Text>
-                            <Text numberOfLines={1} style={s.rowSub}>
+                            <Text numberOfLines={1} style={s.rowTitle}><Marked text={n.title} words={words} /></Text>
+                            <Text numberOfLines={q ? 2 : 1} style={s.rowSub}>
                               <Text style={s.rowDate}>{relativeDate(n.updatedAt)}</Text>
-                              {n.snippet ? `  ${n.snippet}` : ''}
+                              <Marked text={(() => { const line = matchSnippet(n.body, words) || n.snippet; return line ? `  ${line}` : '' })()} words={words} />
                             </Text>
                             {(n.topics || []).length > 0 && (
                               <View style={[s.topicRow, s.rowTopics]}>
                                 {(n.topics || []).map((x) => (
                                   <TouchableOpacity key={x} style={s.topic} onPress={() => setTopic(x)} hitSlop={4}>
-                                    <Text numberOfLines={1} style={s.topicText}>{x}</Text>
+                                    <Text numberOfLines={1} style={s.topicText}><Marked text={x} words={words} /></Text>
                                   </TouchableOpacity>
                                 ))}
                               </View>
@@ -625,8 +612,10 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
                 )}
               </ScrollView>
             )}
-            {/* Material's extended floating action button: the one thing this page is for. */}
-            {notes && !noVault && !error && !selected && !selectedTopic ? (
+            {/* Material's extended floating action button: the one thing this page is for. Out of
+                the way while the keyboard is up (a search). */}
+            <KeyboardInset onChange={setKeyboard} />
+            {notes && !noVault && !error && !selected && !selectedTopic && !keyboard ? (
               <Pressable
                 // Absolute, so the SafeAreaView's padding doesn't lift it: add the inset itself.
                 style={[s.fab, { bottom: 16 + insets.bottom }, !writable && s.fabOff]}
@@ -713,21 +702,8 @@ function makeStyles (t: Theme) {
     web: { flex: 1, backgroundColor: t.surface },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     page: { padding: 16, paddingBottom: 96 },
-    toolRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      marginBottom: 16,
-      height: 44,
-      paddingHorizontal: 14,
-      borderRadius: radius.pill,
-      backgroundColor: t.inputBg,
-      borderWidth: 1,
-      borderColor: t.border
-    },
-    search: { flex: 1, color: t.text, fontSize: 15, padding: 0 },
     canvasSearch: { paddingHorizontal: 16, paddingBottom: 8 },
-    toolRowFlat: { marginBottom: 0 },
+    searchField: { marginBottom: 16 },
     // The note picked on the canvas, over its bottom edge.
     picked: {
       flexDirection: 'row',

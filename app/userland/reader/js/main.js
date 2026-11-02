@@ -21,6 +21,9 @@
 //   app-stdlib's canvas, like nomad://notes): saved articles gathered around their topics, posts
 //   around their feed. Picking a topic or feed on the left lights it up there. Clicking an article
 //   reads it, a post opens it, a topic or feed shows its list. The last choice is remembered.
+// - The search box in the header narrows the list to what has every word typed, in its title,
+//   summary, site, feed or topics, and lights it up on the canvas (app-stdlib/js/search-match.js,
+//   the same rules as nomad://notes and the phone). Under All posts it looks in saved articles too.
 //
 // Vanilla JS (served as-is, no bundle), styled with the app-stdlib tokens like nomad://search.
 
@@ -42,6 +45,7 @@ const state = {
   readSet: new Set(),
   writable: true, // false while a Device that just joined waits for the Vault
   linked: false, // another Device shares the Vault
+  query: '', // what's typed in the search box
 };
 
 let pendingRead = new Set() // marked read here since the last save
@@ -54,6 +58,8 @@ let graphPane = null // kept across renders, so the canvas keeps its place
 let graphInfo = null
 let graphHint = null
 let saveReadTimer = null
+let search = null // app-stdlib/js/search-match.js, imported at start
+let searchInput = null // made once, so typing in it survives each render
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
@@ -69,7 +75,7 @@ init().catch((err) => {
 })
 
 async function init() {
-  await loadState()
+  ;[search] = await Promise.all([import('nomad://app-stdlib/js/search-match.js'), loadState()])
 
   // Deep-link: nomad://reader/?subscribe=<feed url> (used by the chrome Subscribe action).
   const sub = new URLSearchParams(location.search).get('subscribe')
@@ -93,6 +99,12 @@ async function init() {
   })
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && state.reading) closeReading()
+    // "/" goes to the search box, as on many sites, unless you're typing somewhere.
+    if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !state.reading && !e.target.closest?.('input, textarea, [contenteditable]')) {
+      e.preventDefault()
+      searchInput?.focus()
+      searchInput?.select()
+    }
   })
   window.addEventListener('beforeunload', () => { flushReadState() })
   watchOtherDevices()
@@ -266,6 +278,14 @@ function markAllRead() {
     return
   }
   for (const p of visiblePosts()) markRead(p.url)
+  const articles = searchedArticles().filter((a) => !a.readAt)
+  if (articles.length) {
+    articleAction(async () => {
+      let s
+      for (const a of articles) s = await nomad.vault.readerUpdateArticle(a.id, { read: true })
+      return s || nomad.vault.readerState()
+    })
+  }
   render()
 }
 
@@ -369,8 +389,64 @@ async function openFeed(root) {
 
 // ── Render ───────────────────────────────────────────────────────────────────
 
+// ── Search ───────────────────────────────────────────────────────────────────
+
+// The words searched for, folded (search-match.js); [] when the box is empty.
+function searchWords() {
+  return search && state.query.trim() ? search.queryWords(state.query) : []
+}
+
+const postText = (p) => [p.title, p.summary, p.feedTitle, ...(p.tags || []), ...postTopicsOf(p)].join('\n')
+const articleText = (a) => [a.title, a.site, a.url, a.excerpt, ...(a.topics || [])].join('\n')
+
+function searched(list, text) {
+  const words = searchWords()
+  return words.length ? list.filter((x) => search.matchesWords(text(x), words)) : list
+}
+
+// Under All posts a search looks in saved articles too.
+function searchedArticles() {
+  return state.filter === 'all' && searchWords().length ? searched(state.articles, articleText) : []
+}
+
+// text with the searched words marked.
+function marked(text, words = searchWords()) {
+  if (!words.length || !text) return [text]
+  return search.markPieces(text, words).map((p) => (p.match ? el('mark', {}, [p.text]) : p.text))
+}
+
+function setQuery(q) {
+  state.query = q
+  state.editing = null
+  render()
+  graph?.setQuery(q)
+}
+
+function renderSearch() {
+  if (!searchInput) {
+    searchInput = el('input', {
+      type: 'search',
+      placeholder: 'Search Reader',
+      title: 'Search Reader (/)',
+      'aria-label': 'Search Reader',
+      oninput: (e) => setQuery(e.target.value),
+      onkeydown: (e) => {
+        if (e.key === 'Escape') {
+          searchInput.value = ''
+          setQuery('')
+        } else if (e.key === 'Enter' && view === 'canvas') {
+          graph?.fit() // to what matches
+        }
+      },
+    })
+  }
+  return el('div', { class: 'search-ctrl' }, [icon('search'), searchInput])
+}
+
+// ── Lists ────────────────────────────────────────────────────────────────────
+
 function visiblePosts() {
-  return state.filter === 'all' ? state.posts : state.posts.filter((p) => p.feedUrl === state.filter)
+  return searched(state.filter === 'all' ? state.posts : state.posts.filter((p) => p.feedUrl === state.filter), postText)
 }
 
 // The saved-articles views: the reading log, one topic, or the articles with no topic yet.
@@ -379,6 +455,10 @@ function isArticleView() {
 }
 
 function visibleArticles() {
+  return searched(filteredArticles(), articleText)
+}
+
+function filteredArticles() {
   if (state.filter === 'saved') return state.articles
   if (state.filter === 'untagged') return state.articles.filter((a) => !(a.topics || []).length)
   if (state.filter.startsWith('topic:')) {
@@ -392,7 +472,7 @@ function visibleArticles() {
 function visibleTopicPosts() {
   if (!state.filter.startsWith('topic:')) return []
   const k = state.filter.slice(6).toLowerCase()
-  return state.posts.filter((p) => postTopicsOf(p).some((t) => t.toLowerCase() === k))
+  return searched(state.posts.filter((p) => postTopicsOf(p).some((t) => t.toLowerCase() === k)), postText)
 }
 
 const postTopicsOf = (p) => state.postTopics.get(p.url)?.topics || []
@@ -458,11 +538,17 @@ function render() {
   const scroll = app.querySelector('main')?.scrollTop || 0
   const active = document.activeElement
   const typing = active?.matches('.add-feed input') ? '.add-feed input' : active?.matches('.topic-edit input') ? '.topic-edit input' : null
+  // The search box is the same element each time; moving it drops focus, so give it back.
+  const inSearch = active && active === searchInput ? [searchInput.selectionStart, searchInput.selectionEnd] : null
   const canvas = view === 'canvas'
   app.replaceChildren(renderHeader(), el('div', { class: 'layout' }, [renderSidebar(), canvas ? renderCanvasPane() : renderMain()]))
   if (!canvas) app.querySelector('main').scrollTop = scroll
   showCanvas(canvas)
   if (typing) app.querySelector(typing)?.focus() // feeds finishing loading mustn't steal it
+  if (inSearch) {
+    searchInput.focus()
+    searchInput.setSelectionRange(inSearch[0], inSearch[1])
+  }
   if (state.flash) {
     app.querySelector(`[data-id="${state.flash}"]`)?.scrollIntoView({ block: 'nearest' })
     state.flash = null
@@ -472,9 +558,12 @@ function render() {
 function renderHeader() {
   const articles = isArticleView()
   // A topic lists feed posts too, under its saved articles.
-  const unread = articles ? unreadArticles(visibleArticles()) + unreadCount(visibleTopicPosts()) : unreadCount(visiblePosts())
+  const unread = articles
+    ? unreadArticles(visibleArticles()) + unreadCount(visibleTopicPosts())
+    : unreadCount(visiblePosts()) + unreadArticles(searchedArticles())
   return el('header', {}, [
     el('div', { class: 'brand' }, [el('img', { src: 'asset:favicon:nomad://reader/', alt: '' }), 'Reader']),
+    renderSearch(),
     el('div', { class: 'status' }, [!articles && state.loading ? 'Refreshing…' : `${unread} unread`]),
     el('div', { class: 'header-actions' }, [
       el('div', { class: 'view-switch', role: 'group', 'aria-label': 'View' }, [
@@ -657,7 +746,7 @@ async function showCanvas(on) {
       graphLib = { createGraphView: viewMod.createGraphView, readerGraph: graphMod.readerGraph, readerTexts: graphMod.readerTexts }
     }
     if (graph || view !== 'canvas' || state.reading) return renderGraph()
-    graph = graphLib.createGraphView({ parent: graphPane, onOpen: openFromCanvas, label: 'Articles by topic, and feeds' })
+    graph = graphLib.createGraphView({ parent: graphPane, onOpen: openFromCanvas, onMatches: renderGraphInfo, label: 'Articles by topic, and feeds' })
     renderGraph()
     graph.select(canvasIdFor(state.filter))
   }
@@ -668,11 +757,12 @@ async function showCanvas(on) {
 function renderGraph() {
   if (!graph || view !== 'canvas') return
   const data = { articles: state.articles, posts: state.posts, read: state.readSet }
-  graph.update(graphLib.readerGraph(data), { texts: graphLib.readerTexts(data) })
+  graph.update(graphLib.readerGraph(data), { texts: graphLib.readerTexts(data), query: state.query })
   const topicCount = topics().length
   const parts = [plural(state.articles.length, 'article'), plural(topicCount, 'topic')]
   if (state.feeds.length) parts.push(plural(state.feeds.length, 'feed'))
-  graphInfo.textContent = parts.join(' · ')
+  graphCounts = parts.join(' · ')
+  renderGraphInfo()
   if (!state.articles.length && !state.posts.length) {
     graphHint.replaceChildren(
       notice('project-diagram', state.loading ? 'Loading…' : 'Nothing here yet', [
@@ -682,6 +772,14 @@ function renderGraph() {
   } else if (state.articles.length && !topicCount) {
     graphHint.replaceChildren(el('p', { class: 'graph-tip' }, [icon('magic'), 'No topics yet. The AI sorts saved pages into topics, or add them from the list.']))
   } else graphHint.replaceChildren()
+}
+
+// The line over the canvas: what it shows, or while searching, how much matches.
+let graphCounts = ''
+function renderGraphInfo() {
+  if (!graphInfo) return
+  const n = graph?.matchCount
+  graphInfo.textContent = n == null || !state.query.trim() ? graphCounts : n ? `${n} ${n === 1 ? 'match' : 'matches'} · Enter to fit them` : 'Nothing matches'
 }
 
 // A click on the canvas: read an article, open a post, or list a topic's articles or a feed's posts.
@@ -787,7 +885,12 @@ function renderMain() {
     return main
   }
   const posts = visiblePosts()
+  const words = searchWords()
 
+  if (words.length) {
+    renderResults(wrap, posts, searchedArticles())
+    return main
+  }
   if (state.loading && !state.posts.length && state.follows.length) {
     wrap.append(el('div', { class: 'status-msg' }, ['Loading feeds…']))
   } else if (!state.follows.length) {
@@ -812,6 +915,28 @@ function renderMain() {
     )
   }
   return main
+}
+
+// A search in a feed, or under All posts (with the saved articles that match), newest first.
+function renderResults(wrap, posts, articles) {
+  const feed = state.filter === 'all' ? null : state.feeds.find((f) => f.url === state.filter)
+  const where = feed ? ` in ${feed.title}` : ''
+  if (!posts.length && !articles.length) {
+    wrap.append(
+      notice('search', `Nothing matches “${state.query.trim()}”${where}`, [
+        state.loading ? 'Some feeds are still loading. ' : '',
+        'Search looks for every word in titles, summaries, sites, feeds and topics.',
+      ])
+    )
+    return
+  }
+  const counts = [articles.length ? plural(articles.length, 'saved article') : '', posts.length ? plural(posts.length, 'post') : '']
+  wrap.append(el('div', { class: 'result-count' }, ['Found ' + counts.filter(Boolean).join(' and ') + where]))
+  const items = [
+    ...articles.map((a) => ({ at: a.savedAt || '', node: () => renderArticle(a) })),
+    ...posts.map((p) => ({ at: p.createdAt || '', node: () => renderPost(p) })),
+  ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
+  wrap.append(el('div', { class: 'posts' }, items.map((i) => i.node())))
 }
 
 // ── Saved articles ───────────────────────────────────────────────────────────
@@ -854,7 +979,11 @@ function renderArticles(wrap) {
     )
   }
   if (!list.length && !posts.length) {
-    wrap.append(notice('inbox', 'No articles here', ['Articles you save appear here.']))
+    wrap.append(
+      searchWords().length
+        ? notice('search', `Nothing matches “${state.query.trim()}” in ${heading}`, ['Search looks for every word in titles, summaries, sites and topics.'])
+        : notice('inbox', 'No articles here', ['Articles you save appear here.'])
+    )
     return
   }
   // A topic shows saved articles and feed posts together, newest first.
@@ -873,14 +1002,14 @@ function renderArticle(a) {
     el('span', { class: 'dot', 'aria-label': read ? null : 'Unread' }),
     el('div', { class: 'feed-name' }, [
       siteIcon(a.url),
-      el('span', {}, [a.site || a.url]),
+      el('span', {}, marked(a.site || a.url)),
       el('span', { class: 'sep' }, ['·']),
       el('span', { title: 'Saved ' + new Date(a.savedAt).toLocaleString() }, [formatDate(a.savedAt)]),
       a.words ? el('span', { class: 'sep' }, ['·']) : null,
       a.words ? el('span', {}, [`${minutes(a.words)} min read`]) : null,
     ]),
-    el('a', { class: 'title', href: a.url, onclick: (e) => { e.preventDefault(); openReading(a.id) } }, [a.title]),
-    a.excerpt ? el('div', { class: 'summary' }, [a.excerpt]) : null,
+    el('a', { class: 'title', href: a.url, onclick: (e) => { e.preventDefault(); openReading(a.id) } }, marked(a.title)),
+    a.excerpt ? el('div', { class: 'summary' }, marked(a.excerpt)) : null,
     editing ? renderTopicEditor(subject) : renderTopics(subject),
     el('div', { class: 'row-actions' }, [
       a.feed && !state.follows.includes(a.feed) && state.canFollow
@@ -895,7 +1024,7 @@ function renderArticle(a) {
 
 function renderTopics(a) {
   const chips = (a.topics || []).map((t) =>
-    el('span', { class: 'tag', title: `Show ${t}`, onclick: (e) => { e.stopPropagation(); setFilter('topic:' + t) } }, [t])
+    el('span', { class: 'tag', title: `Show ${t}`, onclick: (e) => { e.stopPropagation(); setFilter('topic:' + t) } }, marked(t))
   )
   if (a.tagging) chips.push(el('span', { class: 'tag pending' }, [icon('circle-notch', 'fa-spin'), ' Finding topics…']))
   return el('div', { class: 'meta topics' }, [
@@ -1129,12 +1258,12 @@ function renderPost(p) {
     el('span', { class: 'dot', 'aria-label': read ? null : 'Unread' }),
     el('div', { class: 'feed-name' }, [
       p.web ? icon('rss', 'site-icon') : null,
-      el('span', {}, [p.feedTitle]),
+      el('span', {}, marked(p.feedTitle)),
       p.createdAt ? el('span', { class: 'sep' }, ['·']) : null,
       p.createdAt ? el('span', {}, [formatDate(p.createdAt)]) : null,
     ]),
-    el('a', { class: 'title', href: p.url, onclick: (e) => { e.preventDefault(); openPost(p) } }, [p.title]),
-    p.summary ? el('div', { class: 'summary' }, [p.summary]) : null,
+    el('a', { class: 'title', href: p.url, onclick: (e) => { e.preventDefault(); openPost(p) } }, marked(p.title)),
+    p.summary ? el('div', { class: 'summary' }, marked(p.summary)) : null,
     // The author's own tags, then the topics.
     p.tags.length ? el('div', { class: 'meta' }, p.tags.map((t) => el('span', { class: 'author-tag' }, ['#' + t]))) : null,
     // A post with no topics yet gets "Add topics" with its other actions, on hover.

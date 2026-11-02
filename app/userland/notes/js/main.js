@@ -30,6 +30,7 @@ import { createNoteEditor } from './editor/index.js';
 import { createGraphView } from '../../app-stdlib/js/graph/view.js';
 import { noteGraph, noteTexts, noteGraphCounts, topicNodeId } from './graph.js';
 import { noteTitle, noteSnippet, makeResolver, linkedIds } from '../../../../shared/vault-apps.mjs';
+import { queryWords, matchesWords, matchSnippet, markPieces } from '../../app-stdlib/js/search-match.js';
 
 const SAVE_DELAY = 700;
 const VIEW_KEY = 'nomad-notes-view';
@@ -416,20 +417,25 @@ function renderShell() {
   searchInput = el('input', {
     type: 'search',
     placeholder: 'Search notes',
+    title: 'Search notes (/)',
     'aria-label': 'Search notes',
-    oninput: (e) => {
-      state.query = e.target.value;
-      renderList();
-      graph?.setQuery(state.query);
-    },
+    oninput: (e) => setQuery(e.target.value),
     onkeydown: (e) => {
       if (e.key === 'Escape') {
         searchInput.value = '';
-        state.query = '';
-        renderList();
-        graph?.setQuery('');
+        setQuery('');
+      } else if (e.key === 'Enter' && view === 'canvas') {
+        graph?.fit(); // to what matches
       }
     },
+  });
+  // "/" goes to the search box, as on many sites, unless you're typing somewhere.
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target.closest?.('input, textarea, [contenteditable], .cm-editor')) return;
+    e.preventDefault();
+    searchInput.focus();
+    searchInput.select();
   });
   newBtn = el('button', { class: 'btn primary', onclick: () => newNote() }, [icon('plus'), ' New note']);
   const switcher = el('div', { class: 'view-switch', role: 'group', 'aria-label': 'View' }, [
@@ -464,6 +470,13 @@ function renderShell() {
   app.append(header, layoutEl);
 }
 
+function setQuery(q) {
+  state.query = q;
+  renderList();
+  graph?.setQuery(q);
+  renderGraphInfo();
+}
+
 function viewButton(v, ic, label) {
   const b = el('button', { class: 'view-btn', title: label, 'aria-pressed': 'false', onclick: () => setView(v) }, [icon(ic), el('span', {}, [label])]);
   viewBtns.set(v, b);
@@ -480,7 +493,7 @@ function applyView() {
   }
   if (canvas) {
     const made = !graph;
-    if (!graph) graph = createGraphView({ parent: graphPane, onOpen: openFromCanvas, label: 'Notes, their links and their topics' });
+    if (!graph) graph = createGraphView({ parent: graphPane, onOpen: openFromCanvas, onMatches: renderGraphInfo, label: 'Notes, their links and their topics' });
     renderGraph();
     graph.setVisible(true);
     // The topic the list showed lights up on the canvas.
@@ -505,7 +518,8 @@ function renderGraph() {
   const { notes: count, links, topics } = noteGraphCounts(data);
   const parts = [plural(count, 'note'), plural(links, 'link')];
   if (topics) parts.push(plural(topics, 'topic'));
-  graphInfo.textContent = parts.join(' · ');
+  graphCounts = parts.join(' · ');
+  renderGraphInfo();
   graphPane.classList.toggle('has-topics', topics > 0);
   if (!count) {
     const action = state.writable ? el('button', { class: 'btn primary', onclick: () => newNote() }, [icon('plus'), ' New note']) : null;
@@ -513,6 +527,14 @@ function renderGraph() {
   } else if (!links && !topics) {
     graphHint.replaceChildren(el('p', { class: 'graph-tip' }, [icon('link'), 'No links yet. Link notes with [[ and a note’s title, or give them topics.']));
   } else graphHint.replaceChildren();
+}
+
+// The line over the canvas: what it shows, or while searching, how many notes match.
+let graphCounts = '';
+function renderGraphInfo() {
+  if (!graphInfo) return;
+  const n = graph?.matchCount;
+  graphInfo.textContent = n == null || !state.query.trim() ? graphCounts : n ? `${plural(n, 'note')} match · Enter to fit them` : 'No notes match';
 }
 
 // keepEditor: leave the editor as it is (it already shows the right text), refresh the rest.
@@ -525,14 +547,21 @@ function renderAll({ keepEditor = false } = {}) {
   applyView();
 }
 
+// The notes the list shows: the topic's, and those with every searched word in their text or
+// topics (app-stdlib/js/search-match.js, as on the canvas and the phone).
 function visibleNotes() {
-  const q = state.query.trim().toLowerCase();
+  const words = queryWords(state.query);
   const topic = state.topic ? state.topic.toLowerCase() : null;
   return state.notes.filter(
     (n) =>
-      (!q || n.body.toLowerCase().includes(q) || topicsOf(n).some((t) => t.toLowerCase().includes(q))) &&
+      matchesWords([n.body, ...topicsOf(n)].join('\n'), words) &&
       (!topic || topicsOf(n).some((t) => t.toLowerCase() === topic))
   );
+}
+
+// text with the searched words marked.
+function marked(text, words) {
+  return markPieces(text, words).map((p) => (p.match ? el('mark', {}, [p.text]) : p.text));
 }
 
 const topicsOf = (n) => (n && Array.isArray(n.topics) ? n.topics : []);
@@ -612,19 +641,21 @@ function renderList() {
   listEl.replaceChildren(...items);
 }
 
+// While searching, the line under the title is the one that matched, and the words are marked.
 function noteItem(n) {
   const current = draft && draft.id === n.id;
-  const snippet = noteSnippet(n.body);
+  const words = queryWords(state.query);
+  const snippet = matchSnippet(n.body, words) || noteSnippet(n.body);
   return el(
     'button',
     { class: 'note-item' + (current ? ' current' : ''), onclick: () => n.id && openNote(n.id) },
     [
-      el('div', { class: 'title' }, [noteTitle(n.body)]),
+      el('div', { class: 'title' }, marked(noteTitle(n.body), words)),
       el('div', { class: 'sub' }, [
         el('span', { class: 'date' }, [n.updatedAt ? relativeDate(n.updatedAt) : 'Now']),
-        snippet ? el('span', { class: 'snippet' }, [snippet]) : null,
+        snippet ? el('span', { class: 'snippet' }, marked(snippet, words)) : null,
       ]),
-      topicsOf(n).length ? el('div', { class: 'item-topics' }, topicsOf(n).map((t) => el('span', { class: 'tag' }, [t]))) : null,
+      topicsOf(n).length ? el('div', { class: 'item-topics' }, topicsOf(n).map((t) => el('span', { class: 'tag' }, marked(t, words)))) : null,
     ]
   );
 }

@@ -26,6 +26,7 @@ export interface Theme {
   onAccent: string
   ripple: string // Android press ripple on rows and icon buttons
   selection: string // selected text's highlight: see-through, so the text under it stays readable
+  mark: string // a searched word in a result (desktop's <mark> in nomad://notes and nomad://reader)
   backdrop: string // dim behind sheets and dialogs
 }
 
@@ -55,6 +56,7 @@ const light: Theme = {
   onAccent: '#ffffff',
   ripple: 'rgba(0,0,0,0.08)',
   selection: 'rgba(29,89,199,0.25)',
+  mark: 'rgba(250,204,21,0.38)',
   backdrop: 'rgba(0,0,0,0.4)'
 }
 
@@ -78,6 +80,7 @@ const dark: Theme = {
   onAccent: '#ffffff',
   ripple: 'rgba(255,255,255,0.1)',
   selection: 'rgba(93,128,255,0.4)',
+  mark: 'rgba(250,204,21,0.28)',
   backdrop: 'rgba(0,0,0,0.6)'
 }
 

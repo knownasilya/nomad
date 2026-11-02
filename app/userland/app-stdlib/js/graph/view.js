@@ -19,8 +19,14 @@
 // its links. With onSelect (the phone, which has no hover), a tap selects a node instead, lighting up
 // its links until another tap; onSelect(id) is told, onSelect(null) when a tap on the background
 // clears it, and a second tap on the selected node opens it.
+//
+// A search (opts.query, setQuery) fades what doesn't match and lights up what does, titles shown at
+// any zoom. It matches each node's text in opts.texts (its title when missing) the way the lists
+// do (../search-match.js): every word, in any order, ignoring case and accents. matchCount says how
+// many nodes that aren't hubs match; onMatches(count) is told each time that changes.
 
 import { neighborIds, createLayout } from './layout.js';
+import { foldText, queryWords, matchesWords } from '../search-match.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const MIN_SCALE = 0.15;
@@ -40,7 +46,7 @@ export function labelScale(k) {
   return Math.max(MIN_LABEL_ZOOM, Math.sqrt(k)) / k;
 }
 
-export function createGraphView({ parent, onOpen, onSelect = null, label = 'Canvas' }) {
+export function createGraphView({ parent, onOpen, onSelect = null, onMatches = null, label = 'Canvas' }) {
   const svg = svgEl('svg', { class: 'graph-svg', role: 'group', 'aria-label': label });
   const world = svgEl('g', {});
   const linksG = svgEl('g', { class: 'graph-links' });
@@ -57,7 +63,9 @@ export function createGraphView({ parent, onOpen, onSelect = null, label = 'Canv
   let currentId = null;
   let selectedId = null;
   let query = '';
-  let texts = new Map(); // id → lowercased text the search matches; the title when missing
+  let words = []; // the query's words, folded (search-match.js)
+  let texts = new Map(); // id → folded text the search matches; the title when missing
+  let matchCount = null; // nodes that aren't hubs matching the search; null without one
   let hoverId = null;
   let view = { x: 0, y: 0, k: 1 }; // screen = world * k + (x, y)
   let fitted = false; // fit once the first layout has spread out
@@ -70,8 +78,12 @@ export function createGraphView({ parent, onOpen, onSelect = null, label = 'Canv
 
   function update(next, opts = {}) {
     if ('currentId' in opts) currentId = opts.currentId;
-    if ('query' in opts) query = opts.query || '';
-    if (opts.texts) texts = opts.texts instanceof Map ? opts.texts : new Map(Object.entries(opts.texts));
+    if ('query' in opts) setWords(opts.query);
+    if (opts.texts) {
+      // Folded once here, not on every key press.
+      const given = opts.texts instanceof Map ? opts.texts : new Map(Object.entries(opts.texts));
+      texts = new Map([...given].map(([id, t]) => [id, foldText(t)]));
+    }
     const prev = new Map();
     graph.nodes.forEach((n, i) => prev.set(n.id, layout.points[i]));
     // Places kept from before this view was made (the phone keeps them while a note is open).
@@ -107,8 +119,13 @@ export function createGraphView({ parent, onOpen, onSelect = null, label = 'Canv
     return a.source === b.source && a.target === b.target && !!a.both === !!b.both && a.directed === b.directed && a.kind === b.kind;
   }
 
-  function setQuery(q) {
+  function setWords(q) {
     query = q || '';
+    words = queryWords(query);
+  }
+
+  function setQuery(q) {
+    setWords(q);
     paintState();
   }
 
@@ -194,29 +211,40 @@ export function createGraphView({ parent, onOpen, onSelect = null, label = 'Canv
 
   // Classes for the open node, the hovered or selected node and its links, and the search.
   function paintState() {
-    const q = query.trim().toLowerCase();
+    const searching = words.length > 0;
     const focusId = hoverId || selectedId;
     const near = focusId ? neighborIds(graph, focusId) : null;
     const focusIndex = focusId ? graph.nodes.findIndex((n) => n.id === focusId) : -1;
+    const hit = searching ? graph.nodes.map((n) => matches(n)) : null;
+    let count = 0;
     nodeEls.forEach((g, i) => {
       const n = graph.nodes[i];
+      if (hit && hit[i] && !n.hub) count++;
       g.classList.toggle('current', n.id === currentId);
       g.classList.toggle('selected', n.id === selectedId);
       g.classList.toggle('hover', n.id === focusId);
       g.classList.toggle('near', !!near && near.has(n.id));
-      g.classList.toggle('dim', (!!near && n.id !== focusId && !near.has(n.id)) || (!!q && !matches(n, q)));
+      g.classList.toggle('match', !!hit && hit[i]);
+      g.classList.toggle('dim', (!!near && n.id !== focusId && !near.has(n.id)) || (!!hit && !hit[i]));
     });
     linkEls.forEach(({ g }, i) => {
       const l = graph.links[i];
       const on = focusIndex >= 0 && (l.source === focusIndex || l.target === focusIndex);
       g.classList.toggle('hover', on);
-      g.classList.toggle('dim', (focusIndex >= 0 && !on) || !!q);
+      // While searching, a line stays only between two nodes that match.
+      g.classList.toggle('dim', (focusIndex >= 0 && !on) || (!!hit && !(hit[l.source] && hit[l.target])));
     });
     svg.classList.toggle('labels', view.k >= LABEL_SCALE);
+    svg.classList.toggle('searching', searching);
+    const next = searching ? count : null;
+    if (next !== matchCount) {
+      matchCount = next;
+      onMatches?.(matchCount);
+    }
   }
 
-  function matches(n, q) {
-    return (texts.get(n.id) ?? String(n.title || '').toLowerCase()).includes(q);
+  function matches(n) {
+    return matchesWords(texts.get(n.id) ?? foldText(n.title), words, { folded: true });
   }
 
   function setHover(id) {
@@ -251,15 +279,27 @@ export function createGraphView({ parent, onOpen, onSelect = null, label = 'Canv
     svg.classList.toggle('labels', view.k >= LABEL_SCALE);
   }
 
-  // Zoom and pan so every node fits, with a margin. Small graphs aren't blown up past 1.5×.
+  // Zoom and pan so every node fits, with a margin. Small graphs aren't blown up past 1.5×. While
+  // searching, the nodes that match.
   function fit() {
     const rect = svg.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
-    const b = layout.bounds();
+    const b = (words.length && matchBounds()) || layout.bounds();
     const pad = Math.min(60, rect.width / 8);
     const k = clamp(Math.min((rect.width - pad * 2) / (b.width || 1), (rect.height - pad * 2) / (b.height || 1)), MIN_SCALE, 1.5);
     view = { k, x: rect.width / 2 - (b.x + b.width / 2) * k, y: rect.height / 2 - (b.y + b.height / 2) * k };
     applyView();
+  }
+
+  // The box around the nodes that match the search, or null when none does.
+  function matchBounds() {
+    const pts = layout.points.filter((p, i) => graph.nodes[i] && matches(graph.nodes[i]));
+    if (!pts.length) return null;
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
   }
 
   function zoomBy(factor, cx, cy) {
@@ -451,6 +491,10 @@ export function createGraphView({ parent, onOpen, onSelect = null, label = 'Canv
     },
     get count() {
       return { nodes: graph.nodes.length, links: graph.links.length };
+    },
+    // How many nodes that aren't hubs match the search; null without one.
+    get matchCount() {
+      return matchCount;
     },
     destroy() {
       stop();
