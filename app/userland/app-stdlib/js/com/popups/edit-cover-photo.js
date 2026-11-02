@@ -75,6 +75,7 @@ export class NomadEditCoverPhoto extends BasePopup {
         <div class="controls">
           <img
             id="cover-img"
+            title="Choose a file"
             @click=${this.onClickThumb}
             src="${this.currentImgUrl}"
           />

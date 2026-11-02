@@ -188,7 +188,7 @@ class HypercoreToolsApp extends LitElement {
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div id="hover-el"></div>
-      <span id="close-btn" @click=${window.close}
+      <span id="close-btn" title="Close" role="button" @click=${window.close}
         ><span class="fas fa-times"></span
       ></span>
       <nav>
@@ -204,7 +204,7 @@ class HypercoreToolsApp extends LitElement {
                       <div class="drives-list-header">
                         <div class="key">Key</div>
                         <nav>
-                          <a @click=${this.onClickDeselectDrive}>&times;</a>
+                          <a title="Close this drive" @click=${this.onClickDeselectDrive}>&times;</a>
                           ${driveNavItem('cores', 'Cores')}
                           ${driveNavItem('files', 'Files')}
                         </nav>

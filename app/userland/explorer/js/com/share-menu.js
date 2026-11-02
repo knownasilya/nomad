@@ -18,7 +18,7 @@ export function create({ x, y, targetLabel, url }) {
           <p>Anybody with this link can view the ${targetLabel}</p>
           <p>
             <input type="text" value=${url} />
-            <a @click=${onClickCopy}><span class="fas fa-paste"></span></a>
+            <a title="Copy link" aria-label="Copy link" @click=${onClickCopy}><span class="fas fa-paste"></span></a>
           </p>
         </div>
         <style>

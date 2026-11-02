@@ -559,6 +559,12 @@ Every new or changed screen must work in light **and** dark, and look like its n
   with hairline borders, ripple rows of at least 48dp), `Tabs`, `ActionSheet` for menus and
   long-press actions, and `Icon`/`IconButton` (Font Awesome 5, desktop's icon set). Never use a text
   glyph (☰ ✕ ⌂) as an icon. `Library.tsx` is the worked example.
+- **Icon-only buttons always get a tooltip.** Desktop: a `title="…"` on any button, link or
+  clickable element that shows only an icon (or a `data-tooltip` plus an `aria-label`). Phone: use
+  `IconButton`, whose required `label` is read by TalkBack and shown on touch and hold; a
+  hand-built icon-only Pressable needs `accessibilityLabel` and `onLongPress={() => showLabel(…)}`
+  (`mobile/lib/tooltip.ts`). `scripts/check-icon-buttons.mjs` (`npm run check:icons`, and
+  `tests/unit/icon-button-labels.test.js`) fails on one that doesn't.
 - Check both schemes before calling UI work done.
 
 ## Drive templates live in `nomad.dev`

@@ -381,7 +381,7 @@ export class HistoryApp extends LitElement {
         />
         ${this.query
           ? html`
-              <span @click=${this.onClearQuery} class="close-btn">
+              <span @click=${this.onClearQuery} class="close-btn" title="Clear search" role="button">
                 <span class="fas fa-fw fa-times"></span>
               </span>
             `

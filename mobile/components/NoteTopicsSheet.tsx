@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
+import { showLabel } from '../lib/tooltip'
 import BottomSheet from './BottomSheet'
 import Icon from './Icon'
 
@@ -39,7 +40,7 @@ export default function NoteTopicsSheet ({ visible, onClose, topics, byAi, known
           <View key={topic} style={s.topic}>
             <Text style={s.topicText} numberOfLines={1}>{topic}</Text>
             {editable ? (
-              <TouchableOpacity onPress={() => onChange(topics.filter((x) => x !== topic))} hitSlop={10} accessibilityLabel={`Remove ${topic}`}>
+              <TouchableOpacity onPress={() => onChange(topics.filter((x) => x !== topic))} onLongPress={() => showLabel(`Remove ${topic}`)} hitSlop={10} accessibilityRole='button' accessibilityLabel={`Remove ${topic}`}>
                 <Icon name='times' size={11} color={t.trustText} />
               </TouchableOpacity>
             ) : null}

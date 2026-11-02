@@ -212,7 +212,7 @@ class ShellWindowPanes extends LitElement {
         STATUS_BAR_HEIGHT}px; width: ${pane.bounds.width}px; height: ${STATUS_BAR_HEIGHT}px"
       >
         ${pane.isActive && hasMultiple ? html`<span class="fas fa-circle indicator"></span>` : ''}
-        <button @click=${(e) => this.onClickPaneMenu(e, pane)}>
+        <button title="Pane menu" @click=${(e) => this.onClickPaneMenu(e, pane)}>
           <span class="fa fa-bars"></span>
         </button>
         <span class="status"> ${pane.status || pane.title} </span>
@@ -220,6 +220,7 @@ class ShellWindowPanes extends LitElement {
           ? html`
               <button
                 class="attachment"
+                title="Attach to another pane"
                 @click=${(e) => this.onClickAttachMenu(e, pane)}
                 @mouseover=${(e) => this.onMouseoverAttachMenu(e, pane)}
                 @mouseleave=${(e) => this.onMouseleaveAttachMenu(e, pane)}

@@ -65,7 +65,7 @@ class RequestedPerms extends LitElement {
           <option value="1" ?selected=${value}>Allow</option>
           <option value="0" ?selected=${!value}>Deny</option>
         </select>
-        <a href="#" @click=${(e) => this.onClearPerm(e, perm)}
+        <a href="#" title="Forget this permission" @click=${(e) => this.onClearPerm(e, perm)}
           ><span class="fas fa-fw fa-times"></span
         ></a>
       </div>

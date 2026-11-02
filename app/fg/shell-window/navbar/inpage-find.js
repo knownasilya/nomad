@@ -33,13 +33,15 @@ class NavbarInpageFind extends LitElement {
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="input-container">
         <input type="text" placeholder="Find in page" @keyup=${this.onKeyup} autofocus />
-        <button @click=${this.onClickPrev}>
+        <button title="Previous match" @click=${this.onClickPrev}>
           <i class="fas fa-angle-up"></i>
         </button>
-        <button @click=${this.onClickNext}>
+        <button title="Next match" @click=${this.onClickNext}>
           <i class="fas fa-angle-down"></i>
         </button>
-        <button @click=${this.onClickStop}><i class="fas fa-times"></i></button>
+        <button title="Close find bar" @click=${this.onClickStop}>
+          <i class="fas fa-times"></i>
+        </button>
         <div class="stats">${this.activeMatch} / ${this.numMatches}</div>
       </div>
     `;

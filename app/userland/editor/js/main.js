@@ -827,6 +827,7 @@ class EditorApp extends LitElement {
       <div class="toolbar">
         <button
           class="transparent"
+          title=${this.isFilesOpen ? 'Hide files' : 'Show files'}
           @click=${this.onToggleFilesOpen}
           ?disabled=${this.isUnloaded}
         >
@@ -940,7 +941,7 @@ class EditorApp extends LitElement {
         <span class="spacer"></span>
         ${this.attachedPane
           ? html`
-              <button @click=${window.close}>
+              <button title="Close" @click=${window.close}>
                 <span class="fas fa-times"></span>
               </button>
             `

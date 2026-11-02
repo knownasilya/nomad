@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { AiChatHandlers, AiChatHandle } from '../lib/useBackend'
 import { pickImages } from '../lib/pickImages'
+import { showLabel } from '../lib/tooltip'
 import { applyToolEvent, finishSteps as finishedSteps, type Step } from '../lib/aiSteps'
 import { applySteer, mergeUserTurns, newSteerId, type Queued } from '../lib/aiSteer'
 import Markdown from './Markdown'
@@ -599,6 +600,9 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
                     style={s.attachRemove}
                     hitSlop={8}
                     onPress={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+                    onLongPress={() => showLabel('Remove photo')}
+                    accessibilityRole='button'
+                    accessibilityLabel='Remove photo'
                   >
                     <Icon name='times' size={10} color='#fff' />
                   </TouchableOpacity>
@@ -631,7 +635,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
               onSubmitEditing={send}
             />
             {busy && (
-              <TouchableOpacity style={[s.sendBtn, s.stopBtn]} onPress={stop} accessibilityRole='button' accessibilityLabel='Stop'>
+              <TouchableOpacity style={[s.sendBtn, s.stopBtn]} onPress={stop} onLongPress={() => showLabel('Stop')} accessibilityRole='button' accessibilityLabel='Stop'>
                 <Icon name='stop' size={14} color={t.onAccent} />
               </TouchableOpacity>
             )}
@@ -639,6 +643,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
               <TouchableOpacity
                 style={[s.sendBtn, !canSend && s.sendDisabled]}
                 onPress={send}
+                onLongPress={() => showLabel(busy ? 'Send now' : 'Send')}
                 disabled={!canSend}
                 accessibilityRole='button'
                 accessibilityLabel={busy ? 'Send now; the AI reads it at its next step' : 'Send'}

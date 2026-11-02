@@ -190,7 +190,7 @@ class ShellWindowNavbar extends LitElement {
   get reloadBtn() {
     if (this.isLoading) {
       return html`
-        <button @click=${this.onClickStop} style="margin: 0px 2px" title="Refresh">
+        <button @click=${this.onClickStop} style="margin: 0px 2px" title="Stop loading">
           <svg
             class="icon close"
             width="12"
@@ -215,7 +215,7 @@ class ShellWindowNavbar extends LitElement {
       `;
     }
     return html`
-      <button @click=${this.onClickReload} style="margin: 0px 2px">
+      <button @click=${this.onClickReload} style="margin: 0px 2px" title="Reload">
         <svg
           class="icon refresh"
           width="16"
@@ -264,7 +264,12 @@ class ShellWindowNavbar extends LitElement {
       return html``;
     }
     return html`
-      <button class="watchlist-btn" @click=${this.onClickWatchlistBtn} style="margin: 0px 2px">
+      <button
+        class="watchlist-btn"
+        title="Watchlist updates"
+        @click=${this.onClickWatchlistBtn}
+        style="margin: 0px 2px"
+      >
         <span class="fas fa-eye"></span>
         <span class="badge">${this.numWatchlistNotifications}</span>
       </button>
@@ -276,6 +281,7 @@ class ShellWindowNavbar extends LitElement {
     return html`
       <button
         class="daemon-inactive-btn"
+        title="Hyperdrive networking isn't running. Open Settings to restart it"
         @click=${this.onClickDaemonInactiveBtn}
         style="margin: 0px 2px"
       >
@@ -305,7 +311,12 @@ class ShellWindowNavbar extends LitElement {
       pressed: this.isBrowserMenuOpen,
     });
     return html`
-      <button class=${cls} @click=${this.onClickBrowserMenu} style="margin: 0px 2px">
+      <button
+        class=${cls}
+        title=${this.isUpdateAvailable ? 'Menu (an update is ready)' : 'Menu'}
+        @click=${this.onClickBrowserMenu}
+        style="margin: 0px 2px"
+      >
         ${this.isUpdateAvailable
           ? html`<span class="fas fa-arrow-alt-circle-up"></span>`
           : html`<span class="fa fa-bars"></span>`}

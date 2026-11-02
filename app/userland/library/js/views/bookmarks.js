@@ -137,7 +137,7 @@ export class BookmarksView extends LitElement {
         <div class="title">${title || html`<em>Untitled</em>`}</div>
         <div class="href">${isCard ? domain : href}</div>
         <div class="ctrls">
-          <button @click=${(e) => this.onClickBookmarkMenuBtn(e, bookmark)}>
+          <button title="More" @click=${(e) => this.onClickBookmarkMenuBtn(e, bookmark)}>
             <span class="fas fa-fw fa-ellipsis-h"></span>
           </button>
         </div>

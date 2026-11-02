@@ -646,7 +646,7 @@ export class ExplorerApp extends LitElement {
         </button>
         ${this.attachedPane
           ? html`
-              <button class="transparent" @click=${window.close}>
+              <button class="transparent" title="Close" @click=${window.close}>
                 <span class="fas fa-times"></span>
               </button>
             `

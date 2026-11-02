@@ -131,7 +131,11 @@ class LogSettingsView extends LitElement {
     };
     return html` <div class="controls">
       <div class="standard-controls">
-        <button class="btn transparent" @click=${this.onToggleControlsExpanded}>
+        <button
+          class="btn transparent"
+          title=${this.isControlsExpanded ? 'Hide custom filters' : 'Show custom filters'}
+          @click=${this.onToggleControlsExpanded}
+        >
           <i
             class="fas fa-${this.isControlsExpanded
               ? 'angle-down'
@@ -184,6 +188,7 @@ class LogSettingsView extends LitElement {
                 </select>
                 <button
                   class="btn transparent"
+                  title="Remove filter"
                   @click=${() => this.onRemoveCustomRule(rule)}
                 >
                   <i class="fa fa-times"></i>

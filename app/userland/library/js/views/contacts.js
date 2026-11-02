@@ -140,7 +140,7 @@ export class ContactsView extends LitElement {
             : ''}
         </div>
         <div class="ctrls">
-          <button @click=${(e) => this.onClickContactMenuBtn(e, contact)}>
+          <button title="More" @click=${(e) => this.onClickContactMenuBtn(e, contact)}>
             <span class="fas fa-fw fa-ellipsis-h"></span>
           </button>
         </div>
