@@ -82,18 +82,30 @@ class PersonaLoginModal extends LitElement {
         <div class="body">
           ${this.renderSite()}
           <div class="as-label">will see you as</div>
-          ${this.making ? this.renderMake() : this.choosing ? this.renderChoices() : this.renderPicked()}
+          ${this.making
+            ? this.renderMake()
+            : this.choosing
+              ? this.renderChoices()
+              : this.renderPicked()}
           ${this.renderPerms()}
           ${this.space
             ? html`<div class="space-note">
                 <span class="dot" style="background:${this.space.color}"></span>
-                In your ${this.space.name} space.${this.personas.length ? ' Using another Persona here switches this space to it.' : ''}
+                In your ${this.space.name}
+                space.${this.personas.length
+                  ? ' Using another Persona here switches this space to it.'
+                  : ''}
               </div>`
             : ''}
         </div>
         <div class="actions">
           <button type="button" class="deny" @click=${this.onDeny}>Don’t allow</button>
-          <button type="button" class="allow primary" ?disabled=${!this.canAllow} @click=${this.onAllow}>
+          <button
+            type="button"
+            class="allow primary"
+            ?disabled=${!this.canAllow}
+            @click=${this.onAllow}
+          >
             ${this.making ? 'Make Persona and log in' : 'Log in'}
           </button>
         </div>
@@ -109,8 +121,13 @@ class PersonaLoginModal extends LitElement {
         <div class="party site">
           <img class="icon" src=${s.icon} alt="" @error=${hideImg} />
           <div class="who">
-            <div class="name" title=${s.title || 'Untitled drive'}>${s.title || 'Untitled drive'}</div>
-            <div class="sub"><span class="fas fa-fw fa-folder"></span> <code title=${`hyper://${s.key}/`}>hyper://${short}/</code></div>
+            <div class="name" title=${s.title || 'Untitled drive'}>
+              ${s.title || 'Untitled drive'}
+            </div>
+            <div class="sub">
+              <span class="fas fa-fw fa-folder"></span>
+              <code title=${`hyper://${s.key}/`}>hyper://${short}/</code>
+            </div>
           </div>
         </div>
       `;
@@ -133,7 +150,9 @@ class PersonaLoginModal extends LitElement {
   renderAvatar(p, cls = '') {
     return p.thumbUrl
       ? html`<img class="avatar ${cls}" src=${p.thumbUrl} alt="" @error=${hideImg} />`
-      : html`<span class="avatar initial ${cls}">${(p.title || p.label || '?').slice(0, 1).toUpperCase()}</span>`;
+      : html`<span class="avatar initial ${cls}"
+          >${(p.title || p.label || '?').slice(0, 1).toUpperCase()}</span
+        >`;
   }
 
   renderPicked() {
@@ -145,7 +164,9 @@ class PersonaLoginModal extends LitElement {
           <div class="name">${p.title || p.label}</div>
           <div class="sub">Your Persona “${p.label}”</div>
         </div>
-        <a class="change" href="#" @click=${this.onChange}>${this.personas.length > 1 ? 'Change' : 'New'}</a>
+        <a class="change" href="#" @click=${this.onChange}
+          >${this.personas.length > 1 ? 'Change' : 'New'}</a
+        >
       </div>
     `;
   }
@@ -172,7 +193,9 @@ class PersonaLoginModal extends LitElement {
             </label>
           `;
         })}
-        <a class="make-link" href="#" @click=${this.onStartMake}><span class="fas fa-plus"></span> Make a new Persona</a>
+        <a class="make-link" href="#" @click=${this.onStartMake}
+          ><span class="fas fa-plus"></span> Make a new Persona</a
+        >
       </div>
     `;
   }
@@ -182,7 +205,10 @@ class PersonaLoginModal extends LitElement {
       <div class="make">
         ${this.personas.length
           ? ''
-          : html`<p class="hint">You don’t have a Persona yet. Make one now: it’s a profile drive of your own, kept on your devices.</p>`}
+          : html`<p class="hint">
+              You don’t have a Persona yet. Make one now: it’s a profile drive of your own, kept on
+              your devices.
+            </p>`}
         <label>
           <span>Your name, as sites see it</span>
           <input
@@ -206,9 +232,13 @@ class PersonaLoginModal extends LitElement {
           />
         </label>
         ${!this.vaultReady
-          ? html`<p class="hint warn">This device hasn’t finished syncing your Vault. Wait for it before making a Persona.</p>`
+          ? html`<p class="hint warn">
+              This device hasn’t finished syncing your Vault. Wait for it before making a Persona.
+            </p>`
           : ''}
-        ${this.personas.length ? html`<a href="#" @click=${this.onCancelMake}>Use an existing Persona</a>` : ''}
+        ${this.personas.length
+          ? html`<a href="#" @click=${this.onCancelMake}>Use an existing Persona</a>`
+          : ''}
       </div>
     `;
   }
@@ -226,8 +256,21 @@ class PersonaLoginModal extends LitElement {
         ${this.perms.includes('profile')
           ? html`<li>
               <label>
-                <input type="checkbox" .checked=${profileOn} @change=${(e) => this.toggle('profile', e.target.checked)} />
-                <span>${renderPermDesc({ html, bg: null, url: '', permId: 'profile', permParam: '', permOpts: { title } })}</span>
+                <input
+                  type="checkbox"
+                  .checked=${profileOn}
+                  @change=${(e) => this.toggle('profile', e.target.checked)}
+                />
+                <span
+                  >${renderPermDesc({
+                    html,
+                    bg: null,
+                    url: '',
+                    permId: 'profile',
+                    permParam: '',
+                    permOpts: { title },
+                  })}</span
+                >
               </label>
             </li>`
           : ''}
@@ -254,7 +297,9 @@ class PersonaLoginModal extends LitElement {
   }
 
   toggle(perm, on) {
-    this.checked = on ? [...new Set([...this.checked, perm])] : this.checked.filter((p) => p !== perm);
+    this.checked = on
+      ? [...new Set([...this.checked, perm])]
+      : this.checked.filter((p) => p !== perm);
   }
 
   // events
@@ -289,10 +334,16 @@ class PersonaLoginModal extends LitElement {
 
   onAllow() {
     if (!this.canAllow) return;
-    const perms = this.checked.includes('profile') ? this.checked : this.checked.filter((p) => p !== 'modifyDrive');
+    const perms = this.checked.includes('profile')
+      ? this.checked
+      : this.checked.filter((p) => p !== 'modifyDrive');
     if (this.making) {
       const title = this.newTitle.trim();
-      this.cbs.resolve({ allow: true, create: { title, label: this.newLabel.trim() || 'Me' }, perms });
+      this.cbs.resolve({
+        allow: true,
+        create: { title, label: this.newLabel.trim() || 'Me' },
+        perms,
+      });
     } else {
       this.cbs.resolve({ allow: true, personaId: this.picked.id, perms });
     }

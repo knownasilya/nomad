@@ -54,7 +54,13 @@ async function siteIdentity(url, origin) {
   const key = P.driveKeyOf(`${origin}/`);
   if (!key) {
     const u = new URL(url);
-    return { kind: 'web', host: u.host, secure: u.protocol === 'https:', origin, icon: `asset:favicon:${origin}/` };
+    return {
+      kind: 'web',
+      host: u.host,
+      secure: u.protocol === 'https:',
+      origin,
+      icon: `asset:favicon:${origin}/`,
+    };
   }
   let title = '';
   try {
@@ -66,7 +72,13 @@ async function siteIdentity(url, origin) {
     const info: any = await drives.getDriveInfo(key, { onlyCache: true }).catch(() => null);
     title = String(info?.title || '');
   }
-  return { kind: 'drive', key, title: title.slice(0, 200), origin, icon: `asset:favicon:${origin}/` };
+  return {
+    kind: 'drive',
+    key,
+    title: title.slice(0, 200),
+    origin,
+    icon: `asset:favicon:${origin}/`,
+  };
 }
 
 export default {
@@ -74,7 +86,10 @@ export default {
     const sender = this.sender;
     const url = pageUrl(this);
     const origin = P.sessionOrigin(url);
-    if (!origin) throw new PermissionsError('Only http(s):// sites and hyper:// drives (by key) can ask you to log in');
+    if (!origin)
+      throw new PermissionsError(
+        'Only http(s):// sites and hyper:// drives (by key) can ask you to log in'
+      );
     const o = opts && typeof opts === 'object' ? opts : {};
     // A drive author's mistakes fail at once, before any prompt.
     P.requestedPerms((o.perms ?? []).map?.((p) => String(p).split(':')[0]) ?? o.perms, null);
@@ -91,7 +106,8 @@ export default {
     if (current) {
       const p = personas.get(current.personaId);
       const want = P.requestedPerms(o.perms, P.driveKeyOf(p?.profileUrl));
-      if (want.every((t) => current.perms.includes(t))) return personas.sessionViewFor(url, spaceId);
+      if (want.every((t) => current.perms.includes(t)))
+        return personas.sessionViewFor(url, spaceId);
     }
 
     const choices = await personas.loginChoices(spaceId);
@@ -117,9 +133,11 @@ export default {
     }
 
     let personaId = res.personaId;
-    if (res.create) personaId = (await personas.create({ label: res.create.label, title: res.create.title })).id;
+    if (res.create)
+      personaId = (await personas.create({ label: res.create.label, title: res.create.title })).id;
     const p = personas.get(personaId);
-    if (!p || !personas.isUsable(personaId)) throw new PermissionsError('That Persona can’t log in right now. See My Library → Personas.');
+    if (!p || !personas.isUsable(personaId))
+      throw new PermissionsError('That Persona can’t log in right now. See My Library → Personas.');
     const spaceKey = personas.spaceKeyOf(spaceId);
     if (!spaceKey) throw new Error('This Space isn’t ready yet. Try again in a moment.');
 
@@ -130,7 +148,10 @@ export default {
 
     const key = P.driveKeyOf(p.profileUrl);
     const requested = P.requestedPerms(o.perms, key);
-    const perms = P.grantedPerms(requested, P.requestedPerms(Array.isArray(res.perms) ? res.perms : [], key));
+    const perms = P.grantedPerms(
+      requested,
+      P.requestedPerms(Array.isArray(res.perms) ? res.perms : [], key)
+    );
     await personas.grant({ origin, spaceKey, personaId, perms, maxAge });
     return personas.sessionViewFor(url, spaceId);
   },

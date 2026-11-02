@@ -40,7 +40,11 @@ const FOREIGN = 'f'.repeat(64);
 const bytes = (n, v = 7) => new Uint8Array(n).fill(v);
 
 const persona = (id, label, key = K1, extra = {}) =>
-  makePersona({ id, label, profileUrl: `hyper://${key}/`, creator: key, ...extra }, null, '2026-10-01T00:00:00.000Z');
+  makePersona(
+    { id, label, profileUrl: `hyper://${key}/`, creator: key, ...extra },
+    null,
+    '2026-10-01T00:00:00.000Z'
+  );
 
 describe('paths', () => {
   it('builds and parses Session paths', () => {
@@ -89,29 +93,54 @@ describe('Persona records', () => {
 
   it('makes and updates a Persona', () => {
     const p = persona('abcd1234', 'Work');
-    expect(p).toMatchObject({ type: PERSONA_TYPE, id: 'abcd1234', label: 'Work', profileUrl: `hyper://${K1}/`, creator: K1 });
+    expect(p).toMatchObject({
+      type: PERSONA_TYPE,
+      id: 'abcd1234',
+      label: 'Work',
+      profileUrl: `hyper://${K1}/`,
+      creator: K1,
+    });
     expect(isPersona(p)).toBe(true);
     const q = makePersona({ label: 'Job' }, p, '2026-10-02T00:00:00.000Z');
-    expect(q).toMatchObject({ id: 'abcd1234', label: 'Job', createdAt: p.createdAt, updatedAt: '2026-10-02T00:00:00.000Z', creator: K1 });
+    expect(q).toMatchObject({
+      id: 'abcd1234',
+      label: 'Job',
+      createdAt: p.createdAt,
+      updatedAt: '2026-10-02T00:00:00.000Z',
+      creator: K1,
+    });
   });
 
   it('keeps creator only when it is the Profile Drive’s own key', () => {
-    const p = makePersona({ id: 'abcd1234', label: 'Me', profileUrl: `hyper://${K1}/`, creator: K2 });
+    const p = makePersona({
+      id: 'abcd1234',
+      label: 'Me',
+      profileUrl: `hyper://${K1}/`,
+      creator: K2,
+    });
     expect(p.creator).toBeUndefined();
   });
 
   it('rejects broken records', () => {
     expect(isPersona(null)).toBe(false);
-    expect(isPersona({ type: PERSONA_TYPE, id: 'abcd1234', label: 'x', profileUrl: 'https://x' })).toBe(false);
+    expect(
+      isPersona({ type: PERSONA_TYPE, id: 'abcd1234', label: 'x', profileUrl: 'https://x' })
+    ).toBe(false);
     expect(() => makePersona({ label: 'x', profileUrl: `hyper://${K1}/` })).toThrow(/id/);
   });
 
   it('sorts by label', () => {
-    expect(sortPersonas([persona('bbbbbbbb', 'Work'), persona('aaaaaaaa', 'Me')]).map((p) => p.label)).toEqual(['Me', 'Work']);
+    expect(
+      sortPersonas([persona('bbbbbbbb', 'Work'), persona('aaaaaaaa', 'Me')]).map((p) => p.label)
+    ).toEqual(['Me', 'Work']);
   });
 
   it('makes the default record', () => {
-    expect(makeDefault('abcd1234', 'T')).toEqual({ type: 'nomad/persona-default', personaId: 'abcd1234', updatedAt: 'T' });
+    expect(makeDefault('abcd1234', 'T')).toEqual({
+      type: 'nomad/persona-default',
+      personaId: 'abcd1234',
+      updatedAt: 'T',
+    });
     expect(makeDefault(null, 'T').personaId).toBeNull();
   });
 });
@@ -122,18 +151,26 @@ describe('resolvePersona (ADR-0031 §4)', () => {
   const personas = [work, me];
 
   it('prefers the Space’s own Persona, then the default, then none', () => {
-    expect(resolvePersona({ spaceOverride: 'workwork', defaultId: 'memememe', personas })).toBe(work);
+    expect(resolvePersona({ spaceOverride: 'workwork', defaultId: 'memememe', personas })).toBe(
+      work
+    );
     expect(resolvePersona({ spaceOverride: null, defaultId: 'memememe', personas })).toBe(me);
     expect(resolvePersona({ personas })).toBeNull();
-    expect(resolvedFrom({ spaceOverride: 'workwork', defaultId: 'memememe', personas })).toBe('space');
+    expect(resolvedFrom({ spaceOverride: 'workwork', defaultId: 'memememe', personas })).toBe(
+      'space'
+    );
     expect(resolvedFrom({ defaultId: 'memememe', personas })).toBe('default');
   });
 
   it('falls back when the override is gone or unusable', () => {
     expect(resolvePersona({ spaceOverride: 'gonegone', defaultId: 'memememe', personas })).toBe(me);
     const usable = (p) => p.id !== 'workwork';
-    expect(resolvePersona({ spaceOverride: 'workwork', defaultId: 'memememe', personas, usable })).toBe(me);
-    expect(resolvePersona({ spaceOverride: 'workwork', defaultId: 'workwork', personas, usable })).toBeNull();
+    expect(
+      resolvePersona({ spaceOverride: 'workwork', defaultId: 'memememe', personas, usable })
+    ).toBe(me);
+    expect(
+      resolvePersona({ spaceOverride: 'workwork', defaultId: 'workwork', personas, usable })
+    ).toBeNull();
   });
 });
 
@@ -141,8 +178,12 @@ describe('profileState (ADR-0031 §5)', () => {
   const p = persona('workwork', 'Work');
 
   it('is usable when every writer is one of the user’s Devices', () => {
-    expect(profileState({ persona: p, deviceKeys: [DEV1, DEV2], writers: [] }).state).toBe('usable');
-    expect(profileState({ persona: p, deviceKeys: [DEV1, DEV2], writers: [DEV1, K1] }).state).toBe('usable');
+    expect(profileState({ persona: p, deviceKeys: [DEV1, DEV2], writers: [] }).state).toBe(
+      'usable'
+    );
+    expect(profileState({ persona: p, deviceKeys: [DEV1, DEV2], writers: [DEV1, K1] }).state).toBe(
+      'usable'
+    );
   });
 
   it('flags a writer that isn’t one of the user’s Devices', () => {
@@ -153,13 +194,19 @@ describe('profileState (ADR-0031 §5)', () => {
 
   it('flags a drive the user’s Devices didn’t make', () => {
     const other = makePersona({ id: 'otherone', label: 'X', profileUrl: `hyper://${K2}/` });
-    expect(profileState({ persona: other, deviceKeys: [DEV1], writers: [] }).state).toBe('foreign-writers');
+    expect(profileState({ persona: other, deviceKeys: [DEV1], writers: [] }).state).toBe(
+      'foreign-writers'
+    );
   });
 
   it('says “not ready”, never “invalid”, before the Vault or the drive has synced', () => {
-    expect(profileState({ persona: p, vaultReady: false, writers: [FOREIGN] }).state).toBe('not-ready');
+    expect(profileState({ persona: p, vaultReady: false, writers: [FOREIGN] }).state).toBe(
+      'not-ready'
+    );
     expect(profileState({ persona: p, deviceKeys: [DEV1], writers: null }).state).toBe('not-ready');
-    expect(profileState({ persona: p, deviceKeys: [DEV1], writers: [], loaded: false }).state).toBe('not-ready');
+    expect(profileState({ persona: p, deviceKeys: [DEV1], writers: [], loaded: false }).state).toBe(
+      'not-ready'
+    );
   });
 });
 
@@ -167,7 +214,10 @@ describe('Session permissions (ADR-0031 §9)', () => {
   it('turns page names into tokens for the Persona’s own drive', () => {
     expect(requestedPerms(undefined, K1)).toEqual([]);
     expect(requestedPerms(['profile'], K1)).toEqual(['profile']);
-    expect(requestedPerms(['profile', 'modifyDrive', 'profile'], K1)).toEqual(['profile', `modifyDrive:${K1}`]);
+    expect(requestedPerms(['profile', 'modifyDrive', 'profile'], K1)).toEqual([
+      'profile',
+      `modifyDrive:${K1}`,
+    ]);
     expect(requestedPerms([`modifyDrive:${K1}`], K1)).toEqual([`modifyDrive:${K1}`]);
   });
 
@@ -197,7 +247,13 @@ describe('Session permissions (ADR-0031 §9)', () => {
 
 describe('Sessions (ADR-0031 §8, §10)', () => {
   const now = new Date('2026-10-31T12:00:00.000Z');
-  const base = { id: 'k3v', origin: 'https://example.com', personaId: 'workwork', space: SPACE, now };
+  const base = {
+    id: 'k3v',
+    origin: 'https://example.com',
+    personaId: 'workwork',
+    space: SPACE,
+    now,
+  };
 
   it('makes a Session with no expiry by default', () => {
     const s = makeSession({ ...base, perms: ['profile', 'profile'] });
@@ -233,14 +289,20 @@ describe('Sessions (ADR-0031 §8, §10)', () => {
     expect(sessionGrants(s, `modifyDrive:${K2}`, now)).toBe(false);
     expect(sessionGrants(s, 'createDrive', now)).toBe(false);
     expect(sessionGrants(s, `modifyDrive:${K1}`, now.getTime() + 61000)).toBe(false);
-    expect(sessionGrants({ ...s, perms: ['privateRead:private'] }, 'privateRead:private', now)).toBe(false);
+    expect(
+      sessionGrants({ ...s, perms: ['privateRead:private'] }, 'privateRead:private', now)
+    ).toBe(false);
     expect(sessionGrants(null, 'profile')).toBe(false);
   });
 
   it('shows a page its id, and the profile only with `profile`', () => {
     const profile = { url: `hyper://${K1}/`, title: 'Ada', thumb: '/thumb' };
     const stranger = makeSession({ ...base, perms: [] });
-    expect(sessionView(stranger, profile)).toEqual({ id: 'k3v', perms: [], createdAt: stranger.createdAt });
+    expect(sessionView(stranger, profile)).toEqual({
+      id: 'k3v',
+      perms: [],
+      createdAt: stranger.createdAt,
+    });
     const known = makeSession({ ...base, perms: ['profile', `modifyDrive:${K1}`] });
     expect(sessionView(known, profile)).toEqual({
       id: 'k3v',

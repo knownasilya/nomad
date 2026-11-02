@@ -53,7 +53,9 @@ export function sessionPath(spaceKey, personaId, originHash) {
 
 // The parts of a Session path, or null.
 export function parseSessionPath(path) {
-  const m = /^\/\.vault\/sessions\/([0-9a-f]{64})\/([a-z0-9]{8,40})\/([0-9a-f]{64})\.json$/.exec(String(path || ''));
+  const m = /^\/\.vault\/sessions\/([0-9a-f]{64})\/([a-z0-9]{8,40})\/([0-9a-f]{64})\.json$/.exec(
+    String(path || '')
+  );
   return m ? { space: m[1], personaId: m[2], hash: m[3] } : null;
 }
 
@@ -119,7 +121,8 @@ export function normalizeLabel(label) {
     .replace(/\s+/g, ' ')
     .trim();
   if (!s) throw new Error('Give the Persona a name, like Work or Me');
-  if (s.length > MAX_LABEL) throw new Error(`A Persona’s name can be at most ${MAX_LABEL} characters`);
+  if (s.length > MAX_LABEL)
+    throw new Error(`A Persona’s name can be at most ${MAX_LABEL} characters`);
   return s;
 }
 
@@ -161,7 +164,8 @@ export function makeDefault(personaId, now = new Date().toISOString()) {
 // Personas by label, then oldest first.
 export function sortPersonas(list) {
   return [...list].sort(
-    (a, b) => a.label.localeCompare(b.label) || String(a.createdAt).localeCompare(String(b.createdAt))
+    (a, b) =>
+      a.label.localeCompare(b.label) || String(a.createdAt).localeCompare(String(b.createdAt))
   );
 }
 
@@ -172,7 +176,12 @@ export function sortPersonas(list) {
 // `usable(persona)` says whether a Persona may log in now (profileState(...).state === 'usable');
 // leave it out to resolve without that check (what the UI shows as picked).
 /** @param {{ spaceOverride?: string | null, defaultId?: string | null, personas?: any[], usable?: ((p: any) => boolean) | null }} [o] */
-export function resolvePersona({ spaceOverride = null, defaultId = null, personas = [], usable = null } = {}) {
+export function resolvePersona({
+  spaceOverride = null,
+  defaultId = null,
+  personas = [],
+  usable = null,
+} = {}) {
   const ok = (p) => p && (!usable || usable(p));
   const byId = (id) => (id ? personas.find((p) => p.id === id) || null : null);
   const own = byId(spaceOverride);
@@ -184,7 +193,12 @@ export function resolvePersona({ spaceOverride = null, defaultId = null, persona
 
 // Where the resolved Persona came from: 'space', 'default', or null.
 /** @param {{ spaceOverride?: string | null, defaultId?: string | null, personas?: any[], usable?: ((p: any) => boolean) | null }} [o] */
-export function resolvedFrom({ spaceOverride = null, defaultId = null, personas = [], usable = null } = {}) {
+export function resolvedFrom({
+  spaceOverride = null,
+  defaultId = null,
+  personas = [],
+  usable = null,
+} = {}) {
   const p = resolvePersona({ spaceOverride, defaultId, personas, usable });
   if (!p) return null;
   return p.id === spaceOverride ? 'space' : 'default';
@@ -201,16 +215,28 @@ export function resolvedFrom({ spaceOverride = null, defaultId = null, personas 
 // States: 'usable', 'foreign-writers', and 'not-ready' (this Device hasn't seen the Vault's Devices or
 // the Drive yet: never an error about the user's own identity).
 /** @param {{ persona?: any, vaultReady?: boolean, deviceKeys?: string[], writers?: string[] | null, loaded?: boolean }} [o] */
-export function profileState({ persona, vaultReady = true, deviceKeys = [], writers = null, loaded = true } = {}) {
+export function profileState({
+  persona,
+  vaultReady = true,
+  deviceKeys = [],
+  writers = null,
+  loaded = true,
+} = {}) {
   if (!vaultReady) {
     return { state: 'not-ready', reason: 'This device hasn’t finished syncing your Vault yet.' };
   }
   if (!loaded || !Array.isArray(writers)) {
-    return { state: 'not-ready', reason: 'This device hasn’t got the Persona’s profile drive yet.' };
+    return {
+      state: 'not-ready',
+      reason: 'This device hasn’t got the Persona’s profile drive yet.',
+    };
   }
   const key = driveKeyOf(persona?.profileUrl);
   if (!key || persona.creator !== key) {
-    return { state: 'foreign-writers', reason: 'Its profile drive wasn’t made by one of your devices.' };
+    return {
+      state: 'foreign-writers',
+      reason: 'Its profile drive wasn’t made by one of your devices.',
+    };
   }
   const own = new Set(deviceKeys.map((k) => String(k).toLowerCase()));
   own.add(key);
@@ -243,10 +269,14 @@ export function requestedPerms(perms, profileKey = null) {
     const p = String(raw || '');
     const [name, param] = [p.split(':')[0], p.split(':').slice(1).join(':')];
     if (!SESSION_PERMS.includes(name) || (name === 'profile' && param)) {
-      throw new TypeError(`nomad.session can’t grant “${p}”. It grants ${SESSION_PERMS.join(' and ')}.`);
+      throw new TypeError(
+        `nomad.session can’t grant “${p}”. It grants ${SESSION_PERMS.join(' and ')}.`
+      );
     }
     if (name === 'modifyDrive' && param && param.toLowerCase() !== profileKey) {
-      throw new TypeError('nomad.session grants modifyDrive only for the Persona’s own profile drive');
+      throw new TypeError(
+        'nomad.session grants modifyDrive only for the Persona’s own profile drive'
+      );
     }
     const token = name === 'modifyDrive' ? (profileKey ? `modifyDrive:${profileKey}` : null) : name;
     if (token && !out.includes(token)) out.push(token);
@@ -264,14 +294,24 @@ export function grantedPerms(requested, checked) {
 export function normalizeMaxAge(maxAge) {
   if (maxAge == null) return null;
   const n = Number(maxAge);
-  if (!Number.isFinite(n) || n <= 0) throw new TypeError('maxAge must be a number of seconds above 0');
+  if (!Number.isFinite(n) || n <= 0)
+    throw new TypeError('maxAge must be a number of seconds above 0');
   return Math.min(Math.floor(n), MAX_AGE_LIMIT);
 }
 
 /** @param {{ id?: string, origin?: string, personaId?: string, space?: string, perms?: string[], maxAge?: number | null, now?: Date | string | number }} [o] */
-export function makeSession({ id, origin, personaId, space, perms = [], maxAge = null, now = new Date() } = {}) {
+export function makeSession({
+  id,
+  origin,
+  personaId,
+  space,
+  perms = [],
+  maxAge = null,
+  now = new Date(),
+} = {}) {
   if (!id) throw new Error('A Session needs an id');
-  if (!sessionOrigin(origin) || sessionOrigin(origin) !== origin) throw new Error('A Session needs an origin');
+  if (!sessionOrigin(origin) || sessionOrigin(origin) !== origin)
+    throw new Error('A Session needs an origin');
   if (!ID.test(String(personaId || ''))) throw new Error('A Session needs a Persona');
   if (!HEX64.test(String(space || ''))) throw new Error('A Session needs a Space');
   const t = now instanceof Date ? now : new Date(now);
@@ -325,7 +365,11 @@ export function sessionView(session, profile = null) {
   const view = { id: session.id, perms, createdAt: session.createdAt };
   if (session.expiresAt) view.expiresAt = session.expiresAt;
   if (perms.includes('profile') && profile) {
-    view.profile = { url: profile.url, title: profile.title || '', ...(profile.thumb ? { thumb: profile.thumb } : {}) };
+    view.profile = {
+      url: profile.url,
+      title: profile.title || '',
+      ...(profile.thumb ? { thumb: profile.thumb } : {}),
+    };
   }
   return view;
 }

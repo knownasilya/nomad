@@ -30,7 +30,12 @@ import { WRITERS_PREFIX } from '../../../shared/fs-core.mjs';
 const logger = logLib.get().child({ category: 'browser', subcategory: 'personas' });
 
 const LOAD_TIMEOUT = 8000;
-const THUMB_TYPES = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
+const THUMB_TYPES = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
 const MAX_THUMB = 2 * 1024 * 1024;
 
 // Emits 'changed' when a Persona, the default, a Space's Persona or a Session changes, here or on
@@ -95,10 +100,14 @@ function apply(recs, def, spaces, sessRecs, devices) {
   const nextPersonas = new Map(recs.filter(P.isPersona).map((r) => [r.id, r]));
   const nextDefault = def && def.type === P.DEFAULT_TYPE ? def.personaId || null : null;
   const nextOverrides = new Map(
-    spaces.filter((s) => s && s.rootDriveKey && !s.movedTo && s.persona).map((s) => [s.rootDriveKey, s.persona])
+    spaces
+      .filter((s) => s && s.rootDriveKey && !s.movedTo && s.persona)
+      .map((s) => [s.rootDriveKey, s.persona])
   );
   const nextSessions = new Map(
-    sessRecs.filter(P.isSession).map((r) => [P.sessionPath(r.space, r.personaId, hashOrigin(r.origin)), r])
+    sessRecs
+      .filter(P.isSession)
+      .map((r) => [P.sessionPath(r.space, r.personaId, hashOrigin(r.origin)), r])
   );
   deviceKeys = devices.map((d) => d && d.key).filter(Boolean);
   const stamp = JSON.stringify([
@@ -127,7 +136,10 @@ function apply(recs, def, spaces, sessRecs, devices) {
 async function withTimeout(p, ms) {
   let t;
   try {
-    return await Promise.race([p, new Promise((resolve) => (t = setTimeout(() => resolve(null), ms)))]);
+    return await Promise.race([
+      p,
+      new Promise((resolve) => (t = setTimeout(() => resolve(null), ms))),
+    ]);
   } finally {
     clearTimeout(t);
   }
@@ -136,7 +148,10 @@ async function withTimeout(p, ms) {
 async function writerKeys(sess) {
   await sess.base.update().catch(() => {});
   const out = [];
-  for await (const node of sess.drive.createReadStream({ gte: WRITERS_PREFIX, lt: WRITERS_PREFIX + '\xff' })) {
+  for await (const node of sess.drive.createReadStream({
+    gte: WRITERS_PREFIX,
+    lt: WRITERS_PREFIX + '\xff',
+  })) {
     const rec = node.value;
     if (!rec || rec.value == null) continue;
     try {
@@ -176,7 +191,11 @@ export async function checkProfile(persona) {
       };
     }
   } catch (e) {
-    info = { ...prev, state: 'not-ready', reason: 'This device couldn’t read the Persona’s profile drive.' };
+    info = {
+      ...prev,
+      state: 'not-ready',
+      reason: 'This device couldn’t read the Persona’s profile drive.',
+    };
   }
   const same = JSON.stringify(prev) === JSON.stringify(info);
   profiles.set(persona.id, info);
@@ -202,14 +221,20 @@ export function spaceKeyOf(spaceId) {
 }
 
 function spaceIdOfKey(key) {
-  const space = spacesDb.getCachedAll().find((s) => s.root_drive_url && P.driveKeyOf(s.root_drive_url) === key);
+  const space = spacesDb
+    .getCachedAll()
+    .find((s) => s.root_drive_url && P.driveKeyOf(s.root_drive_url) === key);
   return space ? space.id : null;
 }
 
 // The Persona a Space uses now (§4), without the usable check: what the UI shows as picked, and whose
 // Sessions a page in that Space sees.
 export function personaForSpaceKey(key) {
-  return P.resolvePersona({ spaceOverride: key ? overrides.get(key) : null, defaultId, personas: [...personas.values()] });
+  return P.resolvePersona({
+    spaceOverride: key ? overrides.get(key) : null,
+    defaultId,
+    personas: [...personas.values()],
+  });
 }
 
 export function personaForSpaceId(spaceId) {
@@ -281,7 +306,9 @@ export function state() {
 }
 
 export function listSessions() {
-  const spaceName = (key) => spacesDb.getCachedAll().find((s) => s.root_drive_url && P.driveKeyOf(s.root_drive_url) === key)?.name || 'A space not on this device';
+  const spaceName = (key) =>
+    spacesDb.getCachedAll().find((s) => s.root_drive_url && P.driveKeyOf(s.root_drive_url) === key)
+      ?.name || 'A space not on this device';
   return P.sortSessions([...sessions.values()]).map((s) => ({
     path: P.sessionPath(s.space, s.personaId, hashOrigin(s.origin)),
     id: s.id,
@@ -313,7 +340,8 @@ function hashOrigin(origin) {
 
 function parseThumb(dataUrl) {
   const m = /^data:([a-z/+-]+);base64,(.+)$/i.exec(String(dataUrl || ''));
-  if (!m || !THUMB_TYPES[m[1].toLowerCase()]) throw new Error('Pick a PNG, JPEG, WebP or GIF picture');
+  if (!m || !THUMB_TYPES[m[1].toLowerCase()])
+    throw new Error('Pick a PNG, JPEG, WebP or GIF picture');
   const buf = Buffer.from(m[2], 'base64');
   if (buf.length > MAX_THUMB) throw new Error('Pick a picture under 2 MB');
   return { buf, ext: THUMB_TYPES[m[1].toLowerCase()] };
@@ -345,7 +373,9 @@ async function makeProfileDrive({ title, description, thumb }) {
     await writeManifest(sess, { thumb: path });
   }
   await filesystem.configAutobaseDrive(sess.url, { tags: ['profile'] }).catch(() => {});
-  await archivesDb.setMeta(sess.keyStr, { title: meta.title, type: 'autobase', writable: true }).catch(() => {});
+  await archivesDb
+    .setMeta(sess.keyStr, { title: meta.title, type: 'autobase', writable: true })
+    .catch(() => {});
   return sess;
 }
 
@@ -361,15 +391,30 @@ export function create({ label, title, description, thumb, profileUrl } = {}) {
       const sess = await openProfile(url);
       if (!sess) throw new Error('That drive couldn’t be opened on this device');
       const manifest = await autobases.readJson(sess, '/index.json').catch(() => null);
-      if (manifest?.type !== 'walled.garden/person') throw new Error('That drive isn’t a profile (its index.json type isn’t walled.garden/person)');
-      const own = sess.writable && sess.base?.local?.key && b4a.toString(sess.base.local.key, 'hex') === sess.keyStr;
+      if (manifest?.type !== 'walled.garden/person')
+        throw new Error(
+          'That drive isn’t a profile (its index.json type isn’t walled.garden/person)'
+        );
+      const own =
+        sess.writable &&
+        sess.base?.local?.key &&
+        b4a.toString(sess.base.local.key, 'hex') === sess.keyStr;
       if (!own) throw new Error('Only a profile drive made on this device can be a Persona');
       creator = sess.keyStr;
       const devices = (await vault.listDevices()).map((d) => d.key);
-      const st = P.profileState({ persona: { profileUrl: url, creator }, vaultReady: true, deviceKeys: devices, writers: await writerKeys(sess) });
+      const st = P.profileState({
+        persona: { profileUrl: url, creator },
+        vaultReady: true,
+        deviceKeys: devices,
+        writers: await writerKeys(sess),
+      });
       if (st.state !== 'usable') throw new Error(st.reason);
     } else {
-      const sess = await makeProfileDrive({ title: String(title || name).trim() || name, description, thumb });
+      const sess = await makeProfileDrive({
+        title: String(title || name).trim() || name,
+        description,
+        thumb,
+      });
       url = sess.url;
       creator = sess.keyStr;
     }
@@ -377,7 +422,10 @@ export function create({ label, title, description, thumb, profileUrl } = {}) {
     const id = P.newPersonaId(crypto.randomBytes(10));
     const rec = P.makePersona({ id, label: name, profileUrl: url, creator });
     await vault.putAppRecord(P.personaPath(id), rec);
-    if (!existing.filter(P.isPersona).length && !(await vault.readAppRecord(P.DEFAULT_PATH))?.personaId) {
+    if (
+      !existing.filter(P.isPersona).length &&
+      !(await vault.readAppRecord(P.DEFAULT_PATH))?.personaId
+    ) {
       await vault.putAppRecord(P.DEFAULT_PATH, P.makeDefault(id));
     }
     logger.info('Made a Persona', { id });
@@ -400,13 +448,20 @@ export function update(id, { label, title, description, thumb } = {}) {
     }
     if (title !== undefined || description !== undefined || thumb) {
       const sess = await openProfile(prev.profileUrl);
-      if (!sess?.writable) throw new Error('This device can’t change that profile. Change it on the device that made it.');
+      if (!sess?.writable)
+        throw new Error(
+          'This device can’t change that profile. Change it on the device that made it.'
+        );
       const patch = {};
       if (title !== undefined) patch.title = String(title).trim().slice(0, 280) || rec.label;
-      if (description !== undefined) patch.description = String(description).trim().slice(0, 1000) || undefined;
+      if (description !== undefined)
+        patch.description = String(description).trim().slice(0, 1000) || undefined;
       if (thumb) patch.thumb = await writeThumb(sess, thumb);
       await writeManifest(sess, patch);
-      if (patch.title) await archivesDb.setMeta(sess.keyStr, { title: patch.title, type: 'autobase', writable: true }).catch(() => {});
+      if (patch.title)
+        await archivesDb
+          .setMeta(sess.keyStr, { title: patch.title, type: 'autobase', writable: true })
+          .catch(() => {});
     }
     await refresh();
     await checkProfile(rec);
@@ -422,7 +477,8 @@ export function remove(id) {
       if (P.parseSessionPath(path)?.personaId === id) await vault.delAppRecord(path);
     }
     for (const s of await vault.listSpaces()) {
-      if (s?.persona === id && s.rootDriveKey && !s.movedTo) await vault.putSpaceShare(s.rootDriveKey, { persona: undefined });
+      if (s?.persona === id && s.rootDriveKey && !s.movedTo)
+        await vault.putSpaceShare(s.rootDriveKey, { persona: undefined });
     }
     const def = await vault.readAppRecord(P.DEFAULT_PATH);
     if (def?.personaId === id) await vault.putAppRecord(P.DEFAULT_PATH, P.makeDefault(null));
@@ -434,7 +490,8 @@ export function remove(id) {
 
 export function setDefault(id) {
   return serial(async () => {
-    if (id && !P.isPersona(await vault.readAppRecord(P.personaPath(id)))) throw new Error('That Persona is gone');
+    if (id && !P.isPersona(await vault.readAppRecord(P.personaPath(id))))
+      throw new Error('That Persona is gone');
     await vault.putAppRecord(P.DEFAULT_PATH, P.makeDefault(id || null));
     await refresh();
   });
@@ -451,10 +508,12 @@ export function setSpacePersona(spaceId, id) {
     const fresh = await spacesDb.get(Number(spaceId));
     const key = P.driveKeyOf(fresh.root_drive_url);
     if (!key) throw new Error('That Space isn’t ready yet');
-    if (id && !P.isPersona(await vault.readAppRecord(P.personaPath(id)))) throw new Error('That Persona is gone');
+    if (id && !P.isPersona(await vault.readAppRecord(P.personaPath(id))))
+      throw new Error('That Persona is gone');
     // The record must exist: a Space made before the Vault isn't indexed yet.
     await vault.ensureVault();
-    if (!(await vault.listSpaces()).some((s) => s.rootDriveKey === key && !s.movedTo)) await vault.registerSpace(fresh, key);
+    if (!(await vault.listSpaces()).some((s) => s.rootDriveKey === key && !s.movedTo))
+      await vault.registerSpace(fresh, key);
     await vault.putSpaceShare(key, { persona: id || undefined });
     await refresh();
   });
@@ -463,7 +522,8 @@ export function setSpacePersona(spaceId, id) {
 // The Vault forgot a Space (the user left it): its Sessions go too. Its override went with its record.
 export function forgetSpace(spaceKey) {
   return serial(async () => {
-    for (const path of await vault.listAppRecordPaths(P.sessionsPrefix(spaceKey))) await vault.delAppRecord(path);
+    for (const path of await vault.listAppRecordPaths(P.sessionsPrefix(spaceKey)))
+      await vault.delAppRecord(path);
     await refresh();
   });
 }
@@ -493,7 +553,9 @@ export function sessionViewFor(url, spaceId) {
   if (!s) return null;
   const p = personas.get(s.personaId);
   const info = p ? profiles.get(p.id) : null;
-  const profile = p ? { url: p.profileUrl, title: info?.title || p.label, thumb: info?.thumb || '' } : null;
+  const profile = p
+    ? { url: p.profileUrl, title: info?.title || p.label, thumb: info?.thumb || '' }
+    : null;
   return P.sessionView(s, profile);
 }
 
@@ -517,7 +579,8 @@ export function grant({ origin, spaceKey, personaId, perms, maxAge }) {
   return serial(async () => {
     const path = P.sessionPath(spaceKey, personaId, hashOrigin(origin));
     const prev = await vault.readAppRecord(path);
-    const id = P.isSession(prev) && !P.isExpired(prev) ? prev.id : P.newSessionId(crypto.randomBytes(16));
+    const id =
+      P.isSession(prev) && !P.isExpired(prev) ? prev.id : P.newSessionId(crypto.randomBytes(16));
     const rec = P.makeSession({ id, origin, personaId, space: spaceKey, perms, maxAge });
     await vault.putAppRecord(path, rec);
     await refresh();
@@ -544,7 +607,8 @@ async function sweepExpired() {
   const expired = [...sessions.entries()].filter(([, s]) => P.isExpired(s));
   if (!expired.length) return;
   await serial(async () => {
-    for (const [path] of expired) if (await vault.readAppRecord(path)) await vault.delAppRecord(path);
+    for (const [path] of expired)
+      if (await vault.readAppRecord(path)) await vault.delAppRecord(path);
   });
   await refresh();
 }
@@ -558,8 +622,19 @@ export async function loginChoices(spaceId) {
   const key = spaceKeyOf(spaceId);
   const list = P.sortPersonas([...personas.values()]);
   await Promise.all(list.map((p) => checkProfile(p)));
-  const picked = P.resolvePersona({ spaceOverride: key ? overrides.get(key) : null, defaultId, personas: list, usable });
-  return { spaceKey: key, personas: list.map(view), pickedId: picked?.id || null, vaultReady, hasVault };
+  const picked = P.resolvePersona({
+    spaceOverride: key ? overrides.get(key) : null,
+    defaultId,
+    personas: list,
+    usable,
+  });
+  return {
+    spaceKey: key,
+    personas: list.map(view),
+    pickedId: picked?.id || null,
+    vaultReady,
+    hasVault,
+  };
 }
 
 export function isUsable(id) {
@@ -587,7 +662,9 @@ export async function confirmProfileWriter(sender, url, writerKey) {
     message: `This is the drive for your Persona “${p.label}”.`,
     detail: 'Adding another writer means you can’t log in with it.',
   };
-  const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+  const { response } = win
+    ? await dialog.showMessageBox(win, opts)
+    : await dialog.showMessageBox(opts);
   if (response !== 1) throw new UserDeniedError();
 }
 
