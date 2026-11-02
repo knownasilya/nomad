@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.33.0](https://github.com/knownasilya/nomad/compare/v1.32.0...v1.33.0) (2026-11-02)
+
+
+### Features
+
+* **ai:** link the things the AI makes or changes, on desktop and phone ([601822a](https://github.com/knownasilya/nomad/commit/601822a04abbc084d9c0207dfdc6ef44f549a422))
+* **canvas:** titles grow slower than the canvas when zooming in ([555c8c3](https://github.com/knownasilya/nomad/commit/555c8c30eb4bde954bf1bdeb115ccb5b3de605e3))
+* **mobile:** Reader's add feed in the header, and Load more for long lists ([13f52ea](https://github.com/knownasilya/nomad/commit/13f52ea951625d909a9c4105de22509e81667ad6))
+* **reader,notes:** search Reader and Notes, in the list and on the canvas ([0864e06](https://github.com/knownasilya/nomad/commit/0864e066d58de9b5d57825fc7542d8b50ac04788))
+
+
+### Bug Fixes
+
+* **reader:** show a feed's posts when you pick it on the phone ([1419b2a](https://github.com/knownasilya/nomad/commit/1419b2a77a8e68e59f84a439448ceaa11443ade5))
+
 ## [1.32.0](https://github.com/knownasilya/nomad/compare/v1.31.3...v1.32.0) (2026-11-01)
 
 
