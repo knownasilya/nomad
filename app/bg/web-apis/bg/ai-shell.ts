@@ -81,7 +81,7 @@ function cleanPrefs(prefs: any = {}) {
 }
 
 export default {
-  // opts: { model, think, effort, allowVision, turnId, chatId } — the sidebar's own choices, the
+  // opts: { model, think, effort, allowVision, turnId, chatId, privateData } — the sidebar's own choices, the
   // id it steers this turn by, and the chat (session) it's in. The rest of a turn's options are set here: the stage, the tab lookup and
   // the context.
   chat(messages, opts: any = {}) {
@@ -142,6 +142,8 @@ export default {
         steering,
         // Page control remembers "allow similar" per chat, in this window.
         pageChat: chatId ? `${shell.id}:${chatId}` : null,
+        // An earlier answer in this chat read the user's private data (ADR-0037).
+        privateData: opts.privateData === true,
       });
     }
   },

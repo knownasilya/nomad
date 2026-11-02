@@ -288,6 +288,17 @@ export const PERMS = {
     dangerous: true,
     promptTrusted: true,
   },
+  // The AI sending a request to a site after it read the user's private data in this chat
+  // (ADR-0037): the request could carry that data there. The param is the host. Asked once a turn
+  // per host, never kept: a yes is for what this chat holds.
+  aiSendData: {
+    persist: false,
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+    promptTrusted: true,
+  },
   // The AI changing what it remembers about the user (ADR-0032). Every personal turn reads the
   // memories, so a memory a hostile page talked it into would follow the user around: ask.
   memoryWrite: {
@@ -398,6 +409,7 @@ export const PERM_ICONS = {
   aiPageControl: 'fas fa-mouse-pointer',
   aiPageAction: 'fas fa-mouse-pointer',
   aiSecretUse: 'fas fa-key',
+  aiSendData: 'fas fa-paper-plane',
   aiPagePlan: 'fas fa-list-ol',
 };
 
@@ -469,6 +481,11 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
         sees the secret itself.</span
       >`;
     }
+    case 'aiSendData':
+      return html`<span
+        >Send a request to <strong>${permParam}</strong>. It has read your private data in this chat
+        (your Notes, Reader, files or a page), and the request could carry some of it there.</span
+      >`;
     case 'aiPagePlan': {
       const steps = Array.isArray(permOpts?.steps) ? permOpts.steps : [];
       return html`<span
