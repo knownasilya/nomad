@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.34.0](https://github.com/knownasilya/nomad/compare/v1.33.0...v1.34.0) (2026-11-02)
+
+
+### Features
+
+* **personas:** Personas and Sessions (ADR-0031) ([f304a30](https://github.com/knownasilya/nomad/commit/f304a309cd81ffd2cc15e8e81eece8c2970ada35))
+* **personas:** sites can ask for the Persona's email ([0459497](https://github.com/knownasilya/nomad/commit/045949764f5f20785d78fc8d9a1c355406aeaf07))
+
 ## [1.33.0](https://github.com/knownasilya/nomad/compare/v1.32.0...v1.33.0) (2026-11-02)
 
 
