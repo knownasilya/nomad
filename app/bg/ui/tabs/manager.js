@@ -144,6 +144,8 @@ class Tab extends EventEmitter {
       pinUrl: this.pinUrl,
       groupId: this.groupId,
       paneLayout: this.layout.state,
+      // more than one is a split view: the tab strip and the sidebar mark it
+      paneCount: this.panes.length,
     });
   }
 
@@ -278,6 +280,7 @@ class Tab extends EventEmitter {
   activate() {
     if (this.isHidden) return;
     this.isActive = true;
+    this.dropPreview = false;
 
     for (let pane of this.panes) {
       pane.show({ noFocus: true });
@@ -468,6 +471,64 @@ class Tab extends EventEmitter {
       addPaneToClosedItems(this, url);
       this.setActivePane(this.panes[0]);
     }
+  }
+
+  // Take a pane from another tab and put it beside `anchor` (PaneLayout.insertPane). Its page keeps
+  // running: this is how a tab dropped onto this one joins its split (moveTabIntoSplit).
+  insertPane(pane, { anchor, edge = 'right' } = {}) {
+    this.panes.push(pane);
+    pane.setTab(this);
+    this.layout.insertPane(pane, anchor, edge);
+    filesystem.registerWebContentsSpace(pane.id, this.spaceId);
+    if (this.isActive && !this.dropPreview) pane.show({ noFocus: true });
+  }
+
+  // Let go of a pane without closing its page, for another tab to take with insertPane. Unlike
+  // detachPane, the tab isn't closed when its last pane goes; moveTabIntoSplit removes it.
+  releasePane(pane) {
+    filesystem.unregisterWebContentsSpace(pane.id);
+    pane.hide();
+    let i = this.panes.indexOf(pane);
+    if (i === -1) return;
+    this.panes.splice(i, 1);
+    this.layout.removePane(pane);
+    pane.setAttachedPane(undefined);
+    for (let pane2 of this.panes) {
+      if (pane2.attachedPane === pane) pane2.setAttachedPane(undefined);
+    }
+    if (this.lastActivePane === pane) this.lastActivePane = undefined;
+  }
+
+  // While a tab is dragged over the window, the active tab's pages step aside so the drag reaches
+  // the shell's drop zones instead of the page; the shell draws a picture of them meanwhile
+  // (fg/shell-window/panes.js, capturePanesForDrop).
+  setDropPreview(on) {
+    on = Boolean(on);
+    if (on === Boolean(this.dropPreview)) return;
+    this.dropPreview = on;
+    if (!this.isActive) return;
+    for (let pane of this.panes) {
+      if (on) pane.hide();
+      else pane.show({ noFocus: true });
+    }
+    if (!on) this.resize();
+  }
+
+  async capturePanesForDrop() {
+    return Promise.all(
+      this.panes.map(async (pane) => {
+        try {
+          const img = await pane.webContents.capturePage();
+          if (img.isEmpty()) return { id: pane.id, image: null };
+          return {
+            id: pane.id,
+            image: `data:image/jpeg;base64,${img.toJPEG(80).toString('base64')}`,
+          };
+        } catch (e) {
+          return { id: pane.id, image: null };
+        }
+      })
+    );
   }
 
   async removePane(pane) {
@@ -996,6 +1057,71 @@ export function create(
   }
 
   return tab;
+}
+
+// Split view: can `source`'s pages move into `target`'s split? Both in this window, in one Space
+// and session (a page can't change session), and neither pinned (a pin is one page).
+export function canSplitTabs(win, source, target) {
+  win = getTopWindow(win);
+  var tabs = getAll(win);
+  return Boolean(
+    source &&
+    target &&
+    source !== target &&
+    tabs.includes(source) &&
+    tabs.includes(target) &&
+    !source.isPinned &&
+    !target.isPinned &&
+    source.spaceId === target.spaceId &&
+    source.partition === target.partition
+  );
+}
+
+const SPLIT_EDGES = ['left', 'right', 'top', 'bottom'];
+
+// Move every page of `source` into `target`'s split, beside the pane `paneId` on `edge` (beside
+// the last column when no pane is named), then drop the emptied tab without closing its pages.
+// The tab strip, the sidebar and the page call it when a tab is dropped (fg/shell-window/split-
+// drop.js), and so does the split picker in a pane's status bar (fg/shell-menus/split.js).
+export function moveTabIntoSplit(win, source, target, { paneId, edge } = {}) {
+  win = getTopWindow(win);
+  if (!canSplitTabs(win, source, target)) return false;
+  var anchor = paneId !== undefined && paneId !== null ? target.getPaneById(paneId) : undefined;
+  if (!anchor || !SPLIT_EDGES.includes(edge)) {
+    var lastStack = target.layout.stacks[target.layout.stacks.length - 1];
+    anchor = anchor || lastStack?.panes[0];
+    edge = SPLIT_EDGES.includes(edge) ? edge : 'right';
+  }
+  var moving = source.layout.stacks.flatMap((stack) => stack.panes);
+  if (!moving.length) return false;
+
+  // the pages show again in the target, so end the drop preview first
+  for (let tab of getAll(win)) tab.setDropPreview(false);
+
+  // take the source tab out of the window, keeping its pages
+  var tabs = getAll(win);
+  tabs.splice(tabs.indexOf(source), 1);
+  source.deactivate();
+  prompts.close(source);
+  permPrompt.close(source);
+  modals.close(source);
+  for (let pane of moving) source.releasePane(pane);
+  var bySpace = lastActiveTabBySpace[win.id];
+  if (bySpace && bySpace[source.spaceId] === source) delete bySpace[source.spaceId];
+
+  // put them in the target, in order: each next one after the one before it
+  var next = edge === 'top' || edge === 'bottom' ? 'bottom' : 'right';
+  moving.forEach((pane, i) => {
+    target.insertPane(pane, i === 0 ? { anchor, edge } : { anchor: moving[i - 1], edge: next });
+  });
+  target.setActivePane(moving[0]);
+
+  if (target.isActive) target.resize();
+  else setActive(win, target);
+  moving[0].focus();
+  emitReplaceState(win);
+  triggerSessionSnapshot(win);
+  return true;
 }
 
 // A shell window, other than `exclude`, whose active Space is `spaceId`.
@@ -2255,6 +2381,43 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
 
   async openAttachMenu(paneId) {
     getActive(getWindow(this.sender)).openAttachMenu(paneId);
+  },
+
+  // Split view (fg/shell-window/split-drop.js): open tab `fromIndex` in a split with `toIndex`
+  // ('active' for the shown tab), beside its pane `paneId` on `edge`.
+  async moveTabIntoSplit(fromIndex, toIndex, opts = {}) {
+    var win = getWindow(this.sender);
+    var source = getByIndex(win, fromIndex);
+    var target = getByIndex(win, toIndex);
+    return moveTabIntoSplit(win, source, target, {
+      paneId: opts.paneId,
+      edge: opts.edge,
+    });
+  },
+
+  // The split picker's "New tab" and "This page": a new pane right of `paneId` in the active tab.
+  async splitPaneWithUrl(paneId, which) {
+    var win = getWindow(this.sender);
+    var tab = getActive(win);
+    var pane = tab?.getPaneById(paneId) || tab?.activePane;
+    if (!pane) return;
+    var url = pane.url;
+    if (which === 'new-tab') {
+      url = (await settingsDb.getForSpace(tab.spaceId, 'new_tab')) || defaultUrl;
+    }
+    tab.createPane({ url, after: pane, splitDir: 'vert', setActive: true });
+    triggerSessionSnapshot(win);
+  },
+
+  async capturePanesForDrop() {
+    var tab = getActive(getWindow(this.sender));
+    return tab ? tab.capturePanesForDrop() : [];
+  },
+
+  async setDropPreview(on) {
+    var win = getWindow(this.sender);
+    if (on) getActive(win)?.setDropPreview(true);
+    else for (let tab of getAll(win)) tab.setDropPreview(false);
   },
 });
 

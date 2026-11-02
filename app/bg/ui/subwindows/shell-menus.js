@@ -149,6 +149,17 @@ export function reposition(parentWindow) {
       if (bo.bottom !== undefined) b.y = Math.max(0, bo.bottom - b.height);
       adjustPosition(b, view, parentWindow);
       view.setBounds(b);
+    } else if (view.menuId === 'split') {
+      // The split picker, above the Split button in a pane's status bar (left + bottom): it grows
+      // upward from there, and stays inside the window.
+      const bo = view.boundsOpt || {};
+      const b = { x: bo.left ?? 10, y: 0, width: 300, height: 320 };
+      if (view.currentDimensions) Object.assign(b, view.currentDimensions);
+      else adjustDimensions(b);
+      const parentBounds = parentWindow.getContentBounds();
+      b.x = Math.max(0, Math.min(b.x, parentBounds.width - b.width));
+      b.y = Math.max(0, (bo.bottom ?? parentBounds.height) - b.height);
+      view.setBounds(b);
     } else if (view.menuId === 'spaces') {
       const bo = view.boundsOpt;
       if (bo?.left !== undefined) {

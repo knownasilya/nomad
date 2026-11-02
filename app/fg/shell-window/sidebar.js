@@ -6,6 +6,14 @@ import spinnerCSS from './spinner.css';
 import * as bg from './bg-process-rpc';
 import { pinTiles, pinTooltipUrl } from '../../../shared/pins.mjs';
 import { personaAvatar, personaAvatarCSS } from './spaces-dropdown';
+import {
+  startTabDrag,
+  endTabDrag,
+  canSplitWith,
+  tabDropZone,
+  isSplit,
+  tabTooltip,
+} from './split-drop';
 
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 480;
@@ -345,7 +353,7 @@ class ShellWindowSidebar extends LitElement {
     return html`
       <div
         class="${cls}"
-        title=${tab.title || tab.url}
+        title=${tabTooltip(tab)}
         @click=${() => bg.views.setActiveTab(index)}
         @contextmenu=${(e) => this._onContextmenuTab(e, index)}
         @mousedown=${(e) => this._onMousedownTab(e, index)}
@@ -370,6 +378,9 @@ class ShellWindowSidebar extends LitElement {
               : html`<img src="asset:favicon:${tab.url}?cache=${Date.now()}" />`}
         </div>
         <div class="tab-title">${tab.title || tab.url}</div>
+        ${isSplit(tab)
+          ? html`<span class="fas fa-columns tab-split" title="Split view"></span>`
+          : ''}
         ${tab.isAudioMuted
           ? html`<span class="fas fa-volume-mute tab-audio"></span>`
           : tab.isCurrentlyAudible
@@ -598,15 +609,17 @@ class ShellWindowSidebar extends LitElement {
     }
   }
 
-  // Drag a tab onto a group's header to put it in that group, onto another tab to move it there
-  // (joining that tab's group, or leaving its own), or onto "New tab" to take it out of its group.
-  // Pinned tabs stay where they are.
+  // Drag a tab onto a group's header to put it in that group, onto the top of another tab to move
+  // it there (joining that tab's group, or leaving its own), onto the rest of another tab or onto
+  // the page to open the two in a split (split-drop.js), or onto "New tab" to take it out of its
+  // group. Pinned tabs stay where they are.
 
   _onDragstartTab(e, index) {
     this.draggedTabIndex = index;
     if (!(this.pins || []).length) this.requestUpdate();
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', this.tabs[index]?.url || '');
+    startTabDrag(index, this.tabs[index]);
   }
 
   _onDragendTab() {
@@ -615,9 +628,10 @@ class ShellWindowSidebar extends LitElement {
     this.draggedPinHref = null;
     // the empty pin drop zone shows only while a tab is dragged
     if (wasDraggingTab) this.requestUpdate();
-    for (const el of this.shadowRoot.querySelectorAll('.drop-before, .drop-into')) {
-      el.classList.remove('drop-before', 'drop-into');
+    for (const el of this.shadowRoot.querySelectorAll('.drop-before, .drop-into, .drop-split')) {
+      el.classList.remove('drop-before', 'drop-into', 'drop-split');
     }
+    endTabDrag();
   }
 
   _acceptDrop(e, className) {
@@ -629,20 +643,32 @@ class ShellWindowSidebar extends LitElement {
   }
 
   _onDragleave(e) {
-    e.currentTarget.classList.remove('drop-before', 'drop-into');
+    e.currentTarget.classList.remove('drop-before', 'drop-into', 'drop-split');
+  }
+
+  // The top of a row moves the dragged tab in front of it; the rest opens the two in a split.
+  _tabDropZone(e, tab) {
+    const from = this.tabs[this.draggedTabIndex];
+    if (!canSplitWith(from, tab)) return 'before';
+    const rect = e.currentTarget.getBoundingClientRect();
+    return tabDropZone(rect, e.clientX, e.clientY, { vertical: true });
   }
 
   _onDragoverTab(e, tab, index) {
     if (tab.isPinned || index === this.draggedTabIndex) return;
-    this._acceptDrop(e, 'drop-before');
+    const zone = this._tabDropZone(e, tab);
+    e.currentTarget.classList.remove(zone === 'split' ? 'drop-before' : 'drop-split');
+    this._acceptDrop(e, zone === 'split' ? 'drop-split' : 'drop-before');
   }
 
   _onDropTab(e, tab, index) {
     const from = this.draggedTabIndex;
     if (from === null || tab.isPinned || index === from) return;
     e.preventDefault();
+    const zone = this._tabDropZone(e, tab);
     this._onDragendTab();
-    bg.views.moveTabToGroup(from, tab.groupId || null, index);
+    if (zone === 'split') bg.views.moveTabIntoSplit(from, index);
+    else bg.views.moveTabToGroup(from, tab.groupId || null, index);
   }
 
   _onDragoverGroup(e) {
@@ -1146,6 +1172,18 @@ ShellWindowSidebar.styles = css`
   /* drag and drop: a line above the tab it will land in front of, a tint on the group it joins */
   .sidebar-tab.drop-before {
     box-shadow: inset 0 2px 0 var(--highlight-color--tab--current, #5b5ef4);
+  }
+
+  /* the rest of a tab: the dragged tab opens beside it in a split */
+  .sidebar-tab.drop-split {
+    background: var(--bg-color--split-drop);
+    box-shadow: inset 0 0 0 2px var(--border-color--split-drop);
+  }
+
+  .sidebar-tab .tab-split {
+    flex-shrink: 0;
+    font-size: 10px;
+    opacity: 0.55;
   }
 
   .group-header.drop-into {

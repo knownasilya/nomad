@@ -74,4 +74,8 @@ export default {
   setPaneResizeModeEnabled: 'promise',
   openPaneMenu: 'promise',
   openAttachMenu: 'promise',
+  moveTabIntoSplit: 'promise',
+  splitPaneWithUrl: 'promise',
+  capturePanesForDrop: 'promise',
+  setDropPreview: 'promise',
 };

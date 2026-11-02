@@ -66,6 +66,24 @@ export class PaneLayout extends EventEmitter {
     this.emit('changed');
   }
 
+  // Put `pane` beside `anchor` on one of its edges: 'left' or 'right' make a new column next to the
+  // anchor's column, 'top' or 'bottom' put it in the anchor's column above or below it. A tab
+  // dropped onto a page or a tab joins the split this way (tabs/manager.js moveTabIntoSplit).
+  insertPane(pane, anchor, edge = 'right') {
+    var stack = anchor && this.findStack(anchor);
+    if (!stack) {
+      this.addPane(pane, { after: this.stacks[this.stacks.length - 1] });
+      return;
+    }
+    if (edge === 'top' || edge === 'bottom') {
+      let i = stack.panes.indexOf(anchor);
+      this.addPaneToStack(stack, pane, { after: edge === 'bottom' ? anchor : stack.panes[i - 1] });
+      return;
+    }
+    let i = this.stacks.indexOf(stack);
+    this.addPane(pane, { after: edge === 'left' ? this.stacks[i - 1] : stack });
+  }
+
   removePane(pane) {
     var stack = this.findStack(pane);
     if (stack) {

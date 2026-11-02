@@ -68,6 +68,9 @@ body {
   --text-color--pane-status-bar: #888;
   --text-color--pane-status-bar--active: #555;
   --text-color--pane-status-bar-indicator: #4d82e4;
+  /* split view: where a dragged tab will land (fg/shell-window/panes.js, tabs.js, sidebar.js) */
+  --bg-color--split-drop: rgba(77, 130, 228, 0.2);
+  --border-color--split-drop: #4d82e4;
 
   /* Scrollbars in the shell chrome (scrollbar-color: thumb, track). Without these, Chromium draws
      light scrollbars even when the chrome is dark. */
@@ -147,5 +150,7 @@ body {
     --text-color--pane-status-bar: #666;
     --text-color--pane-status-bar--active: #aaa;
     --text-color--pane-status-bar-indicator: #4d82e4;
+    --bg-color--split-drop: rgba(77, 130, 228, 0.3);
+    --border-color--split-drop: #5b8fee;
   }
 }

@@ -13,6 +13,7 @@ import './persona';
 import './share';
 import './site';
 import './spaces';
+import './split';
 
 class MenusWrapper extends LitElement {
   static get properties() {
@@ -131,6 +132,8 @@ class MenusWrapper extends LitElement {
         return html`<site-menu active-menu></site-menu>`;
       case 'spaces':
         return html`<spaces-menu active-menu></spaces-menu>`;
+      case 'split':
+        return html`<split-menu active-menu></split-menu>`;
     }
     return html`<div></div>`;
   }
