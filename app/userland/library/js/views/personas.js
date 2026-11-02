@@ -4,6 +4,7 @@ import {
 } from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
 import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
 import * as toast from 'nomad://app-stdlib/js/com/toast.js';
+import { setItemTitle } from '../lib/page-title.js';
 import modsCSS from '../../css/views/mods.css.js';
 import personasCSS from '../../css/views/personas.css.js';
 
@@ -57,6 +58,18 @@ export class PersonasView extends LitElement {
   matches(...parts) {
     const f = (this.filter || '').toLowerCase();
     return !f || parts.some((p) => String(p || '').toLowerCase().includes(f));
+  }
+
+  // The tab title names the Persona that is open (lib/page-title.js).
+  itemTitle() {
+    const e = this.editing;
+    if (!e) return '';
+    if (e.isNew) return 'New Persona';
+    return this.st?.personas?.find((p) => p.id === e.id)?.label || e.label;
+  }
+
+  updated() {
+    setItemTitle(this, this.itemTitle());
   }
 
   render() {

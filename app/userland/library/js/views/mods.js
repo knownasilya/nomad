@@ -4,6 +4,7 @@ import {
 } from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
 import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
 import * as toast from 'nomad://app-stdlib/js/com/toast.js';
+import { setItemTitle } from '../lib/page-title.js';
 import modsCSS from '../../css/views/mods.css.js';
 
 // The user's Mods (bg/ui/mods.js, ADR-0023): their own changes to a site, like Arc's. Each has
@@ -78,6 +79,18 @@ export class ModsView extends LitElement {
       out.get(b.site).push(b);
     }
     return [...out];
+  }
+
+  // The tab title names the Mod that is open, or the site the list is filtered to (lib/page-title.js).
+  itemTitle() {
+    const e = this.editing;
+    if (e && !e.id) return 'New Mod';
+    if (e) return this.mods?.find((b) => b.id === e.id)?.name || e.name || e.site;
+    return this.site;
+  }
+
+  updated() {
+    setItemTitle(this, this.itemTitle());
   }
 
   render() {

@@ -7,6 +7,7 @@ import { findParent } from 'nomad://app-stdlib/js/dom.js';
 import { EditBookmarkPopup } from 'nomad://app-stdlib/js/com/popups/edit-bookmark.js';
 import { AddContactPopup } from './com/add-contact-popup.js';
 import mainCSS from '../css/main.css.js';
+import { PAGES, DEFAULT_PAGE, pageTitle, ITEM_TITLE_EVENT } from './lib/page-title.js';
 import './views/drives.js';
 import './views/listings.js';
 import './views/names.js';
@@ -26,6 +27,7 @@ export class LibraryApp extends LitElement {
       view: { type: String },
       filter: { type: String },
       viewMode: { type: String },
+      itemTitle: { type: String }, // the item the page has open, for the tab title
     };
   }
 
@@ -39,14 +41,18 @@ export class LibraryApp extends LitElement {
     nomad.panes.attachToLastActivePane();
 
     this.view = '';
+    this.itemTitle = '';
     this.viewMode = localStorage.getItem('lib-view-mode') || 'list';
     const getView = () => {
       var view = location.pathname.slice(1);
-      return view === '' ? 'drives' : view;
+      return view === '' ? DEFAULT_PAGE : view;
     };
     this.setView(getView());
     window.addEventListener('popstate', (event) => {
       this.setView(getView());
+    });
+    this.addEventListener(ITEM_TITLE_EVENT, (e) => {
+      this.itemTitle = e.detail || '';
     });
 
     this.addEventListener('click', (e) => {
@@ -72,6 +78,7 @@ export class LibraryApp extends LitElement {
   async setView(view) {
     if (this.view === view) return;
     this.view = view;
+    this.itemTitle = '';
 
     var pathname = `/${view}`;
     if (location.pathname !== pathname) {
@@ -80,6 +87,10 @@ export class LibraryApp extends LitElement {
 
     await this.requestUpdate();
     this.shadowRoot.querySelector('[loadable]')?.load();
+  }
+
+  updated() {
+    document.title = pageTitle(this.view, this.itemTitle);
   }
 
   // rendering
@@ -118,65 +129,12 @@ export class LibraryApp extends LitElement {
       <div class="layout">
         <nav>
           <div class="page-nav">
-            ${pageNav(
-              'drives',
-              html`<span class="fas fa-fw fa-sitemap"></span>
-                <span class="label">Hyperdrives</span>`
-            )}
-            ${pageNav(
-              'listings',
-              html`<span class="fas fa-fw fa-broadcast-tower"></span>
-                <span class="label">Listings</span>`
-            )}
-            ${pageNav(
-              'names',
-              html`<span class="fas fa-fw fa-tag"></span>
-                <span class="label">Names</span>`
-            )}
-            ${pageNav(
-              'personas',
-              html`<span class="fas fa-fw fa-id-badge"></span>
-                <span class="label">Personas</span>`
-            )}
-            ${pageNav(
-              'mods',
-              html`<span class="fas fa-fw fa-magic"></span>
-                <span class="label">Mods</span>`
-            )}
-            ${pageNav(
-              'jobs',
-              html`<span class="fas fa-fw fa-clock"></span>
-                <span class="label">Jobs</span>`
-            )}
-            ${pageNav(
-              'secrets',
-              html`<span class="fas fa-fw fa-key"></span>
-                <span class="label">Secrets</span>`
-            )}
-            ${pageNav(
-              'sharing',
-              html`<span class="fas fa-fw fa-user-friends"></span>
-                <span class="label">Sharing</span>`
-            )}
-            ${pageNav(
-              'bookmarks',
-              html`<span class="far fa-fw fa-star"></span>
-                <span class="label">Bookmarks</span>`
-            )}
-            ${pageNav(
-              'contacts',
-              html`<span class="far fa-fw fa-address-card"></span>
-                <span class="label">Contacts</span>`
-            )}
-            ${pageNav(
-              'history',
-              html`<span class="fas fa-fw fa-history"></span>
-                <span class="label">History</span>`
-            )}
-            ${pageNav(
-              'downloads',
-              html`<span class="fas fa-fw fa-arrow-down"></span>
-                <span class="label">Downloads</span>`
+            ${PAGES.map(
+              ([id, label, icon]) => pageNav(
+                id,
+                html`<span class="${icon}"></span>
+                  <span class="label">${label}</span>`
+              )
             )}
           </div>
         </nav>

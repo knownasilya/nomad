@@ -4,6 +4,7 @@ import {
 } from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
 import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
 import * as toast from 'nomad://app-stdlib/js/com/toast.js';
+import { setItemTitle } from '../lib/page-title.js';
 import modsCSS from '../../css/views/mods.css.js';
 import jobsCSS from '../../css/views/jobs.css.js';
 import secretsCSS from '../../css/views/secrets.css.js';
@@ -90,6 +91,17 @@ export class SecretsView extends LitElement {
     return (this.secrets || []).filter(
       (s) => !f || s.name.toLowerCase().includes(f) || s.note.toLowerCase().includes(f) || s.hosts.some((h) => h.includes(f))
     );
+  }
+
+  // The tab title names the secret that is open (lib/page-title.js).
+  itemTitle() {
+    const e = this.editing;
+    if (!e) return '';
+    return e.isNew ? 'New Secret' : e.name;
+  }
+
+  updated() {
+    setItemTitle(this, this.itemTitle());
   }
 
   render() {

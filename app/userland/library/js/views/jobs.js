@@ -4,6 +4,7 @@ import {
 } from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
 import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
 import * as toast from 'nomad://app-stdlib/js/com/toast.js';
+import { setItemTitle } from '../lib/page-title.js';
 import { queryWords, matchesWords } from 'nomad://app-stdlib/js/search-match.js';
 import modsCSS from '../../css/views/mods.css.js';
 import jobsCSS from '../../css/views/jobs.css.js';
@@ -141,6 +142,18 @@ export class JobsView extends LitElement {
         j.prompt.toLowerCase().includes(f) ||
         (j.source?.url || '').includes(f)
     );
+  }
+
+  // The tab title names the Job that is open (lib/page-title.js).
+  itemTitle() {
+    const e = this.editing;
+    if (e && !e.id) return 'New Job';
+    const id = e?.id || this.openId;
+    return (id && this.jobs?.find((j) => j.id === id)?.title) || '';
+  }
+
+  updated() {
+    setItemTitle(this, this.itemTitle());
   }
 
   render() {
