@@ -138,6 +138,9 @@ class Tab extends EventEmitter {
 
   get state() {
     var state = this.primaryPane?.state || {};
+    // Sound from any page of a split view marks the tab (tab strip, sidebar, the tab's menu).
+    state.isCurrentlyAudible = this.isCurrentlyAudible;
+    state.isAudioMuted = this.isAudioMuted;
     return Object.assign(state, {
       isActive: this.isActive,
       isPinned: this.isPinned,
@@ -339,8 +342,18 @@ class Tab extends EventEmitter {
     this.browserWindow = targetWindow;
   }
 
+  get isCurrentlyAudible() {
+    return this.panes.some((p) => p.isCurrentlyAudible);
+  }
+
+  // Muted when every page in it is muted: Mute Tab and the speaker on the tab mute them all.
+  get isAudioMuted() {
+    return this.panes.length > 0 && this.panes.every((p) => p.isAudioMuted);
+  }
+
   toggleMuted() {
-    this.activePane.toggleMuted();
+    const muted = !this.isAudioMuted;
+    for (const pane of this.panes) pane.setAudioMuted(muted);
     this.emitTabUpdateState(this.activePane);
   }
 
@@ -1728,6 +1741,11 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
   async closeTab(index) {
     var win = getWindow(this.sender);
     remove(win, getByIndex(win, index));
+  },
+
+  // The speaker on a tab playing sound (tab strip, sidebar): mute or unmute it.
+  async toggleTabMuted(index) {
+    getByIndex(getWindow(this.sender), index)?.toggleMuted();
   },
 
   async setActiveTab(index) {

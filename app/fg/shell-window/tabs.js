@@ -205,6 +205,8 @@ class ShellWindowTabs extends LitElement {
       pinned: tab.isPinned,
       grouped: Boolean(group),
       'has-icon': tab.isAudioMuted || tab.isCurrentlyAudible,
+      // the close button shows on hover; the speaker keeps clear of it
+      'has-close': !tab.isPinned && (this.tabs.length < 12 || tab.isActive),
       'no-hover': this.tabs.length >= 12,
       'no-favicon': !showFavicon,
       // Draft Mode (ADR-0012): this tab is previewing a Drive's unpublished Draft
@@ -245,14 +247,17 @@ class ShellWindowTabs extends LitElement {
               </div>
             `
           : ''}
+        ${tab.isPinned && (tab.isAudioMuted || tab.isCurrentlyAudible)
+          ? this.renderAudioBtn(tab, index)
+          : ''}
         ${tab.isPinned
           ? ''
           : html`
               <div class="tab-title">${tab.title || tab.url}</div>
               ${tab.isAudioMuted
-                ? html`<span class="fas fa-volume-mute"></span>`
+                ? this.renderAudioBtn(tab, index)
                 : tab.isCurrentlyAudible
-                  ? html`<span class="fas fa-volume-up"></span>`
+                  ? this.renderAudioBtn(tab, index)
                   : ''}
               ${this.tabs.length < 12 || tab.isActive
                 ? html`
@@ -265,6 +270,22 @@ class ShellWindowTabs extends LitElement {
                 : ''}
             `}
       </div>
+    `;
+  }
+
+  // The speaker on a tab playing sound, or crossed out on a muted one. A click mutes or unmutes
+  // the tab (the tab's menu has Mute Tab too).
+  renderAudioBtn(tab, index) {
+    const muted = tab.isAudioMuted;
+    return html`
+      <span
+        class="tab-audio fas ${muted ? 'fa-volume-mute' : 'fa-volume-up'}"
+        role="button"
+        title=${muted ? 'Unmute tab' : 'Mute tab'}
+        aria-label=${muted ? 'Unmute tab' : 'Mute tab'}
+        @click=${(e) => this.onClickAudio(e, index)}
+        @mousedown=${(e) => e.stopPropagation()}
+      ></span>
     `;
   }
 
@@ -385,6 +406,12 @@ class ShellWindowTabs extends LitElement {
     if (e.which === 2) {
       bg.views.closeTab(index);
     }
+  }
+
+  onClickAudio(e, index) {
+    e.preventDefault();
+    e.stopPropagation();
+    bg.views.toggleTabMuted(index);
   }
 
   onClickClose(e, index) {
@@ -760,20 +787,45 @@ ShellWindowTabs.styles = css`
     padding-left: 11px;
   }
 
-  .fa-volume-up,
-  .fa-volume-mute {
+  /* the speaker on a tab playing sound: a button that mutes it, left of where the close button
+     shows on hover (it stays put, so a click meant for it never lands on close) */
+  .tab-audio {
     position: absolute;
-    top: 6px;
-    right: 10px;
-    font-size: 12px;
-    color: rgba(0, 0, 0, 0.6);
-    background: var(--bg-color--background);
-    padding: 2px 0 2px 4px;
+    top: 7px;
+    right: 8px;
+    z-index: 4;
+    width: 16px;
+    height: 16px;
+    line-height: 16px;
+    border-radius: 2px;
+    text-align: center;
+    font-size: 10px;
+    color: var(--text-color--tab--title);
+    opacity: 0.75;
   }
 
-  .tab.current .fa-volume-up,
-  .tab.current .fa-volume-mute {
-    background: var(--bg-color--foreground);
+  .tab-audio.fa-volume-mute {
+    opacity: 0.55;
+  }
+
+  .tab-audio:hover {
+    opacity: 1;
+    background: var(--bg-color--tab-close--hover);
+  }
+
+  .tab.has-close .tab-audio {
+    right: 26px;
+  }
+
+  /* a pinned tab: a small speaker at the icon's top right */
+  .tab.pinned .tab-audio {
+    top: 2px;
+    right: 3px;
+    width: 13px;
+    height: 13px;
+    line-height: 13px;
+    font-size: 8px;
+    border-radius: 50%;
   }
 
   .tab-nofavicon .tab-title {
@@ -821,15 +873,17 @@ ShellWindowTabs.styles = css`
     background: var(--bg-color--tab-close--hover);
   }
 
-  .tab:not(.current):hover,
-  .tab:not(.current):hover .fa-volume-up,
-  .tab:not(.current):hover .fa-volume-mute {
+  .tab:not(.current):hover {
     background: var(--bg-color--tab--hover);
   }
 
   .tab.has-icon .tab-title,
   .tab:hover:not(.no-hover) .tab-title {
     padding-right: 28px;
+  }
+
+  .tab.has-icon.has-close .tab-title {
+    padding-right: 46px;
   }
 
   .tab:hover .tab-close {

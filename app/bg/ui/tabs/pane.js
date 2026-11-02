@@ -207,8 +207,8 @@ export class Pane extends EventEmitter {
     this.webContents.on('page-title-updated', this.onPageTitleUpdated.bind(this)); // NOTE page-title-updated isn't documented on webContents but it is supported
     this.webContents.on('page-favicon-updated', this.onPageFaviconUpdated.bind(this));
     this.webContents.setWindowOpenHandler(this.onWindowOpen.bind(this));
-    this.webContents.on('media-started-playing', this.onMediaChange.bind(this));
-    this.webContents.on('media-paused', this.onMediaChange.bind(this));
+    // sound starting or stopping: the tab shows a speaker while it plays (tabs.js, sidebar.js)
+    this.webContents.on('audio-state-changed', this.onAudioStateChanged.bind(this));
     this.webContents.on('found-in-page', this.onFoundInPage.bind(this));
     this.webContents.on('zoom-changed', this.onZoomChanged.bind(this));
 
@@ -535,7 +535,11 @@ export class Pane extends EventEmitter {
   }
 
   toggleMuted() {
-    this.webContents.setAudioMuted(!this.isAudioMuted);
+    this.setAudioMuted(!this.isAudioMuted);
+  }
+
+  setAudioMuted(muted) {
+    this.webContents.setAudioMuted(Boolean(muted));
   }
 
   async captureScreenshot() {
@@ -1054,12 +1058,11 @@ export class Pane extends EventEmitter {
     return { action: 'deny' };
   }
 
-  onMediaChange(e) {
-    // our goal with this event handler is to detect that audio is playing
-    // this lets us then render an "audio playing" icon on the tab
-    // for whatever reason, the event consistently precedes the "is audible" being set by at most 1s
-    // so, we delay for 1s, then emit a state update
-    setTimeout(() => this.emitUpdateState(), 1e3);
+  // Chromium says when the page starts or stops making sound (any source: video, audio, Web Audio),
+  // which the old media-started-playing guess missed for sound that wasn't a media element and for
+  // a video that just ended.
+  onAudioStateChanged() {
+    this.emitUpdateState();
   }
 
   onFoundInPage(e, res) {
