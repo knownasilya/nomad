@@ -6,12 +6,14 @@
  * - There can only ever be one Site Info view for a given browser window
  * - Site Info views are created with each browser window and then shown/hidden as needed
  * - When unfocused, the Site Info view is hidden (it's meant to act as a popup menu)
+ * - A press anywhere else in the window hides it too (popup-close.mjs)
  */
 
 import path from 'path';
 import Events from 'events';
 import { BrowserView } from 'electron';
 import * as tabManager from '../tabs/manager';
+import { watchOutsidePress, createReopenGuard } from './popup-close.mjs';
 
 // globals
 // =
@@ -19,6 +21,7 @@ import * as tabManager from '../tabs/manager';
 const MARGIN_SIZE = 10;
 var events = new Events();
 var views = {}; // map of {[parentWindow.id] => BrowserView}
+var reopenGuards = {}; // map of {[parentWindow.id] => createReopenGuard()}
 
 // exported api
 // =
@@ -47,6 +50,7 @@ export function setup(parentWindow) {
 
 export function destroy(parentWindow) {
   if (get(parentWindow)) {
+    get(parentWindow).stopOutsidePress?.();
     get(parentWindow).webContents.destroy();
     delete views[parentWindow.id];
   }
@@ -90,6 +94,9 @@ export function toggle(parentWindow, opts) {
   if (view) {
     if (view.isVisible) {
       return hide(parentWindow);
+    } else if (guard(parentWindow).shouldIgnoreToggle('site-info')) {
+      // the press on the site-info button already closed it; this is that press's click
+      return;
     } else {
       return show(parentWindow, opts);
     }
@@ -103,6 +110,13 @@ export async function show(parentWindow, opts) {
     parentWindow.addBrowserView(view);
     reposition(parentWindow);
     view.isVisible = true;
+    guard(parentWindow).clear();
+    view.stopOutsidePress?.();
+    view.stopOutsidePress = watchOutsidePress(parentWindow, view.webContents, () => {
+      if (!view.isVisible) return;
+      guard(parentWindow).closedByPress('site-info');
+      hide(parentWindow);
+    });
 
     var params = opts && opts.params ? opts.params : {};
     params.url = tabManager.getActive(parentWindow).url;
@@ -119,6 +133,8 @@ export async function show(parentWindow, opts) {
 export function hide(parentWindow) {
   var view = get(parentWindow);
   if (view) {
+    view.stopOutsidePress?.();
+    view.stopOutsidePress = null;
     if (view.isVisible) {
       view.webContents.executeJavaScript(`reset(); undefined`);
     }
@@ -131,6 +147,10 @@ export function hide(parentWindow) {
 
 // internal methods
 // =
+
+function guard(parentWindow) {
+  return (reopenGuards[parentWindow.id] = reopenGuards[parentWindow.id] || createReopenGuard());
+}
 
 /**
  * @description
