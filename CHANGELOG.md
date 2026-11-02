@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.35.0](https://github.com/knownasilya/nomad/compare/v1.34.0...v1.35.0) (2026-11-02)
+
+
+### Features
+
+* **personas:** edit a Persona on any device ([b81f2ef](https://github.com/knownasilya/nomad/commit/b81f2ef212c260621d9901b78047c5887604f7a9))
+* **personas:** make a Persona on the phone ([82bbc16](https://github.com/knownasilya/nomad/commit/82bbc16f7f3662bcf53d42e18b45d83a2743c0b6))
+
 ## [1.34.0](https://github.com/knownasilya/nomad/compare/v1.33.0...v1.34.0) (2026-11-02)
 
 
