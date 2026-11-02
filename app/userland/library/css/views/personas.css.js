@@ -98,6 +98,15 @@ const cssStr = css`
     min-width: 220px;
   }
 
+  .profile-row textarea {
+    font-family: inherit;
+  }
+
+  .fields input.email {
+    width: 100%;
+    max-width: 420px;
+  }
+
   .fields input.drive-url {
     width: 100%;
     font-family: var(--code-font);

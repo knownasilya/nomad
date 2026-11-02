@@ -263,6 +263,28 @@ revocation is an event.
 The prototype ([#37]) shows the always-on and only-with-a-Session versions side by side before this
 is final.
 
+## Amendment: a site can ask for the Persona's email (2026-11-02)
+
+Ordinary web sites often need a way to reach the user, and a profile drive gives them none. So a
+Persona can have an email, and a site can ask for it as a third permission, `email`.
+
+- **On the Vault record, never in the Profile Drive.** Anyone with a Profile Drive's URL can read it
+  (6), so an address there would be public. `email` is a field of `/.vault/personas/<id>.json`
+  (`normalizeEmail` in `shared/personas.mjs`), set in My Library → Personas or typed in the login
+  prompt for a Persona that has none. It syncs to the user's Devices like the rest of the record.
+- **Its own permission.** `requestLogin({ perms: ['email'] })` gets its own checkbox in the prompt,
+  which the user can uncheck (9). It stands apart from `profile`: a site can have the email and not
+  the profile, or the reverse. A page gets `session.email`, read from the Persona each time, so a
+  changed address reaches the site and fires `change`. A Persona with no email gives none, and the
+  Session doesn't hold `email`.
+- **Said plainly, like tier 2 (8).** One address given to two sites ties them together, which undoes
+  the per-site `id`. The prompt and My Library say so. A Persona for each context, each with its own
+  address, is the answer today; per-site aliases (a relay that forwards mail) would be a new ADR.
+- **Not verified.** Nomad can't prove the address is the user's. A site that needs proof sends its own
+  code; the docs say so.
+- **Nothing else changes.** `email` isn't a browser permission: the permission engine never asks for
+  it, and no other API reads it. Pages still can't list Personas.
+
 ## Considered options
 
 - **Personas in sqlite** ([#29] B). Cheap and no wire concerns, but a new Device wouldn't know your

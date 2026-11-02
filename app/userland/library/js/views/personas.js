@@ -13,7 +13,7 @@ import personasCSS from '../../css/views/personas.css.js';
 // each Space's own, and sees and ends the Sessions sites hold. Backed by nomad.personas
 // (bg/ui/personas.js); everything lives in the Vault, so it follows the user to their other devices.
 
-const blank = () => ({ isNew: true, label: '', title: '', description: '', thumb: '', thumbPreview: '', useDrive: false, profileUrl: '', error: '', busy: false });
+const blank = () => ({ isNew: true, label: '', title: '', description: '', email: '', thumb: '', thumbPreview: '', useDrive: false, profileUrl: '', error: '', busy: false });
 
 const STATE_ICON = { 'foreign-writers': 'fa-exclamation-triangle', 'not-ready': 'fa-sync-alt' };
 
@@ -69,7 +69,7 @@ export class PersonasView extends LitElement {
       <div class="intro">
         A Persona is who you are when a site asks you to log in. Each one is a profile drive of your
         own: a name, a picture and a few words. A site sees nothing about you until you say yes, and
-        then only a random ID made for that site, plus your profile if you leave it checked. Personas
+        then only a random ID made for that site, plus your profile or email if you leave them checked. Personas
         stay on your own devices.
       </div>
       ${st.hasVault && !st.vaultReady
@@ -175,6 +175,12 @@ export class PersonasView extends LitElement {
                 </label>
               </div>
             `}
+        <div class="fields">
+          <label class="grow">
+            <span>Email <span class="hint">Private. A site gets it only when you say yes, and sites that get the same email can tell it’s you.</span></span>
+            <input class="email" type="email" placeholder="you@example.com (optional)" maxlength="254" .value=${e.email} @input=${(ev) => set({ email: ev.target.value })} />
+          </label>
+        </div>
         ${p && !p.writable
           ? html`<div class="hint-row">This device can’t change the profile. Change its name and picture on the device that made it.</div>`
           : ''}
@@ -249,7 +255,7 @@ export class PersonasView extends LitElement {
   }
 
   edit(p) {
-    this.editing = { ...blank(), isNew: false, id: p.id, label: p.label, title: p.title, description: p.description };
+    this.editing = { ...blank(), isNew: false, id: p.id, label: p.label, title: p.title, description: p.description, email: p.email || '' };
   }
 
   // events
@@ -275,13 +281,13 @@ export class PersonasView extends LitElement {
       if (e.isNew) {
         const p = await nomad.personas.create(
           e.useDrive
-            ? { label: e.label, profileUrl: e.profileUrl }
-            : { label: e.label || e.title, title: e.title || e.label, description: e.description, thumb: e.thumb || undefined }
+            ? { label: e.label, profileUrl: e.profileUrl, email: e.email }
+            : { label: e.label || e.title, title: e.title || e.label, description: e.description, thumb: e.thumb || undefined, email: e.email }
         );
         toast.create(`Made the Persona “${p.label}”`, 'success');
       } else {
         const p = this.st.personas.find((x) => x.id === e.id);
-        const fields = { label: e.label };
+        const fields = { label: e.label, email: e.email };
         if (p?.writable) Object.assign(fields, { title: e.title, description: e.description, thumb: e.thumb || undefined });
         await nomad.personas.update(e.id, fields);
         toast.create('Saved', 'success');
@@ -338,9 +344,11 @@ export class PersonasView extends LitElement {
 
 function describePerms(perms) {
   const names = perms.map((t) => t.split(':')[0]);
-  if (names.includes('modifyDrive')) return 'sees your profile and can change it';
-  if (names.includes('profile')) return 'sees your profile';
-  return 'knows only a random ID';
+  const sees = [];
+  if (names.includes('profile')) sees.push('your profile');
+  if (names.includes('email')) sees.push('your email');
+  if (!sees.length) return 'knows only a random ID';
+  return `sees ${sees.join(' and ')}${names.includes('modifyDrive') ? ', and can change your profile' : ''}`;
 }
 
 function cleanError(err) {

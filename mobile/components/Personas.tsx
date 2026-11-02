@@ -88,7 +88,7 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
     }
     return {
       title: sheet.label,
-      subtitle: sheet.profileUrl,
+      subtitle: sheet.email ? `${sheet.email} · ${sheet.profileUrl}` : sheet.profileUrl,
       groups: [[{ label: sheet.isDefault ? 'Your default Persona' : 'Make default', icon: 'star', active: sheet.isDefault, disabled: sheet.isDefault, onPress: () => act('setDefault', { id: sheet.id }, 'Couldn’t change it') }]]
     }
   }
@@ -185,9 +185,9 @@ function Avatar ({ p, s }: { p: PersonaSummary | null; s: Styles }) {
 
 function describePerms (perms: string[]) {
   const names = perms.map((p) => p.split(':')[0])
-  if (names.includes('modifyDrive')) return 'sees and changes your profile'
-  if (names.includes('profile')) return 'sees your profile'
-  return 'knows only a random ID'
+  const sees = [names.includes('profile') && 'your profile', names.includes('email') && 'your email'].filter(Boolean)
+  if (!sees.length) return 'knows only a random ID'
+  return `sees ${sees.join(' and ')}${names.includes('modifyDrive') ? ', and can change your profile' : ''}`
 }
 
 type Styles = ReturnType<typeof makeStyles>

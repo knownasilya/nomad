@@ -263,6 +263,7 @@ function view(p) {
   return {
     id: p.id,
     label: p.label,
+    email: p.email || '',
     profileUrl: p.profileUrl,
     title: info.title || '',
     description: info.description || '',
@@ -381,9 +382,10 @@ async function makeProfileDrive({ title, description, thumb }) {
 
 // Make a Persona: a new Profile Drive, or one of the user's own (this Device made it and it has no
 // other writers). The first Persona becomes the default.
-export function create({ label, title, description, thumb, profileUrl } = {}) {
+export function create({ label, title, description, thumb, profileUrl, email } = {}) {
   return serial(async () => {
     const name = P.normalizeLabel(label);
+    const mail = P.normalizeEmail(email); // check it before making a drive
     let url;
     let creator = null;
     if (profileUrl) {
@@ -420,7 +422,7 @@ export function create({ label, title, description, thumb, profileUrl } = {}) {
     }
     const existing = await vault.listAppRecords(P.PERSONAS_PREFIX);
     const id = P.newPersonaId(crypto.randomBytes(10));
-    const rec = P.makePersona({ id, label: name, profileUrl: url, creator });
+    const rec = P.makePersona({ id, label: name, profileUrl: url, creator, email: mail });
     await vault.putAppRecord(P.personaPath(id), rec);
     if (
       !existing.filter(P.isPersona).length &&
@@ -435,15 +437,17 @@ export function create({ label, title, description, thumb, profileUrl } = {}) {
   });
 }
 
-// Rename a Persona, and change its profile (name, description, picture) where this Device can write
-// the Profile Drive.
-export function update(id, { label, title, description, thumb } = {}) {
+// Rename a Persona or change its email (Vault record), and change its profile (name, description,
+// picture) where this Device can write the Profile Drive.
+export function update(id, { label, title, description, thumb, email } = {}) {
   return serial(async () => {
     const prev = await vault.readAppRecord(P.personaPath(id));
     if (!P.isPersona(prev)) throw new Error('That Persona is gone');
     let rec = prev;
-    if (label !== undefined && P.normalizeLabel(label) !== prev.label) {
-      rec = P.makePersona({ label }, prev);
+    const relabel = label !== undefined && P.normalizeLabel(label) !== prev.label;
+    const remail = email !== undefined && P.normalizeEmail(email) !== (prev.email || null);
+    if (relabel || remail) {
+      rec = P.makePersona({ ...(relabel ? { label } : {}), ...(remail ? { email } : {}) }, prev);
       await vault.putAppRecord(P.personaPath(id), rec);
     }
     if (title !== undefined || description !== undefined || thumb) {
@@ -556,7 +560,7 @@ export function sessionViewFor(url, spaceId) {
   const profile = p
     ? { url: p.profileUrl, title: info?.title || p.label, thumb: info?.thumb || '' }
     : null;
-  return P.sessionView(s, profile);
+  return P.sessionView(s, profile, p?.email || null);
 }
 
 // For site-info and the location bar: who you are on this site, and what the Session can do.

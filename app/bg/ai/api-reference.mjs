@@ -189,10 +189,11 @@ silent path, so call \`requestLogin\` from a button, not on load. A page has at 
 
 \`\`\`js
 // The prompt. Rejects (UserDeniedError) on cancel, "no", or no Persona; the reasons look the same.
-const session = await nomad.session.requestLogin({ perms: ['profile'], maxAge: 86400 /* optional, seconds */ })
+const session = await nomad.session.requestLogin({ perms: ['profile', 'email'], maxAge: 86400 /* optional, seconds */ })
 // { id: 'k3v…',            // random, made for this site + Persona + Space; the same on every visit
 //   perms: ['profile'],    // what the user left checked: a partial grant is normal
 //   profile: { url: 'hyper://…/', title: 'Ada', thumb: '/thumb.png' },  // only with 'profile'
+//   email: 'ada@example.org',  // only with 'email', and only when the Persona has one
 //   createdAt: '…', expiresAt?: '…' }
 const current = await nomad.session.getCurrent()   // the Session, or null. Never prompts.
 await nomad.session.revoke()                       // log out
@@ -200,9 +201,10 @@ nomad.session.addEventListener('change', e => { /* e.session: the new Session or
 \`\`\`
 
 - \`perms\`: \`'profile'\` (the Persona's drive URL, name and picture) and \`'modifyDrive'\` (write the Persona's own
-  profile drive; needs \`'profile'\`). Without \`'profile'\` the site only gets the random \`id\`: a stable stranger.
+  profile drive; needs \`'profile'\`) and \`'email'\` (the Persona's email, on its own; Nomad doesn't verify it, so
+  send your own code if you need to). Without any of them the site only gets the random \`id\`: a stable stranger.
 - \`change\` fires when the Session ends or changes: \`revoke()\`, the user logged out in site-info or My Library,
-  switched or deleted the Space's Persona, or did so on another device. Show a login button again.
+  switched or deleted the Space's Persona, changed its email, or did so on another device. Show a login button again.
 - Only http(s):// sites and hyper://<key> drives can ask. Personas themselves can't be listed by a page.
 
 ## nomad.panes — Multi-pane tab layout

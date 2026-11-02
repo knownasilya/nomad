@@ -23,6 +23,7 @@ class PersonaLoginModal extends LitElement {
       making: { type: Boolean },
       newTitle: { type: String },
       newLabel: { type: String },
+      newEmail: { type: String },
       vaultReady: { type: Boolean },
     };
   }
@@ -40,6 +41,7 @@ class PersonaLoginModal extends LitElement {
     this.making = false;
     this.newTitle = '';
     this.newLabel = '';
+    this.newEmail = '';
     this.vaultReady = true;
   }
 
@@ -50,7 +52,9 @@ class PersonaLoginModal extends LitElement {
     this.site = params.site || {};
     this.personas = params.personas || [];
     this.pickedId = params.pickedId || null;
-    this.perms = (params.perms || []).filter((p) => p === 'profile' || p === 'modifyDrive');
+    this.perms = (params.perms || []).filter((p) =>
+      ['profile', 'modifyDrive', 'email'].includes(p)
+    );
     this.checked = [...this.perms];
     this.space = params.space || null;
     this.vaultReady = params.vaultReady !== false;
@@ -287,11 +291,54 @@ class PersonaLoginModal extends LitElement {
               </label>
             </li>`
           : ''}
+        ${this.perms.includes('email') ? this.renderEmail(p) : ''}
       </ul>
     `;
   }
 
+  // The `email` permission (ADR-0031 amendment). A Persona with an email shows it; one without (or a
+  // new one) gets a field, and what the user types is saved on the Persona. Left empty, the site
+  // doesn't get an email.
+  renderEmail(p) {
+    const on = this.checked.includes('email');
+    const known = p?.email || '';
+    const bad = on && !known && this.emailInvalid;
+    return html`
+      <li class="email ${on ? '' : 'off'}">
+        <label>
+          <input
+            type="checkbox"
+            .checked=${on}
+            @change=${(e) => this.toggle('email', e.target.checked)}
+          />
+          <span>
+            ${known
+              ? html`See your email, <strong>${known}</strong>`
+              : html`See your email${this.making ? '' : html` (this Persona has none yet)`}`}
+            <span class="sub">Sites that get the same email can tell it’s you.</span>
+          </span>
+        </label>
+        ${!known && on
+          ? html`<input
+              class="email-input ${bad ? 'bad' : ''}"
+              type="email"
+              placeholder="you@example.com (optional)"
+              autocomplete="email"
+              .value=${this.newEmail}
+              @input=${(e) => (this.newEmail = e.target.value)}
+            />`
+          : ''}
+      </li>
+    `;
+  }
+
+  get emailInvalid() {
+    const v = this.newEmail.trim();
+    return !!v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  }
+
   get canAllow() {
+    if (this.checked.includes('email') && this.emailInvalid) return false;
     if (this.making) return !!this.newTitle.trim() && this.vaultReady;
     return !!this.picked;
   }
@@ -334,18 +381,28 @@ class PersonaLoginModal extends LitElement {
 
   onAllow() {
     if (!this.canAllow) return;
-    const perms = this.checked.includes('profile')
+    let perms = this.checked.includes('profile')
       ? this.checked
       : this.checked.filter((p) => p !== 'modifyDrive');
+    // An email typed here, for a Persona that has none. No email at all: the site doesn't get one.
+    const known = this.making ? '' : this.picked.email || '';
+    const email = perms.includes('email') && !known ? this.newEmail.trim() : '';
+    if (!known && !email) perms = perms.filter((p) => p !== 'email');
     if (this.making) {
       const title = this.newTitle.trim();
       this.cbs.resolve({
         allow: true,
         create: { title, label: this.newLabel.trim() || 'Me' },
         perms,
+        ...(email ? { email } : {}),
       });
     } else {
-      this.cbs.resolve({ allow: true, personaId: this.picked.id, perms });
+      this.cbs.resolve({
+        allow: true,
+        personaId: this.picked.id,
+        perms,
+        ...(email ? { email } : {}),
+      });
     }
   }
 }
@@ -563,7 +620,8 @@ PersonaLoginModal.styles = [
       font-weight: 500;
     }
 
-    .make input {
+    .make input,
+    .perms .email-input {
       height: 30px;
       padding: 0 9px;
       border: 1px solid var(--m-border-strong);
@@ -572,7 +630,37 @@ PersonaLoginModal.styles = [
       outline: none;
     }
 
-    .make input:focus {
+    .perms .email-input {
+      margin-left: 22px;
+      width: calc(100% - 22px);
+      box-sizing: border-box;
+      font-family: inherit;
+      background: inherit;
+      color: inherit;
+    }
+
+    .perms .email-input.bad {
+      border-color: var(--pl-warn);
+    }
+
+    .perms li.email {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+    }
+
+    .perms li.email.off {
+      color: var(--m-text-very-light);
+    }
+
+    .perms .sub {
+      display: block;
+      color: var(--m-text-very-light);
+      font-size: 11.5px;
+    }
+
+    .make input:focus,
+    .perms .email-input:focus {
       border-color: var(--m-blue);
       box-shadow: 0 0 0 3px var(--m-focus-ring);
     }

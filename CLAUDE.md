@@ -499,7 +499,9 @@ cache and writes `app/bg/ui/personas.js`. Two APIs: public `nomad.session` (`req
 `getCurrent`, `revoke`, `change`; `bg/web-apis/bg/session.ts`) and internal `nomad.personas`
 (`bg/web-apis/bg/personas.ts`, nomad:// only: a page must never list Personas). The prompt is the
 `persona-login` modal (`app/fg/modals/persona-login.js`), the only way a Session is made: no
-trusted-sender shortcut, no silent path, and a "no" isn't remembered past the page load. The
+trusted-sender shortcut, no silent path, and a "no" isn't remembered past the page load. A Persona can
+have an `email` on its Vault record (never in the Profile Drive, which is public); a site gets it only
+with the `email` permission, which stands apart from `profile` (ADR-0031 amendment). The
 permission engine (`bg/ui/permissions.js`) counts a live Session's tokens (`profile`, and
 `modifyDrive:<the Persona's own drive>`) as granted; nothing else reads Sessions. A Persona logs in
 only while its Profile Drive's writers are the user's own Devices (`profileState`), and
