@@ -11,6 +11,7 @@ export default {
   loadURL: 'promise',
   minimizeTab: 'promise',
   closeTab: 'promise',
+  toggleTabMuted: 'promise',
   setActiveTab: 'promise',
   reorderTab: 'promise',
   restoreBgTab: 'promise',

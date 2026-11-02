@@ -226,8 +226,8 @@ class ShellWindowSidebar extends LitElement {
                 @error=${(e) => this._onFaviconError(e, tile.index)}
               />`
             : html`<img src="asset:favicon:${tab ? tab.url : tile.href}" />`}
-        ${tab?.isCurrentlyAudible && !tab.isAudioMuted
-          ? html`<span class="fas fa-volume-up pin-audio"></span>`
+        ${tab && (tab.isCurrentlyAudible || tab.isAudioMuted)
+          ? this._renderAudioBtn(tab, tile.index, 'pin-audio')
           : ''}
       </div>
     `;
@@ -364,9 +364,9 @@ class ShellWindowSidebar extends LitElement {
           ? html`<span class="fas fa-columns tab-split" title="Split view"></span>`
           : ''}
         ${tab.isAudioMuted
-          ? html`<span class="fas fa-volume-mute tab-audio"></span>`
+          ? this._renderAudioBtn(tab, index, 'tab-audio')
           : tab.isCurrentlyAudible
-            ? html`<span class="fas fa-volume-up tab-audio"></span>`
+            ? this._renderAudioBtn(tab, index, 'tab-audio')
             : ''}
         <div
           class="tab-close"
@@ -449,6 +449,27 @@ class ShellWindowSidebar extends LitElement {
 
   _onClickNew() {
     bg.views.createTab(undefined, { focusLocationBar: true, setActive: true });
+  }
+
+  // The speaker on a tab playing sound, or crossed out on a muted one; a click mutes or unmutes it.
+  _renderAudioBtn(tab, index, cls) {
+    const muted = tab.isAudioMuted;
+    return html`
+      <span
+        class="${cls} fas ${muted ? 'fa-volume-mute' : 'fa-volume-up'}"
+        role="button"
+        title=${muted ? 'Unmute tab' : 'Mute tab'}
+        aria-label=${muted ? 'Unmute tab' : 'Mute tab'}
+        @click=${(e) => this._onClickAudio(e, index)}
+        @mousedown=${(e) => e.stopPropagation()}
+      ></span>
+    `;
+  }
+
+  _onClickAudio(e, index) {
+    e.preventDefault();
+    e.stopPropagation();
+    bg.views.toggleTabMuted(index);
   }
 
   _onClickClose(e, index) {
@@ -985,13 +1006,24 @@ ShellWindowSidebar.styles = css`
     opacity: 0.7;
   }
 
+  /* a pin playing sound: a small speaker badge at its corner, a button that mutes it */
   .pin-audio {
     position: absolute;
-    right: 4px;
-    bottom: 3px;
+    right: 2px;
+    bottom: 2px;
+    width: 14px;
+    height: 14px;
+    line-height: 14px;
+    text-align: center;
+    border-radius: 50%;
     font-size: 8px;
     color: var(--text-color--tab--title);
-    opacity: 0.6;
+    background: var(--bg-color--background);
+    box-shadow: 0 0 0 1px var(--border-color--tab, rgba(0, 0, 0, 0.1));
+  }
+
+  .pin-audio:hover {
+    background: var(--bg-color--tab-close--hover);
   }
 
   .tab-separator {
@@ -1088,11 +1120,26 @@ ShellWindowSidebar.styles = css`
     white-space: nowrap;
   }
 
+  /* the speaker on a tab playing sound: a button that mutes it */
   .tab-audio {
     font-size: 10px;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    border-radius: 3px;
     color: var(--text-color--tab--title);
-    opacity: 0.5;
+    opacity: 0.75;
     flex-shrink: 0;
+  }
+
+  .tab-audio.fa-volume-mute {
+    opacity: 0.55;
+  }
+
+  .tab-audio:hover {
+    opacity: 1;
+    background: var(--bg-color--tab-close--hover);
   }
 
   .tab-close {
