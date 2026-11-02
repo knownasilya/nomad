@@ -39,3 +39,26 @@ async function toJpegDataUrl (uri: string): Promise<string> {
   if (!saved.base64) throw new Error('Could not read the photo')
   return 'data:image/jpeg;base64,' + saved.base64
 }
+
+// A Persona's picture (ADR-0031): one square photo, cropped by the picker and scaled to AVATAR px,
+// as a data:image/jpeg URL. null means the person cancelled.
+const AVATAR = 512
+export async function pickAvatar (source: 'camera' | 'library'): Promise<string | null> {
+  let result: ImagePicker.ImagePickerResult
+  const opts: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1] }
+  if (source === 'camera') {
+    const perm = await ImagePicker.requestCameraPermissionsAsync()
+    if (!perm.granted) throw new Error('Camera access is off for Nomad. Turn it on in system settings.')
+    result = await ImagePicker.launchCameraAsync(opts)
+  } else {
+    result = await ImagePicker.launchImageLibraryAsync(opts)
+  }
+  if (result.canceled || !result.assets[0]) return null
+  let image = await ImageManipulator.manipulate(result.assets[0].uri).renderAsync()
+  if (image.width > AVATAR || image.height > AVATAR) {
+    image = await ImageManipulator.manipulate(image).resize({ width: AVATAR, height: AVATAR }).renderAsync()
+  }
+  const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.8, base64: true })
+  if (!saved.base64) throw new Error('Could not read the photo')
+  return 'data:image/jpeg;base64,' + saved.base64
+}

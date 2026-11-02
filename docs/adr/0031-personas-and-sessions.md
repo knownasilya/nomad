@@ -285,6 +285,35 @@ Persona can have an email, and a site can ask for it as a third permission, `ema
 - **Nothing else changes.** `email` isn't a browser permission: the permission engine never asks for
   it, and no other API reads it. Pages still can't list Personas.
 
+## Amendment: make and edit a Persona on any Device (2026-11-02)
+
+A user who has only their phone with them should be able to make a Persona there, and a Persona
+should be edited the same on every Device, whichever one made it. My Library → Personas on the phone
+gets a **New Persona** form (a name, a picture, a few words, a private label and an optional email)
+and, for each Persona, Edit and Delete, as on the computer.
+
+- **The phone makes and writes a Profile Drive** like a computer does: an Autobase drive with only
+  `/index.json` (`profileManifest` in `shared/personas.mjs`) and the picture as `/thumb.<ext>`
+  (`parseThumb`: PNG, JPEG, WebP or GIF, 2 MB at most; the phone crops it square and saves a 512px
+  JPEG). The Vault record is the same (`savePersona` in `mobile/backend/lib/vault-apps.mjs`), with the
+  drive key as `creator`, and the first Persona made anywhere becomes the default. The email stays
+  on the record, never in the drive. The phone seeds the drive so a computer can fetch it.
+- **Every Device writes every Profile Drive.** This changes 5: a Profile Drive's writers are still
+  only the user's Devices, but now all of them, not just the one that made it. A Device that can't
+  write a Persona's drive yet puts its writer key for that drive in the Vault as an **ask**,
+  `/.vault/persona-writers/<driveKey>/<writerKey>.json` `{ drive, writerKey, device, requestedAt }`.
+  A Device that writes the drive adds it (`addWriter`) and marks the ask granted (`grantedBy`,
+  `grantedAt`). Only the user's Devices write the Vault, so an ask from a Device the Vault lists needs
+  no prompt, like a Root Drive's fan-out. The writer check counts a granted ask's writer key as the
+  user's own (`ownWriterKeys`, `profileState({ ownWriters })`). When a Device leaves the Vault, a
+  Device that writes the drive takes its writer off and drops the ask (`writerAsksToRevoke`), and
+  until then the drive reads as `foreign-writers`. Only a drive one of the user's Devices made
+  (`creator` is the drive key) takes part. Desktop runs this in `bg/ui/personas.js` (`syncWriters`),
+  the phone in `backend.mjs` (`syncPersonaWriters`), on every Vault change.
+- **Until the add arrives**, the name, picture and words are locked on the new Device (the label and
+  email, being Vault fields, can change at once), and the form says to keep the Device that made the
+  Persona online for a minute. Deleting a Persona drops its asks.
+
 ## Considered options
 
 - **Personas in sqlite** ([#29] B). Cheap and no wire concerns, but a new Device wouldn't know your
@@ -329,7 +358,7 @@ Persona can have an email, and a site can ask for it as a third permission, `ema
   and unread). Not in this version: a page's `nomad.ai.chat()` must not learn it, and the user's own
   AI doesn't need it yet.
 - **The phone.** It sees Personas and Sessions as soon as the Vault syncs (`mobile/backend/lib/
-  vault-apps.mjs`) and can list and end them. `nomad.session` in the phone's WebView, with its own
+  vault-apps.mjs`), can list and end them, and can make, edit and delete Personas (amendment above). `nomad.session` in the phone's WebView, with its own
   prompt, comes after desktop.
 - **Concurrent Sessions as two Personas on one origin in one Space.** Ruled out by the singular API.
   If a real need appears, it's a new ADR, not a quiet change.

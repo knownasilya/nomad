@@ -448,8 +448,12 @@ export default class DriveManager {
   // same writable structure the browser tab uses — edits show on reload.
 
   async _openOwned (driveType, key, ns) {
-    if (!ns) throw new Error('Read-only drive: only drives you created can be edited')
-    return this.open(driveType, key, () => {}, ns)
+    if (ns) return this.open(driveType, key, () => {}, ns)
+    // A drive another Device made and added this phone to as a writer (a Persona's Profile Drive):
+    // open it by key, where this phone's writer key for it lives, and write only if it is writable.
+    const entry = driveType === DRIVE_AUTOBASE ? await this.open(driveType, key) : null
+    if (!entry || !isWritable(entry.drive)) throw new Error('Read-only drive: only drives you created can be edited')
+    return entry
   }
 
   // List a folder's immediate children, plus whether the drive is writable.

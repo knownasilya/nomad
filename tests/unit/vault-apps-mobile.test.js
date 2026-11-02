@@ -565,3 +565,54 @@ describe('phone asks a computer to update and restart', () => {
     })
   }, 30000)
 })
+
+describe('phone makes a Persona (ADR-0031 amendment)', () => {
+  it('writes a Persona the computer can log in with, and the first one is the default', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      expect(phone.vaultWritable(base)).toBe(true)
+      const made = await phone.savePersona(base, { id: 'abcd1234abcd1234', label: ' Me ', profileUrl: `hyper://${KEY}/`, email: 'Ada@Example.org' })
+      expect(made).toEqual({ id: 'abcd1234abcd1234', label: 'Me', profileUrl: `hyper://${KEY}/` })
+
+      await until(async () => !!(await readJson(computer, '/.vault/personas/abcd1234abcd1234.json')))
+      const rec = await readJson(computer, '/.vault/personas/abcd1234abcd1234.json')
+      // The phone made the drive, so it is the creator: profileState calls the Persona usable.
+      expect(rec).toMatchObject({ type: 'nomad/persona', label: 'Me', profileUrl: `hyper://${KEY}/`, creator: KEY })
+      expect(rec.email).toMatch(/^ada@example\.org$/i)
+      await until(async () => (await readJson(computer, '/.vault/persona-default.json'))?.personaId === 'abcd1234abcd1234')
+
+      // A second Persona leaves the default alone.
+      const other = 'b'.repeat(64)
+      await phone.savePersona(base, { id: 'ffff0000ffff0000', label: 'Work', profileUrl: `hyper://${other}/` })
+      await until(async () => !!(await readJson(computer, '/.vault/personas/ffff0000ffff0000.json')))
+      expect((await readJson(computer, '/.vault/persona-default.json')).personaId).toBe('abcd1234abcd1234')
+      expect((await readJson(computer, '/.vault/personas/ffff0000ffff0000.json')).creator).toBe(other)
+    })
+  }, 30000)
+
+  it('edits and deletes a Persona, and asks to write its drive', async () => {
+    await withDevices(async ({ computer, phone: base }) => {
+      const id = 'abcd1234abcd1234'
+      await computer.append(putJson('/.vault/personas/' + id + '.json', { type: 'nomad/persona', id, label: 'Me', profileUrl: `hyper://${KEY}/`, creator: KEY, createdAt: 'x', updatedAt: 'x' }))
+      await computer.append(putJson('/.vault/persona-default.json', { type: 'nomad/persona-default', personaId: id }))
+      await computer.update()
+      await until(async () => !!(await readJson(base, '/.vault/personas/' + id + '.json')))
+
+      await phone.updatePersona(base, id, { label: 'Home', email: 'me@example.org' })
+      await until(async () => (await readJson(computer, '/.vault/personas/' + id + '.json'))?.label === 'Home')
+      expect((await readJson(computer, '/.vault/personas/' + id + '.json')).email).toBe('me@example.org')
+
+      const writerKey = '1'.repeat(64)
+      const ask = await phone.askToWritePersona(base, { drive: KEY, writerKey })
+      expect(ask.device).toBe(b4a.toString(base.local.key, 'hex'))
+      await until(async () => !!(await readJson(computer, `/.vault/persona-writers/${KEY}/${writerKey}.json`)))
+      const state = await phone.personaWriterState(base)
+      expect(state.asks).toHaveLength(1)
+      expect(state.device).toBe(ask.device)
+
+      await phone.removePersona(base, id)
+      await until(async () => !(await readJson(computer, '/.vault/personas/' + id + '.json')))
+      expect((await readJson(computer, '/.vault/persona-default.json')).personaId).toBe(null)
+      await until(async () => !(await readJson(computer, `/.vault/persona-writers/${KEY}/${writerKey}.json`)))
+    })
+  }, 30000)
+})

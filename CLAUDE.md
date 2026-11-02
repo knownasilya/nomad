@@ -508,7 +508,11 @@ only while its Profile Drive's writers are the user's own Devices (`profileState
 `fs.approveRequest`/`createInvite` on that drive warn first. UI: My Library → Personas, site-info's
 "Logged in" tab, the Persona icon in the location bar, the Persona on the Spaces button and in the
 Spaces menu; the phone's Personas screen (`mobile/components/Personas.tsx`, `RPC_APPS`
-`personas`) picks the default and the Space's Persona and logs sites out. `nomad.session` in the
+`personas`) picks the default and the Space's Persona, logs sites out, and makes, edits and deletes
+Personas (`NewPersona.tsx`, `createPersona`/`updatePersona` in `backend.mjs`). Every one of the user's
+Devices writes every Profile Drive: a Device that can't asks through the Vault
+(`/.vault/persona-writers/`, `writerAsksToGrant` in `shared/personas.mjs`) and one that can adds it
+(`syncWriters` in `bg/ui/personas.js`, `syncPersonaWriters` on the phone). `nomad.session` in the
 phone's WebView is not built yet. It is a public API, so the sync triad applies.
 
 ## Look and feel: every UI supports dark mode and matches the rest

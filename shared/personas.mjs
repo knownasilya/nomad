@@ -11,6 +11,8 @@
 //   /.vault/spaces/<rootKey>.json     gains persona?: <id>      (the Space's override)
 //   /.vault/sessions/<spaceKey>/<personaId>/<sha256(origin)>.json
 //                                     { type, id, origin, personaId, space, perms, createdAt, expiresAt? }
+//   /.vault/persona-writers/<driveKey>/<writerKey>.json
+//                                     { type, drive, writerKey, device, requestedAt, grantedBy?, grantedAt? }
 //
 // Pure: no imports, so desktop (bg/ui/personas.js) and the phone (mobile/backend/lib/vault-apps.mjs)
 // share it. Hashing and random bytes come from the caller.
@@ -22,6 +24,8 @@ export const DEFAULT_TYPE = 'nomad/persona-default';
 export const SESSIONS_PREFIX = '/.vault/sessions/';
 export const SESSION_TYPE = 'nomad/session';
 export const SPACES_PREFIX = '/.vault/spaces/';
+export const WRITERS_PREFIX = '/.vault/persona-writers/';
+export const WRITER_TYPE = 'nomad/persona-writer';
 
 export const MAX_LABEL = 40;
 // RFC 5321's limit on a forward path.
@@ -126,6 +130,41 @@ export function normalizeLabel(label) {
   if (s.length > MAX_LABEL)
     throw new Error(`A Persona’s name can be at most ${MAX_LABEL} characters`);
   return s;
+}
+
+// A Profile Drive's picture, from a data: URL (the form both UIs pick it in). Returns the bytes as
+// base64 for the caller to decode with its own Buffer, and the file name to write it as.
+export const THUMB_TYPES = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
+export const MAX_THUMB = 2 * 1024 * 1024;
+/** @param {string} dataUrl */
+export function parseThumb(dataUrl) {
+  const m = /^data:([a-z/+-]+);base64,([A-Za-z0-9+/=]+)$/i.exec(String(dataUrl || ''));
+  const ext = m && THUMB_TYPES[m[1].toLowerCase()];
+  if (!m || !ext) throw new Error('Pick a PNG, JPEG, WebP or GIF picture');
+  if (Math.floor((m[2].length * 3) / 4) > MAX_THUMB) throw new Error('Pick a picture under 2 MB');
+  return { base64: m[2], path: `/thumb.${ext}` };
+}
+
+// A new Profile Drive's /index.json (ADR-0031 §6): its name, a few words and its picture's path.
+/** @param {{ title?: string, description?: string, thumb?: string }} [o] */
+export function profileManifest({ title, description, thumb } = {}) {
+  const t = String(title || '')
+    .trim()
+    .slice(0, 280);
+  if (!t) throw new Error('Give the profile a name, the one sites see');
+  /** @type {{ type: string, title: string, description?: string, thumb?: string }} */
+  const m = { type: 'walled.garden/person', title: t };
+  const d = String(description || '')
+    .trim()
+    .slice(0, 1000);
+  if (d) m.description = d;
+  if (thumb) m.thumb = thumb;
+  return m;
 }
 
 // The Persona's email, for sites the user lets see it (the `email` permission). Kept on the
@@ -234,17 +273,19 @@ export function resolvedFrom({
 
 // Whether a Persona's Profile Drive may log in. A Profile Drive's URL is public, so the Drive must
 // have no writers but the user's own Devices:
-//   - `writers`: the writer keys the Drive added (listWriters), every one a Device in the Vault;
+//   - `writers`: the writer keys the Drive added (listWriters), every one a Device in the Vault or
+//     a granted writer ask from one (`ownWriters`, see ownWriterKeys);
 //   - the writer the Drive started with (its own key) is the user's: a Device of theirs made it
 //     (`persona.creator`), checked when the Persona was made.
 // States: 'usable', 'foreign-writers', and 'not-ready' (this Device hasn't seen the Vault's Devices or
 // the Drive yet: never an error about the user's own identity).
-/** @param {{ persona?: any, vaultReady?: boolean, deviceKeys?: string[], writers?: string[] | null, loaded?: boolean }} [o] */
+/** @param {{ persona?: any, vaultReady?: boolean, deviceKeys?: string[], writers?: string[] | null, ownWriters?: string[], loaded?: boolean }} [o] */
 export function profileState({
   persona,
   vaultReady = true,
   deviceKeys = [],
   writers = null,
+  ownWriters = [],
   loaded = true,
 } = {}) {
   if (!vaultReady) {
@@ -263,7 +304,7 @@ export function profileState({
       reason: 'Its profile drive wasn’t made by one of your devices.',
     };
   }
-  const own = new Set(deviceKeys.map((k) => String(k).toLowerCase()));
+  const own = new Set([...deviceKeys, ...ownWriters].map((k) => String(k).toLowerCase()));
   own.add(key);
   const foreign = writers.map((w) => String(w).toLowerCase()).filter((w) => !own.has(w));
   if (foreign.length) {
@@ -274,6 +315,77 @@ export function profileState({
     };
   }
   return { state: 'usable', reason: '' };
+}
+
+// Every Device writes every Profile Drive (ADR-0031 amendment)
+// =
+//
+// A Persona is edited on any of the user's Devices, whichever one made it. A Device that can't write
+// a Persona's Profile Drive yet puts its writer key for that Drive in the Vault (an ask); a Device
+// that can write the Drive adds it as a writer and marks the ask granted. Only the user's Devices
+// write the Vault, so an ask from a Device the Vault lists needs no prompt. When a Device leaves the
+// Vault, a Device that writes the Drive takes its writer off and drops the ask.
+
+export function writersPrefix(driveKey) {
+  return `${WRITERS_PREFIX}${driveKey}/`;
+}
+
+export function writerAskPath(driveKey, writerKey) {
+  if (!HEX64.test(String(driveKey || '')) || !HEX64.test(String(writerKey || '')))
+    throw new Error('A writer ask needs a drive key and a writer key');
+  return `${writersPrefix(driveKey)}${writerKey}.json`;
+}
+
+export function makeWriterAsk({ drive, writerKey, device }, now = new Date().toISOString()) {
+  writerAskPath(drive, writerKey); // validates
+  if (!HEX64.test(String(device || ''))) throw new Error('A writer ask needs a device key');
+  return { type: WRITER_TYPE, drive, writerKey, device, requestedAt: now };
+}
+
+export function isWriterAsk(rec) {
+  return (
+    !!rec &&
+    rec.type === WRITER_TYPE &&
+    HEX64.test(String(rec.drive || '')) &&
+    HEX64.test(String(rec.writerKey || '')) &&
+    HEX64.test(String(rec.device || ''))
+  );
+}
+
+export function markWriterAskGranted(rec, by, now = new Date().toISOString()) {
+  return { ...rec, grantedBy: by, grantedAt: now };
+}
+
+const listed = (deviceKeys) => new Set((deviceKeys || []).map((k) => String(k).toLowerCase()));
+
+// The asks for `driveKey` that a Device writing it should grant: not granted yet, from a listed
+// Device, and not already a writer.
+export function writerAsksToGrant(records, { driveKey, deviceKeys = [], writers = [] } = {}) {
+  const devices = listed(deviceKeys);
+  const have = listed(writers);
+  return (records || []).filter(
+    (r) =>
+      isWriterAsk(r) &&
+      r.drive === driveKey &&
+      devices.has(r.device) &&
+      (!r.grantedBy || !have.has(r.writerKey))
+  );
+}
+
+// The asks for `driveKey` whose Device left the Vault: take the writer off and drop the ask.
+export function writerAsksToRevoke(records, { driveKey, deviceKeys = [] } = {}) {
+  const devices = listed(deviceKeys);
+  return (records || []).filter(
+    (r) => isWriterAsk(r) && r.drive === driveKey && !devices.has(r.device)
+  );
+}
+
+// The writer keys of `driveKey` that belong to the user's Devices: granted asks from listed Devices.
+export function ownWriterKeys(records, { driveKey, deviceKeys = [] } = {}) {
+  const devices = listed(deviceKeys);
+  return (records || [])
+    .filter((r) => isWriterAsk(r) && r.drive === driveKey && r.grantedBy && devices.has(r.device))
+    .map((r) => r.writerKey);
 }
 
 // Sessions (ADR-0031 §8–10)

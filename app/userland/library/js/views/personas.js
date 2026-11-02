@@ -182,7 +182,7 @@ export class PersonasView extends LitElement {
           </label>
         </div>
         ${p && !p.writable
-          ? html`<div class="hint-row">This device can’t change the profile. Change its name and picture on the device that made it.</div>`
+          ? html`<div class="hint-row">This device can’t change the profile yet. Keep the device that made it online for a minute and it adds this one.</div>`
           : ''}
         ${p
           ? html`<div class="hint-row">Profile drive: <a href=${p.profileUrl} target="_blank"><code>${p.profileUrl}</code></a></div>`

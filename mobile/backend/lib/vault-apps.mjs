@@ -646,9 +646,9 @@ export async function requestDeviceUpdate (base, { device, version, prerelease =
 
 // Personas and Sessions (ADR-0031)
 // =
-// Personas are made on a computer (each needs a Profile Drive it writes). The phone lists them, picks
-// the default and the Space's own, and lists and ends the Sessions sites hold. Logging in from the
-// phone's WebView (nomad.session) comes later.
+// The phone makes, edits and deletes Personas like a computer does, picks the default and the Space's
+// own, and lists and ends the Sessions sites hold. Every Device writes every Profile Drive (writer
+// asks below). Logging in from the phone's WebView (nomad.session) comes later.
 
 async function readPrefixEntries (base, prefix) {
   const out = []
@@ -703,6 +703,93 @@ export async function listPersonas (base, space) {
     })),
     writable: !!base.writable
   }
+}
+
+// Is the Vault writable from this phone? Checked before a Persona's profile drive is made, so a
+// phone that can't save the record doesn't leave an orphan drive.
+export function vaultWritable (base) {
+  return !!base?.writable
+}
+
+// Save a new Persona made on this phone (its profile drive is already made and written; `creator`
+// is that drive's key, so profileState knows one of the user's own devices made it). The first
+// Persona becomes the default, like on desktop.
+export async function savePersona (base, { id, label, profileUrl, email }) {
+  const key = pe.driveKeyOf(profileUrl)
+  const rec = pe.makePersona({ id, label, profileUrl, creator: key, email })
+  const existing = (await readPrefix(base, pe.PERSONAS_PREFIX)).filter(pe.isPersona)
+  await putRecord(base, pe.personaPath(rec.id), rec)
+  const def = await readRecord(base, pe.DEFAULT_PATH)
+  if (!existing.length && !def?.personaId) await putRecord(base, pe.DEFAULT_PATH, pe.makeDefault(rec.id))
+  return { id: rec.id, label: rec.label, profileUrl: rec.profileUrl }
+}
+
+// Change a Persona's label or email (its Vault record). The profile's name and picture are in its
+// Profile Drive (backend.mjs updatePersona).
+export async function updatePersona (base, id, { label, email } = {}) {
+  const prev = await readRecord(base, pe.personaPath(id))
+  if (!pe.isPersona(prev)) throw new Error('That Persona is gone')
+  const relabel = label !== undefined && pe.normalizeLabel(label) !== prev.label
+  const remail = email !== undefined && pe.normalizeEmail(email) !== (prev.email || null)
+  if (!relabel && !remail) return prev
+  const rec = pe.makePersona({ ...(relabel ? { label } : {}), ...(remail ? { email } : {}) }, prev)
+  await putRecord(base, pe.personaPath(id), rec)
+  return rec
+}
+
+// Delete a Persona and its Sessions, like desktop's personas.remove. Spaces that named it fall back
+// to the default; if it was the default there is none until the user picks one. Its Profile Drive
+// stays, and its writer asks go unless another Persona uses the same Drive.
+export async function removePersona (base, id) {
+  const gone = await readRecord(base, pe.personaPath(id))
+  for (const { path } of await readPrefixEntries(base, pe.SESSIONS_PREFIX)) {
+    if (pe.parseSessionPath(path)?.personaId === id) await delRecord(base, path)
+  }
+  for (const s of await readPrefix(base, pe.SPACES_PREFIX)) {
+    if (s?.persona === id && s.rootDriveKey && !s.movedTo) {
+      const next = { ...s }
+      delete next.persona
+      await putRecord(base, pe.spacePath(s.rootDriveKey), next)
+    }
+  }
+  const def = await readRecord(base, pe.DEFAULT_PATH)
+  if (def?.personaId === id) await putRecord(base, pe.DEFAULT_PATH, pe.makeDefault(null))
+  if (gone) await delRecord(base, pe.personaPath(id))
+  const driveKey = pe.driveKeyOf(gone?.profileUrl)
+  const others = (await readPrefix(base, pe.PERSONAS_PREFIX)).filter((p) => pe.isPersona(p) && p.id !== id)
+  if (driveKey && !others.some((p) => pe.driveKeyOf(p.profileUrl) === driveKey)) {
+    for (const { path } of await readPrefixEntries(base, pe.writersPrefix(driveKey))) await delRecord(base, path)
+  }
+  return true
+}
+
+// Writer asks for Profile Drives (shared/personas.mjs): what backend.mjs syncPersonaWriters reads.
+export async function personaWriterState (base) {
+  const [recs, asks, devices] = await Promise.all([
+    readPrefix(base, pe.PERSONAS_PREFIX),
+    readPrefix(base, pe.WRITERS_PREFIX),
+    readPrefix(base, '/.vault/devices/')
+  ])
+  return {
+    personas: recs.filter(pe.isPersona),
+    asks: asks.filter(pe.isWriterAsk),
+    deviceKeys: devices.map((d) => d && d.key).filter(Boolean),
+    device: ownKey(base)
+  }
+}
+
+export async function askToWritePersona (base, { drive, writerKey }) {
+  const ask = pe.makeWriterAsk({ drive, writerKey, device: ownKey(base) })
+  await putRecord(base, pe.writerAskPath(drive, writerKey), ask)
+  return ask
+}
+
+export async function markPersonaWriterGranted (base, ask) {
+  await putRecord(base, pe.writerAskPath(ask.drive, ask.writerKey), pe.markWriterAskGranted(ask, ownKey(base)))
+}
+
+export async function dropPersonaWriterAsk (base, ask) {
+  await delRecord(base, pe.writerAskPath(ask.drive, ask.writerKey))
 }
 
 // Log a site out, on every device.

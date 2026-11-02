@@ -12,6 +12,9 @@ import { parseHyperUrl } from './lib/hyper-url.mjs'
 import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault, publishOwnSpaces, publishOwnVersion } from './lib/vault.mjs'
 import * as drafts from './lib/drafts.mjs'
 import * as vaultApps from './lib/vault-apps.mjs'
+import * as pe from '../../shared/personas.mjs'
+import hcrypto from 'hypercore-crypto'
+import { decodeInlineJson, WRITERS_PREFIX as DRIVE_WRITERS } from '../../shared/fs-core.mjs'
 import * as spaceLib from './lib/space-library.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
 import Protomux from 'protomux'
@@ -123,6 +126,8 @@ let vault = null // the opened Vault Autobase, once paired
 // subscriptions, read marks and notes without being reopened (desktop: vault-apps.ts watch()).
 // One event for a burst of updates. Every assignment to `vault` goes through setVault.
 let vaultChangedTimer = null
+let personaWritersTimer = null // syncPersonaWriters, below
+let personaWritersRun = null
 function vaultChanged () {
   clearTimeout(vaultChangedTimer)
   vaultChangedTimer = setTimeout(() => send(RPC_VAULT_CHANGED, {}), 400)
@@ -131,9 +136,12 @@ function vaultChanged () {
 function setVault (base) {
   if (vault === base) return
   if (vault) vault.removeListener('update', vaultChanged)
+  if (vault) vault.removeListener('update', personaWritersSoon)
   vault = base
   if (vault) vault.on('update', vaultChanged)
+  if (vault) vault.on('update', personaWritersSoon)
   vaultChanged()
+  personaWritersSoon()
 }
 
 // Shared Spaces (ADR-0029, lib/space-library.mjs). A shared Space's feeds, Notes, Names and drive
@@ -665,6 +673,10 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'personas' && action === 'endSession') value = await vaultApps.endPersonaSession(vault, args.path)
     else if (app === 'personas' && action === 'setDefault') value = await vaultApps.setDefaultPersona(vault, args.id || null)
     else if (app === 'personas' && action === 'setSpace') value = await vaultApps.setSpacePersona(vault, space, args.id || null)
+    else if (app === 'personas' && action === 'create') value = await createPersona(args)
+    else if (app === 'personas' && action === 'get') value = await getPersona(args)
+    else if (app === 'personas' && action === 'update') value = await updatePersona(args)
+    else if (app === 'personas' && action === 'remove') value = await vaultApps.removePersona(vault, args.id)
     else if (app === 'updates' && action === 'list') value = await vaultApps.deviceUpdates(vault, args.version)
     else if (app === 'updates' && action === 'request') value = await vaultApps.requestDeviceUpdate(vault, { device: args.device, version: args.version, prerelease: !!args.prerelease })
     else throw new Error(`Unknown ${app} action: ${action}`)
@@ -672,6 +684,184 @@ async function handleApps ({ reqId, app, action, ...args }) {
   } catch (err) {
     send(RPC_APPS_RESULT, { reqId, ok: false, message: err.message || String(err) })
   }
+}
+
+// Make a Persona on this phone (ADR-0031 amendment): a new profile drive this phone writes, with its
+// /index.json (and picture), hosted so the user's other devices can fetch it, then the Vault record.
+// Everything that can be refused is checked before the drive is made.
+async function createPersona ({ label, title, description, thumb, email }) {
+  const name = pe.normalizeLabel(label || title)
+  const mail = pe.normalizeEmail(email)
+  const shown = String(title || '').trim() || name
+  const pic = thumb ? pe.parseThumb(thumb) : null
+  pe.profileManifest({ title: shown })
+  if (!vaultApps.vaultWritable(vault)) throw new Error('This phone can’t write to your Vault yet. Keep your other device online until it syncs, then try again.')
+
+  const { key, ns } = await manager.createDrive(DRIVE_AUTOBASE, { title: shown })
+  drivesNs[key] = ns
+  saveDrivesNs()
+  const kb = keyBuf(key)
+  // A profile drive holds only its manifest and picture: drop the welcome page createDrive seeds.
+  await manager.deletePath(DRIVE_AUTOBASE, kb, ns, '/index.html', false).catch(() => {})
+  if (pic) await manager.writeFile(DRIVE_AUTOBASE, kb, ns, pic.path, b4a.from(pic.base64, 'base64'))
+  const manifest = pe.profileManifest({ title: shown, description, thumb: pic?.path })
+  await manager.writeFile(DRIVE_AUTOBASE, kb, ns, '/index.json', b4a.from(JSON.stringify(manifest, null, 2)))
+
+  // Seed it from now on, so a computer can check it and show its name and picture.
+  const ck = `${DRIVE_AUTOBASE}:${key}`
+  hostedDrives[ck] = { key, type: DRIVE_AUTOBASE }
+  saveHostedDrives()
+  if (!hostingPaused) await manager.setHosting(DRIVE_AUTOBASE, kb, true).catch(() => {})
+
+  const id = pe.newPersonaId(hcrypto.randomBytes(10))
+  return vaultApps.savePersona(vault, { id, label: name, profileUrl: `hyper://${key}/`, email: mail })
+}
+
+// Every Device writes every Profile Drive (ADR-0031 amendment, shared/personas.mjs writer asks), so a
+// Persona is edited the same on the phone and on a computer, whichever made it.
+
+const withTimeout = (p, ms) => Promise.race([p, new Promise((resolve) => setTimeout(() => resolve(null), ms))])
+
+// A Persona's Profile Drive, opened where this phone writes it: its own namespace for a drive this
+// phone made, otherwise by key (where its writer key for that drive lives). null when it can't load.
+async function openProfile (profileUrl, ms = 8000) {
+  const key = pe.driveKeyOf(profileUrl)
+  if (!key) return null
+  return withTimeout(manager.open(DRIVE_AUTOBASE, keyBuf(key), () => {}, drivesNs[key] || null).catch(() => null), ms)
+}
+
+async function profileWriters (base) {
+  const out = []
+  for await (const node of base.view.createReadStream({ gte: DRIVE_WRITERS, lt: DRIVE_WRITERS + '\xff' })) {
+    const rec = decodeInlineJson(node.value, b4a)
+    if (rec?.writerKey) out.push(rec.writerKey)
+  }
+  return out
+}
+
+function personaWritersSoon () {
+  clearTimeout(personaWritersTimer)
+  personaWritersTimer = setTimeout(() => { syncPersonaWriters().catch((e) => console.log('[personas] writers', e?.message || e)) }, 1500)
+}
+
+// Ask to write each Profile Drive this phone can't write yet; on one it writes, add the Devices that
+// asked and take off the ones that left the Vault. Desktop does the same (bg/ui/personas.js).
+async function syncPersonaWriters () {
+  if (personaWritersRun) return personaWritersRun
+  personaWritersRun = (async () => {
+    if (!vault?.writable) return
+    const { personas, asks, deviceKeys, device } = await vaultApps.personaWriterState(vault)
+    if (!device) return
+    for (const p of personas) {
+      const driveKey = pe.driveKeyOf(p.profileUrl)
+      if (!driveKey || p.creator !== driveKey) continue
+      const entry = await openProfile(p.profileUrl, 15000)
+      const base = entry?.drive
+      if (!base) continue
+      const mine = asks.filter((a) => a.drive === driveKey)
+      if (!base.writable) {
+        const writerKey = base.local?.key ? b4a.toString(base.local.key, 'hex') : null
+        if (writerKey && !mine.some((a) => a.writerKey === writerKey)) {
+          await vaultApps.askToWritePersona(vault, { drive: driveKey, writerKey })
+          console.log('[personas] asked to write', driveKey.slice(0, 8))
+        }
+        continue
+      }
+      const writers = await profileWriters(base)
+      let changed = false
+      for (const ask of pe.writerAsksToGrant(mine, { driveKey, deviceKeys, writers })) {
+        if (!writers.includes(ask.writerKey)) { await base.append({ addWriter: ask.writerKey }); changed = true }
+        await vaultApps.markPersonaWriterGranted(vault, ask)
+        console.log('[personas] added a device to', driveKey.slice(0, 8))
+      }
+      for (const ask of pe.writerAsksToRevoke(mine, { driveKey, deviceKeys })) {
+        if (writers.includes(ask.writerKey)) { await base.append({ removeWriter: ask.writerKey }); changed = true }
+        await vaultApps.dropPersonaWriterAsk(vault, ask)
+      }
+      if (changed) await base.update().catch(() => {})
+    }
+  })().finally(() => { personaWritersRun = null })
+  return personaWritersRun
+}
+
+const THUMB_MIME = Object.fromEntries(Object.entries(pe.THUMB_TYPES).map(([m, ext]) => [ext, m]))
+
+// One Persona for the edit form: its record, and its profile as the drive has it now.
+async function getPersona ({ id }) {
+  const rec = (await vaultApps.personaWriterState(vault)).personas.find((p) => p.id === id)
+  if (!rec) throw new Error('That Persona is gone')
+  const entry = await openProfile(rec.profileUrl)
+  let manifest = null
+  let thumb = null
+  if (entry) {
+    const buf = await entry.reader.read('/index.json').catch(() => null)
+    try { manifest = buf ? JSON.parse(b4a.toString(buf)) : null } catch {}
+    const ext = typeof manifest?.thumb === 'string' ? manifest.thumb.split('.').pop().toLowerCase() : ''
+    if (THUMB_MIME[ext]) {
+      const pic = await entry.reader.read(manifest.thumb).catch(() => null)
+      if (pic) thumb = `data:${THUMB_MIME[ext]};base64,${b4a.toString(pic, 'base64')}`
+    }
+  }
+  if (entry && !entry.drive.writable) personaWritersSoon()
+  return {
+    id: rec.id,
+    label: rec.label,
+    email: rec.email || '',
+    title: String(manifest?.title || ''),
+    description: String(manifest?.description || ''),
+    thumb,
+    loaded: !!entry,
+    writable: !!entry?.drive?.writable
+  }
+}
+
+// Edit a Persona: its label and email (Vault), and its name, words and picture (Profile Drive) when
+// this phone writes the drive. `thumb` is a data: URL for a new picture, null to remove it, or left
+// out to keep it.
+async function updatePersona ({ id, label, email, title, description, thumb }) {
+  const rec = (await vaultApps.personaWriterState(vault)).personas.find((p) => p.id === id)
+  if (!rec) throw new Error('That Persona is gone')
+  const profile = title !== undefined || description !== undefined || thumb !== undefined
+  const pic = thumb ? pe.parseThumb(thumb) : null
+  let entry = null
+  if (profile) {
+    if (title !== undefined) pe.profileManifest({ title }) // check the name before writing anything
+    entry = await openProfile(rec.profileUrl)
+    if (!entry?.drive?.writable) {
+      personaWritersSoon()
+      throw new Error('This phone can’t change that profile yet. Keep the device that made it online for a minute so it can add this phone, then try again.')
+    }
+  }
+  await vaultApps.updatePersona(vault, id, { label, email })
+  if (profile) {
+    const key = pe.driveKeyOf(rec.profileUrl)
+    const kb = keyBuf(key)
+    const ns = drivesNs[key] || null
+    const buf = await entry.reader.read('/index.json').catch(() => null)
+    let prev = {}
+    try { prev = buf ? JSON.parse(b4a.toString(buf)) : {} } catch {}
+    let thumbPath = typeof prev.thumb === 'string' ? prev.thumb : undefined
+    if (pic) {
+      await manager.writeFile(DRIVE_AUTOBASE, kb, ns, pic.path, b4a.from(pic.base64, 'base64'))
+      if (thumbPath && thumbPath !== pic.path) await manager.deletePath(DRIVE_AUTOBASE, kb, ns, thumbPath, false).catch(() => {})
+      thumbPath = pic.path
+    } else if (thumb === null && thumbPath) {
+      await manager.deletePath(DRIVE_AUTOBASE, kb, ns, thumbPath, false).catch(() => {})
+      thumbPath = undefined
+    }
+    // Keep any other fields the drive's manifest has; these four come from the form.
+    const { type: _t, title: _n, description: _d, thumb: _p, ...rest } = prev
+    const manifest = {
+      ...rest,
+      ...pe.profileManifest({
+        title: title !== undefined ? title : prev.title,
+        description: description !== undefined ? description : prev.description,
+        thumb: thumbPath
+      })
+    }
+    await manager.writeFile(DRIVE_AUTOBASE, kb, ns, '/index.json', b4a.from(JSON.stringify(manifest, null, 2)))
+  }
+  return { id, label: label !== undefined ? pe.normalizeLabel(label) : rec.label }
 }
 
 // Minimal stand-in for nomad.schemas.validate on mobile (the full Zod schemas
