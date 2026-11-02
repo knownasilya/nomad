@@ -18,6 +18,7 @@ class ShellWindowTabs extends LitElement {
       pins: { type: Array },
       spaces: { type: Array },
       activeSpace: { type: Object },
+      activePersona: { type: Object },
       groups: { type: Array },
       isFullscreen: { type: Boolean, attribute: 'is-fullscreen' },
       hasBgTabs: { type: Boolean, attribute: 'has-bg-tabs' },
@@ -145,6 +146,7 @@ class ShellWindowTabs extends LitElement {
           <shell-window-spaces-dropdown
             .spaces=${this.spaces}
             .activeSpace=${this.activeSpace}
+            .persona=${this.activePersona}
           ></shell-window-spaces-dropdown>
         </div>
       </div>

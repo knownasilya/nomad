@@ -24,6 +24,7 @@ const GUIDE_IDS = [
   ['nomad.ai', 'nomad.ai'],
   ['nomad.panes', 'nomad.panes'],
   ['nomad.peersockets', 'nomad.peersockets'],
+  ['nomad.session', 'nomad.session'],
   ['Page-provided tools', 'webmcp'],
   ['Page control', 'page-control'],
   ['After using tools', 'after-tools'],

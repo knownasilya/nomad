@@ -12,9 +12,7 @@ import './select-drive';
 import './select-file';
 import './prompt';
 import './basic-auth';
-import './user-editor';
-import './user-select';
-import './create-session';
+import './persona-login';
 
 class ModalsWrapper extends LitElement {
   static get properties() {
@@ -96,12 +94,8 @@ class ModalsWrapper extends LitElement {
         return html`<prompt-modal></prompt-modal>`;
       case 'basic-auth':
         return html`<basic-auth-modal></basic-auth-modal>`;
-      case 'user-editor':
-        return html`<user-editor-modal></user-editor-modal>`;
-      case 'user-select':
-        return html`<user-select-modal></user-select-modal>`;
-      case 'create-session':
-        return html`<create-session-modal></create-session-modal>`;
+      case 'persona-login':
+        return html`<persona-login-modal></persona-login-modal>`;
     }
     return html`<div></div>`;
   }

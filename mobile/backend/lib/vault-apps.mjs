@@ -9,6 +9,7 @@ import * as ot from '../../../shared/open-tabs.mjs'
 import * as jl from '../../../shared/jobs.mjs'
 import * as sl from '../../../shared/space-library.mjs'
 import * as du from '../../../shared/device-updates.mjs'
+import * as pe from '../../../shared/personas.mjs'
 import { inlineOp, boundedUpdate } from './vault.mjs'
 import { parseHyperUrl } from './hyper-url.mjs'
 import { DRIVE_AUTOBASE, DRIVE_HYPERDRIVE } from '../../rpc-commands.mjs'
@@ -641,4 +642,89 @@ export async function requestDeviceUpdate (base, { device, version, prerelease =
   const req = du.makeRequest({ device, version, prerelease, by: ownKey(base) })
   await putRecord(base, du.requestPath(device), req)
   return req
+}
+
+// Personas and Sessions (ADR-0031)
+// =
+// Personas are made on a computer (each needs a Profile Drive it writes). The phone lists them, picks
+// the default and the Space's own, and lists and ends the Sessions sites hold. Logging in from the
+// phone's WebView (nomad.session) comes later.
+
+async function readPrefixEntries (base, prefix) {
+  const out = []
+  for await (const node of base.view.createReadStream({ gte: prefix, lt: prefix + '\xff' })) {
+    const rec = decodeInlineJson(node.value, b4a)
+    const path = typeof node.key === 'string' ? node.key : b4a.toString(node.key)
+    if (rec) out.push({ path, rec })
+  }
+  return out
+}
+
+// Everything the Personas screen shows, for the Space `space` (its Root Drive key).
+export async function listPersonas (base, space) {
+  await boundedUpdate(base)
+  const [recs, def, spaces, sessions] = await Promise.all([
+    readPrefix(base, pe.PERSONAS_PREFIX),
+    readRecord(base, pe.DEFAULT_PATH),
+    readPrefix(base, pe.SPACES_PREFIX),
+    readPrefixEntries(base, pe.SESSIONS_PREFIX)
+  ])
+  const personas = pe.sortPersonas(recs.filter(pe.isPersona))
+  const defaultId = def?.personaId && personas.some((p) => p.id === def.personaId) ? def.personaId : null
+  const spaceRec = spaces.find((x) => x && x.rootDriveKey === space && !x.movedTo) || null
+  const override = spaceRec?.persona && personas.some((p) => p.id === spaceRec.persona) ? spaceRec.persona : null
+  const resolved = pe.resolvePersona({ spaceOverride: override, defaultId, personas })
+  const spaceName = (key) => spaces.find((x) => x && x.rootDriveKey === key)?.name || (key === space ? 'this space' : 'another space')
+  const live = sessions.filter(({ rec }) => pe.isSession(rec))
+  return {
+    personas: personas.map((p) => ({
+      id: p.id,
+      label: p.label,
+      profileUrl: p.profileUrl,
+      isDefault: p.id === defaultId,
+      sessions: live.filter(({ rec }) => rec.personaId === p.id).length
+    })),
+    defaultId,
+    spacePersonaId: override,
+    resolvedId: resolved?.id || null,
+    spaceKnown: !!spaceRec,
+    sessions: pe.sortSessions(live.map(({ rec, path }) => ({ ...rec, path }))).map((s) => ({
+      path: s.path,
+      origin: s.origin,
+      site: pe.shortOrigin(s.origin),
+      personaLabel: personas.find((p) => p.id === s.personaId)?.label || 'A deleted Persona',
+      spaceName: spaceName(s.space),
+      thisSpace: s.space === space,
+      perms: s.perms,
+      createdAt: s.createdAt,
+      expiresAt: s.expiresAt || null,
+      expired: pe.isExpired(s)
+    })),
+    writable: !!base.writable
+  }
+}
+
+// Log a site out, on every device.
+export async function endPersonaSession (base, path) {
+  if (!pe.parseSessionPath(path)) throw new Error('That isn’t a site login')
+  if (await readRecord(base, path)) await delRecord(base, path)
+  return true
+}
+
+export async function setDefaultPersona (base, id) {
+  if (id && !pe.isPersona(await readRecord(base, pe.personaPath(id)))) throw new Error('That Persona is gone')
+  await putRecord(base, pe.DEFAULT_PATH, pe.makeDefault(id || null))
+  return true
+}
+
+// The Space's own Persona, or null to use the default. It is on the user's own record of the Space.
+export async function setSpacePersona (base, space, id) {
+  if (id && !pe.isPersona(await readRecord(base, pe.personaPath(id)))) throw new Error('That Persona is gone')
+  const rec = await readRecord(base, pe.spacePath(space))
+  if (!rec || rec.movedTo) throw new Error('This space isn’t in your Vault yet. Open it on your computer first.')
+  const next = { ...rec }
+  if (id) next.persona = id
+  else delete next.persona
+  await putRecord(base, pe.spacePath(space), next)
+  return true
 }

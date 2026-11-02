@@ -151,7 +151,8 @@ ${toastCSS}
     text-align: center; /* for when stacking occurs in narrow views */
     border-radius: 16px;
     font-size: 11px;
-    padding: 6px 12px;
+    padding: 6px 10px;
+    white-space: nowrap;
     cursor: pointer;
     margin-left: 2px;
   }
@@ -160,6 +161,74 @@ ${toastCSS}
   }
   .nav .tabs a:not(.active):hover {
     background: var(--bg-color--nav--selected);
+  }
+
+  /* The site's Session (ADR-0031) */
+  .session {
+    padding: 10px 14px 12px;
+  }
+  .session-who {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .session-avatar {
+    flex: 0 0 32px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  .session-avatar.initial {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #5c5cff;
+    color: #fff;
+    font-weight: 600;
+  }
+  .session-name {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .session-sub {
+    font-size: 11px;
+    color: var(--text-color--light);
+  }
+  .session-can {
+    margin-top: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-color--light);
+  }
+  .session-perms {
+    list-style: none;
+    margin: 4px 0 10px;
+    padding: 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-color--default);
+  }
+  .session-perms li {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .session-perms .fas {
+    margin-top: 2px;
+    color: var(--text-color--light);
+  }
+  .session-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .session-actions a {
+    font-size: 11px;
+    color: var(--text-color--link);
+    cursor: pointer;
   }
 `;
 export default cssStr;

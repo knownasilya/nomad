@@ -24,6 +24,7 @@ import * as tabManager from '../../ui/tabs/manager';
 // The caller's Space key, or null.
 const callerSpace = (ctx) => vaultApps.spaceKey(ctx).catch(() => null);
 import * as mods from '../../ui/mods';
+import * as personas from '../../ui/personas';
 import * as openTabs from '../../ui/open-tabs';
 import * as jobs from '../../ai/jobs';
 import { driveTitle, readJobSource, resolveJobWrites } from './job-source';
@@ -262,7 +263,10 @@ export default {
   async leaveSpace() {
     const spaceId = spaceIdOf(this);
     if (spaceId === 1) throw new Error('You can’t leave your Personal Space');
+    const leftKey = personas.spaceKeyOf(spaceId);
     await filesystem.leaveSpace(spaceId);
+    // The Sessions sites held in it go too (ADR-0031 §4).
+    if (leftKey) await personas.forgetSpace(leftKey).catch(() => {});
     for (const win of BrowserWindow.getAllWindows()) {
       if (tabManager.getWindowActiveSpaceId(win) === spaceId) await tabManager.setActiveSpace(win, 1).catch(() => {});
       for (const tab of tabManager.getAll(win).filter((t) => t.spaceId === spaceId)) await tabManager.remove(win, tab);

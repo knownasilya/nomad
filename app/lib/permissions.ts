@@ -342,6 +342,15 @@ export const PERMS = {
     requiresRefresh: false,
     dangerous: true,
   },
+  // A Session's tier 2 (ADR-0031 §8): the site sees the Persona's profile (its drive's URL, name and
+  // picture). Granted only by the login prompt, as part of a Session; never asked for alone.
+  profile: {
+    persist: false,
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    sessionOnly: true,
+  },
 };
 
 export const PERM_ICONS = {
@@ -385,6 +394,7 @@ export const PERM_ICONS = {
   memoryWrite: 'fas fa-brain',
   privateRead: 'fas fa-lock',
   privateWrite: 'fas fa-lock',
+  profile: 'fas fa-id-badge',
   aiPageControl: 'fas fa-mouse-pointer',
   aiPageAction: 'fas fa-mouse-pointer',
   aiSecretUse: 'fas fa-key',
@@ -488,6 +498,10 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
         <span class="plan-note">You can take this back in My Library → Jobs.</span></span
       >`;
     }
+    case 'profile':
+      return permOpts?.title
+        ? html`<span>See your name, <strong>${permOpts.title}</strong>, your picture and your profile drive</span>`
+        : 'See your name, your picture and your profile drive';
     case 'memoryWrite':
       return 'Let the AI assistant remember things about you for later chats, and forget them';
     case 'privateRead':

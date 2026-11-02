@@ -18,6 +18,7 @@ import secretsManifest from './manifests/internal/secrets';
 import webmcpDevtoolsManifest from './manifests/internal/webmcp';
 import aiShellManifest from './manifests/internal/ai-shell';
 import aiChatsManifest from './manifests/internal/ai-chats';
+import personasManifest from './manifests/internal/personas';
 
 // internal apis
 import { WEBAPI as loggerAPI } from '../logger';
@@ -35,6 +36,7 @@ import secretsAPI from './bg/secrets';
 import webmcpDevtoolsAPI from './bg/webmcp-devtools';
 import aiShellAPI from './bg/ai-shell';
 import aiChatsAPI from './bg/ai-chats';
+import personasAPI from './bg/personas';
 import { WEBAPI as downloadsAPI } from '../ui/downloads';
 import { WEBAPI as beakerBrowserAPI } from '../browser';
 
@@ -48,6 +50,7 @@ import modelContextManifest from './manifests/external/model-context';
 import panesManifest from './manifests/external/panes';
 import peersocketsManifest from './manifests/external/peersockets';
 import schemasManifest from './manifests/external/schemas';
+import sessionManifest from './manifests/external/session';
 import shellManifest from './manifests/external/shell';
 
 // external apis
@@ -62,6 +65,7 @@ import modelContextAPI from './bg/model-context';
 import panesAPI from './bg/panes';
 import peersocketsAPI from './bg/peersockets';
 import schemasAPI from './bg/schemas';
+import sessionAPI from './bg/session';
 import * as shellAPI from './bg/shell';
 
 // experimental manifests
@@ -106,6 +110,7 @@ export const setup = function () {
   rpc.exportAPI('webmcp-devtools', webmcpDevtoolsManifest, webmcpDevtoolsAPI, internalOnly);
   rpc.exportAPI('ai-shell', aiShellManifest, aiShellAPI, internalOnly);
   rpc.exportAPI('ai-chats', aiChatsManifest, aiChatsAPI, internalOnly);
+  rpc.exportAPI('personas', personasManifest, personasAPI, internalOnly);
 
   // external apis
   rpc.exportAPI('ai', aiManifest, aiAPI, secureOnly('ai'));
@@ -116,6 +121,7 @@ export const setup = function () {
   rpc.exportAPI('model-context', modelContextManifest, modelContextAPI, secureOnly('model-context'));
   rpc.exportAPI('panes', panesManifest, panesAPI, secureOnly('panes'));
   rpc.exportAPI('schemas', schemasManifest, schemasAPI);
+  rpc.exportAPI('session', sessionManifest, sessionAPI, secureOnly('session'));
   rpc.exportAPI('peersockets', peersocketsManifest, peersocketsAPI, secureOnly('peersockets'));
   rpc.exportAPI('shell', shellManifest, shellAPI, secureOnly('shell'));
 

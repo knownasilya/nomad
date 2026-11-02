@@ -8,6 +8,7 @@ import panesManifest from '../manifests/external/panes';
 import peersocketsManifest from '../manifests/external/peersockets';
 import schemasManifest from '../manifests/external/schemas';
 import shellManifest from '../manifests/external/shell';
+import sessionManifest from '../manifests/external/session';
 
 const RPC_OPTS = { timeout: false, errors };
 
@@ -39,6 +40,14 @@ export const setup = function (rpc) {
       return fromEventStream(peersocketsRPC.watch());
     },
   };
+
+  // nomad.session (ADR-0031): one Session per site, made only by the login prompt. 'change' carries
+  // { session } (null once logged out).
+  const sessionRPC = rpc.importAPI('session', sessionManifest, RPC_OPTS);
+  const session: any = new EventTargetFromStream(sessionRPC.createEventStream, ['change']);
+  session.requestLogin = (opts) => sessionRPC.requestLogin(opts);
+  session.getCurrent = () => sessionRPC.getCurrent();
+  session.revoke = () => sessionRPC.revoke();
 
   const panesRPC = rpc.importAPI('panes', panesManifest, RPC_OPTS);
   const panes: any = new EventTargetFromStream(panesRPC.createEventStream, [
@@ -108,6 +117,7 @@ export const setup = function (rpc) {
     panes,
     peersockets,
     schemas,
+    session,
     shell,
     terminal,
   };

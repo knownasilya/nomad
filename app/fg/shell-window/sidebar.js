@@ -5,6 +5,7 @@ import { styleMap } from 'lit/directives/style-map.js';
 import spinnerCSS from './spinner.css';
 import * as bg from './bg-process-rpc';
 import { pinTiles, pinTooltipUrl } from '../../../shared/pins.mjs';
+import { personaAvatar, personaAvatarCSS } from './spaces-dropdown';
 
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 480;
@@ -31,6 +32,7 @@ class ShellWindowSidebar extends LitElement {
       pinsWritable: { type: Boolean },
       spaces: { type: Array },
       activeSpace: { type: Object },
+      activePersona: { type: Object }, // the Space's Persona (ADR-0031), on the Spaces button
       groups: { type: Array },
       sidebarSide: { type: String, attribute: 'sidebar-side' },
       sidebarWidth: { type: Number, attribute: 'sidebar-width' },
@@ -489,6 +491,7 @@ class ShellWindowSidebar extends LitElement {
       <button class="spaces-btn" title="Switch space" @click=${this._onClickSpaces}>
         <span class="space-dot" style="background:${space?.color || '#6c6cff'}"></span>
         <span class="space-name">${space?.name || 'Spaces'}</span>
+        ${personaAvatar(this.activePersona)}
       </button>
     `;
   }
@@ -1511,5 +1514,7 @@ ShellWindowSidebar.styles = css`
     opacity: 0.3;
   }
 `;
+
+ShellWindowSidebar.styles = [ShellWindowSidebar.styles, personaAvatarCSS];
 
 customElements.define('shell-window-sidebar', ShellWindowSidebar);

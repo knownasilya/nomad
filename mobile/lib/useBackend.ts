@@ -166,7 +166,7 @@ export interface Backend {
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates'
+export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
@@ -206,6 +206,10 @@ export interface Job {
   lastRun: JobRun | null; nextRunAt: string | null; when: string; deviceName: string; requested: boolean
 }
 export interface JobsList { jobs: Job[]; writable: boolean }
+// Personas (ADR-0031): the user's identities and the sites logged in with them, for the active Space.
+export interface PersonaSummary { id: string; label: string; profileUrl: string; isDefault: boolean; sessions: number }
+export interface PersonaSession { path: string; origin: string; site: string; personaLabel: string; spaceName: string; thisSpace: boolean; perms: string[]; createdAt: string; expiresAt: string | null; expired: boolean }
+export interface PersonasList { personas: PersonaSummary[]; defaultId: string | null; spacePersonaId: string | null; resolvedId: string | null; spaceKnown: boolean; sessions: PersonaSession[]; writable: boolean }
 export interface JobNotifications { notify: { id: string; jobId: string; title: string; body: string }[]; since: string; wants: boolean }
 // shared: the Space is shared (ADR-0029); canFollow is false for someone who can only view it.
 // webRead: RSS and Atom items read, per feed. postTopics: feed posts' topics, from a computer's AI.
