@@ -247,11 +247,11 @@ SpacesMenu.styles = [
       padding: 7px 10px;
       cursor: default;
       font-size: 12px;
-      color: var(--text-color--default);
+      color: inherit;
     }
 
     .space-item:hover {
-      background: var(--bg-color--hover, rgba(0, 0, 0, 0.05));
+      background: var(--bg-color--menu-item--hover);
     }
 
     .space-item.active {
@@ -275,11 +275,11 @@ SpacesMenu.styles = [
       gap: 8px;
       padding: 7px 10px;
       cursor: default;
-      color: var(--text-color--default);
+      color: inherit;
     }
 
     .persona-row:hover {
-      background: var(--bg-color--hover, rgba(0, 0, 0, 0.05));
+      background: var(--bg-color--menu-item--hover);
     }
 
     .persona-text {
@@ -340,7 +340,7 @@ SpacesMenu.styles = [
     }
 
     .new-btn:hover {
-      background: var(--bg-color--hover, rgba(0, 0, 0, 0.05));
+      background: var(--bg-color--menu-item--hover);
     }
 
     .create-form {
@@ -356,8 +356,8 @@ SpacesMenu.styles = [
       border: 1px solid var(--border-color--default);
       border-radius: 3px;
       font-size: 12px;
-      background: var(--bg-color--input, #fff);
-      color: var(--text-color--default);
+      background: transparent;
+      color: inherit;
       outline: 0;
       box-sizing: border-box;
     }
@@ -379,7 +379,7 @@ SpacesMenu.styles = [
     }
 
     .swatch.selected {
-      border-color: var(--text-color--default, #333);
+      border-color: var(--text-color--menus-wrapper);
     }
 
     .form-btns {
@@ -397,7 +397,7 @@ SpacesMenu.styles = [
       cursor: default;
       outline: 0;
       background: transparent;
-      color: var(--text-color--default);
+      color: inherit;
     }
 
     .create {

@@ -75,7 +75,7 @@ class MenusWrapper extends LitElement {
         // ignore
       }
 
-      bg.shellMenus.close();
+      bg.shellMenus.close({ blur: true });
 
       // reset any active state
       reset(`${this.currentMenu}-menu`);

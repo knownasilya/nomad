@@ -7,6 +7,8 @@
  * - Shell Menu views are created with each browser window and then shown/hidden as needed
  * - The Shell Menu view contains the UIs for multiple menus and swaps between them as needed
  * - When unfocused, the Shell Menu view is hidden (it's meant to act as a popup menu)
+ * - A press anywhere else in the window hides it too (popup-close.mjs): focus doesn't always move
+ *   on such a press, so the blur alone can leave the menu open
  */
 
 import path from 'path';
@@ -19,6 +21,7 @@ import * as modals from './modals';
 import { triggerMenuItemById } from '../window-menu';
 import shellMenusRPCManifest from '../../rpc-manifests/shell-menus';
 import { findWebContentsParentWindow } from '../../lib/electron';
+import { watchOutsidePress, createReopenGuard } from './popup-close.mjs';
 
 // globals
 // =
@@ -28,6 +31,7 @@ const MARGIN_SIZE = 10;
 const IS_RIGHT_ALIGNED = ['browser', 'bookmark', 'peers', 'share', 'site', 'donate', 'spaces', 'draft', 'mods', 'persona'];
 var events = new Events();
 var views = {}; // map of {[parentWindow.id] => BrowserView}
+var reopenGuards = {}; // map of {[parentWindow.id] => createReopenGuard()}
 
 // exported api
 // =
@@ -48,6 +52,7 @@ export function setup(parentWindow) {
 
 export function destroy(parentWindow) {
   if (get(parentWindow)) {
+    get(parentWindow).stopOutsidePress?.();
     get(parentWindow).webContents.destroy();
     delete views[parentWindow.id];
   }
@@ -152,8 +157,15 @@ export function reposition(parentWindow) {
     } else if (view.menuId === 'spaces') {
       const bo = view.boundsOpt;
       if (bo?.left !== undefined) {
-        // Sidebar mode: caller provides explicit screen coordinates.
-        setBounds({ x: bo.left, y: bo.top ?? 34, width: 200, height: 300 });
+        // Above the sidebar's Spaces button (left + bottom): the menu grows upward from there,
+        // and stays inside the window.
+        const b = { x: bo.left, y: bo.top ?? 34, width: 200, height: 300 };
+        if (view.currentDimensions) Object.assign(b, view.currentDimensions);
+        else adjustDimensions(b);
+        if (bo.bottom !== undefined) b.y = Math.max(0, bo.bottom - b.height);
+        const parentBounds = parentWindow.getContentBounds();
+        b.x = Math.max(0, Math.min(b.x, parentBounds.width - b.width));
+        view.setBounds(b);
       } else {
         setBounds({ x: bo?.rightOffset || 10, y: 34, width: 200, height: 300 });
       }
@@ -166,6 +178,9 @@ export async function toggle(parentWindow, menuId, opts) {
   if (view) {
     if (view.isVisible) {
       return hide(parentWindow);
+    } else if (guard(parentWindow).shouldIgnoreToggle(toggleKey(menuId, opts))) {
+      // the press on this menu's button already closed it; this is that press's click
+      return;
     } else {
       return show(parentWindow, menuId, opts);
     }
@@ -187,9 +202,15 @@ export async function show(parentWindow, menuId, opts) {
   if (view) {
     view.menuId = menuId;
     view.boundsOpt = opts && opts.bounds;
+    view.toggleKey = toggleKey(menuId, opts);
     parentWindow.addBrowserView(view);
     reposition(parentWindow);
     view.isVisible = true;
+    guard(parentWindow).clear();
+    view.stopOutsidePress?.();
+    view.stopOutsidePress = watchOutsidePress(parentWindow, view.webContents, () => {
+      if (view.isVisible) hide(parentWindow, { byPress: true });
+    });
 
     var params = opts && opts.params ? opts.params : {};
     await view.webContents.executeJavaScript(
@@ -204,9 +225,14 @@ export async function show(parentWindow, menuId, opts) {
   }
 }
 
-export function hide(parentWindow) {
+// `byPress`: closed by a press outside it or by its blur, so a toggle of the same menu right after
+// is the click of that press (see popup-close.mjs).
+export function hide(parentWindow, { byPress = false } = {}) {
   var view = get(parentWindow);
   if (view) {
+    view.stopOutsidePress?.();
+    view.stopOutsidePress = null;
+    if (byPress && view.isVisible) guard(parentWindow).closedByPress(view.toggleKey);
     view.webContents.executeJavaScript(`reset('${view.menuId}'); undefined`);
     parentWindow.removeBrowserView(view);
     view.currentDimensions = null;
@@ -219,8 +245,9 @@ export function hide(parentWindow) {
 // =
 
 rpc.exportAPI('background-process-shell-menus', shellMenusRPCManifest, {
-  async close() {
-    hide(findWebContentsParentWindow(this.sender));
+  // `opts.blur`: the menu closed itself because it lost focus (fg/shell-menus/index.js)
+  async close(opts) {
+    hide(findWebContentsParentWindow(this.sender), { byPress: !!opts?.blur });
   },
 
   // Swap the open menu for another in the same spot (the site menu's Mods item opens the Mods menu).
@@ -230,7 +257,7 @@ rpc.exportAPI('background-process-shell-menus', shellMenusRPCManifest, {
     var view = win ? views[win.id] : undefined;
     if (!view || !view.isVisible || !IS_RIGHT_ALIGNED.includes(menuId)) return;
     view.webContents.executeJavaScript(`reset('${view.menuId}'); undefined`);
-    view.menuId = menuId;
+    view.menuId = menuId; // keeps the opener's toggleKey: its button still closes this one
     view.currentDimensions = null;
     reposition(win);
     await view.webContents.executeJavaScript(
@@ -280,6 +307,16 @@ rpc.exportAPI('background-process-shell-menus', shellMenusRPCManifest, {
 
 // internal methods
 // =
+
+function guard(parentWindow) {
+  return (reopenGuards[parentWindow.id] = reopenGuards[parentWindow.id] || createReopenGuard());
+}
+
+// One menu id opens from several buttons (the Persona menu: location bar, Spaces button, sidebar),
+// each with its own bounds, so the button is part of the key.
+function toggleKey(menuId, opts) {
+  return `${menuId}:${JSON.stringify(opts?.bounds || null)}`;
+}
 
 function adjustPosition(bounds, view, parentWindow) {
   if (view.boundsOpt?.left !== undefined) {
