@@ -1052,6 +1052,8 @@ export function create(
       if (tabIndex === -1) tabIndex = undefined;
       else if (tabIndex < lastPinIndex) tabIndex = lastPinIndex;
       else tabIndex++;
+    } else if (typeof tabIndex === 'undefined' && newTabsOnTop(win)) {
+      tabIndex = indexOfLastPinnedTabInSpace(win, spaceId);
     }
     if (typeof tabIndex !== 'undefined') {
       tabs.splice(tabIndex, 0, tab);
@@ -1234,7 +1236,7 @@ export async function restoreBgTabByIndex(win, index) {
   backgroundTabs.splice(index, 1);
   app.emit('custom-background-tabs-update', backgroundTabs);
 
-  if (tab.isPinned) {
+  if (tab.isPinned || newTabsOnTop(win)) {
     tabs.splice(indexOfLastPinnedTabInSpace(win, tab.spaceId), 0, tab);
   } else {
     tabs.push(tab);
@@ -1645,13 +1647,17 @@ export function moveTabToGroup(win, tab, groupId, before = null) {
   emitReplaceState(win);
 }
 
-// Open a new tab at the end of a group, and show the group if it was hidden.
+// Open a new tab in a group, and show the group if it was hidden. It goes at the end of the group,
+// or at its top in the sidebar layout, where new tabs go on top.
 export function createInGroup(win, groupId, url, opts = {}) {
   var group = getTabGroups(win).find((g) => g.id === groupId);
   if (!group) return null;
   group.hidden = false;
+  var first = newTabsOnTop(getTopWindow(win))
+    ? getAll(win).find((t) => t.groupId === groupId && !t.isPinned)
+    : null;
   var tab = create(win, url, opts);
-  if (tab) moveTabToGroup(win, tab, groupId);
+  if (tab) moveTabToGroup(win, tab, groupId, first);
   return tab;
 }
 
@@ -2578,6 +2584,12 @@ function addTabToClosedItems(tab) {
 function addPaneToClosedItems(tab, url) {
   closedItems[tab.browserWindow.id] = closedItems[tab.browserWindow.id] || [];
   closedItems[tab.browserWindow.id].push({ isPane: true, tab, url });
+}
+
+// The sidebar lists tabs top-down, newest first: a new tab goes above the Space's other tabs (below
+// its pinned ones). The top bar keeps adding them at the end. A session being restored keeps its order.
+function newTabsOnTop(win) {
+  return getAddedWindowSettings(win).tabLayout === 'sidebar' && !restoringWindows.has(win.id);
 }
 
 function indexOfLastPinnedTabInSpace(win, spaceId) {
