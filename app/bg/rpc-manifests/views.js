@@ -39,6 +39,8 @@ export default {
   getDraftStatus: 'promise',
   publishDraft: 'promise',
   discardDraft: 'promise',
+  getSiteSession: 'promise',
+  endSiteSession: 'promise',
   getMods: 'promise',
   setModEnabled: 'promise',
   toggleModPreset: 'promise',

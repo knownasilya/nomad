@@ -42,6 +42,7 @@ import * as mods from '../mods';
 import * as personas from '../personas';
 import * as spacePins from '../space-pins';
 import { isPinnable, normalizePinUrl, reconcileTabs } from '../../../../shared/pins.mjs';
+import { shortOrigin } from '../../../../shared/personas.mjs';
 import * as vault from '../../hyper/vault';
 import * as saveToReader from '../save-to-reader';
 
@@ -2086,6 +2087,23 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
     await pane.refreshState();
     pane.webContents.reload();
     return res;
+  },
+
+  // Personas (ADR-0031 §11), for the location bar's Persona menu (fg/shell-menus/persona.js): the
+  // Session the tab's page holds in the tab's Space, and Log out. Only that site's Session, never a
+  // list of the user's Personas.
+  async getSiteSession(index) {
+    const tab = getByIndex(getWindow(this.sender), index);
+    const url = tab?.primaryPane?.url;
+    if (!url) return null;
+    const s = personas.siteSession(url, tab.spaceId);
+    return s ? { ...s, site: shortOrigin(s.origin) } : null;
+  },
+
+  async endSiteSession(index) {
+    const tab = getByIndex(getWindow(this.sender), index);
+    const url = tab?.primaryPane?.url;
+    if (url) await personas.endSessionFor(url, tab.spaceId);
   },
 
   // Mods (ADR-0023), for the location bar's Mods menu (fg/shell-menus/mods.js). Each acts

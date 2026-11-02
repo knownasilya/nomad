@@ -9,6 +9,7 @@ import './mods';
 import './donate';
 import './draft';
 import './peers';
+import './persona';
 import './share';
 import './site';
 import './spaces';
@@ -122,6 +123,8 @@ class MenusWrapper extends LitElement {
         return html`<draft-menu active-menu></draft-menu>`;
       case 'peers':
         return html`<peers-menu active-menu></peers-menu>`;
+      case 'persona':
+        return html`<persona-menu active-menu></persona-menu>`;
       case 'share':
         return html`<share-menu active-menu></share-menu>`;
       case 'site':
