@@ -542,6 +542,22 @@ describe('write grants', () => {
     expect(writePermissions(null)).toEqual([]);
   });
 
+  it('lets a Job make new drives only with newDrives, and keeps old records as they were', () => {
+    const w = normalizeWrites({ newDrives: true });
+    expect(w).toEqual({ drives: [], notes: false, reader: false, newDrives: true });
+    expect(writeCaps(w)).toEqual(['createDrive']);
+    expect(writePermissions(w)).toEqual(['aiCreateDrive']);
+    expect(describeWrites(w)).toEqual(['new drives it makes']);
+    expect(normalizeWrites({ notes: true, newDrives: false })).not.toHaveProperty('newDrives');
+    expect(addedWrites(normalizeWrites({ notes: true }), normalizeWrites({ notes: true, newDrives: true }))).toEqual({
+      drives: [],
+      notes: false,
+      reader: false,
+      newDrives: true,
+    });
+    expect(addedWrites(w, w)).toBe(null);
+  });
+
   it('stages only the drives granted in a Draft', () => {
     const w = normalizeWrites({ drives: [{ url: `hyper://${A}/`, draft: true }, `hyper://${B}/`] });
     expect(writesInDraft(w, `hyper://${A}`)).toBe(true);
@@ -600,5 +616,25 @@ describe('write grants', () => {
       { tool: 'writeNote', summary: 'Wrote “Digest”' },
     ]);
     expect(makeRun({ id: 'r2', job, startedAt: 0, finishedAt: 1, status: 'ok', output: '' }).changes).toBe(undefined);
+  });
+
+  it('records a drive a run made, with its link only when it is a drive', () => {
+    const job = makeJob({ id: 'job-w-1', title: 'Report', prompt: 'Make it' });
+    const run = makeRun({
+      id: 'r3',
+      job,
+      startedAt: 0,
+      finishedAt: 1,
+      status: 'ok',
+      output: 'Done',
+      changes: [
+        { tool: 'createDrive', summary: 'Made the drive “Week 44”', drive: `hyper://${A}`, title: 'Week 44' },
+        { tool: 'createDrive', summary: 'Made a drive', drive: 'https://example.com/' },
+      ],
+    });
+    expect(run.changes).toEqual([
+      { tool: 'createDrive', summary: 'Made the drive “Week 44”', drive: `hyper://${A}/`, title: 'Week 44' },
+      { tool: 'createDrive', summary: 'Made a drive' },
+    ]);
   });
 });

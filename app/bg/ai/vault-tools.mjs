@@ -91,19 +91,30 @@ function matches(query, fields) {
 // this a turn asks again on every write. Any other permission goes straight through. The answer is
 // per site too: a grant is for a site (ADR-0019 §4), and the user's own AI can move to another tab
 // in a turn (ADR-0021).
+//
+// `allow(permission)` says yes to a permission for the rest of the turn, on every site, without
+// asking: what the turn earned another way. A drive the AI made on this turn is the user's new,
+// empty drive, so createDrive allows writing it (modifyDrive:<key>).
 export function askOncePerTurn(permit) {
   const answers = new Map()
-  return (permission, sender, ...rest) => {
+  const allowed = new Set()
+  const ask = (permission, sender, ...rest) => {
+    if (allowed.has(String(permission))) return Promise.resolve(true)
     if (!askedOnce(permission)) return permit(permission, sender, ...rest)
     const key = `${permission} ${siteOf(sender)}`
     if (!answers.has(key)) answers.set(key, Promise.resolve(permit(permission, sender, ...rest)))
     return answers.get(key)
   }
+  ask.allow = (permission) => {
+    allowed.add(String(permission))
+  }
+  return ask
 }
 
 function askedOnce(permission) {
   return (
     VAULT_PERMS.includes(permission) ||
+    permission === 'aiCreateDrive' ||
     String(permission).startsWith('modifyDrive:') ||
     String(permission).startsWith('aiSecretUse:')
   )

@@ -6,6 +6,7 @@
 
 import vm from 'node:vm'
 import { API_REFERENCE } from './api-reference.mjs'
+import { TEMPLATE_IDS } from './create-drive.mjs'
 
 export const DOMAINS = ['capability', 'guide', 'page', 'drive', 'name', 'skill']
 
@@ -38,7 +39,7 @@ const GUIDE_IDS = [
 const DOMAIN_COPY = {
   capability:
     'Read and write the current Drive, fetch an http(s) URL, read or screenshot the open page, open a new tab, and in the AI Sidebar click and type on the page. ' +
-    "For the user's own AI: their Notes, Reader, Mods and Jobs, and HTTP requests with their saved secrets (API keys, by name).",
+    "For the user's own AI: new drives, their Notes, Reader, Mods and Jobs, and HTTP requests with their saved secrets (API keys, by name).",
   guide: 'Sections of the Nomad API reference. Open one with entity guide:<id>.',
   page: 'Tools the current page registered. Open one with entity page:<name>.',
   drive:
@@ -149,6 +150,37 @@ export const CAPABILITIES = [
       required: ['path', 'content'],
     },
     gates: { write: true },
+  },
+  // A new drive for the user (create-drive.mjs), as the Create Drive dialog makes one. The user's own
+  // AI only; it asks once a turn, and a Job needs the `newDrives` grant (shared/jobs.mjs).
+  {
+    name: 'createDrive',
+    description:
+      "Create a new drive in the user's library, as the Create Drive dialog does: a `title`, an optional " +
+      '`description`, and a `template`: "blank" (an empty drive for any files, the default) or "document" (a page ' +
+      'several people can edit at the same time). `collaborative` lets other people ask to write to it; a document ' +
+      'is collaborative unless you pass false, a blank drive is not unless you pass true. Returns { url, title, ' +
+      'template, collaborative }. Then write its files with writeDriveFile, passing its url as `drive`: you may ' +
+      'write to a drive you made without asking again on this turn. Link it in your answer. Make a drive only when ' +
+      'the user asks for one, or for a site or app they asked you to build. Asks permission to create drives.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'The drive\'s name, e.g. "Trip photos"' },
+        description: { type: 'string', description: 'Optional. A sentence about what it is for' },
+        template: {
+          type: 'string',
+          enum: TEMPLATE_IDS,
+          description: 'Optional. "blank" (default) or "document"',
+        },
+        collaborative: {
+          type: 'boolean',
+          description: 'Optional. Whether other people may ask to write to it. The template decides when left out',
+        },
+      },
+      required: ['title'],
+    },
+    gates: { personal: true },
   },
   {
     name: 'currentTab',
@@ -584,9 +616,10 @@ export const CAPABILITIES = [
           type: ['object', 'null'],
           description:
             'Optional. What the Job may change; without it a Job only reads. { "drives": [{ "url": "hyper://<key>/" or a ' +
-            'name, "draft": false }], "notes": true, "reader": true }. A drive lets it write files there with writeDriveFile ' +
+            'name, "draft": false }], "notes": true, "reader": true, "newDrives": true }. A drive lets it write files there with writeDriveFile ' +
             '(to update a site, say); "draft": true stages its writes in the drive\'s Draft for the user to publish. "notes" ' +
-            'lets it write Notes; "reader" lets it follow, unfollow and mark posts read. Give only what the task needs. ' +
+            'lets it write Notes; "reader" lets it follow, unfollow and mark posts read; "newDrives" lets it make drives ' +
+            'with createDrive and write files into the ones it makes. Give only what the task needs. ' +
             'Adding any of these asks the user. The whole object replaces the old one; null takes them all away.',
           properties: {
             drives: {
@@ -600,6 +633,7 @@ export const CAPABILITIES = [
             },
             notes: { type: 'boolean' },
             reader: { type: 'boolean' },
+            newDrives: { type: 'boolean' },
           },
         },
       },

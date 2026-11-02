@@ -7,6 +7,7 @@ const PURPOSES = {
   readDriveFile: 'read a file',
   listDriveFiles: 'list files',
   writeDriveFile: 'write a file',
+  createDrive: 'make a drive',
   fetchUrl: 'fetch a web page',
   currentTab: 'check your current tab',
   readCurrentPage: 'read this page',
@@ -65,6 +66,8 @@ export function toolSummary(name, args) {
       return `Listing the files in ${inDrive(a.path || '/', a.drive)}`;
     case 'writeDriveFile':
       return `Writing ${inDrive(a.path || 'a file', a.drive)}`;
+    case 'createDrive':
+      return a.title ? `Making the drive ${quote(a.title)}` : 'Making a drive';
     case 'fetchUrl':
       return a.url ? `Fetching ${a.url}` : 'Fetching a web page';
     case 'listSecrets':

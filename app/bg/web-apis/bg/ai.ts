@@ -82,6 +82,8 @@ import {
 } from '../../ai/steering.mjs';
 import { pickToolDrive, remoteStage, stageRules, tabSnapshot } from '../../ai/stages.mjs';
 import { openTabGroup, openTabUrl } from '../../ai/open-tab.mjs';
+import { CREATE_DRIVE_PERM, createdDrive, newDriveOptions } from '../../ai/create-drive.mjs';
+import { DRIVE_TEMPLATES } from '../../../lib/drive-templates';
 import { isPageAction } from '../../ai/page-control.mjs';
 import * as pageControl from '../../ui/page-control';
 import {
@@ -584,7 +586,8 @@ async function jobEgress(job, work) {
 function jobGrants(job) {
   const writes = job.writes || null;
   return {
-    allowWrite: !!writes?.drives?.length,
+    // A drive the Job makes (newDrives) is one it may write.
+    allowWrite: !!writes?.drives?.length || !!writes?.newDrives,
     extra: writeCaps(writes),
     draft: writes?.drives?.some((d) => d.draft) ? (base) => writesInDraft(writes, base) : false,
     permit: jobPermitFor(writes),
@@ -600,7 +603,10 @@ function jobEmitter(changes = []) {
   emitter.on('error', () => {});
   emitter.on('tool', (e) => {
     if (e?.phase === 'write') changes.push({ drive: e.drive, path: e.path, draft: !!e.draft });
-    else if (e?.phase === 'start' && RECORDED_WRITES.has(e.name)) started.set(e.id, e.summary);
+    else if (e?.phase === 'drive' && e.drive) {
+      const title = String(e.title || '');
+      changes.push({ tool: 'createDrive', summary: `Made the drive “${title || e.drive}”`, drive: e.drive, title });
+    } else if (e?.phase === 'start' && RECORDED_WRITES.has(e.name)) started.set(e.id, e.summary);
     else if (e?.phase === 'end' && started.has(e.id)) {
       if (!e.error) changes.push({ tool: e.name, summary: started.get(e.id) || e.name });
       started.delete(e.id);
@@ -675,6 +681,7 @@ function jobContext(job) {
   const may = [
     ...(w?.notes ? ['the user’s Notes (writeNote)'] : []),
     ...(w?.reader ? ['their Reader (followFeed, unfollowFeed, markPostsRead)'] : []),
+    ...(w?.newDrives ? ['new drives (createDrive), and the files in the drives it makes (writeDriveFile, live)'] : []),
     ...(drives.length ? [`these drives with writeDriveFile, naming the drive: ${drives.join(', ')}`] : []),
   ];
   const change = may.length
@@ -1324,7 +1331,13 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
       // `draft:true` (remote AI edits) stages into the Drive's Vault-hosted Draft instead of writing
       // the live Drive, so the change is reviewable/publishable (ADR-0012). So does a write while
       // the Drive's own Draft Mode is on.
-      await fsAPI.writeFile.call(ctx, target, args.content, draftFor(base) ? { draft: true } : {});
+      // `approvedDrive`: the yes above is the consent for this write (fs-write-guard.ts).
+      await fsAPI.writeFile.call(
+        { ...ctx, approvedDrive: driveKey },
+        target,
+        args.content,
+        draftFor(base) ? { draft: true } : {}
+      );
       // The 'write' event makes an undo Checkpoint, and tells an editor that shows this drive to
       // reload. It names the drive: the user's own AI can write to any of the user's drives.
       if (emitter) {
@@ -1346,6 +1359,27 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
         );
       }
       return `File written successfully to ${where}. Link: ${target}`;
+    }
+    case 'createDrive': {
+      // A new drive, as the Create Drive dialog makes one (fg/modals/create-drive.js): the user's
+      // own AI only, after the user's yes (once a turn), or a Job's `newDrives` grant.
+      if (!catalog?.personal || !hasCapability(catalog, 'createDrive')) {
+        throw new Error('createDrive is not available here');
+      }
+      const driveOpts = newDriveOptions(args);
+      const allowed = await permit(CREATE_DRIVE_PERM, sender, { title: driveOpts.title });
+      if (!allowed) throw new Error("The user didn't allow making a drive");
+      const url = await fsAPI.createDrive.call(ctx, { ...driveOpts, prompt: false });
+      const base = driveBaseUrl(url);
+      // The new drive is the user's and empty: the turn writes it without another prompt.
+      (permit as any).allow?.('modifyDrive:' + parseDriveUrl(url).hostname);
+      const collaborative =
+        driveOpts.collaborative ??
+        !!DRIVE_TEMPLATES.find((t) => t.id === driveOpts.template)?.collaborative;
+      const made = createdDrive(url, driveOpts, { collaborative, draft: draftFor(base) });
+      // A Job keeps the drive it made with the run (jobEmitter).
+      emitter?.emit('tool', { phase: 'drive', name: 'createDrive', drive: made.url, title: made.title });
+      return JSON.stringify(made, null, 2);
     }
     case 'notify': {
       // A Job's turn only (ADR-0030). jobs.js saves it with the run, and the phone shows it.

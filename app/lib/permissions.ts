@@ -260,6 +260,15 @@ export const PERMS = {
     dangerous: true,
     promptTrusted: true,
   },
+  // The user's own AI making a new drive in their library (createDrive, bg/ai/create-drive.mjs), as
+  // the Create Drive dialog does. Asked once a turn and never kept: each chat that makes drives asks.
+  aiCreateDrive: {
+    persist: false,
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    promptTrusted: true,
+  },
   // The AI's access to the user's AI Jobs (ADR-0030). Changing them is dangerous: a Job runs a prompt
   // by itself, reads the user's Notes and Reader each time, and can notify their phone.
   jobsRead: {
@@ -411,6 +420,7 @@ export const PERM_ICONS = {
   aiSecretUse: 'fas fa-key',
   aiSendData: 'fas fa-paper-plane',
   aiPagePlan: 'fas fa-list-ol',
+  aiCreateDrive: 'fas fa-hdd',
 };
 
 export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
@@ -501,6 +511,10 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
         <span class="plan-note">Other clicks that buy, send, post or delete still ask.</span></span
       >`;
     }
+    case 'aiCreateDrive':
+      return permOpts?.title
+        ? html`<span>Make a new drive, <strong>${permOpts.title}</strong>, in your library</span>`
+        : 'Make a new drive in your library';
     case 'jobsRead':
       return 'Let the AI assistant see your AI Jobs and their results';
     case 'jobsWrite':
