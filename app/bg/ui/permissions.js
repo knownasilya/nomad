@@ -8,6 +8,8 @@ import * as permPromptSubwindow from './subwindows/perm-prompt';
 import * as tabManager from './tabs/manager';
 import { PermissionsError, UserDeniedError } from 'beaker-error-constants';
 import * as wcTrust from '../wc-trust';
+import * as personas from './personas';
+import * as filesystem from '../filesystem/index';
 
 // globals
 // =
@@ -131,6 +133,12 @@ async function onPermissionRequestHandler(webContents, permission, cb, opts) {
   if (res === 1) return cb(true);
   if (res === 0) return cb(false);
 
+  // the page's live Session in its Space (ADR-0031 §9): its tokens count as granted. A Session
+  // only narrows: it holds only tokens a normal prompt could grant, and nothing on hyper://private/.
+  if (sessionGrants(webContents, url, permission)) return cb(true);
+  // a Session-only token (`profile`) is never asked for with a normal prompt
+  if (PERM.sessionOnly) return cb(false);
+
   // look up the containing window
   var { win, tab } = getContaining(webContents);
   if (!win) {
@@ -179,6 +187,15 @@ async function onPermissionRequestHandler(webContents, permission, cb, opts) {
   // hand down the decision
   for (let cb of req.cbs) {
     cb(decision);
+  }
+}
+
+function sessionGrants(webContents, url, permission) {
+  try {
+    const spaceId = filesystem.getSpaceIdForWebContents(webContents.id) || 1;
+    return personas.sessionGrants(url, spaceId, permission);
+  } catch {
+    return false;
   }
 }
 

@@ -31,6 +31,7 @@ class SiteInfoApp extends LitElement {
       naming: { type: Object }, // { value, previous, inSpace, error } while the name field is open
       edit: { type: Object }, // nomad.vault.driveEditStatus for a Drive this Device can't write
       askingEdit: { type: Boolean }, // a viewer of a shared Space is typing a note to ask to edit
+      session: { type: Object }, // this site's Session in the window's Space (ADR-0031), or null
     };
   }
 
@@ -122,6 +123,8 @@ class SiteInfoApp extends LitElement {
 
   init(params) {
     this.url = params.url;
+    // The location bar's Persona icon opens the Session section.
+    if (params.view) this.view = params.view;
     this.load();
   }
 
@@ -137,6 +140,7 @@ class SiteInfoApp extends LitElement {
     this.edit = undefined;
     this.naming = null;
     this.askingEdit = false;
+    this.session = null;
     contextMenu.destroy();
   }
 
@@ -164,6 +168,10 @@ class SiteInfoApp extends LitElement {
       if (!this.view) {
         this.view = 'identity';
       }
+
+      // Who the user is on this site (ADR-0031): its Session in the window's Space.
+      this.session = await nomad.personas.getSiteSession(this.url).catch(() => null);
+      if (this.view === 'session' && !this.session) this.view = 'identity';
 
       // The user's names for this page (bg/hyper/names.js). nomad:// pages can be named too.
       this.names = await nomad.vault.namesForUrl(this.url).catch(() => []);
@@ -509,6 +517,15 @@ class SiteInfoApp extends LitElement {
             <span class="fas fa-fw fa-key"></span>
             Permissions
           </a>
+          ${this.session
+            ? html`<a
+                class=${classMap({ active: this.view === 'session' })}
+                @click=${(e) => this.onSetView(e, 'session')}
+              >
+                <span class="fas fa-fw fa-id-badge"></span>
+                Logged in
+              </a>`
+            : ''}
           ${this.isDrive
             ? html`
                 <a
@@ -551,6 +568,7 @@ class SiteInfoApp extends LitElement {
               ></site-perms>
             `
           : ''}
+        ${this.view === 'session' && this.session ? this.renderSession() : ''}
         ${this.view === 'forks'
           ? html`
               <drive-forks
@@ -579,6 +597,59 @@ class SiteInfoApp extends LitElement {
           : ''}
       </div>
     `;
+  }
+
+  // Who you are on this site, what its Session can do, and Log out (ADR-0031 §11).
+  renderSession() {
+    const s = this.session;
+    const p = s.persona;
+    const name = p ? p.title || p.label : 'A deleted Persona';
+    const sentence = (token) => {
+      const permId = nomadPermissions.getPermId(token);
+      if (permId === 'profile') return nomadPermissions.renderPermDesc({ html, bg: null, url: this.url, permId, permParam: '', permOpts: { title: name } });
+      if (permId === 'modifyDrive') return 'Change files in your profile drive';
+      return token;
+    };
+    return html`
+      <div class="session">
+        <div class="session-who">
+          ${p?.thumbUrl
+            ? html`<img class="session-avatar" src=${p.thumbUrl} alt="" />`
+            : html`<span class="session-avatar initial">${name.slice(0, 1).toUpperCase()}</span>`}
+          <div>
+            <div class="session-name">${name}</div>
+            <div class="session-sub">Your Persona “${p?.label || '?'}” · since ${new Date(s.createdAt).toLocaleDateString()}${s.expiresAt ? html` · until ${new Date(s.expiresAt).toLocaleDateString()}` : ''}</div>
+          </div>
+        </div>
+        <div class="session-can">This site can</div>
+        <ul class="session-perms">
+          <li><span class="fas fa-fw fa-fingerprint"></span> Know it’s the same visitor each time, by a random ID made only for this site</li>
+          ${s.perms.map((t) => html`<li><span class="fas fa-fw fa-check"></span> ${sentence(t)}</li>`)}
+        </ul>
+        <div class="session-actions">
+          <button @click=${this.onLogOut}><span class="fas fa-fw fa-sign-out-alt"></span> Log out</button>
+          <a href="#" @click=${this.onManagePersonas}>Manage Personas</a>
+        </div>
+      </div>
+    `;
+  }
+
+  async onLogOut(e) {
+    e.preventDefault();
+    try {
+      await nomad.personas.endSiteSession(this.url);
+      this.session = null;
+      this.view = 'identity';
+      toast.create('Logged out of this site', 'success');
+    } catch (err) {
+      toast.create(err.message || String(err), 'error');
+    }
+  }
+
+  onManagePersonas(e) {
+    e.preventDefault();
+    nomad.browser.openUrl('nomad://library/personas', { setActive: true });
+    nomad.browser.toggleSiteInfo(false);
   }
 
   async updated() {

@@ -623,7 +623,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
       return
     }
     if (!vault) {
-      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'updates' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : 'Link this phone to use Reader and Notes' })
+      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'updates' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : 'Link this phone to use Reader and Notes' })
       return
     }
     let value
@@ -661,6 +661,10 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'jobs' && action === 'run') value = await vaultApps.requestJobRun(vault, args.id)
     else if (app === 'jobs' && action === 'delete') value = await vaultApps.deleteJob(vault, args.id)
     else if (app === 'jobs' && action === 'notifications') value = await vaultApps.jobNotifications(vault, args.since)
+    else if (app === 'personas' && action === 'list') value = await vaultApps.listPersonas(vault, space)
+    else if (app === 'personas' && action === 'endSession') value = await vaultApps.endPersonaSession(vault, args.path)
+    else if (app === 'personas' && action === 'setDefault') value = await vaultApps.setDefaultPersona(vault, args.id || null)
+    else if (app === 'personas' && action === 'setSpace') value = await vaultApps.setSpacePersona(vault, space, args.id || null)
     else if (app === 'updates' && action === 'list') value = await vaultApps.deviceUpdates(vault, args.version)
     else if (app === 'updates' && action === 'request') value = await vaultApps.requestDeviceUpdate(vault, { device: args.device, version: args.version, prerelease: !!args.prerelease })
     else throw new Error(`Unknown ${app} action: ${action}`)

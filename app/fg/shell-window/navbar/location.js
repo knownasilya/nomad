@@ -41,6 +41,7 @@ class NavbarLocation extends LitElement {
       hasDraft: { type: Boolean, attribute: 'has-draft' },
       draftPreviewing: { type: Boolean, attribute: 'draft-previewing' },
       mods: { type: Object },
+      session: { type: Object }, // the site's Session (ADR-0031): { label, title, thumbUrl } or null
       isLocationFocused: { type: Boolean },
       hasExpanded: { type: Boolean },
     };
@@ -72,6 +73,7 @@ class NavbarLocation extends LitElement {
     this.hasDraft = false;
     this.draftPreviewing = false;
     this.mods = null;
+    this.session = null;
     this.isLocationFocused = false;
     this.hasExpanded = false;
     this.shouldSelectAllOnFocus = false;
@@ -185,7 +187,7 @@ class NavbarLocation extends LitElement {
       >
       </shell-window-navbar-site-info>
       ${this.renderLocation()} ${this.renderZoom()} ${this.renderLiveReloadingBtn()}
-      ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderCopyUrlBtn()}
+      ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderSessionBtn()} ${this.renderCopyUrlBtn()}
       ${this.renderPeers()} ${this.renderDonateBtn()} ${'' /* DISABLED this.renderShareBtn()*/}
       ${this.renderBookmarkBtn()} ${this.renderSiteBtn()}
     `;
@@ -368,6 +370,29 @@ class NavbarLocation extends LitElement {
         <span class="fas fa-pen-nib" style=${this.draftPreviewing ? 'color: #2864dc' : ''}></span>
       </button>
     `;
+  }
+
+  // Personas (ADR-0031 §11): shown only while the site holds a Session. Opens site-info's Session
+  // section (who you are here, what it can do, Log out).
+  renderSessionBtn() {
+    const s = this.session;
+    if (!s) return '';
+    const name = s.title || s.label;
+    return html`
+      <button class="session" @click=${this.onClickSession} title=${`Logged in as ${name} (your Persona “${s.label}”)`}>
+        ${s.thumbUrl
+          ? html`<img class="session-avatar" src=${s.thumbUrl} alt="" />`
+          : html`<span class="session-avatar initial">${name.slice(0, 1).toUpperCase()}</span>`}
+      </button>
+    `;
+  }
+
+  async onClickSession(e) {
+    var rect = e.currentTarget.getClientRects()[0];
+    await bg.views.toggleSiteInfo({
+      bounds: { top: rect.bottom | 0, left: rect.left | 0 },
+      params: { view: 'session' },
+    });
   }
 
   renderShareBtn() {
@@ -743,6 +768,30 @@ NavbarLocation.styles = [
 
     button.copy-url .fa-link {
       font-size: 14px;
+    }
+
+    button.session {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .session-avatar {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      object-fit: cover;
+      box-shadow: 0 0 0 1.5px #2864dc;
+    }
+
+    .session-avatar.initial {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #2864dc;
+      color: #fff;
+      font-size: 9px;
+      font-weight: 600;
     }
 
     button.zoom {

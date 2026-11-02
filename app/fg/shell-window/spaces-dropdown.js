@@ -6,6 +6,7 @@ class ShellWindowSpacesDropdown extends LitElement {
     return {
       spaces: { type: Array },
       activeSpace: { type: Object },
+      persona: { type: Object }, // the Space's Persona (ADR-0031): { label, title, thumbUrl }
     };
   }
 
@@ -13,14 +14,20 @@ class ShellWindowSpacesDropdown extends LitElement {
     super();
     this.spaces = [];
     this.activeSpace = null;
+    this.persona = null;
   }
 
   render() {
     const space = this.activeSpace;
     return html`
-      <button class="spaces-btn" @click=${this.onToggle} title="Switch space">
+      <button
+        class="spaces-btn"
+        @click=${this.onToggle}
+        title=${this.persona ? `Switch space. You are ${this.persona.title || this.persona.label} (${this.persona.label}) here.` : 'Switch space'}
+      >
         <span class="dot" style="background:${space?.color || '#6c6cff'}"></span>
         <span class="name">${space?.name || 'Spaces'}</span>
+        ${personaAvatar(this.persona)}
         <span class="caret">▾</span>
       </button>
     `;
@@ -30,6 +37,37 @@ class ShellWindowSpacesDropdown extends LitElement {
     await bg.views.toggleMenu('spaces');
   }
 }
+
+// The Persona on the Spaces button: its picture, or its first letter. Always on screen, so the user
+// sees who they are before a site asks (ADR-0031 §11).
+export function personaAvatar(p) {
+  if (!p) return '';
+  return p.thumbUrl
+    ? html`<img class="persona" src=${p.thumbUrl} alt="" />`
+    : html`<span class="persona initial">${(p.title || p.label || '?').slice(0, 1).toUpperCase()}</span>`;
+}
+
+export const personaAvatarCSS = css`
+  .persona {
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 0 0 1px var(--border-color--tab, rgba(0, 0, 0, 0.12));
+  }
+
+  .persona.initial {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #5c5cff;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1;
+  }
+`;
 
 ShellWindowSpacesDropdown.styles = css`
   :host {
@@ -74,5 +112,7 @@ ShellWindowSpacesDropdown.styles = css`
     opacity: 0.6;
   }
 `;
+
+ShellWindowSpacesDropdown.styles = [ShellWindowSpacesDropdown.styles, personaAvatarCSS];
 
 customElements.define('shell-window-spaces-dropdown', ShellWindowSpacesDropdown);

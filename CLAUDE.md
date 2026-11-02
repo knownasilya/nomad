@@ -487,6 +487,28 @@ Job uses only the secrets ticked for it on the secret (the local `jobs` list, no
 Library → Secrets over the internal `nomad.secrets` API (writes only from `nomad://library`). Never
 add an API that returns a value.
 
+### Personas and Sessions (ADR-0031)
+
+A Persona is one of the user's identities: a private `label` for a Profile Drive
+(`walled.garden/person`). A Session is the login a site holds after the user said yes in the login
+prompt, one per (origin, Persona, Space). Both are Vault records (`/.vault/personas/`,
+`/.vault/persona-default.json`, `persona` on `/.vault/spaces/<rootKey>.json`,
+`/.vault/sessions/<space>/<persona>/<sha256(origin)>.json`); the rules (resolution order, the writer
+check, Session tokens) are `shared/personas.mjs` (tests `tests/unit/personas.test.js`), the desktop
+cache and writes `app/bg/ui/personas.js`. Two APIs: public `nomad.session` (`requestLogin`,
+`getCurrent`, `revoke`, `change`; `bg/web-apis/bg/session.ts`) and internal `nomad.personas`
+(`bg/web-apis/bg/personas.ts`, nomad:// only: a page must never list Personas). The prompt is the
+`persona-login` modal (`app/fg/modals/persona-login.js`), the only way a Session is made: no
+trusted-sender shortcut, no silent path, and a "no" isn't remembered past the page load. The
+permission engine (`bg/ui/permissions.js`) counts a live Session's tokens (`profile`, and
+`modifyDrive:<the Persona's own drive>`) as granted; nothing else reads Sessions. A Persona logs in
+only while its Profile Drive's writers are the user's own Devices (`profileState`), and
+`fs.approveRequest`/`createInvite` on that drive warn first. UI: My Library → Personas, site-info's
+"Logged in" tab, the Persona icon in the location bar, the Persona on the Spaces button and in the
+Spaces menu; the phone's Personas screen (`mobile/components/Personas.tsx`, `RPC_APPS`
+`personas`) picks the default and the Space's Persona and logs sites out. `nomad.session` in the
+phone's WebView is not built yet. It is a public API, so the sync triad applies.
+
 ## Look and feel: every UI supports dark mode and matches the rest
 
 Every new or changed screen must work in light **and** dark, and look like its neighbours.

@@ -342,6 +342,15 @@ export const NOMAD_SHIM = `(function(){
     },
     markdown: {
       toHTML: function(md){ return rpcApi('markdown', 'toHTML', null, [md]); }
+    },
+    // nomad.session (ADR-0031) isn't on the phone yet: no Session, and a login is declined the way
+    // a "no" is, so a page shows its logged-out state instead of breaking.
+    session: {
+      requestLogin: function(){ var e = new Error('Logging in with a Persona works on your computer for now'); e.name = 'UserDeniedError'; return Promise.reject(e); },
+      getCurrent: function(){ return Promise.resolve(null); },
+      revoke: function(){ return Promise.resolve(); },
+      addEventListener: function(){},
+      removeEventListener: function(){}
     }
   };
   // schemas/markdown live on their own api names, so they use a small variant.

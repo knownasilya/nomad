@@ -14,6 +14,7 @@ import vaultManifest from '../manifests/internal/vault';
 import secretsManifest from '../manifests/internal/secrets';
 import webmcpDevtoolsManifest from '../manifests/internal/webmcp';
 import aiChatsManifest from '../manifests/internal/ai-chats';
+import personasManifest from '../manifests/internal/personas';
 
 export const setup = function (rpc) {
   const internal: any = {};
@@ -33,6 +34,7 @@ export const setup = function (rpc) {
   const secretsRPC = rpc.importAPI('secrets', secretsManifest, opts);
   const webmcpRPC = rpc.importAPI('webmcp-devtools', webmcpDevtoolsManifest, opts);
   const aiChatsRPC = rpc.importAPI('ai-chats', aiChatsManifest, opts);
+  const personasRPC = rpc.importAPI('personas', personasManifest, opts);
 
   // attach APIs
   internal.browser = Object.assign({}, beakerBrowserRPC);
@@ -61,6 +63,9 @@ export const setup = function (rpc) {
   internal.webmcp.watch = () => fromEventStream(webmcpRPC.watch());
   // The AI Sidebar's saved chats, for nomad://ai/chats.
   internal.aiChats = Object.assign({}, aiChatsRPC);
+  // The user's Personas and the Sessions sites hold (ADR-0031): My Library → Personas, site-info.
+  internal.personas = Object.assign({}, personasRPC);
+  internal.personas.watch = () => fromEventStream(personasRPC.watch());
 
   // internal.drives
   internal.drives = new EventTarget();

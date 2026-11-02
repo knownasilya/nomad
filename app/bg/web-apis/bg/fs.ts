@@ -23,6 +23,7 @@ import { createFsWriteGuard } from './fs-write-guard';
 import { privateDrive } from './private-drive-access';
 import * as permissionsUI from '../../ui/permissions';
 import * as wcTrust from '../../wc-trust';
+import * as personas from '../../ui/personas';
 import emitStream from 'emit-stream';
 
 // The backend-routing decisions (alias canonicalisation, autobase-vs-hyperdrive detection, the
@@ -395,6 +396,7 @@ const fsAPI = {
   // requestAccess only enqueue a request the drive owner separately approves, so they stay ambient.
   async createInvite(url, opts = {}) {
     await _assertManage(this, url);
+    await personas.confirmProfileWriter(this.sender, url, null);
     return autobaseAPI.createInvite.call(this, url, opts);
   },
   async claimInvite(inviteUrl, opts = {}) {
@@ -414,6 +416,7 @@ const fsAPI = {
   },
   async approveRequest(url, writerKey, opts = {}) {
     await _assertManage(this, url);
+    await personas.confirmProfileWriter(this.sender, url, writerKey);
     return autobaseAPI.approveRequest.call(this, url, writerKey, opts);
   },
   async denyRequest(url, writerKey) {

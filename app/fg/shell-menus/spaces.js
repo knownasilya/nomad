@@ -21,6 +21,8 @@ class SpacesMenu extends LitElement {
       isCreating: { type: Boolean },
       newName: { type: String },
       newColor: { type: String },
+      persona: { type: Object }, // { personas, defaultId, personaId, resolvedId } for the active Space
+      pickingPersona: { type: Boolean },
     };
   }
 
@@ -35,11 +37,14 @@ class SpacesMenu extends LitElement {
     this.isCreating = false;
     this.newName = '';
     this.newColor = COLORS[0];
+    this.persona = null;
+    this.pickingPersona = false;
   }
 
   async init() {
     this.spaces = await bg.spaces.list();
     this.activeSpace = await bg.spaces.getActive();
+    this.persona = this.activeSpace ? await bg.spaces.getPersonas(this.activeSpace.id).catch(() => null) : null;
   }
 
   render() {
@@ -62,6 +67,7 @@ class SpacesMenu extends LitElement {
           )}
         </div>
         <div class="divider"></div>
+        ${this.renderPersona()}
         ${this.isCreating
           ? this.renderForm()
           : html`
@@ -71,6 +77,66 @@ class SpacesMenu extends LitElement {
             `}
       </div>
     `;
+  }
+
+  // Persona for this Space (ADR-0031 §11): the one the Space uses, and a short list to switch.
+  renderPersona() {
+    const st = this.persona;
+    if (!st) return '';
+    const byId = (id) => st.personas.find((p) => p.id === id) || null;
+    const current = byId(st.resolvedId);
+    const avatar = (p) =>
+      p?.thumbUrl
+        ? html`<img class="avatar" src=${p.thumbUrl} alt="" />`
+        : html`<span class="avatar initial">${p ? (p.title || p.label).slice(0, 1).toUpperCase() : html`<span class="fa fa-user"></span>`}</span>`;
+    if (!this.pickingPersona) {
+      return html`
+        <div class="persona-row" @click=${() => (this.pickingPersona = true)} title="Persona for this Space">
+          ${avatar(current)}
+          <span class="persona-text">
+            <span class="persona-label">Persona for this Space</span>
+            <span class="persona-name">${current ? current.label : 'None yet'}${current && !st.personaId ? ' (default)' : ''}</span>
+          </span>
+          <span class="fa fa-angle-right"></span>
+        </div>
+        <div class="divider"></div>
+      `;
+    }
+    const def = byId(st.defaultId);
+    return html`
+      <div class="header">Persona for this Space</div>
+      <div class="spaces-list">
+        ${st.personas.length
+          ? html`
+              <div class="space-item ${!st.personaId ? 'active' : ''}" @click=${() => this.onSetPersona(null)}>
+                <span class="name">Use the default${def ? ` (${def.label})` : ''}</span>
+                ${!st.personaId ? html`<span class="fa fa-check"></span>` : ''}
+              </div>
+              ${st.personas.map(
+                (p) => html`
+                  <div class="space-item ${st.personaId === p.id ? 'active' : ''}" @click=${() => this.onSetPersona(p.id)}>
+                    ${avatar(p)}
+                    <span class="name">${p.label}</span>
+                    ${st.personaId === p.id ? html`<span class="fa fa-check"></span>` : ''}
+                  </div>
+                `
+              )}
+            `
+          : html`<div class="space-item muted">You have no Personas yet</div>`}
+      </div>
+      <div class="new-btn" @click=${this.onManagePersonas}><span class="fa fa-id-badge"></span> Manage Personas…</div>
+      <div class="divider"></div>
+    `;
+  }
+
+  async onSetPersona(id) {
+    await bg.spaces.setPersona(this.activeSpace.id, id);
+    bg.shellMenus.close();
+  }
+
+  onManagePersonas() {
+    bg.shellMenus.createTab('nomad://library/personas');
+    bg.shellMenus.close();
   }
 
   renderForm() {
@@ -201,6 +267,60 @@ SpacesMenu.styles = [
       height: 10px;
       border-radius: 50%;
       flex: 0 0 10px;
+    }
+
+    .persona-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      cursor: default;
+      color: var(--text-color--default);
+    }
+
+    .persona-row:hover {
+      background: var(--bg-color--hover, rgba(0, 0, 0, 0.05));
+    }
+
+    .persona-text {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .persona-label {
+      font-size: 10px;
+      color: var(--text-color--light, #888);
+    }
+
+    .persona-name {
+      overflow: hidden;
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .avatar {
+      flex: 0 0 18px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .avatar.initial {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--color--blue, #5c5cff);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .space-item.muted {
+      color: var(--text-color--light, #888);
     }
 
     .divider {

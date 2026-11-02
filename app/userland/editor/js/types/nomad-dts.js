@@ -301,6 +301,39 @@ declare namespace Nomad {
     remove(url: string): Promise<void>;
   }
 
+  /** A login a site holds (ADR-0031). profile only when the user left that permission checked. */
+  interface Session {
+    /** Random, made for this site, Persona and Space. The same each visit until the user logs out. */
+    id: string;
+    /** What the user granted: 'profile' and/or 'modifyDrive'. A partial grant is normal. */
+    perms: Array<'profile' | 'modifyDrive'>;
+    profile?: { url: string; title: string; thumb?: string };
+    createdAt: string;
+    expiresAt?: string;
+  }
+
+  interface SessionChangeEvent {
+    type: 'change';
+    /** The new Session, or null once logged out. */
+    session: Session | null;
+  }
+
+  /** Log the user in with one of their Personas. Only the login prompt makes a Session. */
+  interface SessionApi {
+    /**
+     * Show the login prompt. Rejects with UserDeniedError on a cancel, a "no", or no Persona.
+     * perms: 'profile' (the Persona's drive URL, name and picture), 'modifyDrive' (write that drive).
+     * maxAge: seconds until the Session ends (no expiry by default).
+     */
+    requestLogin(opts?: { perms?: Array<'profile' | 'modifyDrive'>; maxAge?: number }): Promise<Session>;
+    /** The Session the prompt already made, or null. Never prompts. */
+    getCurrent(): Promise<Session | null>;
+    /** Log out. */
+    revoke(): Promise<void>;
+    addEventListener(type: 'change', cb: (e: SessionChangeEvent) => void): void;
+    removeEventListener(type: 'change', cb: (e: SessionChangeEvent) => void): void;
+  }
+
   interface Markdown {
     /** Render a markdown string to an HTML string. */
     toHTML(str: string, opts?: object): string;
@@ -478,6 +511,8 @@ declare namespace Nomad {
     panes: Panes;
     peersockets: Peersockets;
     contacts: Contacts;
+    /** Log the user in with one of their Personas (ADR-0031). */
+    session: SessionApi;
     markdown: Markdown;
     schemas: Schemas;
     capabilities: Capabilities;

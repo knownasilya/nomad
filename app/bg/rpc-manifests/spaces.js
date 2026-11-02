@@ -6,4 +6,6 @@ export default {
   update: 'promise',
   remove: 'promise',
   setActive: 'promise',
+  getPersonas: 'promise',
+  setPersona: 'promise',
 };

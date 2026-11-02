@@ -102,6 +102,7 @@ class ShellWindowNavbar extends LitElement {
         ?has-draft=${this.activeTab?.hasDraft ?? false}
         ?draft-previewing=${this.activeTab?.draftPreviewing ?? false}
         .mods=${this.activeTab?.mods ?? null}
+        .session=${this.activeTab?.session ?? null}
       ></shell-window-navbar-location>
       <shell-window-navbar-inpage-find
         .activeTabIndex="${this.activeTabIndex}"

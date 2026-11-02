@@ -30,6 +30,7 @@ class ShellWindowUI extends LitElement {
       hasLocationExpanded: { type: Boolean },
       spaces: { type: Array },
       activeSpace: { type: Object },
+      activePersona: { type: Object }, // the active Space's Persona (ADR-0031), for the Spaces button
       groups: { type: Array },
       tabLayout: { type: String },
       sidebarSide: { type: String },
@@ -55,6 +56,7 @@ class ShellWindowUI extends LitElement {
     this.pins = [];
     this.pinsWritable = true;
     this.activeSpace = null;
+    this.activePersona = null;
     this.groups = [];
     this.activeTabIndex = -1;
     this.tabLayout = 'top-bar';
@@ -102,6 +104,7 @@ class ShellWindowUI extends LitElement {
       this.hasBgTabs = state.hasBgTabs;
       if (state.spaces) this.spaces = state.spaces;
       if (state.activeSpace) this.activeSpace = state.activeSpace;
+      this.activePersona = state.activePersona || null;
       if (state.groups) this.groups = state.groups;
       this.pins = state.pins || [];
       this.pinsWritable = state.pinsWritable !== false;
@@ -249,6 +252,7 @@ class ShellWindowUI extends LitElement {
                     .pinsWritable=${this.pinsWritable}
                     .spaces=${this.spaces}
                     .activeSpace=${this.activeSpace}
+                    .activePersona=${this.activePersona}
                     .groups=${this.groups}
                     sidebar-side=${this.sidebarSide}
                     sidebar-width=${this.sidebarWidth}
@@ -261,6 +265,7 @@ class ShellWindowUI extends LitElement {
                       .pins=${this.pins}
                       .spaces=${this.spaces}
                       .activeSpace=${this.activeSpace}
+                      .activePersona=${this.activePersona}
                       .groups=${this.groups}
                       ?is-fullscreen=${this.isFullscreen}
                       ?has-bg-tabs=${this.hasBgTabs}

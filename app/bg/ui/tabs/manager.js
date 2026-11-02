@@ -39,6 +39,7 @@ import hyper from '../../hyper/index';
 import * as drafts from '../../hyper/drafts';
 import * as names from '../../hyper/names';
 import * as mods from '../mods';
+import * as personas from '../personas';
 import * as spacePins from '../space-pins';
 import { isPinnable, normalizePinUrl, reconcileTabs } from '../../../../shared/pins.mjs';
 import * as vault from '../../hyper/vault';
@@ -719,6 +720,14 @@ export async function setup() {
     iterateTabs((tab) => {
       for (const pane of tab.panes) pane.emitUpdateState();
     });
+  });
+  // The location bar's Persona icon and the Spaces button's Persona follow Personas and Sessions
+  // changed here or on another Device (ADR-0031).
+  personas.events.on('changed', () => {
+    iterateTabs((tab) => {
+      for (const pane of tab.panes) pane.emitUpdateState();
+    });
+    emitReplaceStateAllWindows();
   });
   // The location bar's name follows names kept, renamed or removed here or on another Device.
   names.events.on('changed', () => {
@@ -1575,6 +1584,8 @@ export function emitReplaceState(win) {
     hasBgTabs: backgroundTabs.length > 0,
     spaces: spacesDb.getCachedAll(),
     activeSpace: getWindowActiveSpace(win),
+    // The active Space's Persona (ADR-0031 §11), drawn on the Spaces button: { label, title, thumbUrl }.
+    activePersona: personas.shellPersona(getWindowActiveSpaceId(win)),
     groups: getTabGroups(win),
     // The active Space's pinned pages, [{ href, title }], drawn as tiles (space-pins.js).
     pins: spacePins.forSpace(getWindowActiveSpaceId(win)),
@@ -2261,6 +2272,23 @@ rpc.exportAPI('background-process-spaces', spacesRPCManifest, {
   async setActive(id) {
     const win = getWindow(this.sender);
     await setActiveSpace(win, Number(id));
+  },
+
+  // "Persona for this Space" in the Spaces menu (ADR-0031 §11): the Personas, which one the Space
+  // names (null: it uses the default) and the default.
+  async getPersonas(spaceId) {
+    const st = personas.state();
+    const space = st.spaces.find((s) => s.id === Number(spaceId));
+    return {
+      personas: st.personas.map((p) => ({ id: p.id, label: p.label, title: p.title, thumbUrl: p.thumbUrl, state: p.state })),
+      defaultId: st.defaultId,
+      personaId: space?.personaId || null,
+      resolvedId: space?.resolvedId || null,
+    };
+  },
+
+  async setPersona(spaceId, personaId) {
+    await personas.setSpacePersona(Number(spaceId), personaId || null);
   },
 });
 

@@ -16,6 +16,7 @@ import Library from '../components/Library'
 import Reader from '../components/Reader'
 import Notes from '../components/Notes'
 import Jobs from '../components/Jobs'
+import Personas from '../components/Personas'
 import ActionSheet from '../components/ActionSheet'
 import SiteIcon from '../components/SiteIcon'
 import { ListSection, ListRow, ListEmpty } from '../components/List'
@@ -66,7 +67,7 @@ type Kind = 'home' | 'web' | 'hyper'
 // The full-screen pages over the browser. They stack (lib/navStack.ts): one opened from another
 // sits on top of it, and back closes only the top one.
 type Screen =
-  | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' }
+  | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' | 'personas' }
   | { name: 'notes'; noteId?: string } // noteId: the note to open, e.g. the one a followed link was in
   | { name: 'jobs'; jobId?: string; runId?: string } // a tapped Job notification opens its run
   | { name: 'explorer'; drive: ExplorerDrive }
@@ -1205,7 +1206,8 @@ export default function Browser () {
             { label: 'My Library', icon: 'book', onPress: () => openScreen({ name: 'library' }) },
             { label: 'Reader', icon: 'rss', onPress: () => openScreen({ name: 'reader' }) },
             { label: 'Notes', icon: 'sticky-note', onPress: () => openScreen({ name: 'notes' }) },
-            { label: 'AI Jobs', icon: 'clock', onPress: () => openScreen({ name: 'jobs' }) }
+            { label: 'AI Jobs', icon: 'clock', onPress: () => openScreen({ name: 'jobs' }) },
+            { label: 'Personas', icon: 'id-badge', onPress: () => openScreen({ name: 'personas' }) }
           ],
           [
             // Only for a drive this phone owns, and hosting only for one it doesn't.
@@ -1320,6 +1322,16 @@ export default function Browser () {
         openRunId={jobsScreen?.name === 'jobs' ? jobsScreen.runId : undefined}
         apps={backend.apps}
         onVaultChange={backend.onVaultChange}
+        onOpenDevices={() => openScreen({ name: 'devices' })}
+      />
+
+      <Personas
+        visible={isOpen('personas')}
+        onClose={() => closeScreenNamed('personas')}
+        apps={backend.apps}
+        onVaultChange={backend.onVaultChange}
+        space={spacesApi.activeSpace.rootDriveKey || null}
+        spaceName={spacesApi.activeSpace.name}
         onOpenDevices={() => openScreen({ name: 'devices' })}
       />
 

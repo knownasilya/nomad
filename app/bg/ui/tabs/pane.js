@@ -31,6 +31,7 @@ import * as bookmarks from '../../filesystem/bookmarks';
 import hyper from '../../hyper/index';
 import * as drafts from '../../hyper/drafts';
 import * as mods from '../mods';
+import * as personas from '../personas';
 import fsAPI from '../../web-apis/bg/fs';
 
 const ERR_ABORTED = -3;
@@ -112,6 +113,8 @@ const STATE_VARS = [
   'draftPreviewing',
   // Mods (ADR-0023): { count, on } for the page's site, or null where Mods can't apply
   'mods',
+  // Personas (ADR-0031): { label, title, thumbUrl } when the page's site holds a Session, else null
+  'session',
 ];
 
 // globals
@@ -241,6 +244,17 @@ export class Pane extends EventEmitter {
   get mods() {
     try {
       return mods.stateFor(this.url);
+    } catch {
+      return null;
+    }
+  }
+
+  // The site's Session in this tab's Space (ADR-0031), for the location bar's Persona icon.
+  get session() {
+    try {
+      const s = personas.siteSession(this.url, this.tab?.spaceId);
+      if (!s || !s.persona) return null;
+      return { label: s.persona.label, title: s.persona.title, thumbUrl: s.persona.thumbUrl };
     } catch {
       return null;
     }
