@@ -189,9 +189,9 @@ class NavbarLocation extends LitElement {
       >
       </shell-window-navbar-site-info>
       ${this.renderLocation()} ${this.renderZoom()} ${this.renderLiveReloadingBtn()}
-      ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderSessionBtn()} ${this.renderCopyUrlBtn()}
-      ${this.renderPeers()} ${this.renderDonateBtn()} ${'' /* DISABLED this.renderShareBtn()*/}
-      ${this.renderBookmarkBtn()} ${this.renderSiteBtn()}
+      ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderSessionBtn()}
+      ${this.renderCopyUrlBtn()} ${this.renderPeers()} ${this.renderDonateBtn()}
+      ${'' /* DISABLED this.renderShareBtn()*/} ${this.renderBookmarkBtn()} ${this.renderSiteBtn()}
     `;
   }
 
@@ -322,7 +322,7 @@ class NavbarLocation extends LitElement {
     }
     var cls = classMap({ donate: true, pressed: this.isDonateMenuOpen });
     return html`
-      <button class="${cls}" @click=${this.onClickDonateMenu}>
+      <button class="${cls}" title="Donate to this site" @click=${this.onClickDonateMenu}>
         <i class="fa fa-donate"></i>
       </button>
     `;
@@ -334,7 +334,7 @@ class NavbarLocation extends LitElement {
     }
     var cls = classMap({ peers: true, pressed: this.isPeersMenuOpen });
     return html`
-      <button class="${cls}" @click=${this.onClickPeersMenu}>
+      <button class="${cls}" title="Peers sharing this drive" @click=${this.onClickPeersMenu}>
         <span class="fas fa-share-alt"></span> ${this.peers}
       </button>
     `;
@@ -383,7 +383,11 @@ class NavbarLocation extends LitElement {
     const name = s.title || s.label;
     var cls = classMap({ session: true, pressed: this.isPersonaMenuOpen });
     return html`
-      <button class=${cls} @click=${this.onClickSession} title=${`Logged in as ${name} (your Persona “${s.label}”)`}>
+      <button
+        class=${cls}
+        @click=${this.onClickSession}
+        title=${`Logged in as ${name} (your Persona “${s.label}”)`}
+      >
         ${s.thumbUrl
           ? html`<img class="session-avatar" src=${s.thumbUrl} alt="" />`
           : html`<span class="session-avatar initial">${name.slice(0, 1).toUpperCase()}</span>`}
@@ -408,7 +412,7 @@ class NavbarLocation extends LitElement {
   renderShareBtn() {
     var cls = classMap({ share: true, pressed: this.isShareMenuOpen });
     return html`
-      <button class="${cls}" @click=${this.onClickShareMenu}>
+      <button class="${cls}" title="Share" @click=${this.onClickShareMenu}>
         <i class="fas fa-share-square"></i>
       </button>
     `;
@@ -719,7 +723,9 @@ NavbarLocation.styles = [
       width: 27px;
       border-radius: 0;
       color: var(--text-color--location-btn);
-      transition: background-color 0.12s ease, transform 0.08s ease;
+      transition:
+        background-color 0.12s ease,
+        transform 0.08s ease;
     }
 
     /* Stronger hover/press feedback than the shared button-reset gives, since these buttons sit in a

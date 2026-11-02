@@ -497,6 +497,7 @@ ${this.syncLog.join('\n')}</textarea
                       <a
                         class="revert tooltip-left"
                         data-tooltip="Restore to local folder"
+                        aria-label="Restore to local folder"
                         @click=${(e) => this.onClickRestoreFile(change)}
                       >
                         <span class="fas fa-fw fa-undo"></span>

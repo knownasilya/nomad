@@ -114,7 +114,7 @@ class DesktopApp extends LitElement {
             </a>
           `
         )}
-        <a class="pin add" @click=${(e) => this.onClickNewBookmark(e, true)}>
+        <a class="pin add" title="Add a pin" @click=${(e) => this.onClickNewBookmark(e, true)}>
           <span class="fas fa-fw fa-plus thumb"></span>
         </a>
       </div>

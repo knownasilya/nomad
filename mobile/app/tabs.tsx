@@ -10,6 +10,7 @@ import { useTabSnapshot, tabActions, type TabCard } from '../lib/tabSwitcher'
 import SiteIcon from '../components/SiteIcon'
 import Icon from '../components/Icon'
 import { ago, type DeviceTabsList } from '../lib/openTabs'
+import { showLabel } from '../lib/tooltip'
 
 const GAP = 12
 // Card body shape (width / height), close to a phone page so a thumbnail reads at a glance.
@@ -83,7 +84,7 @@ export default function TabGrid () {
         <TouchableOpacity style={s.barSide} onPress={closeAll} hitSlop={8}>
           <Text style={s.barText}>Close all</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.newBtn} onPress={openNew} accessibilityLabel='New tab'>
+        <TouchableOpacity style={s.newBtn} onPress={openNew} onLongPress={() => showLabel('New tab')} accessibilityRole='button' accessibilityLabel='New tab'>
           <Icon name='plus' size={20} color={t.onAccent} />
         </TouchableOpacity>
         <TouchableOpacity style={[s.barSide, s.barRight]} onPress={leave} hitSlop={8}>
@@ -146,7 +147,7 @@ function Card ({ tab, active, width, swipeDistance, onSelect, onClose, onActiveL
                 : <View style={[s.dot, { backgroundColor: tab.kind === 'hyper' ? t.secure : t.textMuted }]} />}
           </View>
           <Text numberOfLines={1} style={[s.cardTitle, active && s.cardTitleActive]}>{tab.title || 'New tab'}</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={12} style={s.cardClose} accessibilityLabel={`Close ${tab.title}`}>
+          <TouchableOpacity onPress={onClose} onLongPress={() => showLabel('Close tab')} hitSlop={12} style={s.cardClose} accessibilityRole='button' accessibilityLabel={`Close ${tab.title}`}>
             <Icon name='times' size={13} color={t.textMuted} />
           </TouchableOpacity>
         </View>

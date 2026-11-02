@@ -68,6 +68,8 @@ export class ContextualHelp extends LitElement {
         <td
           class="tooltip-right"
           data-tooltip="Click here to copy the URL"
+          aria-label="Copy the URL"
+          role="button"
           @click=${this.onClickCopyUrl}
           style="cursor: pointer"
         >

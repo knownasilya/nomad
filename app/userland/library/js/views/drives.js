@@ -238,7 +238,7 @@ export class DrivesView extends LitElement {
             ${drive.info.mtime ? html`<span>${new Date(drive.info.mtime).toLocaleDateString()}</span>` : ''}
           </div>
           <div class="ctrls">
-            <button @click=${(e) => this.onClickDriveMenuBtn(e, drive)}>
+            <button title="More" @click=${(e) => this.onClickDriveMenuBtn(e, drive)}>
               <span class="fas fa-fw fa-ellipsis-h"></span>
             </button>
           </div>
@@ -285,7 +285,7 @@ export class DrivesView extends LitElement {
             : html`${drive.info.peers} ${pluralize(drive.info.peers, 'peer')}`}
         </div>
         <div class="ctrls">
-          <button @click=${(e) => this.onClickDriveMenuBtn(e, drive)}>
+          <button title="More" @click=${(e) => this.onClickDriveMenuBtn(e, drive)}>
             <span class="fas fa-fw fa-ellipsis-h"></span>
           </button>
         </div>

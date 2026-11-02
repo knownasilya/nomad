@@ -236,7 +236,7 @@ class FilesExplorer extends LitElement {
       <div class="listing" @contextmenu=${this.onContextmenuListing}>
         ${this.folderPath !== '/'
           ? html`
-              <div class="item" @click=${this.onClickUpdog}>
+              <div class="item" title="Up one folder" @click=${this.onClickUpdog}>
                 <span class="icon"
                   ><span class="fa-fw fas fa-level-up-alt"></span
                 ></span>

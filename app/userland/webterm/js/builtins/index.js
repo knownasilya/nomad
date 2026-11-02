@@ -484,7 +484,7 @@ export const system = {
     }
 
     this.out(
-      html`<p>Streaming <button @click=${onStopStream}>&times;</button></p>`,
+      html`<p>Streaming <button title="Stop streaming" @click=${onStopStream}>&times;</button></p>`,
       containerEl
     );
   },

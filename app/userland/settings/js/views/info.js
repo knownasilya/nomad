@@ -45,6 +45,7 @@ class InfoSettingsView extends LitElement {
           <strong>Version</strong>: ${this.browserInfo.version}
           <button
             class="transparent"
+            title=${this.isVersionsExpanded ? 'Hide component versions' : 'Show component versions'}
             @click=${(e) => {
               this.isVersionsExpanded = !this.isVersionsExpanded;
             }}

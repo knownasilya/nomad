@@ -73,10 +73,11 @@ export class DownloadsView extends LitElement {
       var cancelBtn = html`
         <button
           data-tooltip="Cancel download"
+          aria-label="Cancel download"
           @click=${() => this.onCancelDownload(download)}
           class="transparent tooltip-left"
         >
-          <i title="Cancel download" class="fa fa-stop"></i>
+          <i class="fa fa-stop"></i>
         </button>
       `;
 
@@ -94,6 +95,7 @@ export class DownloadsView extends LitElement {
           ${cancelBtn}
           <button
             data-tooltip="Resume download"
+            aria-label="Resume download"
             class="transparent tooltip-left"
             @click=${() => this.onResumeDownload(download)}
           >
@@ -105,6 +107,7 @@ export class DownloadsView extends LitElement {
           ${cancelBtn}
           <button
             data-tooltip="Pause download"
+            aria-label="Pause download"
             class="transparent tooltip-left"
             @click=${() => this.onPauseDownload(download)}
           >
@@ -126,6 +129,7 @@ export class DownloadsView extends LitElement {
         var removeBtn = html`
           <button
             data-tooltip="Remove from downloads"
+            aria-label="Remove from downloads"
             @click=${(e) => this.onRemoveDownload(download)}
             class="transparent tooltip-left"
           >

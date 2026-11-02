@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
 import { useTheme, touch } from '../lib/theme'
+import { showLabel } from '../lib/tooltip'
 import Icon, { type IconName } from './Icon'
 
 interface Props {
   icon?: IconName
-  label: string // read out by TalkBack; there is no visible text
+  label: string // read out by TalkBack, and shown on touch and hold; there is no visible text
   onPress?: () => void
-  onLongPress?: () => void
+  onLongPress?: () => void // replaces the label shown on touch and hold
   disabled?: boolean
   active?: boolean // tinted with the accent, e.g. a bookmarked page's star
   regular?: boolean
@@ -19,14 +20,15 @@ interface Props {
 }
 
 // A round, 48dp icon button with Android's borderless ripple, the size Material asks for so a
-// thumb can hit it. iOS dims it while pressed instead.
+// thumb can hit it. iOS dims it while pressed instead. Touch and hold shows its label, like a
+// tooltip, unless the button has a long-press action of its own.
 export default function IconButton ({ icon, label, onPress, onLongPress, disabled, active, regular, size = 20, color, ripple, style, children }: Props) {
   const t = useTheme()
   const tint = disabled ? t.border : active ? t.accent : color ?? t.textDim
   return (
     <Pressable
       onPress={onPress}
-      onLongPress={onLongPress}
+      onLongPress={onLongPress ?? (() => showLabel(label))}
       disabled={disabled}
       accessibilityRole='button'
       accessibilityLabel={label}

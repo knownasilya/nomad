@@ -67,6 +67,7 @@ class DriveForks extends LitElement {
                         ? html`
                             <button
                               class="transparent"
+                              title="Delete this fork"
                               @click=${(e) => this.onClickDelete(e, fork)}
                             >
                               <span class="far fa-trash-alt"></span>

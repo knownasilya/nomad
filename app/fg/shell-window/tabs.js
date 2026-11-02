@@ -323,7 +323,7 @@ class ShellWindowTabs extends LitElement {
       hidden: !this.hasBgTabs,
     });
     return html`
-      <button class=${cls} @click=${this.onClickBackgroundTray}>
+      <button class=${cls} title="Background tabs" @click=${this.onClickBackgroundTray}>
         <span class="fas fa-caret-down"></span>
       </button>
     `;
