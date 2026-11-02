@@ -89,7 +89,8 @@ export default {
 
   // AI Jobs (bg/ai/jobs.js, ADR-0030)
   listJobs: 'promise', // -> { jobs: [{ ...job, lastRun, nextRunAt, running, here, deviceName }] }
-  listJobRuns: 'promise', // (id) -> runs, newest first
+  listJobRuns: 'promise', // (id) -> runs, newest first, with deviceName and took
+  clearJobRuns: 'promise', // (id) -> how many runs were deleted, on every Device
   saveJob: 'promise', // ({ id?, title?, prompt?, source?, schedule?, notify?, enabled?, runHere? }) -> record
   previewSchedule: 'promise', // (schedule) -> { schedule, when, next: [ISO, …] }: checked, with its next times
   checkJobSource: 'promise', // (id) -> { url, live, module, prompt, title, hash }: the source's drive now

@@ -5,9 +5,14 @@
 // Device sees them:
 //
 //   /.vault/jobs/<id>.json                { type, id, title, prompt, source?, writes?, schedule, notify, enabled,
-//                                           device, space, createdAt, updatedAt, scheduleFrom }
+//                                           device, space, createdAt, updatedAt, scheduleFrom, cleared? }
 //   /.vault/job-runs/<jobId>/<runId>.json { type, id, jobId, title, device, trigger, startedAt, finishedAt,
-//                                           status, output, error?, notification }
+//                                           status, output, error?, notification, changes?, summary?, trimmed? }
+//
+// A Job's runs are its history: the newest KEEP_HISTORY, of which the newest KEEP_RUNS keep their
+// whole answer. An older run is `trimmed`: its answer gives way to a short `summary`, and its status,
+// times, error and changes stay. The user can clear the history (clearHistory): every run goes, and
+// the Job notes `cleared: { at, lastRunAt }` so its schedule still counts from the last run.
 //   /.vault/job-requests/<jobId>.json     { type, jobId, requestedAt, by }   "run it now", from a Device
 //                                           without an AI Runtime (the phone); the Job's Device runs it
 //                                           and deletes the record
@@ -59,7 +64,9 @@ export const RUN_TYPE = 'nomad/job-run';
 export const NOTIFY = ['always', 'auto', 'never'];
 export const MIN_INTERVAL = 15; // minutes
 export const MAX_INTERVAL = 7 * 24 * 60;
-export const KEEP_RUNS = 10; // per Job; older runs are deleted
+export const KEEP_RUNS = 10; // per Job, with their whole answer; older runs are trimmed
+export const KEEP_HISTORY = 50; // per Job; older runs are deleted
+export const MAX_SUMMARY = 300; // characters of a trimmed run's answer
 export const MAX_OUTPUT = 8000; // characters of a run's answer kept in the Vault
 const MAX_TITLE = 80;
 const MAX_PROMPT = 8000;
@@ -639,6 +646,8 @@ function nextInterval(schedule, from) {
 // runs once: a run by hand before its time doesn't count.
 export function dueAt(job, lastRunAt = null) {
   if (!job || !job.enabled || !job.schedule) return null;
+  // A cleared history still counts: the Job's last run is when it was cleared, if no run came since.
+  lastRunAt = latest(lastRunAt, job.cleared?.lastRunAt);
   if (job.schedule.kind === 'once') {
     const at = new Date(job.schedule.at);
     if (Number.isNaN(at.getTime())) return null;
@@ -649,6 +658,14 @@ export function dueAt(job, lastRunAt = null) {
     .filter((t) => t > 0);
   if (!times.length) return null;
   return nextRunAt(job.schedule, new Date(Math.max(...times)));
+}
+
+// The later of two ISO times, either of which may be missing.
+function latest(a, b) {
+  const ta = new Date(a || 0).getTime() || 0;
+  const tb = new Date(b || 0).getTime() || 0;
+  if (!ta && !tb) return null;
+  return ta >= tb ? a : b;
 }
 
 export function isDue(job, lastRunAt, now = new Date()) {
@@ -729,6 +746,7 @@ export function makeJob(fields, prev = null, now = new Date()) {
     createdAt: prev?.createdAt || iso,
     updatedAt: iso,
     scheduleFrom: restart ? iso : prev.scheduleFrom || prev.createdAt || iso,
+    ...(prev?.cleared ? { cleared: prev.cleared } : {}),
   };
 }
 
@@ -1064,8 +1082,53 @@ export function sortRuns(runs) {
 }
 
 // The runs to delete so a Job keeps its newest `keep`.
-export function runsToPrune(runs, keep = KEEP_RUNS) {
+export function runsToPrune(runs, keep = KEEP_HISTORY) {
   return sortRuns(runs).slice(keep);
+}
+
+// The runs to rewrite trimmed (trimRun) so only the newest `full` keep their whole answer.
+export function runsToTrim(runs, full = KEEP_RUNS, keep = KEEP_HISTORY) {
+  return sortRuns(runs)
+    .slice(full, keep)
+    .filter((r) => !r.trimmed && r.output);
+}
+
+// A run without its whole answer: a short summary of it instead.
+export function trimRun(run) {
+  if (!isRun(run) || run.trimmed) return run;
+  const { output, ...rest } = run;
+  const summary = summarize(output, MAX_SUMMARY);
+  return { ...rest, output: '', ...(summary ? { summary } : {}), trimmed: true };
+}
+
+// After a new run is saved: { keep, trim, prune }. `keep` is the Job's history as it now is (newest
+// first, trimmed where it should be), `trim` the runs to rewrite and `prune` the runs to delete.
+export function afterRun(runs) {
+  const prune = runsToPrune(runs);
+  const trim = runsToTrim(runs).map(trimRun);
+  const gone = new Set(prune.map((r) => r.id));
+  const trimmed = new Map(trim.map((r) => [r.id, r]));
+  const keep = sortRuns(runs)
+    .filter((r) => !gone.has(r.id))
+    .map((r) => trimmed.get(r.id) || r);
+  return { keep, trim, prune };
+}
+
+// Clearing a Job's history: { job, remove }. `job` is the record to save, which notes when the
+// history was cleared and when its newest run started, so a schedule doesn't run again early and a
+// one-time Job doesn't run twice. `remove` are the runs to delete.
+export function clearHistory(job, runs, now = new Date()) {
+  if (!isJob(job)) throw new Error('Not a Job');
+  const remove = sortRuns(runs).filter((r) => r.jobId === job.id);
+  const iso = new Date(now).toISOString();
+  return {
+    job: {
+      ...job,
+      updatedAt: iso,
+      cleared: { at: iso, lastRunAt: latest(remove[0]?.startedAt, job.cleared?.lastRunAt) },
+    },
+    remove,
+  };
 }
 
 // Every Job with its newest run and when it next runs: what a list shows.
@@ -1094,4 +1157,29 @@ export function pendingNotifications(runs, since) {
     .filter((r) => r.finishedAt > since && r.notification)
     .sort((a, b) => (a.finishedAt < b.finishedAt ? -1 : 1));
   return { notify, since: newest };
+}
+
+// How long a run took, in words: "42 s", "3 min", "1 h 5 min". '' without both times.
+export function runDuration(run) {
+  const ms = new Date(run?.finishedAt).getTime() - new Date(run?.startedAt).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} s`;
+  const min = Math.round(s / 60);
+  if (min < 60) return `${min} min`;
+  return `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ''}`;
+}
+
+// A run's answer as the history shows it collapsed: the error, or the start of its answer.
+export function runPreview(run, max = 160) {
+  if (!run) return '';
+  if (run.status === 'error') return clip(oneParagraph(run.error || 'The Job didn’t finish'), max);
+  return summarize(run.output || run.summary || run.notification?.body || '', max);
+}
+
+// The text a history's search looks in (app-stdlib search-match.js, mobile/lib/search.ts).
+export function runSearchText(run) {
+  return [run?.output, run?.summary, run?.error, run?.notification?.title, run?.notification?.body]
+    .filter(Boolean)
+    .join(' ');
 }

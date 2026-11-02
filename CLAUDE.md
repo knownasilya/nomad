@@ -439,7 +439,10 @@ injects the turn (`runJobTurn` in `ai.ts`). A run is the `job` stage: personal, 
 (`jobPermitFor`), this Device's runtime only. A Job's `writes` (`shared/jobs.mjs` `normalizeWrites`:
 drives, each live or staged in its Draft; Notes; Reader) are chosen when it is made: in My Library,
 or by the AI's `saveJob`, which asks the user with the `jobWrites` permission for each grant it adds.
-A run records what it changed (`changes`). The AI gets `listJobs`/`saveJob`/`runJob`/`deleteJob` (`jobsRead`/`jobsWrite`) and, inside a
+A run records what it changed (`changes`). A Job's history is its newest 50 runs, the newest 10 with
+their whole answer and older ones trimmed to a summary (`afterRun`); clearing it (`clearHistory`,
+My Library's Clear history, the phone's `jobs`/`clearRuns`) notes `cleared` on the Job so `dueAt`
+still counts from the last run. The AI gets `listJobs`/`saveJob`/`runJob`/`deleteJob` (`jobsRead`/`jobsWrite`) and, inside a
 Job, `notify`. Desktop UI is My Library → Jobs (`nomad.vault.listJobs`/…/`watchJobs`). The phone lists
 them (`mobile/components/Jobs.tsx`, `RPC_APPS` `jobs`) and posts local notifications with
 `expo-notifications` for new runs (`mobile/lib/useJobNotifications.ts`); there is no push server.

@@ -668,6 +668,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'jobs' && action === 'setEnabled') value = await vaultApps.setJobEnabled(vault, args.id, args.enabled)
     else if (app === 'jobs' && action === 'run') value = await vaultApps.requestJobRun(vault, args.id)
     else if (app === 'jobs' && action === 'delete') value = await vaultApps.deleteJob(vault, args.id)
+    else if (app === 'jobs' && action === 'clearRuns') value = await vaultApps.clearJobRuns(vault, args.id)
     else if (app === 'jobs' && action === 'notifications') value = await vaultApps.jobNotifications(vault, args.since)
     else if (app === 'personas' && action === 'list') value = await vaultApps.listPersonas(vault, space)
     else if (app === 'personas' && action === 'endSession') value = await vaultApps.endPersonaSession(vault, args.path)
