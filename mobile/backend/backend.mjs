@@ -12,6 +12,8 @@ import { parseHyperUrl } from './lib/hyper-url.mjs'
 import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault, publishOwnSpaces, publishOwnVersion } from './lib/vault.mjs'
 import * as drafts from './lib/drafts.mjs'
 import * as vaultApps from './lib/vault-apps.mjs'
+import * as pe from '../../shared/personas.mjs'
+import hcrypto from 'hypercore-crypto'
 import * as spaceLib from './lib/space-library.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
 import Protomux from 'protomux'
@@ -665,6 +667,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'personas' && action === 'endSession') value = await vaultApps.endPersonaSession(vault, args.path)
     else if (app === 'personas' && action === 'setDefault') value = await vaultApps.setDefaultPersona(vault, args.id || null)
     else if (app === 'personas' && action === 'setSpace') value = await vaultApps.setSpacePersona(vault, space, args.id || null)
+    else if (app === 'personas' && action === 'create') value = await createPersona(args)
     else if (app === 'updates' && action === 'list') value = await vaultApps.deviceUpdates(vault, args.version)
     else if (app === 'updates' && action === 'request') value = await vaultApps.requestDeviceUpdate(vault, { device: args.device, version: args.version, prerelease: !!args.prerelease })
     else throw new Error(`Unknown ${app} action: ${action}`)
@@ -672,6 +675,37 @@ async function handleApps ({ reqId, app, action, ...args }) {
   } catch (err) {
     send(RPC_APPS_RESULT, { reqId, ok: false, message: err.message || String(err) })
   }
+}
+
+// Make a Persona on this phone (ADR-0031 amendment): a new profile drive this phone writes, with its
+// /index.json (and picture), hosted so the user's other devices can fetch it, then the Vault record.
+// Everything that can be refused is checked before the drive is made.
+async function createPersona ({ label, title, description, thumb, email }) {
+  const name = pe.normalizeLabel(label || title)
+  const mail = pe.normalizeEmail(email)
+  const shown = String(title || '').trim() || name
+  const pic = thumb ? pe.parseThumb(thumb) : null
+  pe.profileManifest({ title: shown })
+  if (!vaultApps.vaultWritable(vault)) throw new Error('This phone can’t write to your Vault yet. Keep your other device online until it syncs, then try again.')
+
+  const { key, ns } = await manager.createDrive(DRIVE_AUTOBASE, { title: shown })
+  drivesNs[key] = ns
+  saveDrivesNs()
+  const kb = keyBuf(key)
+  // A profile drive holds only its manifest and picture: drop the welcome page createDrive seeds.
+  await manager.deletePath(DRIVE_AUTOBASE, kb, ns, '/index.html', false).catch(() => {})
+  if (pic) await manager.writeFile(DRIVE_AUTOBASE, kb, ns, pic.path, b4a.from(pic.base64, 'base64'))
+  const manifest = pe.profileManifest({ title: shown, description, thumb: pic?.path })
+  await manager.writeFile(DRIVE_AUTOBASE, kb, ns, '/index.json', b4a.from(JSON.stringify(manifest, null, 2)))
+
+  // Seed it from now on, so a computer can check it and show its name and picture.
+  const ck = `${DRIVE_AUTOBASE}:${key}`
+  hostedDrives[ck] = { key, type: DRIVE_AUTOBASE }
+  saveHostedDrives()
+  if (!hostingPaused) await manager.setHosting(DRIVE_AUTOBASE, kb, true).catch(() => {})
+
+  const id = pe.newPersonaId(hcrypto.randomBytes(10))
+  return vaultApps.savePersona(vault, { id, label: name, profileUrl: `hyper://${key}/`, email: mail })
 }
 
 // Minimal stand-in for nomad.schemas.validate on mobile (the full Zod schemas

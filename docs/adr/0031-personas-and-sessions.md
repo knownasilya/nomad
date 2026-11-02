@@ -285,6 +285,27 @@ Persona can have an email, and a site can ask for it as a third permission, `ema
 - **Nothing else changes.** `email` isn't a browser permission: the permission engine never asks for
   it, and no other API reads it. Pages still can't list Personas.
 
+## Amendment: make a Persona on the phone (2026-11-02)
+
+A user who has only their phone with them should be able to make a Persona there, not wait for a
+computer. My Library → Personas on the phone gets a **New Persona** form: a name (what sites see), a
+picture, a few words, a private label and an optional email.
+
+- **The phone makes and writes the Profile Drive.** It creates an Autobase drive (like any drive the
+  phone makes), drops the welcome page, and writes `/index.json` (`profileManifest` in
+  `shared/personas.mjs`) and the picture as `/thumb.<ext>` (`parseThumb`: PNG, JPEG, WebP or GIF,
+  2 MB at most; the phone crops it square and saves a 512px JPEG). The phone is the drive's only
+  writer, so the record's `creator` is the drive key and `profileState` calls it usable (5).
+- **The same record.** `savePersona` in `mobile/backend/lib/vault-apps.mjs` writes
+  `/.vault/personas/<id>.json` with `makePersona`, and the first Persona made anywhere becomes the
+  default, as on desktop. The email stays on the record, never in the drive.
+- **The phone seeds it.** A computer can't show the Persona's name and picture, or log in with it,
+  until it has fetched the drive, so the phone hosts the drive from the start and tells the user to
+  stay online for a while.
+- **Name and picture change where the drive was made.** Only the phone can write a drive it made, so
+  a computer edits the label and email but not the name or picture. Renaming and deleting Personas
+  stays on the computer for now.
+
 ## Considered options
 
 - **Personas in sqlite** ([#29] B). Cheap and no wire concerns, but a new Device wouldn't know your
@@ -329,7 +350,7 @@ Persona can have an email, and a site can ask for it as a third permission, `ema
   and unread). Not in this version: a page's `nomad.ai.chat()` must not learn it, and the user's own
   AI doesn't need it yet.
 - **The phone.** It sees Personas and Sessions as soon as the Vault syncs (`mobile/backend/lib/
-  vault-apps.mjs`) and can list and end them. `nomad.session` in the phone's WebView, with its own
+  vault-apps.mjs`), can list and end them, and can make a new one (amendment above). `nomad.session` in the phone's WebView, with its own
   prompt, comes after desktop.
 - **Concurrent Sessions as two Personas on one origin in one Space.** Ruled out by the singular API.
   If a real need appears, it's a new ADR, not a quiet change.

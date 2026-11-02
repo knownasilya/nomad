@@ -706,6 +706,25 @@ export async function listPersonas (base, space) {
 }
 
 // Log a site out, on every device.
+// Is the Vault writable from this phone? Checked before a Persona's profile drive is made, so a
+// phone that can't save the record doesn't leave an orphan drive.
+export function vaultWritable (base) {
+  return !!base?.writable
+}
+
+// Save a new Persona made on this phone (its profile drive is already made and written; `creator`
+// is that drive's key, so profileState knows one of the user's own devices made it). The first
+// Persona becomes the default, like on desktop.
+export async function savePersona (base, { id, label, profileUrl, email }) {
+  const key = pe.driveKeyOf(profileUrl)
+  const rec = pe.makePersona({ id, label, profileUrl, creator: key, email })
+  const existing = (await readPrefix(base, pe.PERSONAS_PREFIX)).filter(pe.isPersona)
+  await putRecord(base, pe.personaPath(rec.id), rec)
+  const def = await readRecord(base, pe.DEFAULT_PATH)
+  if (!existing.length && !def?.personaId) await putRecord(base, pe.DEFAULT_PATH, pe.makeDefault(rec.id))
+  return { id: rec.id, label: rec.label, profileUrl: rec.profileUrl }
+}
+
 export async function endPersonaSession (base, path) {
   if (!pe.parseSessionPath(path)) throw new Error('That isn’t a site login')
   if (await readRecord(base, path)) await delRecord(base, path)

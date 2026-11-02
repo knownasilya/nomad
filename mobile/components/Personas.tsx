@@ -8,6 +8,7 @@ import ActionSheet, { type SheetAction } from './ActionSheet'
 import LinkPhone from './LinkPhone'
 import ScreenHeader from './ScreenHeader'
 import SiteIcon from './SiteIcon'
+import NewPersona from './NewPersona'
 
 interface Props {
   visible: boolean
@@ -19,10 +20,10 @@ interface Props {
   onOpenDevices: () => void
 }
 
-// The phone's Personas (ADR-0031): who you are when a site asks you to log in. They're made on a
-// computer (My Library → Personas), since each one is a profile drive that computer writes. Here the
-// user picks this Space's Persona and the default, and sees and ends the logins sites hold, on every
-// device at once. All of it is in the Vault.
+// The phone's Personas (ADR-0031): who you are when a site asks you to log in. The user makes one
+// here (NewPersona: a profile drive this phone writes) or on a computer, picks this Space's Persona
+// and the default, and sees and ends the logins sites hold, on every device at once. The records are
+// in the Vault.
 export default function Personas ({ visible, onClose, apps, onVaultChange, space, spaceName, onOpenDevices }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
@@ -34,6 +35,7 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [sheet, setSheet] = useState<'space' | PersonaSummary | PersonaSession | null>(null)
+  const [making, setMaking] = useState(false)
 
   const refresh = useCallback(async () => {
     setError('')
@@ -100,7 +102,10 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
         <ScreenHeader
           title='Personas'
           onBack={onClose}
-          actions={list ? [{ icon: 'redo-alt', label: 'Refresh', onPress: refresh, busy }] : undefined}
+          actions={list ? [
+            { icon: 'plus', label: 'New Persona', onPress: () => setMaking(true), disabled: !list.writable },
+            { icon: 'redo-alt', label: 'Refresh', onPress: refresh, busy }
+          ] : undefined}
         />
         {noVault ? (
           <LinkPhone what='Personas' onOpenDevices={onOpenDevices} />
@@ -114,8 +119,9 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
               <Text style={s.hint}>This phone can’t save changes to your Vault yet. Keep your other device online until it syncs.</Text>
             )}
             {list.personas.length === 0 ? (
-              <ListSection footer='A Persona is who you are when a site asks you to log in. Make one on your computer in My Library → Personas, or the first time a site asks there.'>
+              <ListSection footer='A Persona is who you are when a site asks you to log in: a name, a picture and a few words in a profile drive of your own.'>
                 <ListEmpty text='No Personas yet.' />
+                <ListRow title='Make a Persona' icon='plus' accent divider disabled={!list.writable} onPress={() => setMaking(true)} />
               </ListSection>
             ) : (
               <>
@@ -129,7 +135,7 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
                     onPress={() => setSheet('space')}
                   />
                 </ListSection>
-                <ListSection title='Your Personas' footer='Make, rename and change them on your computer in My Library → Personas.'>
+                <ListSection title='Your Personas' footer='A Persona’s name and picture change on the device that made it. Rename and delete them on your computer in My Library → Personas.'>
                   {list.personas.map((p, i) => (
                     <ListRow
                       key={p.id}
@@ -141,6 +147,7 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
                       onPress={() => setSheet(p)}
                     />
                   ))}
+                  <ListRow title='New Persona' icon='plus' accent divider disabled={!list.writable} onPress={() => setMaking(true)} />
                 </ListSection>
               </>
             )}
@@ -163,6 +170,12 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
             </ListSection>
           </ScrollView>
         )}
+        <NewPersona
+          visible={making}
+          onClose={() => setMaking(false)}
+          apps={call}
+          onMade={(made) => { setMaking(false); refresh(); Alert.alert('Persona made', `“${made}” is ready. Keep this phone online for a bit so your computer gets its profile drive.`) }}
+        />
         <ActionSheet
           visible={!!sp}
           onClose={() => setSheet(null)}

@@ -11,6 +11,8 @@ import {
   newSessionId,
   normalizeLabel,
   normalizeEmail,
+  parseThumb,
+  profileManifest,
   makePersona,
   isPersona,
   makeDefault,
@@ -381,6 +383,31 @@ describe('email (ADR-0031 amendment)', () => {
     expect(sessionView(p, profile, 'ada@example.org')).not.toHaveProperty('email');
     expect(sessionView(s, profile, null)).not.toHaveProperty('email');
     expect(sessionGrants(s, 'email', now)).toBe(true);
+  });
+});
+
+describe('Profile Drive files (ADR-0031 §6)', () => {
+  it('reads a picture from a data URL', () => {
+    expect(parseThumb('data:image/jpeg;base64,AAAA')).toEqual({
+      base64: 'AAAA',
+      path: '/thumb.jpg',
+    });
+    expect(parseThumb('data:image/PNG;base64,AAAA').path).toBe('/thumb.png');
+    expect(() => parseThumb('data:image/svg+xml;base64,AAAA')).toThrow(/PNG/);
+    expect(() => parseThumb('nope')).toThrow(/PNG/);
+    expect(() => parseThumb(`data:image/png;base64,${'A'.repeat(3 * 1024 * 1024)}`)).toThrow(
+      /2 MB/
+    );
+  });
+
+  it('writes a person manifest', () => {
+    expect(profileManifest({ title: ' Ada ', description: '', thumb: '/thumb.jpg' })).toEqual({
+      type: 'walled.garden/person',
+      title: 'Ada',
+      thumb: '/thumb.jpg',
+    });
+    expect(profileManifest({ title: 'Ada', description: 'Hi' }).description).toBe('Hi');
+    expect(() => profileManifest({ title: '  ' })).toThrow(/name/);
   });
 });
 

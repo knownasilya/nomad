@@ -128,6 +128,41 @@ export function normalizeLabel(label) {
   return s;
 }
 
+// A Profile Drive's picture, from a data: URL (the form both UIs pick it in). Returns the bytes as
+// base64 for the caller to decode with its own Buffer, and the file name to write it as.
+export const THUMB_TYPES = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
+export const MAX_THUMB = 2 * 1024 * 1024;
+/** @param {string} dataUrl */
+export function parseThumb(dataUrl) {
+  const m = /^data:([a-z/+-]+);base64,([A-Za-z0-9+/=]+)$/i.exec(String(dataUrl || ''));
+  const ext = m && THUMB_TYPES[m[1].toLowerCase()];
+  if (!m || !ext) throw new Error('Pick a PNG, JPEG, WebP or GIF picture');
+  if (Math.floor((m[2].length * 3) / 4) > MAX_THUMB) throw new Error('Pick a picture under 2 MB');
+  return { base64: m[2], path: `/thumb.${ext}` };
+}
+
+// A new Profile Drive's /index.json (ADR-0031 §6): its name, a few words and its picture's path.
+/** @param {{ title?: string, description?: string, thumb?: string }} [o] */
+export function profileManifest({ title, description, thumb } = {}) {
+  const t = String(title || '')
+    .trim()
+    .slice(0, 280);
+  if (!t) throw new Error('Give the profile a name, the one sites see');
+  /** @type {{ type: string, title: string, description?: string, thumb?: string }} */
+  const m = { type: 'walled.garden/person', title: t };
+  const d = String(description || '')
+    .trim()
+    .slice(0, 1000);
+  if (d) m.description = d;
+  if (thumb) m.thumb = thumb;
+  return m;
+}
+
 // The Persona's email, for sites the user lets see it (the `email` permission). Kept on the
 // Vault record only, never in the Profile Drive, which anyone with its URL can read. Nomad can't
 // prove the address is the user's; a site that needs that sends its own code. '' or null clears it.
