@@ -98,17 +98,6 @@ class ShellWindowPanes extends LitElement {
       .rotate90 {
         transform: rotate(-90deg);
       }
-      .pane-status-bar button.split-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        margin-left: 4px;
-        white-space: nowrap;
-      }
-      .pane-status-bar button.split-btn .fas {
-        font-size: 10px;
-      }
-
       /* split view by drag and drop: while a tab is dragged, the pages step aside for a picture of
          them, and the half a dropped tab will take is drawn over it */
       .drop-pane {
@@ -227,13 +216,6 @@ class ShellWindowPanes extends LitElement {
           <span class="fa fa-bars"></span>
         </button>
         <span class="status"> ${pane.status || pane.title} </span>
-        <button
-          class="split-btn"
-          title="Open another tab beside this page"
-          @click=${(e) => this.onClickSplit(e, pane)}
-        >
-          <span class="fas fa-columns"></span> Split
-        </button>
         ${hasMultiple
           ? html`
               <button
@@ -362,19 +344,6 @@ class ShellWindowPanes extends LitElement {
 
   onMouseleaveAttachMenu(e, pane) {
     this.focusAttachId = undefined;
-  }
-
-  // The split picker (fg/shell-menus/split.js), above the button.
-  async onClickSplit(e, pane) {
-    e.stopPropagation();
-    // A click that just closed the picker (by blurring it) shouldn't open it again.
-    if (Date.now() - (this.lastSplitMenuClose || 0) < 100) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    await bg.views.toggleMenu('split', {
-      bounds: { left: (rect.right | 0) - 300, bottom: (rect.top | 0) + 4 },
-      params: { paneId: pane.id },
-    });
-    this.lastSplitMenuClose = Date.now();
   }
 
   // split view by drag and drop

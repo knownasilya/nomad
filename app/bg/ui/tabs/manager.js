@@ -657,6 +657,8 @@ class Tab extends EventEmitter {
     var tab = this;
 
     var menuItems = [];
+    menuItems.push({ label: 'Split With', submenu: this.splitWithMenuItems(pane) });
+    menuItems.push({ type: 'separator' });
     menuItems.push(contextMenu.createMenuItem('split-pane-vert', { webContents, tab }));
     menuItems.push(contextMenu.createMenuItem('split-pane-horz', { webContents, tab }));
     if (contextMenu.shouldShowMenuItem('move-pane', { tab })) {
@@ -670,6 +672,30 @@ class Tab extends EventEmitter {
       x: bounds.x,
       y: bounds.y + bounds.height - 20,
     });
+  }
+
+  // The pane menu's "Split With" submenu: the Space's other open tabs, each moving into a split
+  // right of `pane` (moveTabIntoSplit), then a new tab there. Dragging a tab onto the page or onto
+  // another tab does the same (fg/shell-window/split-drop.js).
+  splitWithMenuItems(pane) {
+    var win = this.browserWindow;
+    var items = getVisibleTabs(win)
+      .filter((other) => canSplitTabs(win, other, this))
+      .map((other) => ({
+        label: menuLabel(other.title || other.url),
+        click: () => moveTabIntoSplit(win, other, this, { paneId: pane.id, edge: 'right' }),
+      }));
+    if (!items.length) items.push({ label: 'No other open tabs', enabled: false });
+    items.push({ type: 'separator' });
+    items.push({
+      label: 'New Tab',
+      click: async () => {
+        var url = (await settingsDb.getForSpace(this.spaceId, 'new_tab')) || defaultUrl;
+        this.createPane({ url, after: pane, splitDir: 'vert', setActive: true });
+        triggerSessionSnapshot(win);
+      },
+    });
+    return items;
   }
 
   openAttachMenu(paneId) {
@@ -1082,7 +1108,7 @@ const SPLIT_EDGES = ['left', 'right', 'top', 'bottom'];
 // Move every page of `source` into `target`'s split, beside the pane `paneId` on `edge` (beside
 // the last column when no pane is named), then drop the emptied tab without closing its pages.
 // The tab strip, the sidebar and the page call it when a tab is dropped (fg/shell-window/split-
-// drop.js), and so does the split picker in a pane's status bar (fg/shell-menus/split.js).
+// drop.js), and so does the pane menu's "Split With" submenu (splitWithMenuItems).
 export function moveTabIntoSplit(win, source, target, { paneId, edge } = {}) {
   win = getTopWindow(win);
   if (!canSplitTabs(win, source, target)) return false;
@@ -1122,6 +1148,13 @@ export function moveTabIntoSplit(win, source, target, { paneId, edge } = {}) {
   emitReplaceState(win);
   triggerSessionSnapshot(win);
   return true;
+}
+
+// A tab title for a native menu: one line, not too long, and no '&' read as an accelerator.
+function menuLabel(text) {
+  text = String(text || '').replace(/\s+/g, ' ').trim();
+  if (text.length > 60) text = text.slice(0, 59) + '…';
+  return text.replace(/&/g, '&&');
 }
 
 // A shell window, other than `exclude`, whose active Space is `spaceId`.
@@ -2393,20 +2426,6 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
       paneId: opts.paneId,
       edge: opts.edge,
     });
-  },
-
-  // The split picker's "New tab" and "This page": a new pane right of `paneId` in the active tab.
-  async splitPaneWithUrl(paneId, which) {
-    var win = getWindow(this.sender);
-    var tab = getActive(win);
-    var pane = tab?.getPaneById(paneId) || tab?.activePane;
-    if (!pane) return;
-    var url = pane.url;
-    if (which === 'new-tab') {
-      url = (await settingsDb.getForSpace(tab.spaceId, 'new_tab')) || defaultUrl;
-    }
-    tab.createPane({ url, after: pane, splitDir: 'vert', setActive: true });
-    triggerSessionSnapshot(win);
   },
 
   async capturePanesForDrop() {

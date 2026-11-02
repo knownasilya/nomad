@@ -90,16 +90,3 @@ export function dropPreviewRect(bounds, edge) {
   }
   return { x, y, width, height };
 }
-
-// The open tabs the split picker offers for a pane of the active tab: every other tab in the Space
-// that isn't pinned, filtered by what was typed (every word, any order, ignoring case).
-export function splitCandidates(tabs, query = '') {
-  const words = String(query).toLowerCase().split(/\s+/).filter(Boolean);
-  const out = [];
-  (tabs || []).forEach((tab, index) => {
-    if (!tab || tab.isActive || tab.isPinned) return;
-    const hay = `${tab.title || ''} ${tab.url || ''}`.toLowerCase();
-    if (words.every((w) => hay.includes(w))) out.push({ tab, index });
-  });
-  return out;
-}

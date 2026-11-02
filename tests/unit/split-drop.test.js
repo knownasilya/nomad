@@ -6,7 +6,6 @@ import {
   tabDropZone,
   paneDropEdge,
   dropPreviewRect,
-  splitCandidates,
   startTabDrag,
   endTabDrag,
   currentTabDrag,
@@ -86,23 +85,6 @@ describe('dropPreviewRect', () => {
     expect(dropPreviewRect(b, 'right')).toEqual({ x: 210, y: 20, width: 200, height: 300 });
     expect(dropPreviewRect(b, 'top')).toEqual({ x: 10, y: 20, width: 400, height: 150 });
     expect(dropPreviewRect(b, 'bottom')).toEqual({ x: 10, y: 170, width: 400, height: 150 });
-  });
-});
-
-describe('splitCandidates', () => {
-  const tabs = [
-    { title: 'Pinned', url: 'https://pin.test/', isPinned: true },
-    { title: 'Current', url: 'https://cur.test/', isActive: true },
-    { title: 'Nomad docs', url: 'https://nomad.dev/docs/' },
-    { title: 'Weather', url: 'https://weather.test/today' },
-  ];
-  it('lists the other unpinned tabs with their index', () => {
-    expect(splitCandidates(tabs).map((c) => c.index)).toEqual([2, 3]);
-  });
-  it('filters on every word, any order, ignoring case', () => {
-    expect(splitCandidates(tabs, 'DOCS nomad').map((c) => c.index)).toEqual([2]);
-    expect(splitCandidates(tabs, 'today').map((c) => c.index)).toEqual([3]);
-    expect(splitCandidates(tabs, 'nothing here')).toEqual([]);
   });
 });
 
