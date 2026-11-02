@@ -163,9 +163,11 @@ module.exports = function (src, dest, opts) {
         plugins: [
           litDedupePlugin(appDir),
           nodePolyfills({
-            // Don't re-declare process/Buffer/global — Electron's preload context
-            // already has them and a top-level const re-declaration causes SyntaxError.
-            globals: { Buffer: false, global: false, process: false },
+            // Don't re-declare process/global — Electron's preload context already has them
+            // and a top-level const re-declaration causes SyntaxError. Buffer is different:
+            // since Electron 45 a sandboxed preload has no Buffer global, so bundled code that
+            // uses it (pauls-electron-rpc, pretty-hash) gets the polyfill imported per module.
+            globals: { Buffer: 'build', global: false, process: false },
           }),
           cssJsPlugin(),
         ],

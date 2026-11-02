@@ -55,7 +55,7 @@
     "@lezer/highlight": "^1.2.1",
     "@lezer/markdown": "^1.4.3",
     "@types/node": "^25.9.1",
-    "electron": "^42.3.0",
+    "electron": "^45.2.1",
     "electron-builder": "^23.0.2",
     "electron-notarize": "^0.3.0",
     "fs-jetpack": "^1.2.0",

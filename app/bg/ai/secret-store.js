@@ -33,12 +33,13 @@ function filePath() {
 }
 
 // Whether values can be kept encrypted here. Linux's 'basic_text' backend is a fixed key, not a
-// keychain, so it counts as no.
-export function encryptionStatus() {
+// keychain, so it counts as no. Uses safeStorage's async methods: the sync ones are deprecated in
+// Electron 45 and go in 46. Values the sync encryptString wrote decrypt with decryptStringAsync.
+export async function encryptionStatus() {
   let available = false;
   let backend = null;
   try {
-    available = safeStorage.isEncryptionAvailable();
+    available = await safeStorage.isAsyncEncryptionAvailable();
     if (process.platform === 'linux' && typeof safeStorage.getSelectedStorageBackend === 'function') {
       backend = safeStorage.getSelectedStorageBackend();
     }
@@ -60,13 +61,16 @@ export function load() {
         data = JSON.parse(await fs.promises.readFile(filePath(), 'utf8'));
       } catch {}
       const next = new Map();
+      let reencrypt = false;
       for (const s of Array.isArray(data?.secrets) ? data.secrets : []) {
         if (!rules.isSecretName(s?.name)) continue;
         const { value, ...rec } = s;
         let plain = null;
         if (value) {
           try {
-            plain = safeStorage.decryptString(Buffer.from(value, 'base64'));
+            const out = await safeStorage.decryptStringAsync(Buffer.from(value, 'base64'));
+            plain = out.result;
+            if (out.shouldReEncrypt) reencrypt = true;
           } catch {
             plain = null; // a keychain that changed; the user sets it again
           }
@@ -74,16 +78,20 @@ export function load() {
         next.set(rec.name, { rec, value: plain });
       }
       secrets = next;
+      // The OS key changed (rotated or stronger): write the values again under the new one.
+      if (reencrypt) writes = writes.then(persist).catch(() => {});
     })();
   }
   return loading;
 }
 
 async function persist() {
-  const list = [...secrets.values()].map(({ rec, value }) => ({
-    ...rec,
-    value: value ? safeStorage.encryptString(value).toString('base64') : null,
-  }));
+  const list = await Promise.all(
+    [...secrets.values()].map(async ({ rec, value }) => ({
+      ...rec,
+      value: value ? (await safeStorage.encryptStringAsync(value)).toString('base64') : null,
+    }))
+  );
   const file = filePath();
   const tmp = file + '.tmp';
   await fs.promises.writeFile(tmp, JSON.stringify({ version: 1, secrets: list }, null, 2), { mode: 0o600 });
@@ -124,7 +132,10 @@ export function save(fields) {
     const prev = secrets.get(name) || null;
     if (rest.create && prev) throw new Error(`There’s already a secret called ${name}`);
     const hasNew = typeof value === 'string' && value.trim() !== '';
-    if (hasNew && !encryptionStatus().ok) throw new Error(encryptionStatus().reason);
+    if (hasNew) {
+      const status = await encryptionStatus();
+      if (!status.ok) throw new Error(status.reason);
+    }
     const fields2 = { ...rest };
     delete fields2.create;
     if (!prev && fields2.hosts === undefined && rules.normalizeInject(fields2.inject).in === 'url' && hasNew) {
@@ -225,7 +236,8 @@ export function setValue(name, value, by) {
   return serial(async () => {
     const s = secrets.get(name);
     if (!s) throw new Error(`No secret called ${name}`);
-    if (!encryptionStatus().ok) throw new Error(encryptionStatus().reason);
+    const status = await encryptionStatus();
+    if (!status.ok) throw new Error(status.reason);
     const plain = rules.checkValue(s.rec, value);
     s.value = plain;
     s.rec = { ...s.rec, valueSetAt: new Date().toISOString(), valueSetBy: by };

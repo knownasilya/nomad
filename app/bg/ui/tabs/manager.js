@@ -2178,7 +2178,7 @@ rpc.exportAPI('background-process-views', viewsRPCManifest, {
   async showLocationBarContextMenu(index) {
     var win = getWindow(this.sender);
     var tab = getByIndex(win, index);
-    var clipboardContent = clipboard.readText();
+    var clipboardContent = await clipboard.readText(); // a Promise since Electron 44
     var clipInfo = examineLocationInput(clipboardContent);
     var menu = Menu.buildFromTemplate([
       { label: 'Cut', role: 'cut' },
