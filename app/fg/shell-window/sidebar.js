@@ -136,12 +136,6 @@ class ShellWindowSidebar extends LitElement {
         </div>
         <div class="sidebar-tabs" @scroll=${this._hidePinTip}>
           ${this._renderPins(tiles)}
-          ${repeat(
-            this._buildItems(),
-            (item) => (item.group ? `grp:${item.group.id}` : `tab:${item.index}`),
-            (item) =>
-              item.group ? this._renderGroup(item.group) : this._renderTab(item.tab, item.index)
-          )}
           <button
             class="new-tab-inline"
             title="New tab"
@@ -153,6 +147,12 @@ class ShellWindowSidebar extends LitElement {
             <span class="new-tab-icon fas fa-plus"></span>
             <span class="new-tab-label">New tab</span>
           </button>
+          ${repeat(
+            this._buildItems(),
+            (item) => (item.group ? `grp:${item.group.id}` : `tab:${item.index}`),
+            (item) =>
+              item.group ? this._renderGroup(item.group) : this._renderTab(item.tab, item.index)
+          )}
         </div>
         ${this._renderSpacesDropdown()
           ? html` <div class="sidebar-footer">${this._renderSpacesDropdown()}</div> `
@@ -251,8 +251,8 @@ class ShellWindowSidebar extends LitElement {
     `;
   }
 
-  // Ungrouped tabs and groups in tab order, so a new tab (added at the end) shows below the groups
-  // above it. A group sits where its first tab is; a group with no tabs goes at the end.
+  // Ungrouped tabs and groups in tab order, so a new tab (added at the top, under "New tab") shows
+  // above the groups below it. A group sits where its first tab is; a group with no tabs goes at the end.
   _buildItems() {
     const groups = this.groups || [];
     const items = [];
@@ -562,7 +562,10 @@ class ShellWindowSidebar extends LitElement {
     if (from === null) return;
     e.preventDefault();
     this._onDragendTab();
-    if (this.tabs[from]?.groupId) bg.views.moveTabToGroup(from, null);
+    // "New tab" is at the top of the list, so the tab goes there, above the Space's other tabs
+    if (!this.tabs[from]?.groupId) return;
+    const top = this.tabs.findIndex((t, i) => !t.isPinned && i !== from);
+    bg.views.moveTabToGroup(from, null, top === -1 ? null : top);
   }
 
   // pins
@@ -1204,7 +1207,7 @@ ShellWindowSidebar.styles = css`
     transition:
       background 0.1s,
       opacity 0.1s;
-    margin-top: 2px;
+    margin-bottom: 2px;
   }
 
   .new-tab-inline:hover {
