@@ -38,6 +38,7 @@ import HostingSettings from '../components/HostingSettings'
 import { usePersistence, type SavedSite, type SavedDrive } from '../lib/usePersistence'
 import { useSpaces, PERSONAL_ID, SPACE_COLORS } from '../lib/useSpaces'
 import { useFavicons } from '../lib/useFavicons'
+import { collapseRecents } from '../lib/recents'
 import { useNames, useNamesForUrl, mayBeName } from '../lib/useNames'
 import NameSheet from '../components/NameSheet'
 import { resolveAddress, isHyperUrl, shortKey, hyperKeyOf, type DriveType } from '../lib/hyperUrl'
@@ -1469,6 +1470,8 @@ function Home ({
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const { pins, history, iconFor, suggest, onAddPin, onRemovePin, onRefresh } = home
+  // Pages from one site back to back show as one row, the newest (lib/recents.ts).
+  const recents = useMemo(() => collapseRecents(history).slice(0, 30), [history])
   // Pins can change on another device, so pick up the latest whenever home opens.
   useEffect(() => { onRefresh() }, [onRefresh])
   return (
@@ -1498,7 +1501,7 @@ function Home ({
         {history.length === 0 ? (
           <ListEmpty text='Pages you visit appear here.' />
         ) : (
-          history.slice(0, 30).map((h, i) => (
+          recents.map((h, i) => (
             <ListRow
               key={h.url + h.ts}
               title={h.title}
