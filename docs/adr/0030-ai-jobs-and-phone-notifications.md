@@ -18,7 +18,7 @@ rules are in `shared/jobs.mjs`; the desktop side is `app/bg/ai/jobs.js` (store, 
    `{ type: 'nomad/job-run', id, jobId, title, device, trigger, startedAt, finishedAt, status, output, error?, notification }`.
    Every linked Device sees them, like Notes and Mods. A run's answer is the user's own content,
    the same as a Note, and it is capped (8,000 characters, the newest 10 runs per Job) so the Vault's
-   log stays small. ADR-0013 keeps live chat off the Vault; a Job's run is a finished result, not a
+   log stays small. (Amended below: a Job keeps a longer history, and the user can clear it.) ADR-0013 keeps live chat off the Vault; a Job's run is a finished result, not a
    stream, so it belongs there.
 2. **One Device runs a Job on its schedule.** `device` names it: the computer it was made on, until
    the user moves it ("Run it on this computer instead"). Two desktops never run the same Job twice.
@@ -113,3 +113,23 @@ rules are in `shared/jobs.mjs`; the desktop side is `app/bg/ai/jobs.js` (store, 
   `saveJob` description and `PERSONAL_PROMPT` say so).
 - A copied source makes the Job record as big as its files (32,000 characters of module and 8,000
   of prompt at most). Live sources store only their URL.
+
+## Amendment: run history (2026-11)
+
+The user wants to see a Job's last result and its errors over time, and to clear that log.
+
+- **A Job keeps its newest 50 runs** (`KEEP_HISTORY`). The newest 10 (`KEEP_RUNS`) keep their whole
+  answer; an older run is rewritten **trimmed** (`trimRun`): `output` becomes `''`, a 300-character
+  `summary` of it stays, with `trimmed: true`. Its status, times, error, changes and notification
+  stay, so the log still says when it ran and why it failed. `afterRun` in `shared/jobs.mjs` works out
+  what to keep, trim and delete after each run; the Vault's log grows by small records only.
+- **Clearing the history** (`clearHistory`) deletes every run of the Job, from any Device that can
+  write the Vault (My Library's **Clear history**, the phone's **Clear**). The Job record gains
+  `cleared: { at, lastRunAt }`: `dueAt` counts from `lastRunAt` when no run is newer, so a cleared
+  Job doesn't run again at once for a time it already ran, and a one-time Job doesn't run twice.
+  `makeJob` keeps the field on later edits. A failed run after a cleared history notifies, as the
+  first failure of a streak does.
+- My Library and the phone show the history with a count of runs and failures, an All / Failed
+  switch, a search over answers and errors (the shared search rule of Notes and Reader), each run's
+  duration and Device, and a failing Job's last error on its row in the list. The phone's search
+  sits in a full-screen Modal, so it pads the page by the keyboard's inset (`KeyboardInset`).

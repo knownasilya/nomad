@@ -41,7 +41,14 @@ import {
   MAX_SKILL_INSTRUCTIONS,
 } from '../../../../shared/ai-skills.mjs';
 import * as aiSkills from '../../ai/skills';
-import { describeSchedule, nextRunAt, normalizeSchedule } from '../../../../shared/jobs.mjs';
+import {
+  describeSchedule,
+  nextRunAt,
+  normalizeSchedule,
+  runDuration,
+  runPreview,
+  runSearchText,
+} from '../../../../shared/jobs.mjs';
 
 // The Drive key of a hyper://<key>/ URL, or null.
 function driveKeyOf(url) {
@@ -550,9 +557,26 @@ export default {
     };
   },
 
-  // A Job's saved runs, newest first.
+  // A Job's history: its saved runs, newest first, each with the name of the Device that ran it and
+  // how long it took.
   async listJobRuns(id) {
-    return jobs.runsOf(id);
+    const [own, devices] = await Promise.all([
+      jobs.ownKey().catch(() => null),
+      vault.listDevices().catch(() => []),
+    ]);
+    const names = new Map((devices || []).map((d) => [d.key, d.name]));
+    return jobs.runsOf(id).map((r) => ({
+      ...r,
+      deviceName: !r.device ? '' : r.device === own ? 'This computer' : names.get(r.device) || 'Another device',
+      took: runDuration(r),
+      preview: runPreview(r),
+      searchText: runSearchText(r),
+    }));
+  },
+
+  // Clear a Job's history on every Device. Resolves to how many runs went.
+  async clearJobRuns(id) {
+    return jobs.clearRuns(id);
   },
 
   // ({ id?, title?, prompt?, source?, writes?, schedule?, notify?, enabled?, runHere? }) -> record. A

@@ -12,7 +12,8 @@
 //   the Job notes it (`source.changed`) and My Library offers it; nothing changes until the user
 //   takes it.
 // - A time missed while the computer slept runs once when it wakes (shared/jobs.mjs dueAt).
-// - Each Job keeps its newest KEEP_RUNS runs.
+// - Each Job keeps its newest KEEP_HISTORY runs as its history, the newest KEEP_RUNS with their
+//   whole answer (shared/jobs.mjs afterRun). The user can clear it (clearRuns).
 //
 // The turn itself is passed in by setup() ({ runTurn }), as auto-names takes completeText, so this
 // module doesn't import ai.ts (which imports this one through ai-vault.ts).
@@ -191,6 +192,31 @@ export function remove(id) {
   return run;
 }
 
+// Clear a Job's history: delete every saved run, on every Device. The Job notes when its last run
+// was, so its schedule doesn't run it again early (shared/jobs.mjs clearHistory).
+export function clearRuns(id) {
+  const run = writes.then(async () => {
+    const job = jobs.get(id);
+    if (!job) throw new Error('No Job with that id');
+    // Every saved run, not only the ones this Device has seen yet.
+    const saved = await vault.listAppRecords(jl.runsPrefix(id)).catch(() => []);
+    const { job: rec, remove } = jl.clearHistory(job, [...saved, ...runsOf(id)]);
+    const seen = new Set();
+    for (const r of remove) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      await vault.delAppRecord(jl.runPath(id, r.id)).catch(() => {});
+    }
+    await vault.putAppRecord(jl.jobPath(id), rec);
+    jobs.set(id, rec);
+    runs.delete(id);
+    events.emit('changed');
+    return seen.size;
+  });
+  writes = run.catch(() => {});
+  return run;
+}
+
 // Running
 // =
 
@@ -290,10 +316,10 @@ async function runOne(job, trigger) {
   if (error) logger.warn('A Job failed', { id: job.id, error });
   try {
     await vault.putAppRecord(jl.runPath(job.id, run.id), run);
-    const all = [run, ...runsOf(job.id)];
-    const prune = jl.runsToPrune(all);
+    const { keep, trim, prune } = jl.afterRun([run, ...runsOf(job.id)]);
     for (const old of prune) await vault.delAppRecord(jl.runPath(job.id, old.id)).catch(() => {});
-    runs.set(job.id, jl.sortRuns(all).slice(0, jl.KEEP_RUNS));
+    for (const r of trim) await vault.putAppRecord(jl.runPath(job.id, r.id), r).catch(() => {});
+    runs.set(job.id, keep);
   } catch (err) {
     logger.warn('Could not save a Job’s run', { id: job.id, error: err?.message });
   }

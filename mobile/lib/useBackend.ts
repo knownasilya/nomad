@@ -189,6 +189,11 @@ export interface JobRun {
   output: string; error?: string; notification: { title: string; body: string } | null
   // What the run changed: a file it wrote in a drive (in its Draft or live), or a Note or Reader change.
   changes?: ({ drive: string; path: string; draft: boolean } | { tool: string; summary: string })[]
+  // An older run keeps only the start of its answer (shared/jobs.mjs trimRun).
+  summary?: string; trimmed?: boolean
+  // From the backend's history (jobs/runs): who ran it, how long it took, a line to show folded, and
+  // the text its search looks in.
+  deviceName?: string; took?: string; preview?: string; searchText?: string
 }
 export interface Job {
   type: 'nomad/job'; id: string; title: string; prompt: string; schedule: JobSchedule
@@ -201,6 +206,8 @@ export interface Job {
   canChange: string[]
   notify: 'always' | 'auto' | 'never'; enabled: boolean; device: string | null; space: string | null
   createdAt: string; updatedAt: string
+  // When its history was last cleared, and when its newest run then started.
+  cleared?: { at: string; lastRunAt: string | null }
   // Worked out by the backend: the newest run, when it next runs, the schedule in words, the name of
   // the Device that runs it, and whether a "run now" from a phone is waiting for it.
   lastRun: JobRun | null; nextRunAt: string | null; when: string; deviceName: string; requested: boolean

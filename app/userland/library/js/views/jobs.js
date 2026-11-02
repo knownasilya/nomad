@@ -4,6 +4,7 @@ import {
 } from 'nomad://app-stdlib/vendor/lit-element/lit-element.js';
 import { repeat } from 'nomad://app-stdlib/vendor/lit-element/lit-html/directives/repeat.js';
 import * as toast from 'nomad://app-stdlib/js/com/toast.js';
+import { queryWords, matchesWords } from 'nomad://app-stdlib/js/search-match.js';
 import modsCSS from '../../css/views/mods.css.js';
 import jobsCSS from '../../css/views/jobs.css.js';
 
@@ -19,6 +20,9 @@ import jobsCSS from '../../css/views/jobs.css.js';
 // ?id=<id> opens one. The rules (schedules, notify, sizes) live in shared/jobs.mjs; bg checks
 // them on save.
 
+// How much history a Job keeps (shared/jobs.mjs KEEP_HISTORY, KEEP_RUNS).
+const KEEP_HISTORY = 50;
+const KEEP_RUNS = 10;
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const KINDS = [
   { id: 'manual', label: 'Only when I run it' },
@@ -69,6 +73,8 @@ export class JobsView extends LitElement {
       editing: { type: Object }, // a form: blank() or one made from a Job
       openId: { type: String }, // the Job whose runs show
       runs: { type: Array },
+      runFilter: { type: String }, // the open Job's history: 'all' or 'failed'
+      runQuery: { type: String }, // words to find in the open Job's history
       newer: { type: Object }, // a newer version of the open Job's source: { jobId, url, module, prompt } or { jobId, error }
       secrets: { type: Array }, // the user's secrets on this computer, without values
     };
@@ -84,6 +90,8 @@ export class JobsView extends LitElement {
     this.filter = undefined;
     this.editing = null;
     this.runs = [];
+    this.runFilter = 'all';
+    this.runQuery = '';
     this.newer = null;
     this.secrets = [];
     this.openId = new URLSearchParams(location.search).get('id') || null;
@@ -172,6 +180,11 @@ export class JobsView extends LitElement {
           <div class="meta" @click=${() => this.onOpen(j)}>
             <div class="title">${j.title}</div>
             <div class="summary">${this.summary(j)}</div>
+            ${!j.running && j.lastRun?.status === 'error' && !open && !e
+              ? html`<div class="last-error" title=${j.lastRun.error || ''}>
+                  <span class="fas fa-fw fa-exclamation-circle"></span> ${j.lastRun.error || 'The Job didn’t finish'}
+                </div>`
+              : ''}
           </div>
           <div class="actions">
             <button class="icon" title="Run now" aria-label="Run ${j.title} now" ?disabled=${j.running} @click=${() => this.onRun(j)}>
@@ -222,24 +235,85 @@ export class JobsView extends LitElement {
               <button class="link" @click=${() => this.onRunHere(j)}>Run it on this computer instead</button>
             </div>`}
         ${this.renderSecrets(j)}
-        <div class="label">Runs</div>
-        ${runs.length === 0
-          ? html`<div class="hint-row">No runs yet. Click <span class="fas fa-play"></span> to run it now.</div>`
-          : runs.map(
-              (r, i) => html`
-                <details class="run" ?open=${i === 0}>
+        ${this.renderHistory(j)}
+      </div>
+    `;
+  }
+
+  // The Job's history: its saved runs, newest first, with what each answered or why it failed. The
+  // newest is open. It can be narrowed to failed runs or searched, and cleared.
+  renderHistory(j) {
+    const runs = this.runs || [];
+    const failed = runs.filter((r) => r.status === 'error').length;
+    const words = queryWords(this.runQuery || '');
+    const shown = runs.filter(
+      (r) =>
+        (this.runFilter !== 'failed' || r.status === 'error') &&
+        (!words.length || matchesWords(r.searchText || '', words))
+    );
+    const cleared = j.cleared?.at ? `History cleared ${ago(j.cleared.at)}.` : '';
+    return html`
+      <div class="history-head">
+        <div class="label">History</div>
+        ${runs.length
+          ? html`<span class="count">${runs.length} ${runs.length === 1 ? 'run' : 'runs'}${failed ? html` · <span class="err">${failed} failed</span>` : ''}</span>`
+          : ''}
+        <span class="spacer"></span>
+        ${runs.length > 1
+          ? html`
+              <input
+                type="search"
+                class="history-search"
+                placeholder="Search history"
+                aria-label="Search ${j.title}’s history"
+                .value=${this.runQuery || ''}
+                @input=${(ev) => (this.runQuery = ev.target.value)}
+              />
+              <div class="seg" role="group" aria-label="Show">
+                <button class=${this.runFilter === 'failed' ? '' : 'on'} aria-pressed=${this.runFilter !== 'failed'} @click=${() => (this.runFilter = 'all')}>All</button>
+                <button class=${this.runFilter === 'failed' ? 'on' : ''} aria-pressed=${this.runFilter === 'failed'} ?disabled=${!failed} @click=${() => (this.runFilter = 'failed')}>Failed</button>
+              </div>
+            `
+          : ''}
+        ${runs.length
+          ? html`<button class="clear" title="Delete this Job’s saved runs on all your devices" @click=${() => this.onClearHistory(j)}>
+              <span class="fas fa-fw fa-broom"></span> Clear history
+            </button>`
+          : ''}
+      </div>
+      ${runs.length === 0
+        ? html`<div class="hint-row">
+            ${cleared ? cleared + ' ' : ''}No runs yet. Click <span class="fas fa-play"></span> to run it now.
+          </div>`
+        : shown.length === 0
+          ? html`<div class="hint-row">${this.runFilter === 'failed' && !words.length ? 'No failed runs.' : 'No runs match.'}</div>`
+          : shown.map(
+              (r) => html`
+                <details class="run ${r.status === 'error' ? 'failed' : ''}" ?open=${r.id === runs[0].id || (words.length && shown.length <= 3)}>
                   <summary>
                     <span class="fas fa-fw ${r.status === 'error' ? 'fa-exclamation-circle err' : 'fa-check-circle ok'}"></span>
-                    ${new Date(r.startedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
-                    <span class="muted">· ${r.trigger === 'manual' ? 'by hand' : 'on schedule'}${r.notification ? ' · notified' : ''}</span>
+                    <span class="run-when">${new Date(r.startedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                    <span class="muted">· ${runMeta(r, j)}</span>
+                    <span class="run-preview">${r.preview || ''}</span>
                   </summary>
-                  ${r.error ? html`<div class="error">${r.error}</div>` : ''}
-                  ${r.output ? html`<div class="output">${r.output}</div>` : ''}
+                  ${r.error ? html`<div class="run-error"><span class="fas fa-fw fa-exclamation-triangle"></span> ${r.error}</div>` : ''}
+                  ${r.output
+                    ? html`<div class="output">${r.output}</div>`
+                    : r.summary
+                      ? html`<div class="output trimmed">${r.summary}</div>
+                          <div class="hint-row">An older run: only the start of its answer is kept.</div>`
+                      : r.status !== 'error'
+                        ? html`<div class="hint-row">No answer.</div>`
+                        : ''}
                   ${this.renderChanges(j, r)}
                 </details>
               `
             )}
-      </div>
+      ${runs.length
+        ? html`<div class="hint-row">
+            Keeps the last ${KEEP_HISTORY} runs, the newest ${KEEP_RUNS} with their whole answer. ${cleared}
+          </div>`
+        : ''}
     `;
   }
 
@@ -651,6 +725,8 @@ export class JobsView extends LitElement {
     if (this.editing?.id === j.id) return;
     this.openId = this.openId === j.id ? null : j.id;
     this.runs = [];
+    this.runFilter = 'all';
+    this.runQuery = '';
     this.newer = null;
     history.replaceState({}, '', this.openId ? `/jobs?id=${this.openId}` : '/jobs');
     if (this.openId) this.runs = await nomad.vault.listJobRuns(j.id).catch(() => []);
@@ -735,6 +811,21 @@ export class JobsView extends LitElement {
     }
   }
 
+  async onClearHistory(j) {
+    const n = (this.runs || []).length;
+    if (!confirm(`Clear the history of “${j.title}”? Its ${n} saved ${n === 1 ? 'run goes' : 'runs go'} from all your devices. The Job stays.`)) return;
+    try {
+      const gone = await nomad.vault.clearJobRuns(j.id);
+      this.runs = [];
+      this.runFilter = 'all';
+      this.runQuery = '';
+      await this.load();
+      toast.create(`Cleared ${gone} ${gone === 1 ? 'run' : 'runs'} of “${j.title}”`, 'success');
+    } catch (err) {
+      toast.create(cleanError(err), 'error');
+    }
+  }
+
   async onDelete(j) {
     if (!confirm(`Delete the Job “${j.title}” and its saved runs?`)) return;
     try {
@@ -746,6 +837,16 @@ export class JobsView extends LitElement {
       toast.create(cleanError(err), 'error');
     }
   }
+}
+
+// How a run went, after its time: by hand or on schedule, how long it took, where, and whether it
+// notified.
+function runMeta(r, j) {
+  const parts = [r.trigger === 'manual' ? 'by hand' : 'on schedule'];
+  if (r.took) parts.push(`took ${r.took}`);
+  if (r.deviceName && r.deviceName !== j.deviceName) parts.push(`on ${r.deviceName}`);
+  if (r.notification) parts.push('notified');
+  return parts.join(' · ');
 }
 
 // A Date as a datetime-local input's value, in local time.

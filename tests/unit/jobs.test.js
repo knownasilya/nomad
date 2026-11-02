@@ -3,6 +3,7 @@ import {
   JOB_TYPE,
   RUN_TYPE,
   KEEP_RUNS,
+  KEEP_HISTORY,
   MAX_OUTPUT,
   newJobId,
   newRunId,
@@ -21,6 +22,13 @@ import {
   makeRun,
   sortRuns,
   runsToPrune,
+  runsToTrim,
+  trimRun,
+  afterRun,
+  clearHistory,
+  runDuration,
+  runPreview,
+  runSearchText,
   jobsWithRuns,
   pendingNotifications,
   sourceFiles,
@@ -384,10 +392,81 @@ describe('runs', () => {
   });
 
   it('keeps the newest runs', () => {
-    const runs = Array.from({ length: KEEP_RUNS + 3 }, (_, i) => run(i + 1));
+    const runs = Array.from({ length: KEEP_HISTORY + 3 }, (_, i) => run(i + 1));
     const pruned = runsToPrune(runs);
     expect(pruned).toHaveLength(3);
     expect(pruned.map((r) => r.startedAt)).toEqual(runs.slice(0, 3).reverse().map((r) => r.startedAt));
+  });
+
+  it('keeps the whole answer of the newest runs and a summary of older ones', () => {
+    const runs = Array.from({ length: KEEP_RUNS + 2 }, (_, i) =>
+      run(i + 1, { output: `**Day ${i + 1}**: ` + 'news '.repeat(200) })
+    );
+    const trim = runsToTrim(runs);
+    expect(trim.map((r) => r.startedAt)).toEqual([at(2, 8), at(1, 8)].map((d) => d.toISOString()));
+    const t = trimRun(trim[0]);
+    expect(t).toMatchObject({ id: trim[0].id, status: 'ok', output: '', trimmed: true, notification: trim[0].notification });
+    expect(t.summary.startsWith('Day 2: news')).toBe(true);
+    expect(t.summary.length).toBeLessThanOrEqual(300);
+    // Trimmed once: not again.
+    expect(runsToTrim([...runs.slice(2), t, trimRun(runs[0])])).toEqual([]);
+    expect(trimRun(t)).toBe(t);
+  });
+
+  it('keeps a failed run’s error when trimmed', () => {
+    const r = trimRun(run(1, { status: 'error', error: 'The AI runtime isn’t reachable', output: 'partial' }));
+    expect(r).toMatchObject({ status: 'error', error: 'The AI runtime isn’t reachable', trimmed: true, output: '' });
+  });
+
+  it('works out the history after a new run', () => {
+    const runs = Array.from({ length: KEEP_HISTORY + 1 }, (_, i) => run(i + 1));
+    const { keep, trim, prune } = afterRun(runs);
+    expect(keep).toHaveLength(KEEP_HISTORY);
+    expect(prune).toHaveLength(1);
+    expect(prune[0].startedAt).toBe(at(1, 8).toISOString());
+    // Every run past the newest KEEP_RUNS still has its answer, so each is rewritten trimmed.
+    expect(trim.length).toBe(KEEP_HISTORY - KEEP_RUNS);
+    expect(keep[0].startedAt).toBe(at(KEEP_HISTORY + 1, 8).toISOString());
+    expect(keep.slice(0, KEEP_RUNS).every((r) => !r.trimmed)).toBe(true);
+    expect(keep.slice(KEEP_RUNS).every((r) => r.trimmed)).toBe(true);
+  });
+
+  it('clears the history and remembers the last run, so the schedule doesn’t run early', () => {
+    const runs = [run(1), run(3), run(2)];
+    const { job: rec, remove } = clearHistory(job, runs, at(3, 12));
+    expect(remove.map((r) => r.id)).toEqual(sortRuns(runs).map((r) => r.id));
+    expect(rec.cleared).toEqual({ at: at(3, 12).toISOString(), lastRunAt: at(3, 8).toISOString() });
+    expect(rec.updatedAt).toBe(at(3, 12).toISOString());
+    // Without the runs, the Job still counts from its last one: next is day 4, not day 1's 8:00
+    // (already past, so it would run at once).
+    expect(dueAt(job)).toEqual(at(1, 8));
+    expect(dueAt(rec)).toEqual(at(4, 8));
+    expect(dueAt(rec, at(4, 8).toISOString())).toEqual(at(5, 8));
+    // Clearing an empty history keeps the earlier mark.
+    expect(clearHistory(rec, [], at(3, 13)).job.cleared.lastRunAt).toBe(at(3, 8).toISOString());
+    // Editing the Job keeps it.
+    expect(makeJob({ title: 'Renamed' }, rec, at(3, 14)).cleared).toEqual(rec.cleared);
+    // Only this Job's runs.
+    expect(clearHistory(job, [{ ...run(1), jobId: 'job-other-1' }]).remove).toEqual([]);
+  });
+
+  it('doesn’t run a one-time Job twice after its history is cleared', () => {
+    const once = makeJob({ id: 'job-once-1', prompt: 'x', schedule: { kind: 'once', at: at(2, 9).toISOString() } }, null, at(1, 7));
+    const ran = { ...run(2), jobId: once.id, startedAt: at(2, 9).toISOString() };
+    expect(dueAt(once, ran.startedAt)).toBe(null);
+    const { job: rec } = clearHistory(once, [ran], at(3, 0));
+    expect(dueAt(rec)).toBe(null);
+  });
+
+  it('says how long a run took and what it answered', () => {
+    expect(runDuration(run(1))).toBe('1 min');
+    expect(runDuration({ startedAt: at(1, 8).toISOString(), finishedAt: new Date(at(1, 8).getTime() + 42_000).toISOString() })).toBe('42 s');
+    expect(runDuration({ startedAt: at(1, 8).toISOString(), finishedAt: at(1, 9, 5).toISOString() })).toBe('1 h 5 min');
+    expect(runDuration({})).toBe('');
+    expect(runPreview(run(1, { output: '# Today\n\n- **3** posts' }))).toBe('Today 3 posts');
+    expect(runPreview(run(1, { status: 'error', error: 'No  AI\nruntime' }))).toBe('No AI runtime');
+    expect(runPreview(trimRun(run(1, { output: 'old answer' })))).toBe('old answer');
+    expect(runSearchText(run(1, { status: 'error', error: 'Timed out' }))).toContain('Timed out');
   });
 
   it('lists Jobs with their newest run and next time', () => {

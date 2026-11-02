@@ -164,6 +164,81 @@ const cssStr = css`
     margin: 6px 0 0;
   }
 
+  .hint-row a {
+    color: var(--text-color--link);
+  }
+
+  .last-error {
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--mods-err);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .history-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 6px 0 6px;
+  }
+
+  .job-body .history-head .label {
+    margin: 0;
+  }
+
+  .history-head .count {
+    font-size: 12px;
+    color: var(--text-color--light);
+  }
+
+  .history-head .count .err {
+    color: var(--mods-err);
+  }
+
+  .history-head .spacer {
+    flex: 1;
+  }
+
+  input.history-search {
+    width: 180px;
+    height: 30px;
+    box-sizing: border-box;
+  }
+
+  .seg {
+    display: inline-flex;
+  }
+
+  .seg button {
+    border-radius: 0;
+  }
+
+  .seg button:first-child {
+    border-radius: 6px 0 0 6px;
+  }
+
+  .seg button:last-child {
+    border-radius: 0 6px 6px 0;
+    border-left: 0;
+  }
+
+  .seg button.on {
+    background: var(--bg-color--semi-light);
+    font-weight: 600;
+  }
+
+  .seg button[disabled] {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  button.clear:hover {
+    color: var(--mods-err);
+  }
+
   .run {
     border-top: 1px solid var(--border-color--very-light);
     padding: 6px 0;
@@ -171,8 +246,66 @@ const cssStr = css`
   }
 
   .run summary {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
     cursor: pointer;
     color: var(--text-color--default);
+    list-style: none;
+  }
+
+  .run summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .run summary::before {
+    content: '▸';
+    width: 10px;
+    flex: none;
+    color: var(--text-color--light);
+  }
+
+  .run[open] summary::before {
+    content: '▾';
+  }
+
+  .run-when,
+  .run summary .muted {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .run-preview {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-color--light);
+  }
+
+  .run.failed .run-preview {
+    color: var(--mods-err);
+  }
+
+  .run[open] .run-preview {
+    visibility: hidden;
+  }
+
+  .run-error {
+    margin-top: 6px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--mods-err);
+    color: var(--mods-err);
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .output.trimmed {
+    color: var(--text-color--light);
   }
 
   .run .muted {
@@ -185,10 +318,6 @@ const cssStr = css`
 
   .run .err {
     color: var(--mods-err);
-  }
-
-  .run .error {
-    margin-top: 6px;
   }
 
   .output {

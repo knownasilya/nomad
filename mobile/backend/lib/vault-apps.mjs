@@ -546,10 +546,22 @@ export async function listJobs (base) {
   }
 }
 
-// A Job's runs, newest first.
+// A Job's history: its runs, newest first, each with the name of the Device that ran it and how
+// long it took.
 export async function jobRuns (base, jobId) {
   await boundedUpdate(base)
-  return jl.sortRuns(await readPrefix(base, jl.runsPrefix(jobId)))
+  const [runs, nameOf] = await Promise.all([readPrefix(base, jl.runsPrefix(jobId)), deviceNames(base)])
+  return jl.sortRuns(runs).map((r) => ({ ...r, deviceName: r.device ? nameOf(r.device) : '', took: jl.runDuration(r), preview: jl.runPreview(r), searchText: jl.runSearchText(r) }))
+}
+
+// Clear a Job's history on every Device: delete its runs, and note on the Job when its last run was
+// so its schedule doesn't run it again early (shared/jobs.mjs clearHistory). Returns how many went.
+export async function clearJobRuns (base, id) {
+  const job = await readJob(base, id)
+  const { job: rec, remove } = jl.clearHistory(job, await readPrefix(base, jl.runsPrefix(id)))
+  for (const r of remove) await delRecord(base, jl.runPath(id, r.id))
+  await putRecord(base, jl.jobPath(id), rec)
+  return remove.length
 }
 
 async function readJob (base, id) {
