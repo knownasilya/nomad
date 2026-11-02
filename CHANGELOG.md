@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.36.0](https://github.com/knownasilya/nomad/compare/v1.35.0...v1.36.0) (2026-11-02)
+
+
+### Features
+
+* **ai:** let the user's AI and AI Jobs create a drive ([8806616](https://github.com/knownasilya/nomad/commit/880661624a582d51985d18fa59450e85d004db32))
+* **jobs:** a run history per AI Job, with errors, search and Clear ([e40e9c4](https://github.com/knownasilya/nomad/commit/e40e9c4a20e371d53aa4cb61acadcc4cb5018751))
+* **jobs:** let an AI Job open web pages and click and type on them ([543414a](https://github.com/knownasilya/nomad/commit/543414ae4eefb8734d3dbe6d3a2ef2d257e18df1))
+* **mobile:** one Recent row per site visited back to back ([f44ac96](https://github.com/knownasilya/nomad/commit/f44ac960092da0f18feccf857c32491e63ac7420))
+* **onboarding:** offer to make the first Persona, skippable ([9eed1b4](https://github.com/knownasilya/nomad/commit/9eed1b46a265dab677742bac55340673cc757f92))
+* **personas:** give the location bar's Persona icon its own menu ([fd70f46](https://github.com/knownasilya/nomad/commit/fd70f460721719a21255eaed8c931acbecd7b9c8))
+* **personas:** open the Persona menu from the Spaces button's picture ([45ca9b2](https://github.com/knownasilya/nomad/commit/45ca9b2a1fc2c01c3ababbda15e3388335355849))
+
+
+### Bug Fixes
+
+* **ai:** ask before sending private data to a site the user didn't name ([64e174c](https://github.com/knownasilya/nomad/commit/64e174c783f0217b944f13c9202c1ed2258ceba3))
+
 ## [1.35.0](https://github.com/knownasilya/nomad/compare/v1.34.0...v1.35.0) (2026-11-02)
 
 
