@@ -176,8 +176,9 @@ export function similarKey(url, verb, control) {
   return [siteOf(url), String(verb || ''), c.role || 'generic', name].join('\n')
 }
 
-// The confirm's option for those, in words the user can check.
-export function similarLabel(url, control) {
+// The confirm's option for those, in words the user can check. `span` is how long it lasts: the
+// rest of a sidebar chat, or a Job's later runs (ADR-0038).
+export function similarLabel(url, control, span = 'for the rest of this chat') {
   let host = ''
   try {
     host = new URL(String(url)).host
@@ -185,7 +186,7 @@ export function similarLabel(url, control) {
   const name = clip(String(control?.name || '').trim(), 60).replace(/\d+/g, '…')
   const role = control?.role && control.role !== 'generic' ? control.role : 'element'
   const what = name ? `${role}s like “${name}”` : `${role}s like this`
-  return `Also allow ${what}${host ? ` on ${host}` : ''} for the rest of this chat`
+  return `Also allow ${what}${host ? ` on ${host}` : ''} ${span}`
 }
 
 const KEYS = {

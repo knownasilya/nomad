@@ -7,7 +7,8 @@
 //   /.vault/jobs/<id>.json                { type, id, title, prompt, source?, writes?, schedule, notify, enabled,
 //                                           device, space, createdAt, updatedAt, scheduleFrom, cleared? }
 //   /.vault/job-runs/<jobId>/<runId>.json { type, id, jobId, title, device, trigger, startedAt, finishedAt,
-//                                           status, output, error?, notification, changes?, summary?, trimmed? }
+//                                           status, output, error?, notification, changes?, needs?, summary?,
+//                                           trimmed? }
 //
 // A Job's runs are its history: the newest KEEP_HISTORY, of which the newest KEEP_RUNS keep their
 // whole answer. An older run is `trimmed`: its answer gives way to a short `summary`, and its status,
@@ -47,7 +48,14 @@
 // and whether it may write Notes and change Reader (follow, unfollow, mark read). Nothing else:
 // the runner offers only those write capabilities, and its permission check grants only those.
 //
-//   writes: { drives: [{ url: 'hyper://<key>/', draft }], notes, reader }
+//   writes: { drives: [{ url: 'hyper://<key>/', draft }], notes, reader, pages }
+//
+// `pages` (ADR-0038) are the sites the Job may open in a page of its own, signed in as the user:
+// [{ site, control, actions }]. `site` is a web host without "www." (example.com) or hyper://<key>.
+// `control` lets it click, type and scroll there too, and `actions` are the clicks that buy, send,
+// post or delete that the user let it repeat ({ key, label }, page-control.mjs similarKey). The user
+// gives them on a run they watch (Run with me) or in My Library; a run with nobody watching only
+// uses them, and notes on its record what else it wanted (`needs`).
 //
 // `notify` is 'always' (every run sends its answer), 'auto' (only when the AI calls notify), or
 // 'never'. A failed run notifies too, once per streak of failures, unless 'never'.
@@ -900,7 +908,7 @@ export const WRITE_CAPS = {
 // first), each with `draft`. Null when it grants nothing. Throws for a bad drive.
 export function normalizeWrites(input) {
   if (!input) return null;
-  if (typeof input !== 'object') throw new Error('writes is { drives?, notes?, reader?, newDrives? }');
+  if (typeof input !== 'object') throw new Error('writes is { drives?, notes?, reader?, newDrives?, pages? }');
   const drives = [];
   for (const d of Array.isArray(input.drives) ? input.drives : []) {
     const raw = typeof d === 'string' ? { url: d } : d || {};
@@ -914,10 +922,12 @@ export function normalizeWrites(input) {
   if (drives.length > MAX_WRITE_DRIVES) {
     throw new Error(`A Job can write at most ${MAX_WRITE_DRIVES} drives`);
   }
+  const pages = normalizePages(input.pages);
   const out = { drives, notes: !!input.notes, reader: !!input.reader };
   // Only when granted, so a Job saved before this grant existed keeps the same record.
   if (input.newDrives) out.newDrives = true;
-  return drives.length || out.notes || out.reader || out.newDrives ? out : null;
+  if (pages.length) out.pages = pages;
+  return drives.length || out.notes || out.reader || out.newDrives || pages.length ? out : null;
 }
 
 // The capabilities a Job's writes add to its turn, besides writeDriveFile (which a drive grant
@@ -959,6 +969,7 @@ export function addedWrites(prev, next) {
     notes: next.notes && !prev?.notes,
     reader: next.reader && !prev?.reader,
     newDrives: next.newDrives && !prev?.newDrives,
+    pages: addedPages(prev?.pages, next.pages),
   });
 }
 
@@ -973,7 +984,141 @@ export function describeWrites(writes, driveName = null) {
       (d) =>
         `${(driveName && driveName(d.url)) || d.url.slice(0, 16) + '…/'}${d.draft ? ' (in a Draft)' : ''}`
     ),
+    ...(writes.pages || []).map(describePage),
   ];
+}
+
+// Web pages (ADR-0038)
+// =
+
+export const MAX_PAGE_SITES = 20;
+export const MAX_PAGE_ACTIONS = 20;
+const MAX_NEEDS = 10;
+// The site a page grant names, from a URL or what the user typed: a web host in lower case
+// without "www." (example.com, example.com:8080), or hyper://<key>. '' for anything else.
+export function pageSite(input) {
+  let s = String(input || '').trim();
+  if (!s) return '';
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = 'https://' + s;
+  let u;
+  try {
+    u = new URL(s);
+  } catch {
+    return '';
+  }
+  if (u.protocol === 'hyper:') {
+    const host = u.hostname.toLowerCase();
+    return DRIVE_HOST_RE.test(host) ? `hyper://${host}` : '';
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+  return u.host.toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
+}
+
+// A Job's page grants, tidied: one per site, `control` when any said so, actions by key.
+function normalizePages(input) {
+  if (input == null) return [];
+  if (!Array.isArray(input)) throw new Error('pages is a list: [{ site, control }]');
+  const bySite = new Map();
+  for (const p of input) {
+    const raw = typeof p === 'string' ? { site: p } : p || {};
+    const site = pageSite(raw.site);
+    if (!site) throw new Error(`“${raw.site}” isn’t a site a Job can open: give a web address or hyper://<key>/`);
+    const g = bySite.get(site) || { site, control: false, actions: [] };
+    g.control = g.control || !!raw.control;
+    for (const a of Array.isArray(raw.actions) ? raw.actions : []) {
+      const key = typeof a?.key === 'string' ? a.key.slice(0, 400) : '';
+      if (!key || g.actions.some((x) => x.key === key)) continue;
+      g.actions.push({ key, label: clip(String(a.label || ''), 120) || 'a click' });
+    }
+    bySite.set(site, g);
+  }
+  if (bySite.size > MAX_PAGE_SITES) throw new Error(`A Job can use at most ${MAX_PAGE_SITES} sites`);
+  return [...bySite.values()].map((g) => ({
+    site: g.site,
+    control: g.control || g.actions.length > 0,
+    ...(g.actions.length ? { actions: g.actions.slice(-MAX_PAGE_ACTIONS) } : {}),
+  }));
+}
+
+// The grants in `next` that `prev` didn't have: a new site, `control` on a site, or a new click.
+function addedPages(prev, next) {
+  const had = new Map((prev || []).map((p) => [p.site, p]));
+  const out = [];
+  for (const p of next || []) {
+    const old = had.get(p.site);
+    const actions = (p.actions || []).filter((a) => !old?.actions?.some((x) => x.key === a.key));
+    if (!old || (p.control && !old.control) || actions.length) {
+      out.push({ site: p.site, control: !!p.control && !old?.control, ...(actions.length ? { actions } : {}) });
+    }
+  }
+  return out;
+}
+
+// The Job's grant for the site of `url` (a URL or a site), or null.
+export function pageGrant(writes, url) {
+  const site = pageSite(url);
+  return (site && (writes?.pages || []).find((p) => p.site === site)) || null;
+}
+
+// `writes` with a site granted: opened, controlled (`control`), or one more click it may repeat
+// (`action`: { key, label }). The user's yes on a run they watch.
+export function grantPage(writes, url, { control = false, action = null } = {}) {
+  const site = pageSite(url);
+  if (!site) throw new Error('Not a site a Job can open');
+  const pages = [...(writes?.pages || [])];
+  const i = pages.findIndex((p) => p.site === site);
+  const old = i === -1 ? { site, control: false } : pages[i];
+  const next = {
+    ...old,
+    control: old.control || control || !!action,
+    ...(action ? { actions: [...(old.actions || []), action] } : {}),
+  };
+  if (i === -1) pages.push(next);
+  else pages[i] = next;
+  return normalizeWrites({ ...writes, pages });
+}
+
+// `next` with only the repeatable clicks `prev` already had: those are the user's own yes on a run
+// they watched (or in My Library), never something the AI's saveJob adds.
+export function keepPageActions(prev, next) {
+  if (!next?.pages?.length) return next;
+  const had = new Map((prev?.pages || []).map((p) => [p.site, p.actions || []]));
+  const pages = next.pages.map((p) => {
+    const actions = (p.actions || []).filter((a) => (had.get(p.site) || []).some((x) => x.key === a.key));
+    const { actions: _drop, ...rest } = p;
+    return actions.length ? { ...rest, actions } : rest;
+  });
+  return normalizeWrites({ ...next, pages });
+}
+
+// "open example.com", "click and type on example.com, and 2 kinds of click you allowed".
+function describePage(p) {
+  const n = p.actions?.length || 0;
+  const clicks = n ? `, and ${n === 1 ? 'a click' : `${n} kinds of click`} you allowed (${p.actions.map((a) => a.label).join('; ')})` : '';
+  return p.control ? `click and type on ${p.site}${clicks}` : `open pages on ${p.site}`;
+}
+
+// What a run wanted and didn't have, tidied for its record: { site, control?, action? }, one each.
+export function normalizeNeeds(needs) {
+  const out = [];
+  for (const n of Array.isArray(needs) ? needs : []) {
+    const site = pageSite(n?.site);
+    if (!site) continue;
+    const need = {
+      site,
+      ...(n.control ? { control: true } : {}),
+      ...(n.action ? { action: clip(String(n.action), 120) } : {}),
+    };
+    if (out.some((x) => x.site === need.site && x.control === need.control && x.action === need.action)) continue;
+    out.push(need);
+  }
+  return out.slice(0, MAX_NEEDS);
+}
+
+// A need in words: "open example.com", "click and type on example.com", "click “Send” on example.com".
+export function describeNeed(n) {
+  if (n.action) return `${n.action} on ${n.site}`;
+  return n.control ? `click and type on ${n.site}` : `open ${n.site}`;
 }
 
 // What a run changed, tidied for its record: { drive, path, draft } for a file, { tool, summary }
@@ -1065,8 +1210,10 @@ export function makeRun({
   error,
   notification,
   changes = [],
+  needs = [],
 }) {
   const changed = normalizeChanges(changes);
+  const wanted = normalizeNeeds(needs);
   return {
     type: RUN_TYPE,
     id,
@@ -1081,6 +1228,7 @@ export function makeRun({
     ...(error ? { error: clip(String(error), MAX_ERROR) } : {}),
     notification: notification || null,
     ...(changed.length ? { changes: changed } : {}),
+    ...(wanted.length ? { needs: wanted } : {}),
   };
 }
 

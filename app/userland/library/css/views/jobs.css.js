@@ -407,6 +407,57 @@ const cssStr = css`
     margin-top: 2px;
   }
 
+  /* Web pages (ADR-0038): a site's row wraps to list the clicks it may repeat. */
+  .grant-pages li {
+    flex-wrap: wrap;
+  }
+
+  .grant-pages .page-actions {
+    flex-basis: 100%;
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 26px;
+  }
+
+  .grant-pages .page-actions li {
+    border: 0;
+    padding: 0;
+    gap: 4px;
+    color: var(--text-color--default);
+  }
+
+  .grant-pages .page-actions .muted {
+    color: var(--text-color--pretty-light);
+  }
+
+  .needs {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color--light);
+    border-radius: 6px;
+    background: var(--bg-color--secondary);
+    font-size: 13px;
+  }
+
+  .needs ul {
+    list-style: none;
+    margin: 2px 0 6px;
+    padding: 0;
+  }
+
+  .needs li {
+    padding: 2px 0;
+    overflow-wrap: anywhere;
+  }
+
+  .needs .label {
+    margin-top: 0;
+  }
+
+  .needs .hint-row {
+    margin: 0;
+  }
+
   button.icon[disabled] {
     cursor: default;
     opacity: 0.7;

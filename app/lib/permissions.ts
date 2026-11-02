@@ -346,6 +346,17 @@ export const PERMS = {
     dangerous: true,
     promptTrusted: true,
   },
+  // A site an AI Job may open, or click and type on, on its later runs with nobody watching
+  // (ADR-0038). Asked on a run the user watches (Run with me); the yes is kept on the Job, not here.
+  // The param numbers it.
+  jobPage: {
+    persist: false,
+    idempotent: false,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    dangerous: true,
+    promptTrusted: true,
+  },
   // One file or folder of the user's private drive (hyper://private/), for a limited time. The
   // param is the path. Not persisted here: private-drive-guard.ts keeps the grant and ends it.
   privateRead: {
@@ -411,6 +422,7 @@ export const PERM_ICONS = {
   jobsRead: 'fas fa-clock',
   jobsWrite: 'fas fa-clock',
   jobWrites: 'fas fa-clock',
+  jobPage: 'fas fa-mouse-pointer',
   memoryWrite: 'fas fa-brain',
   privateRead: 'fas fa-lock',
   privateWrite: 'fas fa-lock',
@@ -483,7 +495,10 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
     case 'aiPageControl':
       return 'Let the AI assistant click, type and scroll on this site for 30 days';
     case 'aiPageAction':
-      return `Let the AI assistant ${permOpts?.action || 'do this'}`;
+      // A Job on a run the user watches says which Job (ADR-0038).
+      return permOpts?.job
+        ? `Let the AI Job “${permOpts.job}” ${permOpts?.action || 'do this'}`
+        : `Let the AI assistant ${permOpts?.action || 'do this'}`;
     case 'aiSecretUse': {
       const host = permOpts?.host ? ` to ${permOpts.host}` : '';
       return html`<span
@@ -528,6 +543,24 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
         </ul>
         <span class="plan-note">You can take this back in My Library → Jobs.</span></span
       >`;
+    }
+    case 'jobPage': {
+      const title = permOpts?.title || 'Untitled';
+      const site = permOpts?.site || 'this site';
+      return permOpts?.control
+        ? html`<span
+            >Let the AI Job “${title}” click, type and scroll on <strong>${site}</strong>, signed in as you, each
+            time it runs, with nobody watching.
+            <span class="plan-note"
+              >It still can't type passwords or card numbers, and asks before it buys, sends, posts or
+              deletes. You can take this back in My Library → Jobs.</span
+            ></span
+          >`
+        : html`<span
+            >Let the AI Job “${title}” open and read pages on <strong>${site}</strong>, signed in as you,
+            each time it runs, with nobody watching.
+            <span class="plan-note">You can take this back in My Library → Jobs.</span></span
+          >`;
     }
     case 'profile':
       return permOpts?.title

@@ -31,3 +31,24 @@ export function openTabGroup(group) {
   if (name.length > 60) throw new Error('group is a short name, 60 characters at most')
   return name
 }
+
+// The url an AI Job's openPage opens (ADR-0038): a web page or a hyper:// drive, never Nomad's own
+// apps or the user's private drive. A bare address ("example.com/news") is https.
+export function jobPageUrl(url) {
+  if (typeof url !== 'string' || !url.trim()) throw new Error('Pass `url`, the page to open, e.g. https://example.com/')
+  let s = url.trim()
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = 'https://' + s
+  let parsed
+  try {
+    parsed = new URL(s)
+  } catch {
+    throw new Error(`Not a URL: ${url}. Pass a full URL, such as https://example.com/`)
+  }
+  if (!['http:', 'https:', 'hyper:'].includes(parsed.protocol)) {
+    throw new Error('A Job opens http, https and hyper:// pages only')
+  }
+  if (parsed.protocol === 'hyper:' && parsed.hostname.toLowerCase() === 'private') {
+    throw new Error("A Job can't open the user's private drive")
+  }
+  return parsed.href
+}

@@ -3,9 +3,10 @@
 // A turn that has read the user's Notes, Reader, Mods, Jobs, drive files or the page in their tab
 // can carry that data out in a URL, a query string or a body. A page, a feed post or a fetched
 // file can tell the model to do exactly that. So once a turn holds private data, a request to a
-// host the user didn't name (fetchUrl, httpRequest, openTab) needs the user's yes, asked once per
-// host per turn (`aiSendData:<host>`). A Job has nobody to ask: it reaches only the hosts its
-// prompt names and the hosts of the secrets it may use, and is refused anywhere else.
+// host the user didn't name (fetchUrl, httpRequest, openTab, a Job's openPage) needs the user's yes,
+// asked once per host per turn (`aiSendData:<host>`). A Job has nobody to ask: it reaches only the
+// hosts its prompt names, the hosts of the secrets it may use and the sites the user let it open
+// (ADR-0038), and is refused anywhere else.
 //
 // Before a turn reads anything private, requests go out as before: there is nothing to leak.
 //
@@ -28,6 +29,8 @@ export const PRIVATE_READS = new Set([
   'currentTab',
   'readCurrentPage',
   'screenshotCurrentPage',
+  // A Job's page is signed in as the user (ADR-0038).
+  'openPage',
   'snapshotPage',
   'clickElement',
   'clickAt',
