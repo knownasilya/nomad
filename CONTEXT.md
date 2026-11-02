@@ -237,6 +237,14 @@ and notify. A Message from anyone else is a **Message request**: it waits, silen
 accepts, ignores or blocks the sender, and the sender is never told which (ADR-0036, proposed).
 _Avoid_: friend, follower, connection
 
+**Vouch**:
+A `walled.garden/vouch`: one Profile Drive (the host) says it has had another (the guest) over at
+home, with an optional note. Shows nowhere until the guest accepts it; private to the guest unless
+they show it to a site or on their profile. Valid while the host's Profile Drive lists its hash and
+for a year at most. Weighed by whether the viewer knows the host, never as a score. Not proof of
+personhood (ADR-0037, proposed).
+_Avoid_: badge, verification, endorsement, rating, reference
+
 **Shared Space**:
 A Space its owner shared with other people. Its library (Drive Registry, Contacts, Bookmarks, Reader
 feeds, and its own Notes and Names) lives in a Space Library that every Member reads; each Member
