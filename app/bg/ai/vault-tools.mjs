@@ -11,7 +11,7 @@
 
 import { noteTitle, noteSnippet, sortNotes, makeResolver, findLinks, driveRoot, feedUrl } from '../../../shared/vault-apps.mjs'
 import { PRESETS, normalizeSite, describeMod } from '../../../shared/mods.mjs'
-import { describeSchedule, describeWrites, writePermissions } from '../../../shared/jobs.mjs'
+import { describeNeed, describeSchedule, describeWrites, writePermissions } from '../../../shared/jobs.mjs'
 import { noteLink, jobLink, modLink } from '../../../shared/item-links.mjs'
 
 // Capability -> the permission it asks for.
@@ -363,6 +363,8 @@ export function jobForModel(j, deviceName = () => 'another device') {
           answer: clip(last.output, 2000),
           ...(last.error ? { error: last.error } : {}),
           ...(last.changes?.length ? { changed: last.changes } : {}),
+          // What it wanted and wasn't given (ADR-0038): Run with me lets the user allow it.
+          ...(last.needs?.length ? { wanted: last.needs.map(describeNeed) } : {}),
         }
       : null,
   }

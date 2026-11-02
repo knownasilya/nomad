@@ -38,7 +38,7 @@ const GUIDE_IDS = [
 
 const DOMAIN_COPY = {
   capability:
-    'Read and write the current Drive, fetch an http(s) URL, read or screenshot the open page, open a new tab, and in the AI Sidebar click and type on the page. ' +
+    'Read and write the current Drive, fetch an http(s) URL, read or screenshot the open page, open a new tab, and in the AI Sidebar click and type on the page (in a Job, on its own page: openPage). ' +
     "For the user's own AI: new drives, their Notes, Reader, Mods and Jobs, and HTTP requests with their saved secrets (API keys, by name).",
   guide: 'Sections of the Nomad API reference. Open one with entity guide:<id>.',
   page: 'Tools the current page registered. Open one with entity page:<name>.',
@@ -572,7 +572,8 @@ export const CAPABILITIES = [
       'Create a Job (no `id`; `prompt` or `source` required) or change one (`id`; fields you leave out stay as they are). ' +
       "Each run, the AI gets `prompt` on its own, with no chat history and nobody watching, on this computer: write it as " +
       'a complete instruction. A run can read the Notes, Reader, drives and the web, send requests with the ' +
-      'secrets the user lets it use (My Library → Secrets), and changes nothing in Nomad unless `writes` lets it. Its answer is ' +
+      'secrets the user lets it use (My Library → Secrets), open web pages signed in as the user on the sites the user ' +
+      'allows (`writes.pages`), and changes nothing in Nomad unless `writes` lets it. Its answer is ' +
       'saved for the user, and it can notify their phone. A Job can also come from a drive (`source`): its job.js runs ' +
       'first (an execute-style module with the same capabilities, getting { job, prompt, lastRun }), then the AI gets ' +
       'job.md with what the module returned; with no job.md, the module\'s result is the answer. `prompt` then adds to ' +
@@ -616,11 +617,14 @@ export const CAPABILITIES = [
           type: ['object', 'null'],
           description:
             'Optional. What the Job may change; without it a Job only reads. { "drives": [{ "url": "hyper://<key>/" or a ' +
-            'name, "draft": false }], "notes": true, "reader": true, "newDrives": true }. A drive lets it write files there with writeDriveFile ' +
+            'name, "draft": false }], "notes": true, "reader": true, "newDrives": true, ' +
+            '"pages": [{ "site": "example.com", "control": true }] }. A drive lets it write files there with writeDriveFile ' +
             '(to update a site, say); "draft": true stages its writes in the drive\'s Draft for the user to publish. "notes" ' +
             'lets it write Notes; "reader" lets it follow, unfollow and mark posts read; "newDrives" lets it make drives ' +
-            'with createDrive and write files into the ones it makes. Give only what the task needs. ' +
-            'Adding any of these asks the user. The whole object replaces the old one; null takes them all away.',
+            'with createDrive and write files into the ones it makes. "pages" are sites it may open with ' +
+            'openPage, signed in as the user, and with "control" click and type on; the user can also give them on a run ' +
+            'they watch (Run with me in My Library → Jobs), which asks for each site the Job reaches. Give only what the ' +
+            'task needs. Adding any of these asks the user. The whole object replaces the old one; null takes them all away.',
           properties: {
             drives: {
               type: 'array',
@@ -634,6 +638,19 @@ export const CAPABILITIES = [
             notes: { type: 'boolean' },
             reader: { type: 'boolean' },
             newDrives: { type: 'boolean' },
+            pages: {
+              type: 'array',
+              items: {
+                anyOf: [
+                  { type: 'string' },
+                  {
+                    type: 'object',
+                    properties: { site: { type: 'string' }, control: { type: 'boolean' } },
+                    required: ['site'],
+                  },
+                ],
+              },
+            },
           },
         },
       },
@@ -696,6 +713,24 @@ export const CAPABILITIES = [
     },
     gates: { personal: true, memory: true },
   },
+  // A Job's page (ADR-0038): a page of the Job's own, signed in as the user, that it reads and,
+  // where the user let it, clicks and types on with the page-control capabilities above.
+  {
+    name: 'openPage',
+    description:
+      "Open a web page in this Job's own page, signed in as the user, and read it once it has loaded: " +
+      'returns { url, title, text }. Use it for pages that need the user\'s login or JavaScript; fetchUrl is ' +
+      'enough for a plain public page. One page at a time: opening another replaces it. Then readCurrentPage ' +
+      'reads it again, and snapshotPage, clickElement, typeText, pressKey, selectOption and scrollPage use it. ' +
+      'Each site needs the user\'s OK, given on a run they watch; without it the call fails and the run notes ' +
+      'what it wanted.',
+    inputSchema: {
+      type: 'object',
+      properties: { url: { type: 'string', description: 'The page, e.g. https://example.com/account' } },
+      required: ['url'],
+    },
+    gates: { job: true },
+  },
   {
     name: 'notify',
     description:
@@ -717,7 +752,23 @@ export const CAPABILITIES = [
 // anything, and it never asks a permission (the Notes and Reader reads are granted with the Job).
 // It may send requests (httpRequest) with only the secrets the user let that Job use (ADR-0033).
 // Capabilities with no `personal` gate are filtered by the usual gates (no writes, no renderer).
+// What a Job's turn may call on its own page (ADR-0038). openPage and readCurrentPage need a site's
+// grant; the rest need it with `control` (shared/jobs.mjs writes.pages). They are offered on every
+// Job's turn, so a run with nobody watching can say what it wanted, and a run the user watches can
+// ask for it. Not planPageActions, clickAt or screenshots: a grant is per site, not per plan.
+export const JOB_PAGE_CAPS = [
+  'openPage',
+  'readCurrentPage',
+  'snapshotPage',
+  'clickElement',
+  'typeText',
+  'pressKey',
+  'selectOption',
+  'scrollPage',
+]
+
 export const JOB_CAPS = new Set([
+  ...JOB_PAGE_CAPS,
   'listNotes',
   'readNote',
   'listReaderPosts',
@@ -771,10 +822,12 @@ const TAB_DRIVE_ARG = {
 // `job`: the turn is one of the user's AI Jobs (ADR-0030). Of the personal capabilities it keeps only
 // JOB_CAPS, and it adds notify. `job.extra` names the write capabilities the Job was granted
 // (shared/jobs.mjs writeCaps); writeDriveFile comes with allowWrite, which a drive grant turns on.
+// `job.pages` says the run has its own page (ADR-0038): openPage, readCurrentPage and the page
+// actions, without a tab or a renderer of the turn's own. Without it a Job gets none of them.
 // `secrets`: the turn may use the user's secrets (stages.mjs; ADR-0033). It adds listSecrets and
 // httpRequest.
 // `memory`: AI memory is on (the `ai_memory` setting, ADR-0032). It adds remember and forget.
-/** @param {{ allowWrite?: boolean, allowVision?: boolean, remote?: boolean, personal?: boolean, tab?: boolean, job?: false | { extra?: string[] }, secrets?: boolean, memory?: boolean }} [opts] */
+/** @param {{ allowWrite?: boolean, allowVision?: boolean, remote?: boolean, personal?: boolean, tab?: boolean, job?: false | { extra?: string[], pages?: boolean }, secrets?: boolean, memory?: boolean }} [opts] */
 export function visibleCapabilities({
   allowWrite = true,
   allowVision = false,
@@ -789,15 +842,18 @@ export function visibleCapabilities({
   return CAPABILITIES.filter((cap) => {
     if (cap.gates?.write && !allowWrite) return false
     if (cap.gates?.vision && !allowVision) return false
-    if (cap.gates?.renderer && remote) return false
+    // A Job's own page runs here, whatever the turn says about renderer and tab (ADR-0038).
+    const jobPage = job && job.pages && JOB_PAGE_CAPS.includes(cap.name)
+    if (cap.gates?.renderer && remote && !jobPage) return false
     if (cap.gates?.personal && !personal) return false
-    if (cap.gates?.tab && !tab) return false
+    if (cap.gates?.tab && !tab && !jobPage) return false
     if (cap.gates?.job && !job) return false
     if (cap.gates?.secrets && !secrets) return false
     if (cap.gates?.memory && !memory) return false
     if (job && (cap.gates?.personal || cap.gates?.job) && !JOB_CAPS.has(cap.name) && !jobExtra.includes(cap.name)) {
       return false
     }
+    if (job && JOB_PAGE_CAPS.includes(cap.name) && !jobPage) return false
     return true
   }).map(({ namedDescription, tabDescription, ...cap }) => {
     if (!personal || !namedDescription) return cap

@@ -17,7 +17,22 @@ const AI_ASKS = {
   aiCreateDrive: {
     lead: 'The AI assistant wants to:',
   },
+  // A Job on a run the user watches (ADR-0038): the page may be the one asking it to go further.
+  jobPage: {
+    lead: 'Your AI Job wants to:',
+    caution: "Only click 'Allow' if this Job should use this site by itself.",
+  },
+  // A risky click on such a run (aiPageAction with `job`).
+  jobAction: {
+    lead: 'Your AI Job wants to:',
+    caution: "Only click 'Allow' if this Job should do this.",
+  },
 };
+
+// A Job's own click asks under aiPageAction with `job` set: it reads as the Job's, like jobPage.
+function aiAsk(permId, opts) {
+  return AI_ASKS[permId] || (permId === 'aiPageAction' && opts?.job ? AI_ASKS.jobAction : null);
+}
 
 class PermPrompt extends LitElement {
   constructor() {
@@ -98,7 +113,7 @@ class PermPrompt extends LitElement {
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper" @contextmenu=${this.onContextMenu}>
-        <p>${AI_ASKS[this.permId]?.lead || 'This site wants to:'}</p>
+        <p>${aiAsk(this.permId, this.permOpts)?.lead || 'This site wants to:'}</p>
         <p class="perm">
           <i class="${PERM_ICONS[this.permId]}"></i>
           ${renderPermDesc({
@@ -144,7 +159,7 @@ class PermPrompt extends LitElement {
           ? html` <div class="perm-experimental">
               <i class="fa fa-info-circle"></i>
               <span
-                >${AI_ASKS[this.permId]?.caution || "Only click 'Allow' if you trust this page."}</span
+                >${aiAsk(this.permId, this.permOpts)?.caution || "Only click 'Allow' if you trust this page."}</span
               >
             </div>`
           : ''}

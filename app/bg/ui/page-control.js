@@ -79,7 +79,17 @@ export function setup() {
 // One turn's page control. `requestPermission` is the turn's permission function; `stopTurn`
 // ends the turn (the bar's Stop and Esc). `chat` names the sidebar chat the turn is in, so a
 // confirm can offer to allow similar clicks for the rest of it; without one it asks every time.
-export function createSession({ requestPermission, stopTurn, chat = null }) {
+// An AI Job's page (ai/job-page.js, ADR-0038) brings its own rules: `allowSite(url)` replaces the
+// 30-day site grant, `confirmAction({ wc, url, verb, control, what })` replaces the confirm (each
+// throws when the answer is no), and `focus: false` keeps a hidden page from taking the focus.
+export function createSession({
+  requestPermission,
+  stopTurn,
+  chat = null,
+  allowSite = null,
+  confirmAction = null,
+  focus = true,
+}) {
   let pinned = null;
   let stopped = false;
   let tookOver = false;
@@ -120,6 +130,7 @@ export function createSession({ requestPermission, stopTurn, chat = null }) {
 
   async function allowed(wc) {
     const url = wc.getURL();
+    if (allowSite) return allowSite(url);
     const site = siteOf(url);
     if (!answers.has(site)) answers.set(site, ask(wc, url));
     if (!(await answers.get(site))) {
@@ -151,6 +162,7 @@ export function createSession({ requestPermission, stopTurn, chat = null }) {
       planned.set(similarKey(url, 'plan', control), left - 1);
       return;
     }
+    if (confirmAction) return confirmAction({ wc, url, verb, control, what });
     const key = chat ? similarKey(url, verb, control) : null;
     if (key && similarOk.get(chat)?.has(key)) return;
     const ok = await requestPermission(`${PAGE_ACTION_PERM}:${++confirms}`, wc, {
@@ -226,7 +238,7 @@ export function createSession({ requestPermission, stopTurn, chat = null }) {
     await call(wc, `moveCursor(${num(x)}, ${num(y)})`);
     const z = zoom(wc);
     const at = { x: Math.round(x * z), y: Math.round(y * z) };
-    wc.focus();
+    if (focus) wc.focus();
     await call(wc, 'acting(1500)');
     wc.sendInputEvent({ type: 'mouseMove', ...at });
     wc.sendInputEvent({ type: 'mouseDown', ...at, button: 'left', clickCount: 1 });
@@ -237,7 +249,7 @@ export function createSession({ requestPermission, stopTurn, chat = null }) {
   }
 
   async function key(wc, k) {
-    wc.focus();
+    if (focus) wc.focus();
     await call(wc, 'acting(1500)');
     wc.sendInputEvent({ type: 'keyDown', keyCode: k.keyCode, modifiers: k.modifiers });
     if (k.char) wc.sendInputEvent({ type: 'char', keyCode: k.char, modifiers: k.modifiers });
@@ -537,7 +549,7 @@ function call(wc, expr, timeout = CALL_TIMEOUT) {
 }
 
 // Wait for a navigation the action started, then for the page's DOM to go still.
-async function settle(wc) {
+export async function settle(wc) {
   await delay(80);
   if (isGone(wc)) return;
   if (wc.isLoading()) {

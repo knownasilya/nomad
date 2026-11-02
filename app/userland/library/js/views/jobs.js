@@ -17,6 +17,10 @@ import jobsCSS from '../../css/views/jobs.css.js';
 // the user's own runs its latest files; anyone else's is copied, and a newer version shows here to
 // look at and take, or leave.
 //
+// A Job can also use web pages (ADR-0038): open a site in a page of its own, signed in as the user,
+// and click and type there. The user gives it each site on a run they watch (Run with me), or here
+// in the editor; a run with nobody watching shows what it wanted and wasn't given.
+//
 // ?id=<id> opens one. The rules (schedules, notify, sizes) live in shared/jobs.mjs; bg checks
 // them on save.
 
@@ -49,6 +53,9 @@ const blank = () => ({
   notes: false,
   reader: false,
   newDrives: false, // make new drives (createDrive), and write the ones it makes
+  // Sites it may open, and click and type on (`control`), with the clicks it may repeat (`actions`).
+  pages: [],
+  addSite: '', // the site being typed
   kind: 'manual', // 'manual' | 'interval' | 'daily' | 'monthly' | 'once' | 'text'
   every: 1,
   unit: 'hours',
@@ -147,7 +154,8 @@ export class JobsView extends LitElement {
         8:00, sum up my unread Reader posts”. It can read your Notes, Reader, drives and the web, and
         it changes only what you let it: your Notes, your Reader, or drives you pick, live or in a
         Draft for you to publish. With a secret you let it use (in Secrets), it can call an API or a
-        webhook without seeing the key. Its answers and what it changed are kept here, and it can
+        webhook without seeing the key. It can open web pages signed in as you, and click and type on
+        them, on the sites you let it: run it with you once and it asks. Its answers and what it changed are kept here, and it can
         notify your phone. Ask the AI in the
         sidebar to make one, or make it here. A Job can also come from a drive with a
         <code>job.md</code> prompt and a <code>job.js</code> module. A Job runs on the computer that
@@ -191,6 +199,9 @@ export class JobsView extends LitElement {
             <button class="icon" title="Run now" aria-label="Run ${j.title} now" ?disabled=${j.running} @click=${() => this.onRun(j)}>
               <span class="fas fa-fw ${j.running ? 'fa-circle-notch fa-spin' : 'fa-play'}"></span>
             </button>
+            <button class="icon" title="Run with me: watch it in a tab, and allow the sites it uses" aria-label="Run ${j.title} with me" ?disabled=${j.running} @click=${() => this.onRun(j, true)}>
+              <span class="fas fa-fw fa-eye"></span>
+            </button>
             <button class="icon" title="Edit" aria-label="Edit ${j.title}" @click=${() => (e ? (this.editing = null) : this.edit(j))}>
               <span class="fas fa-fw ${e ? 'fa-chevron-up' : 'fa-pen'}"></span>
             </button>
@@ -215,7 +226,9 @@ export class JobsView extends LitElement {
     if (!j.here) parts.push(`runs on ${j.deviceName}`);
     if (j.notify !== 'never') parts.push(j.notify === 'auto' ? 'notifies when it finds something' : 'notifies your phone');
     if (j.source?.changed) parts.push('a newer version is in its drive');
-    if (j.writes) parts.push('can change things');
+    const w = j.writes;
+    if (w?.notes || w?.reader || w?.drives?.length) parts.push('can change things');
+    if (w?.pages?.length) parts.push(`uses ${w.pages.length === 1 ? w.pages[0].site : `${w.pages.length} sites`}`);
     return parts.join(' · ');
   }
 
@@ -307,6 +320,7 @@ export class JobsView extends LitElement {
                         ? html`<div class="hint-row">No answer.</div>`
                         : ''}
                   ${this.renderChanges(j, r)}
+                  ${r.id === runs[0].id ? this.renderNeeds(j, r) : ''}
                 </details>
               `
             )}
@@ -318,10 +332,31 @@ export class JobsView extends LitElement {
     `;
   }
 
-  // What a Job may change on its own.
+  // What a Job may change on its own, and the sites it may use.
   renderGrants(j) {
     const w = j.writes;
     if (!w) return '';
+    const changes = w.notes || w.reader || w.newDrives || w.drives?.length;
+    return html`
+      ${changes ? this.renderChangeGrants(w) : ''}
+      ${w.pages?.length
+        ? html`<div class="label">Web pages</div>
+            <ul class="grants">
+              ${w.pages.map(
+                (p) => html`<li>
+                  <span class="fas fa-fw ${p.control ? 'fa-mouse-pointer' : 'fa-globe'}"></span>
+                  ${p.control ? 'Opens, clicks and types on' : 'Opens and reads'} <strong>${p.site}</strong>
+                  ${p.actions?.length
+                    ? html`<span class="muted">· may also ${p.actions.map((a) => a.label).join('; ')}</span>`
+                    : ''}
+                </li>`
+              )}
+            </ul>`
+        : ''}
+    `;
+  }
+
+  renderChangeGrants(w) {
     return html`
       <div class="label">Can change</div>
       <ul class="grants">
@@ -337,6 +372,29 @@ export class JobsView extends LitElement {
         )}
       </ul>
     `;
+  }
+
+  // What the newest run wanted and wasn't given: sites to open or use, clicks to make. Run with me
+  // asks for them.
+  renderNeeds(j, r) {
+    const needs = r.needs || [];
+    if (!needs.length) return '';
+    return html`<div class="needs">
+      <div class="label">It wanted to</div>
+      <ul>
+        ${needs.map(
+          (n) => html`<li>
+            <span class="fas fa-fw ${n.control || n.action ? 'fa-mouse-pointer' : 'fa-globe'}"></span>
+            ${n.action ? html`${n.action} on <strong>${n.site}</strong>` : html`${n.control ? 'click and type on' : 'open'} <strong>${n.site}</strong>`}
+          </li>`
+        )}
+      </ul>
+      <div class="hint-row">
+        It runs with nobody watching, so it can only use what you allowed.
+        <button class="link" ?disabled=${j.running} @click=${() => this.onRun(j, true)}>Run it with me</button>
+        to watch it and allow these.
+      </div>
+    </div>`;
   }
 
   // What a run changed: drives it made, files it wrote, and Notes and Reader changes.
@@ -531,6 +589,7 @@ export class JobsView extends LitElement {
         </div>
 
         ${this.renderWrites(e, set)}
+        ${this.renderPages(e, set)}
 
         <div class="block">
           <div class="label">Notify my phone</div>
@@ -618,6 +677,70 @@ export class JobsView extends LitElement {
     `;
   }
 
+  // The editor's "Web pages" block (ADR-0038): sites it may open signed in as the user, and where it
+  // may click and type too. Run with me adds them as the Job asks.
+  renderPages(e, set) {
+    const add = () => {
+      const site = e.addSite.trim();
+      if (!site) return;
+      if (e.pages.some((p) => p.site === site)) return set({ addSite: '' });
+      set({ pages: [...e.pages, { site, control: false, actions: [] }], addSite: '' });
+    };
+    const put = (i, patch) => set({ pages: e.pages.map((p, k) => (k === i ? { ...p, ...patch } : p)) });
+    return html`
+      <div class="block">
+        <div class="label">Web pages <span class="hint">Sites it may open in a page of its own, signed in as you. Easiest: save it, then run it with you (<span class="fas fa-eye"></span>) and allow each site as it asks.</span></div>
+        ${e.pages.length
+          ? html`<ul class="grant-drives grant-pages">
+              ${e.pages.map(
+                (p, i) => html`<li>
+                  <span class="fas fa-fw ${p.control ? 'fa-mouse-pointer' : 'fa-globe'}"></span>
+                  <span class="drive-name" title=${p.site}>${p.site}</span>
+                  <label class="check">
+                    <input type="checkbox" .checked=${p.control} @change=${(ev) => put(i, { control: ev.target.checked, ...(ev.target.checked ? {} : { actions: [] }) })} />
+                    Click and type
+                  </label>
+                  <button type="button" class="icon" title="Remove" aria-label="Stop letting it open ${p.site}" @click=${() => set({ pages: e.pages.filter((_, k) => k !== i) })}>
+                    <span class="fas fa-fw fa-times"></span>
+                  </button>
+                  ${p.actions?.length
+                    ? html`<ul class="page-actions">
+                        ${p.actions.map(
+                          (a, k) => html`<li>
+                            <span class="muted">May also</span> ${a.label}
+                            <button type="button" class="icon" title="Remove" aria-label="Stop letting it ${a.label}" @click=${() => put(i, { actions: p.actions.filter((_, x) => x !== k) })}>
+                              <span class="fas fa-fw fa-times"></span>
+                            </button>
+                          </li>`
+                        )}
+                      </ul>`
+                    : ''}
+                </li>`
+              )}
+            </ul>`
+          : ''}
+        <div class="when sub">
+          <input
+            class="add-drive"
+            placeholder="A site it may open: example.com"
+            .value=${e.addSite}
+            @input=${(ev) => set({ addSite: ev.target.value })}
+            @keydown=${(ev) => {
+              if (ev.key === 'Enter') {
+                ev.preventDefault();
+                add();
+              }
+            }}
+          />
+          <button type="button" @click=${add} ?disabled=${!e.addSite.trim()}>Add site</button>
+        </div>
+        ${e.pages.some((p) => p.control)
+          ? html`<div class="hint-row">It never types passwords or card numbers. A click that buys, sends, posts or deletes waits for you, unless you allowed one like it on a run you watched.</div>`
+          : ''}
+      </div>
+    `;
+  }
+
   renderTimes(e, set) {
     const times = e.times.length ? e.times : ['08:00'];
     const put = (i, v) => set({ times: times.map((t, k) => (k === i ? v : t)) });
@@ -651,6 +774,7 @@ export class JobsView extends LitElement {
       notes: !!j.writes?.notes,
       reader: !!j.writes?.reader,
       newDrives: !!j.writes?.newDrives,
+      pages: (j.writes?.pages || []).map((p) => ({ site: p.site, control: !!p.control, actions: p.actions || [] })),
       notify: j.notify,
       enabled: j.enabled,
     };
@@ -762,12 +886,13 @@ export class JobsView extends LitElement {
         prompt: e.prompt,
         source,
         writes:
-          e.notes || e.reader || e.newDrives || e.drives.length
+          e.notes || e.reader || e.newDrives || e.drives.length || e.pages.length
             ? {
                 notes: e.notes,
                 reader: e.reader,
                 newDrives: e.newDrives,
                 drives: e.drives.map((d) => ({ url: d.url, draft: d.draft })),
+                pages: e.pages,
               }
             : null,
         schedule: this.schedule(e),
@@ -782,11 +907,12 @@ export class JobsView extends LitElement {
     }
   }
 
-  async onRun(j) {
+  // `watch`: Run with me. Its page opens in a tab of this window, and each site it reaches asks.
+  async onRun(j, watch = false) {
     try {
-      await nomad.vault.runJob(j.id);
+      await nomad.vault.runJob(j.id, watch ? { watch: true } : undefined);
       if (this.openId !== j.id) await this.onOpen(j);
-      toast.create(`Running “${j.title}”…`);
+      toast.create(watch ? `Running “${j.title}” with you: its page opens in a tab` : `Running “${j.title}”…`);
     } catch (err) {
       toast.create(cleanError(err), 'error');
     }

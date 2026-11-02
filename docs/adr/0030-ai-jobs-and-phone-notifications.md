@@ -94,7 +94,8 @@ rules are in `shared/jobs.mjs`; the desktop side is `app/bg/ai/jobs.js` (store, 
    and lists what it may change; a no saves nothing. The same grants bound a `job.js` module.
    Each run records what it changed (`changes`: the files it wrote, and each Note or Reader change),
    kept even when the run fails partway, and My Library and the phone show them under the run.
-   Clicking and typing on web pages (ADR-0028) stays out: it needs a tab and the user watching.
+   Clicking and typing on web pages (ADR-0028) stayed out at first, since it needs a tab and the
+   user watching. ADR-0038 adds it: the user watches one run (Run with me) and allows each site.
 
 ## Consequences
 

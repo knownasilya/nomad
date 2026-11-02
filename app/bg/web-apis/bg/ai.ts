@@ -86,6 +86,7 @@ import { CREATE_DRIVE_PERM, createdDrive, newDriveOptions } from '../../ai/creat
 import { DRIVE_TEMPLATES } from '../../../lib/drive-templates';
 import { isPageAction } from '../../ai/page-control.mjs';
 import * as pageControl from '../../ui/page-control';
+import { createJobPage } from '../../ai/job-page';
 import {
   getActiveRuntime,
   listRuntimeCatalog,
@@ -498,7 +499,24 @@ export { routeChat };
 // hash of the copied source's drive as it is now (null when unknown), and what the run changed.
 // `changes` is the list each change the run makes goes into, so a run that fails partway still
 // records what it changed.
-export async function runJobTurn(job, { signal, notify, trigger = 'manual', lastRun = null, changes: into = [] }) {
+//
+// The run has a page of its own (job-page.js, ADR-0038): hidden, or with `watch` (the user's
+// window, for Run with me) a tab the user watches, where each site the Job reaches asks them and
+// `onGrant` saves their yes on the Job. `needs` gets what a run with nobody watching wanted and
+// wasn't given.
+export async function runJobTurn(
+  job,
+  {
+    signal,
+    notify,
+    trigger = 'manual',
+    lastRun = null,
+    changes: into = [],
+    needs = [],
+    watch = null,
+    onGrant = async (_writes) => {},
+  }
+) {
   const newer =
     job.source && !job.source.live
       ? readJobSource(job.source.url).then(
@@ -518,7 +536,26 @@ export async function runJobTurn(job, { signal, notify, trigger = 'manual', last
   // prompt names and the hosts of the secrets it may use (ADR-0037). One guard for job.js and the
   // turn: what the module read comes to the turn with its result.
   const egress = await jobEgress(job, work);
+  // The run's own page. Stop on a watched page's bar ends the run.
+  const stop = new AbortController();
+  signal?.addEventListener?.('abort', () => stop.abort());
+  const jobPage = createJobPage({
+    job,
+    watchWin: watch && !watch.isDestroyed?.() ? watch : null,
+    space,
+    egress,
+    stopTurn: () => stop.abort(),
+    onGrant,
+    needs,
+  });
+  try {
+    return await runJobWork(job, { work, trigger, lastRun, notify, signal: stop.signal, space, grants, emitter, changes, egress, jobPage, newer });
+  } finally {
+    jobPage.end();
+  }
+}
 
+async function runJobWork(job, { work, trigger, lastRun, notify, signal, space, grants, emitter, changes, egress, jobPage, newer }) {
   let result = null;
   if (work.module) {
     result = await runJobModule(work.module, {
@@ -536,6 +573,7 @@ export async function runJobTurn(job, { signal, notify, trigger = 'manual', last
       grants,
       emitter,
       egress,
+      jobPage,
     });
     if (!work.prompt) return { output: moduleOutput(result), sourceHash: await newer, changes };
   }
@@ -561,6 +599,7 @@ export async function runJobTurn(job, { signal, notify, trigger = 'manual', last
     requestPermission: grants.permit,
     context: jobContext(job),
     job: { id: job.id, notify, extra: grants.extra },
+    jobPage,
     egress,
     signal,
   });
@@ -574,9 +613,13 @@ async function jobEgress(job, work) {
   const secretHosts = (await secretStore.list().catch(() => []))
     .filter((s) => usable(s))
     .flatMap((s) => s.hosts || []);
+  // The sites the user let the Job open are theirs to choose too (ADR-0038).
+  const pageHosts = (job.writes?.pages || []).map((p) =>
+    p.site.startsWith('hyper://') ? p.site.slice(8) : p.site.replace(/:\d+$/, '')
+  );
   return createEgressGuard({
     interactive: false,
-    trustedHosts: [...hostsIn(work.prompt || job.prompt || ''), ...secretHosts],
+    trustedHosts: [...hostsIn(work.prompt || job.prompt || ''), ...secretHosts, ...pageHosts],
   });
 }
 
@@ -618,7 +661,7 @@ function jobEmitter(changes = []) {
 // A Job's job.js, run like the AI's execute code with the job turn's capabilities: no tab, no page
 // tools, notify, and the writes the Job was given. Resolves what main() returned (text, or JSON for
 // anything else).
-async function runJobModule(code, { jobId, params, space, notify, signal, grants, emitter, egress }) {
+async function runJobModule(code, { jobId, params, space, notify, signal, grants, emitter, egress, jobPage }) {
   const sender = makeRemoteSender('nomad://jobs/');
   const catalog = buildCatalog({
     allowWrite: grants.allowWrite,
@@ -626,7 +669,7 @@ async function runJobModule(code, { jobId, params, space, notify, signal, grants
     pageTools: null,
     personal: true,
     tab: false,
-    job: { extra: grants.extra },
+    job: { extra: grants.extra, pages: !!jobPage },
     secrets: true,
     names: names.list(space).filter((r) => !r.hidden),
   });
@@ -641,6 +684,7 @@ async function runJobModule(code, { jobId, params, space, notify, signal, grants
     signal,
     catalog,
     job: { id: jobId, notify },
+    jobPage,
     egress,
   };
   return executeInUtilityProcess({
@@ -782,7 +826,7 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     personal,
     tab: !!currentTab,
     // A Job's turn: its write grants add those capabilities (ADR-0030).
-    job: job ? { extra: job.extra || [] } : false,
+    job: job ? { extra: job.extra || [], pages: !!opts.jobPage } : false,
     // The user's saved secrets, by name (ADR-0033): the sidebar, the phone and Jobs, never a page.
     secrets: rules.secrets,
     // remember and forget, while AI memory is on (ADR-0032).
@@ -822,7 +866,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
   const tools = offerTools && !cli ? MODEL_TOOLS : null;
   // The AI Sidebar can click and type on the page in the user's tab (ADR-0028). The catalog says
   // whether this turn can: not a page's own turn, the phone, or another program on this machine.
-  const canControlPage = catalog.capabilities.some((c) => isPageAction(c.name));
+  // A Job uses its own page instead (ADR-0038): no session on the user's tab.
+  const canControlPage = !job && catalog.capabilities.some((c) => isPageAction(c.name));
 
   // opts.context (from the AI Sidebar or the phone) says what the user is looking at. The
   // standing prompt no longer inlines the whole API reference — search loads a guide when the
@@ -881,6 +926,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     catalog,
     pageSession,
     job,
+    // A Job's own page (job-page.js, ADR-0038).
+    jobPage: job ? opts.jobPage || null : null,
     // Where a request may go once the turn holds private data (egress.mjs).
     egress,
     // Messages the user sends while this turn runs (steering.mjs). A CLI's loopback MCP calls
@@ -1090,6 +1137,7 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
     pageSession = null,
     job = null,
     egress = null,
+    jobPage = null,
   } = opts;
   // WebMCP page tool — round-trip to the renderer that registered it. Access was already
   // consented per-origin in resolvePageTools(); running it can only do what page JS can do.
@@ -1147,6 +1195,15 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
   if (isVaultTool(name)) {
     if (!catalog?.personal) throw new Error(`${name} is not available here`);
     return runVaultTool(name, args || {}, { ctx, space, permit });
+  }
+
+  // A Job's own page (ADR-0038): it opens, reads, clicks and types there, on the sites the user let
+  // it use. Never the user's tab.
+  if (job && (name === 'openPage' || name === 'readCurrentPage' || isPageAction(name))) {
+    if (!jobPage || !hasCapability(catalog, name)) throw new Error(`${name} is not available here`);
+    if (name === 'openPage') return jobPage.open(args?.url);
+    if (name === 'readCurrentPage') return jobPage.read();
+    return jobPage.run(name, args || {}, { emitter, id: opts.toolCallId });
   }
 
   // Clicking and typing on the page in the user's tab (ADR-0028): the AI Sidebar's turn only. The

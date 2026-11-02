@@ -91,11 +91,11 @@ export default {
   listJobs: 'promise', // -> { jobs: [{ ...job, lastRun, nextRunAt, running, here, deviceName }] }
   listJobRuns: 'promise', // (id) -> runs, newest first, with deviceName and took
   clearJobRuns: 'promise', // (id) -> how many runs were deleted, on every Device
-  saveJob: 'promise', // ({ id?, title?, prompt?, source?, schedule?, notify?, enabled?, runHere? }) -> record
+  saveJob: 'promise', // ({ id?, title?, prompt?, source?, writes?, schedule?, notify?, enabled?, runHere? }) -> record
   previewSchedule: 'promise', // (schedule) -> { schedule, when, next: [ISO, …] }: checked, with its next times
   checkJobSource: 'promise', // (id) -> { url, live, module, prompt, title, hash }: the source's drive now
   deleteJob: 'promise',
-  runJob: 'promise', // (id) runs it now, on this Device
+  runJob: 'promise', // (id, { watch? }) runs it now, on this Device; watch: in a tab the user watches (Run with me)
   watchJobs: 'readable', // 'changed' when a Job or a run changes, or a run starts
 
   // Open tabs on the user's other Devices (bg/ui/open-tabs.js)

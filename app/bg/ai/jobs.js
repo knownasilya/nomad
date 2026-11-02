@@ -8,6 +8,8 @@
 //   phone over the AI Bridge).
 // - One run at a time. A run is a turn on the `job` stage (ai.ts runJobTurn): the user's own AI,
 //   reading only, with nobody to ask. It times out after RUN_TIMEOUT_MS.
+// - A run can open web pages on the sites the Job was given (ADR-0038). Run with me (`watch`) runs
+//   it in a tab the user watches, asks them for the sites it needs, and saves each yes on the Job.
 // - A Job from someone else's drive runs its copy. When a run sees a newer version in the drive,
 //   the Job notes it (`source.changed`) and My Library offers it; nothing changes until the user
 //   takes it.
@@ -48,7 +50,7 @@ const running = new Map(); // jobId -> AbortController
 const attempted = new Map(); // jobId -> ISO time
 let draining = false;
 
-/** @param {{ runTurn: (job: any, opts: { signal: AbortSignal, notify: (n: any) => void, trigger: string, lastRun: any, changes: any[] }) => Promise<{ output: string, sourceHash?: string | null }> }} opts */
+/** @param {{ runTurn: (job: any, opts: { signal: AbortSignal, notify: (n: any) => void, trigger: string, lastRun: any, changes: any[], needs: any[], watch: any, onGrant: (writes: any) => Promise<any> }) => Promise<{ output: string, sourceHash?: string | null }> }} opts */
 export function setup(opts) {
   runTurn = opts.runTurn;
   refresh();
@@ -221,9 +223,30 @@ export function clearRuns(id) {
 // =
 
 // Run a Job now, on this Device, after any run already going. Resolves once it is queued.
-export function runNow(id) {
+// `watch` is the user's window for Run with me (ADR-0038): the run's page opens in a tab there, and
+// each site it reaches asks the user, whose yes is saved on the Job.
+export function runNow(id, { watch = null } = {}) {
   if (!jobs.has(id)) throw new Error('No Job with that id');
-  enqueue(id, 'manual');
+  if (watch && running.has(id)) throw new Error('This Job is running now. Try again when it’s done.');
+  enqueue(id, 'manual', watch);
+}
+
+// The user let a Job use another site, or another click, on a run they watched (ADR-0038): save
+// its writes with that grant, on the latest record.
+export function grantPages(id, nextWrites) {
+  const run = writes.then(async () => {
+    const prev = jobs.get(id);
+    if (!prev) return null;
+    // Only the page grants change: anything else the record says now stays.
+    const merged = jl.normalizeWrites({ ...prev.writes, pages: nextWrites?.pages || [] });
+    const rec = jl.makeJob({ writes: merged }, prev);
+    await vault.putAppRecord(jl.jobPath(id), rec);
+    jobs.set(id, rec);
+    events.emit('changed');
+    return rec;
+  });
+  writes = run.catch(() => {});
+  return run;
 }
 
 async function tick() {
@@ -243,9 +266,15 @@ async function tick() {
   }
 }
 
-function enqueue(id, trigger) {
-  if (running.has(id) || queue.some((q) => q.id === id)) return;
-  queue.push({ id, trigger });
+function enqueue(id, trigger, watch = null) {
+  if (running.has(id)) return;
+  const queued = queue.find((q) => q.id === id);
+  if (queued) {
+    // Run with me on a Job already waiting: that run is the one the user watches.
+    if (watch) queued.watch = watch;
+    return;
+  }
+  queue.push({ id, trigger, watch });
   drain();
 }
 
@@ -254,16 +283,16 @@ async function drain() {
   draining = true;
   try {
     while (queue.length) {
-      const { id, trigger } = queue.shift();
+      const { id, trigger, watch } = queue.shift();
       const job = jobs.get(id);
-      if (job) await runOne(job, trigger);
+      if (job) await runOne(job, trigger, watch);
     }
   } finally {
     draining = false;
   }
 }
 
-async function runOne(job, trigger) {
+async function runOne(job, trigger, watch = null) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), RUN_TIMEOUT_MS);
   running.set(job.id, controller);
@@ -276,7 +305,8 @@ async function runOne(job, trigger) {
   let output = '';
   let error = null;
   const changes = [];
-  logger.info('Running a Job', { id: job.id, trigger });
+  const needs = [];
+  logger.info('Running a Job', { id: job.id, trigger, watched: !!watch });
   try {
     if (!runTurn) throw new Error('The AI isn’t ready yet');
     const res = await runTurn(job, {
@@ -287,6 +317,9 @@ async function runOne(job, trigger) {
       trigger,
       lastRun: prevRun,
       changes,
+      needs,
+      watch,
+      onGrant: (w) => grantPages(job.id, w),
     });
     output = res?.output || '';
     if (res?.sourceHash) noteSourceChange(job.id, res.sourceHash);
@@ -312,6 +345,7 @@ async function runOne(job, trigger) {
     error,
     notification: jl.finalNotification(job, { status, output, error, notified, prevRun }),
     changes,
+    needs,
   });
   if (error) logger.warn('A Job failed', { id: job.id, error });
   try {

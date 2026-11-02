@@ -451,6 +451,15 @@ run first (`runJobTurn`/`runJobModule` in `ai.ts`, files read by `bg/web-apis/bg
 user's own drives are live; anyone else's is copied into the record, and a newer version waits for the
 user in My Library (`checkJobSource`). The AI must not be able to take it for them.
 
+A Job can open pages and use them (ADR-0038): `openPage` plus the sidebar's page actions on one
+page of its own (`app/bg/ai/job-page.js`; `JOB_PAGE_CAPS` in `search-execute.mjs`). With nobody
+watching it is a hidden window in the Job's Space's session; on **Run with me**
+(`runJob(id, { watch: true })`) it is a tab in the "Jobs" group. Sites are `writes.pages`
+(`pageSite`/`pageGrant`/`grantPage` in `shared/jobs.mjs`); a watched run asks `jobPage` per site and
+`aiPageAction` (with `job`) per risky click, and saves each yes on the Job (`jobs.grantPages`). An
+unwatched run never asks: it is refused and records `needs` on the run. Only a tick on a watched
+run adds a repeatable click (`keepPageActions` strips any the AI's `saveJob` adds).
+
 ### The AI page, chats and memory (ADR-0032)
 
 `nomad://ai` (`app/userland/ai/`, in the browser menu) is the AI's own page: `/chats`, `/memory`,

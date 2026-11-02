@@ -15,7 +15,7 @@ import * as jobs from '../../ai/jobs';
 import * as memory from '../../ai/memory';
 import { driveTitle, readJobSource, resolveJobWrites } from './job-source';
 import * as vault from '../../hyper/vault';
-import { addedWrites, describeSchedule, describeWrites } from '../../../../shared/jobs.mjs';
+import { addedWrites, describeSchedule, describeWrites, keepPageActions } from '../../../../shared/jobs.mjs';
 import { noteLink, jobLink, MEMORY_LINK, READER_LINK } from '../../../../shared/item-links.mjs';
 import fsAPI from './fs';
 import * as webFeeds from './web-feeds';
@@ -211,7 +211,8 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
       // New write grants ask the user, here and now: the Job will use them with nobody watching.
       let writes;
       if (args.writes !== undefined) {
-        writes = await resolveJobWrites(args.writes, await readerSpace().catch(() => null));
+        // A click the Job may repeat is the user's own yes on a run they watched: the AI can keep one, not add one.
+        writes = keepPageActions(prev?.writes, await resolveJobWrites(args.writes, await readerSpace().catch(() => null)));
         const added = addedWrites(prev?.writes, writes);
         if (added) {
           const titles = new Map();

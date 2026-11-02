@@ -642,9 +642,15 @@ export default {
     await jobs.remove(id);
   },
 
-  // Run a Job now, on this Device.
-  async runJob(id) {
-    jobs.runNow(id);
+  // Run a Job now, on this Device. `{ watch: true }` is Run with me (ADR-0038): its page opens in a
+  // tab of this page's window, and each site it reaches asks the user, whose yes is kept on the Job.
+  async runJob(id, opts: any = {}) {
+    let watch = null;
+    if (opts?.watch) {
+      watch = tabManager.findContainingWindow(this.sender) || BrowserWindow.getFocusedWindow();
+      if (!watch) throw new Error('Open a Nomad window to watch the Job run');
+    }
+    jobs.runNow(id, { watch });
   },
 
   // 'changed' when a Job or a run changes, here or on another Device, and when a run starts.
