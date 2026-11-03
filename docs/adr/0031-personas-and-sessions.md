@@ -1,11 +1,12 @@
 # Personas: the user's identities in the browser, and the Sessions a site gets by asking
 
-**Status: Proposed.** 2026-10-31. Combines the Personas map ([#27]) and its eleven tickets
-([#28]–[#38]) into one decision. Two of them were closed with answers ([#28], [#35]); the user
-answered parts of three more in comments ([#29], [#31], [#33]). The rest are settled here as
-proposals, each marked with the ticket it answers. Two prototypes ([#36], [#37]) must be built and
-looked at before *Accepted*. Builds on ADR-0006 (the Vault), ADR-0010 (`nomad.fs`), ADR-0022 (pages
-can't open the private drive) and ADR-0029 (Shared Spaces).
+**Status: Accepted.** 2026-10-31; built 2026-11-02 ([#128]). Combines the Personas map ([#27]) and
+its eleven tickets ([#28]–[#38]) into one decision. Two of them were closed with answers ([#28],
+[#35]); the user answered parts of three more in comments ([#29], [#31], [#33]); the rest were
+settled here, each marked with the ticket it answers. The two prototypes ([#36], [#37]) were
+skipped: the real login prompt and switcher were built and looked at instead (see Rollout). Builds
+on ADR-0006 (the Vault), ADR-0010 (`nomad.fs`), ADR-0022 (pages can't open the private drive) and
+ADR-0029 (Shared Spaces). ADR-0036 and ADR-0037 propose amendments that are not built.
 
 The user wants a drive to be able to ask "who are you?" with a button, and the browser to answer
 with one of the user's identities: a default one for the whole Vault, and a different one for a
@@ -263,8 +264,8 @@ revocation is an event.
   here, what it can do, Open profile, Manage Personas and Log out, and nothing else of site info.
   Site info keeps its Session tab.
 
-The prototype ([#37]) shows the always-on and only-with-a-Session versions side by side before this
-is final.
+Both were built: the Spaces button always shows the Persona's picture, and the location-bar icon
+shows only with a Session.
 
 ## Amendment: a site can ask for the Persona's email (2026-11-02)
 
@@ -366,22 +367,31 @@ and, for each Persona, Edit and Delete, as on the computer.
 - **Concurrent Sessions as two Personas on one origin in one Space.** Ruled out by the singular API.
   If a real need appears, it's a new ADR, not a quiet change.
 
-## Prototypes before *Accepted*
+## Prototypes
 
-- **P1, the login prompt** ([#36]): one Persona, several, and none; a long and a look-alike drive
-  title; a `profile` request unchecked; light and dark.
-- **P2, the switcher** ([#37]): the Spaces button with the Persona thumb, the location-bar icon, and
-  the always-visible against only-with-a-Session versions side by side.
+Planned before *Accepted*, and replaced by the built UI:
+
+- **P1, the login prompt** ([#36]): `app/fg/modals/persona-login.js`, with one Persona, several,
+  none, and the email field.
+- **P2, the switcher** ([#37]): the Persona picture on the Spaces button and the location-bar icon,
+  both opening `fg/shell-menus/persona.js`. The always-visible picture and the only-with-a-Session
+  icon both shipped (§11).
 
 ## Rollout
 
 1. **Records and management.** `shared/personas.mjs` (records, resolution order, the writer check,
    the Session key) with unit tests; the Vault records; `nomad.personas`; My Library → Personas;
-   CONTEXT.md entries.
+   CONTEXT.md entries. *Landed.*
 2. **Login.** `nomad.session`, the prompt, the permission-engine hook, the `change` event, site-info's
-   Session section, the docs and types. Delete Beaker's session code.
+   Session section, the docs and types. Delete Beaker's session code. *Landed*; the Beaker files are
+   gone.
 3. **Switching.** The Spaces menu entry, the Persona thumb on the Spaces button, the location-bar icon.
-4. **Phone.** List and end Sessions; then `nomad.session` in the WebView.
+   *Landed.*
+4. **Phone.** List and end Sessions; then `nomad.session` in the WebView. *Listing, ending, and
+   making and editing Personas landed* (amendment above); `nomad.session` in the WebView is not built.
+
+Onboarding also offers a first Persona, which becomes the default (desktop's setup window,
+`app/userland/setup/persona.js`, and the phone once it is linked, `mobile/lib/usePersonaOnboarding.ts`).
 
 ## Source issues
 
@@ -394,8 +404,8 @@ and, for each Persona, Edit and Delete, as on the computer.
 - [#33] Session lifetime, storage, and revocation
 - [#34] What makes a login "user initiated"
 - [#35] Prior art: browser-mediated identity handoff (closed)
-- [#36] Prototype the login prompt
-- [#37] Prototype the Persona switcher
+- [#36] Prototype the login prompt (skipped; see Prototypes)
+- [#37] Prototype the Persona switcher (skipped; see Prototypes)
 - [#38] Does every site see the same Persona?
 
 [#27]: https://github.com/knownasilya/nomad/issues/27
@@ -410,3 +420,4 @@ and, for each Persona, Edit and Delete, as on the computer.
 [#36]: https://github.com/knownasilya/nomad/issues/36
 [#37]: https://github.com/knownasilya/nomad/issues/37
 [#38]: https://github.com/knownasilya/nomad/issues/38
+[#128]: https://github.com/knownasilya/nomad/pull/128

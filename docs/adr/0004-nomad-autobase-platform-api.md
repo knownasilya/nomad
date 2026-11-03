@@ -1,5 +1,10 @@
 # nomad.autobase as a first-class platform API with Collaborative Drive shape
 
+**Status: Superseded by ADR-0010.** `nomad.autobase` was removed in ADR-0010 Phase 4 (2026-07-02).
+Every new drive is a Collaborative Drive, and the writer methods described here
+(`createInvite`, `approveRequest`, `listWriters`, …) live on `nomad.fs`. The point that Nomad owns
+the writer handshake still holds.
+
 Multi-writer collaboration is exposed via a new `nomad.autobase` platform API. The primary abstraction is a **Collaborative Drive** — an Autobase-backed drive whose API mirrors `nomad.hyperdrive`. Writer management (`inviteWriter`, `addWriter`) is part of the API, not left to templates or shell UI.
 
 ## Why

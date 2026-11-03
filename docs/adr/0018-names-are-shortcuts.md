@@ -2,6 +2,11 @@
 
 **Status: Accepted.** 2026-10-10.
 
+*Amended by ADR-0029 (Shared Spaces).* Decision 1's "one set per user" is now the default, not the
+only kind: a Name can also belong to one Space (`/.vault/space-lib/<space>/names/`, **Only in
+<Space>**), and a shared Space keeps its Names in its Space Library. The rest of this ADR (no dots,
+resolving only on navigation and in the user's own AI) is unchanged.
+
 A user can give a short **Name** ("blog", "notes", "gh") to a Drive, to an app folder inside a
 private drive, or to any URL. Typing the name in the URL bar, or opening `hyper://<name>/` in a tab,
 goes to what it names, and the AI can look names up and read or write a named Drive. The rules are in

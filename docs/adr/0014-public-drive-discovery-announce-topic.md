@@ -1,10 +1,18 @@
 # Public drive discovery via an opt-in well-known announce topic
 
-**Status: Proposed (future); partially implemented by ADR-0016** (Topics/Keywords manifest
-vocabulary, `indexable` switch, manifest-only crawler, `nomad://search`). Designed 2026-07-04. Sketches how a **search/index layer over public
+**Status: Accepted; built through ADR-0016** (2026-07-11). Designed 2026-07-04. The core of this
+ADR is built: `INDEX_TOPIC` (`walled.garden/index/v1`) and the one-message intake handshake, as the
+`nomad/listing` Protomux channel (`shared/listing-wire.mjs`, `app/bg/hyper/discovery.js`); the opt-in
+as `indexable: true` in `/index.json` (ADR-0016 §2, which also covers §4's opt-out); a crawler
+(`app/tools/crawler.mjs`, `crawler-index.mjs`) serving a plain HTTP/JSON index (§6, v1); and
+`nomad://search`. ADR-0016 changed one thing: the listing frame carries the manifest's index
+fields, so the crawler indexes manifests only and does not walk `/posts/` (the content crawl in §3
+is still deferred). Not built: the Hyperbee index (§6's endgame), identity folding, and
+abuse/moderation (see Follow-ups). The text below is the design as written in July.
+
+This ADR sketches how a **search/index layer over public
 Drives** would solve the one problem the protocol deliberately does not: *finding Drives you were
-never handed the key to.* Nothing here is built, and none of it changes the wire format or
-`nomad.fs`. It records a direction — an **opt-in `walled.garden/index` announce topic** plus a tiny
+never handed the key to.* None of it changes the wire format or `nomad.fs`. It records a direction — an **opt-in `walled.garden/index` announce topic** plus a tiny
 key-intake handshake — so that when indexing/search is picked up, it is built as an aggregation layer
 *beside* the protocol rather than as a central registry baked *into* it. This ADR is a companion to
 ADR-0013 (which makes non-enumerability of followers a defended invariant); the same P2P-default that
@@ -128,8 +136,8 @@ central authority that owns the namespace.
 
 ## Consequences
 
-- **A recorded direction, not a commitment.** No code, schema, or wire-format change lands with this
-  ADR. It exists so a future contributor builds search as an opt-in aggregation layer and does not
+- **A recorded direction, not a commitment** (when written; ADR-0016 built it). No code, schema, or
+  wire-format change landed with this ADR. It exists so a future contributor builds search as an opt-in aggregation layer and does not
   reach for a central registry or, worse, try to crawl follows.
 - **Two topics per listed Drive.** A publicly-listed Drive announces on both its own discovery key
   (content) and `INDEX_TOPIC` (intake). The publish flow gains exactly one `configureNetwork` call;

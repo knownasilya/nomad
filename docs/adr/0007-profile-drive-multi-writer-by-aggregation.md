@@ -1,5 +1,9 @@
 # Profile Drives go multi-writer by Writer-Key aggregation, not Autobase
 
+**Status: Superseded by ADR-0010.** The aggregation code (`writer-keys.json`, `syncWriterKeys`,
+`ensureProfileContentDrive`) was deleted in ADR-0010 Phase 4. A Profile Drive is now an Autobase
+whose writers are all of the user's Devices (ADR-0031 §5 and its 2026-11-02 amendment).
+
 Unlike Space Root Drives — which are converted to Autobase-backed Collaborative Drives for multi-device writing (ADR-0006) — a **Profile Drive keeps its original single-writer `hyper://` URL and becomes multi-writer by aggregation**. Each Device publishes social content under its own key; the canonical Profile Drive publishes a `writer-keys.json` listing all the user's Device keys; consuming peers treat posts from any listed key (carried in `Post.author.writerKey`) as the same identity and merge them.
 
 ## Why

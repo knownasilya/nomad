@@ -1,5 +1,14 @@
 # Editor AI Sidebar edits the drive via a server-side agent, not the Monaco buffer
 
+**Status: Accepted; amended by ADR-0021.** The server-side tool loop, `driveUrl`, the save-clean
+gate and per-turn Checkpoints are built as described. The per-app sidebar is not: the shared
+`app-stdlib/js/com/ai-sidebar.js` was replaced by the window's one AI Sidebar
+(`app/fg/shell-window/ai-sidebar.js`, ADR-0021). The editor and explorer now expose the host
+contract as `window.__nomadAiHost` (`getAgentDrive`, `getAgentContext`, `prepareForAgentRun`,
+`onAgentWroteFile`), which `bg/ai/active-tab.mjs` and `ai-shell.ts` call, so the sidebar works on
+the Drive an editor or explorer tab has open. A sidebar turn on a writable Drive stages its writes
+in a Draft (ADR-0012).
+
 The editor (`nomad://editor`) gains a collapsible **AI Sidebar** that runs an agentic
 `nomad.ai.chat()` loop over the Drive currently open in the editor. Rather than having the model
 propose text that the editor applies to the Monaco buffer (client-side, single-file), the agent

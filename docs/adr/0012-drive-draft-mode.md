@@ -1,6 +1,6 @@
 # Drive Draft Mode — device-private staging hosted in the Vault
 
-**Status: Proposed.** Designed 2026-07-04 (grill session). Adds a **Draft** to any writable Drive:
+**Status: Accepted.** Designed 2026-07-04 (grill session); built (see *Built*, at the end). Adds a **Draft** to any writable Drive:
 a set of unpublished file writes/deletes that stay private to the user's own Devices until
 **Published**. The load-bearing decision is *where the Draft lives* — **inside the Vault** — which
 delivers cross-Device sync in v1 with **no wire-format change and no dependence on the unbuilt
@@ -125,3 +125,22 @@ Dependency spine: **P0 → P1 → {P2, P3, P4} in parallel → P5**. No wire-for
 
 Live-runtime gates (unverifiable offline): cross-Device draft sync over a real swarm; blob re-home
 resolved by a follower; concurrent Publish from two Devices.
+
+## Built (amendment, 2026-11-03)
+
+Phases 0–4 are built: `app/bg/hyper/drafts.js` and `mobile/backend/lib/drafts.mjs`, the draft methods
+in `shared/fs-manifest.mjs`, routing in `bg/fs.js`, the editor's and explorer's Draft Mode with the
+conflict prompt on Publish, and the phone's stage / preview / discard with Publish gated to drives it
+can write. What the build changed:
+
+- **The preview is per Drive, not per tab (amends 5).** The stream-protocol request doesn't reliably
+  carry the tab's `webContentsId`, so `drafts.setPreview`/`isPreview` key the flag by the Drive's key.
+  The toggle is a pen-nib in the location bar (`fg/shell-window/navbar/location.js`
+  `renderDraftBtn` → `bg.views.toggleDraftPreview`), shown when the tab's Drive has a Draft. While a
+  Drive is previewed, `nomad.fs` reads in that Drive's app merge the Draft too, so the app sees its
+  own staged content; the editor and explorer pass `{ draft: false }` when their own Draft Mode is
+  off so the flag can't leak into their published reads.
+- **The AI stages from the window's AI Sidebar** (ADR-0021), not a sidebar inside the editor: a
+  sidebar turn starts a Draft for each Drive it writes.
+- **Not built yet:** purging the `draft-blobs` core on Publish and Discard (the `TODO(blobs)` in
+  `drafts.js`), and the live-swarm checks listed above.
