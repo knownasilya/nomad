@@ -92,51 +92,134 @@ const cssStr = css`
     color: var(--personas-warn);
   }
 
-  .fields label.grow,
-  .profile-row label.grow {
-    flex: 1;
-    min-width: 220px;
+  /* The editor: one column, max 520px, in two groups (public profile, private). */
+  .persona-form {
+    max-width: 520px;
+    margin-top: 16px;
+    gap: 18px;
   }
 
-  .profile-row textarea {
+  .persona-form fieldset {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .persona-form legend {
+    width: 100%;
+    margin-bottom: 12px;
+    padding: 0 0 6px;
+    border-bottom: 1px solid var(--border-color--very-light);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-color--default);
+  }
+
+  .persona-form legend .legend-hint {
+    margin-left: 6px;
+    font-weight: 400;
+    color: var(--text-color--pretty-light);
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .field-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-color--default);
+  }
+
+  .field-label .optional {
+    margin-left: 4px;
+    font-weight: 400;
+    color: var(--text-color--pretty-light);
+  }
+
+  .field input,
+  .field textarea {
+    width: 100%;
+  }
+
+  .field textarea {
     font-family: inherit;
   }
 
-  .fields input.email {
-    width: 100%;
-    max-width: 420px;
+  .field input:disabled,
+  .field textarea:disabled {
+    opacity: 0.6;
   }
 
-  .fields input.drive-url {
-    width: 100%;
-    font-family: var(--code-font);
+  .field-hint {
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--text-color--pretty-light);
   }
 
-  .profile-row {
-    display: flex;
-    gap: 16px;
-    align-items: flex-start;
-  }
-
-  .profile-row label {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 12px;
+  .notice-hint {
     color: var(--text-color--light);
   }
 
-  .picture {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
+  .field input.drive-url {
+    font-family: var(--code-font);
+    font-size: 12px;
   }
 
+  .picture-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .picture-row .avatar.large {
+    flex-basis: 64px;
+    width: 64px;
+    height: 64px;
+  }
+
+  .picture-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  /* Looks like a button; the real file input stays focusable for the keyboard. */
   .file-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 30px;
+    padding: 0 12px;
+    border: 1px solid var(--border-color--light);
+    border-radius: 6px;
     font-size: 12px;
-    color: var(--mods-accent);
+    font-weight: 500;
+    color: var(--text-color--default);
     cursor: pointer;
+  }
+
+  .file-btn:hover {
+    background: var(--lib-row-hover-bg, var(--bg-color--semi-light));
+  }
+
+  .file-btn:focus-within {
+    border-color: var(--mods-accent);
+    box-shadow: 0 0 0 3px var(--mods-accent-soft);
+  }
+
+  .file-btn .fas {
+    color: var(--text-color--light);
   }
 
   .file-btn.disabled {
@@ -144,8 +227,63 @@ const cssStr = css`
     cursor: default;
   }
 
+  .file-btn.disabled:hover {
+    background: none;
+  }
+
   .file-btn input {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .drive-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 4px 4px 4px 10px;
+    border-radius: 6px;
+    background: var(--bg-color--secondary);
+    font-size: 12px;
+  }
+
+  .drive-label {
+    flex: 0 0 auto;
+    color: var(--text-color--light);
+  }
+
+  .drive-key {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11.5px;
+    color: var(--text-color--default);
+  }
+
+  .drive-row button.icon {
+    height: 26px;
+    width: 26px;
+  }
+
+  .icon-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    color: var(--text-color--light);
+    text-decoration: none;
+  }
+
+  .icon-link:hover {
+    background: var(--lib-search-bg, var(--bg-color--semi-light));
+    color: var(--text-color--default);
   }
 
   .hint-row {
