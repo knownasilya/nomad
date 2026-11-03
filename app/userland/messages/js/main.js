@@ -314,7 +314,7 @@ function renderOverview() {
     ],
     el('p', { class: 'privacy' }, [
       'Messages are sealed so only your own devices can open them, and kept in your Vault. They are not end-to-end in the strongest sense: anyone who can read your Vault can read them, a stolen key opens earlier messages, and the person you write to learns your device’s network address. ',
-      el('a', { href: 'https://nomad.pages.dev/docs/personas/messages/', target: '_blank' }, ['What is and isn’t private']),
+      el('a', { href: 'https://nomad.pages.dev/docs/api/advanced/messages/', target: '_blank' }, ['What is and isn’t private']),
     ])
   )
 }
