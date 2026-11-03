@@ -115,3 +115,18 @@ export function planStep<S> (h: TabHistory<S>, delta: -1 | 1, webCan: boolean): 
   const sameSession = webCan && cur.session != null && cur.session === h.session && target.session === h.session
   return { type: sameSession ? 'native' : 'load', sp: to, ...(returnTo ? { returnTo } : {}) }
 }
+
+// --- Android's back on the browser screen --------------------------------
+
+export type BackAction = 'closeAi' | 'leaveAddress' | 'history'
+
+// What one press of Android's back does on the browser screen, first match wins: close the AI
+// panel, leave the address bar, then step back in the tab's history. While the keyboard is up it
+// takes the first back itself, and closing it leaves the bar too; so `leaveAddress` is the bar
+// still in its editing layout with no keyboard under it, which back must undo as in Chrome
+// instead of stepping the tab (or leaving the app) behind it.
+export function backAction ({ aiOpen, editingAddress }: { aiOpen: boolean; editingAddress: boolean }): BackAction {
+  if (aiOpen) return 'closeAi'
+  if (editingAddress) return 'leaveAddress'
+  return 'history'
+}

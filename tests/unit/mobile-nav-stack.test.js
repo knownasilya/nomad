@@ -2,7 +2,7 @@
 // tab's history holds every page you were on, so back always returns to where you came from.
 
 import { describe, it, expect } from 'vitest'
-import { pushScreen, closeScreen, sameUrl, loadEntry, pageLoaded, planStep } from '../../mobile/lib/navStack.ts'
+import { pushScreen, closeScreen, sameUrl, loadEntry, pageLoaded, planStep, backAction } from '../../mobile/lib/navStack.ts'
 
 const blank = () => ({ stack: [{ kind: 'home', session: 0 }], sp: 0, session: 0, settled: true, pendingStep: false })
 const web = (url, extra = {}) => ({ kind: 'web', url, ...extra })
@@ -147,5 +147,19 @@ describe('a tab history', () => {
   it('has nowhere to go past either end', () => {
     expect(planStep(blank(), -1, true)).toEqual({ type: 'none' })
     expect(planStep(blank(), 1, true)).toEqual({ type: 'none' })
+  })
+})
+
+describe("Android's back on the browser screen", () => {
+  it('closes the AI panel first', () => {
+    expect(backAction({ aiOpen: true, editingAddress: true })).toBe('closeAi')
+  })
+
+  it('leaves an address bar left editing with no keyboard, instead of stepping the tab', () => {
+    expect(backAction({ aiOpen: false, editingAddress: true })).toBe('leaveAddress')
+  })
+
+  it('steps back in the tab otherwise', () => {
+    expect(backAction({ aiOpen: false, editingAddress: false })).toBe('history')
   })
 })
