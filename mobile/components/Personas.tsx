@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Modal, View, Text, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native'
+import { Modal, View, Text, ScrollView, ActivityIndicator, Alert, Share, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useTheme, type Theme } from '../lib/theme'
-import type { Backend, PersonasList, PersonaSession, PersonaSummary } from '../lib/useBackend'
+import type { Backend, InboxPersona, InboxSummary, PersonasList, PersonaSession, PersonaSummary } from '../lib/useBackend'
 import { ListSection, ListRow, ListEmpty } from './List'
 import ActionSheet, { type SheetAction } from './ActionSheet'
 import LinkPhone from './LinkPhone'
@@ -23,7 +23,8 @@ interface Props {
 // The phone's Personas (ADR-0031): who you are when a site asks you to log in. The user makes, edits
 // and deletes them here as on a computer (NewPersona; every device writes every profile drive), picks
 // this Space's Persona and the default, and sees and ends the logins sites hold, on every device at
-// once. The records are in the Vault.
+// once. The records are in the Vault. Each Persona's sheet also has its Messages settings
+// (ADR-0036): who can write to it, its message link, and a new inbox address.
 export default function Personas ({ visible, onClose, apps, onVaultChange, space, spaceName, onOpenDevices }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
@@ -34,7 +35,8 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
   const [noVault, setNoVault] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [sheet, setSheet] = useState<'space' | PersonaSummary | PersonaSession | null>(null)
+  const [sheet, setSheet] = useState<'space' | PersonaSummary | PersonaSession | { modeFor: PersonaSummary } | null>(null)
+  const [inbox, setInbox] = useState<InboxPersona[]>([])
   const [making, setMaking] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
 
@@ -45,6 +47,9 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
     setNoVault(false)
     if (!res.ok || !res.value) { setError(res.message || 'Couldn’t load your Personas'); return }
     setList(res.value)
+    // Messages settings per Persona; Personas still work without them.
+    const ib = await call<InboxSummary>('messages', 'summary', {})
+    setInbox(ib.ok && ib.value ? ib.value.personas : [])
   }, [call, space])
 
   useEffect(() => { if (visible) refresh() }, [visible, refresh])
@@ -68,9 +73,34 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
 
   const remove = (p: PersonaSummary) => {
     const sites = p.sessions ? ` It’s logged in on ${p.sessions} site${p.sessions === 1 ? '' : 's'}; they’re logged out.` : ''
-    Alert.alert(`Delete “${p.label}”?`, `It goes from all your devices.${sites} Its profile drive stays.`, [
+    const msgs = inboxOf(p)?.enabled ? ' Its messages are deleted too.' : ''
+    Alert.alert(`Delete “${p.label}”?`, `It goes from all your devices.${sites}${msgs} Its profile drive stays.`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => act('remove', { id: p.id }, 'Couldn’t delete it') }
+    ])
+  }
+
+  const inboxOf = (p: PersonaSummary) => inbox.find((m) => m.personaId === p.id) || null
+
+  const messagesAct = async (action: string, args: Record<string, unknown>, failed: string) => {
+    setBusy(true)
+    const res = await call('messages', action, args)
+    setBusy(false)
+    if (!res.ok) { Alert.alert(failed, res.message || 'Unknown error'); return null }
+    await refresh()
+    return res
+  }
+
+  const shareLink = async (p: PersonaSummary) => {
+    const res = await call<string | null>('messages', 'link', { personaId: p.id })
+    if (!res.ok || !res.value) { Alert.alert('No message link yet', res.message || 'Choose who can message this Persona first.'); return }
+    Share.share({ message: res.value }).catch(() => {})
+  }
+
+  const rotate = (p: PersonaSummary) => {
+    Alert.alert('Change the inbox address?', 'Your contacts keep writing to you. Message links you gave out stop working in two weeks, and strangers can’t use an old one.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Change it', onPress: () => messagesAct('rotate', { personaId: p.id }, 'Couldn’t change it') }
     ])
   }
 
@@ -90,6 +120,20 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
         ]]
       }
     }
+    if ('modeFor' in sheet) {
+      const p = sheet.modeFor
+      const m = inboxOf(p)
+      const set = (mode: string) => messagesAct('setMode', { personaId: p.id, mode }, 'Couldn’t change it')
+      return {
+        title: `Who can message ${p.label}`,
+        subtitle: 'People you write to can always answer.',
+        groups: [[
+          { label: 'Only people I write to', icon: 'user-lock', active: !m || m.mode === 'off', onPress: () => set('off') },
+          { label: 'People I give a link to', icon: 'link', active: m?.mode === 'link', onPress: () => set('link') },
+          { label: 'Anyone, as requests', icon: 'globe', active: m?.mode === 'anyone', onPress: () => set('anyone') }
+        ]]
+      }
+    }
     if ('path' in sheet) {
       return {
         title: sheet.site,
@@ -105,9 +149,20 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
           { label: 'Edit', icon: 'pen', onPress: () => { setSheet(null); setEditId(sheet.id) } },
           { label: sheet.isDefault ? 'Your default Persona' : 'Make default', icon: 'star', active: sheet.isDefault, disabled: sheet.isDefault, onPress: () => act('setDefault', { id: sheet.id }, 'Couldn’t change it') }
         ],
+        messagesActions(sheet),
         [{ label: 'Delete', icon: 'trash', destructive: true, onPress: () => { setSheet(null); remove(sheet) } }]
       ]
     }
+  }
+  // The Messages group of a Persona's sheet; empty when it can't have an Inbox here.
+  function messagesActions (p: PersonaSummary): SheetAction[] {
+    const m = inboxOf(p)
+    if (!m || !m.usable) return []
+    return [
+      { label: `Who can message: ${MODE_LABELS[m.enabled ? m.mode : 'off']}`, icon: 'comments', onPress: () => setTimeout(() => setSheet({ modeFor: p }), 250) },
+      { label: 'Share message link', icon: 'share-alt', hidden: !m.enabled || m.mode === 'off', onPress: () => shareLink(p) },
+      { label: 'Change inbox address', icon: 'sync-alt', hidden: !m.enabled, onPress: () => rotate(p) }
+    ]
   }
   const sp = sheetProps()
 
@@ -209,6 +264,8 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
     </Modal>
   )
 }
+
+const MODE_LABELS: Record<string, string> = { off: 'only people I write to', link: 'people with my link', anyone: 'anyone, as requests' }
 
 function Avatar ({ p, s }: { p: PersonaSummary | null; s: Styles }) {
   return (

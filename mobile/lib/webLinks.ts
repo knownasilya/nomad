@@ -7,6 +7,7 @@ export type LinkRoute =
   | { to: 'page' } // the WebView loads it
   | { to: 'tab'; url: string } // the tab goes there instead (a web page or a drive)
   | { to: 'reader'; url: string } // a feed: offer to subscribe in Reader
+  | { to: 'messages'; url: string } // a Persona's message link (ADR-0036): write to them in Messages
   | { to: 'app'; url: string; fallback?: string } // another app's link; fallback is a web page for when no app takes it
 
 const WEB = /^https?:\/\//i
@@ -29,6 +30,10 @@ export function routeLink (url: string): LinkRoute {
       return { to: 'reader', url: feedUrl(url) }
     case 'intent':
       return routeIntent(url)
+    case 'nomad':
+      // Only a message link; Messages checks it again before it uses it.
+      if (/^nomad:\/\/messages\/new\?/i.test(url)) return { to: 'messages', url }
+      return { to: 'page' }
     default:
       return { to: 'app', url }
   }

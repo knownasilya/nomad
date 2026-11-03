@@ -166,7 +166,7 @@ export interface Backend {
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas'
+export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
@@ -217,6 +217,16 @@ export interface JobsList { jobs: Job[]; writable: boolean }
 export interface PersonaSummary { id: string; label: string; email: string; profileUrl: string; isDefault: boolean; sessions: number }
 export interface PersonaSession { path: string; origin: string; site: string; personaLabel: string; spaceName: string; thisSpace: boolean; perms: string[]; createdAt: string; expiresAt: string | null; expired: boolean }
 export interface PersonasList { personas: PersonaSummary[]; defaultId: string | null; spacePersonaId: string | null; resolvedId: string | null; spaceKnown: boolean; sessions: PersonaSession[]; writable: boolean }
+// The Persona Inbox (ADR-0036, backend/lib/inbox.mjs over RPC_APPS `messages`)
+export interface InboxPersona { personaId: string; label: string; profileUrl: string; usable: boolean; enabled: boolean; mode: 'off' | 'link' | 'anyone'; sent: boolean; state: string; reason: string }
+export interface InboxMessage { type: 'walled.garden/message'; id: string; from: string; to: string; createdAt: string; text: string; inReplyTo?: string }
+export interface InboxRecord { personaId: string; direction: 'in' | 'out'; message: InboxMessage; status: 'queued' | 'delivered' | 'failed' | 'received'; request?: boolean; verified?: boolean; readAt?: string; attempts?: number }
+export interface InboxConversation { personaId: string; other: string; title: string; last: InboxRecord; unread: number; request: boolean; count: number; contact: 'accepted' | 'blocked' | null }
+export interface InboxSummary { vaultReady: boolean; personas: InboxPersona[]; conversations: InboxConversation[]; requests: InboxConversation[]; blocked: { personaId: string; profileUrl: string }[] }
+export interface InboxThread { personaId: string; other: string; title: string; thumb: string; contact: 'accepted' | 'blocked' | null; reachable: boolean; records: InboxRecord[] }
+export interface InboxLookup { profileUrl: string; title: string; thumb: string; isPerson: boolean; published: boolean }
+export interface MessageNotifications { notify: { id: string; personaId: string; from: string; title: string; body: string }[]; since: string }
+
 export interface JobNotifications { notify: { id: string; jobId: string; title: string; body: string }[]; since: string; wants: boolean }
 // shared: the Space is shared (ADR-0029); canFollow is false for someone who can only view it.
 // webRead: RSS and Atom items read, per feed. postTopics: feed posts' topics, from a computer's AI.

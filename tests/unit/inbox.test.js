@@ -300,3 +300,22 @@ describe('the Zod schemas agree', () => {
     expect(PersonSchema.safeParse(person).success).toBe(true);
   });
 });
+
+describe('phone notifications', () => {
+  const rec = (id, at, extra = {}) =>
+    I.makeRecord({ personaId: PID, direction: 'in', status: 'received', receivedAt: at, message: { ...goldenMessage(), id: id.padEnd(26, 'a') }, ...extra });
+  it('shows new Contact messages after the mark, never requests or unchecked ones', () => {
+    const rs = [
+      rec('b', '2026-11-03T12:00:01.000Z'),
+      rec('c', '2026-11-03T12:00:02.000Z', { request: true }),
+      rec('d', '2026-11-03T12:00:03.000Z', { verified: false }),
+      rec('e', '2026-11-03T12:00:04.000Z', { readAt: AT }),
+      rec('f', '2026-11-03T12:00:05.000Z'),
+    ];
+    expect(I.pendingNotifications(rs, null)).toEqual({ notify: [], since: '2026-11-03T12:00:05.000Z' });
+    const r = I.pendingNotifications(rs, '2026-11-03T12:00:00.000Z');
+    expect(r.notify.map((x) => x.message.id[0])).toEqual(['b', 'f']);
+    expect(r.since).toBe('2026-11-03T12:00:05.000Z');
+    expect(I.pendingNotifications(rs, r.since).notify).toEqual([]);
+  });
+});

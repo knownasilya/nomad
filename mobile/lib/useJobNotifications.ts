@@ -39,11 +39,16 @@ export function useJobNotifications (backend: Pick<Backend, 'apps' | 'onVaultCha
 
   // A tap on a notification, now or the one that launched the app.
   useEffect(() => {
+    // A Message's notification (useMessageNotifications) is the other kind; it opens Messages.
+    const mine = (data: any) => data?.kind !== 'message'
     const open = (data: any) => onOpenRef.current({ jobId: data?.jobId, runId: data?.runId })
-    const sub = Notifications.addNotificationResponseReceivedListener((res) => open(res.notification.request.content.data))
+    const sub = Notifications.addNotificationResponseReceivedListener((res) => {
+      const data = res.notification.request.content.data
+      if (mine(data)) open(data)
+    })
     Notifications.getLastNotificationResponseAsync()
       .then((res) => {
-        if (!res) return
+        if (!res || !mine(res.notification.request.content.data)) return
         open(res.notification.request.content.data)
         // Or it opens the same run again on the next launch.
         Notifications.clearLastNotificationResponseAsync().catch(() => {})

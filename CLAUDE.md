@@ -566,7 +566,8 @@ outcome. Reading a stranger's profile uses `lookupOnly`, so this Device never an
 `walled.garden/message` schema and `inbox` on `walled.garden/person` must match `messageError` and
 `publishedInbox`. UI: `nomad://messages` (`app/userland/messages/`, internal `nomad.inbox`), My
 Library → Personas → Messages, site-info's **Message** on a Profile Drive, the phone's Messages
-screen (`mobile/components/Messages.tsx`, `RPC_APPS` `messages`). No page API and no AI capability
+screen (`mobile/components/Messages.tsx`, `RPC_APPS` `messages`), its notifications
+(`mobile/lib/useMessageNotifications.ts`) and a message link followed in a tab (`routeLink` → `messages`). No page API and no AI capability
 reads or sends messages (§7.1, §7.6). The phone keeps its backend running for
 `BACKGROUND_GRACE_MS` (five minutes) after it leaves the screen, so its mailbox and the AI keep
 answering.

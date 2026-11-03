@@ -790,3 +790,19 @@ export function cryptoFromSodium(sodium) {
     },
   };
 }
+
+// Notifications on a Device that learns of Messages through the Vault (the phone, ADR-0036 §9):
+// new Messages from Contacts received after `since` (an ISO time, the newest receivedAt already
+// shown). Never a request, never an unchecked one, never one already read. The first time (no
+// `since`) nothing older shows. Returns { notify: records, since }.
+export function pendingNotifications(records, since = null) {
+  const shown = (r) =>
+    isRecord(r) && r.direction === 'in' && !r.request && r.verified !== false && !r.readAt;
+  const all = records.filter((r) => isRecord(r) && r.direction === 'in' && r.receivedAt);
+  const newest = all.reduce((m, r) => (r.receivedAt > m ? r.receivedAt : m), since || '');
+  if (!since) return { notify: [], since: newest || new Date(0).toISOString() };
+  const notify = all
+    .filter((r) => shown(r) && r.receivedAt > since)
+    .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
+  return { notify, since: newest };
+}
