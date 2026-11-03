@@ -163,56 +163,77 @@ export class PersonasView extends LitElement {
     `;
   }
 
+  // One column in two groups: what sites see (picture, name, about) and what stays with the user
+  // (label, email), each hint under its field, then the profile drive, then the buttons.
   renderEditor(e, p = null) {
     const set = (patch) => (this.editing = { ...this.editing, ...patch, error: '' });
     const canProfile = !p || p.writable;
+    const thumb = e.thumbPreview || p?.thumbUrl;
     return html`
-      <form class="editor" @submit=${this.onSave} autocomplete="off">
-        <div class="fields">
-          <label>
-            <span>Label <span class="hint">Only you see it</span></span>
-            <input class="name" placeholder="Work" maxlength="40" .value=${e.label} @input=${(ev) => set({ label: ev.target.value })} />
-          </label>
+      <form class="editor persona-form" @submit=${this.onSave} autocomplete="off">
+        <fieldset class="group">
+          <legend>Public profile <span class="legend-hint">Sites see this when you log in</span></legend>
           ${e.useDrive
-            ? html`<label class="grow">
-                <span>Profile drive <span class="hint">One you made on this device</span></span>
+            ? html`<label class="field">
+                <span class="field-label">Profile drive</span>
                 <input class="drive-url" placeholder="hyper://…/" .value=${e.profileUrl} @input=${(ev) => set({ profileUrl: ev.target.value })} />
+                <span class="field-hint">One you made on this device. Its name and picture are what sites see.</span>
               </label>`
-            : html`<label>
-                <span>Name <span class="hint">What sites see</span></span>
-                <input class="name" placeholder="Ada Lovelace" maxlength="280" ?disabled=${!canProfile} .value=${e.title} @input=${(ev) => set({ title: ev.target.value })} />
-              </label>`}
-        </div>
-        ${e.useDrive
-          ? ''
-          : html`
-              <div class="profile-row">
-                <div class="picture">
-                  ${e.thumbPreview || p?.thumbUrl
-                    ? html`<img class="avatar large" src=${e.thumbPreview || p.thumbUrl} alt="" />`
+            : html`
+                <div class="picture-row">
+                  ${thumb
+                    ? html`<img class="avatar large" src=${thumb} alt="" />`
                     : html`<span class="avatar large initial">${(e.title || e.label || '?').slice(0, 1).toUpperCase()}</span>`}
-                  <label class="file-btn ${canProfile ? '' : 'disabled'}">
-                    <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" ?disabled=${!canProfile} @change=${this.onPickThumb} />
-                    ${e.thumbPreview || p?.thumbUrl ? 'Change picture' : 'Add a picture'}
-                  </label>
+                  <div class="picture-actions">
+                    <label class="file-btn ${canProfile ? '' : 'disabled'}">
+                      <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" ?disabled=${!canProfile} @change=${this.onPickThumb} />
+                      <span class="fas fa-fw fa-image"></span> ${thumb ? 'Change picture' : 'Add a picture'}
+                    </label>
+                    <span class="field-hint">PNG, JPEG, WebP or GIF, under 2 MB</span>
+                  </div>
                 </div>
-                <label class="grow">
-                  <span class="label-text">About <span class="hint">Optional, also public</span></span>
+                <label class="field">
+                  <span class="field-label">Name</span>
+                  <input placeholder="Ada Lovelace" maxlength="280" ?disabled=${!canProfile} .value=${e.title} @input=${(ev) => set({ title: ev.target.value })} />
+                </label>
+                <label class="field">
+                  <span class="field-label">About <span class="optional">Optional</span></span>
                   <textarea rows="2" maxlength="1000" placeholder="A few words about you" ?disabled=${!canProfile} .value=${e.description} @input=${(ev) => set({ description: ev.target.value })}></textarea>
                 </label>
-              </div>
-            `}
-        <div class="fields">
-          <label class="grow">
-            <span>Email <span class="hint">Private. A site gets it only when you say yes, and sites that get the same email can tell it’s you.</span></span>
-            <input class="email" type="email" placeholder="you@example.com (optional)" maxlength="254" .value=${e.email} @input=${(ev) => set({ email: ev.target.value })} />
+                ${p && !p.writable
+                  ? html`<div class="field-hint notice-hint">
+                      <span class="fas fa-fw fa-sync-alt"></span> This device can’t change the profile yet. Keep the device that made it online
+                      for a minute and it adds this one.
+                    </div>`
+                  : ''}
+              `}
+        </fieldset>
+
+        <fieldset class="group">
+          <legend>Private <span class="legend-hint">Stays on your devices</span></legend>
+          <label class="field">
+            <span class="field-label">Label</span>
+            <input placeholder="Work" maxlength="40" .value=${e.label} @input=${(ev) => set({ label: ev.target.value })} />
+            <span class="field-hint">Your name for this Persona. Only you see it.</span>
           </label>
-        </div>
-        ${p && !p.writable
-          ? html`<div class="hint-row">This device can’t change the profile yet. Keep the device that made it online for a minute and it adds this one.</div>`
-          : ''}
+          <label class="field">
+            <span class="field-label">Email <span class="optional">Optional</span></span>
+            <input type="email" placeholder="you@example.com" maxlength="254" .value=${e.email} @input=${(ev) => set({ email: ev.target.value })} />
+            <span class="field-hint">A site gets it only when you say yes, and sites that get the same email can tell it’s you.</span>
+          </label>
+        </fieldset>
+
         ${p
-          ? html`<div class="hint-row">Profile drive: <a href=${p.profileUrl} target="_blank"><code>${p.profileUrl}</code></a></div>`
+          ? html`<div class="drive-row">
+              <span class="drive-label">Profile drive</span>
+              <code class="drive-key" title=${p.profileUrl}>${shortDriveUrl(p.profileUrl)}</code>
+              <button type="button" class="icon" title="Copy profile drive address" aria-label="Copy profile drive address" @click=${() => this.onCopyDrive(p)}>
+                <span class="fas fa-fw fa-copy"></span>
+              </button>
+              <a class="icon-link" href=${p.profileUrl} target="_blank" title="Open profile drive" aria-label="Open profile drive">
+                <span class="fas fa-fw fa-external-link-alt"></span>
+              </a>
+            </div>`
           : html`<div class="hint-row">
               ${e.useDrive
                 ? html`<button type="button" class="link" @click=${() => set({ useDrive: false })}>Make a new profile drive instead</button>`
@@ -226,6 +247,15 @@ export class PersonasView extends LitElement {
         </div>
       </form>
     `;
+  }
+
+  async onCopyDrive(p) {
+    try {
+      await navigator.clipboard.writeText(p.profileUrl);
+      toast.create('Profile drive address copied', 'success');
+    } catch (err) {
+      toast.create(cleanError(err), 'error');
+    }
   }
 
   renderSpaces() {
@@ -464,6 +494,12 @@ export class PersonasView extends LitElement {
       toast.create(cleanError(err), 'error');
     }
   }
+}
+
+// hyper://838d28aa…7b51b800/: enough of the key to tell drives apart; the whole URL is in the title.
+function shortDriveUrl(url) {
+  const m = /^hyper:\/\/([0-9a-z]{20,})\/?$/i.exec(String(url || ''));
+  return m ? `hyper://${m[1].slice(0, 8)}…${m[1].slice(-8)}/` : url;
 }
 
 function inboxSummary(m) {
