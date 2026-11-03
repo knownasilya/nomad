@@ -1,5 +1,9 @@
 # Blog is an Autobase Collaborative Drive, not Profile-style aggregation
 
+**Status: Accepted; amended by ADR-0010.** A Blog is an Autobase drive as decided here, but since
+ADR-0010 every new drive is one, so this is the default rather than an exception to ADR-0007
+(which ADR-0010 superseded).
+
 A Blog is created as an Autobase-backed Collaborative Drive, so all of the user's Devices are Writers of one drive under a single stable URL. This deliberately diverges from ADR-0007, which made Profile Drives go multi-writer by aggregation (per-device content drives + `writer-keys.json`) instead of Autobase.
 
 ## Why

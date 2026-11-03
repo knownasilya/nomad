@@ -3,6 +3,13 @@
 **Status: Proposed.** 2026-10-30. Builds on ADR-0025 (Live Docs) and the Document drive template.
 Three spikes (below) must pass before *Accepted*.
 
+*Partly built (2026-11-03).* §1 and §2 are built for other purposes: desktop opens a drive it didn't
+create in its own namespace and answers Writer grants (`shared/drive-writers.mjs`,
+`app/bg/hyper/drive-writers.js`, ADR-0029 step 2), and the phone asks for its key on Space Root
+Drives and Space Libraries (the amendment under §2). Phases 1–4, the part that edits a Document on
+the phone (`nomad.fs.watch`, `nomad.peersockets`, **Edit on this phone**, the template picker), are
+not built, and none of the spikes has run.
+
 ADR-0025 gives desktop a **Document** drive: a Live Doc at `/doc/` that several Writers edit at
 once, with keystrokes and cursors carried live over a peersockets room. The drive's app is
 self-contained (`/index.html` plus one `/app.js` holding Yjs, y-protocols, CodeMirror 6 and

@@ -167,7 +167,8 @@ replication fails with `DECODING_ERROR`.
 
 `bg/fs.js` picks between two **internal** backend impls per URL; these are NOT public APIs:
 - `bg/hyperdrive.js` — a single-writer Hyperdrive; its read API **fails on an Autobase core**, so it's
-  used only for `hyper://private/`, profile, and external Hyperdrives.
+  used only for external Hyperdrives and drives made before ADR-0010 (`hyper://private/`, Space Root
+  Drives and Profile Drives are Autobases).
 - `bg/autobase.js` — a multi-writer Autobase (linearised Hyperbee view); `list(prefix)` is a flat
   Hyperbee key-range scan (recursive). This is the backend for all new drives.
 - Backend detection is only reliable for locally-known/loaded drives (`isCollaborativeDrive` returns

@@ -2,6 +2,13 @@
 
 **Status: Accepted.** 2026-10-09.
 
+*Amended by ADR-0029 (Shared Spaces).* Decision 2 no longer holds as written: a Note can belong to
+one Space as well as to the user. An unshared Space keeps its Notes in the Vault under
+`/.vault/space-lib/<space>/notes/`, and a shared Space keeps its Reader feeds and its Notes in its
+Space Library. Code reads them through `spaceLibrary.records(space, kind)` on desktop and
+`placeOf(base, space, kind)` on the phone, never straight from the Vault. Read marks stay in the
+Vault and stay each person's own.
+
 The built-in Reader keeps its subscriptions and read marks, and the built-in Notes app keeps its
 notes, in the **Vault**. Each Device the user links, the phone too, reads and writes the same data.
 The record layout and the rules both apps share (titles, links, conflicts) are in

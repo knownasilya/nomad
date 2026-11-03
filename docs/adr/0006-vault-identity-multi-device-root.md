@@ -1,5 +1,11 @@
 # The Vault: an identity-level Autobase as the root of multi-device sync
 
+**Status: Accepted; amended by ADR-0010 and ADR-0026.** The Vault is built as described. The lazy
+Root-Drive→Autobase migration is gone: ADR-0010 makes every Root Drive an Autobase from birth and
+deleted the migration code. Pairing still adds the new Device to each Root Drive, but a Device
+writes a drive it didn't create with its own per-drive writer key, granted through the Vault
+(ADR-0026 §2, built on desktop in ADR-0029 step 2 and asked for by the phone too).
+
 Multi-device support is rooted in a new top-level primitive, the **Vault**: a private, identity-level Collaborative Drive (Autobase) that indexes a user's Spaces (by Root Drive key) and trusted Devices (by writer key). A new Device joins by pairing into the Vault using Holepunch's `blind-pairing` (encrypted, signed invite + explicit approval on an existing Device). Once joined, the Device is added as a Writer to the Vault and, eagerly, to every Space Root Drive the Vault indexes — so any Device can edit anything the user owns. Vault creation and the Root-Drive→Autobase migration happen lazily, the first time the user links a Device.
 
 ## Why

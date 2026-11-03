@@ -1,9 +1,10 @@
 # Shared Spaces: a Space's own library, shared with other people
 
-**Status: Proposed.** 2026-10-30. Builds on ADR-0006 (the Vault), ADR-0017 (Reader and Notes in the
-Vault), ADR-0018 (Names) and ADR-0026 (per-drive writer keys and Writer grants). Spike S1 passed
-(below); S2 is still open. All seven rollout steps are built (see Rollout and "Built", below); S2
-has not been run against a live swarm yet.
+**Status: Accepted.** 2026-10-30; built the same week (see Rollout and "Built", below). Builds on
+ADR-0006 (the Vault), ADR-0017 (Reader and Notes in the Vault), ADR-0018 (Names) and ADR-0026
+(per-drive writer keys and Writer grants). Spike S1 passed. S2 (two pairing members on one swarm)
+has not been run against a live swarm, and two pieces are not built: **Make a new copy without
+them** (§8) and approving or inviting from the phone.
 
 The user wants a Space to have its own library: its own Drives, Contacts, Bookmarks, Reader feeds,
 Notes and Names, next to the ones that belong to the user in every Space. Then they want to share a
@@ -280,7 +281,7 @@ What the build settled that the sections above left open:
 - **nomad.dev** gains a help page on sharing a Space once it ships. No `nomad.*` API changes for
   pages: Space libraries are reached only by nomad:// pages, through `nomad.vault`.
 
-## Spikes before *Accepted*
+## Spikes
 
 - **S1: desktop writes a Drive it didn't create. Passed** on the pinned autobase 7.28.1, corestore
   7.10.1 and hypercore 11.33.1 (`app/scripts/spike-per-drive-writer.mjs`). With the Vault open on the
@@ -299,7 +300,9 @@ What the build settled that the sections above left open:
   - **The Vault itself must keep opening on the root store** on a Device that joined by pairing,
     since its approved key is the root `local` core.
 - **S2: two pairing members on one swarm.** One `BlindPairing` instance serves the Vault's invites
-  and several Space Libraries' invites at once, each candidate reaching the right one.
+  and several Space Libraries' invites at once, each candidate reaching the right one. Built that way:
+  `space-library.js` adds one member per Library to Device pairing's instance (`pairing.instance()`
+  in `device-pairing.js`). Not yet run against a live swarm.
 
 ## Rollout
 

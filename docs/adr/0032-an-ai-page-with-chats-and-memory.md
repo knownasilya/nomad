@@ -10,7 +10,8 @@ Desktop only for now.
 
 ## Decision
 
-1. **`nomad://ai` is the AI's page.** It has three views, `/chats`, `/memory` and `/setup`, and a link
+1. **`nomad://ai` is the AI's page.** It has three views, `/chats`, `/memory` and `/setup` (ADR-0034
+   added a fourth, `/skills`), and a link
    to My Library → Jobs, where Jobs stay (ADR-0030). The browser menu has an AI item next to Notes
    and Search. The old Settings → AI tab is now a nav item that opens `nomad://ai/setup`, and
    `nomad://settings?view=ai` goes there too, so old links keep working. The page is

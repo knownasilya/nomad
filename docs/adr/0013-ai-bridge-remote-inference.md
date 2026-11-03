@@ -1,5 +1,9 @@
 # Remote AI via a Device-to-Device Bridge, not the Vault
 
+**Status: Accepted.** Built: `shared/ai-bridge.mjs` (frames), `app/bg/hyper/ai-bridge.js`
+(desktop Provider) and the phone's AI panel (Client). ADR-0021 later gave a Bridge turn its own
+stage (`phone` or `page`, `remoteStage`).
+
 A Device without its own AI Runtime (typically mobile) can run `nomad.ai.chat()` by forwarding the
 call to another of the user's Devices — the **AI Provider** — over a live **AI Bridge**, a Protomux
 control channel on the shared Hyperswarm connection. The Provider runs the *entire* agentic loop

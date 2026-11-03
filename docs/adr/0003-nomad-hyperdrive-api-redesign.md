@@ -1,5 +1,9 @@
 # nomad.hyperdrive redesigned to match Hyperdrive v11 — no compatibility shim
 
+**Status: Superseded by ADR-0010.** `nomad.hyperdrive` was removed in ADR-0010 Phase 4
+(2026-07-02). Drive apps use `nomad.fs`, which keeps this ADR's v11-shaped verbs (`get`, `put`,
+`del`, `list`, `entry`) and adds a real `stat`. Kept as the record of why the v10 surface went.
+
 The `nomad.hyperdrive` API exposed to drive apps is redesigned to match Hyperdrive v11's native API (`get`, `put`, `del`, `list`, `entry`) rather than wrapping v11 behind the old `stat`/`readFile`/`writeFile`/`readdir` surface.
 
 ## Why
