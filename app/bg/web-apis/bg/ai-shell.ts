@@ -23,6 +23,7 @@ import {
 } from '../../ai/active-tab.mjs';
 import aiAPI, { routeChat, createChatStream } from './ai';
 import * as chatStore from '../../ai/chat-store';
+import * as jobChat from '../../ai/job-chat';
 import * as settingsDb from '../../dbs/settings';
 import { createSteering } from '../../ai/steering.mjs';
 
@@ -197,12 +198,25 @@ export default {
     await notifyAgentHostOfWrite(activePane(this.sender), drive, path);
   },
 
+  // `running` marks the chat of a Job run that is going on now (job-chat.js).
   async listSessions() {
-    return chatStore.listSessions(this.sender);
+    const rows = await chatStore.listSessions(this.sender);
+    return rows.map((r) => ({ ...r, running: jobChat.isLive(r.id) }));
   },
 
   async loadSession(sessionId) {
-    return chatStore.loadSession(this.sender, sessionId);
+    const data = await chatStore.loadSession(this.sender, sessionId);
+    return data ? { ...data, running: jobChat.isLive(sessionId) } : data;
+  },
+
+  // A Job run the user watches, as it happens (job-chat.js): the same events as chat(), from the
+  // run's start. Closing it stops following, not the run; stopJob() stops the run.
+  followJob(sessionId) {
+    return createChatStream((emitter, signal) => jobChat.follow(String(sessionId || ''), emitter, signal));
+  },
+
+  async stopJob(sessionId) {
+    return jobChat.stop(String(sessionId || ''));
   },
 
   newSession() {

@@ -6,7 +6,8 @@ import { cleanError, timeAgo, highlight } from '../util.js';
 
 // The AI Sidebar's saved chats (bg/ai/chat-store.js, in hyper://private/.ai-chat/): one list for the
 // user, not one per site (ADR-0021). Search their names and messages, read one, give it a name,
-// delete it, or open it in the sidebar of this window to carry on.
+// delete it, or open it in the sidebar of this window to carry on. A chat with `job` is a run of
+// an AI Job the user watched (bg/ai/job-chat.js), marked as a Job's; `running` while it goes on.
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -137,7 +138,9 @@ class AiChatsView extends LitElement {
     return html`
       <div class="card ${open ? 'open' : ''}">
         <div class="row-head">
-          <div class="row-icon"><span class="fas fa-comment-alt"></span></div>
+          <div class="row-icon" title=${c.job ? 'An AI Job’s run' : ''}>
+            <span class="fas ${c.job ? 'fa-robot' : 'fa-comment-alt'}"></span>
+          </div>
           ${renaming
             ? html`<form class="rename" @submit=${(e) => this.onRenameSave(e, c)}>
                 <input
@@ -154,6 +157,12 @@ class AiChatsView extends LitElement {
             : html`<div class="meta clickable" @click=${() => this.toggle(c)}>
                 <div class="title">
                   ${highlight(c.title || 'New chat', words)}
+                  ${c.job
+                    ? html`<span class="badge job" title="A run of the Job “${c.job.title}”. It ran by itself.">
+                        <span class="fas fa-fw ${c.running ? 'fa-circle-notch fa-spin' : 'fa-robot'}"></span>
+                        ${c.running ? 'Job · running' : 'Job'}
+                      </span>`
+                    : ''}
                   ${c.id === this.lastId ? html`<span class="badge" title="The chat the AI sidebar opens with">In sidebar</span>` : ''}
                 </div>
                 <div class="summary">${count} · ${timeAgo(c.updatedAt)}</div>
@@ -193,7 +202,7 @@ class AiChatsView extends LitElement {
         ${rows.map(
           (m) => html`
             <div class="msg ${m.role}">
-              <div class="who">${m.role === 'user' ? 'You' : 'Assistant'}</div>
+              <div class="who">${m.role === 'user' ? (m.fromJob ? 'The Job' : 'You') : 'Assistant'}</div>
               <div class="text">${highlight(m.content.trim(), words)}</div>
             </div>
           `
@@ -268,6 +277,11 @@ const viewCSS = css`
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
+  }
+
+  .badge.job .fas {
+    margin-right: 2px;
+    font-size: 10px;
   }
 
   .open-btn .fas {

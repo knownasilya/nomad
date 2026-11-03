@@ -63,3 +63,25 @@ nobody watching, so it can't ask.
   lists it and its runs as before.
 - **ADR-0030** said clicking and typing on pages stays out of Jobs because it needs a tab and the
   user watching. This ADR replaces that: the user watches once, and the Job keeps what they allowed.
+
+## Amendment: watching a run in the AI Sidebar (2026-11-03)
+
+A run is also a chat the user can watch (`app/bg/ai/job-chat.js`, rules in `job-chat-messages.mjs`).
+
+- **Run with me opens the sidebar to the run.** The run's turn events (answer, reasoning, steps)
+  are drawn in the AI Sidebar of the user's window, as one of its own turns would be
+  (`aiShell.followJob`). The first message is the Job's prompt, marked `fromJob`. The sidebar's
+  Stop ends the run (`aiShell.stopJob`), like the Stop bar on its page. A message typed while it
+  runs is sent as the next turn once the run ends: a run can't be steered.
+- **Any run can be watched while it runs.** My Library → Jobs shows a **Running** badge and a
+  **Watch** button (`nomad.vault.viewJob`), which opens the window's sidebar to the run's chat and
+  brings its page to the front: a watched run's tab, or the hidden page in a window of its own,
+  which stays until the user closes it (closing it mid-run only hides it).
+- **A chat is saved only once someone watches the run.** It is a sidebar session with
+  `job: { id, title }`, saved with the watching window's webContents, so the sidebar's history and
+  nomad://ai/chats mark it as a Job's (and as running while it is). The run's record names it
+  (`chat` on the run, `makeRun`), so the Jobs page offers **Open its chat** on that run. Runs
+  nobody watched keep their answer in the Job's history only, so an hourly Job doesn't fill the
+  chat list.
+- Its answer has no Checkpoint: the run records what it changed, and a Job's writes can be staged
+  in a Draft, which the sidebar's Revert doesn't know about.

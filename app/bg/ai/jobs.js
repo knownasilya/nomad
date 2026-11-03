@@ -50,7 +50,7 @@ const running = new Map(); // jobId -> AbortController
 const attempted = new Map(); // jobId -> ISO time
 let draining = false;
 
-/** @param {{ runTurn: (job: any, opts: { signal: AbortSignal, notify: (n: any) => void, trigger: string, lastRun: any, changes: any[], needs: any[], watch: any, onGrant: (writes: any) => Promise<any> }) => Promise<{ output: string, sourceHash?: string | null }> }} opts */
+/** @param {{ runTurn: (job: any, opts: { signal: AbortSignal, notify: (n: any) => void, trigger: string, lastRun: any, changes: any[], needs: any[], watch: any, onGrant: (writes: any) => Promise<any>, chat: { id: string | null } }) => Promise<{ output: string, sourceHash?: string | null }> }} opts */
 export function setup(opts) {
   runTurn = opts.runTurn;
   refresh();
@@ -306,6 +306,7 @@ async function runOne(job, trigger, watch = null) {
   let error = null;
   const changes = [];
   const needs = [];
+  const chat = { id: null }; // the run's chat in the AI Sidebar, when someone watched it
   logger.info('Running a Job', { id: job.id, trigger, watched: !!watch });
   try {
     if (!runTurn) throw new Error('The AI isn’t ready yet');
@@ -320,6 +321,7 @@ async function runOne(job, trigger, watch = null) {
       needs,
       watch,
       onGrant: (w) => grantPages(job.id, w),
+      chat,
     });
     output = res?.output || '';
     if (res?.sourceHash) noteSourceChange(job.id, res.sourceHash);
@@ -346,6 +348,7 @@ async function runOne(job, trigger, watch = null) {
     notification: jl.finalNotification(job, { status, output, error, notified, prevRun }),
     changes,
     needs,
+    chat: chat.id,
   });
   if (error) logger.warn('A Job failed', { id: job.id, error });
   try {
