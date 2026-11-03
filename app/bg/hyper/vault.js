@@ -58,6 +58,10 @@ const DRAFTS_PREFIX = '/.drafts/';
 const PERSONAS_PREFIX = '/.vault/personas/';
 const PERSONA_DEFAULT_PREFIX = '/.vault/persona-default.json';
 const SESSIONS_PREFIX = '/.vault/sessions/';
+// Each Persona's Inbox seed, its Contacts and its Messages (shared/inbox.mjs, ADR-0036).
+const INBOX_PREFIX = '/.vault/inbox/';
+const CONTACTS_PREFIX = '/.vault/contacts/';
+const MESSAGES_PREFIX = '/.vault/messages/';
 // Each Device's open tabs (shared/open-tabs.mjs). Not carried: they belong to the Device.
 const OPEN_TABS_PREFIX = '/.vault/tabs/';
 const CARRY_PREFIXES = [
@@ -73,6 +77,9 @@ const CARRY_PREFIXES = [
   PERSONAS_PREFIX,
   PERSONA_DEFAULT_PREFIX,
   SESSIONS_PREFIX,
+  INBOX_PREFIX,
+  CONTACTS_PREFIX,
+  MESSAGES_PREFIX,
 ];
 
 // Emits 'changed' when this Device switches to another Vault, so code that follows the Vault's

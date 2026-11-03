@@ -19,6 +19,7 @@ import webmcpDevtoolsManifest from './manifests/internal/webmcp';
 import aiShellManifest from './manifests/internal/ai-shell';
 import aiChatsManifest from './manifests/internal/ai-chats';
 import personasManifest from './manifests/internal/personas';
+import inboxManifest from './manifests/internal/inbox';
 
 // internal apis
 import { WEBAPI as loggerAPI } from '../logger';
@@ -37,6 +38,7 @@ import webmcpDevtoolsAPI from './bg/webmcp-devtools';
 import aiShellAPI from './bg/ai-shell';
 import aiChatsAPI from './bg/ai-chats';
 import personasAPI from './bg/personas';
+import inboxAPI from './bg/inbox';
 import { WEBAPI as downloadsAPI } from '../ui/downloads';
 import { WEBAPI as beakerBrowserAPI } from '../browser';
 
@@ -111,6 +113,7 @@ export const setup = function () {
   rpc.exportAPI('ai-shell', aiShellManifest, aiShellAPI, internalOnly);
   rpc.exportAPI('ai-chats', aiChatsManifest, aiChatsAPI, internalOnly);
   rpc.exportAPI('personas', personasManifest, personasAPI, internalOnly);
+  rpc.exportAPI('inbox', inboxManifest, inboxAPI, internalOnly);
 
   // external apis
   rpc.exportAPI('ai', aiManifest, aiAPI, secureOnly('ai'));

@@ -550,6 +550,27 @@ stage, marks `profileSetup`) and, once the phone is linked and the Vault has non
 (`mobile/lib/usePersonaOnboarding.ts` + `NewPersona`'s `onboarding` mode). `nomad.session` in the
 phone's WebView is not built yet. It is a public API, so the sync triad applies.
 
+### The Persona Inbox (ADR-0036)
+
+Direct messages to a Persona. Each Persona with an Inbox has a seed in the Vault
+(`/.vault/inbox/<personaId>.json`); from it come a `sign` key, a `box` key and **one mailbox key per
+Device** (spike S1: Devices sharing one HyperDHT key pair knock each other offline). The rules (paths,
+key derivation, the message link, the sealed frame, `classify`, limits) are `shared/inbox.mjs`; the
+mailbox servers, the outbox, the sender and own-profile checks are `shared/inbox-engine.mjs`, which
+desktop (`app/bg/hyper/inbox.js`) and the phone (`mobile/backend/lib/inbox.mjs`) run with their own
+DHT node, Vault and Personas. Tests: `tests/unit/inbox.test.js` (with golden keys, signature and
+sealed frame: never change them without a new `SIG_CONTEXT`/frame `VERSION`) and
+`tests/unit/inbox-engine.test.js` (two people, three Devices on a local DHT testnet). A delivery
+always connects from a fresh key pair, never the swarm's. The mailbox sends the same ack for every
+outcome. Reading a stranger's profile uses `lookupOnly`, so this Device never announces it. The
+`walled.garden/message` schema and `inbox` on `walled.garden/person` must match `messageError` and
+`publishedInbox`. UI: `nomad://messages` (`app/userland/messages/`, internal `nomad.inbox`), My
+Library → Personas → Messages, site-info's **Message** on a Profile Drive, the phone's Messages
+screen (`mobile/components/Messages.tsx`, `RPC_APPS` `messages`). No page API and no AI capability
+reads or sends messages (§7.1, §7.6). The phone keeps its backend running for
+`BACKGROUND_GRACE_MS` (five minutes) after it leaves the screen, so its mailbox and the AI keep
+answering.
+
 ## Look and feel: every UI supports dark mode and matches the rest
 
 Every new or changed screen must work in light **and** dark, and look like its neighbours.

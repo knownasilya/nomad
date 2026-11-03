@@ -219,6 +219,17 @@ const cssStr = css`
     font-size: 12px;
   }
 
+  .inbox-row .summary {
+    font-size: 12px;
+    color: var(--text-color--light);
+  }
+
+  .toolbar a.link {
+    margin-left: auto;
+    font-size: 12px;
+    text-decoration: none;
+  }
+
   .empty.small {
     padding: 14px 6px;
     text-align: left;

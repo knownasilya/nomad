@@ -140,8 +140,9 @@ async function _loadCollaborativeDriveInner(keyStr, opts = {}) {
 
   // Join the swarm BEFORE updating. A remote collaborative drive must replicate its
   // bootstrap from peers, so a connection has to be in place first — createHyperdriveSession
-  // joins during setup for the same reason.
-  _joinSwarm(base);
+  // joins during setup for the same reason. `lookupOnly` (a stranger's Profile Drive the Inbox
+  // reads to check a sender, ADR-0036 §6.3) finds peers without announcing that this Device has it.
+  _joinSwarm(base, { lookupOnly: !!opts.lookupOnly });
 
   const sess = _makeSession(keyStr, base);
   sessions[keyStr] = sess;
@@ -463,13 +464,13 @@ function _makeSession(keyStr, base) {
   };
 }
 
-function _joinSwarm(base) {
+function _joinSwarm(base, { lookupOnly = false } = {}) {
   const swarm = daemon.getSwarm();
   if (!swarm) return;
   const discKeyStr = b4a.toString(base.discoveryKey, 'hex');
   // Use store-level replication — swarm connection handler in daemon.js already calls store.replicate(conn)
   // so just join the discovery key for the autobase
-  swarm.join(base.discoveryKey);
+  swarm.join(base.discoveryKey, lookupOnly ? { server: false, client: true } : undefined);
 
   // Open the writer-request control channel on this base's peers (existing + future).
   const keyStr = b4a.toString(base.key, 'hex');

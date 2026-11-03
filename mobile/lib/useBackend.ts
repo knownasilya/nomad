@@ -6,7 +6,7 @@ import RPC from 'bare-rpc'
 import b4a from 'b4a'
 
 import bundle from '../app/app.bundle.mjs'
-import { holdForAiTurn } from './hostingService'
+import { holdForAiTurn, holdForBackground } from './hostingService'
 import { currentVersion } from './updater'
 import {
   RPC_OPEN,
@@ -268,6 +268,10 @@ export interface AiChatHandle {
 // Boots the Bare worklet (the P2P backend) once and wires up RPC. The returned
 // `open`/`close` functions post commands to the backend; responses are routed
 // back through the latest `handlers` via a ref so the worklet only starts once.
+// How long the backend keeps running after the app leaves the screen (ADR-0036 spike S2: without
+// it, bare-kit parks the worklet at once and the phone's mailbox and AI stop answering).
+export const BACKGROUND_GRACE_MS = 5 * 60 * 1000
+
 export function useBackend (handlers: BackendHandlers): Backend {
   const rpcRef = useRef<any>(null)
   const handlersRef = useRef(handlers)
@@ -280,6 +284,14 @@ export function useBackend (handlers: BackendHandlers): Backend {
   // backgrounded, and the worklet they need kept awake. Only AI turns take a hold today.
   const awakeHolds = useRef(0)
   const workletRef = useRef<any>(null)
+  // The real suspend (bare-kit's update), so a hold's release can park the worklet without going
+  // back through the grace below.
+  const suspendRef = useRef<((state?: AppStateStatus) => void) | null>(null)
+  // The grace after the app leaves the screen: the backend keeps running for BACKGROUND_GRACE_MS so
+  // a message can still arrive at the Inbox's mailbox (ADR-0036) and the AI (its Bridge, a turn the
+  // user starts and switches away from) keeps working. Spent until the app comes back.
+  const grace = useRef<{ release: () => void, timer: ReturnType<typeof setTimeout> } | null>(null)
+  const graceSpent = useRef(false)
   const vaultListeners = useRef(new Set<() => void>())
   const onVaultChange = useRef((listener: () => void) => {
     vaultListeners.current.add(listener)
@@ -298,8 +310,13 @@ export function useBackend (handlers: BackendHandlers): Backend {
     // instead of racing to resume after it. With no holds the original behaviour runs untouched,
     // so an idle app still sleeps as it should.
     const suspendOnBackground = w.update.bind(worklet)
+    suspendRef.current = suspendOnBackground
     w.update = (state?: AppStateStatus) => {
-      if (state === 'background' && awakeHolds.current > 0) return
+      if (state === 'active') endGrace()
+      if (state === 'background') {
+        startGrace()
+        if (awakeHolds.current > 0) return
+      }
       return suspendOnBackground(state)
     }
     // Belt and braces: if anything else suspends the worklet (a state we didn't see, a future
@@ -401,9 +418,29 @@ export function useBackend (handlers: BackendHandlers): Backend {
   // the LAST hold while the app is already in the background suspends the worklet there and then —
   // without that, work started in the foreground would leave the backend running until the user
   // came back, since nothing else re-checks AppState in between.
-  function acquireAwake (): () => void {
+  function startGrace (): void {
+    if (grace.current || graceSpent.current) return
+    const release = acquireAwake(holdForBackground)
+    const timer = setTimeout(() => {
+      grace.current = null
+      graceSpent.current = true
+      release()
+    }, BACKGROUND_GRACE_MS)
+    grace.current = { release, timer }
+  }
+
+  function endGrace (): void {
+    graceSpent.current = false
+    const g = grace.current
+    if (!g) return
+    grace.current = null
+    clearTimeout(g.timer)
+    g.release()
+  }
+
+  function acquireAwake (holdService: () => () => void = holdForAiTurn): () => void {
     awakeHolds.current++
-    const releaseService = holdForAiTurn()
+    const releaseService = holdService()
     let released = false
     return () => {
       if (released) return
@@ -412,7 +449,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
       releaseService()
       const worklet = workletRef.current
       if (awakeHolds.current === 0 && worklet && !worklet.suspended && AppState.currentState !== 'active') {
-        try { worklet.update('background') } catch {}
+        try { (suspendRef.current || worklet.update.bind(worklet))('background') } catch {}
       }
     }
   }

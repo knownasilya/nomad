@@ -556,10 +556,24 @@ export function update(id, { label, title, description, thumb, email } = {}) {
   });
 }
 
+// Work that goes with a Persona when it's deleted (the Inbox: its seed, Contacts and Messages,
+// ADR-0036 §7.4). Registered by bg/hyper/inbox.js, which imports this module.
+const removeHooks = [];
+export function onRemove(fn) {
+  removeHooks.push(fn);
+}
+
 // Delete a Persona and its Sessions (each open page gets `change`). Spaces that named it fall back to
 // the default; if it was the default there is none until the user picks one. The Profile Drive stays.
 export function remove(id) {
   return serial(async () => {
+    for (const fn of removeHooks) {
+      try {
+        await fn(id);
+      } catch (e) {
+        logger.warn('Could not clean up after a Persona', { error: String(e) });
+      }
+    }
     for (const path of await vault.listAppRecordPaths(P.SESSIONS_PREFIX)) {
       if (P.parseSessionPath(path)?.personaId === id) await vault.delAppRecord(path);
     }
@@ -763,6 +777,54 @@ export async function confirmProfileWriter(sender, url, writerKey) {
     ? await dialog.showMessageBox(win, opts)
     : await dialog.showMessageBox(opts);
   if (response !== 1) throw new UserDeniedError();
+}
+
+// For the Persona Inbox (bg/hyper/inbox.js, ADR-0036)
+// =
+
+// Every Persona, with whether it passed the writer check (§7.3: an Inbox runs only on a usable one).
+export function inboxPersonas() {
+  return [...personas.values()].map((p) => ({
+    id: p.id,
+    label: p.label,
+    profileUrl: p.profileUrl,
+    usable: usable(p),
+  }));
+}
+
+export function deviceInfo() {
+  return { vaultReady, deviceKey: ownDeviceKey, deviceKeys: [...deviceKeys] };
+}
+
+// A Profile Drive's /index.json, or null when it can't be read in time. Only looks the drive up;
+// this Device doesn't announce a stranger's profile (ADR-0036 §6.3).
+export async function readProfileManifest(url) {
+  const key = P.driveKeyOf(url);
+  if (!key) return null;
+  const own = [...personas.values()].some((p) => P.driveKeyOf(p.profileUrl) === key);
+  const sess = await withTimeout(
+    autobases.getOrLoadCollaborativeDrive(key, own ? {} : { lookupOnly: true }).catch(() => null),
+    LOAD_TIMEOUT
+  );
+  if (!sess) return null;
+  await withTimeout(
+    sess.base.update().catch(() => {}),
+    LOAD_TIMEOUT
+  );
+  return autobases.readJson(sess, '/index.json').catch(() => null);
+}
+
+// Write (or with null, remove) the `inbox` field of a Persona's Profile Drive. False when this
+// Device can't write the drive yet; another of the user's Devices will.
+export function writeProfileInbox(id, inbox) {
+  return serial(async () => {
+    const p = personas.get(id);
+    if (!p) return false;
+    const sess = await openProfile(p.profileUrl);
+    if (!sess?.writable) return false;
+    await writeManifest(sess, { inbox: inbox || undefined });
+    return true;
+  });
 }
 
 export { spaceIdOfKey };

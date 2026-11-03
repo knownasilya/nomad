@@ -23,6 +23,7 @@ export class PersonasView extends LitElement {
     return {
       st: { type: Object },
       sessions: { type: Array },
+      inbox: { type: Object },
       filter: { type: String },
       editing: { type: Object },
     };
@@ -36,12 +37,23 @@ export class PersonasView extends LitElement {
     super();
     this.st = undefined; // undefined = loading
     this.sessions = [];
+    this.inbox = null; // nomad.inbox.summary() and the notification setting (ADR-0036)
     this.filter = undefined;
     this.editing = new URLSearchParams(location.search).get('new') ? blank() : null;
     this.load();
     try {
       nomad.personas.watch().addEventListener('changed', () => this.load());
+      nomad.inbox.watch().addEventListener('changed', () => this.loadInbox());
     } catch {}
+  }
+
+  async loadInbox() {
+    try {
+      const [summary, notify] = await Promise.all([nomad.inbox.summary(), nomad.inbox.getNotify()]);
+      this.inbox = { ...summary, notify };
+    } catch {
+      this.inbox = null;
+    }
   }
 
   async load() {
@@ -49,6 +61,7 @@ export class PersonasView extends LitElement {
       const [st, sessions] = await Promise.all([nomad.personas.list(), nomad.personas.listSessions()]);
       this.st = st;
       this.sessions = sessions;
+      this.loadInbox();
     } catch (e) {
       this.st = { personas: [], spaces: [], hasVault: false, vaultReady: false, error: e.message };
       this.sessions = [];
@@ -103,6 +116,7 @@ export class PersonasView extends LitElement {
           : repeat(personas, (p) => p.id, (p) => this.renderPersona(p))}
 
       ${st.personas.length ? this.renderSpaces() : ''}
+      ${st.personas.length ? this.renderMessages() : ''}
       ${this.renderSessions()}
     `;
   }
@@ -238,6 +252,98 @@ export class PersonasView extends LitElement {
     `;
   }
 
+  // Messages (ADR-0036): who may write to each Persona, its message link and its address.
+  renderMessages() {
+    const box = this.inbox;
+    if (!box) return '';
+    return html`
+      <div class="toolbar section">
+        <span class="section-title">Messages</span>
+        <a class="link" href="nomad://messages" target="_blank">Open Messages</a>
+      </div>
+      <div class="card list">
+        ${box.personas.map(
+          (m) => html`
+            <div class="list-row inbox-row">
+              <div class="grow meta-col">
+                <div class="title">${m.label}</div>
+                <div class="summary">${inboxSummary(m)}</div>
+              </div>
+              ${m.mode === 'link' && m.enabled
+                ? html`<button class="icon" title="Copy message link" aria-label="Copy the message link for ${m.label}" @click=${() => this.onCopyLink(m)}>
+                    <span class="fas fa-fw fa-link"></span>
+                  </button>`
+                : ''}
+              ${m.enabled
+                ? html`<button class="icon" title="Change inbox address" aria-label="Change the inbox address for ${m.label}" @click=${() => this.onRotate(m)}>
+                    <span class="fas fa-fw fa-sync-alt"></span>
+                  </button>`
+                : ''}
+              <select aria-label="Who can message ${m.label}" ?disabled=${!m.usable} @change=${(ev) => this.onSetMode(m, ev.target.value)}>
+                <option value="off" ?selected=${m.mode === 'off'}>Only people I write to</option>
+                <option value="link" ?selected=${m.mode === 'link'}>People I give a link to</option>
+                <option value="anyone" ?selected=${m.mode === 'anyone'}>Anyone, as requests</option>
+              </select>
+            </div>
+          `
+        )}
+        <label class="list-row">
+          <input type="checkbox" .checked=${!!box.notify} @change=${(ev) => this.onSetNotify(ev.target.checked)} />
+          <span class="grow">Notify me of new messages from my contacts <span class="hint">Never for requests</span></span>
+        </label>
+      </div>
+      <div class="hint-row">
+        Messages are sealed so only your devices can open them, and kept in your Vault. The person you write to sees your
+        device’s network address, and anyone who can read your Vault can read your messages.
+      </div>
+    `;
+  }
+
+  async onSetMode(m, mode) {
+    try {
+      await nomad.inbox.setMode(m.personaId, mode);
+      await this.loadInbox();
+      if (mode === 'link') toast.create(`Copy the message link and give it to people you want to hear from`, 'success');
+    } catch (err) {
+      toast.create(cleanError(err), 'error');
+      await this.loadInbox();
+    }
+  }
+
+  async onCopyLink(m) {
+    try {
+      const link = await nomad.inbox.messageLink(m.personaId);
+      if (!link) throw new Error('This Persona has no inbox yet');
+      await navigator.clipboard.writeText(link);
+      toast.create('Message link copied', 'success');
+    } catch (err) {
+      toast.create(cleanError(err), 'error');
+    }
+  }
+
+  async onRotate(m) {
+    const ok = confirm(
+      `Change the inbox address for “${m.label}”?\n\nEvery message link you gave out stops working, and people you talk to get the new address with your next message. Messages already on their way still arrive for 14 days.`
+    );
+    if (!ok) return;
+    try {
+      await nomad.inbox.rotate(m.personaId);
+      await this.loadInbox();
+      toast.create('Inbox address changed', 'success');
+    } catch (err) {
+      toast.create(cleanError(err), 'error');
+    }
+  }
+
+  async onSetNotify(on) {
+    try {
+      await nomad.inbox.setNotify(on);
+      await this.loadInbox();
+    } catch (err) {
+      toast.create(cleanError(err), 'error');
+    }
+  }
+
   renderSessions() {
     const rows = this.sessions.filter((s) => this.matches(s.site, s.personaLabel, s.spaceName));
     return html`
@@ -334,7 +440,12 @@ export class PersonasView extends LitElement {
 
   async onDelete(p) {
     const n = p.sessions ? ` You’ll be logged out of ${p.sessions} site${p.sessions === 1 ? '' : 's'}.` : '';
-    if (!confirm(`Delete the Persona “${p.label}”?${n} Its profile drive stays in your Hyperdrives.`)) return;
+    if (
+      !confirm(
+        `Delete the Persona “${p.label}”?${n} Its messages and contacts are deleted from all your devices. Its profile drive stays in your Hyperdrives.`
+      )
+    )
+      return;
     try {
       await nomad.personas.remove(p.id);
       await this.load();
@@ -353,6 +464,15 @@ export class PersonasView extends LitElement {
       toast.create(cleanError(err), 'error');
     }
   }
+}
+
+function inboxSummary(m) {
+  if (!m.usable) return 'Off: its profile drive has a writer that isn’t one of your devices.';
+  if (m.state === 'changed') return m.reason;
+  if (!m.enabled) return 'Off. Writing to someone turns it on for the people you write to.';
+  if (m.mode === 'anyone') return 'Anyone can write. People who aren’t your contacts wait in Requests.';
+  if (m.mode === 'link') return 'People with your message link can write. They wait in Requests until you accept.';
+  return 'Only people you wrote to can answer.';
 }
 
 function describePerms(perms) {

@@ -10,6 +10,7 @@ import { FollowsSchema, type Follows } from './follows.ts';
 import { ReactionSchema, type Reaction } from './reaction.ts';
 import { StatusSchema, type Status } from './status.ts';
 import { VoteSchema, type Vote } from './vote.ts';
+import { MessageSchema, type Message } from './message.ts';
 
 export {
   PersonSchema,
@@ -21,9 +22,10 @@ export {
   ReactionSchema,
   StatusSchema,
   VoteSchema,
+  MessageSchema,
 };
 
-export type { Person, Post, Feed, Bookmark, Comment, Follows, Reaction, Status, Vote };
+export type { Person, Post, Feed, Bookmark, Comment, Follows, Reaction, Status, Vote, Message };
 
 export const SCHEMAS = {
   'walled.garden/person': PersonSchema,
@@ -35,6 +37,7 @@ export const SCHEMAS = {
   'walled.garden/reaction': ReactionSchema,
   'walled.garden/status': StatusSchema,
   'walled.garden/vote': VoteSchema,
+  'walled.garden/message': MessageSchema,
 } as const;
 
 // The set of registered walled.garden `type` strings (e.g. 'walled.garden/post').
@@ -50,4 +53,5 @@ export type WalledGardenRecord =
   | Follows
   | Reaction
   | Status
-  | Vote;
+  | Vote
+  | Message;

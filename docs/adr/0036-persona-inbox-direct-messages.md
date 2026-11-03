@@ -1,6 +1,7 @@
 # Persona Inbox: direct messages to a Persona, end-to-end encrypted, with the user deciding who gets in
 
-**Status: Proposed.** 2026-11-02. Builds on ADR-0031 (Personas and Sessions, implemented in [#128]),
+**Status: Accepted** 2026-11-03, with the spike S1 amendment below (one mailbox key per Device).
+Proposed 2026-11-02. Builds on ADR-0031 (Personas and Sessions, implemented in [#128]),
 ADR-0006 (the Vault), ADR-0013 (followers are subscriber-side, which set the "encrypted follow-inbox"
 aside as its own ADR) and ADR-0029 (Shared Spaces). Amends ADR-0031 §6: `walled.garden/person` gains
 one optional field. Two spikes (below) must pass before *Accepted*.
@@ -316,6 +317,33 @@ UI and the nomad.dev page say so in those words.
 - **S2, the phone in the background.** How long the phone's backend keeps a mailbox reachable after
   the app leaves the screen, and what that costs in battery. This sets how the UI describes phone
   delivery.
+
+## Spike results (2026-11-03)
+
+- **S1, several Devices on one mailbox key: fails.** `scripts/spikes/inbox-s1-shared-mailbox.mjs` and
+  `inbox-s1-failover.mjs`, on a local HyperDHT testnet with the Devices as ephemeral nodes (as a
+  laptop or phone behind NAT is). A HyperDHT node keeps one announce record and one forwarding entry
+  per target *and public key*, so three Devices on one key pair overwrite each other:
+  - a Device that **closes cleanly** unannounces the shared record, and the others become
+    unreachable (`PEER_NOT_FOUND`) until they re-announce, about every five minutes;
+  - when the Device that announced last **dies** (a lid closing, a crash), delivery fails for 296 s,
+    until another Device's next re-announce.
+  With one key **per Device**, the same kill fails over at once: the sender tries the next key.
+  So, as this ADR planned for this case: **each Device derives its own mailbox key**,
+  `keyPair(hash('nomad/inbox/mailbox/v1' ‖ seed ‖ deviceKey))`, and the published field, the message
+  link and `replyTo` carry a short list, `mailboxes` (at most 8, the Vault's Devices). §2's table,
+  §3's `inbox.mailbox` and §3.1's `&mailbox=` become `mailboxes` / a repeated `&mailbox=`. A
+  message link made before a Device joined doesn't name it; the Devices it does name still answer,
+  and every Message carries the current list in `replyTo`. The outbox's first retries are short
+  (15 s, 1 min, 2 min, 5 min, then up to 30 min) to cover a dead Device's announce lingering.
+- **S2, the phone in the background: answered from the code, battery still to measure.**
+  react-native-bare-kit suspended the Bare worklet on every move to the background, so the phone's
+  mailbox (and the AI Bridge) stopped answering the moment Nomad left the screen, unless an AI turn
+  held it. The phone now keeps the backend running for **five minutes** after it leaves the screen
+  (`BACKGROUND_GRACE_MS` in `mobile/lib/useBackend.ts`, with the Android foreground service up for
+  that time), then parks it. The UI says the phone receives messages while Nomad is open or was in
+  the last few minutes; the computer is the Device that receives the rest. What those five minutes
+  cost in battery is still to be measured on a phone.
 
 ## Rollout
 

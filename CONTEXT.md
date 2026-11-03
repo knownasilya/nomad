@@ -220,21 +220,22 @@ proposed).
 _Avoid_: login, token, credential, sign-in, auth
 
 **Inbox**:
-A Persona's ability to receive Messages: keys derived from a seed in the Vault, and a mailbox on the
-DHT that the user's online Devices answer. Off until the user turns it on; then reachable by people
-given a message link, or by anyone as Message requests (ADR-0036, proposed).
+A Persona's ability to receive Messages: keys derived from a seed in the Vault, and one mailbox per
+Device on the DHT, which that Device answers while it's online. Off until the user turns it on or
+writes to someone; then reachable by people given a message link, or by anyone as Message requests
+(ADR-0036).
 _Avoid_: mailbox (for the whole feature), DMs (in code), chat
 
 **Message**:
 A `walled.garden/message`: plain text from one Persona to another Profile Drive, sealed to the
 recipient's Inbox and signed by the sender. Kept in each side's Vault. All Messages between one of the
-user's Personas and one other Profile Drive are a **Conversation**.
+user's Personas and one other Profile Drive are a **Conversation** (ADR-0036).
 _Avoid_: DM (in code), chat message, mail, post
 
 **Contact**:
 A Profile Drive the user accepted, or wrote to first, for one Persona. Its Messages reach the inbox
 and notify. A Message from anyone else is a **Message request**: it waits, silently, until the user
-accepts, ignores or blocks the sender, and the sender is never told which (ADR-0036, proposed).
+accepts, ignores or blocks the sender, and the sender is never told which (ADR-0036).
 _Avoid_: friend, follower, connection
 
 **Vouch**:
