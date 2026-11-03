@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.39.0](https://github.com/knownasilya/nomad/compare/v1.38.0...v1.39.0) (2026-11-03)
+
+
+### Features
+
+* **ai:** watch a Job's run in the AI sidebar ([44b9614](https://github.com/knownasilya/nomad/commit/44b9614fed9d900cb13ffb90da6c0b1988cddac9))
+* **inbox:** direct messages to a Persona, on desktop (ADR-0036) ([1149e49](https://github.com/knownasilya/nomad/commit/1149e49bb2e7435a249dae298790137b3f2bff30))
+* **mobile:** Messages on the phone (ADR-0036 step 3) ([daceaa0](https://github.com/knownasilya/nomad/commit/daceaa027ac22b1099e70b17442ccd3c381fe49b))
+
+
+### Bug Fixes
+
+* **messages:** link to the Messages guide on nomad.dev ([5e91cec](https://github.com/knownasilya/nomad/commit/5e91cec3433a76c85bd14317368ec7010462745c))
+
 ## [1.38.0](https://github.com/knownasilya/nomad/compare/v1.37.0...v1.38.0) (2026-11-02)
 
 
