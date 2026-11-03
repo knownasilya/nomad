@@ -506,6 +506,16 @@ async function nomadProtocol(request) {
         { fallbackToIndexHTML: true }
       );
     }
+    // The Persona Inbox (ADR-0036): direct messages. /new and ?persona=&with= are routes of one page.
+    if (requestUrl === 'nomad://messages' || requestUrl.startsWith('nomad://messages/')) {
+      return serveAppAsset(
+        requestUrl,
+        path.join(__dirname, 'userland', 'messages'),
+        cb,
+        // @ts-ignore
+        { fallbackToIndexHTML: true }
+      );
+    }
     if (requestUrl === 'nomad://reader' || requestUrl.startsWith('nomad://reader/')) {
       return serveAppAsset(
         requestUrl,

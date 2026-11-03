@@ -17,6 +17,7 @@ import Reader from '../components/Reader'
 import Notes from '../components/Notes'
 import Jobs from '../components/Jobs'
 import Personas from '../components/Personas'
+import Messages from '../components/Messages'
 import NewPersona from '../components/NewPersona'
 import ActionSheet from '../components/ActionSheet'
 import SiteIcon from '../components/SiteIcon'
@@ -34,6 +35,7 @@ import FileExplorer, { type ExplorerDrive } from '../components/FileExplorer'
 import type { HyperRender } from '../components/HyperView'
 import { useBackend, type SpaceJoin } from '../lib/useBackend'
 import { useJobNotifications } from '../lib/useJobNotifications'
+import { useMessageNotifications } from '../lib/useMessageNotifications'
 import { usePersonaOnboarding } from '../lib/usePersonaOnboarding'
 import { syncHostingService } from '../lib/hostingService'
 import HostingSettings from '../components/HostingSettings'
@@ -73,6 +75,7 @@ type Screen =
   | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' | 'personas' }
   | { name: 'notes'; noteId?: string } // noteId: the note to open, e.g. the one a followed link was in
   | { name: 'jobs'; jobId?: string; runId?: string } // a tapped Job notification opens its run
+  | { name: 'messages'; personaId?: string; with?: string; link?: string } // a Conversation, or a message link to answer
   | { name: 'explorer'; drive: ExplorerDrive }
 type ScreenName = Screen['name']
 
@@ -300,6 +303,7 @@ export default function Browser () {
   if (explorerDrive) lastExplorerDrive.current = explorerDrive
   const notesScreen = screens.find((sc) => sc.name === 'notes')
   const jobsScreen = screens.find((sc) => sc.name === 'jobs')
+  const messagesScreen = screens.find((sc) => sc.name === 'messages')
   // The sheets over the browser, and the AI panel.
   const [spacesOpen, setSpacesOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -362,6 +366,8 @@ export default function Browser () {
 
   // A notification from an AI Job for each new run that has one; a tap opens that run.
   useJobNotifications(backend, ({ jobId, runId }) => openScreen({ name: 'jobs', jobId, runId }))
+  // A notification for each new Message to a Persona (ADR-0036); a tap opens the Conversation.
+  useMessageNotifications(backend, (c) => openScreen({ name: 'messages', personaId: c.personaId, with: c.with }))
 
   // Spaces — each has its own Root Drive; bookmarks/history/drives are scoped to the active space.
   const spacesApi = useSpaces(backend)
@@ -492,10 +498,12 @@ export default function Browser () {
           : { kind: 'web', url: r.url }
         navTo(id, entry, true)
       }
+      // A Persona's message link typed or pasted in the address bar opens Messages to write to them.
+      if (routeLink(rawInput.trim()).to === 'messages') return openScreen({ name: 'messages', link: rawInput.trim() })
       if (!mayBeName(rawInput)) return go(rawInput)
       names.resolve(rawInput).then(go)
     },
-    [navTo, persist, names.resolve]
+    [navTo, persist, names.resolve, openScreen]
   )
 
   // The recent-sites card (no dropdown under the bar, which covered the page as you typed). The
@@ -886,9 +894,10 @@ export default function Browser () {
     if (req.isTopFrame === false) return false
     if (route.to === 'tab') navigate(id, route.url)
     else if (route.to === 'reader') openFeed(route.url)
+    else if (route.to === 'messages') openScreen({ name: 'messages', link: route.url })
     else openOutside(id, route.url, route.fallback)
     return false
-  }, [navigate, openFeed, openOutside])
+  }, [navigate, openFeed, openOutside, openScreen])
 
   // A page's new windows (modules/nomad-webview-windows): a target="_blank" link opens a new tab, as
   // in Chrome, and a feed it tried to download goes to Reader. A sign-in popup shows over the tab
@@ -1223,6 +1232,7 @@ export default function Browser () {
             { label: 'My Library', icon: 'book', onPress: () => openScreen({ name: 'library' }) },
             { label: 'Reader', icon: 'rss', onPress: () => openScreen({ name: 'reader' }) },
             { label: 'Notes', icon: 'sticky-note', onPress: () => openScreen({ name: 'notes' }) },
+            { label: 'Messages', icon: 'comments', onPress: () => openScreen({ name: 'messages' }) },
             { label: 'AI Jobs', icon: 'clock', onPress: () => openScreen({ name: 'jobs' }) },
             { label: 'Personas', icon: 'id-badge', onPress: () => openScreen({ name: 'personas' }) }
           ],
@@ -1340,6 +1350,19 @@ export default function Browser () {
         apps={backend.apps}
         onVaultChange={backend.onVaultChange}
         onOpenDevices={() => openScreen({ name: 'devices' })}
+      />
+
+      <Messages
+        visible={!!messagesScreen}
+        onClose={() => closeScreenNamed('messages')}
+        openPersonaId={messagesScreen?.name === 'messages' ? messagesScreen.personaId : undefined}
+        openWith={messagesScreen?.name === 'messages' ? messagesScreen.with : undefined}
+        openLink={messagesScreen?.name === 'messages' ? messagesScreen.link : undefined}
+        apps={backend.apps}
+        onVaultChange={backend.onVaultChange}
+        onOpenDevices={() => openScreen({ name: 'devices' })}
+        onOpenPersonas={() => openScreen({ name: 'personas' })}
+        onOpenUrl={(url) => openFromScreens(url, undefined, screensRef.current.map((sc) => (sc.name === 'messages' ? { name: 'messages' } : sc)))}
       />
 
       <Personas

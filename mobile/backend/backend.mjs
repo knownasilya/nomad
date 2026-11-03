@@ -17,6 +17,7 @@ import hcrypto from 'hypercore-crypto'
 import { decodeInlineJson, WRITERS_PREFIX as DRIVE_WRITERS } from '../../shared/fs-core.mjs'
 import * as spaceLib from './lib/space-library.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
+import { createPhoneInbox } from './lib/inbox.mjs'
 import Protomux from 'protomux'
 import c from 'compact-encoding'
 import { createDevicePresence } from '../../shared/device-presence.mjs'
@@ -137,12 +138,35 @@ function setVault (base) {
   if (vault === base) return
   if (vault) vault.removeListener('update', vaultChanged)
   if (vault) vault.removeListener('update', personaWritersSoon)
+  if (vault) vault.removeListener('update', inboxVaultUpdated)
   vault = base
   if (vault) vault.on('update', vaultChanged)
   if (vault) vault.on('update', personaWritersSoon)
+  if (vault) vault.on('update', inboxVaultUpdated)
   vaultChanged()
   personaWritersSoon()
+  inbox.setVault(vault).catch((e) => console.log('[inbox] setVault', e?.message || e))
 }
+
+// The Persona Inbox (ADR-0036, lib/inbox.mjs): this phone's mailboxes and outbox. While the worklet
+// is suspended nothing runs; on resume it listens again and retries the outbox.
+const inbox = createPhoneInbox({
+  dht: manager.swarm.dht,
+  openProfile: (url, ms) => openProfile(url, ms),
+  profileWriters: (base) => profileWriters(base),
+  writeProfileJson: async (url, manifest) => {
+    const key = pe.driveKeyOf(url)
+    await manager.writeFile(DRIVE_AUTOBASE, keyBuf(key), drivesNs[key] || null, '/index.json', b4a.from(JSON.stringify(manifest, null, 2)))
+  },
+  onChange: () => vaultChanged()
+})
+let inboxTimer = null
+function inboxVaultUpdated () {
+  clearTimeout(inboxTimer)
+  inboxTimer = setTimeout(() => inbox.vaultUpdated(), 1000)
+}
+Bare.on('resume', () => inbox.resume())
+goodbye(() => inbox.close())
 
 // Shared Spaces (ADR-0029, lib/space-library.mjs). A shared Space's feeds, Notes, Names and drive
 // list are in its Space Library. Each Library this phone opens tells the UI when it changes, as the
@@ -631,7 +655,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
       return
     }
     if (!vault) {
-      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'updates' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : 'Link this phone to use Reader and Notes' })
+      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'messages' ? 'Link this phone to your computer to use Messages' : app === 'updates' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : 'Link this phone to use Reader and Notes' })
       return
     }
     let value
@@ -677,7 +701,11 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'personas' && action === 'create') value = await createPersona(args)
     else if (app === 'personas' && action === 'get') value = await getPersona(args)
     else if (app === 'personas' && action === 'update') value = await updatePersona(args)
-    else if (app === 'personas' && action === 'remove') value = await vaultApps.removePersona(vault, args.id)
+    else if (app === 'personas' && action === 'remove') {
+      // Its Inbox goes with it: the seed, Contacts and Messages (ADR-0036 §7.4).
+      await inbox.handle('forget', { personaId: args.id }).catch(() => {})
+      value = await vaultApps.removePersona(vault, args.id)
+    } else if (app === 'messages') value = await inbox.handle(action, args)
     else if (app === 'updates' && action === 'list') value = await vaultApps.deviceUpdates(vault, args.version)
     else if (app === 'updates' && action === 'request') value = await vaultApps.requestDeviceUpdate(vault, { device: args.device, version: args.version, prerelease: !!args.prerelease })
     else throw new Error(`Unknown ${app} action: ${action}`)

@@ -13,6 +13,8 @@ import { NativeModules, PermissionsAndroid, Platform } from 'react-native'
 // Two independent reasons keep it running, and the service stays up while EITHER holds:
 //   • hosted drives  — syncHostingService(count), whenever the hosted-drive count may have changed
 //   • an AI turn     — holdForAiTurn(), released by the function it returns
+//   • the grace after leaving the screen — holdForBackground() (useBackend): the Inbox's mailbox and
+//     the AI keep working for a few minutes after the user switches apps
 // Keeping both here (rather than one caller each racing start/stop) is what stops a finished AI
 // turn from tearing down the notification a hosting session still needs.
 
@@ -22,6 +24,7 @@ const native: { start(text: string): void; stop(): void } | undefined =
 let askedForNotifications = false
 let hostedDrives = 0
 let aiTurns = 0
+let background = 0
 
 export async function syncHostingService (count: number): Promise<void> {
   hostedDrives = count
@@ -42,9 +45,23 @@ export function holdForAiTurn (): () => void {
   }
 }
 
+// Hold the service up for the few minutes after the app leaves the screen. Same contract as
+// holdForAiTurn.
+export function holdForBackground (): () => void {
+  background++
+  void apply()
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    background = Math.max(0, background - 1)
+    void apply()
+  }
+}
+
 async function apply (): Promise<void> {
   if (!native) return
-  if (hostedDrives <= 0 && aiTurns <= 0) {
+  if (hostedDrives <= 0 && aiTurns <= 0 && background <= 0) {
     native.stop()
     return
   }
@@ -63,5 +80,6 @@ async function apply (): Promise<void> {
 function label (): string {
   const hosting = hostedDrives === 1 ? 'hosting 1 drive' : `hosting ${hostedDrives} drives`
   if (aiTurns > 0) return hostedDrives > 0 ? `Answering with AI · ${hosting}` : 'Answering with AI'
+  if (hostedDrives <= 0) return 'Staying connected for a few minutes'
   return hostedDrives === 1 ? 'Hosting 1 drive for peers' : `Hosting ${hostedDrives} drives for peers`
 }

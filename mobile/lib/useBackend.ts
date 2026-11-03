@@ -6,7 +6,7 @@ import RPC from 'bare-rpc'
 import b4a from 'b4a'
 
 import bundle from '../app/app.bundle.mjs'
-import { holdForAiTurn } from './hostingService'
+import { holdForAiTurn, holdForBackground } from './hostingService'
 import { currentVersion } from './updater'
 import {
   RPC_OPEN,
@@ -166,7 +166,7 @@ export interface Backend {
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas'
+export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
@@ -217,6 +217,16 @@ export interface JobsList { jobs: Job[]; writable: boolean }
 export interface PersonaSummary { id: string; label: string; email: string; profileUrl: string; isDefault: boolean; sessions: number }
 export interface PersonaSession { path: string; origin: string; site: string; personaLabel: string; spaceName: string; thisSpace: boolean; perms: string[]; createdAt: string; expiresAt: string | null; expired: boolean }
 export interface PersonasList { personas: PersonaSummary[]; defaultId: string | null; spacePersonaId: string | null; resolvedId: string | null; spaceKnown: boolean; sessions: PersonaSession[]; writable: boolean }
+// The Persona Inbox (ADR-0036, backend/lib/inbox.mjs over RPC_APPS `messages`)
+export interface InboxPersona { personaId: string; label: string; profileUrl: string; usable: boolean; enabled: boolean; mode: 'off' | 'link' | 'anyone'; sent: boolean; state: string; reason: string }
+export interface InboxMessage { type: 'walled.garden/message'; id: string; from: string; to: string; createdAt: string; text: string; inReplyTo?: string }
+export interface InboxRecord { personaId: string; direction: 'in' | 'out'; message: InboxMessage; status: 'queued' | 'delivered' | 'failed' | 'received'; request?: boolean; verified?: boolean; readAt?: string; attempts?: number }
+export interface InboxConversation { personaId: string; other: string; title: string; last: InboxRecord; unread: number; request: boolean; count: number; contact: 'accepted' | 'blocked' | null }
+export interface InboxSummary { vaultReady: boolean; personas: InboxPersona[]; conversations: InboxConversation[]; requests: InboxConversation[]; blocked: { personaId: string; profileUrl: string }[] }
+export interface InboxThread { personaId: string; other: string; title: string; thumb: string; contact: 'accepted' | 'blocked' | null; reachable: boolean; records: InboxRecord[] }
+export interface InboxLookup { profileUrl: string; title: string; thumb: string; isPerson: boolean; published: boolean }
+export interface MessageNotifications { notify: { id: string; personaId: string; from: string; title: string; body: string }[]; since: string }
+
 export interface JobNotifications { notify: { id: string; jobId: string; title: string; body: string }[]; since: string; wants: boolean }
 // shared: the Space is shared (ADR-0029); canFollow is false for someone who can only view it.
 // webRead: RSS and Atom items read, per feed. postTopics: feed posts' topics, from a computer's AI.
@@ -268,6 +278,10 @@ export interface AiChatHandle {
 // Boots the Bare worklet (the P2P backend) once and wires up RPC. The returned
 // `open`/`close` functions post commands to the backend; responses are routed
 // back through the latest `handlers` via a ref so the worklet only starts once.
+// How long the backend keeps running after the app leaves the screen (ADR-0036 spike S2: without
+// it, bare-kit parks the worklet at once and the phone's mailbox and AI stop answering).
+export const BACKGROUND_GRACE_MS = 5 * 60 * 1000
+
 export function useBackend (handlers: BackendHandlers): Backend {
   const rpcRef = useRef<any>(null)
   const handlersRef = useRef(handlers)
@@ -280,6 +294,14 @@ export function useBackend (handlers: BackendHandlers): Backend {
   // backgrounded, and the worklet they need kept awake. Only AI turns take a hold today.
   const awakeHolds = useRef(0)
   const workletRef = useRef<any>(null)
+  // The real suspend (bare-kit's update), so a hold's release can park the worklet without going
+  // back through the grace below.
+  const suspendRef = useRef<((state?: AppStateStatus) => void) | null>(null)
+  // The grace after the app leaves the screen: the backend keeps running for BACKGROUND_GRACE_MS so
+  // a message can still arrive at the Inbox's mailbox (ADR-0036) and the AI (its Bridge, a turn the
+  // user starts and switches away from) keeps working. Spent until the app comes back.
+  const grace = useRef<{ release: () => void, timer: ReturnType<typeof setTimeout> } | null>(null)
+  const graceSpent = useRef(false)
   const vaultListeners = useRef(new Set<() => void>())
   const onVaultChange = useRef((listener: () => void) => {
     vaultListeners.current.add(listener)
@@ -298,8 +320,13 @@ export function useBackend (handlers: BackendHandlers): Backend {
     // instead of racing to resume after it. With no holds the original behaviour runs untouched,
     // so an idle app still sleeps as it should.
     const suspendOnBackground = w.update.bind(worklet)
+    suspendRef.current = suspendOnBackground
     w.update = (state?: AppStateStatus) => {
-      if (state === 'background' && awakeHolds.current > 0) return
+      if (state === 'active') endGrace()
+      if (state === 'background') {
+        startGrace()
+        if (awakeHolds.current > 0) return
+      }
       return suspendOnBackground(state)
     }
     // Belt and braces: if anything else suspends the worklet (a state we didn't see, a future
@@ -401,9 +428,29 @@ export function useBackend (handlers: BackendHandlers): Backend {
   // the LAST hold while the app is already in the background suspends the worklet there and then —
   // without that, work started in the foreground would leave the backend running until the user
   // came back, since nothing else re-checks AppState in between.
-  function acquireAwake (): () => void {
+  function startGrace (): void {
+    if (grace.current || graceSpent.current) return
+    const release = acquireAwake(holdForBackground)
+    const timer = setTimeout(() => {
+      grace.current = null
+      graceSpent.current = true
+      release()
+    }, BACKGROUND_GRACE_MS)
+    grace.current = { release, timer }
+  }
+
+  function endGrace (): void {
+    graceSpent.current = false
+    const g = grace.current
+    if (!g) return
+    grace.current = null
+    clearTimeout(g.timer)
+    g.release()
+  }
+
+  function acquireAwake (holdService: () => () => void = holdForAiTurn): () => void {
     awakeHolds.current++
-    const releaseService = holdForAiTurn()
+    const releaseService = holdService()
     let released = false
     return () => {
       if (released) return
@@ -412,7 +459,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
       releaseService()
       const worklet = workletRef.current
       if (awakeHolds.current === 0 && worklet && !worklet.suspended && AppState.currentState !== 'active') {
-        try { worklet.update('background') } catch {}
+        try { (suspendRef.current || worklet.update.bind(worklet))('background') } catch {}
       }
     }
   }

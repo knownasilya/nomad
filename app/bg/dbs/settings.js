@@ -51,6 +51,7 @@ const GLOBAL_SETTINGS = new Set([
   'highlights_hidden',
   'url_routing_rules',
   'sync_open_tabs',
+  'inbox_notify',
 ]);
 
 // The built-in search page (userland/search), which runs the ?q= it opens with.
@@ -90,6 +91,9 @@ export const setup = async function (opts) {
     // Settings → Auto Updater: the user's other Devices (their phone) may update and restart Nomad
     // here (bg/remote-update.js).
     remote_update_enabled: 1,
+    // A notification for each new Message from a Contact (bg/hyper/inbox.js, ADR-0036). Never for
+    // a request.
+    inbox_notify: 1,
     auto_redirect_to_dat: 1,
     custom_start_page: 'blank',
     new_tab: 'nomad://desktop/',

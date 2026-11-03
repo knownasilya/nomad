@@ -211,7 +211,7 @@ export async function setup() {
 
 export function getDriveIdent(url) {
   const system = isRootUrl(url);
-  return { system, internal: system, profile: false, feed: false };
+  return { system, internal: system, profile: false, feed: false, person: false };
 }
 
 export async function getDriveIdentFull(url) {
@@ -233,6 +233,8 @@ export async function getDriveIdentFull(url) {
             const manifest = await autobases.readJson(sess, '/index.json');
             if (manifest) {
               ident.feed = manifest.type === 'walled.garden/feed';
+              // A Profile Drive: site-info offers Message (ADR-0036 §9).
+              ident.person = manifest.type === 'walled.garden/person';
               _applyListingIdent(ident, manifest);
               // Reconcile the swarm announce with the manifest (ADR-0016): survives restarts, since
               // configure()'s live setListed() doesn't re-fire on a fresh boot. Pass the full index
@@ -257,6 +259,7 @@ export async function getDriveIdentFull(url) {
       const manifest = JSON.parse(buf.toString());
       ident.profile = manifest.type === 'walled.garden/person';
       ident.feed = manifest.type === 'walled.garden/feed';
+      ident.person = manifest.type === 'walled.garden/person';
       _applyListingIdent(ident, manifest);
     }
   } catch {}

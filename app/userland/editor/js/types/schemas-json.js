@@ -3,7 +3,7 @@
 // Registered with monaco.languages.json.jsonDefaults so a .json file whose "type"
 // field matches a walled.garden schema gets that schema's autocomplete/validation.
 
-export const WALLED_GARDEN_TYPES = ["walled.garden/person","walled.garden/post","walled.garden/feed","walled.garden/bookmark","walled.garden/comment","walled.garden/follows","walled.garden/reaction","walled.garden/status","walled.garden/vote"];
+export const WALLED_GARDEN_TYPES = ["walled.garden/person","walled.garden/post","walled.garden/feed","walled.garden/bookmark","walled.garden/comment","walled.garden/follows","walled.garden/reaction","walled.garden/status","walled.garden/vote","walled.garden/message"];
 export const WALLED_GARDEN_JSON_SCHEMA = {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "walled.garden records & drive manifest",
@@ -98,6 +98,36 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
           "collaborative": {
             "type": "boolean",
             "description": "Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default."
+          },
+          "inbox": {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "const": 1
+              },
+              "sign": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "box": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "mailboxes": {
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              }
+            },
+            "required": [
+              "v",
+              "sign"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
@@ -1052,6 +1082,131 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
     },
     {
       "if": {
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "const": "walled.garden/message"
+          }
+        }
+      },
+      "then": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Manifest: human-readable name for the drive"
+          },
+          "description": {
+            "type": "string",
+            "description": "Manifest: short description of the drive's contents"
+          },
+          "type": {
+            "type": "string",
+            "const": "walled.garden/message"
+          },
+          "thumb": {
+            "type": "string",
+            "description": "Manifest: path within the drive to the thumbnail image"
+          },
+          "author": {
+            "type": "object",
+            "description": "Manifest: information about the drive author",
+            "properties": {
+              "url": {
+                "type": "string",
+                "description": "The author profile drive's hyper:// URL"
+              }
+            }
+          },
+          "forkOf": {
+            "type": "string",
+            "description": "Manifest: hyper:// URL this drive was forked from"
+          },
+          "links": {
+            "type": "object",
+            "description": "Manifest: map of named link arrays",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "href": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "csp": {
+            "type": "string",
+            "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
+          },
+          "ai": {
+            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (the AI page, nomad://ai/setup, or the model picker in the AI sidebar), never something a drive can set.",
+            "oneOf": [
+              {
+                "type": "boolean",
+                "description": "Opt this drive into nomad.ai using its own /ai/system.md"
+              },
+              {
+                "type": "string",
+                "description": "Pointer: delegate to another drive's AI Config"
+              }
+            ]
+          },
+          "fallback": {
+            "type": "string",
+            "pattern": "^/.*[^/]$",
+            "description": "Manifest: absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses (ADR-0015). Real files always win. Supersedes the legacy /.ui/ui.html convention."
+          },
+          "collaborative": {
+            "type": "boolean",
+            "description": "Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default."
+          },
+          "id": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 40
+          },
+          "from": {
+            "type": "string",
+            "format": "uri"
+          },
+          "to": {
+            "type": "string",
+            "format": "uri"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "inReplyTo": {
+            "type": "string",
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "from",
+          "to",
+          "createdAt",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "if": {
         "not": {
           "required": [
             "type"
@@ -1067,7 +1222,8 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
                 "walled.garden/follows",
                 "walled.garden/reaction",
                 "walled.garden/status",
-                "walled.garden/vote"
+                "walled.garden/vote",
+                "walled.garden/message"
               ]
             }
           }

@@ -17,6 +17,12 @@ describe('routeLink', () => {
     expect(routeLink('feed:http://example.com/atom')).toEqual({ to: 'reader', url: 'http://example.com/atom' })
   })
 
+  it('opens a message link in Messages and leaves other nomad:// links alone', () => {
+    const url = 'nomad://messages/new?to=abc&box=def&mailbox=123'
+    expect(routeLink(url)).toEqual({ to: 'messages', url })
+    expect(routeLink('nomad://settings/')).toEqual({ to: 'page' })
+  })
+
   it('opens hyper:// links in the tab', () => {
     expect(routeLink('hyper://abc/posts/')).toEqual({ to: 'tab', url: 'hyper://abc/posts/' })
   })

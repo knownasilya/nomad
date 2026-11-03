@@ -15,6 +15,7 @@ import secretsManifest from '../manifests/internal/secrets';
 import webmcpDevtoolsManifest from '../manifests/internal/webmcp';
 import aiChatsManifest from '../manifests/internal/ai-chats';
 import personasManifest from '../manifests/internal/personas';
+import inboxManifest from '../manifests/internal/inbox';
 
 export const setup = function (rpc) {
   const internal: any = {};
@@ -35,6 +36,7 @@ export const setup = function (rpc) {
   const webmcpRPC = rpc.importAPI('webmcp-devtools', webmcpDevtoolsManifest, opts);
   const aiChatsRPC = rpc.importAPI('ai-chats', aiChatsManifest, opts);
   const personasRPC = rpc.importAPI('personas', personasManifest, opts);
+  const inboxRPC = rpc.importAPI('inbox', inboxManifest, opts);
 
   // attach APIs
   internal.browser = Object.assign({}, beakerBrowserRPC);
@@ -66,6 +68,8 @@ export const setup = function (rpc) {
   // The user's Personas and the Sessions sites hold (ADR-0031): My Library → Personas, site-info.
   internal.personas = Object.assign({}, personasRPC);
   internal.personas.watch = () => fromEventStream(personasRPC.watch());
+  internal.inbox = Object.assign({}, inboxRPC);
+  internal.inbox.watch = () => fromEventStream(inboxRPC.watch());
 
   // internal.drives
   internal.drives = new EventTarget();

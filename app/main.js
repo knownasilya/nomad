@@ -10,7 +10,7 @@ process.noAsar = true;
 // It doesn't have any windows which you can see on screen, but we can open
 // window from here.
 
-import { app, protocol, nativeTheme } from 'electron';
+import { app, protocol, nativeTheme, BrowserWindow } from 'electron';
 import { join } from 'path';
 
 import { getEnvVar } from './bg/lib/env';
@@ -36,6 +36,7 @@ import * as webapis from './bg/web-apis/bg';
 import * as initWindow from './bg/ui/init-window';
 import { runSetupFlow } from './bg/ui/setup-flow';
 import * as windows from './bg/ui/windows';
+import * as tabManager from './bg/ui/tabs/manager';
 import * as windowMenu from './bg/ui/window-menu';
 import registerContextMenu from './bg/ui/context-menu';
 import * as highlights from './bg/ui/highlights';
@@ -46,6 +47,7 @@ import * as aiSkills from './bg/ai/skills';
 import * as pageControl from './bg/ui/page-control';
 import * as openTabs from './bg/ui/open-tabs';
 import * as remoteUpdate from './bg/remote-update';
+import * as inbox from './bg/hyper/inbox';
 import * as trayIcon from './bg/ui/tray-icon';
 import * as downloads from './bg/ui/downloads';
 import * as permissions from './bg/ui/permissions';
@@ -206,6 +208,17 @@ app.on('ready', async function () {
   openTabs.setup();
   // The user's phone can ask this computer to update and restart (Settings → Auto Updater).
   remoteUpdate.setup();
+  // Direct messages to the user's Personas (ADR-0036): this Device's mailboxes and outbox. A click on
+  // a notification opens the Conversation.
+  inbox.setup({
+    open: (personaId, from) => {
+      const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+      if (!win) return;
+      win.show();
+      const q = `persona=${encodeURIComponent(personaId)}&with=${encodeURIComponent(from)}`;
+      tabManager.create(win, `nomad://messages/?${q}`, { setActive: true });
+    },
+  });
   log.info('Initializing tray icon');
   trayIcon.setup();
   log.info('Initializing browser windows');
@@ -247,6 +260,8 @@ app.on('will-quit', async (e) => {
   if (hyper.daemon.requiresShutdown()) {
     e.preventDefault();
     log.info('Delaying shutdown to teardown the daemon');
+    // Unannounce this Device's mailboxes first, so a sender tries the user's other Devices at once.
+    await inbox.shutdown();
     await hyper.daemon.shutdown();
     app.quit();
   }

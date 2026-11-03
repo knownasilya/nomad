@@ -6,6 +6,7 @@ import { ListSection, ListRow, SwitchRow } from './List'
 import { useTheme, type Theme } from '../lib/theme'
 import type { Backend } from '../lib/useBackend'
 import { useDesktopUpdates } from '../lib/deviceUpdates'
+import { useMessageNotifySetting } from '../lib/useMessageNotifications'
 import { checkForUpdate, currentVersion, installUpdate, setAutoInstall, setBetaUpdates, updatesSupported, useAutoInstall, useBetaUpdates, useUpdateState } from '../lib/updater'
 
 interface Props {
@@ -30,6 +31,7 @@ export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosti
   const version = currentVersion()
   // The user's computers, so one on an older Nomad can be updated from here too.
   const computers = useDesktopUpdates(apps, visible)
+  const [notifyMessages, setNotifyMessages] = useMessageNotifySetting()
 
   return (
     <Modal visible={visible} animationType='slide' onRequestClose={onClose} presentationStyle='fullScreen'>
@@ -47,6 +49,15 @@ export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosti
               subtitle='Your other devices list them by space. Turning this off removes them there.'
               value={shareTabs}
               onValueChange={onShareTabs}
+            />
+          </ListSection>
+          <ListSection title='Notifications'>
+            <SwitchRow
+              icon='comments'
+              title='Messages'
+              subtitle='A notification for each new message to your Personas. Message requests never notify.'
+              value={notifyMessages}
+              onValueChange={setNotifyMessages}
             />
           </ListSection>
           {updatesSupported ? (

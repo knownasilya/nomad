@@ -78,6 +78,18 @@ class Identity extends LitElement {
                           No identity information found
                         </div>
                       `}
+                  ${this.cert.ident && this.cert.ident.person
+                    ? html`
+                        <div class="field-group">
+                          <button
+                            style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:6px;font-size:13px"
+                            @click=${this.onMessage}
+                          >
+                            <span class="fa-fw fas fa-comment"></span> Message
+                          </button>
+                        </div>
+                      `
+                    : ''}
                   ${this.cert.ident && this.cert.ident.feed
                     ? html`
                         <div class="field-group">
@@ -114,6 +126,16 @@ class Identity extends LitElement {
 
   // events
   // =
+
+  // A new message to this Profile Drive, from the Persona this window's Space uses (ADR-0036 §7.2).
+  async onMessage() {
+    if (!this.url) return;
+    const m = /^hyper:\/\/([0-9a-f]{64})/i.exec(this.url);
+    if (!m) return;
+    const persona = await nomad.inbox.tabPersona().catch(() => null);
+    const q = `to=${encodeURIComponent(`hyper://${m[1].toLowerCase()}/`)}${persona ? `&persona=${encodeURIComponent(persona)}` : ''}`;
+    nomad.browser.openUrl(`nomad://messages/new?${q}`, { setActive: true });
+  }
 
   onSubscribe() {
     if (!this.url) return;
