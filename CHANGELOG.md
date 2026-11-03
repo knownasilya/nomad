@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.39.1](https://github.com/knownasilya/nomad/compare/v1.39.0...v1.39.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **library:** tidy the Persona editor into one ordered column ([0513e2c](https://github.com/knownasilya/nomad/commit/0513e2c190760f0494c7c2e3b44156f493c16348))
+* **mobile:** a back swipe no longer opens a new tab stuck in the address bar ([0cbd87f](https://github.com/knownasilya/nomad/commit/0cbd87f43ebc03dfda8245120e6723d554ef004f))
+
 ## [1.39.0](https://github.com/knownasilya/nomad/compare/v1.38.0...v1.39.0) (2026-11-03)
 
 
