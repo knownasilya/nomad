@@ -1,4 +1,4 @@
-import { useMemo, useState, type Ref } from 'react'
+import { useMemo, type Ref } from 'react'
 import { View, TextInput, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import { tintTheme } from '../lib/siteTheme'
@@ -14,6 +14,10 @@ interface Props {
   loading: boolean
   isHyper: boolean
   driveType: DriveType
+  // The bar is in its editing layout (the field takes the whole row). The browser owns this, not the
+  // field's own focus events, so leaving the bar (back, a navigation, a tab switch, the app going to
+  // the background) always brings the Space, AI, tab and menu buttons back.
+  editing: boolean
   onFocus?: () => void
   onBlur?: () => void
   onRecents: () => void // the clock button: a card of recent sites, filtered by what's typed
@@ -42,11 +46,10 @@ interface Props {
 // under the field), and the keyboard's Go key opens what was typed. The bar takes on the site's
 // theme color when it has one.
 export default function AddressBar (props: Props) {
-  const { value, onChangeText, onSubmit, onReload, loading, isHyper, onFocus, onBlur, onRecents, hasDraft, draftPreviewing, onToggleDraft, siteName, inputRef, canReload = true, tint, topInset = 0, space, aiOpen, onAi, tabCount, onTabs, onNewTab, onMenu } = props
+  const { value, onChangeText, onSubmit, onReload, loading, isHyper, editing: focused, onFocus, onBlur, onRecents, hasDraft, draftPreviewing, onToggleDraft, siteName, inputRef, canReload = true, tint, topInset = 0, space, aiOpen, onAi, tabCount, onTabs, onNewTab, onMenu } = props
   const base = useTheme()
   const t = useMemo(() => tintTheme(base, tint), [base, tint])
   const s = useMemo(() => makeStyles(t, !!tint), [t, tint])
-  const [focused, setFocused] = useState(false)
   const secure = /^https:\/\//i.test(value)
   const lead: IconName = focused || !value ? 'search' : isHyper ? 'share-alt' : secure ? 'lock' : 'info-circle'
   // On a site's color, the green and blue marks could vanish; the bar's own text color can't.
@@ -84,8 +87,8 @@ export default function AddressBar (props: Props) {
             value={value}
             onChangeText={onChangeText}
             onSubmitEditing={onSubmit}
-            onFocus={() => { setFocused(true); onFocus?.() }}
-            onBlur={() => { setFocused(false); onBlur?.() }}
+            onFocus={onFocus}
+            onBlur={onBlur}
             placeholder='Search or enter address'
             placeholderTextColor={t.textMuted}
             // The address is all selected on focus, so the highlight must stay see-through: a solid
@@ -124,8 +127,9 @@ export default function AddressBar (props: Props) {
           <>
             <IconButton icon='robot' label='AI assistant' onPress={onAi} color={aiOpen ? t.accent : t.textDim} ripple={t.ripple} style={s.btn} />
             {/* Chrome's tab switcher button: the open-tab count in a rounded square. Past 99 it gives
-                up and grins, as Chrome does. Touch and hold opens a new tab. */}
-            <IconButton onPress={onTabs} onLongPress={onNewTab} label={`${tabCount} open ${tabCount === 1 ? 'tab' : 'tabs'}. Touch and hold for a new tab`} ripple={t.ripple} style={s.btn}>
+                up and grins, as Chrome does. Touch and hold opens a new tab when the finger lifts, so
+                a back swipe that starts on it opens nothing (lib/hold.ts). */}
+            <IconButton onPress={onTabs} onLongPress={onNewTab} longPressLabel='New tab' label={`${tabCount} open ${tabCount === 1 ? 'tab' : 'tabs'}. Touch and hold for a new tab`} ripple={t.ripple} style={s.btn}>
               <View style={s.tabCount}>
                 <Text style={s.tabCountText}>{tabCount > 99 ? ':D' : tabCount}</Text>
               </View>

@@ -615,6 +615,11 @@ The phone's navigation is a stack (`mobile/lib/navStack.ts`, tests in `tests/uni
   `returnTo`, so back from it opens that screen again.
 - Inside a screen, back steps back through its own trail first: folders in FileExplorer, linked
   notes in Notes.
+- On the browser screen, back closes the AI panel, then leaves the address bar, then steps the tab
+  (`backAction`). The bar's editing layout is the browser's `urlFocused` (AddressBar's `editing`
+  prop), not the field's own focus, and leaving it always blurs the field (`leaveAddress`).
+- An `IconButton`'s `onLongPress` runs when the finger lifts (`lib/hold.ts`): a back swipe from the
+  edge starts as a touch on the button there, and the system cancels it once it takes the gesture.
 
 ## Mobile: links and popups stay in Nomad
 

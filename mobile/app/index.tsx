@@ -56,7 +56,7 @@ import webViewInsets from '../modules/nomad-webview-insets'
 import webViewWindows from '../modules/nomad-webview-windows'
 import { routeLink, FEED_JS } from '../lib/webLinks'
 import type { ItemLink } from '../lib/itemLinks'
-import { pushScreen, closeScreen, loadEntry, pageLoaded, planStep, type NavEntry as StackEntry, type TabHistory } from '../lib/navStack'
+import { pushScreen, closeScreen, loadEntry, pageLoaded, planStep, backAction, type NavEntry as StackEntry, type TabHistory } from '../lib/navStack'
 
 // Thumbnails for the tab grid are scaled to this width; a grid card is about half a phone wide.
 const THUMB_WIDTH = 360
@@ -314,6 +314,30 @@ export default function Browser () {
   // The address bar has focus (it hides the name tag then). recentsOpen: the recent-sites card that
   // the bar's clock button opens, and recentsQuery what the bar held when it opened.
   const [urlFocused, setUrlFocused] = useState(false)
+  const urlFocusedRef = useRef(urlFocused)
+  urlFocusedRef.current = urlFocused
+  const addressRef = useRef<TextInput>(null)
+  // Leave the address bar: its buttons come back. Blur the field too, so a later tap on it focuses
+  // it again (and sends onFocus) instead of finding it still focused under the plain layout.
+  const leaveAddress = useCallback(() => {
+    addressRef.current?.blur()
+    setUrlFocused(false)
+  }, [])
+  // Focus the address bar after `ms` (a new tab, ready to type in). Only while the app is in front:
+  // a field focused in the background comes back focused with no keyboard, stuck in its editing
+  // layout. Going to the background cancels one still waiting.
+  const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelFocusAddress = useCallback(() => {
+    if (focusTimer.current) clearTimeout(focusTimer.current)
+    focusTimer.current = null
+  }, [])
+  const focusAddressSoon = useCallback((ms: number) => {
+    cancelFocusAddress()
+    focusTimer.current = setTimeout(() => {
+      focusTimer.current = null
+      if (AppState.currentState === 'active') addressRef.current?.focus()
+    }, ms)
+  }, [cancelFocusAddress])
   const [recentsOpen, setRecentsOpen] = useState(false)
   const [recentsQuery, setRecentsQuery] = useState('')
   // Drives registered in the active space's Root Drive (/drives.json) — incl. drives added on other
@@ -468,7 +492,7 @@ export default function Browser () {
       setLogs([]) // page-scoped console resets on navigation
       setSource('')
       // Any navigation (typed URL, a recent site, back/forward, home button) leaves the address bar.
-      setUrlFocused(false)
+      leaveAddress()
       const fields = fieldsFor(tab, entry, sameDrive)
       const session = newSession()
       setTabs((prev) =>
@@ -478,7 +502,7 @@ export default function Browser () {
       )
       if (entry.kind === 'hyper') backend.open(id, entry.url, entry.driveType, entry.ns, entry.detect ?? true)
     },
-    [backend]
+    [backend, leaveAddress]
   )
 
   // A name the user gave a drive or URL (ADR-0018) goes where it points: typed ("blog" or
@@ -516,9 +540,17 @@ export default function Browser () {
     Keyboard.dismiss()
     setRecentsOpen(true)
   }, [])
-  // urlFocused is plain state, decoupled from the TextInput's real focus, so a tab close or switch
-  // (which sends no blur) resets it.
-  useEffect(() => { setUrlFocused(false) }, [activeId])
+  // A tab close or switch sends no blur, so it leaves the address bar here.
+  useEffect(() => { leaveAddress() }, [activeId, leaveAddress])
+  // Going to the background leaves the bar, and drops a focus still waiting to happen.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'background') return
+      cancelFocusAddress()
+      if (urlFocusedRef.current) leaveAddress()
+    })
+    return () => sub.remove()
+  }, [cancelFocusAddress, leaveAddress])
 
   // Back (-1) or forward (+1) in a tab's history (lib/navStack.ts): inside the WebView on screen
   // when both entries are its own pages, else by loading the entry. Back from a page opened from a
@@ -824,20 +856,19 @@ export default function Browser () {
     if (gridOpening.current) return
     gridOpening.current = true
     Keyboard.dismiss()
-    setUrlFocused(false)
+    leaveAddress()
     await Promise.race([captureActive(), new Promise((resolve) => setTimeout(resolve, 400))])
     router.push('/tabs')
     gridOpening.current = false
-  }, [captureActive])
+  }, [captureActive, leaveAddress])
 
-  const addressRef = useRef<TextInput>(null)
   // Closing the keyboard (Android back, or a tap on the page) leaves the address bar, as in Chrome,
   // so the bar gets its buttons back instead of staying in its editing layout.
   useEffect(() => {
     if (!urlFocused) return
-    const sub = Keyboard.addListener('keyboardDidHide', () => addressRef.current?.blur())
+    const sub = Keyboard.addListener('keyboardDidHide', leaveAddress)
     return () => sub.remove()
-  }, [urlFocused])
+  }, [urlFocused, leaveAddress])
   const focusAddressOnReturn = useRef(false)
 
   // A URL from another Device's tabs (the tab grid) opens in a new tab here. navTo reads tabsRef,
@@ -967,17 +998,17 @@ export default function Browser () {
   // Touch and hold on the tab count: a new tab, ready to type an address in.
   const openTabAndType = useCallback(() => {
     openTab()
-    setTimeout(() => addressRef.current?.focus(), 100)
-  }, [openTab])
+    focusAddressSoon(100)
+  }, [openTab, focusAddressSoon])
 
   useFocusEffect(
     useCallback(() => {
       if (!focusAddressOnReturn.current) return
       focusAddressOnReturn.current = false
       // Wait for the grid's fade-out; focusing mid-transition can drop the keyboard on Android.
-      const timer = setTimeout(() => addressRef.current?.focus(), 250)
-      return () => clearTimeout(timer)
-    }, [])
+      focusAddressSoon(250)
+      return cancelFocusAddress
+    }, [focusAddressSoon, cancelFocusAddress])
   )
 
   // A page in the tab's WebView finished loading: a link followed in the page becomes its own
@@ -1015,7 +1046,9 @@ export default function Browser () {
   // the two always agree.
   const goBackActive = useCallback((): boolean => step(activeIdRef.current, -1), [step])
 
-  // Android hardware back navigates back instead of exiting the app. Returning false when there's
+  // Android hardware back navigates back instead of exiting the app (lib/navStack.ts backAction).
+  // The address bar left in its editing layout with no keyboard up comes first: back leaves it, as
+  // in Chrome, rather than stepping the tab behind it. Returning false when there's
   // nowhere to go lets Android background the app as usual. A visible full-screen Modal (Library/…)
   // handles its own back via onRequestClose, so this handler won't fire while one is open — but the
   // AI panel is a plain in-tree overlay (see AiPanel), so closing it is this handler's job. Keeping
@@ -1026,11 +1059,14 @@ export default function Browser () {
     useCallback(() => {
       if (Platform.OS !== 'android') return
       const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-        if (aiOpen) { setAiOpen(false); return true }
-        return goBackActive()
+        switch (backAction({ aiOpen, editingAddress: urlFocusedRef.current })) {
+          case 'closeAi': setAiOpen(false); return true
+          case 'leaveAddress': leaveAddress(); return true
+          default: return goBackActive()
+        }
       })
       return () => sub.remove()
-    }, [goBackActive, aiOpen])
+    }, [goBackActive, aiOpen, leaveAddress])
   )
 
   // --- render ------------------------------------------------------------
@@ -1140,11 +1176,12 @@ export default function Browser () {
       <AddressBar
         value={active.input}
         onChangeText={(text) => patch(active.id, { input: text })}
-        onSubmit={() => { setUrlFocused(false); navigate(active.id, active.input) }}
+        onSubmit={() => { leaveAddress(); navigate(active.id, active.input) }}
         onReload={reload}
         loading={active.kind === 'hyper' && active.render?.type === 'loading'}
         isHyper={isHyperUrl(active.input)}
         driveType={active.driveType}
+        editing={urlFocused}
         onFocus={() => setUrlFocused(true)}
         onBlur={() => setUrlFocused(false)}
         onRecents={openRecents}
