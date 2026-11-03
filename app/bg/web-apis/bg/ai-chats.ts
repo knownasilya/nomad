@@ -7,6 +7,7 @@
 // sidebar showing a deleted chat doesn't save it back.
 
 import * as chatStore from '../../ai/chat-store';
+import * as jobChat from '../../ai/job-chat';
 import { findWebContentsParentWindow } from '../../lib/electron';
 import { openAiSidebarChat, emitAiChatsChanged } from '../../ui/tabs/manager';
 
@@ -23,7 +24,8 @@ export default {
       chatStore.listSessions(this.sender, { query: String(query || '') }),
       chatStore.getLastSessionId(this.sender).catch(() => null),
     ]);
-    return { chats, lastId };
+    // `job` marks a Job run's chat; `running`, one going on now (job-chat.js).
+    return { chats: chats.map((c) => ({ ...c, running: jobChat.isLive(c.id) })), lastId };
   },
 
   async load(id) {

@@ -1211,6 +1211,7 @@ export function makeRun({
   notification,
   changes = [],
   needs = [],
+  chat = null,
 }) {
   const changed = normalizeChanges(changes);
   const wanted = normalizeNeeds(needs);
@@ -1229,8 +1230,12 @@ export function makeRun({
     notification: notification || null,
     ...(changed.length ? { changes: changed } : {}),
     ...(wanted.length ? { needs: wanted } : {}),
+    // The run's chat in the AI Sidebar (app/bg/ai/job-chat.js), when the user watched it.
+    ...(typeof chat === 'string' && CHAT_ID.test(chat) ? { chat } : {}),
   };
 }
+
+const CHAT_ID = /^[a-z0-9]{1,40}$/;
 
 function clipOutput(text) {
   const s = String(text || '').trim();

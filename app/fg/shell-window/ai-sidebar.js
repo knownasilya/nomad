@@ -56,6 +56,8 @@ class ShellWindowAiSidebar extends LitElement {
       draft: { type: String },
       streaming: { type: Boolean },
       sessionId: { type: String },
+      _sessionJob: { state: true },
+      _followingJob: { state: true },
       _activity: { state: true },
       _model: { state: true },
       _think: { state: true },
@@ -301,6 +303,13 @@ class ShellWindowAiSidebar extends LitElement {
       font-size: 11px;
       color: var(--ai-text-muted);
     }
+    .session-row .job-tag {
+      margin-right: 4px;
+      padding: 0 5px;
+      border-radius: 4px;
+      background: var(--ai-hover);
+      font-weight: 600;
+    }
     .session-row .icon-btn {
       opacity: 0;
       width: 26px;
@@ -380,6 +389,46 @@ class ShellWindowAiSidebar extends LitElement {
       color: var(--ai-text-muted);
       width: 14px;
       text-align: center;
+    }
+
+    /* — a Job's run (bg/ai/job-chat.js) — */
+
+    .job-banner {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 10px 14px 0;
+      padding: 8px 10px;
+      border: 1px solid var(--ai-border);
+      border-radius: 8px;
+      background: var(--ai-surface);
+    }
+    .job-banner > .fas {
+      color: var(--ai-text-muted);
+    }
+    .job-banner .info {
+      flex: 1;
+      min-width: 0;
+    }
+    .job-banner .job-title {
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .job-banner .job-sub {
+      font-size: 11px;
+      color: var(--ai-text-muted);
+    }
+    .job-banner .link-btn {
+      flex-shrink: 0;
+    }
+    .from-job {
+      align-self: flex-end;
+      margin-top: 6px;
+      margin-bottom: -6px;
+      font-size: 11px;
+      color: var(--ai-text-muted);
     }
 
     /* — the conversation — */
@@ -954,6 +1003,10 @@ class ShellWindowAiSidebar extends LitElement {
     this.draft = '';
     this.streaming = false;
     this.sessionId = '';
+    // { id, title } when the open chat is a Job run's (bg/ai/job-chat.js); _followingJob while
+    // this sidebar draws that run as it goes.
+    this._sessionJob = null;
+    this._followingJob = false;
     this._loadedTabUrl = undefined;
     // { url, writable } for the Drive the active tab is really about — resolved async via
     // _loadDriveInfo() since for nomad://editor/explorer it isn't derivable from activeTab.url
@@ -1112,8 +1165,7 @@ class ShellWindowAiSidebar extends LitElement {
       if (lastId) {
         const data = await bg.aiShell.loadSession(lastId);
         if (data) {
-          this.sessionId = lastId;
-          this.messages = data.messages || [];
+          this._showSession(lastId, data);
           return;
         }
       }
@@ -1122,16 +1174,27 @@ class ShellWindowAiSidebar extends LitElement {
     }
     this.sessionId = await bg.aiShell.newSession();
     this.messages = [];
+    this._sessionJob = null;
+  }
+
+  // Shows a loaded session. A Job run's that is still going on is drawn as it goes.
+  _showSession(id, data) {
+    this.sessionId = id;
+    this.messages = data.messages || [];
+    this._sessionJob = data.job || null;
+    this._draftDrives = new Set();
+    if (data.job && data.running) this._followJob(id, this.messages);
   }
 
   // Always takes explicit (sessionId, messages) rather than reading live state — a save triggered
   // from a turn must land on the session it belongs to (see _send()'s captured turnSessionId).
-  async _saveSession(sessionId, messages) {
+  // `job` keeps a Job run's chat marked as one, and titled with the Job, when the user carries on.
+  async _saveSession(sessionId, messages, job = null) {
     if (!sessionId) return;
     const firstUser = messages.find((m) => m.role === 'user');
-    const title = firstUser ? firstUser.content.trim().slice(0, 60) : '';
+    const title = job ? job.title : firstUser ? firstUser.content.trim().slice(0, 60) : '';
     try {
-      await bg.aiShell.saveSession(sessionId, { title, messages });
+      await bg.aiShell.saveSession(sessionId, { title, messages, ...(job ? { job } : {}) });
     } catch {
       /* non-fatal */
     }
@@ -1141,6 +1204,7 @@ class ShellWindowAiSidebar extends LitElement {
     if (this.streaming) return;
     this.sessionId = await bg.aiShell.newSession();
     this.messages = [];
+    this._sessionJob = null;
     this._draftDrives = new Set();
     this._sessionsOpen = false;
     this.requestUpdate();
@@ -1164,10 +1228,8 @@ class ShellWindowAiSidebar extends LitElement {
     }
     const data = await bg.aiShell.loadSession(id);
     if (!data) return;
-    this.sessionId = id;
-    this.messages = data.messages || [];
-    this._draftDrives = new Set();
     this._sessionsOpen = false;
+    this._showSession(id, data);
   }
 
   async _deleteSession(e, id) {
@@ -1373,12 +1435,25 @@ class ShellWindowAiSidebar extends LitElement {
               class="session-row ${s.id === this.sessionId ? 'current' : ''}"
               @click=${() => this._switchToSession(s.id)}
             >
-              <span class="fas fa-fw fa-comment-alt"></span>
+              <span
+                class="fas fa-fw ${s.job ? 'fa-robot' : 'fa-comment-alt'}"
+                title=${s.job ? 'A Job’s run' : ''}
+              ></span>
               <div class="info">
                 <div class="session-title">${s.title || 'New chat'}</div>
-                <div class="session-time">${s.updatedAt ? formatTime(s.updatedAt) : ''}</div>
+                <div class="session-time">
+                  ${s.job
+                    ? html`<span class="job-tag">${s.running ? 'Job · running' : 'Job'}</span>`
+                    : ''}
+                  ${s.updatedAt ? formatTime(s.updatedAt) : ''}
+                </div>
               </div>
-              <button class="icon-btn" title="Delete" @click=${(e) => this._deleteSession(e, s.id)}>
+              <button
+                class="icon-btn"
+                title="Delete"
+                aria-label="Delete ${s.title || 'this chat'}"
+                @click=${(e) => this._deleteSession(e, s.id)}
+              >
                 <span class="fas fa-fw fa-trash-alt"></span>
               </button>
             </div>
@@ -1391,6 +1466,7 @@ class ShellWindowAiSidebar extends LitElement {
   _renderChat() {
     const canThink = this._think && this._reasoningModel !== false;
     return html`
+      ${this._sessionJob ? this._renderJobBanner() : ''}
       ${this.messages.length === 0
         ? this._renderEmpty()
         : html`<div class="messages">
@@ -1406,9 +1482,11 @@ class ShellWindowAiSidebar extends LitElement {
           class="input"
           rows="1"
           .value=${this.draft}
-          placeholder=${this.streaming
-            ? 'Steer the assistant while it works…'
-            : 'Ask about this tab, or anything…'}
+          placeholder=${this._followingJob
+            ? 'Ask about this run. It’s sent when the Job is done…'
+            : this.streaming
+              ? 'Steer the assistant while it works…'
+              : 'Ask about this tab, or anything…'}
           @input=${this._onInput}
           @keydown=${this._onKeydown}
         ></textarea>
@@ -1498,6 +1576,32 @@ class ShellWindowAiSidebar extends LitElement {
     `;
   }
 
+  // The open chat is a Job's run: it ran by itself, and maybe still is (bg/ai/job-chat.js).
+  _renderJobBanner() {
+    const job = this._sessionJob;
+    return html`<div class="job-banner">
+      <span class="fas fa-fw fa-robot"></span>
+      <div class="info">
+        <div class="job-title">${job.title || 'Job'}</div>
+        <div class="job-sub">
+          ${this._followingJob
+            ? 'An AI Job running by itself. Stop ends the run.'
+            : 'An AI Job’s run. It ran by itself.'}
+        </div>
+      </div>
+      <button
+        class="link-btn"
+        title="Open this Job in My Library"
+        @click=${() =>
+          bg.views.createTab(`nomad://library/jobs?id=${encodeURIComponent(job.id)}`, {
+            setActive: true,
+          })}
+      >
+        Open Job <span class="fas fa-fw fa-external-link-alt"></span>
+      </button>
+    </div>`;
+  }
+
   _renderEmpty() {
     const suggestions = [
       ['fa-align-left', 'Summarize this page'],
@@ -1577,6 +1681,9 @@ class ShellWindowAiSidebar extends LitElement {
           </details>`
         : '';
     return html`
+      ${m.role === 'user' && m.fromJob
+        ? html`<div class="from-job"><span class="fas fa-fw fa-robot"></span> Sent by the Job</div>`
+        : ''}
       ${reasoning}
       ${m.images && m.images.length
         ? html`<div class="screenshots">
@@ -1723,7 +1830,9 @@ class ShellWindowAiSidebar extends LitElement {
       <div class="queued-note">
         ${q.now
           ? html`<span class="fas fa-fw fa-spinner fa-spin"></span> Sending now…`
-          : html`<span class="far fa-fw fa-clock"></span> Queued for the assistant's next step
+          : this._followingJob
+            ? html`<span class="far fa-fw fa-clock"></span> Sent when the Job is done`
+            : html`<span class="far fa-fw fa-clock"></span> Queued for the assistant's next step
               <button
                 class="msg-action send-now"
                 title="Stop what the assistant is doing and send this now"
@@ -1731,7 +1840,12 @@ class ShellWindowAiSidebar extends LitElement {
               >
                 <span class="fas fa-fw fa-paper-plane"></span> Send now
               </button>`}
-        <button class="msg-action" title="Take back this message" @click=${() => this._unqueue(q.id)}>
+        <button
+          class="msg-action"
+          title="Take back this message"
+          aria-label="Take back this message"
+          @click=${() => this._unqueue(q.id)}
+        >
           <span class="fas fa-fw fa-times"></span>
         </button>
       </div>
@@ -1824,6 +1938,8 @@ class ShellWindowAiSidebar extends LitElement {
     await this.updateComplete;
     this._autosize();
     this._scrollToBottom();
+    // A Job's run can't be steered: the message waits for the run to end, then goes as the next turn.
+    if (this._followingJob) return;
     try {
       await bg.aiShell.steer(this._turnId, item.id, text);
     } catch (e) {
@@ -1842,6 +1958,7 @@ class ShellWindowAiSidebar extends LitElement {
 
   async _unqueue(id) {
     this._queued = this._queued.filter((q) => q.id !== id);
+    if (this._followingJob) return;
     try {
       await bg.aiShell.unsteer(this._turnId, id);
     } catch {
@@ -1857,7 +1974,6 @@ class ShellWindowAiSidebar extends LitElement {
     // always keeps mutating its own local turnMessages regardless, and the final save (in
     // `finally`) always targets turnSessionId, never live state.
     const turnSessionId = this.sessionId;
-    const isCurrent = () => this.sessionId === turnSessionId;
 
     // Draft Mode (ADR-0012): the first time this conversation is used on a writable Drive, start
     // a Draft for it, so the agent's writes there stage privately — the user reviews the whole
@@ -1872,12 +1988,60 @@ class ShellWindowAiSidebar extends LitElement {
       }
     }
 
+    const messages = [...this.messages, ...texts.map((content) => ({ role: 'user', content }))];
+    // 'error' is a UI-only pseudo-role (a failed turn's bubble) — the runtime only accepts
+    // system/user/assistant/tool/developer, so a past failure must never be replayed as history.
+    const history = mergeUserTurns(
+      messages
+        .filter((m) => m.role === 'user' || m.role === 'assistant')
+        .map((m) => ({ role: m.role, content: m.content }))
+    );
+    // An earlier turn read the user's private data (ADR-0037).
+    const privateData = messages.some((m) => m.privateData === true);
+    await this._streamTurn({
+      sessionId: turnSessionId,
+      messages,
+      tabDrive,
+      open: (turnId) =>
+        bg.aiShell.chat(history, {
+          model: this._model || undefined,
+          think: this._think,
+          effort: this._think ? this._effort || undefined : undefined,
+          allowVision: this._visionModel === true,
+          turnId,
+          // A page-action confirm can allow similar clicks for the rest of this chat.
+          chatId: turnSessionId || undefined,
+          privateData,
+        }),
+    });
+  }
+
+  // A Job's run the user watches (bg/ai/job-chat.js): the sidebar draws it like one of its own
+  // turns, from the run's start. bg saves its chat; Stop ends the run.
+  async _followJob(sessionId, messages) {
+    if (this.streaming) return;
+    await this._streamTurn({
+      sessionId,
+      messages,
+      job: true,
+      open: () => bg.aiShell.followJob(sessionId),
+    });
+  }
+
+  // Draws one turn of session `sessionId` from the chat stream open(turnId) returns, after
+  // `messages`. `job`: a Job's run (_followJob), which can't be steered, keeps no Checkpoint and
+  // is saved by bg.
+  async _streamTurn({ sessionId: turnSessionId, messages, open, tabDrive = null, job = false }) {
+    const isCurrent = () => this.sessionId === turnSessionId;
+    // The Job a session's chat belongs to stays on it when it's saved.
+    const turnJob = isCurrent() ? this._sessionJob : null;
     this.streaming = true;
+    this._followingJob = job;
     this._activity = [];
     const turnId = `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     this._turnId = turnId;
 
-    let turnMessages = [...this.messages, ...texts.map((content) => ({ role: 'user', content }))];
+    let turnMessages = messages;
     let assistantIdx = turnMessages.length;
     // one Checkpoint per assistant turn: files[] captures {path, priorContent}
     turnMessages = [...turnMessages, { role: 'assistant', content: '', reasoning: '', files: [] }];
@@ -1924,7 +2088,7 @@ class ShellWindowAiSidebar extends LitElement {
           turnMessages = [...turnMessages];
           turnMessages[assistantIdx] = { ...msg, privateData: true };
         }
-      } else if (e.phase === 'write' && e.path) {
+      } else if (e.phase === 'write' && e.path && !job) {
         // Each file keeps its drive: the assistant can write to any drive the user names.
         const msg = turnMessages[assistantIdx];
         const drive = e.drive || tabDrive || this._driveBase;
@@ -1982,34 +2146,15 @@ class ShellWindowAiSidebar extends LitElement {
     let failed = false;
     let iterator = null;
     try {
-      // 'error' is a UI-only pseudo-role (a failed turn's bubble) — the runtime only accepts
-      // system/user/assistant/tool/developer, so a past failure must never be replayed as history.
-      const history = mergeUserTurns(
-        turnMessages
-          .slice(0, assistantIdx)
-          .filter((m) => m.role === 'user' || m.role === 'assistant')
-          .map((m) => ({ role: m.role, content: m.content }))
-      );
-
-      const eventTarget = fromEventStream(
-        bg.aiShell.chat(history, {
-          model: this._model || undefined,
-          think: this._think,
-          effort: this._think ? this._effort || undefined : undefined,
-          allowVision: this._visionModel === true,
-          turnId,
-          // A page-action confirm can allow similar clicks for the rest of this chat.
-          chatId: turnSessionId || undefined,
-          // An earlier turn read the user's private data (ADR-0037).
-          privateData: turnMessages.slice(0, assistantIdx).some((m) => m.privateData === true),
-        })
-      );
+      const eventTarget = fromEventStream(open(turnId));
       eventTarget.addEventListener('tool', (e) => onToolEvent(e));
       eventTarget.addEventListener('steer', (e) => onSteer(e));
       eventTarget.addEventListener('reasoning', (e) => onReasoning(e.text));
       iterator = streamToAsyncIterator(eventTarget);
       this._stopChat = () => {
         stopped = true;
+        // Closing a Job's stream only stops following it: the run itself is told to stop.
+        if (job) bg.aiShell.stopJob(turnSessionId).catch(() => {});
         iterator.return?.();
       };
 
@@ -2054,6 +2199,7 @@ class ShellWindowAiSidebar extends LitElement {
       }
       if (isCurrent()) {
         this.streaming = false;
+        this._followingJob = false;
         this._activity = [];
       }
       const cur = turnMessages[assistantIdx];
@@ -2062,7 +2208,7 @@ class ShellWindowAiSidebar extends LitElement {
         turnMessages[assistantIdx] = { ...cur, content: '_Stopped._' };
       }
       sync();
-      await this._saveSession(turnSessionId, turnMessages);
+      if (!job) await this._saveSession(turnSessionId, turnMessages, turnJob);
       if (left.length) {
         if (stopped || failed || !isCurrent()) {
           this.draft = [...left, this.draft.trim()].filter(Boolean).join('\n\n');
@@ -2105,7 +2251,7 @@ class ShellWindowAiSidebar extends LitElement {
     if (this.sessionId !== sessionId) return;
     msg.reverted = true;
     this.messages = [...this.messages];
-    await this._saveSession(sessionId, this.messages);
+    await this._saveSession(sessionId, this.messages, this._sessionJob);
     this.requestUpdate();
   }
 

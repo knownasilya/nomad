@@ -304,6 +304,43 @@ const cssStr = css`
     overflow-wrap: anywhere;
   }
 
+  .running-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: 6px;
+    padding: 1px 7px 1px 4px;
+    border-radius: 10px;
+    background: var(--mods-accent-soft);
+    color: var(--mods-accent);
+    font-size: 11px;
+    font-weight: 600;
+    vertical-align: 1px;
+  }
+
+  .watch-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 28px;
+    padding: 0 10px 0 7px;
+    border: 1px solid var(--mods-accent);
+    border-radius: 6px;
+    background: var(--mods-accent-soft);
+    color: var(--mods-accent);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .watch-btn:hover {
+    filter: brightness(0.97);
+  }
+
+  .run-chat {
+    margin-top: 6px;
+  }
+
   .output.trimmed {
     color: var(--text-color--light);
   }

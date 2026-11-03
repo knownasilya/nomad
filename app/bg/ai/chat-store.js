@@ -4,9 +4,12 @@
 // hyper://private/address-book.json already does (app/userland/library/js/lib/contacts.js).
 //
 // Layout:
-//   /.ai-chat/sessions/<sessionId>.json   { id, title, messages, updatedAt }
+//   /.ai-chat/sessions/<sessionId>.json   { id, title, messages, updatedAt, job? }
 //   /.ai-chat/last-session.json           { sessionId }
 //   /.ai-chat/names.json                  { [sessionId]: name }   names the user gave on the AI page
+//
+// A session with `job` ({ id, title }) is the chat of a Job run the user watched (job-chat.js): the
+// sidebar and the AI page mark it as automated.
 //
 // A session's `title` is its first message, rewritten on every save. A name the user gives a chat
 // (nomad://ai/chats) is kept apart, in names.json, so the sidebar's next save can't overwrite it.
@@ -23,6 +26,7 @@
 
 import fsAPI from '../web-apis/bg/fs';
 import { searchWords, previewOf, matchSession } from './chat-search.mjs';
+import { jobOf } from './job-chat-messages.mjs';
 
 const ROOT = 'hyper://private/.ai-chat';
 const SESSIONS = `${ROOT}/sessions`;
@@ -49,7 +53,7 @@ export function newSessionId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-// Every session, newest first: { id, title, named, updatedAt, messageCount, preview }. `title` is
+// Every session, newest first: { id, title, named, updatedAt, messageCount, preview, job }. `title` is
 // the user's name for it when they gave one (named: true), else its first message. With `query`,
 // only the sessions whose name or messages have every word of it, each with a `snippet` around the
 // first match.
@@ -89,6 +93,7 @@ export async function listSessions(sender, { query = '' } = {}) {
       messageCount: messages.filter((m) => m && (m.role === 'user' || m.role === 'assistant'))
         .length,
       preview: previewOf(messages),
+      job: jobOf(data),
     };
     if (words.length) {
       const snippet = matchSession(row.title, messages, words);
@@ -107,8 +112,10 @@ export async function loadSession(sender, sessionId) {
 
 export async function saveSession(sender, sessionId, data) {
   const ctx = { sender };
+  const { job: _job, ...rest } = data || {};
+  const job = jobOf(data);
   await Promise.all([
-    writeJson(ctx, sessionUrl(sessionId), { ...data, id: sessionId, updatedAt: Date.now() }),
+    writeJson(ctx, sessionUrl(sessionId), { ...rest, ...(job ? { job } : {}), id: sessionId, updatedAt: Date.now() }),
     writeJson(ctx, LAST_SESSION, { sessionId }),
   ]);
 }

@@ -460,6 +460,13 @@ watching it is a hidden window in the Job's Space's session; on **Run with me**
 unwatched run never asks: it is refused and records `needs` on the run. Only a tick on a watched
 run adds a repeatable click (`keepPageActions` strips any the AI's `saveJob` adds).
 
+Every run can be watched in the AI Sidebar (`app/bg/ai/job-chat.js`, rules in `job-chat-messages.mjs`;
+ADR-0038 amendment): Run with me opens the window's sidebar to the run's chat at once, and the Jobs
+page's **Watch** (`nomad.vault.viewJob`) does it for a run already going, bringing its page forward
+too. The sidebar draws it with `aiShell.followJob` (its Stop is `aiShell.stopJob`). The chat is a
+sidebar session with `job: { id, title }`, saved only once someone watches; the run's record names
+it (`chat`), and the sidebar's history and nomad://ai/chats mark it as a Job's.
+
 ### The AI page, chats and memory (ADR-0032)
 
 `nomad://ai` (`app/userland/ai/`, in the browser menu) is the AI's own page: `/chats`, `/memory`,

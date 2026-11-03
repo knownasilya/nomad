@@ -27,6 +27,7 @@ import * as mods from '../../ui/mods';
 import * as personas from '../../ui/personas';
 import * as openTabs from '../../ui/open-tabs';
 import * as jobs from '../../ai/jobs';
+import * as jobChat from '../../ai/job-chat';
 import { driveTitle, readJobSource, resolveJobWrites } from './job-source';
 import { PRESETS } from '../../../../shared/mods.mjs';
 import { searchMemories, MAX_MEMORIES } from '../../../../shared/ai-memory.mjs';
@@ -651,6 +652,17 @@ export default {
       if (!watch) throw new Error('Open a Nomad window to watch the Job run');
     }
     jobs.runNow(id, { watch });
+  },
+
+  // Watch a Job's run from this page's window (ADR-0038): while it runs, the AI Sidebar opens to its
+  // chat and its page comes to the front (a hidden page shows in a window of its own). After it
+  // ran, `{ chat }` (a run's `chat`) or its last watched run's chat opens. { running, chat, page }.
+  async viewJob(id, opts: any = {}) {
+    if (!jobs.get(id)) throw new Error('No Job with that id');
+    const win = tabManager.findContainingWindow(this.sender) || BrowserWindow.getFocusedWindow();
+    if (!win) throw new Error('Open a Nomad window to watch the Job');
+    const chat = typeof opts?.chat === 'string' && /^[a-z0-9]{1,40}$/.test(opts.chat) ? opts.chat : null;
+    return jobChat.view(id, win, { chat });
   },
 
   // 'changed' when a Job or a run changes, here or on another Device, and when a run starts.

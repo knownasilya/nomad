@@ -96,6 +96,7 @@ export default {
   checkJobSource: 'promise', // (id) -> { url, live, module, prompt, title, hash }: the source's drive now
   deleteJob: 'promise',
   runJob: 'promise', // (id, { watch? }) runs it now, on this Device; watch: in a tab the user watches (Run with me)
+  viewJob: 'promise', // (id, { chat? }) opens a running Job's chat in the AI Sidebar and shows its page; after, a run's chat
   watchJobs: 'readable', // 'changed' when a Job or a run changes, or a run starts
 
   // Open tabs on the user's other Devices (bg/ui/open-tabs.js)

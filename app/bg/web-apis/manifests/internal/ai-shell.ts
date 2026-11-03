@@ -13,6 +13,8 @@ export default {
   notifyAgentWroteFile: 'promise',
   listSessions: 'promise',
   loadSession: 'promise',
+  followJob: 'readable',
+  stopJob: 'promise',
   newSession: 'promise',
   saveSession: 'promise',
   deleteSession: 'promise',

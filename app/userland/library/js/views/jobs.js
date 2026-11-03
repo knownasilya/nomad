@@ -200,7 +200,12 @@ export class JobsView extends LitElement {
             <span class="track"></span>
           </label>
           <div class="meta" @click=${() => this.onOpen(j)}>
-            <div class="title">${j.title}</div>
+            <div class="title">
+              ${j.title}
+              ${j.running
+                ? html`<span class="running-badge"><span class="fas fa-fw fa-circle-notch fa-spin"></span> Running</span>`
+                : ''}
+            </div>
             <div class="summary">${this.summary(j)}</div>
             ${!j.running && j.lastRun?.status === 'error' && !open && !e
               ? html`<div class="last-error" title=${j.lastRun.error || ''}>
@@ -212,9 +217,13 @@ export class JobsView extends LitElement {
             <button class="icon" title="Run now" aria-label="Run ${j.title} now" ?disabled=${j.running} @click=${() => this.onRun(j)}>
               <span class="fas fa-fw ${j.running ? 'fa-circle-notch fa-spin' : 'fa-play'}"></span>
             </button>
-            <button class="icon" title="Run with me: watch it in a tab, and allow the sites it uses" aria-label="Run ${j.title} with me" ?disabled=${j.running} @click=${() => this.onRun(j, true)}>
-              <span class="fas fa-fw fa-eye"></span>
-            </button>
+            ${j.running
+              ? html`<button class="watch-btn" title="Watch this run: its page, and its chat in the AI sidebar" @click=${() => this.onWatch(j)}>
+                  <span class="fas fa-fw fa-eye"></span> Watch
+                </button>`
+              : html`<button class="icon" title="Run with me: watch it in a tab, and allow the sites it uses" aria-label="Run ${j.title} with me" @click=${() => this.onRun(j, true)}>
+                  <span class="fas fa-fw fa-eye"></span>
+                </button>`}
             <button class="icon" title="Edit" aria-label="Edit ${j.title}" @click=${() => (e ? (this.editing = null) : this.edit(j))}>
               <span class="fas fa-fw ${e ? 'fa-chevron-up' : 'fa-pen'}"></span>
             </button>
@@ -230,8 +239,7 @@ export class JobsView extends LitElement {
 
   summary(j) {
     const parts = [j.when];
-    if (j.running) parts.push('Running now…');
-    else if (j.lastRun) {
+    if (j.lastRun && !j.running) {
       parts.push(`${j.lastRun.status === 'error' ? 'Failed' : 'Ran'} ${ago(j.lastRun.finishedAt)}`);
     }
     if (j.enabled && j.nextRunAt && j.here) parts.push(`next ${inTime(j.nextRunAt)}`);
@@ -332,6 +340,13 @@ export class JobsView extends LitElement {
                       : r.status !== 'error'
                         ? html`<div class="hint-row">No answer.</div>`
                         : ''}
+                  ${r.chat
+                    ? html`<div class="run-chat">
+                        <button class="link" title="Open this run’s chat in the AI sidebar" @click=${() => this.onOpenRunChat(j, r)}>
+                          <span class="fas fa-fw fa-comment-alt"></span> Open its chat
+                        </button>
+                      </div>`
+                    : ''}
                   ${this.renderChanges(j, r)}
                   ${r.id === runs[0].id ? this.renderNeeds(j, r) : ''}
                 </details>
@@ -920,12 +935,38 @@ export class JobsView extends LitElement {
     }
   }
 
-  // `watch`: Run with me. Its page opens in a tab of this window, and each site it reaches asks.
+  // `watch`: Run with me. Its page opens in a tab of this window, its chat in the window's AI
+  // sidebar, and each site it reaches asks.
   async onRun(j, watch = false) {
     try {
       await nomad.vault.runJob(j.id, watch ? { watch: true } : undefined);
       if (this.openId !== j.id) await this.onOpen(j);
-      toast.create(watch ? `Running “${j.title}” with you: its page opens in a tab` : `Running “${j.title}”…`);
+      toast.create(
+        watch
+          ? `Running “${j.title}” with you: its page opens in a tab, and its chat in the AI sidebar`
+          : `Running “${j.title}”…`
+      );
+    } catch (err) {
+      toast.create(cleanError(err), 'error');
+    }
+  }
+
+  // A run going on now: its chat opens in this window's AI sidebar, and its page comes to the front
+  // (a run nobody watched shows its page in a window of its own).
+  async onWatch(j) {
+    try {
+      const shown = await nomad.vault.viewJob(j.id);
+      if (!shown?.running) toast.create(`“${j.title}” isn’t running anymore`);
+      else if (!shown.chat) toast.create('Couldn’t open the run’s chat here', 'error');
+    } catch (err) {
+      toast.create(cleanError(err), 'error');
+    }
+  }
+
+  // A run someone watched: its chat, in this window's AI sidebar.
+  async onOpenRunChat(j, r) {
+    try {
+      await nomad.vault.viewJob(j.id, { chat: r.chat });
     } catch (err) {
       toast.create(cleanError(err), 'error');
     }

@@ -87,6 +87,7 @@ import { DRIVE_TEMPLATES } from '../../../lib/drive-templates';
 import { isPageAction } from '../../ai/page-control.mjs';
 import * as pageControl from '../../ui/page-control';
 import { createJobPage } from '../../ai/job-page';
+import * as jobChat from '../../ai/job-chat';
 import {
   getActiveRuntime,
   listRuntimeCatalog,
@@ -503,7 +504,8 @@ export { routeChat };
 // The run has a page of its own (job-page.js, ADR-0038): hidden, or with `watch` (the user's
 // window, for Run with me) a tab the user watches, where each site the Job reaches asks them and
 // `onGrant` saves their yes on the Job. `needs` gets what a run with nobody watching wanted and
-// wasn't given.
+// wasn't given. `chat.id` gets the id of the run's chat in the AI Sidebar, when someone watched it
+// (job-chat.js).
 export async function runJobTurn(
   job,
   {
@@ -515,6 +517,7 @@ export async function runJobTurn(
     needs = [],
     watch = null,
     onGrant = async (_writes) => {},
+    chat: chatOut = { id: null },
   }
 ) {
   const newer =
@@ -539,19 +542,39 @@ export async function runJobTurn(
   // The run's own page. Stop on a watched page's bar ends the run.
   const stop = new AbortController();
   signal?.addEventListener?.('abort', () => stop.abort());
+  const watchWin = watch && !watch.isDestroyed?.() ? watch : null;
   const jobPage = createJobPage({
     job,
-    watchWin: watch && !watch.isDestroyed?.() ? watch : null,
+    watchWin,
     space,
     egress,
     stopTurn: () => stop.abort(),
     onGrant,
     needs,
   });
+  // The run is a chat the user can watch in the AI Sidebar (job-chat.js): at once with Run with
+  // me, or later from My Library → Jobs. The sidebar's Stop ends the run.
+  const chat = await jobChat
+    .open({ job, prompt: work.prompt, emitter, stop: () => stop.abort(), page: jobPage, watchWin })
+    .catch((err) => {
+      console.warn('[ai] Could not open a Job’s chat', job.id, err?.message);
+      return null;
+    });
+  let result = null;
+  let failure = null;
   try {
-    return await runJobWork(job, { work, trigger, lastRun, notify, signal: stop.signal, space, grants, emitter, changes, egress, jobPage, newer });
+    result = await runJobWork(job, { work, trigger, lastRun, notify, signal: stop.signal, space, grants, emitter, changes, egress, jobPage, newer });
+    return result;
+  } catch (err) {
+    failure = err;
+    throw err;
   } finally {
     jobPage.end();
+    // The chat someone watched, for the run's record.
+    chatOut.id =
+      (await chat
+        ?.end({ error: failure ? failure.message || String(failure) : null, output: result?.output || '' })
+        .catch(() => null)) || null;
   }
 }
 

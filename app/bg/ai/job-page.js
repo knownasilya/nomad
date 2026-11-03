@@ -69,6 +69,7 @@ export function createJobPage({
   let writes = job.writes || null;
   let wc = null; // the page's webContents
   let hiddenWin = null;
+  let shown = false; // the user asked to see the hidden page
   let ended = false;
   const answers = new Map(); // site + kind -> Promise<boolean>, this run's answers
 
@@ -280,13 +281,41 @@ export function createJobPage({
       return session.run(name, args || {}, { tab: { sender: wc }, emitter, id });
     },
 
-    // The run is over: take the cursor off the page, close the hidden window. A watched run's tab
-    // stays, so the user sees where the Job left off.
+    // The user wants to see the page (Watch, in My Library → Jobs): a watched run's tab comes to the
+    // front of its window; a hidden page shows in a window of its own, which stays until they close
+    // it. While the run goes on, closing that window hides it again, so the run keeps its page.
+    // false when there is no page to show (none opened yet, or its tab was closed).
+    show() {
+      if (!wc || wc.isDestroyed()) return false;
+      if (watched) {
+        const tab = tabManager.findTab(wc);
+        const win = tab && tabManager.findContainingWindow(wc);
+        if (!tab || !win) return false;
+        tabManager.setActive(win, tab);
+        win.focus();
+        return true;
+      }
+      if (!hiddenWin || hiddenWin.isDestroyed()) return false;
+      if (!shown) {
+        shown = true;
+        hiddenWin.on('close', (e) => {
+          if (ended) return;
+          e.preventDefault();
+          hiddenWin.hide();
+        });
+      }
+      hiddenWin.show();
+      hiddenWin.focus();
+      return true;
+    },
+
+    // The run is over: take the cursor off the page, close the hidden window unless the user is
+    // looking at it. A watched run's tab stays, so the user sees where the Job left off.
     end() {
       if (ended) return;
       ended = true;
       session.end();
-      if (hiddenWin && !hiddenWin.isDestroyed()) hiddenWin.destroy();
+      if (hiddenWin && !hiddenWin.isDestroyed() && !(shown && hiddenWin.isVisible())) hiddenWin.destroy();
       hiddenWin = null;
     },
   };
