@@ -15,6 +15,9 @@ body {
   --nts-nav-hover-bg: var(--bg-color--semi-light);
   --nts-row-hover: #f5f5fb;
   --nts-err: #dc2626;
+  /* The AI as a collaborator in a note (its cursor color is bg/notes/live-note.mjs AI_USER). */
+  --nts-ai: #6d4fe8;
+  --nts-ai-soft: rgba(124, 92, 255, 0.28);
   --nts-warn-bg: #fff7e6;
   --nts-warn-border: #f5d48a;
   /* A topic, the color of its hub on the canvas (app-stdlib/css/graph.css --graph-hub). */
@@ -56,6 +59,8 @@ body {
     --nts-sidebar-bg: #1e1e24;
     --nts-accent: #7b9fff;
     --nts-accent-soft: rgba(93, 128, 255, 0.13);
+    --nts-ai: #a78bfa;
+    --nts-ai-soft: rgba(167, 139, 250, 0.32);
     --nts-mark: rgba(250, 204, 21, 0.28);
     --nts-row-hover: #2a2a34;
     --nts-err: #f87171;
@@ -770,6 +775,82 @@ main {
 
 .toolbar .saved.err {
   color: var(--nts-err);
+}
+
+.toolbar .saved.ai {
+  color: var(--nts-ai);
+}
+
+/* Live editing (ADR-0041): who else has the note open, and their cursors in the text. */
+.toolbar .presence {
+  display: flex;
+  align-items: center;
+  margin-right: 8px;
+}
+
+.toolbar .presence[hidden] {
+  display: none;
+}
+
+.toolbar .avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-color--default);
+  background: var(--avatar);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: default;
+}
+
+.toolbar .avatar:first-child {
+  margin-left: 0;
+}
+
+.toolbar .avatar.ai {
+  font-size: 10px;
+  animation: nts-ai-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes nts-ai-pulse {
+  50% {
+    box-shadow: 0 0 0 3px var(--nts-ai-soft);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toolbar .avatar.ai {
+    animation: none;
+  }
+}
+
+/* A collaborator's cursor (y-codemirror.next): its name always shows, above the caret. */
+.cm-editor .cm-ySelectionCaret {
+  border-left-width: 2px;
+  border-right-width: 0;
+  margin-left: -1px;
+}
+
+.cm-editor .cm-ySelectionInfo {
+  opacity: 1;
+  top: -1.45em;
+  left: -2px;
+  padding: 1px 5px;
+  border-radius: 4px 4px 4px 0;
+  font-family: var(--system-font);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.cm-editor .cm-ySelectionCaretDot {
+  display: none;
 }
 
 /* The note scrolls as one page. The editor takes all the height its text doesn't, so the whole

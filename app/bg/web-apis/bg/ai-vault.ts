@@ -9,6 +9,7 @@
 
 import * as apps from '../../../../shared/vault-apps.mjs';
 import * as vaultApps from './vault-apps';
+import * as liveNotes from '../../notes/live-notes';
 import { highlightForAi, assertCanHighlight } from '../../ui/highlights';
 import * as mods from '../../ui/mods';
 import * as jobs from '../../ai/jobs';
@@ -66,6 +67,8 @@ export async function runVaultTool(name, args, { ctx, space = null, permit, scra
     case 'readNote': {
       const note = findNote(await notes(), args);
       if (!note) throw new Error('No note with that id or title. Use listNotes to find it.');
+      // Kept so a writeNote from this version goes into the open Note as edits (ADR-0041).
+      liveNotes.rememberRead(note);
       return json(
         noteForModel(note, {
           offset: readOffset(args),
@@ -86,13 +89,29 @@ export async function runVaultTool(name, args, { ctx, space = null, permit, scra
         if (!findNote(await notes(), { id })) throw new Error('No note with that id');
       }
       const turnSpace = await readerSpace().catch(() => null);
-      let note = await vaultApps.saveNote(ctx, {
-        id: id || undefined,
-        body,
-        baseUpdatedAt,
-        inSpace: true, // a new Note is kept in the turn's Space, as in the Notes app
-        space: turnSpace,
-      });
+      // The Note is open in Notes (here or on another of the user's Devices): type the change into
+      // it as a collaborator, with the AI's own cursor, so it merges with what the user is typing
+      // (ADR-0041). It falls back to a plain save when the change touches text the user changed
+      // since the AI read it, which keeps the AI's version as a conflict copy.
+      let note = null;
+      if (id && liveNotes.isOpen(id)) {
+        const current = findNote(await notes(), { id });
+        const base = liveNotes.readVersion(id, baseUpdatedAt) ?? (current && current.updatedAt === baseUpdatedAt ? current.body : null);
+        if (base != null) {
+          const res = await liveNotes.aiWrite(id, base, body);
+          if (res && res.note) note = res.note;
+        }
+      }
+      note =
+        note ||
+        (await vaultApps.saveNote(ctx, {
+          id: id || undefined,
+          body,
+          baseUpdatedAt,
+          inSpace: true, // a new Note is kept in the turn's Space, as in the Notes app
+          space: turnSpace,
+        }));
+      liveNotes.rememberRead(note); // the base of the AI's next edit
       // Topics the user's AI sets count as the user's (ADR-0035): the background sort leaves them.
       if (Array.isArray(topics)) {
         note = await vaultApps.setNoteTopics(ctx, { id: note.id, topics: topics.filter((t) => typeof t === 'string'), space: turnSpace });

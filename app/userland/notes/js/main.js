@@ -25,9 +25,15 @@
 // (bg/web-apis/bg/note-topics.ts). The Topics dropdown above the list (All by default) shows the
 // notes with any of the topics ticked in it, and on the canvas every topic is a hub with its notes
 // around it; clicking a hub lists its notes.
+// An open note is edited live (ADR-0041, ./live.js): the editor joins the note's session in bg, which
+// the same note open on the user's other Devices joins too, and which the AI types into when it edits
+// the note. Their edits appear as they happen, with their cursors, and the session saves the note.
 // Bundled (scripts/build.js → js/main.build.js), styled with the app-stdlib tokens like nomad://reader.
 
 import { createNoteEditor } from './editor/index.js';
+import { keymap } from '@codemirror/view';
+import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next';
+import { connectLiveNote, canLive, colorFor, setYText } from './live.js';
 import { createGraphView } from '../../app-stdlib/js/graph/view.js';
 import { noteGraph, noteTexts, noteGraphCounts, topicNodeId } from './graph.js';
 import { noteTitle, noteSnippet, makeResolver, linkedIds } from '../../../../shared/vault-apps.mjs';
@@ -36,6 +42,7 @@ import { notesPageTitle } from './page-title.js';
 import { isTopicOn, toggleTopic, keepKnownTopics, matchesTopics, topicFilterLabel } from './topic-filter.js';
 
 const SAVE_DELAY = 700;
+const EDITOR_HINT = 'Start typing. The first line is the title. Type [[ to link a note.';
 const VIEW_KEY = 'nomad-notes-view';
 
 const state = {
@@ -67,6 +74,12 @@ let mentionsOpen = false; // the user opened Linked mentions; it stays open from
 let editor = null;
 let view = 'list'; // 'list' (the list and the open note) or 'canvas' (the notes and their links)
 let graph = null; // the canvas, made the first time it's shown
+// The open note's live session (./live.js): { id, conn, synced, status }. Null while the note is
+// new (not saved yet), when this device can't write, or when live editing isn't available.
+let live = null;
+let me = { name: 'This device', key: '' }; // this device, for the cursor others see
+let editorHost = null;
+let presenceEl = null;
 
 const app = document.getElementById('app');
 let listEl, topicsEl, topicBtn, topicLabel, topicClear, topicOffer, topicMenu, topicSearch, topicOptions, mainEl, searchInput, newBtn, savedEl, layoutEl, graphPane, graphInfo, graphHint;
@@ -81,6 +94,12 @@ init().catch((err) => {
 });
 
 async function init() {
+  nomad.vault
+    .getThisDevice?.()
+    .then((d) => {
+      if (d) me = { name: d.name || me.name, key: d.key || '' };
+    })
+    .catch(() => {});
   await loadNotes();
   state.loaded = true;
   const fromUrl = idFromUrl();
@@ -192,6 +211,8 @@ function watchOtherDevices() {
         draft = null;
         const next = state.notes[0];
         if (next) return openNote(next.id, { push: false });
+      } else if (live && live.synced && live.id === draft.id) {
+        draft.base = fresh.updatedAt; // the live session already has the text
       } else if (fresh.updatedAt !== draft.base) {
         draft.body = fresh.body;
         draft.base = fresh.updatedAt;
@@ -248,6 +269,7 @@ async function save() {
       if (draft === target) {
         setUrl(note.id, false);
         renderAround(); // the topic bar, now that it has an id
+        startLive({ keepLocal: true }); // stored now, so it can be edited live from here on
       }
     }
     target.base = note.updatedAt;
@@ -776,9 +798,12 @@ function noteItem(n) {
 }
 
 function renderEditor() {
+  stopLive();
   editor?.destroy();
   editor = null;
   savedEl = null;
+  presenceEl = null;
+  editorHost = null;
   if (!state.loaded) return;
   if (!draft) {
     mainEl.replaceChildren(
@@ -793,11 +818,14 @@ function renderEditor() {
   }
 
   savedEl = el('span', { class: 'saved' });
+  presenceEl = el('span', { class: 'presence' });
   const host = el('div', { class: 'cm-host' });
+  editorHost = host;
   mainEl.replaceChildren(
     el('div', { class: 'toolbar' }, [
       ...toolbarButtons(),
       el('span', { class: 'spacer' }),
+      presenceEl,
       savedEl,
       scopeButton(),
       el(
@@ -813,7 +841,7 @@ function renderEditor() {
     doc: draft.body,
     notes: state.notes,
     readOnly: !state.writable,
-    placeholder: 'Start typing. The first line is the title. Type [[ to link a note.',
+    placeholder: EDITOR_HINT,
     onChange: (text) => {
       draft.body = text;
       dirty = true;
@@ -827,6 +855,133 @@ function renderEditor() {
   if (!draft.id) editor.focus();
   renderAround();
   renderSaveMsg();
+  startLive();
+}
+
+// ── Live editing (ADR-0041) ─────────────────────────────────────────────────
+
+// Join the open note's live session. The editor waits (read only) until it's in step with the
+// session, then is swapped for one bound to it. `keepLocal`: the note was just saved for the first
+// time, and what's typed since goes into the session.
+function startLive({ keepLocal = false } = {}) {
+  const target = draft;
+  if (!target || !target.id || !editor || !state.writable || !canLive() || (live && live.id === target.id)) return;
+  stopLive();
+  const conn = connectLiveNote({
+    id: target.id,
+    user: { name: me.name, color: colorFor(me.key || me.name), colorLight: colorFor(me.key || me.name) + '33' },
+    onStatus: (st) => onLiveStatus(target, st),
+    onPeers: () => renderPresence(),
+    // The session joined another Device's copy of this note: connect again to it.
+    onReset: () => {
+      if (draft === target && live && live.conn === conn) {
+        stopLive();
+        startLive({ keepLocal: true });
+      }
+    },
+  });
+  const mine = { id: target.id, conn, synced: false, status: null };
+  live = mine;
+  if (!keepLocal) editor.setReadOnly(true);
+  conn.whenSynced.then(
+    () => {
+      if (live !== mine || draft !== target || !editor) return;
+      if (keepLocal) setYText(conn.ytext, editor.getText());
+      mine.synced = true;
+      clearTimeout(saveTimer); // the session saves from here on
+      dirty = false;
+      bindLive(conn);
+      renderPresence();
+    },
+    (err) => {
+      // No live editing (an older bg, or it failed): edit and save the note as before.
+      console.warn('[notes] live editing unavailable', err);
+      if (live !== mine) return;
+      conn.destroy();
+      live = null;
+      editor?.setReadOnly(!state.writable);
+    }
+  );
+}
+
+function stopLive() {
+  if (!live) return;
+  live.conn.destroy();
+  live = null;
+  renderPresence();
+}
+
+// Swap the editor for one bound to the session, keeping the cursor and focus.
+function bindLive(conn) {
+  if (!editorHost || !editor) return;
+  const hadFocus = editor.view.hasFocus;
+  const { anchor, head } = editor.view.state.selection.main;
+  editor.destroy();
+  editorHost.replaceChildren();
+  const text = conn.ytext.toString();
+  editor = createNoteEditor({
+    parent: editorHost,
+    doc: text,
+    notes: state.notes,
+    readOnly: !state.writable,
+    placeholder: EDITOR_HINT,
+    onChange: (t) => {
+      // Anyone's edit: this tab's, another Device's, or the AI's. The session saves them.
+      draft.body = t;
+      renderList();
+      updateTitle();
+    },
+    onOpenLink: openLink,
+    // Undo takes back this tab's own edits, never the AI's or another Device's.
+    collab: [yCollab(conn.ytext, conn.awareness), keymap.of(yUndoManagerKeymap)],
+  });
+  const clamp = (n) => Math.min(n, text.length);
+  editor.view.dispatch({ selection: { anchor: clamp(anchor), head: clamp(head) } });
+  if (hadFocus) editor.focus();
+  if (draft.body !== text) {
+    draft.body = text;
+    renderList();
+    updateTitle();
+  }
+}
+
+function onLiveStatus(target, st) {
+  if (draft !== target || !live) return;
+  live.status = st;
+  if (st.updatedAt) target.base = st.updatedAt;
+  if (st.error) setSaveMsg('error', 'Not saved: ' + st.error);
+  else if (st.ai) setSaveMsg('ai', 'AI is editing…');
+  else if (st.saving || st.unsaved) setSaveMsg('saving', 'Saving…');
+  else if (saveMsg.kind === 'saving' || saveMsg.kind === 'ai') setSaveMsg('saved', 'Saved');
+  renderPresence();
+}
+
+// Who else has the note open: the AI while it edits, and the user's other Devices. Each has a
+// tooltip, since they show only an icon or initials.
+function renderPresence() {
+  if (!presenceEl) return;
+  const others = live && live.synced ? live.conn.others() : [];
+  others.sort((a, b) => Number(b.ai) - Number(a.ai));
+  const seen = new Set();
+  const items = [];
+  for (const o of others) {
+    const k = (o.ai ? 'ai:' : 'dev:') + o.name;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const label = o.ai ? 'AI is editing this note' : `${o.name} has this note open`;
+    items.push(
+      el('span', { class: 'avatar' + (o.ai ? ' ai' : ''), style: `--avatar: ${o.color}`, title: label, 'aria-label': label, role: 'img' }, [
+        o.ai ? icon('robot') : initials(o.name),
+      ])
+    );
+  }
+  presenceEl.replaceChildren(...items);
+  presenceEl.hidden = !items.length;
+}
+
+function initials(name) {
+  const parts = String(name || '?').trim().split(/\s+/);
+  return ((parts[0] || '?')[0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
 }
 
 // Where the open note is: in every Space, or only in this one. A click moves it.
@@ -1085,6 +1240,7 @@ function renderSaveMsg() {
   }
   savedEl.textContent = text;
   savedEl.classList.toggle('err', saveMsg.kind === 'error');
+  savedEl.classList.toggle('ai', saveMsg.kind === 'ai');
 }
 
 // Whether the notes reach the user's other Devices.

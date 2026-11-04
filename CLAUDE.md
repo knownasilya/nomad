@@ -235,6 +235,21 @@ Reader's topic rules). `makeNote` keeps them on every save, and setting them nev
 **`npm run build:canvas`** bundles from `app-stdlib/js/graph/phone.js`: rerun it after changing the
 canvas or either graph.
 
+### Live Notes (ADR-0041)
+
+An open Note is edited live: a Yjs session per open Note in bg (`app/bg/notes/live-note.mjs`,
+`LiveNote`; wiring in `app/bg/notes/live-notes.js`) that every nomad://notes tab joins
+(`nomad.vault.openLiveNote`/`liveNoteSend`, `notes/js/live.js`, bound with `yCollab`) and that the same
+Note's session on the user's other Devices joins over `shared/note-live.mjs` (Protomux
+`nomad/note-live`, each side signs `proofMessage(nonce, handshakeHash)` with its Vault writer key
+before any Note frame). The record stays the Note: the session is seeded from it (a deterministic
+seed client id, so two Devices don't double the text) and the **leader** (lowest Device key in the
+session) writes it back and folds outside changes in (`shared/note-diff.mjs`). The AI's `writeNote`
+on an open Note types its edits in with its own cursor (`aiEdit`, from the text `readNote` gave it);
+when they touch text the user changed, it falls back to a conflict copy. The phone isn't on the link
+yet: its edits arrive through the record. Tests: `tests/unit/note-diff.test.js`,
+`note-live-session.test.js`, `note-live-link.test.js`.
+
 ### Names (ADR-0018)
 
 The user's short names for Drives, app folders and URLs live in the Vault (`/.vault/names/`, rules in
