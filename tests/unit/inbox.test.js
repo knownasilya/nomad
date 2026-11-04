@@ -7,7 +7,9 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createRequire } from 'module';
+import { execFileSync } from 'child_process';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import * as I from '../../shared/inbox.mjs';
 
 let crypto;
@@ -317,5 +319,38 @@ describe('phone notifications', () => {
     expect(r.notify.map((x) => x.message.id[0])).toEqual(['b', 'f']);
     expect(r.since).toBe('2026-11-03T12:00:05.000Z');
     expect(I.pendingNotifications(rs, r.since).notify).toEqual([]);
+  });
+});
+
+// The phone's backend runs on Bare, which has no TextEncoder or TextDecoder: a `new TextEncoder()`
+// as the file loaded crashed the app at launch (1.39.0). The file must load without them and give
+// the same bytes by hand.
+describe('without TextEncoder (Bare)', () => {
+  const texts = ['', 'hello', 'héllo 👋', '\u0000\u007f\u0080\u07ff\u0800\uffff', '\ud83d', 'a\udc00b', '\ud83d\ud83d\ude00', '日本語 🇺🇦'];
+  const bytes = [
+    [0xff], [0xc0, 0x80], [0xe0, 0x80, 0x80], [0xed, 0xa0, 0x80], [0xf4, 0x90, 0x80, 0x80],
+    [0xe2, 0x82], [0xf0, 0x9f, 0x98], [0x61, 0x80, 0x62], [0xc3, 0xa9, 0xf0, 0x9f, 0x91, 0x8b],
+  ];
+
+  it('encodes and decodes UTF-8 exactly as TextEncoder and TextDecoder do', () => {
+    const te = new TextEncoder();
+    const td = new TextDecoder();
+    for (const t of texts) {
+      expect([...I.encodeUtf8(t)]).toEqual([...te.encode(t)]);
+      expect(I.decodeUtf8(te.encode(t))).toBe(td.decode(te.encode(t)));
+    }
+    for (const b of bytes) expect(I.decodeUtf8(new Uint8Array(b))).toBe(td.decode(new Uint8Array(b)));
+  });
+
+  it('loads and works with neither global', () => {
+    const url = pathToFileURL(path.join(process.cwd(), 'shared', 'inbox.mjs')).href;
+    const script = `delete globalThis.TextEncoder; delete globalThis.TextDecoder;
+      const I = await import(${JSON.stringify(url)});
+      const texts = ${JSON.stringify(texts)};
+      console.log(JSON.stringify(texts.map((t) => [I.toHex(I.utf8(t)), I.fromUtf8(I.utf8(t))])));`;
+    const out = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' }));
+    const te = new TextEncoder();
+    const td = new TextDecoder();
+    expect(out).toEqual(texts.map((t) => [I.toHex(te.encode(t)), td.decode(te.encode(t))]));
   });
 });

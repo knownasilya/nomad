@@ -573,6 +573,11 @@ reads or sends messages (§7.1, §7.6). The phone keeps its backend running for
 `BACKGROUND_GRACE_MS` (five minutes) after it leaves the screen, so its mailbox and the AI keep
 answering.
 
+**`shared/*.mjs` also runs on the phone's Bare worklet**, which has no `TextEncoder`/`TextDecoder`,
+`crypto`, `Buffer` or `structuredClone` globals. A shared module must not touch one as it loads: an
+error there kills the worklet and the app closes at launch (1.39.0, `shared/inbox.mjs`). Use `b4a`,
+pass the dependency in, or check `typeof` first.
+
 ## Look and feel: every UI supports dark mode and matches the rest
 
 Every new or changed screen must work in light **and** dark, and look like its neighbours.
