@@ -17,6 +17,7 @@ import { getEnvVar } from './bg/lib/env';
 import * as logger from './bg/logger';
 import * as beakerBrowser from './bg/browser';
 import * as adblocker from './bg/adblocker';
+import * as widevine from './bg/widevine';
 import * as portForwarder from './bg/nat-port-forwarder';
 import dbs from './bg/dbs/index';
 import hyper from './bg/hyper/index';
@@ -142,6 +143,8 @@ app.on('ready', async function () {
 
   await logger.setup(join(commonOpts.userDataPath, 'nomad.log'));
   log.info('Welcome to Nomad');
+  // Widevine for DRM video (Prime Video, Netflix, …). Starts now; the first browser window waits for it.
+  widevine.setup();
   nomadProtocol.register(protocol);
   webapis.setup();
   initWindow.open();
@@ -221,6 +224,8 @@ app.on('ready', async function () {
   });
   log.info('Initializing tray icon');
   trayIcon.setup();
+  // A renderer started before the Widevine CDM is registered never sees it.
+  await widevine.waitBriefly();
   log.info('Initializing browser windows');
   windows.setup();
   log.info('Initializing downloads manager');

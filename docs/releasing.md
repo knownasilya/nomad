@@ -127,10 +127,34 @@ All secrets are **optional** — the workflow degrades rather than fails when th
 | `MAC_CERTS` | macOS (Apple Developer ID) | build is not Developer ID signed (`CSC_IDENTITY_AUTO_DISCOVERY=false`) |
 | `MAC_CERTS_PASSWORD` | macOS | — |
 | `APPLE_ID`, `APPLE_ID_PASSWORD`, `APPLE_TEAM_ID` | macOS notarization | not notarized |
+| `EVS_ACCOUNT_NAME`, `EVS_PASSWD` | macOS Widevine VMP signing (below) | not VMP-signed: DRM streaming sites (Prime Video, Netflix) may refuse to play (warning in the job log) |
 | `ANDROID_KEYSTORE` | Android | signed with the committed **debug** keystore (warning in the job log) |
 | `ANDROID_KEYSTORE_PASSWORD` | Android | — |
 | `ANDROID_KEY_ALIAS` | Android | — |
 | `ANDROID_KEY_PASSWORD` | Android | — |
+
+### Widevine and VMP signing (DRM video)
+
+Prime Video, Netflix, Disney+ and other streaming sites decrypt video with Widevine. Stock Electron
+doesn't include it, so those players fail with a generic "error playing your video". castLabs'
+Electron build ([ECS](https://github.com/castlabs/electron-releases), tags ending in `+wvcus`) adds
+a `components` API that installs the Widevine CDM; `app/bg/widevine.js` starts it at launch and
+holds the first browser window until it's ready (up to 15 s). On stock Electron it does nothing.
+
+The services also check the app's **VMP signature**. ECS ships a development signature only; a
+production one comes from castLabs EVS, which is free:
+
+```bash
+python3 -m pip install --upgrade castlabs-evs
+python3 -m castlabs_evs.account signup    # confirms by email
+```
+
+Add the account name and password as the `EVS_ACCOUNT_NAME` and `EVS_PASSWD` repository secrets.
+The release workflow logs in, and `scripts/afterPackHook.js` runs `castlabs_evs.vmp sign-pkg` on the
+packed app **before** code signing (macOS requires that order) and then `verify-pkg`. The hook skips
+signing when Electron isn't a castLabs build or the secrets aren't set. Linux has no VMP; Widevine
+there plays whatever the service allows without it. To sign a local `npm run pack` build, run
+`python3 -m castlabs_evs.account reauth` once and set `EVS_ACCOUNT_NAME` in the shell.
 
 ### Setting up the macOS self-signed certificate
 
