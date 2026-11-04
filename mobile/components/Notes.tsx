@@ -13,6 +13,7 @@ import Icon from './Icon'
 import { ListSection } from './List'
 import Canvas, { type CanvasHandle, type CanvasSnapshot } from './Canvas'
 import NoteTopicsSheet from './NoteTopicsSheet'
+import TopicFilterSheet from './TopicFilterSheet'
 import SearchField, { Marked } from './SearchField'
 import KeyboardInset from './KeyboardInset'
 import { queryWords, matchesWords, matchSnippet } from '../lib/search'
@@ -55,8 +56,9 @@ const TOOLS: [string, string][] = [['heading', 'H'], ['bold', 'B'], ['italic', '
 // line with an arrowhead for each link. Tap a note to light up its links and see it below; tap it
 // again, or Open, to edit it. Back from the note returns to the canvas as it was.
 // A note can have topics (ADR-0035): the row under the editor's tools shows them and opens a sheet
-// to change them; a computer's AI also sorts notes into topics by itself. The chips above the list
-// show one topic's notes, and on the canvas each topic is a hub with its notes around it.
+// to change them; a computer's AI also sorts notes into topics by itself. The Topics dropdown above
+// the list (All by default) shows the notes with any of the topics ticked in it (TopicFilterSheet),
+// and on the canvas each topic is a hub with its notes around it.
 // The search box finds notes with every word typed, in their text or topics, in any order and
 // ignoring accents (lib/search.ts, desktop's rules): the list shows the line that matched with the
 // words marked, and the canvas lights up the notes that match.
@@ -92,8 +94,10 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
   // The list, or the canvas of notes and their links. The last one used comes back next time.
   const [view, setView] = useState<'list' | 'canvas'>('list')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  // The topic whose notes the list shows, or null for all; the open note (for its topics); the sheet.
-  const [topic, setTopic] = useState<string | null>(null)
+  // The topics ticked in the Topics dropdown, none for All, and whether its sheet is open; the open
+  // note (for its topics); the sheet that changes them.
+  const [topics, setTopics] = useState<string[]>([])
+  const [filterOpen, setFilterOpen] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
   const [topicsOpen, setTopicsOpen] = useState(false)
   const canvasRef = useRef<CanvasHandle>(null)
@@ -386,12 +390,14 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
 
   // Every topic the notes use, most used first (shared/note-topics.mjs noteTopicCounts).
   const topicList = useMemo(() => topicCounts(notes || []), [notes])
-  const topicKey = topic && topicList.some((x) => x.topic.toLowerCase() === topic.toLowerCase()) ? topic.toLowerCase() : null
+  // The ticked topics the notes still use: one that lost its last note drops out.
+  const ticked = useMemo(() => topics.filter((x) => topicList.some((k) => k.topic.toLowerCase() === x.toLowerCase())), [topics, topicList])
+  const tickedKeys = ticked.map((x) => x.toLowerCase())
   const words = useMemo(() => queryWords(query), [query])
   const q = words.length > 0
   const shown = (notes || []).filter((n) =>
     matchesWords([n.body, ...(n.topics || [])].join('\n'), words) &&
-    (!topicKey || (n.topics || []).some((x) => x.toLowerCase() === topicKey)))
+    (!tickedKeys.length || (n.topics || []).some((x) => tickedKeys.includes(x.toLowerCase()))))
   const openNote = openId ? (notes || []).find((n) => n.id === openId) || null : null
 
   // A note's topics, set by hand: the AI on a computer leaves them alone after this.
@@ -409,7 +415,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
   const showTopic = (id: string) => {
     const hub = topicList.find((x) => 'topic:' + x.topic.toLowerCase() === id)
     if (!hub) return
-    setTopic(hub.topic)
+    setTopics([hub.topic])
     setSelectedId(null)
     setView('list')
   }
@@ -574,18 +580,27 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
               <ScrollView contentContainerStyle={[s.page, keyboard > insets.bottom && { paddingBottom: 96 + keyboard - insets.bottom }]} keyboardShouldPersistTaps='handled'>
                 <SearchField value={query} onChangeText={setQuery} placeholder='Search notes' style={s.searchField} />
                 {topicList.length > 0 && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chips} contentContainerStyle={s.chipsContent}>
-                    <Chip s={s} label='All' active={!topicKey} onPress={() => setTopic(null)} />
-                    {topicList.map((x) => (
-                      <Chip key={x.topic} s={s} label={`${x.topic} · ${x.count}`} active={topicKey === x.topic.toLowerCase()} onPress={() => setTopic(topicKey === x.topic.toLowerCase() ? null : x.topic)} />
-                    ))}
-                  </ScrollView>
+                  <View style={s.filterRow}>
+                    <Pressable
+                      style={[s.topicSelect, ticked.length > 0 && s.topicSelectOn]}
+                      onPress={() => setFilterOpen(true)}
+                      android_ripple={{ color: t.ripple }}
+                      accessibilityRole='button'
+                      accessibilityLabel={ticked.length ? `Topics: ${ticked.join(', ')}` : 'Topics: all'}
+                      accessibilityHint='Choose the topics to show'
+                    >
+                      <Icon name='tag' size={13} color={ticked.length ? t.trustText : t.textMuted} />
+                      <Text numberOfLines={1} style={[s.topicSelectText, ticked.length > 0 && s.topicSelectTextOn]}>{topicFilterLabel(ticked)}</Text>
+                      <Icon name='chevron-down' size={11} color={ticked.length ? t.trustText : t.textMuted} />
+                    </Pressable>
+                    {ticked.length ? <IconButton icon='times' label='Show all notes' onPress={() => setTopics([])} size={16} /> : null}
+                  </View>
                 )}
                 {!writable && (
                   <Text style={s.hint}>This phone can’t save changes to your Vault yet. Keep your other device online until it syncs.</Text>
                 )}
                 {shown.length === 0 ? (
-                  <Text style={s.empty}>{q || topicKey ? 'No notes match.' : 'No notes yet. Tap New note to write one. It shows on your computer too.'}</Text>
+                  <Text style={s.empty}>{q || ticked.length ? 'No notes match.' : 'No notes yet. Tap New note to write one. It shows on your computer too.'}</Text>
                 ) : (
                   sections.map((sec) => (
                     <ListSection key={sec.title || 'all'} title={sec.title || undefined}>
@@ -599,7 +614,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
                             {(n.topics || []).length > 0 && (
                               <View style={[s.topicRow, s.rowTopics]}>
                                 {(n.topics || []).map((x) => (
-                                  <TouchableOpacity key={x} style={s.topic} onPress={() => setTopic(x)} hitSlop={4}>
+                                  <TouchableOpacity key={x} style={s.topic} onPress={() => setTopics([x])} hitSlop={4}>
                                     <Text numberOfLines={1} style={s.topicText}><Marked text={x} words={words} /></Text>
                                   </TouchableOpacity>
                                 ))}
@@ -631,6 +646,14 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
           </>
         )}
       </SafeAreaView>
+      <TopicFilterSheet
+        visible={filterOpen && topicList.length > 0}
+        onClose={() => setFilterOpen(false)}
+        topics={topicList}
+        total={(notes || []).length}
+        selected={ticked}
+        onChange={setTopics}
+      />
       <NoteTopicsSheet
         visible={topicsOpen && !!openNote}
         onClose={() => setTopicsOpen(false)}
@@ -660,14 +683,12 @@ function topicCounts (notes: Note[]): Array<{ topic: string; count: number }> {
   return [...counts.values()].sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic))
 }
 
-type Styles = ReturnType<typeof makeStyles>
-
-function Chip ({ label, active, onPress, s }: { label: string; active: boolean; onPress: () => void; s: Styles }) {
-  return (
-    <TouchableOpacity style={[s.chip, active && s.chipActive]} onPress={onPress} accessibilityState={{ selected: active }}>
-      <Text numberOfLines={1} style={[s.chipText, active && s.chipTextActive]}>{label}</Text>
-    </TouchableOpacity>
-  )
+// What the Topics dropdown says: "All topics", "Garden", "Garden, Work", "Garden + 2 more" (as on
+// desktop: app/userland/notes/js/topic-filter.js topicFilterLabel).
+function topicFilterLabel (ticked: string[]): string {
+  if (!ticked.length) return 'All topics'
+  if (ticked.length <= 2) return ticked.join(', ')
+  return `${ticked[0]} + ${ticked.length - 1} more`
 }
 
 function relativeDate (iso: string): string {
@@ -755,13 +776,25 @@ function makeStyles (t: Theme) {
     rowTitle: { color: t.text, fontSize: 15, fontWeight: '600' },
     rowSub: { color: t.textMuted, fontSize: 13, marginTop: 2 },
     rowDate: { color: t.textDim },
-    // Topics (ADR-0035): the filter chips, a note's tags, and the editor's topic row.
-    chips: { flexGrow: 0, marginHorizontal: -16, marginTop: -4, marginBottom: 12 },
-    chipsContent: { paddingHorizontal: 16, gap: 8 },
-    chip: { height: 34, justifyContent: 'center', paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: t.border, maxWidth: 200 },
-    chipActive: { backgroundColor: t.trustBg, borderColor: t.trustBg },
-    chipText: { color: t.textDim, fontSize: 13, fontWeight: '500' },
-    chipTextActive: { color: t.trustText, fontWeight: '700' },
+    // Topics (ADR-0035): the Topics dropdown, a note's tags, and the editor's topic row.
+    filterRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: -4, marginBottom: 12 },
+    topicSelect: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      height: 44,
+      paddingLeft: 16,
+      paddingRight: 14,
+      borderRadius: radius.pill,
+      borderWidth: 1,
+      borderColor: t.border,
+      backgroundColor: t.surface,
+      overflow: 'hidden'
+    },
+    topicSelectOn: { backgroundColor: t.trustBg, borderColor: t.trustBg },
+    topicSelectText: { flex: 1, color: t.textDim, fontSize: 14 },
+    topicSelectTextOn: { color: t.trustText, fontWeight: '600' },
     topicRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, flex: 1 },
     rowTopics: { marginTop: 6, flex: 0 },
     topic: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: t.trustBg, maxWidth: 160 },

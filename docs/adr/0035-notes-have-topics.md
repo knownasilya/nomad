@@ -34,14 +34,16 @@ the canvas graph is `app/userland/notes/js/graph.js` (tests `tests/unit/notes-gr
    topics" above the list while the pass is off, still ask.
 4. **nomad://notes** shows a note's topics in a bar above its text: click one to list its notes, ×
    to take it off, type to add one (Enter or a comma; the known topics are suggested), or Suggest.
-   The chips above the list show one topic's notes, and each row shows its topics. The internal API
+   The Topics dropdown above the list (All by default) shows the notes with any of the topics
+   ticked in it (`notes/js/topic-filter.js`), and each row shows its topics. Clicking a note's topic
+   or a hub on the canvas shows that topic alone. The internal API
    is `nomad.vault.setNoteTopics({ id, topics })` and `nomad.vault.suggestNoteTopics(ids?)`;
    `listNotes()` adds `ai: { autoTopics, tagging, noRuntime }`.
 5. **The canvas gathers notes around their topics.** Each topic is a hub (`topic:<topic, lowercased>`,
    drawn like Reader's topics), tied to its notes by a dashed line with no arrowhead, so it reads
    apart from a link between notes. Clicking a hub lists its notes; the list's topic lights up its
    hub. The search matches topics too. The phone draws the same graph (`npm run build:canvas`).
-6. **The phone** shows the same chips and row topics, a topic row under the editor's tools that
+6. **The phone** shows the same dropdown (its menu is a sheet, `TopicFilterSheet`) and row topics, a topic row under the editor's tools that
    opens a sheet to change them (`notes`/`setTopics` over `RPC_APPS`), and topic hubs on its canvas:
    tap one to see how many notes it has, then List. It doesn't ask an AI itself; a computer sorts
    the phone's notes.

@@ -22,8 +22,9 @@
 //
 // A note can have topics (ADR-0035): the bar above its text shows them, adds and removes them, and
 // asks the AI to suggest some. This Device's AI also sorts notes by itself once they settle
-// (bg/web-apis/bg/note-topics.ts). The topic chips above the list show one topic's notes, and on
-// the canvas every topic is a hub with its notes around it; clicking a hub lists its notes.
+// (bg/web-apis/bg/note-topics.ts). The Topics dropdown above the list (All by default) shows the
+// notes with any of the topics ticked in it, and on the canvas every topic is a hub with its notes
+// around it; clicking a hub lists its notes.
 // Bundled (scripts/build.js → js/main.build.js), styled with the app-stdlib tokens like nomad://reader.
 
 import { createNoteEditor } from './editor/index.js';
@@ -32,6 +33,7 @@ import { noteGraph, noteTexts, noteGraphCounts, topicNodeId } from './graph.js';
 import { noteTitle, noteSnippet, makeResolver, linkedIds } from '../../../../shared/vault-apps.mjs';
 import { queryWords, matchesWords, matchSnippet, markPieces } from '../../app-stdlib/js/search-match.js';
 import { notesPageTitle } from './page-title.js';
+import { isTopicOn, toggleTopic, keepKnownTopics, matchesTopics, topicFilterLabel } from './topic-filter.js';
 
 const SAVE_DELAY = 700;
 const VIEW_KEY = 'nomad-notes-view';
@@ -47,7 +49,7 @@ const state = {
   shared: false, // this Space is shared with other people (ADR-0029)
   canWriteSpace: true, // false for a person who can only view the shared Space
   members: 0,
-  topic: null, // the topic whose notes the list shows, or null for all
+  topics: [], // the topics ticked in the filter: the list shows notes with any of them; none is All
   // What the AI is doing with topics: { autoTopics, tagging: [noteId], noRuntime }.
   ai: { autoTopics: false, tagging: [], noRuntime: false },
 };
@@ -67,7 +69,7 @@ let view = 'list'; // 'list' (the list and the open note) or 'canvas' (the notes
 let graph = null; // the canvas, made the first time it's shown
 
 const app = document.getElementById('app');
-let listEl, topicsEl, mainEl, searchInput, newBtn, savedEl, layoutEl, graphPane, graphInfo, graphHint;
+let listEl, topicsEl, topicBtn, topicLabel, topicClear, topicOffer, topicMenu, topicSearch, topicOptions, mainEl, searchInput, newBtn, savedEl, layoutEl, graphPane, graphInfo, graphHint;
 const viewBtns = new Map();
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
@@ -164,8 +166,8 @@ async function loadNotes() {
   state.canWriteSpace = res.canWriteSpace !== false;
   state.members = res.members || 0;
   state.ai = { autoTopics: false, tagging: [], noRuntime: false, ...(res.ai || {}) };
-  // The topic shown may have gone (its last note lost it, on this Device or another).
-  if (state.topic && !topicCounts().some((t) => t.topic.toLowerCase() === state.topic.toLowerCase())) state.topic = null;
+  // A ticked topic may have gone (its last note lost it, on this Device or another).
+  state.topics = keepKnownTopics(state.topics, topicCounts());
   editor?.setNotes(state.notes);
 }
 
@@ -379,7 +381,7 @@ async function openFromCanvas(id) {
   if (id.startsWith('topic:')) {
     const t = topicCounts().find((x) => topicNodeId(x.topic) === id);
     if (!t) return;
-    state.topic = t.topic;
+    state.topics = [t.topic];
     view = 'list';
     setUrl(draft?.id || null, true);
     applyView();
@@ -450,7 +452,7 @@ function renderShell() {
     el('div', { class: 'header-actions' }, [switcher, newBtn]),
   ]);
   listEl = el('div', { class: 'notes' });
-  topicsEl = el('div', { class: 'topic-filter', role: 'group', 'aria-label': 'Topics' });
+  renderTopicShell();
   const nav = el('nav', {}, [topicsEl, listEl, el('footer', {}, [])]);
   mainEl = el('main', {});
   graphInfo = el('span', { class: 'graph-info' });
@@ -498,7 +500,7 @@ function applyView() {
     renderGraph();
     graph.setVisible(true);
     // The topic the list showed lights up on the canvas.
-    if (made || state.topic) graph.select(state.topic ? topicNodeId(state.topic) : null);
+    if (made || state.topics.length) graph.select(canvasTopic());
   } else {
     graph?.setVisible(false);
     editor?.view.requestMeasure();
@@ -559,12 +561,7 @@ function renderAll({ keepEditor = false } = {}) {
 // topics (app-stdlib/js/search-match.js, as on the canvas and the phone).
 function visibleNotes() {
   const words = queryWords(state.query);
-  const topic = state.topic ? state.topic.toLowerCase() : null;
-  return state.notes.filter(
-    (n) =>
-      matchesWords([n.body, ...topicsOf(n)].join('\n'), words) &&
-      (!topic || topicsOf(n).some((t) => t.toLowerCase() === topic))
-  );
+  return state.notes.filter((n) => matchesWords([n.body, ...topicsOf(n)].join('\n'), words) && matchesTopics(topicsOf(n), state.topics));
 }
 
 // text with the searched words marked.
@@ -587,14 +584,104 @@ function topicCounts() {
   return [...counts.values()].sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic));
 }
 
-function setTopic(topic) {
-  state.topic = topic && state.topic?.toLowerCase() === topic.toLowerCase() ? null : topic;
-  if (view === 'canvas') graph?.select(state.topic ? topicNodeId(state.topic) : null, { center: !!state.topic });
+// The topic a hub on the canvas lights up for: the one ticked, when just one is.
+function canvasTopic() {
+  return state.topics.length === 1 ? topicNodeId(state.topics[0]) : null;
+}
+
+// Show the notes with any of these topics; [] is All.
+function setTopics(topics) {
+  state.topics = topics;
+  if (view === 'canvas') graph?.select(canvasTopic(), { center: state.topics.length === 1 });
   renderList();
 }
 
-// The chips above the list: all notes, or one topic's. The AI's offer to sort the notes that have
-// no topic yet, when it doesn't do so by itself.
+// A topic picked outside the dropdown (a note's topic, a hub on the canvas) shows that topic's
+// notes alone, or all notes again when it was already the one shown.
+function setTopic(topic) {
+  setTopics(state.topics.length === 1 && isTopicOn(state.topics, topic) ? [] : [topic]);
+}
+
+// The Topics dropdown above the list: a button that says what the list shows, and a menu of
+// checkboxes under it, All first. Ticking one keeps the menu open, so you can tick several. With a
+// lot of topics, a box at the top of the menu finds one. Beside the button: × goes back to All, and
+// the AI's offer to sort the notes that have no topic yet, when it doesn't do so by itself.
+let topicMenuOpen = false;
+
+function renderTopicShell() {
+  topicLabel = el('span', { class: 'label' });
+  topicBtn = el(
+    'button',
+    {
+      class: 'topic-select',
+      'aria-haspopup': 'true',
+      'aria-expanded': 'false',
+      'aria-controls': 'topic-menu',
+      'data-key': 'button',
+      onclick: () => openTopicMenu(!topicMenuOpen),
+      onkeydown: (e) => {
+        if (e.key === 'ArrowDown' && !topicMenuOpen) {
+          e.preventDefault();
+          openTopicMenu(true);
+          focusTopicOption(0);
+        }
+      },
+    },
+    [icon('tag'), topicLabel, el('span', { class: 'fas fa-fw fa-chevron-down caret', 'aria-hidden': 'true' })]
+  );
+  topicClear = el('button', { class: 'icon-btn topic-clear', title: 'Show all notes', 'aria-label': 'Show all notes', onclick: () => setTopics([]) }, [icon('times')]);
+  topicSearch = el('input', {
+    type: 'search',
+    class: 'topic-search',
+    placeholder: 'Find a topic',
+    'aria-label': 'Find a topic',
+    'data-key': 'search',
+    oninput: () => renderTopicOptions(),
+  });
+  topicOptions = el('div', { class: 'topic-options' });
+  topicMenu = el('div', { class: 'topic-menu', id: 'topic-menu', role: 'group', 'aria-label': 'Show notes about', hidden: true }, [topicSearch, topicOptions]);
+  topicOffer = el('div', { class: 'topic-offer' });
+  topicsEl = el('div', { class: 'topic-filter', hidden: true }, [
+    el('div', { class: 'topic-row' }, [topicBtn, topicClear]),
+    topicMenu,
+    topicOffer,
+  ]);
+  topicsEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && topicMenuOpen) {
+      e.preventDefault();
+      e.stopPropagation();
+      openTopicMenu(false);
+      topicBtn.focus();
+    } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && topicMenu.contains(e.target)) {
+      e.preventDefault();
+      const boxes = [...topicOptions.querySelectorAll('input')];
+      const i = boxes.indexOf(e.target);
+      focusTopicOption(e.key === 'ArrowDown' ? Math.min(i + 1, boxes.length - 1) : i - 1);
+    }
+  });
+  // A click anywhere else, or focus leaving the filter, closes the menu.
+  document.addEventListener('pointerdown', (e) => {
+    if (topicMenuOpen && !topicsEl.contains(e.target)) openTopicMenu(false);
+  });
+  topicsEl.addEventListener('focusout', (e) => {
+    if (topicMenuOpen && e.relatedTarget && !topicsEl.contains(e.relatedTarget)) openTopicMenu(false);
+  });
+}
+
+function openTopicMenu(open) {
+  topicMenuOpen = open;
+  if (!open) topicSearch.value = '';
+  renderTopicFilter();
+}
+
+// The nth checkbox in the menu; -1 is the find box when it shows, else the button.
+function focusTopicOption(i) {
+  const boxes = [...topicOptions.querySelectorAll('input')];
+  if (i >= 0 && boxes[i]) boxes[i].focus();
+  else if (!topicSearch.hidden) topicSearch.focus();
+  else topicBtn.focus();
+}
+
 function renderTopicFilter() {
   const all = topicCounts();
   const untagged = state.notes.filter((n) => !n.topicsBy && n.body.trim() && !state.ai.tagging.includes(n.id));
@@ -604,22 +691,42 @@ function renderTopicFilter() {
         ` Sort ${plural(untagged.length, 'note')} into topics`,
       ])
     : null;
-  if (!all.length && !offer) {
-    topicsEl.replaceChildren();
-    topicsEl.hidden = true;
-    return;
-  }
-  topicsEl.hidden = false;
-  const chip = (label, count, on, onclick, title) =>
-    el('button', { class: 'topic-chip' + (on ? ' on' : ''), 'aria-pressed': String(on), title, onclick }, [
-      label,
-      count != null ? el('span', { class: 'n' }, [String(count)]) : null,
+  topicsEl.hidden = !all.length && !offer;
+  topicsEl.querySelector('.topic-row').hidden = !all.length;
+  topicOffer.replaceChildren(...(offer ? [offer] : []));
+  if (!all.length) topicMenuOpen = false;
+
+  const on = state.topics.length > 0;
+  topicLabel.textContent = topicFilterLabel(state.topics);
+  topicBtn.classList.toggle('on', on);
+  topicBtn.title = on ? `Showing notes about ${state.topics.join(', ')}. Choose topics` : 'Choose topics to show';
+  topicBtn.setAttribute('aria-label', on ? `Topics: ${state.topics.join(', ')}` : 'Topics: all');
+  topicBtn.setAttribute('aria-expanded', String(topicMenuOpen));
+  topicClear.hidden = !on;
+  topicMenu.hidden = !topicMenuOpen;
+  topicSearch.hidden = all.length <= 8;
+  if (topicMenuOpen) renderTopicOptions(all);
+}
+
+// The menu's checkboxes, All first, then each topic with its number of notes. Redrawn on every
+// tick, keeping focus on the box that had it.
+function renderTopicOptions(all = topicCounts()) {
+  const focused = topicOptions.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+  const q = topicSearch.hidden ? '' : topicSearch.value.trim();
+  const words = queryWords(q);
+  const shown = all.filter((t) => matchesWords(t.topic, words));
+  const option = (key, label, count, checked, onchange) =>
+    el('label', { class: 'topic-option' + (checked ? ' on' : '') }, [
+      el('input', { type: 'checkbox', 'data-key': key, checked, onchange }),
+      el('span', { class: 'name' }, typeof label === 'string' ? [label] : label),
+      el('span', { class: 'n' }, [String(count)]),
     ]);
-  topicsEl.replaceChildren(
-    ...(all.length ? [chip('All', null, !state.topic, () => setTopic(null), 'Every note')] : []),
-    ...all.map((t) => chip(t.topic, t.count, state.topic?.toLowerCase() === t.topic.toLowerCase(), () => setTopic(t.topic), `Notes about ${t.topic}`)),
-    ...(offer ? [offer] : [])
+  topicOptions.replaceChildren(
+    ...(q ? [] : [option('all', 'All topics', state.notes.length, !state.topics.length, () => setTopics([]))]),
+    ...shown.map((t) => option('t:' + t.topic.toLowerCase(), marked(t.topic, words), t.count, isTopicOn(state.topics, t.topic), () => setTopics(toggleTopic(state.topics, t.topic)))),
+    ...(shown.length ? [] : [el('div', { class: 'topic-none' }, ['No topics match.'])])
   );
+  if (focused) topicOptions.querySelector(`[data-key="${CSS.escape(focused)}"]`)?.focus();
 }
 
 function renderList() {
@@ -644,7 +751,7 @@ function renderList() {
   }
   items.push(...everywhere.map(item));
   if (!items.length) {
-    items.push(el('div', { class: 'list-msg' }, [state.query || state.topic ? 'No notes match.' : 'No notes yet.']));
+    items.push(el('div', { class: 'list-msg' }, [state.query || state.topics.length ? 'No notes match.' : 'No notes yet.']));
   }
   listEl.replaceChildren(...items);
 }
