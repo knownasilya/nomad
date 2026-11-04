@@ -6,6 +6,7 @@ import {
   search,
   buildCatalog,
   compileModule,
+  moduleValue,
   runModule,
   splitGuides,
   capabilityCode,
@@ -136,6 +137,80 @@ describe('execute modules', () => {
         "import { nomad } from 'nomad:runtime'\nexport default async function main() { return import('fs') }"
       )
     ).toThrow(/only the nomad:runtime import/);
+  });
+
+  it('lets helpers sit above and below main', async () => {
+    const code = [
+      "import { nomad } from 'nomad:runtime'",
+      'const PREFIX = "n:"',
+      'function label(n) { return PREFIX + n.title }',
+      'export default async function main() {',
+      '  return (await nomad.listNotes({})).map(label).concat(shout("ok"))',
+      '}',
+      'const shout = (s) => s.toUpperCase()',
+      'export function unused() {}',
+    ].join('\n');
+    const value = await runModule(code, {}, async () => JSON.stringify([{ title: 'a' }, { title: 'b' }]));
+    expect(JSON.parse(value)).toEqual(['n:a', 'n:b', 'OK']);
+  });
+
+  it('runs an arrow default export and a default export by name', async () => {
+    const arrow = "import { nomad } from 'nomad:runtime'\nconst two = 2\nexport default async () => two * 21";
+    expect(await runModule(arrow, {}, async () => null)).toBe('42');
+    const byName = [
+      "import { nomad } from 'nomad:runtime'",
+      'const main = async ({ n }) => helper(n)',
+      'function helper(n) { return n + 1 }',
+      'export default main',
+    ].join('\n');
+    expect(await runModule(byName, { n: 1 }, async () => null)).toBe('2');
+  });
+
+  it('still refuses two default exports', () => {
+    expect(() =>
+      compileModule(
+        "import { nomad } from 'nomad:runtime'\nexport default async function a() {}\nexport default async function b() {}"
+      )
+    ).toThrow(/only one default export/);
+  });
+
+  it('gives a module parsed values, and text capabilities as text', async () => {
+    const code = [
+      "import { nomad } from 'nomad:runtime'",
+      'export default async function main() {',
+      '  const notes = await nomad.listNotes({})',
+      '  const file = await nomad.readDriveFile({ path: "/index.json" })',
+      '  const done = await nomad.writeNote({ body: "x" })',
+      '  const page = await nomad.page.stats({})',
+      '  return { count: notes.notes.length, fileType: typeof file, done, total: page.total }',
+      '}',
+    ].join('\n');
+    const value = await runModule(code, {}, async (call) => {
+      if (call.target === 'listNotes') return '{ "notes": [{ "id": "1" }, { "id": "2" }] }';
+      if (call.target === 'readDriveFile') return '{ "title": "My drive" }';
+      if (call.target === 'writeNote') return 'Saved the note';
+      if (call.target === 'page') return '{"total":3}';
+      throw new Error('unexpected ' + call.target);
+    });
+    expect(JSON.parse(value)).toEqual({ count: 2, fileType: 'string', done: 'Saved the note', total: 3 });
+  });
+
+  it('keeps JSON.parse of an already parsed result working', async () => {
+    const code = [
+      "import { nomad } from 'nomad:runtime'",
+      'export default async function main() {',
+      '  const res = JSON.parse(await nomad.httpRequest({ url: "https://example.com" }))',
+      '  return JSON.parse(res.body).n + JSON.parse("1")',
+      '}',
+    ].join('\n');
+    const value = await runModule(code, {}, async () => JSON.stringify({ ok: true, body: '{"n":41}' }));
+    expect(value).toBe('42');
+  });
+
+  it('leaves a string that is not JSON alone', () => {
+    expect(moduleValue('listNotes', '[not json')).toBe('[not json');
+    expect(moduleValue('fetchUrl', '{"a":1}')).toBe('{"a":1}');
+    expect(moduleValue('listNotes', '{"a":1}')).toEqual({ a: 1 });
   });
 
   it('blocks constructing a function from a string', async () => {

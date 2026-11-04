@@ -56,6 +56,7 @@ const DOMAIN_COPY = {
 export const CAPABILITIES = [
   {
     name: 'readDriveFile',
+    returns: 'text',
     description: 'Read the text content of a file in the current Drive.',
     namedDescription: 'Read the text content of a file in the current Drive, or in a named one (`drive`).',
     tabDescription: "Read the text content of a file in a drive: a named one (`drive`), or the drive in the user's current tab.",
@@ -79,6 +80,7 @@ export const CAPABILITIES = [
   },
   {
     name: 'fetchUrl',
+    returns: 'text',
     description: 'Fetch the text content of an http or https URL.',
     inputSchema: {
       type: 'object',
@@ -194,6 +196,7 @@ export const CAPABILITIES = [
   },
   {
     name: 'readCurrentPage',
+    returns: 'text',
     description:
       'Read the visible text content of the page currently open in this tab. Works on any page — ' +
       'http/https sites included, not just hyper:// Drives. For a hyper:// Drive, prefer ' +
@@ -1117,7 +1120,9 @@ function scoreHit(domain, item, tokens) {
     score,
     call: undefined,
   }
-  if (domain === 'capability') hit.call = { code: capabilityCode(name), inputSchema: item.inputSchema }
+  if (domain === 'capability') {
+    hit.call = { code: capabilityCode(name), inputSchema: item.inputSchema, returns: returnsNote(item) }
+  }
   if (domain === 'page') hit.call = { code: pageToolCode(name), inputSchema: item.inputSchema }
   if (domain === 'name') Object.assign(hit, { url: item.url, shortcut: `hyper://${name}/`, kind: item.kind })
   return hit
@@ -1166,6 +1171,7 @@ function openEntity(ref, catalog) {
       title: cap.name,
       summary: cap.description,
       inputSchema: cap.inputSchema,
+      returns: returnsNote(cap),
       code: capabilityCode(id),
     }
   }
@@ -1292,6 +1298,12 @@ export function assertCallAllowed(target, name, catalog) {
  * vm context that cannot eval or construct functions from strings. The only
  * import allowed is `nomad:runtime`.
  */
+// A module may declare helpers (functions, constants, classes) above or below its default export,
+// as in any ES module. `export` on a helper is dropped: the default export is what runs.
+const DEFAULT_EXPORT = /(^|\n)([ \t]*)export\s+default\s+/g
+const NAMED_EXPORT = /(^|\n)([ \t]*)export\s+(?=(?:async\s+)?function\b|const\b|let\b|var\b|class\b)/g
+const DEFAULT_FUNCTION = /^((?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\()/
+
 export function compileModule(code) {
   if (typeof code !== 'string' || !code.trim()) throw new Error('execute requires code')
   if (code.length > MAX_CODE) throw new Error('execute code is too long')
@@ -1303,10 +1315,28 @@ export function compileModule(code) {
   rest = rest.slice(imported[0].length).trim()
   if (/\bimport\s*\(|(?:^|\n)\s*import\s+/.test(rest)) throw new Error('only the nomad:runtime import is allowed')
   if (/\brequire\s*\(/.test(rest)) throw new Error('require is not available')
-  if (!/^export\s+default\s+/.test(rest)) throw new Error('module must default-export a function')
-  const exported = rest.replace(/^export\s+default\s+/, '').trim()
-  if (/(^|\n)\s*export\s+/.test(exported)) throw new Error('only one default export is allowed')
-  const wrapped = `(function (nomad) {\n"use strict";\nconst __default = (${exported});\nreturn __default;\n})`
+  const defaults = rest.match(DEFAULT_EXPORT) || []
+  if (defaults.length === 0) throw new Error('module must default-export a function')
+  if (defaults.length > 1) throw new Error('only one default export is allowed')
+  rest = rest.replace(NAMED_EXPORT, '$1$2')
+  if (/(^|\n)\s*export\s+/.test(rest.replace(DEFAULT_EXPORT, '$1$2'))) {
+    throw new Error('only the default export is used: declare helpers without export')
+  }
+  // A named function declaration stays a declaration, so it is hoisted like the helpers around it.
+  // Anything else (an arrow, an anonymous function, a name declared elsewhere) is assigned in place.
+  let body
+  let result = '__default'
+  const at = rest.search(/(^|\n)[ \t]*export\s+default\s+/)
+  const head = rest.slice(0, at)
+  const tail = rest.slice(at).replace(/^\n?[ \t]*export\s+default\s+/, '')
+  const named = tail.match(DEFAULT_FUNCTION)
+  if (named) {
+    body = `${head}\n${tail}`
+    result = named[2]
+  } else {
+    body = `${head}\n__default = ${tail}`
+  }
+  const wrapped = `(function (nomad) {\n"use strict";\nlet __default;\n${body}\n;return ${result};\n})`
   let script
   try {
     script = new vm.Script(wrapped, { filename: 'execute-module.js' })
@@ -1329,7 +1359,7 @@ function safeGlobals() {
     Object,
     Array,
     Promise,
-    JSON,
+    JSON: MODULE_JSON,
     Math,
     Number,
     String,
@@ -1354,14 +1384,54 @@ function safeGlobals() {
   }
 }
 
+// Capabilities answer the host as text (that is what the model reads when it calls one directly),
+// often JSON text. A module gets the value instead: JSON objects and arrays arrive parsed, so the
+// model never has to JSON.parse a result (and never tells the user it is doing so). A capability
+// whose result is content (`returns: 'text'`: a file, a fetched URL, a page's text) stays a string
+// even when that content happens to be JSON.
+const TEXT_RESULTS = new Set(CAPABILITIES.filter((c) => c.returns === 'text').map((c) => c.name))
+
+export function moduleValue(name, value) {
+  if (typeof value !== 'string' || TEXT_RESULTS.has(name)) return value
+  const text = value.trim()
+  if (!/^[[{]/.test(text)) return value
+  try {
+    return JSON.parse(text)
+  } catch {
+    return value
+  }
+}
+
+// What a module is told a capability gives back, on its search hit and its opened entity.
+export function returnsNote(cap) {
+  return cap.returns === 'text'
+    ? 'A string: the text as it is (a JSON file or response stays a string).'
+    : 'A value ready to use: an object or array as its description says (already parsed, never JSON text), or a short confirmation string.'
+}
+
+// The modules' JSON: JSON.parse on a value that is already parsed gives it back, so a module written
+// when capabilities returned JSON text (JSON.parse(await nomad.listNotes())) keeps working.
+const MODULE_JSON = Object.freeze({
+  stringify: JSON.stringify,
+  parse(text, reviver) {
+    if (text !== null && typeof text === 'object') return text
+    return JSON.parse(text, reviver)
+  },
+  [Symbol.toStringTag]: 'JSON',
+})
+
 export function createRuntime(invoke) {
-  const call = (target, args) => invoke({ target, args: args === undefined ? {} : args })
+  const call = (target, args) =>
+    Promise.resolve(invoke({ target, args: args === undefined ? {} : args })).then((v) => moduleValue(target, v))
   const page = new Proxy(
     {},
     {
       get(_target, prop) {
         if (typeof prop !== 'string' || prop === 'then') return undefined
-        return (args) => invoke({ target: 'page', name: prop, args: args === undefined ? {} : args })
+        return (args) =>
+          Promise.resolve(invoke({ target: 'page', name: prop, args: args === undefined ? {} : args })).then((v) =>
+            moduleValue('page', v)
+          )
       },
     }
   )
@@ -1421,7 +1491,10 @@ export const MODEL_TOOLS = [
       name: 'execute',
       description:
         "Run one module. It must import { nomad } from 'nomad:runtime' and default-export " +
-        'async function main(params). Pass varying arguments as params. Page tools are nomad.page.<name>(params).',
+        'async function main(params). Helper functions and constants may sit above or below main. Pass varying ' +
+        'arguments as params. Page tools are nomad.page.<name>(params). Every nomad.* call resolves to a ready ' +
+        'value: objects and arrays arrive parsed (no JSON.parse); readDriveFile, fetchUrl and readCurrentPage give ' +
+        "a string. What main returns is this tool's result.",
       parameters: {
         type: 'object',
         properties: {
