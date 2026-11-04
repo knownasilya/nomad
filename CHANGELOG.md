@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.40.0](https://github.com/knownasilya/nomad/compare/v1.39.2...v1.40.0) (2026-11-04)
+
+
+### Features
+
+* **ai:** a scratch space for what the AI looks up ([1cd4f3d](https://github.com/knownasilya/nomad/commit/1cd4f3d7e6b3fe428f5f28e50224b9f230154246))
+* **ai:** allow a site for 3 months, manage it on nomad://ai/sites, and warn when a request sends a secret ([3c0eab3](https://github.com/knownasilya/nomad/commit/3c0eab3308f317b77b114cec38e2f0b8bd6c9fc7))
+* **ai:** read long Notes, posts and pages in parts ([01b77bb](https://github.com/knownasilya/nomad/commit/01b77bbb7a43d7348d807bdd3bcb2cc42891ecf4))
+* **ai:** show the URL and request in the AI's send-data prompt ([6ce0821](https://github.com/knownasilya/nomad/commit/6ce0821cf1db38cb281d4d4cba0e764aca848a2c))
+* **notes:** pick topics from a dropdown, several at once ([68ef496](https://github.com/knownasilya/nomad/commit/68ef496f5218d1c2da972ef3b863174db3661763))
+
+
+### Bug Fixes
+
+* **ai:** give execute modules parsed results and let helpers sit outside main ([b994a4d](https://github.com/knownasilya/nomad/commit/b994a4d853f9aba2b369314728117d678a7f8b57))
+* name what's open in the tab title in Reader, Messages and History ([aca751a](https://github.com/knownasilya/nomad/commit/aca751a8d2c5ce5f47ccdadf4f34e2c4e8075964))
+* **notes:** name the open note in the tab title ([41bfb3e](https://github.com/knownasilya/nomad/commit/41bfb3e2290cfc7aa16ebfd9fcaf56c9b80cccaf))
+
 ### [1.39.2](https://github.com/knownasilya/nomad/compare/v1.39.1...v1.39.2) (2026-11-04)
 
 
