@@ -38,7 +38,8 @@ import {
 import { genuiPrompt } from '../../../lib/genui/library.mjs';
 import { askOncePerTurn, jobPermitFor } from '../../ai/vault-tools.mjs';
 import * as secretStore from '../../ai/secret-store';
-import { hostAllowed, permissionFor, redact, redactResult, secretForModel } from '../../ai/secrets.mjs';
+import * as sendGrants from '../../ai/send-grants';
+import { describeInject, hostAllowed, permissionFor, redact, redactResult, secretForModel } from '../../ai/secrets.mjs';
 import { createEgressGuard, hostsIn, requestPreview, sendPermission, userText } from '../../ai/egress.mjs';
 import { runHttpRequest } from '../../ai/http-request.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
@@ -644,6 +645,8 @@ async function jobEgress(job, work) {
   return createEgressGuard({
     interactive: false,
     trustedHosts: [...hostsIn(work.prompt || job.prompt || ''), ...secretHosts, ...pageHosts],
+    // A site the user allowed for 3 months is theirs for a Job too.
+    granted: sendGrants.covers,
   });
 }
 
@@ -875,6 +878,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
           privateData: opts.privateData === true,
           trustedHosts: hostsIn(userText(chatMessages)),
           interactive: true,
+          // Sites the user allowed for 3 months send without asking (send-grants.js).
+          granted: sendGrants.covers,
           // The chat remembers it on this answer, and says so on its next turn.
           onPrivate: () => emitter.emit('tool', { phase: 'private' }),
         })
@@ -1210,9 +1215,17 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
   const draftFor = (base) => (typeof draft === 'function' ? !!draft(base) : !!draft);
   // The user's yes to a request to `host` on this turn, after the turn read private data. Asked on
   // the tab's site, and on the phone over the Bridge (`aiSendData:<host>`). The prompt shows the
-  // request that asks (`request`: its URL, method, headers, body); the yes covers the host.
-  const askToSend = (request: Record<string, any>) => (host: string) =>
-    permit(sendPermission(host), sender, { host, request: requestPreview(request) });
+  // request that asks (`request`: its URL, method, headers, body); the yes covers the host. Its
+  // "Allow for 3 months" box answers 'similar', which keeps the host in send-grants.js.
+  const askToSend = (request: Record<string, any>) => async (host: string) => {
+    const answer = await permit(sendPermission(host), sender, {
+      host,
+      request: requestPreview(request),
+      similar: `Allow ${host} for 3 months, in every chat (AI page → Sites)`,
+    });
+    if (answer === 'similar') await sendGrants.grant(host).catch(() => {});
+    return !!answer;
+  };
   const stagesInDraft = (base) =>
     writeStagesInDraft(ctx, base, draftFor(base) ? { draft: true } : {}).catch(() => false);
   const readOpts = (staged) => (staged ? { draft: true } : {});
@@ -1333,6 +1346,13 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
     case 'httpRequest': {
       if (!hasCapability(catalog, 'httpRequest')) throw new Error('httpRequest is not available here');
       const usable = await usableSecrets({ job });
+      // The secrets this request names, as its prompts show them: where each goes and its hosts.
+      const named = [...(Array.isArray(args?.secrets) ? args.secrets : []), ...(args?.secret ? [args.secret] : [])];
+      const recs = await Promise.all(named.map((n) => secretStore.get(String(n)).catch(() => null)));
+      const secretDetails = recs
+        .filter(Boolean)
+        .map((r) => ({ name: r.name, hosts: r.hosts || [], sentAs: describeInject(r.inject) }));
+      const preview = { ...args, kind: 'request', secretDetails };
       // A secret this turn may use: a Job's grant, or (the sidebar, the phone) the user's yes, asked
       // once a turn per secret and naming the host. Checked before any value is read.
       const mayUse = async (secretName, host) => {
@@ -1349,8 +1369,9 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
               : `${secretName} is only for Jobs. The user can change that in My Library → Secrets.`
           );
         }
-        // A yes covers the secret's own hosts for the rest of the turn, so the prompt names them all.
-        const prompt = { secret: secretName, host: rec.hosts.join(', ') || host };
+        // A yes covers the secret's own hosts for the rest of the turn, so the prompt names them all,
+        // and shows the request that asks.
+        const prompt = { secret: secretName, host: rec.hosts.join(', ') || host, request: requestPreview(preview) };
         if (!job && !(await permit(permissionFor(secretName), sender, prompt))) {
           throw new Error(`The user didn't allow ${secretName} on this turn`);
         }
@@ -1366,10 +1387,8 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
       // After a private read, a host the user didn't name asks first, unless a secret this request
       // names covers it: the user chose that secret's hosts. A Job can't ask, so it is refused.
       if (egress && args?.url) {
-        const named = [...(Array.isArray(args.secrets) ? args.secrets : []), ...(args.secret ? [args.secret] : [])];
-        const recs = await Promise.all(named.map((n) => secretStore.get(String(n)).catch(() => null)));
         const secretHosts = recs.filter((r) => r && usable(r)).flatMap((r) => r.hosts || []);
-        await egress.check(String(args.url), { ask: askToSend({ ...args, kind: 'request' }), secretHosts });
+        await egress.check(String(args.url), { ask: askToSend(preview), secretHosts });
       }
       const res = await runHttpRequest(args || {}, {
         resolveSecrets: async (wanted, host) => {

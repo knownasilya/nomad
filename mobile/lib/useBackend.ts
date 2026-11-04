@@ -265,6 +265,7 @@ export interface AiPromptRequest {
   bodyType?: 'text' | 'json' | 'form'
   bodyLength?: number
   secrets: string[]
+  secretDetails?: { name: string; hosts: string[]; sentAs: string }[]
 }
 
 export interface AiChatHandlers {

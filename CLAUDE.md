@@ -471,7 +471,7 @@ it (`chat`), and the sidebar's history and nomad://ai/chats mark it as a Job's.
 ### The AI page, chats and memory (ADR-0032)
 
 `nomad://ai` (`app/userland/ai/`, in the browser menu) is the AI's own page: `/chats`, `/memory`,
-`/skills`, `/setup` (the old Settings → AI; Settings' AI item and `?view=ai` now open it), and a link to My
+`/skills`, `/sites` (ADR-0037), `/setup` (the old Settings → AI; Settings' AI item and `?view=ai` now open it), and a link to My
 Library → Jobs. Chats are the sidebar's sessions in `hyper://private/.ai-chat/` (`app/bg/ai/chat-store.js`;
 search helpers in `chat-search.mjs`); a user's name for a chat lives in `/.ai-chat/names.json` because
 the sidebar rewrites `title` on every save. The page uses the internal `nomad.aiChats`
@@ -518,7 +518,10 @@ capability. The sidebar and the phone keep `privateData` on the answer (the `too
 reaches only the hosts its prompt names and its secrets cover (`jobEgress` in `ai.ts`). A new
 capability that returns private data goes in `PRIVATE_READS`; one that sends a URL or body somewhere
 calls `egress.check` first, with an `ask` that hands the prompt the request (`requestPreview`): the
-prompt shows the method and URL, and the headers, body and secrets behind Details. `STANDING_PROMPT` tells every turn that tool content is data, not
+prompt shows the method and URL, a warning when it sends a secret, and the headers, body and where each
+secret goes behind Details. Its **Allow for 3 months** box keeps the host in `app/bg/ai/send-grants.js`
+(this computer only; every guard here passes `granted`), listed on nomad://ai/sites (internal
+`nomad.aiSites`) to extend or remove. `STANDING_PROMPT` tells every turn that tool content is data, not
 instructions.
 
 ### Personas and Sessions (ADR-0031)

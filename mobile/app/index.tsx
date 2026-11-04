@@ -201,12 +201,12 @@ const VAULT_PROMPTS: Record<string, { title: string; message: string }> = {
 
 // The AI using one of the user's secrets (ADR-0033): `aiSecretUse:<NAME>`. The secret stays on the
 // computer; the phone only says yes or no.
-function secretPrompt (permission: string): { title: string; message: string } | null {
+function secretPrompt (permission: string, request?: AiPromptRequest | null): { title: string; message: string } | null {
   const m = /^aiSecretUse:([A-Z][A-Z0-9_]{1,63})$/.exec(permission)
   if (!m) return null
   return {
     title: `Allow AI to use ${m[1]}?`,
-    message: `The AI running on your other device wants to send requests with your secret ${m[1]}, to the sites you allowed for it. It never sees the secret itself.`
+    message: `The AI running on your other device wants to send requests with your secret ${m[1]}, to the sites you allowed for it.${requestLines(request)}It never sees the secret itself.`
   }
 }
 
@@ -224,18 +224,23 @@ function sendDataPrompt (permission: string, request?: AiPromptRequest | null): 
 
 // The request in a phone prompt: method and URL, then what else it sends, in a few lines.
 function requestLines (r?: AiPromptRequest | null): string {
-  if (!r || typeof r.url !== 'string' || !r.url) return ' '
-  const url = r.url.length > 300 ? r.url.slice(0, 300) + '…' : r.url
+  if (!r || typeof r.url !== 'string' || (!r.url && !r.secrets?.length)) return ' '
+  const url = !r.url ? '(the URL is your secret)' : r.url.length > 300 ? r.url.slice(0, 300) + '…' : r.url
   const lines = [r.kind === 'tab' ? `Open ${url}` : `${r.method || 'GET'} ${url}`]
   const bodyLength = r.bodyLength || (r.body ? r.body.length : 0)
   if (bodyLength) lines.push(`With a body of ${bodyLength.toLocaleString()} characters`)
   if (Array.isArray(r.headers) && r.headers.length) lines.push(`Headers: ${r.headers.map((h) => h.name).join(', ')}`)
-  if (Array.isArray(r.secrets) && r.secrets.length) lines.push(`Your secrets: ${r.secrets.join(', ')}`)
+  if (Array.isArray(r.secrets) && r.secrets.length) {
+    lines.push(`⚠ Sends your ${r.secrets.length > 1 ? 'secrets' : 'secret'} ${r.secrets.join(', ')}`)
+    for (const d of r.secretDetails || []) {
+      if (d.sentAs) lines.push(`  ${d.name} goes in ${d.sentAs}${d.hosts?.length ? `, only to ${d.hosts.join(', ')}` : ''}`)
+    }
+  }
   return `\n\n${lines.join('\n')}\n\n`
 }
 
 function confirmAiPermission (permission: string, drive?: { name: string; url: string }, request?: AiPromptRequest | null): Promise<boolean> {
-  const vaultPrompt = VAULT_PROMPTS[permission] || secretPrompt(permission) || sendDataPrompt(permission, request)
+  const vaultPrompt = VAULT_PROMPTS[permission] || secretPrompt(permission, request) || sendDataPrompt(permission, request)
   const name = drive?.name || 'this drive'
   const url = drive?.url || ''
   const title = vaultPrompt ? vaultPrompt.title : 'Allow AI to edit?'

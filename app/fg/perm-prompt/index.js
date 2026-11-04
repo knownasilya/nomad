@@ -13,6 +13,11 @@ const AI_ASKS = {
     lead: 'The AI assistant wants to:',
     caution: "Only click 'Allow' if you asked the assistant to use this site.",
   },
+  // The AI using one of the user's secrets (ADR-0033): the site in the tab didn't ask for it.
+  aiSecretUse: {
+    lead: 'The AI assistant wants to:',
+    caution: "Only click 'Allow' if you asked the assistant to use this secret.",
+  },
   // createDrive (bg/ai/create-drive.mjs): the drive goes in the user's library, not the site's.
   aiCreateDrive: {
     lead: 'The AI assistant wants to:',
@@ -29,11 +34,16 @@ const AI_ASKS = {
   },
 };
 
-// The request an aiSendData prompt is for (egress.mjs requestPreview): one line with its method and
-// URL, and the rest (the whole URL, headers, body, secrets) behind Details so the prompt stays small.
+// The request an aiSendData or aiSecretUse prompt is for (egress.mjs requestPreview): one line with
+// its method and URL, a warning when it sends one of the user's secrets, and the rest (the whole
+// URL, headers, body, where each secret goes) behind Details so the prompt stays small.
+const REQUEST_PERMS = new Set(['aiSendData', 'aiSecretUse']);
+
 function requestOf(permId, opts) {
-  const r = permId === 'aiSendData' ? opts?.request : null;
-  return r && typeof r === 'object' && typeof r.url === 'string' && r.url ? r : null;
+  const r = REQUEST_PERMS.has(permId) ? opts?.request : null;
+  if (!r || typeof r !== 'object' || typeof r.url !== 'string') return null;
+  // A URL secret is the whole URL: the request has none of its own.
+  return r.url || r.secrets?.length ? r : null;
 }
 
 const count = (n) => Number(n || 0).toLocaleString();
@@ -42,22 +52,56 @@ function hasMore(r) {
   return r.url.length > 34 || r.urlLength || r.headers?.length || r.body != null || r.secrets?.length;
 }
 
-function renderRequest(r, host, onToggle) {
+const codes = (names) => names.map((n, i) => html`${i ? ', ' : ''}<code>${n}</code>`);
+
+// What the yes covers, in the prompt's own terms.
+function coversText(permId, permParam, r) {
+  if (permId === 'aiSecretUse') {
+    const hosts = r.secretDetails?.find((d) => d.name === permParam)?.hosts || [];
+    return `Allowing lets the AI use ${permParam} for the rest of this answer${
+      hosts.length ? `, only with ${hosts.join(', ')}` : ''
+    }.`;
+  }
+  return `Allowing covers every request to ${permParam} for the rest of this answer.`;
+}
+
+function renderRequest(r, { permId, permParam, onToggle }) {
   const verb = r.kind === 'tab' ? 'Open' : r.method || 'GET';
   const bodyLabel = { json: 'Body (JSON)', form: 'Body (form)' }[r.bodyType] || 'Body';
   const bodySize = r.bodyLength || (r.body || '').length;
+  const secrets = r.secrets || [];
+  const details = r.secretDetails || [];
   return html`<div class="request">
-    <div class="request-line" title=${r.url}>
-      <span class="method">${verb}</span><span class="url">${r.url}</span>
+    <div class="request-line" title=${r.url || 'The URL is one of your secrets'}>
+      <span class="method">${verb}</span
+      ><span class="url ${r.url ? '' : 'none'}">${r.url || 'URL from your secret'}</span>
     </div>
+    ${secrets.length
+      ? html`<div class="secret-warning">
+          <i
+            class="fas fa-exclamation-triangle"
+            role="img"
+            title="This request sends a secret"
+            aria-label="Warning: this request sends a secret"
+          ></i>
+          <span
+            >Sends your ${secrets.length > 1 ? 'secrets' : 'secret'} ${codes(secrets)}. Open
+            Details to see where.</span
+          >
+        </div>`
+      : ''}
     ${hasMore(r)
       ? html`<details @toggle=${onToggle}>
           <summary>Details</summary>
           <dl>
-            <dt>${r.kind === 'tab' ? 'Opens a tab at' : 'URL'}</dt>
-            <dd><code class="block url">${r.url}${r.urlLength ? '…' : ''}</code></dd>
-            ${r.urlLength
-              ? html`<dd class="cut">Showing ${count(r.url.length)} of ${count(r.urlLength)} characters</dd>`
+            ${r.url
+              ? html`<dt>${r.kind === 'tab' ? 'Opens a tab at' : 'URL'}</dt>
+                  <dd><code class="block url">${r.url}${r.urlLength ? '…' : ''}</code></dd>
+                  ${r.urlLength
+                    ? html`<dd class="cut">
+                        Showing ${count(r.url.length)} of ${count(r.urlLength)} characters
+                      </dd>`
+                    : ''}`
               : ''}
             ${r.headers?.length
               ? html`<dt>Headers</dt>
@@ -76,16 +120,24 @@ function renderRequest(r, host, onToggle) {
                     ? html`<dd class="cut">Showing the first ${count(r.body.length)}</dd>`
                     : ''}`
               : ''}
-            ${r.secrets?.length
-              ? html`<dt>Your secrets</dt>
-                  <dd>
-                    ${r.secrets.map((s, i) => html`${i ? ', ' : ''}<code>${s}</code>`)}. Nomad adds
-                    ${r.secrets.length > 1 ? 'their values' : 'its value'}; the AI never sees
-                    ${r.secrets.length > 1 ? 'them' : 'it'}.
-                  </dd>`
+            ${secrets.length
+              ? html`<dt class="warn">
+                    <i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Your
+                    ${secrets.length > 1 ? 'secrets' : 'secret'}
+                  </dt>
+                  ${secrets.map((name) => {
+                    const d = details.find((x) => x.name === name);
+                    return html`<dd class="secret">
+                      <code>${name}</code>
+                      ${d?.sentAs ? html`goes in ${d.sentAs}` : ''}${d?.hosts?.length
+                        ? html`, only to ${d.hosts.join(', ')}`
+                        : ''}.
+                    </dd>`;
+                  })}
+                  <dd class="cut">Nomad adds the value; the AI never sees it.</dd>`
               : ''}
           </dl>
-          <p class="covers">Allowing covers every request to ${host} for the rest of this answer.</p>
+          <p class="covers">${coversText(permId, permParam, r)}</p>
         </details>`
       : ''}
   </div>`;
@@ -185,7 +237,11 @@ class PermPrompt extends LitElement {
           })}
         </p>
         ${requestOf(this.permId, this.permOpts)
-          ? renderRequest(requestOf(this.permId, this.permOpts), this.permParam, () => this.fitHeight())
+          ? renderRequest(requestOf(this.permId, this.permOpts), {
+              permId: this.permId,
+              permParam: this.permParam,
+              onToggle: () => this.fitHeight(),
+            })
           : ''}
         ${this.permOpts?.similar
           ? html`<label class="similar">
@@ -430,6 +486,34 @@ PermPrompt.styles = [
       margin-top: 2px;
     }
 
+    .request-line .url.none {
+      font-family: inherit;
+      font-style: italic;
+      color: #666;
+    }
+
+    .secret-warning {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      margin-top: 6px;
+      padding: 5px 7px;
+      border: 1px solid #f0d58c;
+      border-radius: 3px;
+      background: #fff8e1;
+      color: #6b4e00;
+      line-height: 1.35;
+    }
+
+    .secret-warning i,
+    dt.warn i {
+      color: #c58a00;
+    }
+
+    dd.secret {
+      line-height: 1.4;
+    }
+
     @media (prefers-color-scheme: dark) {
       a {
         color: #8ab4f8;
@@ -454,6 +538,21 @@ PermPrompt.styles = [
 
       summary:focus-visible {
         outline-color: #8ab4f8;
+      }
+
+      .request-line .url.none {
+        color: #aaa;
+      }
+
+      .secret-warning {
+        background: #3a3120;
+        border-color: #6b5520;
+        color: #f1d9a0;
+      }
+
+      .secret-warning i,
+      dt.warn i {
+        color: #f0b429;
       }
 
       .perm-experimental,

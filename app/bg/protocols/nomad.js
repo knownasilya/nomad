@@ -534,8 +534,8 @@ async function nomadProtocol(request) {
         { CSP: SEARCH_CSP, fallbackToIndexHTML: true }
       );
     }
-    // The user's AI: its chats, memory, skills and setup (userland/ai). /chats, /memory, /skills and /setup are
-    // routes of one page.
+    // The user's AI: its chats, memory, skills, sites and setup (userland/ai). /chats, /memory, /skills,
+    // /sites and /setup are routes of one page.
     if (requestUrl === 'nomad://ai' || requestUrl.startsWith('nomad://ai/')) {
       return serveAppAsset(
         requestUrl,

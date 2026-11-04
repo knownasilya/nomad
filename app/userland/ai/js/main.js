@@ -1,5 +1,6 @@
 // nomad://ai — the user's AI in one place: the AI Sidebar's saved chats (/chats), what the assistant
-// remembers about them (/memory, ADR-0032), the skills the user gives it (/skills, ADR-0034), and the
+// remembers about them (/memory, ADR-0032), the skills the user gives it (/skills, ADR-0034), the
+// sites it may send to without asking (/sites, ADR-0037 amendment), and the
 // runtime and model it uses (/setup, moved here from Settings). AI Jobs keep their page in My Library; the nav links there.
 //
 // Vanilla Lit from app-stdlib (served as-is, no bundle), styled like My Library.
@@ -9,6 +10,7 @@ import mainCSS from '../css/main.css.js';
 import './views/chats.js';
 import './views/memory.js';
 import './views/skills.js';
+import './views/sites.js';
 import './views/setup.js';
 
 // [path, icon, label, search placeholder]
@@ -16,6 +18,7 @@ const VIEWS = [
   ['chats', 'fas fa-comments', 'Chats', 'Search chats'],
   ['memory', 'fas fa-brain', 'Memory', 'Search memories'],
   ['skills', 'fas fa-magic', 'Skills', 'Search skills'],
+  ['sites', 'fas fa-paper-plane', 'Sites', 'Search sites'],
   ['setup', 'fas fa-sliders-h', 'Setup', ''],
 ];
 
@@ -128,6 +131,8 @@ class AiApp extends LitElement {
         return html`<ai-memory-view .query=${this.query}></ai-memory-view>`;
       case 'skills':
         return html`<ai-skills-view .query=${this.query}></ai-skills-view>`;
+      case 'sites':
+        return html`<ai-sites-view .query=${this.query}></ai-sites-view>`;
       case 'setup':
         return html`<ai-setup-view></ai-setup-view>`;
       default:

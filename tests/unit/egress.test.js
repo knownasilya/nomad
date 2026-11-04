@@ -4,6 +4,12 @@ import {
   createEgressGuard,
   hostsIn,
   PREVIEW_BODY_MAX,
+  SEND_GRANT_DAYS,
+  liveSendGrants,
+  sendGrantCovers,
+  sendGrantUntil,
+  withSendGrant,
+  withoutSendGrant,
   PREVIEW_URL_MAX,
   readsPrivate,
   requestHost,
@@ -251,5 +257,82 @@ describe('egress: what the prompt shows of a request', () => {
   it('is plain data the prompt window and the Bridge can carry', () => {
     const p = requestPreview({ url: 'https://x.dev/', method: 'POST', json: { a: [1, { b: 2 }] }, headers: { A: 1 } })
     expect(JSON.parse(JSON.stringify(p))).toEqual(p)
+  })
+})
+
+describe('egress: sites allowed for 3 months', () => {
+  const DAY = 24 * 60 * 60 * 1000
+  const now = Date.UTC(2026, 10, 4)
+
+  it('lasts 90 days', () => {
+    expect(SEND_GRANT_DAYS).toBe(90)
+    expect(sendGrantUntil(now)).toBe(now + 90 * DAY)
+  })
+
+  it('adds a site, and extends one from today keeping when it was first allowed', () => {
+    let grants = withSendGrant([], 'WWW.Example.com', now)
+    expect(grants).toEqual([{ host: 'example.com', grantedAt: now, until: now + 90 * DAY }])
+    grants = withSendGrant(grants, 'example.com', now + 60 * DAY)
+    expect(grants).toEqual([{ host: 'example.com', grantedAt: now, until: now + 150 * DAY }])
+    expect(() => withSendGrant([], 'example.com/path', now)).toThrow()
+    expect(() => withSendGrant([], '', now)).toThrow()
+  })
+
+  it('covers the same host until it ends, not other hosts', () => {
+    const grants = withSendGrant([], 'api.example.com', now)
+    expect(sendGrantCovers('api.example.com', grants, now + DAY)).toBe(true)
+    expect(sendGrantCovers('www.api.example.com', grants, now + DAY)).toBe(true)
+    expect(sendGrantCovers('example.com', grants, now + DAY)).toBe(false)
+    expect(sendGrantCovers('evil.api.example.com', grants, now + DAY)).toBe(false)
+    expect(sendGrantCovers('api.example.com', grants, now + 91 * DAY)).toBe(false)
+  })
+
+  it('drops ended and broken grants, and removes one', () => {
+    const grants = [
+      { host: 'a.dev', grantedAt: now, until: now + 5 * DAY },
+      { host: 'b.dev', grantedAt: now, until: now - 1 },
+      { host: '', until: now + DAY },
+      { host: 'c.dev', until: 'soon' },
+      { host: 'a.dev', grantedAt: now, until: now + 2 * DAY },
+    ]
+    expect(liveSendGrants(grants, now).map((g) => g.host)).toEqual(['a.dev'])
+    expect(liveSendGrants(grants, now)[0].until).toBe(now + 5 * DAY)
+    expect(withoutSendGrant(grants, 'a.dev', now)).toEqual([])
+  })
+
+  it('lets the guard send to an allowed site without asking', async () => {
+    const ask = vi.fn(() => false)
+    const guard = createEgressGuard({ privateData: true, granted: (h) => h === 'api.example.com' })
+    await guard.check('https://api.example.com/x', { ask })
+    expect(ask).not.toHaveBeenCalled()
+    await expect(guard.check('https://other.example.com/x', { ask })).rejects.toThrow()
+    expect(ask).toHaveBeenCalledTimes(1)
+    const job = createEgressGuard({ privateData: true, interactive: false, granted: async () => true })
+    await job.check('https://api.example.com/x')
+    const broken = createEgressGuard({ privateData: true, interactive: false, granted: () => { throw new Error('x') } })
+    await expect(broken.check('https://api.example.com/x')).rejects.toThrow()
+  })
+})
+
+describe('egress: the prompt’s secrets', () => {
+  it('says where each named secret goes, never a value', () => {
+    const p = requestPreview({
+      kind: 'request',
+      url: 'https://api.example.com/x',
+      method: 'POST',
+      secrets: ['API_TOKEN'],
+      secretDetails: [
+        { name: 'API_TOKEN', hosts: ['api.example.com'], sentAs: 'the Authorization header', value: 'shh' },
+        { name: 'OTHER', hosts: ['x.dev'], sentAs: 'the body' },
+      ],
+    })
+    expect(p.secretDetails).toEqual([{ name: 'API_TOKEN', hosts: ['api.example.com'], sentAs: 'the Authorization header' }])
+    expect(JSON.stringify(p)).not.toContain('shh')
+  })
+
+  it('shows a URL secret’s request without a URL', () => {
+    const p = requestPreview({ kind: 'request', method: 'GET', secret: 'WEBHOOK_URL' })
+    expect(p.url).toBe('')
+    expect(p.secrets).toEqual(['WEBHOOK_URL'])
   })
 })

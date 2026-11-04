@@ -65,3 +65,21 @@ values are cut (`PREVIEW_URL_MAX`, `PREVIEW_BODY_MAX`) and say how long they wer
 Bridge's PROMPT frame carries the same `request`, and the alert names the method, URL, body size,
 header names and secrets. An older Client ignores the field. The answer still covers the host for
 the rest of the turn, and the prompt says so.
+
+## Amendment: allowing a site for 3 months, and secrets in the prompt (2026-11-04)
+
+Asking every chat about the same site got old. The `aiSendData` prompt has an **Allow for 3
+months** box (its `similar` answer). A yes with it ticked keeps the host in
+`<userData>/ai-send-grants.json` on this computer (`app/bg/ai/send-grants.js`, rules
+`liveSendGrants`/`withSendGrant`/`sendGrantCovers` in `egress.mjs`), and every guard on this
+computer (the sidebar, the phone's turns it serves, a Job) sends there without asking until it
+ends. A grant matches its host exactly (`www.` ignored), never a subdomain. **nomad://ai/sites**
+lists them with when each ends; **Extend** gives a site another 3 months from today and **Remove**
+makes the next request ask again (internal `nomad.aiSites`, whose changes only nomad://ai may
+make). Nothing else adds a grant: no API, and no AI capability. The phone's prompt has no box, so
+its answers stay per turn.
+
+A request that sends one of the user's secrets says so up front: a warning row under the URL names
+the secrets, and Details says where each goes (`describeInject`) and its hosts. The `aiSecretUse`
+prompt shows the same request block, and now reads as the assistant's ask, not the site's. The
+phone's alerts add the same lines.
