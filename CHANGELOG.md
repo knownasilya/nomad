@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.42.0](https://github.com/knownasilya/nomad/compare/v1.40.0...v1.42.0) (2026-11-04)
+
+
+### Features
+
+* **notes:** live editing — the AI types into an open note with its own cursor, and your devices edit it together ([5857b7d](https://github.com/knownasilya/nomad/commit/5857b7d4b1f76e59a9a363f6f788a8ec7958e1ee))
+
+
+### Bug Fixes
+
+* package yjs, y-protocols and lib0 with the desktop app ([3dd704f](https://github.com/knownasilya/nomad/commit/3dd704f1b6ffd6cb94c0e2baf63a2a85c96f6693))
+
 ## [1.41.0](https://github.com/knownasilya/nomad/compare/v1.40.0...v1.41.0) (2026-11-04)
 
 
