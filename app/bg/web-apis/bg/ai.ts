@@ -37,6 +37,8 @@ import {
 } from '../../ai/api-reference.mjs';
 import { genuiPrompt } from '../../../lib/genui/library.mjs';
 import { askOncePerTurn, jobPermitFor } from '../../ai/vault-tools.mjs';
+import { readOffset, partText } from '../../ai/text-part.mjs';
+import { createScratch, readPageText, runScratchTool, scratchFor, SCRATCH_TOOLS } from '../../ai/scratch.mjs';
 import * as secretStore from '../../ai/secret-store';
 import * as sendGrants from '../../ai/send-grants';
 import { describeInject, hostAllowed, permissionFor, redact, redactResult, secretForModel } from '../../ai/secrets.mjs';
@@ -582,6 +584,8 @@ export async function runJobTurn(
 
 async function runJobWork(job, { work, trigger, lastRun, notify, signal, space, grants, emitter, changes, egress, jobPage, newer }) {
   let result = null;
+  // One scratch space for the run: what job.js saves, the turn after it can read (scratch.mjs).
+  const scratch = createScratch();
   if (work.module) {
     result = await runJobModule(work.module, {
       jobId: job.id,
@@ -599,6 +603,7 @@ async function runJobWork(job, { work, trigger, lastRun, notify, signal, space, 
       emitter,
       egress,
       jobPage,
+      scratch,
     });
     if (!work.prompt) return { output: moduleOutput(result), sourceHash: await newer, changes };
   }
@@ -626,6 +631,7 @@ async function runJobWork(job, { work, trigger, lastRun, notify, signal, space, 
     job: { id: job.id, notify, extra: grants.extra },
     jobPage,
     egress,
+    scratch,
     signal,
   });
   return { output: answer.trim() || all.trim(), sourceHash: await newer, changes };
@@ -688,7 +694,7 @@ function jobEmitter(changes = []) {
 // A Job's job.js, run like the AI's execute code with the job turn's capabilities: no tab, no page
 // tools, notify, and the writes the Job was given. Resolves what main() returned (text, or JSON for
 // anything else).
-async function runJobModule(code, { jobId, params, space, notify, signal, grants, emitter, egress, jobPage }) {
+async function runJobModule(code, { jobId, params, space, notify, signal, grants, emitter, egress, jobPage, scratch }) {
   const sender = makeRemoteSender('nomad://jobs/');
   const catalog = buildCatalog({
     allowWrite: grants.allowWrite,
@@ -699,6 +705,7 @@ async function runJobModule(code, { jobId, params, space, notify, signal, grants
     job: { extra: grants.extra, pages: !!jobPage },
     secrets: true,
     names: names.list(space).filter((r) => !r.hidden),
+    scratch: true,
   });
   const opts = {
     driveUrl: null,
@@ -713,6 +720,7 @@ async function runJobModule(code, { jobId, params, space, notify, signal, grants
     job: { id: jobId, notify },
     jobPage,
     egress,
+    scratch,
   };
   return executeInUtilityProcess({
     code,
@@ -862,8 +870,13 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     skills: personal ? aiSkills.enabledList() : null,
     // The user's own names, and those of the Space the turn is in (ADR-0029).
     names: personal ? names.list(await turnSpaceKey(sender, opts)).filter((r) => !r.hidden) : null,
+    // saveScratch, readScratch, …: every chat turn has a scratch space (scratch.mjs).
+    scratch: true,
     ownerId: opts.ownerId,
   });
+  // What the AI saves to use again in this chat: the store the caller passes (a Job's run), the
+  // sidebar chat's (`scratchScope`), else one for this turn alone.
+  const scratch = opts.scratch || (opts.scratchScope ? scratchFor(String(opts.scratchScope)) : createScratch());
   // One answer per Notes, Reader or drive-edit permission per turn (vault-tools.mjs askOncePerTurn).
   const requestPermission = askOncePerTurn(opts.requestPermission || permissions.requestPermission);
   // Once the user's own AI holds their private data, a request to a host they didn't name asks
@@ -959,6 +972,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     jobPage: job ? opts.jobPage || null : null,
     // Where a request may go once the turn holds private data (egress.mjs).
     egress,
+    // The chat's scratch space (scratch.mjs).
+    scratch,
     // Messages the user sends while this turn runs (steering.mjs). A CLI's loopback MCP calls
     // carry them on their results.
     steering: opts.steering || null,
@@ -1167,6 +1182,7 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
     job = null,
     egress = null,
     jobPage = null,
+    scratch = null,
   } = opts;
   // WebMCP page tool — round-trip to the renderer that registered it. Access was already
   // consented per-origin in resolvePageTools(); running it can only do what page JS can do.
@@ -1233,15 +1249,21 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
   // The user's Notes and Reader (ai-vault.ts): a personal turn only, each after its permission.
   if (isVaultTool(name)) {
     if (!catalog?.personal) throw new Error(`${name} is not available here`);
-    return runVaultTool(name, args || {}, { ctx, space, permit });
+    return runVaultTool(name, args || {}, { ctx, space, permit, scratch });
+  }
+
+  // The chat's scratch space (scratch.mjs): what the AI saved to use again later in this chat.
+  if (SCRATCH_TOOLS.has(name)) {
+    if (!hasCapability(catalog, name)) throw new Error(`${name} is not available here`);
+    return runScratchTool(name, args || {}, { store: scratch, egress });
   }
 
   // A Job's own page (ADR-0038): it opens, reads, clicks and types there, on the sites the user let
   // it use. Never the user's tab.
   if (job && (name === 'openPage' || name === 'readCurrentPage' || isPageAction(name))) {
     if (!jobPage || !hasCapability(catalog, name)) throw new Error(`${name} is not available here`);
-    if (name === 'openPage') return jobPage.open(args?.url);
-    if (name === 'readCurrentPage') return jobPage.read();
+    if (name === 'openPage') return jobPage.open(args?.url, scratch);
+    if (name === 'readCurrentPage') return jobPage.read(readOffset(args), scratch);
     return jobPage.run(name, args || {}, { emitter, id: opts.toolCallId });
   }
 
@@ -1514,19 +1536,26 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
             'Use readDriveFile/listDriveFiles for a Drive, or ask the user to paste what you need.'
         );
       }
-      let text;
-      try {
-        text = await sender.executeJavaScript(
-          'document.body ? document.body.innerText : document.documentElement.outerHTML'
-        );
-      } catch (err) {
-        throw new Error(`Could not read this page's content: ${err.message}`);
-      }
-      if (typeof text !== 'string' || !text.trim()) {
-        return '(This page has no readable text content.)';
-      }
-      const MAX = 20000;
-      return text.length > MAX ? text.slice(0, MAX) + '\n…[truncated]' : text;
+      // A long page is read in parts (text-part.mjs): the note after each part says how to read on.
+      // The whole text is saved in the chat's scratch space, and later parts come from it.
+      const { part, saved } = await readPageText(scratch, {
+        url: sender.getURL?.() || '',
+        offset: readOffset(args),
+        source: 'readCurrentPage',
+        load: async () => {
+          let text;
+          try {
+            text = await sender.executeJavaScript(
+              'document.body ? document.body.innerText : document.documentElement.outerHTML'
+            );
+          } catch (err) {
+            throw new Error(`Could not read this page's content: ${err.message}`);
+          }
+          return typeof text === 'string' ? text : '';
+        },
+      });
+      if (!part.text.trim() && !part.offset) return '(This page has no readable text content.)';
+      return partText(part, 'readCurrentPage', '', saved);
     }
     case 'screenshotCurrentPage': {
       // Only reached when the catalog includes this capability, which requires the caller to

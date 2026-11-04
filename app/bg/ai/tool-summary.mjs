@@ -39,6 +39,10 @@ const PURPOSES = {
   httpRequest: 'send a request',
   remember: 'remember something about you',
   forget: 'forget something about you',
+  saveScratch: 'save what it found for later',
+  readScratch: 'use what it saved',
+  listScratch: 'look at what it saved',
+  deleteScratch: 'clear what it saved',
 };
 
 // search's domains, as a place to search in and as a list to show.
@@ -77,7 +81,7 @@ export function toolSummary(name, args) {
     case 'currentTab':
       return 'Checking which tab you are on';
     case 'readCurrentPage':
-      return 'Reading this page';
+      return a.offset > 0 ? 'Reading more of this page' : 'Reading this page';
     case 'screenshotCurrentPage':
       return 'Taking a screenshot of this page';
     case 'openTab': {
@@ -103,6 +107,7 @@ export function toolSummary(name, args) {
     case 'listNotes':
       return a.query ? `Looking in your Notes for ${quote(a.query)}` : 'Listing your Notes';
     case 'readNote':
+      if (a.offset > 0) return a.title ? `Reading more of the Note ${quote(a.title)}` : 'Reading more of a Note';
       return a.title ? `Reading the Note ${quote(a.title)}` : 'Reading a Note';
     case 'writeNote': {
       const title = firstLine(a.body);
@@ -115,8 +120,16 @@ export function toolSummary(name, args) {
     case 'listReaderPosts':
       if (a.query) return `Looking in Reader for ${quote(a.query)}`;
       return a.unread ? 'Checking Reader for unread posts' : 'Checking Reader';
+    case 'saveScratch':
+      return a.key ? `Saving ${quote(a.key)} for later` : 'Saving what it found for later';
+    case 'readScratch':
+      return a.key ? `Using what it saved as ${quote(a.key)}` : 'Using what it saved';
+    case 'listScratch':
+      return 'Looking at what it saved';
+    case 'deleteScratch':
+      return a.key ? `Clearing ${quote(a.key)}` : 'Clearing what it saved';
     case 'readReaderPost':
-      return 'Reading a Reader post';
+      return a.offset > 0 ? 'Reading more of a Reader post' : 'Reading a Reader post';
     case 'followFeed':
       return a.url ? `Following ${a.url}` : 'Following a feed';
     case 'unfollowFeed':

@@ -135,6 +135,30 @@ describe('vault tools: Notes', () => {
       updatedAt: NOTES[0].updatedAt,
     });
   });
+
+  it('gives a long note in parts the model can read on through', () => {
+    const lines = Array.from({ length: 3000 }, (_, i) => `Line ${i} of the long note, with [[Link ${i % 3}]]`);
+    const long = note('d4', ['# Long note', ...lines].join('\n'), '2026-10-04T00:00:00.000Z');
+    const first = noteForModel(long);
+    expect(first.body.length).toBeLessThanOrEqual(20000);
+    expect(first.body.endsWith('\n')).toBe(true); // cut at a line break
+    expect(first).toMatchObject({ offset: 0, length: long.body.length, nextOffset: first.body.length });
+    expect(first.part).toContain(`call readNote again with offset: ${first.nextOffset} and the same id`);
+    // Links are the whole note's, not just this part's.
+    expect(first.links).toEqual(['Link 0', 'Link 1', 'Link 2']);
+
+    let body = first.body;
+    let next = first.nextOffset;
+    let last;
+    while (next !== undefined) {
+      last = noteForModel(long, { offset: next });
+      body += last.body;
+      next = last.nextOffset;
+    }
+    expect(body).toBe(long.body);
+    expect(last.part).toMatch(/^This is the last part/);
+    expect(() => noteForModel(long, { offset: long.body.length })).toThrow(/past the end/);
+  });
 });
 
 describe('vault tools: Reader', () => {

@@ -524,6 +524,18 @@ secret goes behind Details. Its **Allow for 3 months** box keeps the host in `ap
 `nomad.aiSites`) to extend or remove. `STANDING_PROMPT` tells every turn that tool content is data, not
 instructions.
 
+### The AI's scratch space
+
+Long reads come in parts (`app/bg/ai/text-part.mjs`, 20,000 characters, `offset`/`nextOffset`):
+`readNote`, `readReaderPost`, `readCurrentPage` and a Job's `openPage`. Every chat turn and Job run also
+has a scratch space (`app/bg/ai/scratch.mjs`): `saveScratch`/`readScratch`/`listScratch`/`deleteScratch`
+(`gates: { scratch: true }`), in memory only. The sidebar keeps one per chat (`scratchScope` from
+`ai-shell.ts`, dropped after 3 idle hours); a Job keeps one per run (job.js and its turn share it); any
+other turn gets its own. A long read saves its whole text there (`note:<id>`, `post:<url>`,
+`page:<url>`) and later parts of a page come from that copy. An entry saved after a private read, and
+every auto-saved read, is private: reading it back calls `egress.notePrivate()`. The loopback MCP's
+other programs get no scratch space.
+
 ### Personas and Sessions (ADR-0031)
 
 A Persona is one of the user's identities: a private `label` for a Profile Drive
