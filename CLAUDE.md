@@ -609,6 +609,12 @@ answering.
 error there kills the worklet and the app closes at launch (1.39.0, `shared/inbox.mjs`). Use `b4a`,
 pass the dependency in, or check `typeof` first.
 
+**A package the main process imports goes in `app/package.json` too.** The main bundle leaves npm
+packages as `require()` calls and the packaged app resolves them from `app/node_modules`, so a package
+only the root `package.json` lists builds and runs from a checkout but closes the packaged app at
+launch ("Cannot find module 'yjs'", 1.41.0). `tests/unit/main-deps-packaged.test.js` checks every
+import in `app/main.js`, `app/bg`, `app/lib` and `shared` against `app/package-lock.json`.
+
 ## Look and feel: every UI supports dark mode and matches the rest
 
 Every new or changed screen must work in light **and** dark, and look like its neighbours.

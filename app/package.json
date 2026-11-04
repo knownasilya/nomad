@@ -60,6 +60,7 @@
     "keyboardevents-areequal": "^0.2.2",
     "knex": "^0.21.0",
     "knex-on-conflict-do-nothing": "^1.0.0",
+    "lib0": "^0.2.119",
     "linkedom": "^0.18.14",
     "lit": "^3.3.3",
     "lodash.clonedeep": "^4.5.0",
@@ -102,7 +103,9 @@
     "to-ico": "^1.1.5",
     "utp-native": "^2.1.7",
     "winston": "^3.19.0",
+    "y-protocols": "^1.0.7",
     "yazl": "^2.5.1",
+    "yjs": "^13.6.33",
     "yo-yo": "^1.4.0",
     "z32": "^1.1.0",
     "zod": "^4.4.3"
