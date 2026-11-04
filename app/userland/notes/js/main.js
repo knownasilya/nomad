@@ -31,6 +31,7 @@ import { createGraphView } from '../../app-stdlib/js/graph/view.js';
 import { noteGraph, noteTexts, noteGraphCounts, topicNodeId } from './graph.js';
 import { noteTitle, noteSnippet, makeResolver, linkedIds } from '../../../../shared/vault-apps.mjs';
 import { queryWords, matchesWords, matchSnippet, markPieces } from '../../app-stdlib/js/search-match.js';
+import { notesPageTitle } from './page-title.js';
 
 const SAVE_DELAY = 700;
 const VIEW_KEY = 'nomad-notes-view';
@@ -502,6 +503,13 @@ function applyView() {
     graph?.setVisible(false);
     editor?.view.requestMeasure();
   }
+  updateTitle();
+}
+
+// The tab names the open note, and follows its first line as it's typed.
+function updateTitle() {
+  const title = notesPageTitle(draft ? draft.body : null, { canvas: view === 'canvas' });
+  if (document.title !== title) document.title = title;
 }
 
 // The canvas shows what's typed in the open note, like the list does.
@@ -704,6 +712,7 @@ function renderEditor() {
       dirty = true;
       setSaveMsg('idle', '');
       renderList();
+      updateTitle();
       scheduleSave();
     },
     onOpenLink: openLink,

@@ -600,6 +600,13 @@ Every new or changed screen must work in light **and** dark, and look like its n
   hand-built icon-only Pressable needs `accessibilityLabel` and `onLongPress={() => showLabel(…)}`
   (`mobile/lib/tooltip.ts`). `scripts/check-icon-buttons.mjs` (`npm run check:icons`, and
   `tests/unit/icon-button-labels.test.js`) fails on one that doesn't.
+- **Every page names what's open in the tab title.** A desktop `nomad://` app sets `document.title`
+  as `<open item> · <sub-page> · <App>`, leaving out what isn't there (`Groceries · Notes`,
+  `Jobs · My Library`, `Reading log · Reader`), and goes back to the plain app name when nothing is
+  open. Set it from the place every view change passes through (the render, or the one function
+  that switches views), so back/forward and edits that rename the item update it too. A new
+  sub-page, route or opened item needs its title in the same change. My Library's
+  `lib/page-title.js` (`PAGES`, `setItemTitle`) and Notes' `js/page-title.js` are the examples.
 - Check both schemes before calling UI work done.
 
 ## Drive templates live in `nomad.dev`

@@ -156,6 +156,8 @@ export class HistoryApp extends LitElement {
 
   render() {
     const current = this.view === 'devices' ? 'devices' : this.closedTabs ? 'closed' : 'all';
+    const label = { closed: 'Recently Closed Tabs', devices: 'Tabs From Other Devices' }[current];
+    document.title = label ? `${label} · Browsing History` : 'Browsing History';
     const navItem = (view, label) => html`
       <a class=${current === view ? 'current' : ''} @click=${(e) => this.setView(view)}
         >${label}</a
