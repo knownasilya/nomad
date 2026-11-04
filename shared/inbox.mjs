@@ -73,15 +73,88 @@ const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 // Bytes and text
 // =
 
-const te = new TextEncoder();
-const td = new TextDecoder();
+// The phone's backend runs on Bare, which has no TextEncoder or TextDecoder (a `new TextEncoder()`
+// up here threw as the module loaded and took the whole app down at launch). So use them where
+// they exist and fall back to the same UTF-8 by hand, with U+FFFD for anything malformed, as they do.
+const te = typeof TextEncoder === 'function' ? new TextEncoder() : null;
+const td = typeof TextDecoder === 'function' ? new TextDecoder() : null;
 
 export function utf8(s) {
-  return te.encode(String(s));
+  return te ? te.encode(String(s)) : encodeUtf8(String(s));
 }
 
 export function fromUtf8(b) {
-  return td.decode(b);
+  return td ? td.decode(b) : decodeUtf8(b);
+}
+
+export function encodeUtf8(s) {
+  const out = [];
+  for (let i = 0; i < s.length; i++) {
+    let c = s.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) {
+      const d = s.charCodeAt(i + 1);
+      if (d >= 0xdc00 && d <= 0xdfff) {
+        c = 0x10000 + ((c - 0xd800) << 10) + (d - 0xdc00);
+        i++;
+      }
+    }
+    if (c >= 0xd800 && c <= 0xdfff) c = 0xfffd; // a lone surrogate
+    if (c < 0x80) out.push(c);
+    else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+    else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+    else out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+  }
+  return new Uint8Array(out);
+}
+
+export function decodeUtf8(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let s = '';
+  let i = 0;
+  while (i < b.length) {
+    const x = b[i];
+    let need = 0;
+    let c = 0;
+    let lo = 0x80;
+    let hi = 0xbf;
+    if (x < 0x80) {
+      s += String.fromCharCode(x);
+      i++;
+      continue;
+    } else if (x >= 0xc2 && x <= 0xdf) {
+      need = 1;
+      c = x & 31;
+    } else if (x >= 0xe0 && x <= 0xef) {
+      need = 2;
+      c = x & 15;
+      if (x === 0xe0) lo = 0xa0;
+      if (x === 0xed) hi = 0x9f;
+    } else if (x >= 0xf0 && x <= 0xf4) {
+      need = 3;
+      c = x & 7;
+      if (x === 0xf0) lo = 0x90;
+      if (x === 0xf4) hi = 0x8f;
+    } else {
+      s += '\ufffd';
+      i++;
+      continue;
+    }
+    let j = 1;
+    for (; j <= need; j++) {
+      const y = b[i + j];
+      if (y === undefined || y < (j === 1 ? lo : 0x80) || y > (j === 1 ? hi : 0xbf)) break;
+      c = (c << 6) | (y & 63);
+    }
+    if (j <= need) {
+      // A malformed sequence: one U+FFFD for the bytes read so far, then go on from the bad byte.
+      s += '\ufffd';
+      i += j;
+      continue;
+    }
+    s += String.fromCodePoint(c);
+    i += need + 1;
+  }
+  return s;
 }
 
 export function toHex(bytes) {
