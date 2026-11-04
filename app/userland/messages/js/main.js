@@ -177,8 +177,18 @@ function textWithLinks(text) {
 // Render
 // =
 
+// The tab names the open conversation, or the new message being written.
+function updateTitle() {
+  let name = ''
+  if (state.compose) name = 'New message'
+  else if (state.open) name = state.thread ? state.thread.title || shortKey(state.thread.other) : nameOf(state.open.other)
+  const title = [String(name || '').replace(/\s+/g, ' ').trim(), 'Messages'].filter(Boolean).join(' · ')
+  if (document.title !== title) document.title = title
+}
+
 function render() {
   const app = document.getElementById('app')
+  updateTitle()
   const scroller = app.querySelector('.thread-body')
   const atBottom = !scroller || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 40
   const keepDraft = document.activeElement?.matches?.('.composer textarea')

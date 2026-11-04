@@ -525,8 +525,24 @@ function postSubject(p) {
   }
 }
 
+// The tab names what's open: the article being read, else the feed or topic picked on the left.
+function updateTitle() {
+  let name = ''
+  if (state.reading) name = state.reading.article?.title || 'Article'
+  else if (state.filter === 'saved') name = 'Reading log'
+  else if (state.filter === 'untagged') name = 'No topic yet'
+  else if (state.filter.startsWith('topic:')) name = state.filter.slice(6)
+  else if (state.filter !== 'all') {
+    const f = state.feeds.find((x) => x.url === state.filter)
+    name = f ? f.title || f.url : ''
+  }
+  const title = [String(name).replace(/\s+/g, ' ').trim(), 'Reader'].filter(Boolean).join(' · ')
+  if (document.title !== title) document.title = title
+}
+
 function render() {
   const app = document.getElementById('app')
+  updateTitle()
   if (state.reading) {
     showCanvas(false)
     const scroller = app.querySelector('.reading')
