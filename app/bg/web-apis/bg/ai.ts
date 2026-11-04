@@ -37,6 +37,7 @@ import {
 } from '../../ai/api-reference.mjs';
 import { genuiPrompt } from '../../../lib/genui/library.mjs';
 import { askOncePerTurn, jobPermitFor } from '../../ai/vault-tools.mjs';
+import { readOffset, textPart, partText } from '../../ai/text-part.mjs';
 import * as secretStore from '../../ai/secret-store';
 import { hostAllowed, permissionFor, redact, redactResult, secretForModel } from '../../ai/secrets.mjs';
 import { createEgressGuard, hostsIn, sendPermission, userText } from '../../ai/egress.mjs';
@@ -1225,7 +1226,7 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
   if (job && (name === 'openPage' || name === 'readCurrentPage' || isPageAction(name))) {
     if (!jobPage || !hasCapability(catalog, name)) throw new Error(`${name} is not available here`);
     if (name === 'openPage') return jobPage.open(args?.url);
-    if (name === 'readCurrentPage') return jobPage.read();
+    if (name === 'readCurrentPage') return jobPage.read(readOffset(args));
     return jobPage.run(name, args || {}, { emitter, id: opts.toolCallId });
   }
 
@@ -1503,8 +1504,8 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
       if (typeof text !== 'string' || !text.trim()) {
         return '(This page has no readable text content.)';
       }
-      const MAX = 20000;
-      return text.length > MAX ? text.slice(0, MAX) + '\n…[truncated]' : text;
+      // A long page is read in parts (text-part.mjs): the note after each part says how to read on.
+      return partText(textPart(text, { offset: readOffset(args) }), 'readCurrentPage');
     }
     case 'screenshotCurrentPage': {
       // Only reached when the catalog includes this capability, which requires the caller to

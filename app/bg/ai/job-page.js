@@ -28,13 +28,13 @@ import { registerForPartition } from '../protocols/index';
 import { spaceIdOfKey } from '../ui/personas';
 import { PAGE_ACTION_PERM, pageOffLimits, similarKey, similarLabel } from './page-control.mjs';
 import { jobPageUrl } from './open-tab.mjs';
+import { textPart, partFields } from './text-part.mjs';
 import { grantPage, pageGrant, pageSite } from '../../../shared/jobs.mjs';
 
 const logger = logLib.get().child({ category: 'ai', subcategory: 'job-page' });
 
 const PRELOAD_WORLD = 999;
 const LOAD_TIMEOUT = 20_000;
-const MAX_TEXT = 20_000;
 export const JOB_PAGE_PERM = 'jobPage';
 export const JOB_TAB_GROUP = 'Jobs';
 // The hidden page's size: a laptop screen, so pages lay out as they do for the user.
@@ -230,19 +230,23 @@ export function createJobPage({
     } catch (err) {
       throw new Error(`Could not read the page: ${err?.message || err}`);
     }
-    const s = typeof body === 'string' ? body.trim() : '';
-    return s.length > MAX_TEXT ? s.slice(0, MAX_TEXT) + `\n…[cut at ${MAX_TEXT} characters]` : s;
+    return typeof body === 'string' ? body.trim() : '';
   }
 
-  async function read() {
+  // The page's text, or one part of it from `offset` when it is long (text-part.mjs), with where the
+  // next part starts: readCurrentPage with that offset reads on.
+  async function read(offset = 0) {
     if (ended) throw new Error('The run is over.');
     if (!wc || wc.isDestroyed()) throw new Error('No page is open. Open one with openPage.');
     // A click can go to another site: it needs its own grant to be read.
     await mayUse(wc.getURL(), false);
+    const all = await text(wc);
+    const part = textPart(all, { offset });
     return JSON.stringify({
       url: wc.getURL(),
       title: wc.getTitle() || '',
-      text: (await text(wc)) || '(This page has no text.)',
+      text: part.text || '(This page has no text.)',
+      ...partFields(part, 'readCurrentPage'),
     });
   }
 

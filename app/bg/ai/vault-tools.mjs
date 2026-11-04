@@ -13,6 +13,7 @@ import { noteTitle, noteSnippet, sortNotes, makeResolver, findLinks, driveRoot, 
 import { PRESETS, normalizeSite, describeMod } from '../../../shared/mods.mjs'
 import { describeNeed, describeSchedule, describeWrites, writePermissions } from '../../../shared/jobs.mjs'
 import { noteLink, jobLink, modLink } from '../../../shared/item-links.mjs'
+import { PART_CHARS, textPart, partFields } from './text-part.mjs'
 
 // Capability -> the permission it asks for.
 export const VAULT_TOOL_PERMS = {
@@ -63,8 +64,8 @@ export function jobPermitFor(writes) {
 
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 100
-// A post or note the model reads in full is cut here, so one long page can't fill its context.
-export const MAX_TEXT = 20000
+// Mod code and Job prompts in a list are cut here. A Note or post is read in parts (text-part.mjs).
+export const MAX_TEXT = PART_CHARS
 
 export function clampLimit(limit) {
   const n = Math.floor(Number(limit))
@@ -168,13 +169,16 @@ export function findNote(notes, { id, title } = {}) {
   return null
 }
 
-// A whole Note for the model, with the titles it links to.
-export function noteForModel(note) {
+// A Note for the model, with the titles it links to. A long Note's body is one part of it, from
+// `offset`, with where the next part starts (text-part.mjs); `links` are the whole Note's.
+export function noteForModel(note, { offset = 0 } = {}) {
+  const part = textPart(note.body, { offset })
   return {
     id: note.id,
     title: noteTitle(note.body),
     url: noteLink(note.id),
-    body: clip(note.body),
+    body: part.text,
+    ...partFields(part, 'readNote', 'id'),
     links: [...new Set(findLinks(note.body).map((l) => l.target))],
     topics: note.topics || [],
     createdAt: note.createdAt,

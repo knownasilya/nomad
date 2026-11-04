@@ -15,6 +15,7 @@ import * as jobs from '../../ai/jobs';
 import * as memory from '../../ai/memory';
 import { driveTitle, readJobSource, resolveJobWrites } from './job-source';
 import * as vault from '../../hyper/vault';
+import { readOffset, textPart, partFields } from '../../ai/text-part.mjs';
 import { addedWrites, describeSchedule, describeWrites, keepPageActions } from '../../../../shared/jobs.mjs';
 import { noteLink, jobLink, MEMORY_LINK, READER_LINK } from '../../../../shared/item-links.mjs';
 import fsAPI from './fs';
@@ -29,7 +30,6 @@ import {
   splitPostUrl,
   POST_BODY_FILES,
   htmlToText,
-  clip,
   findMods,
   modForModel,
   findJobs,
@@ -64,7 +64,7 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
     case 'readNote': {
       const note = findNote(await notes(), args);
       if (!note) throw new Error('No note with that id or title. Use listNotes to find it.');
-      return json(noteForModel(note));
+      return json(noteForModel(note, { offset: readOffset(args) }));
     }
 
     case 'writeNote': {
@@ -129,7 +129,7 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
       const { follows, read } = await vaultApps.readerOf(await readerSpace());
       if (!follows.includes(post.root))
         throw new Error("That post isn't from a feed the user follows in Reader");
-      return json(await readPost(ctx, post, read));
+      return json(await readPost(ctx, post, read, readOffset(args)));
     }
 
     case 'followFeed': {
@@ -315,8 +315,9 @@ async function loadFeed(ctx, root): Promise<LoadedFeed> {
   }
 }
 
-// A post's metadata and text: post.json, then the first body file that exists.
-async function readPost(ctx, { root, dir }, read) {
+// A post's metadata and text: post.json, then the first body file that exists. A long post's text is
+// one part of it, from `offset` (text-part.mjs).
+async function readPost(ctx, { root, dir }, read, offset = 0) {
   const meta = JSON.parse(await readText(ctx, root, dir + 'post.json'));
   let feedTitle = root;
   try {
@@ -330,6 +331,7 @@ async function readPost(ctx, { root, dir }, read) {
       continue;
     }
     const format = file.split('.').pop();
+    const part = textPart(format === 'html' ? htmlToText(body) : body, { offset });
     return {
       url: root + dir.slice(1),
       feedUrl: root,
@@ -340,7 +342,8 @@ async function readPost(ctx, { root, dir }, read) {
       createdAt: meta.createdAt || '',
       read: read.includes(root + dir.slice(1)),
       format,
-      text: clip(format === 'html' ? htmlToText(body) : body),
+      text: part.text,
+      ...partFields(part, 'readReaderPost', 'url'),
     };
   }
   throw new Error('This post has no text file');

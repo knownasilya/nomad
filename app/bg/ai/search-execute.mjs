@@ -200,8 +200,15 @@ export const CAPABILITIES = [
     description:
       'Read the visible text content of the page currently open in this tab. Works on any page — ' +
       'http/https sites included, not just hyper:// Drives. For a hyper:// Drive, prefer ' +
-      'readDriveFile/listDriveFiles to read its actual source files instead of the rendered page.',
-    inputSchema: { type: 'object', properties: {}, required: [] },
+      'readDriveFile/listDriveFiles to read its actual source files instead of the rendered page. ' +
+      'A long page comes in parts of 20,000 characters: the note after a part gives the `offset` to read on with.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        offset: { type: 'number', description: 'Optional. Where to start, in characters: the nextOffset the last read gave (default 0)' },
+      },
+      required: [],
+    },
     gates: { renderer: true },
   },
   {
@@ -381,13 +388,16 @@ export const CAPABILITIES = [
   {
     name: 'readNote',
     description:
-      "Read one of the user's Notes in full: its Markdown, the titles it links to, its topics, and its updatedAt " +
-      '(pass that to writeNote to edit it). Find it by `id` or `title`. Asks permission to read Notes.',
+      "Read one of the user's Notes: its Markdown, the titles it links to, its topics, and its updatedAt " +
+      '(pass that to writeNote to edit it). Find it by `id` or `title`. A long Note comes in parts of 20,000 ' +
+      'characters: then the result has `length` and `part`, and `nextOffset` until the last part. Call readNote ' +
+      'again with the same id and `offset: nextOffset` to read on. Asks permission to read Notes.',
     inputSchema: {
       type: 'object',
       properties: {
         id: { type: 'string', description: 'The note id, from listNotes' },
         title: { type: 'string', description: 'Or the note title (its first line)' },
+        offset: { type: 'number', description: 'Optional. Where to start, in characters: the nextOffset the last read gave (default 0)' },
       },
       required: [],
     },
@@ -399,7 +409,8 @@ export const CAPABILITIES = [
       'Create a Note (no `id`), or replace the text of one (`id`, and the updatedAt readNote gave as ' +
       '`baseUpdatedAt`). A new Note is kept only in the current Space; the user can show it in every Space. ' +
       'The first line is its title; link Notes with [[Title]]. If the Note changed ' +
-      'since you read it, your text is kept as a conflict copy. Pass `topics` to set the Note\'s topics ' +
+      'since you read it, your text is kept as a conflict copy. `body` replaces the whole Note, so if readNote ' +
+      'gave it in parts, read every part first. Pass `topics` to set the Note\'s topics ' +
       '(1 to 3 words each, Title Case, reusing the user\'s topics where one fits); leave it out to keep them. ' +
       'Asks permission to write Notes.',
     inputSchema: {
@@ -454,10 +465,15 @@ export const CAPABILITIES = [
     name: 'readReaderPost',
     description:
       'Read one post from a hyper:// feed the user follows in Reader: title, date, tags and text. A post ' +
-      'from an RSS or Atom feed is a web page: fetch its URL instead. Asks permission to read Reader.',
+      'from an RSS or Atom feed is a web page: fetch its URL instead. A long post comes in parts of 20,000 ' +
+      'characters: then the result has `length` and `part`, and `nextOffset` until the last part; call it again ' +
+      'with the same url and `offset: nextOffset` to read on. Asks permission to read Reader.',
     inputSchema: {
       type: 'object',
-      properties: { url: { type: 'string', description: 'The post URL, from listReaderPosts' } },
+      properties: {
+        url: { type: 'string', description: 'The post URL, from listReaderPosts' },
+        offset: { type: 'number', description: 'Optional. Where to start, in characters: the nextOffset the last read gave (default 0)' },
+      },
       required: ['url'],
     },
     gates: { personal: true },
@@ -722,7 +738,8 @@ export const CAPABILITIES = [
     name: 'openPage',
     description:
       "Open a web page in this Job's own page, signed in as the user, and read it once it has loaded: " +
-      'returns { url, title, text }. Use it for pages that need the user\'s login or JavaScript; fetchUrl is ' +
+      'returns { url, title, text }. A long page\'s text is its first 20,000 characters, with `nextOffset`: ' +
+      'readCurrentPage({ offset: nextOffset }) reads on. Use it for pages that need the user\'s login or JavaScript; fetchUrl is ' +
       'enough for a plain public page. One page at a time: opening another replaces it. Then readCurrentPage ' +
       'reads it again, and snapshotPage, clickElement, typeText, pressKey, selectOption and scrollPage use it. ' +
       'Each site needs the user\'s OK, given on a run they watch; without it the call fails and the run notes ' +
