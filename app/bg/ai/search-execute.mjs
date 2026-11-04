@@ -410,8 +410,9 @@ export const CAPABILITIES = [
     description:
       'Create a Note (no `id`), or replace the text of one (`id`, and the updatedAt readNote gave as ' +
       '`baseUpdatedAt`). A new Note is kept only in the current Space; the user can show it in every Space. ' +
-      'The first line is its title; link Notes with [[Title]]. If the Note changed ' +
-      'since you read it, your text is kept as a conflict copy. `body` replaces the whole Note, so if readNote ' +
+      'The first line is its title; link Notes with [[Title]]. If the user has the Note open, your changes ' +
+      'are typed into it live and merged with their edits. If the Note changed since you read it and your ' +
+      'change touches the same text, your text is kept as a conflict copy. `body` replaces the whole Note, so if readNote ' +
       'gave it in parts, read every part first. Pass `topics` to set the Note\'s topics ' +
       '(1 to 3 words each, Title Case, reusing the user\'s topics where one fits); leave it out to keep them. ' +
       'Asks permission to write Notes.',

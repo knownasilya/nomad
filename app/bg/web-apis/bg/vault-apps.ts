@@ -336,6 +336,18 @@ async function findStored(id, space) {
   return { space: null, prev: null };
 }
 
+// Where the Note `id` is, in the user's Notes or any Space this Device knows: { space, prev }. For
+// live Notes (bg/notes/live-notes.js), which aren't tied to one caller's Space.
+export async function locateNote(id) {
+  const own = await vault.readAppRecord(apps.notePath(id));
+  if (own) return { space: null, prev: own };
+  for (const space of await knownSpaceKeys()) {
+    const theirs = await getNote(space, id).catch(() => null);
+    if (theirs) return { space, prev: theirs };
+  }
+  return { space: null, prev: null };
+}
+
 // { notes: [note], space, spaceName, writable, linked }, newest first. `space` is the caller's
 // Space key (null outside a Space), and `spaceName` its name, for the Notes page's sections.
 // In a shared Space, `shared` is true, `canWriteSpace` says whether this person can write its Notes,

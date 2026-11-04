@@ -61,6 +61,8 @@ export default {
   setNoteTopics: 'promise', // ({ id, topics }) -> note, its topics set by hand (ADR-0035)
   suggestNoteTopics: 'promise', // (ids?) -> how many notes the AI will sort into topics
   watchAppData: 'readable', // 'changed' when the Vault changes
+  openLiveNote: 'readable', // (id, conn) -> 'message' { data } (y-protocols, base64), 'status', 'failed' (ADR-0041)
+  liveNoteSend: 'promise', // (id, conn, data) -> whether the session took it
 
   // Names (bg/hyper/names.js)
   listNames: 'promise', // -> [{ name, url, title, space, hidden?, createdAt, updatedAt }]

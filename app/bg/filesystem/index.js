@@ -14,6 +14,7 @@ import { HYPERDRIVE_HASH_REGEX } from '../../lib/const';
 import * as autobases from '../hyper/autobases';
 import * as vault from '../hyper/vault';
 import * as devicePresence from '../hyper/device-presence';
+import * as liveNotes from '../notes/live-notes';
 import * as driveWriters from '../hyper/drive-writers';
 import * as spaceLibrary from '../hyper/space-library';
 
@@ -196,6 +197,7 @@ export async function setup() {
           .then(() => vault.publishOwnVersion(app.getVersion()))
           .catch(() => {});
         devicePresence.install();
+        liveNotes.install(); // live Note editing between this user's Devices (ADR-0041)
       }
       // Writer grants between this user's Devices (ADR-0026 §2): grants follow the Vault.
       driveWriters.watch();

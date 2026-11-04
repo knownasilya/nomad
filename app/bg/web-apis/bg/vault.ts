@@ -12,6 +12,7 @@ import * as pairing from '../../hyper/device-pairing';
 import * as devicePresence from '../../hyper/device-presence';
 import * as vaultApps from './vault-apps';
 import * as noteTopics from './note-topics';
+import * as liveNotes from '../../notes/live-notes';
 import * as names from '../../hyper/names';
 import * as driveWriters from '../../hyper/drive-writers';
 import * as spaceLibrary from '../../hyper/space-library';
@@ -123,6 +124,7 @@ export default {
       } catch {}
       // A Vault made after startup (first invite) needs the presence channel on live connections.
       devicePresence.install();
+      liveNotes.install();
     }
     const devices = sess ? await vault.listDevices() : [];
     return {
@@ -407,6 +409,17 @@ export default {
       close();
     };
     return watcher;
+  },
+
+  // Live editing of an open Note (bg/notes/live-notes.js, ADR-0041). `conn` is the page's own id
+  // for this connection. The stream's 'message' events are y-protocols messages ({ data: base64 })
+  // and 'status' the session's; liveNoteSend sends the page's. Closing the stream leaves the Note.
+  openLiveNote(id, conn) {
+    return liveNotes.openPage(id, conn);
+  },
+
+  async liveNoteSend(id, conn, data) {
+    return liveNotes.pageSend(id, conn, data);
   },
 
   // Names (hyper/names.js): short words for drives, apps in a private drive, and any URL. The
