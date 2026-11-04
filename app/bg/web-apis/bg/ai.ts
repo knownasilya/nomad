@@ -39,7 +39,7 @@ import { genuiPrompt } from '../../../lib/genui/library.mjs';
 import { askOncePerTurn, jobPermitFor } from '../../ai/vault-tools.mjs';
 import * as secretStore from '../../ai/secret-store';
 import { hostAllowed, permissionFor, redact, redactResult, secretForModel } from '../../ai/secrets.mjs';
-import { createEgressGuard, hostsIn, sendPermission, userText } from '../../ai/egress.mjs';
+import { createEgressGuard, hostsIn, requestPreview, sendPermission, userText } from '../../ai/egress.mjs';
 import { runHttpRequest } from '../../ai/http-request.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
 import {
@@ -316,7 +316,8 @@ async function routeChat(messages, sender, emitter, opts) {
     onTool: (event) => emitter.emit('tool', event),
     onReasoning: (text) => emitter.emit('reasoning', { text }),
     // The human is on THIS (Client) Device, so the relayed modifyDrive prompt is shown here.
-    onPrompt: (permission) => permissions.requestPermission(permission, sender),
+    onPrompt: (permission, request) =>
+      permissions.requestPermission(permission, sender, request ? { request } : undefined),
     // The user steers the turn from this window; the Provider's loop reads it (steering.mjs).
     steering: opts.steering || null,
     onSteered: (event) => emitter.emit('steer', event),
@@ -1208,8 +1209,10 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
   // Job's `draft` is per drive (a function of the drive's base URL), as its grants say.
   const draftFor = (base) => (typeof draft === 'function' ? !!draft(base) : !!draft);
   // The user's yes to a request to `host` on this turn, after the turn read private data. Asked on
-  // the tab's site, and on the phone over the Bridge (`aiSendData:<host>`).
-  const askToSend = (host) => permit(sendPermission(host), sender, { host });
+  // the tab's site, and on the phone over the Bridge (`aiSendData:<host>`). The prompt shows the
+  // request that asks (`request`: its URL, method, headers, body); the yes covers the host.
+  const askToSend = (request: Record<string, any>) => (host: string) =>
+    permit(sendPermission(host), sender, { host, request: requestPreview(request) });
   const stagesInDraft = (base) =>
     writeStagesInDraft(ctx, base, draftFor(base) ? { draft: true } : {}).catch(() => false);
   const readOpts = (staged) => (staged ? { draft: true } : {});
@@ -1312,7 +1315,7 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
       if (urlp.protocol !== 'http:' && urlp.protocol !== 'https:') {
         throw new Error('Only http and https URLs are supported');
       }
-      await egress?.check(urlp.href, { ask: askToSend });
+      await egress?.check(urlp.href, { ask: askToSend({ kind: 'fetch', url: urlp.href }) });
       return fetchText(args.url);
     }
     case 'listSecrets': {
@@ -1366,7 +1369,7 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
         const named = [...(Array.isArray(args.secrets) ? args.secrets : []), ...(args.secret ? [args.secret] : [])];
         const recs = await Promise.all(named.map((n) => secretStore.get(String(n)).catch(() => null)));
         const secretHosts = recs.filter((r) => r && usable(r)).flatMap((r) => r.hosts || []);
-        await egress.check(String(args.url), { ask: askToSend, secretHosts });
+        await egress.check(String(args.url), { ask: askToSend({ ...args, kind: 'request' }), secretHosts });
       }
       const res = await runHttpRequest(args || {}, {
         resolveSecrets: async (wanted, host) => {
@@ -1553,7 +1556,7 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
         const host = new URL(url).hostname.toLowerCase();
         const own =
           url.startsWith('hyper://') && names.list(nameSpace).some((r) => String(r.name).toLowerCase() === host);
-        await egress.check(url, { ask: askToSend, trusted: own });
+        await egress.check(url, { ask: askToSend({ kind: 'tab', url }), trusted: own });
       }
       const groupName = openTabGroup(args.group);
       // Next to the tab the user is on, in its window; the focused window when that tab is gone.

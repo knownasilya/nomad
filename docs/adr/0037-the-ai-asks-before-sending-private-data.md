@@ -53,3 +53,15 @@ well, and `fetchUrl` had no limit at all. The rules are `app/bg/ai/egress.mjs` (
   (ADR-0028). `followFeed` already asks `readerWrite`. Images in answers aren't rendered, so they
   aren't a way out.
 - The perm prompt now has a dark theme, like the shell menus.
+
+## Amendment: the prompt shows the request (2026-11-04)
+
+A host alone didn't tell the user what they were saying yes to. The `aiSendData` prompt now
+carries the request that asks (`request` in the prompt's opts, built by `requestPreview` in
+`egress.mjs`: the URL, the method, the headers and body the AI wrote, and the names of the secrets
+Nomad adds). The desktop prompt shows the method and URL on one line, and the rest behind a
+**Details** disclosure, so it stays small until the user opens it; the window grows to fit. Long
+values are cut (`PREVIEW_URL_MAX`, `PREVIEW_BODY_MAX`) and say how long they were. On the phone the
+Bridge's PROMPT frame carries the same `request`, and the alert names the method, URL, body size,
+header names and secrets. An older Client ignores the field. The answer still covers the host for
+the rest of the turn, and the prompt says so.

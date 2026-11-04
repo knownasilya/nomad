@@ -497,9 +497,9 @@ async function handleAiChat ({ reqId, messages, opts = {} }) {
       // Provider keepalive during model load / slow first token — resets the UI idle timeout.
       onHeartbeat: () => send(RPC_AI_EVENT, { reqId, kind: 'heartbeat' }),
       // Relayed modifyDrive consent — the human is on THIS phone. Surface it to the RN UI and wait.
-      onPrompt: (permission) => new Promise((resolve) => {
+      onPrompt: (permission, request) => new Promise((resolve) => {
         entry.promptResolve = resolve
-        send(RPC_AI_EVENT, { reqId, kind: 'prompt', permission })
+        send(RPC_AI_EVENT, { reqId, kind: 'prompt', permission, request: request || null })
       })
     })
     send(RPC_AI_EVENT, { reqId, kind: 'done' })

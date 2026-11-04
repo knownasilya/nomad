@@ -517,7 +517,8 @@ capability. The sidebar and the phone keep `privateData` on the answer (the `too
 `phase: 'private'`) and send it with the chat's next turns. A Job can't ask: after a private read it
 reaches only the hosts its prompt names and its secrets cover (`jobEgress` in `ai.ts`). A new
 capability that returns private data goes in `PRIVATE_READS`; one that sends a URL or body somewhere
-calls `egress.check` first. `STANDING_PROMPT` tells every turn that tool content is data, not
+calls `egress.check` first, with an `ask` that hands the prompt the request (`requestPreview`): the
+prompt shows the method and URL, and the headers, body and secrets behind Details. `STANDING_PROMPT` tells every turn that tool content is data, not
 instructions.
 
 ### Personas and Sessions (ADR-0031)

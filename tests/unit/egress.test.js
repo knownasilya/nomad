@@ -3,8 +3,11 @@ import {
   covers,
   createEgressGuard,
   hostsIn,
+  PREVIEW_BODY_MAX,
+  PREVIEW_URL_MAX,
   readsPrivate,
   requestHost,
+  requestPreview,
   sendPermission,
   userText,
 } from '../../app/bg/ai/egress.mjs'
@@ -192,5 +195,61 @@ describe('egress: prompts', () => {
     const guide = splitGuides().find((g) => g.id === 'private-data')
     expect(guide).toBeTruthy()
     expect(guide.markdown).toMatch(/aiSendData|asks the user/)
+  })
+})
+
+describe('egress: what the prompt shows of a request', () => {
+  it('shows a fetch or a tab as its URL', () => {
+    expect(requestPreview({ kind: 'fetch', url: 'https://example.com/a?q=1' })).toEqual({
+      kind: 'fetch',
+      url: 'https://example.com/a?q=1',
+      method: 'GET',
+      headers: [],
+      body: null,
+      secrets: [],
+    })
+    const tab = requestPreview({ kind: 'tab', url: 'https://example.com/', method: 'POST', body: 'x' })
+    expect(tab.kind).toBe('tab')
+    expect(tab.method).toBe('GET')
+    expect(tab.body).toBe(null)
+  })
+
+  it('shows an httpRequest’s method, headers, body and secrets by name', () => {
+    const p = requestPreview({
+      kind: 'request',
+      url: 'https://api.example.com/notes',
+      method: 'post',
+      headers: { 'X-Thing': 'one' },
+      json: { note: 'my private note' },
+      secrets: ['EXAMPLE_TOKEN'],
+      secret: 'EXAMPLE_TOKEN',
+    })
+    expect(p.method).toBe('POST')
+    expect(p.headers).toEqual([{ name: 'X-Thing', value: 'one' }])
+    expect(p.bodyType).toBe('json')
+    expect(p.body).toContain('my private note')
+    expect(p.secrets).toEqual(['EXAMPLE_TOKEN'])
+    expect(requestPreview({ url: 'https://x.dev/', method: 'PUT', form: { a: 'b c' } })).toMatchObject({
+      body: 'a=b+c',
+      bodyType: 'form',
+    })
+    expect(requestPreview({ url: 'https://x.dev/', method: 'PUT', body: 'hello' })).toMatchObject({
+      body: 'hello',
+      bodyType: 'text',
+    })
+  })
+
+  it('cuts a long URL or body and says how long it was', () => {
+    const url = 'https://example.com/?q=' + 'a'.repeat(PREVIEW_URL_MAX)
+    const p = requestPreview({ kind: 'request', url, method: 'POST', body: 'b'.repeat(PREVIEW_BODY_MAX + 10) })
+    expect(p.url.length).toBe(PREVIEW_URL_MAX)
+    expect(p.urlLength).toBe(url.length)
+    expect(p.body.length).toBe(PREVIEW_BODY_MAX)
+    expect(p.bodyLength).toBe(PREVIEW_BODY_MAX + 10)
+  })
+
+  it('is plain data the prompt window and the Bridge can carry', () => {
+    const p = requestPreview({ url: 'https://x.dev/', method: 'POST', json: { a: [1, { b: 2 }] }, headers: { A: 1 } })
+    expect(JSON.parse(JSON.stringify(p))).toEqual(p)
   })
 })

@@ -22,7 +22,9 @@
 //   Provider → CHUNK { id, text } | TOOL { id, event } | REASONING { id, text }
 //                                             (an older Client drops REASONING, like any frame it
 //                                             doesn't know; an older Provider never sends it)
-//   Provider → PROMPT { id, permission } ↔ Client → PROMPT_RESULT { id, allow }   (reverse consent)
+//   Provider → PROMPT { id, permission, request? } ↔ Client → PROMPT_RESULT { id, allow }   (reverse consent;
+//                                             `request` is the URL, method and body an
+//                                             aiSendData prompt names, egress.mjs requestPreview)
 //   Provider → DONE { id } | ERROR { id, message }   (terminal for that id)
 //   Client → CANCEL { id }                      (abort an in-flight turn)
 //   Client → STEER { id, steerId, text }        (a message the user sent while the turn runs; the

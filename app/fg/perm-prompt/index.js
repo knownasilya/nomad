@@ -29,6 +29,68 @@ const AI_ASKS = {
   },
 };
 
+// The request an aiSendData prompt is for (egress.mjs requestPreview): one line with its method and
+// URL, and the rest (the whole URL, headers, body, secrets) behind Details so the prompt stays small.
+function requestOf(permId, opts) {
+  const r = permId === 'aiSendData' ? opts?.request : null;
+  return r && typeof r === 'object' && typeof r.url === 'string' && r.url ? r : null;
+}
+
+const count = (n) => Number(n || 0).toLocaleString();
+
+function hasMore(r) {
+  return r.url.length > 34 || r.urlLength || r.headers?.length || r.body != null || r.secrets?.length;
+}
+
+function renderRequest(r, host, onToggle) {
+  const verb = r.kind === 'tab' ? 'Open' : r.method || 'GET';
+  const bodyLabel = { json: 'Body (JSON)', form: 'Body (form)' }[r.bodyType] || 'Body';
+  const bodySize = r.bodyLength || (r.body || '').length;
+  return html`<div class="request">
+    <div class="request-line" title=${r.url}>
+      <span class="method">${verb}</span><span class="url">${r.url}</span>
+    </div>
+    ${hasMore(r)
+      ? html`<details @toggle=${onToggle}>
+          <summary>Details</summary>
+          <dl>
+            <dt>${r.kind === 'tab' ? 'Opens a tab at' : 'URL'}</dt>
+            <dd><code class="block url">${r.url}${r.urlLength ? '…' : ''}</code></dd>
+            ${r.urlLength
+              ? html`<dd class="cut">Showing ${count(r.url.length)} of ${count(r.urlLength)} characters</dd>`
+              : ''}
+            ${r.headers?.length
+              ? html`<dt>Headers</dt>
+                  <dd>
+                    <code class="block"
+                      >${r.headers.map((h) => html`<div><b>${h.name}:</b> ${h.value}</div>`)}</code
+                    >
+                  </dd>`
+              : ''}
+            ${r.body != null
+              ? html`<dt>${bodyLabel}, ${count(bodySize)} characters</dt>
+                  <dd>
+                    <pre class="block">${r.body}${r.bodyLength ? '\n…' : ''}</pre>
+                  </dd>
+                  ${r.bodyLength
+                    ? html`<dd class="cut">Showing the first ${count(r.body.length)}</dd>`
+                    : ''}`
+              : ''}
+            ${r.secrets?.length
+              ? html`<dt>Your secrets</dt>
+                  <dd>
+                    ${r.secrets.map((s, i) => html`${i ? ', ' : ''}<code>${s}</code>`)}. Nomad adds
+                    ${r.secrets.length > 1 ? 'their values' : 'its value'}; the AI never sees
+                    ${r.secrets.length > 1 ? 'them' : 'it'}.
+                  </dd>`
+              : ''}
+          </dl>
+          <p class="covers">Allowing covers every request to ${host} for the rest of this answer.</p>
+        </details>`
+      : ''}
+  </div>`;
+}
+
 // A Job's own click asks under aiPageAction with `job` set: it reads as the Job's, like jobPage.
 function aiAsk(permId, opts) {
   return AI_ASKS[permId] || (permId === 'aiPageAction' && opts?.job ? AI_ASKS.jobAction : null);
@@ -95,10 +157,7 @@ class PermPrompt extends LitElement {
 
     // create the prompt
     await this.requestUpdate();
-
-    // adjust height based on rendering
-    var height = this.shadowRoot.querySelector('div').clientHeight | 0;
-    bg.permPrompt.resizeSelf({ height });
+    this.fitHeight();
 
     // setup promise
     return new Promise((resolve) => {
@@ -125,7 +184,9 @@ class PermPrompt extends LitElement {
             permOpts: this.permOpts,
           })}
         </p>
-
+        ${requestOf(this.permId, this.permOpts)
+          ? renderRequest(requestOf(this.permId, this.permOpts), this.permParam, () => this.fitHeight())
+          : ''}
         ${this.permOpts?.similar
           ? html`<label class="similar">
               <input
@@ -165,6 +226,12 @@ class PermPrompt extends LitElement {
           : ''}
       </div>
     `;
+  }
+
+  // The prompt's window is as tall as what it shows: again when Details opens or closes.
+  fitHeight() {
+    var height = this.shadowRoot.querySelector('div').clientHeight | 0;
+    bg.permPrompt.resizeSelf({ height });
   }
 
   onContextMenu(e) {
@@ -267,6 +334,102 @@ PermPrompt.styles = [
       text-align: right;
     }
 
+    .request {
+      margin: -4px 0 12px;
+      font-size: 12px;
+    }
+
+    .request-line {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      padding: 5px 7px;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      background: #f7f7f8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11.5px;
+    }
+
+    .request-line .method {
+      flex: none;
+      font-weight: 600;
+      color: #555;
+    }
+
+    .request-line .url {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    details {
+      margin-top: 6px;
+    }
+
+    summary {
+      cursor: pointer;
+      color: #555;
+      user-select: none;
+      width: max-content;
+    }
+
+    summary:focus-visible {
+      outline: 2px solid #2864dc;
+      outline-offset: 2px;
+      border-radius: 2px;
+    }
+
+    dl {
+      margin: 6px 0 0;
+    }
+
+    dt {
+      margin-top: 8px;
+      color: #666;
+      font-size: 11.5px;
+    }
+
+    dd {
+      margin: 3px 0 0;
+    }
+
+    dd.cut,
+    .covers {
+      color: #777;
+      font-size: 11.5px;
+    }
+
+    .covers {
+      margin: 8px 0 0;
+      font-weight: 400;
+    }
+
+    .block {
+      display: block;
+      margin: 0;
+      padding: 5px 7px;
+      max-height: 120px;
+      overflow: auto;
+      border: 1px solid #e3e3e3;
+      border-radius: 3px;
+      background: #f7f7f8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    code.block.url {
+      word-break: break-all;
+    }
+
+    code.block div + div {
+      margin-top: 2px;
+    }
+
     @media (prefers-color-scheme: dark) {
       a {
         color: #8ab4f8;
@@ -274,8 +437,23 @@ PermPrompt.styles = [
 
       p.perm i,
       .plan-what,
-      .plan-note {
+      .plan-note,
+      summary,
+      dt,
+      dd.cut,
+      .covers,
+      .request-line .method {
         color: #aaa;
+      }
+
+      .request-line,
+      .block {
+        background: #232325;
+        border-color: #4a4a4e;
+      }
+
+      summary:focus-visible {
+        outline-color: #8ab4f8;
       }
 
       .perm-experimental,

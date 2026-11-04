@@ -86,8 +86,9 @@ export async function isSharingEnabled() {
 //   onChunk(text)            — streamed assistant text
 //   onTool(event)            — tool activity (start / end / write Checkpoint payloads)
 //   onReasoning(text)        — streamed reasoning text (not sent by an older Provider)
-//   onPrompt(permission)     — reverse consent: return Promise<boolean> (this Device is where the
-//                              human is, so the modifyDrive prompt is shown HERE, not on the Provider)
+//   onPrompt(permission, request) — reverse consent: return Promise<boolean> (this Device is where the
+//                              human is, so the modifyDrive prompt is shown HERE, not on the Provider).
+//                              `request` is the request an aiSendData prompt names, or null.
 export async function requestRemoteChat({
   messages,
   opts = {},
@@ -393,10 +394,13 @@ async function onRequest(peer, f) {
 
   // Reverse consent (§6): the modifyDrive prompt is shown on the CLIENT (where the human is), so
   // the Provider's requestPermission relays a PROMPT frame and awaits the PROMPT_RESULT.
-  const requestPermission = (permission /*, sender */) =>
+  // An `aiSendData` prompt also sends the request that asks (`request`, egress.mjs requestPreview),
+  // so the phone can show its URL. An older Client ignores the extra field.
+  const requestPermission = (permission, _sender, opts) =>
     new Promise((resolve) => {
       entry.promptResolve = resolve;
-      sendFrame(peer, { t: FRAME.PROMPT, id, permission });
+      const request = opts?.request && typeof opts.request === 'object' ? opts.request : null;
+      sendFrame(peer, { t: FRAME.PROMPT, id, permission, ...(request ? { request } : {}) });
     });
 
   // Keepalive: remote inference can take a while to load the model / produce the first token, during
@@ -494,7 +498,7 @@ function onClientStream(peer, f) {
       });
     case FRAME.PROMPT:
       // Show the consent prompt locally and relay the answer back.
-      return Promise.resolve(req.onPrompt ? req.onPrompt(f.permission) : false)
+      return Promise.resolve(req.onPrompt ? req.onPrompt(f.permission, f.request || null) : false)
         .then((allow) => sendFrame(peer, { t: FRAME.PROMPT_RESULT, id: f.id, allow: !!allow }))
         .catch(() => sendFrame(peer, { t: FRAME.PROMPT_RESULT, id: f.id, allow: false }));
     case FRAME.DONE:

@@ -254,11 +254,25 @@ export interface NomadResult { ok: boolean; value?: unknown; error?: string }
 
 // Streaming nomad.ai.chat() — runs on a remote AI Provider over the Bridge (ADR-0013). Unlike the
 // single-reply calls above it delivers many events until onDone/onError; cancel() aborts the turn.
+// The request an aiSendData prompt names (app/bg/ai/egress.mjs requestPreview).
+export interface AiPromptRequest {
+  kind: 'fetch' | 'request' | 'tab'
+  url: string
+  urlLength?: number
+  method: string
+  headers: { name: string; value: string }[]
+  body: string | null
+  bodyType?: 'text' | 'json' | 'form'
+  bodyLength?: number
+  secrets: string[]
+}
+
 export interface AiChatHandlers {
   onChunk?: (text: string) => void
   onTool?: (event: unknown) => void
   onReasoning?: (text: string) => void // the model's reasoning, streamed (desktop Providers since this release)
-  onPrompt?: (permission: string) => boolean | Promise<boolean> // relayed modifyDrive consent
+  // Relayed consent. `request` is the request an aiSendData prompt names (its URL, method, body).
+  onPrompt?: (permission: string, request?: AiPromptRequest | null) => boolean | Promise<boolean>
   // The Provider's loop read these messages the user sent mid-turn (handle.steer).
   onSteer?: (event: { ids: string[]; texts: string[] }) => void
   onDone?: () => void
@@ -491,7 +505,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
       else if (msg.kind === 'reasoning') h.onReasoning?.(msg.text)
       else if (msg.kind === 'steer') h.onSteer?.({ ids: msg.ids || [], texts: msg.texts || [] })
       else if (msg.kind === 'prompt') {
-        Promise.resolve(h.onPrompt ? h.onPrompt(msg.permission) : false).then((allow) => {
+        Promise.resolve(h.onPrompt ? h.onPrompt(msg.permission, msg.request || null) : false).then((allow) => {
           const r = rpc.request(RPC_AI_PROMPT_RESULT)
           r.send(b4a.from(JSON.stringify({ reqId, allow: !!allow })))
         })

@@ -189,3 +189,78 @@ export function createEgressGuard({ privateData = false, trustedHosts = [], inte
     },
   }
 }
+
+// How much of a request the prompt shows. The prompt only needs enough to tell what goes where;
+// a longer value is cut and says how long it was.
+export const PREVIEW_URL_MAX = 2000
+export const PREVIEW_VALUE_MAX = 300
+export const PREVIEW_BODY_MAX = 4000
+
+function cut(s, max) {
+  const str = String(s ?? '')
+  return str.length > max ? { text: str.slice(0, max), cut: str.length } : { text: str, cut: 0 }
+}
+
+/**
+ * @typedef {{
+ *   kind: 'fetch' | 'request' | 'tab',
+ *   url: string, urlLength?: number,
+ *   method: string,
+ *   headers: { name: string, value: string }[],
+ *   body: string | null, bodyType?: 'text' | 'json' | 'form', bodyLength?: number,
+ *   secrets: string[],
+ * }} RequestPreview
+ */
+
+/**
+ * What the `aiSendData` prompt shows of the request that asks: the URL, the method, the headers
+ * and body the AI wrote, and the secrets Nomad adds for it (by name; values are added later and
+ * never shown). `kind` is 'fetch' (fetchUrl), 'request' (httpRequest) or 'tab' (openTab).
+ * Only plain strings and numbers, so it can go to the prompt window and over the AI Bridge.
+ * @param {any} [request] `{ kind, url }`, plus an httpRequest's own arguments
+ * @returns {RequestPreview}
+ */
+export function requestPreview(request = {}) {
+  const { kind = 'request', url, method, headers, body, json, form, secrets, secret } = request || {}
+  const k = kind === 'fetch' || kind === 'tab' ? kind : 'request'
+  const u = cut(url, PREVIEW_URL_MAX)
+  /** @type {RequestPreview} */
+  const out = {
+    kind: k,
+    url: u.text,
+    method: k === 'request' ? String(method || 'GET').toUpperCase().slice(0, 10) : 'GET',
+    headers: [],
+    body: null,
+    secrets: [],
+  }
+  if (u.cut) out.urlLength = u.cut
+  if (k !== 'request') return out
+  if (headers && typeof headers === 'object' && !Array.isArray(headers)) {
+    out.headers = Object.entries(headers)
+      .slice(0, 50)
+      .map(([name, value]) => ({ name: cut(name, 100).text, value: cut(value, PREVIEW_VALUE_MAX).text }))
+  }
+  let raw = null
+  if (body != null) {
+    raw = String(body)
+    out.bodyType = 'text'
+  } else if (json != null) {
+    try {
+      raw = JSON.stringify(json, null, 2)
+    } catch {
+      raw = String(json)
+    }
+    out.bodyType = 'json'
+  } else if (form != null && typeof form === 'object') {
+    raw = new URLSearchParams(Object.entries(form).map(([a, b]) => [a, String(b ?? '')])).toString()
+    out.bodyType = 'form'
+  }
+  if (raw != null) {
+    const b = cut(raw, PREVIEW_BODY_MAX)
+    out.body = b.text
+    if (b.cut) out.bodyLength = b.cut
+  }
+  const names = [...(Array.isArray(secrets) ? secrets : []), ...(secret ? [secret] : [])]
+  out.secrets = [...new Set(names.map((n) => cut(n, 64).text))].slice(0, 10)
+  return out
+}

@@ -33,7 +33,7 @@ import AiPanel from '../components/AiPanel'
 import Shortcuts from '../components/Shortcuts'
 import FileExplorer, { type ExplorerDrive } from '../components/FileExplorer'
 import type { HyperRender } from '../components/HyperView'
-import { useBackend, type SpaceJoin } from '../lib/useBackend'
+import { useBackend, type SpaceJoin, type AiPromptRequest } from '../lib/useBackend'
 import { useJobNotifications } from '../lib/useJobNotifications'
 import { useMessageNotifications } from '../lib/useMessageNotifications'
 import { usePersonaOnboarding } from '../lib/usePersonaOnboarding'
@@ -211,18 +211,31 @@ function secretPrompt (permission: string): { title: string; message: string } |
 }
 
 // The AI sending a request to a site after it read the user's private data in this chat (ADR-0037):
-// `aiSendData:<host>`. The request could carry that data there.
-function sendDataPrompt (permission: string): { title: string; message: string } | null {
+// `aiSendData:<host>`. The request could carry that data there. A newer Provider also sends the
+// request that asks (`request`), so the prompt names its URL and what it sends.
+function sendDataPrompt (permission: string, request?: AiPromptRequest | null): { title: string; message: string } | null {
   const m = /^aiSendData:([^\s]{1,300})$/.exec(permission)
   if (!m) return null
   return {
     title: `Allow AI to contact ${m[1]}?`,
-    message: `The AI running on your other device wants to send a request to ${m[1]}. It has read your private data in this chat (your Notes, Reader, files or a page), and the request could carry some of it there. Allow only if you asked it to use this site.`
+    message: `The AI running on your other device wants to send a request to ${m[1]}.${requestLines(request)}It has read your private data in this chat (your Notes, Reader, files or a page), and the request could carry some of it there. Allow only if you asked it to use this site.`
   }
 }
 
-function confirmAiPermission (permission: string, drive?: { name: string; url: string }): Promise<boolean> {
-  const vaultPrompt = VAULT_PROMPTS[permission] || secretPrompt(permission) || sendDataPrompt(permission)
+// The request in a phone prompt: method and URL, then what else it sends, in a few lines.
+function requestLines (r?: AiPromptRequest | null): string {
+  if (!r || typeof r.url !== 'string' || !r.url) return ' '
+  const url = r.url.length > 300 ? r.url.slice(0, 300) + '…' : r.url
+  const lines = [r.kind === 'tab' ? `Open ${url}` : `${r.method || 'GET'} ${url}`]
+  const bodyLength = r.bodyLength || (r.body ? r.body.length : 0)
+  if (bodyLength) lines.push(`With a body of ${bodyLength.toLocaleString()} characters`)
+  if (Array.isArray(r.headers) && r.headers.length) lines.push(`Headers: ${r.headers.map((h) => h.name).join(', ')}`)
+  if (Array.isArray(r.secrets) && r.secrets.length) lines.push(`Your secrets: ${r.secrets.join(', ')}`)
+  return `\n\n${lines.join('\n')}\n\n`
+}
+
+function confirmAiPermission (permission: string, drive?: { name: string; url: string }, request?: AiPromptRequest | null): Promise<boolean> {
+  const vaultPrompt = VAULT_PROMPTS[permission] || secretPrompt(permission) || sendDataPrompt(permission, request)
   const name = drive?.name || 'this drive'
   const url = drive?.url || ''
   const title = vaultPrompt ? vaultPrompt.title : 'Allow AI to edit?'
@@ -685,7 +698,7 @@ export default function Browser () {
           onReasoning: (text) => inject({ kind: 'reasoning', text }),
           onDone: () => { delete aiHandles.current[id]; inject({ kind: 'done' }) },
           onError: (message) => { delete aiHandles.current[id]; inject({ kind: 'error', message }) },
-          onPrompt: (permission) => confirmAiPermission(permission, describeDrive(permission))
+          onPrompt: (permission, request) => confirmAiPermission(permission, describeDrive(permission), request)
         })
       }
       else if (msg.type === 'nomad-ai-cancel' && msg.payload && msg.payload.id) {
@@ -1466,7 +1479,7 @@ export default function Browser () {
       title={active.title}
       space={spacesApi.activeSpace.rootDriveKey}
       aiChat={backend.aiChat}
-      onPrompt={(permission) => confirmAiPermission(permission, describeDrive(permission))}
+      onPrompt={(permission, request) => confirmAiPermission(permission, describeDrive(permission), request)}
       onPreviewDraft={onPreviewDraft}
       onOpenLink={openAiLink}
     />

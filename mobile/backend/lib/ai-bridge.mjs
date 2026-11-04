@@ -242,7 +242,7 @@ export function createAiBridge ({ swarm, getVault }) {
           texts: Array.isArray(f.texts) ? f.texts : []
         })
       case FRAME.PROMPT:
-        return Promise.resolve(req.onPrompt ? req.onPrompt(f.permission) : false)
+        return Promise.resolve(req.onPrompt ? req.onPrompt(f.permission, f.request || null) : false)
           .then((allow) => sendFrame(peer, { t: FRAME.PROMPT_RESULT, id: f.id, allow: !!allow }))
           .catch(() => sendFrame(peer, { t: FRAME.PROMPT_RESULT, id: f.id, allow: false }))
       case FRAME.HEARTBEAT:
