@@ -28,7 +28,8 @@ import { registerForPartition } from '../protocols/index';
 import { spaceIdOfKey } from '../ui/personas';
 import { PAGE_ACTION_PERM, pageOffLimits, similarKey, similarLabel } from './page-control.mjs';
 import { jobPageUrl } from './open-tab.mjs';
-import { textPart, partFields } from './text-part.mjs';
+import { partFields } from './text-part.mjs';
+import { readPageText } from './scratch.mjs';
 import { grantPage, pageGrant, pageSite } from '../../../shared/jobs.mjs';
 
 const logger = logLib.get().child({ category: 'ai', subcategory: 'job-page' });
@@ -234,19 +235,25 @@ export function createJobPage({
   }
 
   // The page's text, or one part of it from `offset` when it is long (text-part.mjs), with where the
-  // next part starts: readCurrentPage with that offset reads on.
-  async function read(offset = 0) {
+  // next part starts: readCurrentPage with that offset reads on. A long page is saved whole in the
+  // run's scratch space (scratch.mjs), and later parts come from that copy.
+  async function read(offset = 0, scratch = null) {
     if (ended) throw new Error('The run is over.');
     if (!wc || wc.isDestroyed()) throw new Error('No page is open. Open one with openPage.');
     // A click can go to another site: it needs its own grant to be read.
     await mayUse(wc.getURL(), false);
-    const all = await text(wc);
-    const part = textPart(all, { offset });
+    const page = wc;
+    const { part, saved } = await readPageText(scratch, {
+      url: page.getURL(),
+      offset,
+      source: 'openPage',
+      load: () => text(page),
+    });
     return JSON.stringify({
-      url: wc.getURL(),
-      title: wc.getTitle() || '',
+      url: page.getURL(),
+      title: page.getTitle() || '',
       text: part.text || '(This page has no text.)',
-      ...partFields(part, 'readCurrentPage'),
+      ...partFields(part, 'readCurrentPage', '', saved),
     });
   }
 
@@ -256,7 +263,7 @@ export function createJobPage({
     },
 
     // openPage: the page at `url`, read. Names (hyper://<name>/) go to what the user named.
-    async open(rawUrl) {
+    async open(rawUrl, scratch = null) {
       if (ended) throw new Error('The run is over.');
       const given = jobPageUrl(rawUrl);
       const url = names.resolveUrl(given, space) || given;
@@ -265,7 +272,7 @@ export function createJobPage({
       await egress?.check?.(url);
       await mayUse(url, false);
       await load(url);
-      return read();
+      return read(0, scratch);
     },
 
     read,

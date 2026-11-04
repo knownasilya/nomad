@@ -201,7 +201,8 @@ export const CAPABILITIES = [
       'Read the visible text content of the page currently open in this tab. Works on any page — ' +
       'http/https sites included, not just hyper:// Drives. For a hyper:// Drive, prefer ' +
       'readDriveFile/listDriveFiles to read its actual source files instead of the rendered page. ' +
-      'A long page comes in parts of 20,000 characters: the note after a part gives the `offset` to read on with.',
+      'A long page comes in parts of 20,000 characters: the note after a part gives the `offset` to read on with, ' +
+      'and the scratch key the whole text is saved under (readScratch), so later parts match the first.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -391,7 +392,8 @@ export const CAPABILITIES = [
       "Read one of the user's Notes: its Markdown, the titles it links to, its topics, and its updatedAt " +
       '(pass that to writeNote to edit it). Find it by `id` or `title`. A long Note comes in parts of 20,000 ' +
       'characters: then the result has `length` and `part`, and `nextOffset` until the last part. Call readNote ' +
-      'again with the same id and `offset: nextOffset` to read on. Asks permission to read Notes.',
+      'again with the same id and `offset: nextOffset` to read on, or readScratch({ key: scratch }) for the whole ' +
+      'text in your code. Asks permission to read Notes.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -467,7 +469,8 @@ export const CAPABILITIES = [
       'Read one post from a hyper:// feed the user follows in Reader: title, date, tags and text. A post ' +
       'from an RSS or Atom feed is a web page: fetch its URL instead. A long post comes in parts of 20,000 ' +
       'characters: then the result has `length` and `part`, and `nextOffset` until the last part; call it again ' +
-      'with the same url and `offset: nextOffset` to read on. Asks permission to read Reader.',
+      'with the same url and `offset: nextOffset` to read on, or readScratch({ key: scratch }) for the whole text. ' +
+      'Asks permission to read Reader.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -732,6 +735,59 @@ export const CAPABILITIES = [
     },
     gates: { personal: true, memory: true },
   },
+  // The chat's scratch space (scratch.mjs): what the AI looked up, kept for later steps of the same
+  // chat in memory on this computer. Every chat turn has one; the loopback MCP's other programs don't.
+  {
+    name: 'saveScratch',
+    description:
+      'Save something you looked up or built, to use again later in this chat without fetching it again or ' +
+      'reading it through: a fetched page, a file, API results, a list you made. `value` is text or any JSON ' +
+      'value, up to 1,000,000 characters; saving under a `key` that exists replaces it. The chat keeps about ' +
+      '4,000,000 characters and drops what was used longest ago past that. It stays in memory on this computer ' +
+      'for this chat only (a Job: this run), never on disk or in the user\'s files. Returns { saved, key, chars }.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        key: { type: 'string', description: 'A short name for it, like "flights" or "api:issues"' },
+        value: { description: 'The text, or any JSON value, to save' },
+        note: { type: 'string', description: 'Optional. A few words on what it is, shown by listScratch' },
+      },
+      required: ['key', 'value'],
+    },
+    gates: { scratch: true },
+  },
+  {
+    name: 'readScratch',
+    description:
+      'Get back what this chat saved under `key`: with saveScratch, or the whole text of a long Note, Reader post or ' +
+      'page that a read gave in parts (its `scratch` key, like "note:<id>" or "page:<url>"). Returns ' +
+      '{ key, value, source, note?, savedAt }, the value as it was saved. Search or slice it in your code and ' +
+      'return only what you need.',
+    inputSchema: {
+      type: 'object',
+      properties: { key: { type: 'string', description: 'The key it was saved under' } },
+      required: ['key'],
+    },
+    gates: { scratch: true },
+  },
+  {
+    name: 'listScratch',
+    description:
+      'List what this chat has saved, newest first: each key, its note, where it came from (`source`), its type, ' +
+      'its size in characters and when it was saved.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    gates: { scratch: true },
+  },
+  {
+    name: 'deleteScratch',
+    description: 'Delete what this chat saved under `key`, when you no longer need it.',
+    inputSchema: {
+      type: 'object',
+      properties: { key: { type: 'string', description: 'The key it was saved under' } },
+      required: ['key'],
+    },
+    gates: { scratch: true },
+  },
   // A Job's page (ADR-0038): a page of the Job's own, signed in as the user, that it reads and,
   // where the user let it, clicks and types on with the page-control capabilities above.
   {
@@ -739,7 +795,7 @@ export const CAPABILITIES = [
     description:
       "Open a web page in this Job's own page, signed in as the user, and read it once it has loaded: " +
       'returns { url, title, text }. A long page\'s text is its first 20,000 characters, with `nextOffset`: ' +
-      'readCurrentPage({ offset: nextOffset }) reads on. Use it for pages that need the user\'s login or JavaScript; fetchUrl is ' +
+      'readCurrentPage({ offset: nextOffset }) reads on, and readScratch({ key: scratch }) gives the whole text. Use it for pages that need the user\'s login or JavaScript; fetchUrl is ' +
       'enough for a plain public page. One page at a time: opening another replaces it. Then readCurrentPage ' +
       'reads it again, and snapshotPage, clickElement, typeText, pressKey, selectOption and scrollPage use it. ' +
       'Each site needs the user\'s OK, given on a run they watch; without it the call fails and the run notes ' +
@@ -847,7 +903,9 @@ const TAB_DRIVE_ARG = {
 // `secrets`: the turn may use the user's secrets (stages.mjs; ADR-0033). It adds listSecrets and
 // httpRequest.
 // `memory`: AI memory is on (the `ai_memory` setting, ADR-0032). It adds remember and forget.
-/** @param {{ allowWrite?: boolean, allowVision?: boolean, remote?: boolean, personal?: boolean, tab?: boolean, job?: false | { extra?: string[], pages?: boolean }, secrets?: boolean, memory?: boolean }} [opts] */
+// `scratch`: the turn has a scratch space (scratch.mjs): every chat turn and Job run, not the
+// loopback MCP's other programs. It adds saveScratch, readScratch, listScratch and deleteScratch.
+/** @param {{ allowWrite?: boolean, allowVision?: boolean, remote?: boolean, personal?: boolean, tab?: boolean, job?: false | { extra?: string[], pages?: boolean }, secrets?: boolean, memory?: boolean, scratch?: boolean }} [opts] */
 export function visibleCapabilities({
   allowWrite = true,
   allowVision = false,
@@ -857,6 +915,7 @@ export function visibleCapabilities({
   job = false,
   secrets = false,
   memory = false,
+  scratch = false,
 } = {}) {
   const jobExtra = job && Array.isArray(job.extra) ? job.extra : []
   return CAPABILITIES.filter((cap) => {
@@ -870,6 +929,7 @@ export function visibleCapabilities({
     if (cap.gates?.job && !job) return false
     if (cap.gates?.secrets && !secrets) return false
     if (cap.gates?.memory && !memory) return false
+    if (cap.gates?.scratch && !scratch) return false
     if (job && (cap.gates?.personal || cap.gates?.job) && !JOB_CAPS.has(cap.name) && !jobExtra.includes(cap.name)) {
       return false
     }
@@ -929,7 +989,7 @@ function guideRecord(id, title, markdown) {
 const GUIDES = splitGuides(API_REFERENCE)
 
 export function buildCatalog(opts) {
-  const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, tab, job, secrets, memory, names, skills, ownerId } =
+  const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, tab, job, secrets, memory, scratch, names, skills, ownerId } =
     opts || {}
   const caps = visibleCapabilities({
     allowWrite,
@@ -940,6 +1000,7 @@ export function buildCatalog(opts) {
     job: personal && job ? job : false,
     secrets: !!personal && !!secrets,
     memory: !!personal && !!memory,
+    scratch: !!scratch,
   })
   return {
     capabilities: caps,

@@ -15,7 +15,8 @@ import * as jobs from '../../ai/jobs';
 import * as memory from '../../ai/memory';
 import { driveTitle, readJobSource, resolveJobWrites } from './job-source';
 import * as vault from '../../hyper/vault';
-import { readOffset, textPart, partFields } from '../../ai/text-part.mjs';
+import { readOffset, textPart, partFields, isPartial } from '../../ai/text-part.mjs';
+import { saveWhole, scratchKey } from '../../ai/scratch.mjs';
 import { addedWrites, describeSchedule, describeWrites, keepPageActions } from '../../../../shared/jobs.mjs';
 import { noteLink, jobLink, MEMORY_LINK, READER_LINK } from '../../../../shared/item-links.mjs';
 import fsAPI from './fs';
@@ -47,8 +48,9 @@ export function isVaultTool(name) {
 }
 
 // opts: ctx ({ sender }), space (a Space key from another Device's turn, else null: the sender's
-// Space), permit (permission, sender) -> Promise<boolean>.
-export async function runVaultTool(name, args, { ctx, space = null, permit }) {
+// Space), permit (permission, sender) -> Promise<boolean>, scratch (the chat's scratch store, where a
+// long Note's or post's whole text is saved; scratch.mjs).
+export async function runVaultTool(name, args, { ctx, space = null, permit, scratch = null }) {
   const permission = VAULT_TOOL_PERMS[name];
   if (name === 'highlightText') assertCanHighlight(ctx.sender, args);
   if (!(await permit(permission, ctx.sender)))
@@ -64,7 +66,12 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
     case 'readNote': {
       const note = findNote(await notes(), args);
       if (!note) throw new Error('No note with that id or title. Use listNotes to find it.');
-      return json(noteForModel(note, { offset: readOffset(args) }));
+      return json(
+        noteForModel(note, {
+          offset: readOffset(args),
+          save: (key, text) => saveWhole(scratch, key, text, 'readNote'),
+        })
+      );
     }
 
     case 'writeNote': {
@@ -129,7 +136,7 @@ export async function runVaultTool(name, args, { ctx, space = null, permit }) {
       const { follows, read } = await vaultApps.readerOf(await readerSpace());
       if (!follows.includes(post.root))
         throw new Error("That post isn't from a feed the user follows in Reader");
-      return json(await readPost(ctx, post, read, readOffset(args)));
+      return json(await readPost(ctx, post, read, readOffset(args), scratch));
     }
 
     case 'followFeed': {
@@ -317,7 +324,7 @@ async function loadFeed(ctx, root): Promise<LoadedFeed> {
 
 // A post's metadata and text: post.json, then the first body file that exists. A long post's text is
 // one part of it, from `offset` (text-part.mjs).
-async function readPost(ctx, { root, dir }, read, offset = 0) {
+async function readPost(ctx, { root, dir }, read, offset = 0, scratch = null) {
   const meta = JSON.parse(await readText(ctx, root, dir + 'post.json'));
   let feedTitle = root;
   try {
@@ -331,9 +338,12 @@ async function readPost(ctx, { root, dir }, read, offset = 0) {
       continue;
     }
     const format = file.split('.').pop();
-    const part = textPart(format === 'html' ? htmlToText(body) : body, { offset });
+    const text = format === 'html' ? htmlToText(body) : body;
+    const part = textPart(text, { offset });
+    const url = root + dir.slice(1);
+    const saved = isPartial(part) ? saveWhole(scratch, scratchKey('post', url), text, 'readReaderPost') : null;
     return {
-      url: root + dir.slice(1),
+      url,
       feedUrl: root,
       feedTitle,
       title: meta.title || '',
@@ -343,7 +353,7 @@ async function readPost(ctx, { root, dir }, read, offset = 0) {
       read: read.includes(root + dir.slice(1)),
       format,
       text: part.text,
-      ...partFields(part, 'readReaderPost', 'url'),
+      ...partFields(part, 'readReaderPost', 'url', saved),
     };
   }
   throw new Error('This post has no text file');

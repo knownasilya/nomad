@@ -13,7 +13,8 @@ import { noteTitle, noteSnippet, sortNotes, makeResolver, findLinks, driveRoot, 
 import { PRESETS, normalizeSite, describeMod } from '../../../shared/mods.mjs'
 import { describeNeed, describeSchedule, describeWrites, writePermissions } from '../../../shared/jobs.mjs'
 import { noteLink, jobLink, modLink } from '../../../shared/item-links.mjs'
-import { PART_CHARS, textPart, partFields } from './text-part.mjs'
+import { PART_CHARS, textPart, partFields, isPartial } from './text-part.mjs'
+import { scratchKey } from './scratch.mjs'
 
 // Capability -> the permission it asks for.
 export const VAULT_TOOL_PERMS = {
@@ -171,14 +172,17 @@ export function findNote(notes, { id, title } = {}) {
 
 // A Note for the model, with the titles it links to. A long Note's body is one part of it, from
 // `offset`, with where the next part starts (text-part.mjs); `links` are the whole Note's.
-export function noteForModel(note, { offset = 0 } = {}) {
+// `save(key, text)` keeps a long Note's whole body in the chat's scratch space (scratch.mjs) and
+// returns the key, or null.
+export function noteForModel(note, { offset = 0, save = null } = {}) {
   const part = textPart(note.body, { offset })
+  const saved = save && isPartial(part) ? save(scratchKey('note', note.id), note.body) : null
   return {
     id: note.id,
     title: noteTitle(note.body),
     url: noteLink(note.id),
     body: part.text,
-    ...partFields(part, 'readNote', 'id'),
+    ...partFields(part, 'readNote', 'id', saved),
     links: [...new Set(findLinks(note.body).map((l) => l.target))],
     topics: note.topics || [],
     createdAt: note.createdAt,

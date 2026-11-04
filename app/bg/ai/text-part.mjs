@@ -54,28 +54,31 @@ export function isPartial(part) {
 }
 
 // What the model is told about a part: which characters it has and how to read on. `name` is the
-// capability that reads on; `same` the argument to pass again with the offset ('id', 'url'), if any.
-export function partNote(part, name, same = '') {
+// capability that reads on; `same` the argument to pass again with the offset ('id', 'url'), if any;
+// `saved` the scratch key the whole text is saved under (scratch.mjs), if it is.
+export function partNote(part, name, same = '', saved = null) {
   const range = `characters ${part.offset}–${part.end} of ${part.length}`
+  const whole = saved ? ` The whole text is saved: readScratch({ key: ${JSON.stringify(saved)} }) gives all of it to your code.` : ''
   return part.more
     ? `This is part of the text: ${range}. To read on, call ${name} again with offset: ${part.end}` +
-        `${same ? ` and the same ${same}` : ''}.`
-    : `This is the last part of the text: ${range}.`
+        `${same ? ` and the same ${same}` : ''}.${whole}`
+    : `This is the last part of the text: ${range}.${whole}`
 }
 
 // Fields to add to a JSON result that holds a part: nothing for whole text; else where it is and
 // where the next part starts.
-export function partFields(part, name, same = '') {
+export function partFields(part, name, same = '', saved = null) {
   if (!isPartial(part)) return {}
   return {
     offset: part.offset,
     length: part.length,
     ...(part.more ? { nextOffset: part.end } : {}),
-    part: partNote(part, name, same),
+    ...(saved ? { scratch: saved } : {}),
+    part: partNote(part, name, same, saved),
   }
 }
 
 // A text result's part with its note after it, for capabilities that return the text itself.
-export function partText(part, name, same = '') {
-  return isPartial(part) ? `${part.text}\n\n[${partNote(part, name, same)}]` : part.text
+export function partText(part, name, same = '', saved = null) {
+  return isPartial(part) ? `${part.text}\n\n[${partNote(part, name, same, saved)}]` : part.text
 }

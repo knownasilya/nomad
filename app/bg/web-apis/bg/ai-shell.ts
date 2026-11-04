@@ -143,6 +143,8 @@ export default {
         steering,
         // Page control remembers "allow similar" per chat, in this window.
         pageChat: chatId ? `${shell.id}:${chatId}` : null,
+        // What the AI saves with saveScratch stays for the chat's later turns (scratch.mjs).
+        scratchScope: chatId ? `sidebar:${shell.id}:${chatId}` : null,
         // An earlier answer in this chat read the user's private data (ADR-0037).
         privateData: opts.privateData === true,
       });

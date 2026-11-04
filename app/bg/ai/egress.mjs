@@ -153,6 +153,12 @@ export function createEgressGuard({ privateData = false, trustedHosts = [], inte
       holds = true
       onPrivate?.()
     },
+    /** Something read back private data another way (the scratch space, scratch.mjs). */
+    notePrivate() {
+      if (holds) return
+      holds = true
+      onPrivate?.()
+    },
     /** Hosts the user named mid-turn (a message they steered in). */
     trust(hosts) {
       for (const h of hosts || []) {
