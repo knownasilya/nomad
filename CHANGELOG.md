@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.39.2](https://github.com/knownasilya/nomad/compare/v1.39.1...v1.39.2) (2026-11-04)
+
+
+### Bug Fixes
+
+* **mobile:** the app no longer closes at launch since Messages (1.39.0) ([3c2dab2](https://github.com/knownasilya/nomad/commit/3c2dab22e3db1ed916bbfab002bb9c4b14e926c2))
+
 ### [1.39.1](https://github.com/knownasilya/nomad/compare/v1.39.0...v1.39.1) (2026-11-03)
 
 
