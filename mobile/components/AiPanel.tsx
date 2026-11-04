@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, Activit
 import * as Clipboard from 'expo-clipboard'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme, radius, type Theme } from '../lib/theme'
-import type { AiChatHandlers, AiChatHandle } from '../lib/useBackend'
+import type { AiChatHandlers, AiChatHandle, AiPromptRequest } from '../lib/useBackend'
 import { pickImages } from '../lib/pickImages'
 import { showLabel } from '../lib/tooltip'
 import { applyToolEvent, finishSteps as finishedSteps, type Step } from '../lib/aiSteps'
@@ -112,7 +112,7 @@ interface Props {
   aiChat: (messages: unknown[], opts: Record<string, unknown>, handlers: AiChatHandlers) => AiChatHandle
   // Native consent for a relayed permission: a modifyDrive write, or Notes or Reader access (the
   // human is here on the phone).
-  onPrompt?: (permission: string) => boolean | Promise<boolean>
+  onPrompt?: (permission: string, request?: AiPromptRequest | null) => boolean | Promise<boolean>
   // Render the current Drive's Draft in the tab (set preview + reload + close the panel).
   onPreviewDraft?: (url: string) => void
   // A link in an answer: a Note, a Job, Reader, a page (lib/itemLinks.ts). Links that aren't one

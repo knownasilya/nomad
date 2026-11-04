@@ -14,6 +14,7 @@ import vaultManifest from '../manifests/internal/vault';
 import secretsManifest from '../manifests/internal/secrets';
 import webmcpDevtoolsManifest from '../manifests/internal/webmcp';
 import aiChatsManifest from '../manifests/internal/ai-chats';
+import aiSitesManifest from '../manifests/internal/ai-sites';
 import personasManifest from '../manifests/internal/personas';
 import inboxManifest from '../manifests/internal/inbox';
 
@@ -35,6 +36,7 @@ export const setup = function (rpc) {
   const secretsRPC = rpc.importAPI('secrets', secretsManifest, opts);
   const webmcpRPC = rpc.importAPI('webmcp-devtools', webmcpDevtoolsManifest, opts);
   const aiChatsRPC = rpc.importAPI('ai-chats', aiChatsManifest, opts);
+  const aiSitesRPC = rpc.importAPI('ai-sites', aiSitesManifest, opts);
   const personasRPC = rpc.importAPI('personas', personasManifest, opts);
   const inboxRPC = rpc.importAPI('inbox', inboxManifest, opts);
 
@@ -65,6 +67,9 @@ export const setup = function (rpc) {
   internal.webmcp.watch = () => fromEventStream(webmcpRPC.watch());
   // The AI Sidebar's saved chats, for nomad://ai/chats.
   internal.aiChats = Object.assign({}, aiChatsRPC);
+  // The sites the user let the AI send to for 3 months, for nomad://ai/sites.
+  internal.aiSites = Object.assign({}, aiSitesRPC);
+  internal.aiSites.watch = () => fromEventStream(aiSitesRPC.watch());
   // The user's Personas and the Sessions sites hold (ADR-0031): My Library → Personas, site-info.
   internal.personas = Object.assign({}, personasRPC);
   internal.personas.watch = () => fromEventStream(personasRPC.watch());
