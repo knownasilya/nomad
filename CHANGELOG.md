@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.42.0](https://github.com/knownasilya/nomad/compare/v1.41.1...v1.42.0) (2026-11-05)
+
+
+### Features
+
+* **mobile:** live note editing on the phone ([f97b503](https://github.com/knownasilya/nomad/commit/f97b503cf6db8acd49cdd418cf21e1ad1b85b1c0))
+
+
+### Bug Fixes
+
+* **shell:** mute the Nomad mark in the URL bar to a gray ([3e26689](https://github.com/knownasilya/nomad/commit/3e2668994f0445876773bed4d3e08a03cd1219dd))
+* **shell:** show the Nomad mark, not Beaker's, in the URL bar on nomad:// pages ([b303e44](https://github.com/knownasilya/nomad/commit/b303e446d257dfba0a4569abc4690c95238ce34a))
+
 ### [1.41.1](https://github.com/knownasilya/nomad/compare/v1.41.0...v1.41.1) (2026-11-04)
 
 
