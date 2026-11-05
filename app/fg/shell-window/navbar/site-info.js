@@ -230,9 +230,10 @@ NavbarSiteInfo.styles = [
     }
 
     /* The Nomad mark in one color: a disc with the N cut out of it, so the N shows the button's own
-       background. Dark on the light theme, light on the dark one. */
+       background. A muted gray from the bar's text color, so it doesn't outweigh the page's name. */
     .nomad-logo path {
       fill: var(--text-color--location-input);
+      opacity: 0.6;
     }
 
     .fa-user {
