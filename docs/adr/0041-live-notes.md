@@ -93,8 +93,28 @@ text, or, if the user had typed since the AI read it, the AI's text became a con
 
 - Two Devices with the same Note open no longer make conflict copies of each other's live edits.
   Offline edits on two Devices still do, as before.
-- The phone takes part only through the record: its edits fold into a desktop session, and it sees
-  the desktop's edits when the record syncs. Joining the link from the phone (its WebView editor and
-  a session in its backend) is the next step.
+- The phone joins the link too: see the amendment below.
 - Sessions close five seconds after the last page leaves (`IDLE_CLOSE_MS`), after a last save.
 - Tests: `tests/unit/note-diff.test.js`, `note-live-session.test.js`, `note-live-link.test.js`.
+
+## Amendment: the phone joins (2026-11-05)
+
+The phone runs the same sessions. The session (`shared/note-live-session.mjs`) and a Device's set of
+sessions with their link frames (`shared/note-live-hub.mjs`) moved to `shared/`, with no bare
+imports: each runtime passes in its own Yjs. The phone's backend (`mobile/backend/lib/live-notes.mjs`)
+runs them with the link over its swarm, signs with its Vault writer key and checks the computer's
+the same way. Its editor page (`app/userland/notes/js/mobile.js`, in the WebView) joins with the same
+client as nomad://notes (`live.js`, with a transport through React Native: `RPC_NOTE_LIVE`,
+`RPC_NOTE_LIVE_EVENT`), so the AI's edits on a computer and the computer's own show on the phone as
+they're typed, with their cursors, and the header shows an avatar for each. The AI's `writeNote` on a
+Note open only on the phone types into it the same way, since the phone's `OPEN` lists it.
+
+- A phone that isn't a Vault writer yet can't save the record, so it says `saves: false` on `JOIN`
+  and the leader is the lowest key among the Devices that can. An older Device sends nothing and is
+  taken to save, as before.
+- A page leaving saves at once when this Device leads, so the list shows the last edit.
+- Yjs's lib0 imports `node:crypto`, which Bare lacks, so the bundle maps it to a shim over
+  sodium (`mobile/tools/bare-imports.cjs`); `tests/unit/mobile-backend-deps.test.js` keeps the
+  phone's packages and desktop's Yjs versions in step.
+- Tests: `tests/unit/note-live-hub.test.js` (a computer and a phone joining one session, the AI
+  typing into a Note open only on the phone, a phone that can't save).

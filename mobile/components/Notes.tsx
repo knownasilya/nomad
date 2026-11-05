@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 import { useTheme, radius, type Theme } from '../lib/theme'
 import type { Backend, Note } from '../lib/useBackend'
+import { showLabel } from '../lib/tooltip'
 import editorHtml from '../lib/noteEditorHtml'
 import LinkPhone from './LinkPhone'
 import ScreenHeader from './ScreenHeader'
@@ -26,6 +27,8 @@ interface Props {
   onClose: () => void
   apps: Backend['apps']
   onVaultChange: Backend['onVaultChange']
+  noteLive: Backend['noteLive']
+  onNoteLive: Backend['onNoteLive']
   space?: string // the active Space's Root Drive key: a Space can keep notes of its own (ADR-0029)
   spaceName?: string
   onOpenDevices: () => void
@@ -39,6 +42,11 @@ interface Props {
 // inSpace: the note is kept only in the active Space.
 interface Draft { id: string | null; body: string; title: string; base: string | null; openedTitle: string | null; conflictOf: string | null; inSpace: boolean }
 
+// Who else has the open note, from the editor page: the AI while it types, the user's computers.
+interface Peer { name: string; color: string; ai: boolean }
+// The session's status (shared/note-live-session.mjs status()).
+interface LiveStatus { saving?: boolean; unsaved?: boolean; error?: string | null; ai?: boolean; updatedAt?: string | null }
+
 // The editor's formatting buttons: [command in app/userland/notes/js/editor/commands.js, label].
 const TOOLS: [string, string][] = [['heading', 'H'], ['bold', 'B'], ['italic', 'I'], ['strike', 'S'], ['bullet', '•'], ['task', '☑'], ['quote', '❝'], ['code', '</>'], ['link', '[[ ]]']]
 
@@ -49,6 +57,11 @@ const TOOLS: [string, string][] = [['heading', 'H'], ['bold', 'B'], ['italic', '
 // becomes a conflict copy. A new note left empty is never stored; an emptied one is deleted when you
 // leave it. Retitling a note updates the links to it. Another Device's edits show while this is open.
 // Back from a note reached by a [[link]] returns to the note the link was in, then to the list.
+// An open note is edited live (ADR-0041): the editor joins the note's session in the backend, which
+// joins the same note open on the user's computers, so their edits and the AI's show as they're
+// typed, with a cursor for each, and avatars in the header say who's there. The session saves the
+// note then; the save path here is for a new note's first save and for when live editing isn't
+// available (an older backend, or a note this phone can only read).
 // A note is the user's, shown in every Space, or kept only in the active Space (ADR-0029): the list
 // shows the Space's first, and the pin in the editor moves a note between the two. A new note is
 // kept in the active Space.
@@ -62,7 +75,7 @@ const TOOLS: [string, string][] = [['heading', 'H'], ['bold', 'B'], ['italic', '
 // The search box finds notes with every word typed, in their text or topics, in any order and
 // ignoring accents (lib/search.ts, desktop's rules): the list shows the line that matched with the
 // words marked, and the canvas lights up the notes that match.
-export default function Notes ({ visible, onClose, apps, onVaultChange, space, spaceName, onOpenDevices, onOpenUrl, openNoteId }: Props) {
+export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive, onNoteLive, space, spaceName, onOpenDevices, onOpenUrl, openNoteId }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const insets = useSafeAreaInsets()
@@ -122,6 +135,13 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
   const pendingHeading = useRef('')
   // The notes [[links]] were followed from to reach the open one, oldest first: back walks them.
   const trail = useRef<string[]>([])
+  // The open note's live session, as the editor page joined it, and whether the page is in step
+  // with it (from then on the session saves the note, not save() here).
+  const live = useRef<{ id: string; conn: string; synced: boolean } | null>(null)
+  // The AI's cursor shows wherever it types from (a computer), so it's what says the AI is editing.
+  const [peers, setPeers] = useState<Peer[]>([])
+  const noteLiveRef = useRef(noteLive)
+  noteLiveRef.current = noteLive
 
   const keepNotes = (list: Note[]) => {
     notesRef.current = list
@@ -131,6 +151,21 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
   // Tell the editor page something: window.__noteEditor in app/userland/notes/js/mobile.js.
   const send = useCallback((msg: Record<string, unknown>) => {
     web.current?.injectJavaScript(`window.__noteEditor && window.__noteEditor(${JSON.stringify(msg)});true;`)
+  }, [])
+
+  // The session's messages and status, for the editor page's connection.
+  useEffect(() => onNoteLive((ev) => {
+    const l = live.current
+    if (!l || ev.conn !== l.conn) return
+    send({ type: 'liveEvent', conn: ev.conn, kind: ev.kind, data: ev.data, status: ev.status })
+  }), [onNoteLive, send])
+
+  // Leave the open note's session (the backend saves what was typed first, when it leads).
+  const endLive = useCallback(async () => {
+    const l = live.current
+    live.current = null
+    setPeers([])
+    if (l) await noteLiveRef.current('close', { id: l.id, conn: l.conn })
   }, [])
 
   const load = useCallback(async () => {
@@ -161,21 +196,25 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
       const fresh = notesRef.current.find((n) => n.id === d.id)
       if (!fresh) {
         // Deleted on another Device.
+        endLive()
         trail.current = []
         draft.current = null
         ready.current = false
         setEditorOpen(false)
+      } else if (live.current?.synced && live.current.id === d.id) {
+        d.base = fresh.updatedAt // the live session already has the text
       } else if (fresh.updatedAt !== d.base) {
         Object.assign(d, { body: fresh.body, title: fresh.title, base: fresh.updatedAt, openedTitle: fresh.title })
         send({ type: 'setText', body: fresh.body })
       }
     })
-  }, [visible, onVaultChange, load, send])
+  }, [visible, onVaultChange, load, send, endLive])
 
   const showDraft = useCallback((focus: boolean) => {
     const d = draft.current
     if (!d) return
-    send({ type: 'load', theme: t, id: d.id, body: d.body, notes: notesRef.current, readOnly: !writable || (d.inSpace && !canWriteSpace), focus, heading: pendingHeading.current })
+    const readOnly = !writable || (d.inSpace && !canWriteSpace)
+    send({ type: 'load', theme: t, id: d.id, body: d.body, notes: notesRef.current, readOnly, focus, heading: pendingHeading.current, live: !!d.id && !readOnly })
     pendingHeading.current = ''
   }, [send, t, writable, canWriteSpace])
 
@@ -225,6 +264,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
   // whose title changed gets the links to it updated (like a rename in Obsidian).
   const leave = useCallback(async () => {
     const target = draft.current
+    await endLive()
     await save()
     if (!target || !target.id || !writable) return
     if (!target.body.trim()) {
@@ -236,7 +276,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
       const res = await call<number>('notes', 'renameLinks', { id: target.id, from: target.openedTitle, to: target.title })
       if (res.ok && res.value) await load()
     }
-  }, [call, save, writable, load])
+  }, [call, save, writable, load, endLive])
 
   const openEditor = (note: Note | null, { body = '', heading = '' } = {}) => {
     draft.current = note
@@ -248,6 +288,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
     pendingHeading.current = heading
     setStatus('')
     setBanner(null)
+    setPeers([])
     if (ready.current) showDraft(!note)
     else setEditorOpen(true) // the page loads, says 'ready', and then gets the note
     if (dirty.current) save()
@@ -323,6 +364,10 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
     if (msg.type === 'ready') {
       ready.current = true
       showDraft(!d?.id)
+    } else if (msg.type === 'change' && d && msg.live && live.current?.synced) {
+      // Anyone's edit, in the live session: it saves them.
+      d.body = msg.body
+      d.title = msg.title
     } else if (msg.type === 'change' && d) {
       d.body = msg.body
       d.title = msg.title
@@ -330,6 +375,35 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
       setStatus('')
       if (timer.current) clearTimeout(timer.current)
       timer.current = setTimeout(save, SAVE_DELAY)
+    } else if (msg.type === 'liveOpen' && d && d.id === msg.id) {
+      const l = { id: msg.id, conn: msg.conn, synced: false }
+      live.current = l
+      noteLive<{ me: { name: string; key: string } }>('open', { id: msg.id, conn: msg.conn, space }).then((res) => {
+        if (live.current !== l) return
+        if (res.ok && res.value) send({ type: 'liveMe', conn: l.conn, me: res.value.me })
+        else send({ type: 'liveEvent', conn: l.conn, kind: 'failed', message: res.message || 'Live editing is not available' })
+      })
+    } else if (msg.type === 'liveSend') {
+      if (live.current && live.current.conn === msg.conn) noteLive('send', { id: msg.id, conn: msg.conn, data: msg.data })
+    } else if (msg.type === 'liveClose') {
+      if (live.current && live.current.conn === msg.conn) endLive()
+    } else if (msg.type === 'liveSynced' && live.current && live.current.id === msg.id) {
+      // The session saves from here on. Anything typed before it's in step went into it.
+      live.current.synced = true
+      if (timer.current) { clearTimeout(timer.current); timer.current = null }
+      dirty.current = false
+    } else if (msg.type === 'liveOff') {
+      // No live editing: save the note from here, as before.
+      if (live.current && live.current.id === msg.id) { live.current = null; setPeers([]) }
+    } else if (msg.type === 'liveStatus' && d && d.id === msg.id) {
+      const st: LiveStatus = msg.status || {}
+      if (st.updatedAt) d.base = st.updatedAt
+      if (st.error) setStatus('Not saved: ' + st.error)
+      else if (st.ai) setStatus('AI is editing…')
+      else if (st.saving || st.unsaved) setStatus('Saving…')
+      else setStatus((prev) => (prev === 'Saving…' || prev === 'AI is editing…' ? 'Saved' : prev))
+    } else if (msg.type === 'livePeers' && d && d.id === msg.id) {
+      setPeers(Array.isArray(msg.others) ? msg.others : [])
     } else if (msg.type === 'openNote') {
       openLinked(msg.id, msg.heading || '')
     } else if (msg.type === 'createNote') {
@@ -371,6 +445,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
           if (timer.current) clearTimeout(timer.current)
           if (saving.current) await saving.current
           dirty.current = false
+          await endLive()
           const res = await call('notes', 'delete', { id: target.id })
           if (!res.ok) return Alert.alert('Couldn’t delete', res.message || 'Unknown error')
           keepNotes(notesRef.current.filter((n) => n.id !== target.id))
@@ -439,7 +514,27 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, space, s
           <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <View style={s.header}>
               <IconButton icon='arrow-left' label='Back' onPress={backFromEditor} color={t.text} />
-              <Text numberOfLines={1} style={s.status}>{editable ? status : writable ? 'You can view this Space’s notes' : 'Read only for now'}</Text>
+              <Text numberOfLines={1} style={s.status}>{editable ? (peers.some((p) => p.ai) ? 'AI is editing…' : status) : writable ? 'You can view this Space’s notes' : 'Read only for now'}</Text>
+              {peers.length ? (
+                <View style={s.peers}>
+                  {peers.map((p) => {
+                    const label = p.ai ? 'AI is editing this note' : `${p.name} has this note open`
+                    return (
+                      <Pressable
+                        key={(p.ai ? 'ai:' : 'dev:') + p.name}
+                        style={[s.avatar, { backgroundColor: p.color }]}
+                        onPress={() => showLabel(label)}
+                        onLongPress={() => showLabel(label)}
+                        accessibilityRole='image'
+                        accessibilityLabel={label}
+                        hitSlop={6}
+                      >
+                        {p.ai ? <Icon name='robot' size={12} color='#fff' /> : <Text style={s.avatarText}>{initials(p.name)}</Text>}
+                      </Pressable>
+                    )
+                  })}
+                </View>
+              ) : null}
               {space ? (
                 shared ? (
                   <IconButton
@@ -705,11 +800,20 @@ function relativeDate (iso: string): string {
   return d.toLocaleDateString(undefined, d.getFullYear() === today.getFullYear() ? { month: 'short', day: 'numeric' } : { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
+// A person's or device's initials, for its avatar.
+function initials (name: string) {
+  const parts = String(name || '?').trim().split(/\s+/)
+  return ((parts[0] || '?')[0] + (parts[1] ? parts[1][0] : '')).toUpperCase()
+}
+
 function makeStyles (t: Theme) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: t.bg },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4, height: 56, gap: 8 },
     status: { flex: 1, color: t.textMuted, fontSize: 12, textAlign: 'center' },
+    peers: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    avatar: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: t.bg },
+    avatarText: { color: '#fff', fontSize: 11, fontWeight: '700' },
     banner: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 12, marginBottom: 8, padding: 10, borderRadius: radius.md, backgroundColor: t.surfaceAlt },
     bannerText: { flex: 1, color: t.text, fontSize: 13, lineHeight: 18 },
     bannerAction: { color: t.accent, fontSize: 13, fontWeight: '600' },

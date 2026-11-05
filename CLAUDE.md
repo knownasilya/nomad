@@ -237,18 +237,28 @@ canvas or either graph.
 
 ### Live Notes (ADR-0041)
 
-An open Note is edited live: a Yjs session per open Note in bg (`app/bg/notes/live-note.mjs`,
-`LiveNote`; wiring in `app/bg/notes/live-notes.js`) that every nomad://notes tab joins
-(`nomad.vault.openLiveNote`/`liveNoteSend`, `notes/js/live.js`, bound with `yCollab`) and that the same
-Note's session on the user's other Devices joins over `shared/note-live.mjs` (Protomux
+An open Note is edited live: a Yjs session per open Note (`shared/note-live-session.mjs`, `LiveNote`)
+and the sessions of one Device with their link frames (`shared/note-live-hub.mjs`), run by desktop's
+bg (`app/bg/notes/live-note.mjs` gives it Yjs, `app/bg/notes/live-notes.js` wires it) and by the
+phone's backend (`mobile/backend/lib/live-notes.mjs`). Every nomad://notes tab joins it
+(`nomad.vault.openLiveNote`/`liveNoteSend`, `notes/js/live.js`, bound with `yCollab`), the phone's
+editor page too (`notes/js/mobile.js`, the same client over React Native and `RPC_NOTE_LIVE`), and
+the same Note's session on the user's other Devices joins over `shared/note-live.mjs` (Protomux
 `nomad/note-live`, each side signs `proofMessage(nonce, handshakeHash)` with its Vault writer key
 before any Note frame). The record stays the Note: the session is seeded from it (a deterministic
-seed client id, so two Devices don't double the text) and the **leader** (lowest Device key in the
-session) writes it back and folds outside changes in (`shared/note-diff.mjs`). The AI's `writeNote`
-on an open Note types its edits in with its own cursor (`aiEdit`, from the text `readNote` gave it);
-when they touch text the user changed, it falls back to a conflict copy. The phone isn't on the link
-yet: its edits arrive through the record. Tests: `tests/unit/note-diff.test.js`,
-`note-live-session.test.js`, `note-live-link.test.js`.
+seed client id, so two Devices don't double the text) and the **leader** (lowest key among the
+session's Devices that can write the Vault, `saves` on `JOIN`) writes it back and folds outside
+changes in (`shared/note-diff.mjs`). The AI's `writeNote` on an open Note (here or on the phone)
+types its edits in with its own cursor (`aiEdit`, from the text `readNote` gave it); when they touch
+text the user changed, it falls back to a conflict copy. Tests: `tests/unit/note-diff.test.js`,
+`note-live-session.test.js`, `note-live-link.test.js`, `note-live-hub.test.js`.
+
+**Yjs on the phone's Bare worklet:** `yjs`, `y-protocols` and `lib0` are in `mobile/package.json`
+at desktop's versions, and lib0's `node:crypto` import is mapped to
+`mobile/backend/lib/node-crypto-shim.mjs` by `--imports tools/bare-imports.cjs` in `npm run bundle`
+(without it the bundle fails: Bare has no `node:crypto`). `tests/unit/mobile-backend-deps.test.js`
+checks every package the backend reaches is in `mobile/package-lock.json`. The phone's editor page
+is built with Vite `resolve.dedupe` on Yjs, so y-codemirror.next and the rest share one copy.
 
 ### Names (ADR-0018)
 

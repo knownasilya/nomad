@@ -22,6 +22,7 @@ import Protomux from 'protomux'
 import c from 'compact-encoding'
 import { createDevicePresence } from '../../shared/device-presence.mjs'
 import { createLogStore } from './lib/log-store.mjs'
+import { createPhoneLiveNotes } from './lib/live-notes.mjs'
 import {
   RPC_OPEN,
   RPC_CLOSE,
@@ -65,6 +66,9 @@ import {
   RPC_LOGS,
   RPC_LOGS_RESULT,
   RPC_VAULT_CHANGED,
+  RPC_NOTE_LIVE,
+  RPC_NOTE_LIVE_RESULT,
+  RPC_NOTE_LIVE_EVENT,
   DRIVE_HYPERDRIVE,
   DRIVE_AUTOBASE
 } from '../rpc-commands.mjs'
@@ -131,7 +135,10 @@ let personaWritersTimer = null // syncPersonaWriters, below
 let personaWritersRun = null
 function vaultChanged () {
   clearTimeout(vaultChangedTimer)
-  vaultChangedTimer = setTimeout(() => send(RPC_VAULT_CHANGED, {}), 400)
+  vaultChangedTimer = setTimeout(() => {
+    send(RPC_VAULT_CHANGED, {})
+    liveNotes.recordsChanged().catch(() => {})
+  }, 400)
 }
 
 function setVault (base) {
@@ -218,6 +225,14 @@ const presence = createDevicePresence({
   b4a,
   getVaultKey: () => (vault && vault.key ? b4a.toString(vault.key, 'hex') : null),
   getDeviceKey: () => (vault && vault.local?.key ? b4a.toString(vault.local.key, 'hex') : null)
+})
+// Live Notes (ADR-0041, lib/live-notes.mjs): the Note open in the editor is a session joined to the
+// same Note open on the user's computers. Late-bound to the Vault like the two above.
+const liveNotes = createPhoneLiveNotes({
+  swarm: manager.swarm,
+  store,
+  getVault: () => vault,
+  emit: (event) => send(RPC_NOTE_LIVE_EVENT, event)
 })
 // Set once we've seen THIS device's own record in the Vault index. If it later disappears while the
 // index still holds other records, this device was removed on another device — see handleVaultStatus.
@@ -343,6 +358,7 @@ manager.onHostingBytes = (n) => {
       // fully guarded so it can never throw into the swarm emitter.
       aiBridge.install()
       presence.install()
+      liveNotes.install()
     } catch (err) {
       // leave vault null; the UI will show an unpaired state and can retry
     }
@@ -378,10 +394,21 @@ const rpc = new RPC(IPC, (req) => {
   else if (req.command === RPC_AI_STEER_NOW) handleAiSteer('now', msg)
   else if (req.command === RPC_APPS) handleApps(msg)
   else if (req.command === RPC_LOGS) handleLogs(msg)
+  else if (req.command === RPC_NOTE_LIVE) handleNoteLive(msg)
 })
 
 // The Logs page: this session's lines after `since`, and the previous session's when asked (to read
 // what happened before a crash).
+// Live Notes (ADR-0041). 'send' carries the editor's keystrokes, so it gets no reply.
+async function handleNoteLive (msg) {
+  try {
+    const value = await liveNotes.handle(msg)
+    if (msg.action !== 'send') send(RPC_NOTE_LIVE_RESULT, { reqId: msg.reqId, ok: true, value })
+  } catch (err) {
+    if (msg.action !== 'send') send(RPC_NOTE_LIVE_RESULT, { reqId: msg.reqId, ok: false, message: err.message || String(err) })
+  }
+}
+
 function handleLogs ({ reqId, since = 0, previous = false }) {
   try {
     send(RPC_LOGS_RESULT, { reqId, ok: true, entries: logStore ? logStore.since(since) : [], ...(previous ? { previous: logStore ? logStore.previous() : [] } : {}) })
@@ -926,6 +953,7 @@ async function handleRemoveDevice ({ reqId, deviceKey, self = false }) {
       setVault(null)
       ownDeviceSeen = false
       presence.reset()
+      liveNotes.reset()
       try { if (fs.existsSync(vaultKeyPath)) fs.unlinkSync(vaultKeyPath) } catch {}
       if (base) {
         removeDevice(base, deviceKey).catch(() => {}).then(() => base.close().catch(() => {}))
@@ -1093,7 +1121,7 @@ async function handlePairSubmit ({ reqId, code, name = 'Mobile device' }) {
     // the UI — it only needs to know pairing succeeded. The Vault opens in the background;
     // vaultStatus() reflects it once ready.
     send(RPC_PAIRED, { reqId, ok: true, vaultKey, deviceKey })
-    openVault(store, manager.swarm, vaultKey).then((b) => { setVault(b); aiBridge.install(); presence.install() }).catch(() => {})
+    openVault(store, manager.swarm, vaultKey).then((b) => { setVault(b); aiBridge.install(); presence.install(); liveNotes.install() }).catch(() => {})
   } catch (err) {
     send(RPC_PAIRED, { reqId, ok: false, message: err.message || String(err) })
   }
@@ -1130,6 +1158,7 @@ async function handleVaultStatus ({ reqId, spaceKeys = [], ownSpaces = null, own
       setVault(null)
       ownDeviceSeen = false
       presence.reset()
+      liveNotes.reset()
       try { if (fs.existsSync(vaultKeyPath)) fs.unlinkSync(vaultKeyPath) } catch {}
       if (base) base.close().catch(() => {})
       send(RPC_VAULT, { reqId, hasVault: false, removed: true })
@@ -1156,8 +1185,10 @@ async function handleVaultStatus ({ reqId, spaceKeys = [], ownSpaces = null, own
         console.log('[vault] publishOwnVersion failed', err && err.message)
       }
     }
-    // Make sure the presence channel is up on live connections (cheap re-scan; no-op when it is).
+    // Make sure the presence and live-note channels are up on live connections (cheap re-scan;
+    // no-op when they are).
     presence.install()
+    liveNotes.install()
     send(RPC_VAULT, {
       reqId,
       hasVault: true,
