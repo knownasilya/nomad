@@ -11,6 +11,7 @@ import * as encoding from 'lib0/encoding'
 import * as decoding from 'lib0/decoding'
 import { LiveNote, MSG_SYNC, MSG_AWARENESS } from '../../app/bg/notes/live-note.mjs'
 import { createLiveNotes } from '../../shared/note-live-hub.mjs'
+import { forgetClients } from '../../app/userland/notes/js/live.js'
 
 // Just what the hub uses of b4a.
 const b4a = {
@@ -92,6 +93,13 @@ async function page (dev, conn) {
   const awareness = new awarenessProtocol.Awareness(doc)
   awareness.setLocalStateField('user', { name: conn })
   const seen = [] // every user state that showed up
+  awareness.on('update', ({ added, updated, removed }, origin) => {
+    if (origin === 'hub') return forgetClients(awareness, removed) // as live.js does
+    const e = encoding.createEncoder()
+    encoding.writeVarUint(e, MSG_AWARENESS)
+    encoding.writeVarUint8Array(e, awarenessProtocol.encodeAwarenessUpdate(awareness, [...added, ...updated, ...removed]))
+    toHub(encoding.toUint8Array(e))
+  })
   awareness.on('change', () => {
     for (const st of awareness.getStates().values()) if (st && st.user) seen.push(st.user)
   })
@@ -185,6 +193,31 @@ describe('live Notes across a computer and a phone', () => {
     await desktop.notes.session(ID).flush()
     expect(vault.rec.body).toBe('Draft two')
     expect(vault.writes).toEqual([DESKTOP])
+  })
+
+  it('shows the phone’s cursor again at once when the Devices reconnect', async () => {
+    const vault = vaultOf('Draft')
+    const desktop = device(DESKTOP, vault)
+    const phone = device(PHONE, vault)
+    connect(desktop, phone)
+    const onDesktop = await page(desktop, 'desktop-page')
+    const onPhone = await page(phone, 'phone-page')
+    await until(() => onPhone.text.toString() === 'Draft' && onDesktop.text.toString() === 'Draft')
+    onPhone.awareness.setLocalStateField('cursor', {
+      anchor: Y.createRelativePositionFromTypeIndex(onPhone.text, 1),
+      head: Y.createRelativePositionFromTypeIndex(onPhone.text, 3)
+    })
+    const phoneOnDesktop = () => onDesktop.awareness.getStates().get(onPhone.doc.clientID)
+    await until(() => phoneOnDesktop()?.cursor)
+
+    // The connection drops and comes back. Nothing on the phone changes meanwhile, so its
+    // awareness clock is the one the computer already saw.
+    desktop.notes.onPeer(PHONE, false)
+    phone.notes.onPeer(DESKTOP, false)
+    await until(() => !phoneOnDesktop())
+    connect(desktop, phone)
+    await until(() => phoneOnDesktop()?.cursor, 500) // not after the 15 s renewal
+    expect(phoneOnDesktop().user).toEqual({ name: 'phone-page' })
   })
 
   it('saves the phone’s last edit as its page leaves, then closes the session', async () => {

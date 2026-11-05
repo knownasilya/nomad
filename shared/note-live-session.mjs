@@ -250,6 +250,11 @@ export function makeLiveNote({ Y, syncProtocol, awarenessProtocol, encoding, dec
       for (const c of removed) for (const p of this.peers.values()) p.clients.delete(c);
       const changed = [...added, ...updated, ...removed];
       if (changed.length) this._toAll(this._awarenessMsg(changed), peer ? origin : null);
+      // A client that left comes back with the clock it had (its Device reconnects), and
+      // y-protocols ignores a state no newer than the one it remembers: forget its clock too, once
+      // the removal is sent on, so it shows again at once.
+      const aw = this.awareness;
+      for (const c of removed) if (c !== aw.clientID && !aw.states.has(c)) aw.meta.delete(c);
     }
 
     // Replace the document with another session's (`update` is its whole state, `info` its seed).
