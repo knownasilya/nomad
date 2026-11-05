@@ -250,7 +250,7 @@ seed client id, so two Devices don't double the text) and the **leader** (lowest
 session's Devices that can write the Vault, `saves` on `JOIN`) writes it back and folds outside
 changes in (`shared/note-diff.mjs`). The AI's `writeNote` on an open Note (here or on the phone)
 types its edits in with its own cursor (`aiEdit`, from the text `readNote` gave it); when they touch
-text the user changed, it falls back to a conflict copy. Tests: `tests/unit/note-diff.test.js`,
+text the user changed, it falls back to a conflict copy. Cursors and selections are awareness `cursor`s, drawn by yCollab. The phone's editor sends its own with `shareCursor` (`notes/js/mobile.js`), because yCollab and CodeMirror's `view.hasFocus` ask `document.hasFocus()`, which Android's WebView often answers false. Every awareness that relays others (the session, `live.js`) forgets a removed client's clock (`forgetClients`), so a Device that reconnects shows again at once and not after the 15 s renewal. Tests: `tests/unit/note-diff.test.js`,
 `note-live-session.test.js`, `note-live-link.test.js`, `note-live-hub.test.js`.
 
 **Yjs on the phone's Bare worklet:** `yjs`, `y-protocols` and `lib0` are in `mobile/package.json`

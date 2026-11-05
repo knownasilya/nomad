@@ -23,7 +23,8 @@
 // note open on the user's computers, and the AI on a computer types into it with its own cursor.
 // React Native stops saving the note itself once the page says liveSynced: the session saves.
 
-import { keymap } from '@codemirror/view';
+import { keymap, ViewPlugin } from '@codemirror/view';
+import * as Y from 'yjs';
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next';
 import { createNoteEditor } from './editor/index.js';
 import { connectLiveNote, colorFor, setYText } from './live.js';
@@ -218,6 +219,31 @@ function stopLive() {
   post({ type: 'livePeers', id: was.id, others: [] });
 }
 
+// This phone's cursor and selection, for the others. yCollab sends them only while
+// view.hasFocus, which asks document.hasFocus(), and Android's WebView often says false while the
+// editor has focus and the keyboard is up: the computer showed the phone's cursor only now and
+// then. Send them whenever the editor is the focused element.
+const shareCursor = (ytext, awareness) =>
+  ViewPlugin.define(() => ({
+    update(u) {
+      if (u.view.root.activeElement !== u.view.contentDOM) return;
+      if (!(u.selectionSet || u.docChanged || u.focusChanged)) return;
+      const state = awareness.getLocalState();
+      if (!state) return;
+      const { anchor, head } = u.state.selection.main;
+      const a = Y.createRelativePositionFromTypeIndex(ytext, anchor);
+      const h = Y.createRelativePositionFromTypeIndex(ytext, head);
+      const was = state.cursor;
+      if (
+        was &&
+        Y.compareRelativePositions(Y.createRelativePositionFromJSON(was.anchor), a) &&
+        Y.compareRelativePositions(Y.createRelativePositionFromJSON(was.head), h)
+      )
+        return;
+      awareness.setLocalStateField('cursor', { anchor: a, head: h });
+    },
+  }));
+
 // Swap the editor for one bound to the session, keeping the cursor and focus.
 function bindLive(conn) {
   if (!editor) return;
@@ -227,7 +253,11 @@ function bindLive(conn) {
   document.getElementById('editor').replaceChildren();
   const text = conn.ytext.toString();
   // Undo takes back this phone's own edits, never the AI's or a computer's.
-  makeEditor(text, [yCollab(conn.ytext, conn.awareness), keymap.of(yUndoManagerKeymap)]);
+  makeEditor(text, [
+    yCollab(conn.ytext, conn.awareness),
+    shareCursor(conn.ytext, conn.awareness),
+    keymap.of(yUndoManagerKeymap),
+  ]);
   const clamp = (n) => Math.min(n, text.length);
   editor.view.dispatch({ selection: { anchor: clamp(anchor), head: clamp(head) } });
   if (hadFocus) editor.focus();

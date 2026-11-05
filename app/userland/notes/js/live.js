@@ -26,6 +26,14 @@ export function colorFor(key) {
   return COLORS[h % COLORS.length];
 }
 
+// A collaborator who left (their Device's connection dropped, or their state timed out) comes
+// back with the same awareness clock it had, and y-protocols ignores a state no newer than the
+// clock it remembers, so they'd stay hidden until their next cursor move or 15 s renewal. Forget
+// the clock with the state. The session does the same (shared/note-live-session.mjs).
+export function forgetClients(awareness, clients) {
+  for (const c of clients) if (c !== awareness.clientID && !awareness.states.has(c)) awareness.meta.delete(c);
+}
+
 export const canLive = () => typeof window.nomad?.vault?.openLiveNote === 'function';
 
 function b64(bytes) {
@@ -173,6 +181,7 @@ export function connectLiveNote({
   });
   awareness.on('update', ({ added, updated, removed }, origin) => {
     if (origin === 'local') sendAwareness([...added, ...updated, ...removed]);
+    else forgetClients(awareness, removed);
   });
   awareness.on('change', () => onPeers());
 
