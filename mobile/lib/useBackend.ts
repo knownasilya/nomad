@@ -50,7 +50,10 @@ import {
   RPC_APPS_RESULT,
   RPC_LOGS,
   RPC_LOGS_RESULT,
-  RPC_VAULT_CHANGED
+  RPC_VAULT_CHANGED,
+  RPC_NOTE_LIVE,
+  RPC_NOTE_LIVE_RESULT,
+  RPC_NOTE_LIVE_EVENT
 } from '../rpc-commands.mjs'
 import type { LogEntry } from './log'
 
@@ -162,7 +165,15 @@ export interface Backend {
   // Call `listener` whenever the Vault changes, here or on another Device (RPC_VAULT_CHANGED).
   // Returns the function that stops it. The same function on every render.
   onVaultChange: (listener: () => void) => () => void
+  // Live editing of an open Note (ADR-0041, backend/lib/live-notes.mjs): 'open' joins its session
+  // as `conn` and 'close' leaves it (both resolve); 'send' passes on one of the editor's messages.
+  noteLive: <T = unknown>(action: 'open' | 'send' | 'close', args: { id: string; conn: string; data?: string; space?: string }) => Promise<AppsResult<T>>
+  // Call `listener` with each RPC_NOTE_LIVE_EVENT. Returns the function that stops it.
+  onNoteLive: (listener: (event: NoteLiveEvent) => void) => () => void
 }
+
+// The session's side of a live Note, for the editor `conn`.
+export interface NoteLiveEvent { id: string; conn: string; kind: 'message' | 'status'; data?: string; status?: Record<string, unknown> }
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
@@ -322,6 +333,11 @@ export function useBackend (handlers: BackendHandlers): Backend {
     vaultListeners.current.add(listener)
     return () => { vaultListeners.current.delete(listener) }
   }).current
+  const noteLiveListeners = useRef(new Set<(event: NoteLiveEvent) => void>())
+  const onNoteLive = useRef((listener: (event: NoteLiveEvent) => void) => {
+    noteLiveListeners.current.add(listener)
+    return () => { noteLiveListeners.current.delete(listener) }
+  }).current
 
   useEffect(() => {
     const worklet = new Worklet()
@@ -369,11 +385,14 @@ export function useBackend (handlers: BackendHandlers): Backend {
       else if (req.command === RPC_VAULT_CHANGED) {
         for (const listener of [...vaultListeners.current]) listener()
       }
+      else if (req.command === RPC_NOTE_LIVE_EVENT) {
+        for (const listener of [...noteLiveListeners.current]) listener(msg)
+      }
       else if (req.command === RPC_AI_EVENT) {
         // Streaming: many frames per reqId, so the sink stays registered until it sees done|error.
         aiStreams.current[msg.reqId]?.(msg)
       }
-      else if (req.command === RPC_CREATED || req.command === RPC_PAIRED || req.command === RPC_VAULT || req.command === RPC_FS_RESULT || req.command === RPC_SPACE_DRIVES_RESULT || req.command === RPC_BOOKMARKS_RESULT || req.command === RPC_HOSTING_RESULT || req.command === RPC_NOMAD_RESULT || req.command === RPC_APPS_RESULT || req.command === RPC_LOGS_RESULT) {
+      else if (req.command === RPC_CREATED || req.command === RPC_PAIRED || req.command === RPC_VAULT || req.command === RPC_FS_RESULT || req.command === RPC_SPACE_DRIVES_RESULT || req.command === RPC_BOOKMARKS_RESULT || req.command === RPC_HOSTING_RESULT || req.command === RPC_NOMAD_RESULT || req.command === RPC_APPS_RESULT || req.command === RPC_LOGS_RESULT || req.command === RPC_NOTE_LIVE_RESULT) {
         pending.current[msg.reqId]?.(msg)
         delete pending.current[msg.reqId]
       }
@@ -556,6 +575,24 @@ export function useBackend (handlers: BackendHandlers): Backend {
     },
     apps: (app, action, args) => appsCall(app, action, args),
     onVaultChange,
+    noteLive<T> (action: 'open' | 'send' | 'close', args: { id: string; conn: string; data?: string; space?: string }) {
+      return new Promise<AppsResult<T>>((resolve) => {
+        const rpc = rpcRef.current
+        if (!rpc) return resolve({ ok: false, message: 'backend not ready' })
+        if (action === 'send') {
+          rpc.request(RPC_NOTE_LIVE).send(b4a.from(JSON.stringify({ action, ...args })))
+          return resolve({ ok: true })
+        }
+        const reqId = `nl_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
+        // An older backend never answers: the editor then saves the note as before.
+        const timer = setTimeout(() => {
+          if (pending.current[reqId]) { delete pending.current[reqId]; resolve({ ok: false, message: 'backend did not respond' }) }
+        }, 8000)
+        pending.current[reqId] = (msg: AppsResult<T>) => { clearTimeout(timer); resolve(msg) }
+        rpc.request(RPC_NOTE_LIVE).send(b4a.from(JSON.stringify({ reqId, action, ...args })))
+      })
+    },
+    onNoteLive,
     aiChat: (messages, opts, handlers) => aiChat(messages, opts, handlers),
     fsList: (driveType, key, ns, path) => fsCall(RPC_FS_LIST, { driveType, key, ns, path }),
     fsRead: (driveType, key, ns, path) => fsCall(RPC_FS_READ, { driveType, key, ns, path }),

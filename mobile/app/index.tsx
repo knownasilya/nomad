@@ -1391,6 +1391,8 @@ export default function Browser () {
         openNoteId={notesScreen?.name === 'notes' ? notesScreen.noteId : undefined}
         apps={backend.apps}
         onVaultChange={backend.onVaultChange}
+        noteLive={backend.noteLive}
+        onNoteLive={backend.onNoteLive}
         space={spacesApi.activeSpace.rootDriveKey || undefined}
         spaceName={spacesApi.activeSpace.name}
         onOpenDevices={() => openScreen({ name: 'devices' })}

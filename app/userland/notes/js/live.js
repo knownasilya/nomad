@@ -2,6 +2,8 @@
 // with the session in bg (bg/notes/live-notes.js) over nomad.vault.openLiveNote / liveNoteSend.
 // The session joins the same Note open on the user's other Devices, and the AI types into it, so
 // the editor (bound with yCollab) shows their edits as they happen and their cursors.
+// The phone's editor (./mobile.js) uses the same client with its own transport, through React
+// Native to the session in the phone's backend (mobile/backend/lib/live-notes.mjs).
 
 import * as Y from 'yjs';
 import * as syncProtocol from 'y-protocols/sync';
@@ -52,14 +54,43 @@ export function setYText(ytext, want) {
   });
 }
 
+// How a page reaches the session: transport(conn, { status, failed, message }) starts it and
+// returns { send(base64), close() }. `status(st)`, `failed({ message })` and `message({ data })`
+// are the session's events for this page. This one is desktop's, over nomad.vault.
+export function vaultTransport(id) {
+  return (conn, on) => {
+    const stream = nomad.vault.openLiveNote(id, conn);
+    stream.addEventListener('status', (e) => on.status(e));
+    stream.addEventListener('failed', (e) => on.failed(e));
+    stream.addEventListener('message', (e) => on.message(e));
+    return {
+      send: (b64) => nomad.vault.liveNoteSend(id, conn, b64).catch(() => {}),
+      close() {
+        try {
+          stream.close();
+        } catch {}
+      },
+    };
+  };
+}
+
 /**
  * Join Note `id`'s session. `user` is { name, color, colorLight } for this page's cursor.
  * onStatus(status)   the session's { saving, unsaved, error, devices, ai, updatedAt }
  * onPeers()          someone joined, left, or moved their cursor
  * onReset()          the session took another Device's document: connect again
- * Returns { ydoc, ytext, awareness, whenSynced, others(), destroy() }.
+ * transport          how to reach the session (vaultTransport by default)
+ * Returns { conn, ydoc, ytext, awareness, whenSynced, others(), setUser(user), destroy() }.
  */
-export function connectLiveNote({ id, user, onStatus = () => {}, onPeers = () => {}, onReset = () => {} }) {
+export function connectLiveNote({
+  id,
+  user,
+  onStatus = () => {},
+  onPeers = () => {},
+  onReset = () => {},
+  transport = vaultTransport(id),
+  timeoutMs = SYNC_TIMEOUT_MS,
+}) {
   const ydoc = new Y.Doc();
   const ytext = ydoc.getText('text');
   const awareness = new awarenessProtocol.Awareness(ydoc);
@@ -73,12 +104,15 @@ export function connectLiveNote({ id, user, onStatus = () => {}, onPeers = () =>
     resolveSynced = resolve;
     rejectSynced = reject;
   });
-  const timer = setTimeout(() => rejectSynced(new Error('The note did not load in time')), SYNC_TIMEOUT_MS);
+  const timer = setTimeout(() => rejectSynced(new Error('The note did not load in time')), timeoutMs);
   whenSynced.catch(() => {}).finally(() => clearTimeout(timer));
 
+  let link = null;
+  const early = []; // sent before the transport is up (a transport may answer at once)
   const send = (bytes) => {
     if (closed) return;
-    nomad.vault.liveNoteSend(id, conn, b64(bytes)).catch(() => {});
+    if (link) link.send(b64(bytes));
+    else early.push(b64(bytes));
   };
   const sendAwareness = (clients) => {
     const enc = encoding.createEncoder();
@@ -97,13 +131,7 @@ export function connectLiveNote({ id, user, onStatus = () => {}, onPeers = () =>
     sendAwareness([ydoc.clientID]);
   };
 
-  const stream = nomad.vault.openLiveNote(id, conn);
-  stream.addEventListener('status', (e) => {
-    ask();
-    onStatus(e);
-  });
-  stream.addEventListener('failed', (e) => rejectSynced(new Error(e.message || 'Live editing is not available')));
-  stream.addEventListener('message', (e) => {
+  const onMessage = (e) => {
     if (closed) return;
     try {
       const bytes = unb64(e.data);
@@ -124,7 +152,17 @@ export function connectLiveNote({ id, user, onStatus = () => {}, onPeers = () =>
     } catch (err) {
       console.warn('[notes] bad live message', err);
     }
+  };
+  link = transport(conn, {
+    status: (e) => {
+      if (closed) return;
+      ask();
+      onStatus(e);
+    },
+    failed: (e) => rejectSynced(new Error((e && e.message) || 'Live editing is not available')),
+    message: onMessage,
   });
+  for (const m of early.splice(0)) link.send(m);
 
   ydoc.on('update', (update, origin) => {
     if (origin === FROM_HUB) return;
@@ -149,19 +187,21 @@ export function connectLiveNote({ id, user, onStatus = () => {}, onPeers = () =>
   };
 
   return {
+    conn,
     ydoc,
     ytext,
     awareness,
     whenSynced,
     others,
+    setUser(next) {
+      if (!closed) awareness.setLocalStateField('user', next);
+    },
     destroy() {
       if (closed) return;
       awarenessProtocol.removeAwarenessStates(awareness, [ydoc.clientID], 'local');
       closed = true;
       clearTimeout(timer);
-      try {
-        stream.close();
-      } catch {}
+      link?.close();
       awareness.destroy();
       ydoc.destroy();
     },

@@ -25,6 +25,9 @@ const result = await vite.build({
     lib: { entry, formats: ['iife'], name: 'NoteEditor', fileName: () => 'note-editor.js' },
   },
   define: { 'process.env.NODE_ENV': '"production"' },
+  // One Yjs: y-codemirror.next is only in the repo root's node_modules, the rest of the editor
+  // finds app/'s copy, and two copies break yCollab ("Yjs was already imported").
+  resolve: { dedupe: ['yjs', 'lib0', 'y-protocols'] },
 });
 const outputs = Array.isArray(result) ? result : [result];
 const chunk = outputs.flatMap((o) => o.output).find((o) => o.type === 'chunk');
@@ -54,6 +57,10 @@ body { font-family: var(--note-font); }
 #mentions .mention { display: block; width: 100%; padding: 8px 0; border: 0; background: none; text-align: left; font: inherit; }
 #mentions .mention .title { display: block; font-size: 15px; font-weight: 600; color: var(--note-accent); }
 #mentions .mention .snippet { display: block; overflow: hidden; font-size: 13px; color: var(--note-muted); text-overflow: ellipsis; white-space: nowrap; }
+/* A collaborator's cursor in a live note (y-codemirror.next): the AI's or a computer's, its name above the caret. */
+.cm-editor .cm-ySelectionCaret { border-left-width: 2px; border-right-width: 0; margin-left: -1px; }
+.cm-editor .cm-ySelectionInfo { opacity: 1; top: -1.45em; left: -2px; padding: 1px 5px; border-radius: 4px 4px 4px 0; font-family: var(--note-font); font-size: 10.5px; font-weight: 600; line-height: 1.35; }
+.cm-editor .cm-ySelectionCaretDot { display: none; }
 `;
 
 const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>${css}</style></head><body><div id="editor"></div><section id="mentions"></section><script>${js}</script></body></html>`;

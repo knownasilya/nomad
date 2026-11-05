@@ -302,6 +302,47 @@ export async function saveNote (base, { id, body, baseUpdatedAt, inSpace = false
   return withPreview(withSpace(where)(note))
 }
 
+// Live Notes (ADR-0041, lib/live-notes.mjs). The stored record of Note `id`, or null.
+export async function locateNote (base, id, space = null) {
+  if (!apps.isNoteId(id)) return null
+  const { prev } = await findStored(base, id, space)
+  return prev || null
+}
+
+// Whether this phone can write Note `id` where it's kept (a shared Space it only views can't).
+export async function canWriteNote (base, id, space = null) {
+  if (!base || !base.writable) return false
+  const found = await findStored(base, id, space)
+  if (!found.space) return true
+  const place = await placeOf(base, found.space, 'notes')
+  return !place.shared || place.writable
+}
+
+// The record store a live session writes through, as desktop's: save `body` unless the record
+// changed since `known` (then hand back the current one), and keep `body` as a conflict copy.
+export function liveNoteStore (getBase, id, space = null) {
+  return {
+    async save (body, known) {
+      const base = getBase()
+      if (!base) throw new Error('This phone isn’t linked')
+      const found = await findStored(base, id, space)
+      if (!found.prev) throw new Error('This note was deleted')
+      if (found.prev.body === body) return { note: found.prev }
+      if (known.updatedAt && found.prev.updatedAt !== known.updatedAt) return { stale: found.prev }
+      const note = apps.makeNote({ id, body }, found.prev)
+      await putNote(base, id, found.space, note)
+      return { note }
+    },
+    async conflict (body) {
+      const base = getBase()
+      if (!base) return
+      const found = await findStored(base, id, space)
+      const copy = apps.makeNote({ id: apps.newNoteId(), body: apps.conflictBody(body), conflictOf: id })
+      await putNote(base, copy.id, found.space, copy)
+    }
+  }
+}
+
 export async function deleteNote (base, id, space = null) {
   const found = await findStored(base, id, space) // notePath validates the id
   if (found.prev) await delNote(base, id, found.space)

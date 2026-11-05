@@ -26,6 +26,14 @@ export const RPC_NOMAD = 40 // { reqId, api, method, url?, args } an in-page nom
 //   jobs:   'list' | 'runs' {id} | 'setEnabled' {id, enabled} | 'run' {id} | 'delete' {id}
 //           | 'notifications' {since} — the user's AI Jobs (shared/jobs.mjs)
 export const RPC_APPS = 46 // { reqId, app: 'reader'|'notes'|'names'|'tabs'|'jobs'|'updates', action, ...args }
+// Live editing of the Note open in the editor (ADR-0041, backend/lib/live-notes.mjs). The editor's
+// y-protocols messages go to the Note's session in the backend, which joins the same Note open on
+// the user's computers. 'open' and 'close' reply with one RPC_NOTE_LIVE_RESULT; 'send' doesn't.
+//   { reqId?, action: 'open' | 'send' | 'close', id, conn, data? (base64), space? }
+export const RPC_NOTE_LIVE = 54
+export const RPC_NOTE_LIVE_RESULT = 55 // { reqId, ok, value?: { status, me } | true, message? }
+// The session's side, for one editor: a y-protocols message or the session's status.
+export const RPC_NOTE_LIVE_EVENT = 56 // { id, conn, kind: 'message' | 'status', data?, status? }
 // The Logs page (Settings → Logs): the backend's console lines with id > since, plus the previous
 // session's when `previous` (to read what led up to a crash).
 export const RPC_LOGS = 48 // { reqId, since?, previous? }
