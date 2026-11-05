@@ -75,7 +75,7 @@ class GeneralSettingsView extends LitElement {
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       ${this.renderDaemonStatus()}
       <div class="form-group">
-        <h2>Auto Updater</h2>
+        <h2 id="auto-updater">Auto Updater</h2>
         ${this.renderAutoUpdater()}
       </div>
       <div class="form-group">
@@ -145,8 +145,6 @@ class GeneralSettingsView extends LitElement {
       default:
       case 'idle':
         return html` <div class="section">
-          <h2 id="auto-updater">Auto Updater</h2>
-
           ${this.browserInfo.updater.error
             ? html`
                 <div class="message error">
@@ -180,8 +178,6 @@ class GeneralSettingsView extends LitElement {
 
       case 'checking':
         return html` <div class="section">
-          <h2 id="auto-updater">Auto Updater</h2>
-
           <div class="auto-updater">
             <p>
               <button class="btn" disabled>Checking for updates</button>
@@ -199,8 +195,6 @@ class GeneralSettingsView extends LitElement {
 
       case 'downloading':
         return html` <div class="section">
-          <h2 id="auto-updater">Auto Updater</h2>
-
           <div class="auto-updater">
             <p>
               <button class="btn" disabled>Updating</button>
@@ -217,8 +211,6 @@ class GeneralSettingsView extends LitElement {
 
       case 'downloaded':
         return html` <div class="section">
-          <h2 id="auto-updater">Auto Updater</h2>
-
           <div class="auto-updater">
             <p>
               <button class="btn" @click=${this.onClickRestart}>
