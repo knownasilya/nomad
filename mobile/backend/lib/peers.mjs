@@ -18,7 +18,7 @@ async function readPrefix (base, prefix) {
   return out
 }
 
-const liveSpaces = (spaces) => spaces.filter((s) => s && !s.movedTo && !s.removed && peers.isKey(s.rootDriveKey))
+const liveSpaces = (spaces) => spaces.filter((s) => s && !s.movedTo && !s.removed && !s.deleted && peers.isKey(s.rootDriveKey))
 
 // [{ ...record, online, status, summary, spaces: [{ rootDriveKey, name, kept }] }]
 export async function listPeers (base, { connected = new Set(), statuses = new Map() } = {}) {

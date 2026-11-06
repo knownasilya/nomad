@@ -4,6 +4,7 @@ import z32 from 'z32'
 import b4a from 'b4a'
 import { openAutobaseDrive } from './drive-manager.mjs'
 import { makeMetadata, decodeInlineJson } from '../../../shared/fs-core.mjs'
+import { deletedSpace, editSpaceRecord, isDeletedSpace, spaceEditError } from '../../../shared/space-records.mjs'
 
 // Vault index records are small JSON control records — stored inline in the v1 view
 // ({ metadata, blob:null, value: base64(JSON) }); see shared/fs-core.mjs. This builds that op.
@@ -136,6 +137,32 @@ export async function addSpaceToVault (base, { rootDriveKey, name, icon, color }
   }
   await base.append(inlineOp(path, rec))
   await base.update()
+}
+
+// Rename or recolor a Space the Vault lists ({ name?, color? }), like desktop's spaces.update. The
+// user's other Devices take the new name and color from here.
+export async function updateSpaceInVault (base, { rootDriveKey, name, color }) {
+  if (!base || !rootDriveKey) return null
+  const err = spaceEditError({ name, color })
+  if (err) throw new Error(err)
+  if (!base.writable) throw new Error('This phone can’t write to your Vault yet. Keep your other device online until it syncs, then try again.')
+  const path = `${SPACES_PREFIX}${rootDriveKey}.json`
+  const node = await base.view.get(path)
+  const rec = node && decodeInlineJson(node.value, b4a)
+  if (!rec || rec.movedTo || isDeletedSpace(rec)) return null
+  const next = editSpaceRecord(rec, { name, color })
+  await base.append(inlineOp(path, next))
+  await boundedUpdate(base)
+  return next
+}
+
+// Delete (or, after space-library's leave, forget) a Space: its record becomes a tombstone
+// (shared/space-records.mjs), so the user's other Devices drop it and none publishes it again.
+export async function deleteSpaceInVault (base, rootDriveKey) {
+  if (!base || !rootDriveKey) return
+  if (!base.writable) throw new Error('This phone can’t write to your Vault yet. Keep your other device online until it syncs, then try again.')
+  await base.append(inlineOp(`${SPACES_PREFIX}${rootDriveKey}.json`, deletedSpace(rootDriveKey)))
+  await boundedUpdate(base)
 }
 
 // Record this phone's Spaces on its own Device record (`spaces: [{ rootDriveKey, name }]`), like

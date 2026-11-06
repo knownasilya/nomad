@@ -70,6 +70,20 @@ describe('mergeVaultSpaces', () => {
     expect(res.toPublish.map((s) => s.rootDriveKey)).toEqual([B])
   })
 
+  it('drops a Space deleted on another Device and never publishes it again', () => {
+    const tomb = { rootDriveKey: A, deleted: true, deletedAt: '2026-11-06T00:00:00Z' }
+    const res = mergeVaultSpaces([personal({ rootDriveKey: P }), local(A, 'Trips'), { ...local(B, 'Work'), source: 'vault' }], [rec(P, 'Personal', { originId: 1 }), tomb, rec(B, 'Work')])
+    expect(res.next.map((s) => s.id)).toEqual([PERSONAL_ID, B])
+    expect(res.dropped).toEqual([A])
+    expect(res.toPublish).toEqual([])
+  })
+
+  it('never adds a tombstone or drops the phone Personal for one', () => {
+    const res = mergeVaultSpaces([personal({ rootDriveKey: P })], [rec(P, 'Personal', { originId: 1 }), { rootDriveKey: C, deleted: true }, { rootDriveKey: P, deleted: true }])
+    expect(res.next.map((s) => s.id)).toEqual([PERSONAL_ID])
+    expect(res.dropped).toEqual([])
+  })
+
   it('repoints a Space whose Root Drive moved', () => {
     const res = mergeVaultSpaces([personal({ rootDriveKey: P }), { ...local(A, 'Trips'), source: 'vault' }], [rec(P, 'Personal', { originId: 1 }), { rootDriveKey: A, movedTo: B }, rec(B, 'Trips')])
     expect(res.next[1]).toMatchObject({ id: A, rootDriveKey: B, rootDriveUrl: `hyper://${B}/` })

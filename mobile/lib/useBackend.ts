@@ -90,7 +90,7 @@ export interface DeviceSpace { rootDriveKey: string; name: string }
 export interface VaultDevice { key: string; name: string; platform: string; addedAt?: string; spaces?: DeviceSpace[]; version?: string }
 // movedTo: the Space's Root Drive got a new key; this record only points at it.
 // library: a shared Space's Space Library (ADR-0029), with this person's role in it.
-export interface VaultSpace { rootDriveKey: string; name: string; icon?: string; color?: string; movedTo?: string; library?: string; role?: 'owner' | 'editor' | 'viewer'; memberId?: string; removed?: boolean }
+export interface VaultSpace { rootDriveKey: string; name: string; icon?: string; color?: string; movedTo?: string; deleted?: boolean; library?: string; role?: 'owner' | 'editor' | 'viewer'; memberId?: string; removed?: boolean }
 // A shared Space as the phone sees it (spaces/status), and what joining one gives back.
 export interface SpaceShare { shared: boolean; role?: 'owner' | 'editor' | 'viewer'; writable?: boolean; members?: Array<{ memberId: string; name: string; role: string; you: boolean }> }
 export interface SpaceJoin { library: string; memberId: string; index: { name?: string; icon?: string; color?: string } }

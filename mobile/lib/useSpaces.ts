@@ -2,17 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { Backend } from './useBackend'
 import { mergeVaultSpaces, PERSONAL_ID } from './spacesMerge'
+import { SPACE_COLORS, cleanSpaceName } from './spaceRules'
 
 // Spaces — a named user context with its own Root Drive, mirroring nomad desktop
 // (app/bg/dbs/spaces.js). One space is active at a time. An unpaired phone keeps its own spaces
 // here; once it is paired into a Vault, its spaces are the Vault's (see syncFromVault), shared with
 // the user's other devices. See nomad/docs/multi-device-protocol.md.
 
-// Desktop's 8-color palette (app/fg/shell-menus/spaces.js).
-export const SPACE_COLORS = [
-  '#6c6cff', '#e85d4a', '#e8a025', '#3ab36e',
-  '#2b9fd4', '#9b59b6', '#e91e8c', '#607d8b'
-]
+export { SPACE_COLORS, SPACE_NAME_MAX } from './spaceRules'
 
 export interface Space {
   id: string // rootDriveKey once it has one, else a local uid; stable per device
@@ -46,6 +43,11 @@ export interface Spaces {
   createSpace: (opts: { name: string; icon?: string; color?: string }) => Promise<Space | null>
   renameSpace: (id: string, name: string) => void
   setSpaceColor: (id: string, color: string) => void
+  // The Space switcher's Edit: rename and recolor, delete, or leave a shared Space. A Space the
+  // Vault lists changes there first, so the user's other Devices follow. Each resolves to an error
+  // to show, or null. After unpublishSpace the caller moves off the Space and calls removeSpace.
+  editSpace: (id: string, edit: { name: string; color: string }) => Promise<string | null>
+  unpublishSpace: (id: string, action: 'delete' | 'leave') => Promise<string | null>
   removeSpace: (id: string) => void
   removeSpaces: (ids: string[]) => void
   // Called after this device leaves the Vault: clears the shared markers, downgrades the
@@ -83,9 +85,9 @@ export function useSpaces (backend: Backend): Spaces {
       // downgrade the synced spaces to local-only copies (mirrors a manual unlink, minus the prompt).
       if (v.removed) { leaveVaultRef.current(); return }
       if (!v.hasVault || v.opening || !v.spaces) return
-      const keys = v.spaces.filter((sp) => sp.rootDriveKey && !sp.movedTo).map((sp) => sp.rootDriveKey)
+      const keys = v.spaces.filter((sp) => sp.rootDriveKey && !sp.movedTo && !sp.deleted).map((sp) => sp.rootDriveKey)
       setVaultKeys(keys)
-      setPeopleKeys(v.spaces.filter((sp) => sp.rootDriveKey && sp.library && !sp.movedTo && !sp.removed).map((sp) => sp.rootDriveKey))
+      setPeopleKeys(v.spaces.filter((sp) => sp.rootDriveKey && sp.library && !sp.movedTo && !sp.removed && !sp.deleted).map((sp) => sp.rootDriveKey))
       if (!keys.length) return
       const vaultSpaces = v.spaces
       const { toPublish, dropped } = mergeVaultSpaces(spacesRef.current, vaultSpaces)
@@ -262,6 +264,42 @@ export function useSpaces (backend: Backend): Spaces {
     })
   }, [persist])
 
+  const vaultKeysRef = useRef(vaultKeys)
+  vaultKeysRef.current = vaultKeys
+  const inVault = (sp: Space) => !!sp.rootDriveKey && vaultKeysRef.current.includes(sp.rootDriveKey)
+
+  const editSpace = useCallback(async (id: string, edit: { name: string; color: string }) => {
+    const sp = spacesRef.current.find((s) => s.id === id)
+    if (!sp) return 'That space is gone'
+    const name = cleanSpaceName(edit.name)
+    if (!name) return 'Give the space a name'
+    if (inVault(sp)) {
+      const res = await backendRef.current.apps('spaces', 'update', { rootDriveKey: sp.rootDriveKey, name, color: edit.color })
+      if (!res.ok) return res.message || 'Couldn’t save the space'
+    }
+    setSpaces((prev) => {
+      const next = prev.map((s) => (s.id === id ? { ...s, name, color: edit.color } : s))
+      persist(next)
+      return next
+    })
+    return null
+  }, [persist])
+
+  // Delete and leave both take the Space off the Vault (a tombstone, so the user's other Devices drop
+  // it). Personal is never removed.
+  const unpublishSpace = useCallback(async (id: string, action: 'delete' | 'leave') => {
+    if (id === PERSONAL_ID) return 'Your Personal space can’t be removed'
+    const sp = spacesRef.current.find((s) => s.id === id)
+    if (!sp) return null
+    if (inVault(sp)) {
+      const res = await backendRef.current.apps('spaces', action, { rootDriveKey: sp.rootDriveKey })
+      if (!res.ok) return res.message || (action === 'leave' ? 'Couldn’t leave the space' : 'Couldn’t delete the space')
+    } else if (action === 'leave') {
+      return 'Link this phone to your computer first'
+    }
+    return null
+  }, [])
+
   // After this device leaves the Vault (unlink), the spaces it only had via the Vault are no longer
   // shared. Clear the shared markers immediately and downgrade those spaces to local; return them so
   // the caller can ask whether to also remove their local copies from this device.
@@ -293,6 +331,8 @@ export function useSpaces (backend: Backend): Spaces {
     createSpace,
     renameSpace,
     setSpaceColor,
+    editSpace,
+    unpublishSpace,
     removeSpace,
     removeSpaces,
     leaveVault,

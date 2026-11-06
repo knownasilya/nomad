@@ -5,6 +5,7 @@ export default {
   create: 'promise',
   update: 'promise',
   remove: 'promise',
+  leave: 'promise',
   setActive: 'promise',
   getPersonas: 'promise',
   setPersona: 'promise',

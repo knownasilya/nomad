@@ -44,6 +44,7 @@ import * as spacePins from '../space-pins';
 import { isPinnable, normalizePinUrl, reconcileTabs } from '../../../../shared/pins.mjs';
 import { shortOrigin } from '../../../../shared/personas.mjs';
 import * as vault from '../../hyper/vault';
+import { editSpaceRecord, removeKind, spaceEditError } from '../../../../shared/space-records.mjs';
 import * as saveToReader from '../save-to-reader';
 
 const X_POSITION = 0;
@@ -772,8 +773,12 @@ class Tab extends EventEmitter {
 // =
 
 export async function setup() {
-  // A Space another Device added to the Vault (hyper/vault.js) appears in every window's Space list.
-  vault.events.on('spaces-synced', () => emitReplaceStateAllWindows());
+  // A Space another Device added to the Vault (hyper/vault.js) appears in every window's Space list,
+  // and one it deleted (or left) goes, tabs and all.
+  vault.events.on('spaces-synced', async (res) => {
+    for (const { id } of res?.deleted || []) await dropSpace(id).catch(() => {});
+    emitReplaceStateAllWindows();
+  });
   // A Space's pinned pages changed, here or on another Device (space-pins.js).
   spacePins.events.on('changed', ({ spaceId }) => reconcileSpacePins(spaceId));
   // defaultUrl stays as the hardcoded 'nomad://desktop/'.
@@ -1789,6 +1794,39 @@ export async function createSpace(opts, { waitForDrive = false } = {}) {
   return space;
 }
 
+// The Spaces, each with `shared` (shared with other people, ADR-0029: it is left, not deleted) and
+// `role`, for the Spaces menu's Edit form.
+async function listSpacesWithShare() {
+  const list = await spacesDb.list();
+  const recs = await vault.listSpaces().catch(() => []);
+  const byKey = new Map(recs.filter((r) => r && !r.movedTo).map((r) => [r.rootDriveKey, r]));
+  return list.map((s) => {
+    let rec = null;
+    try {
+      rec = s.root_drive_url ? byKey.get(hyper.drives.fromURLToKey(s.root_drive_url)) : null;
+    } catch {}
+    const shared = s.id !== 1 && removeKind(rec) === 'leave';
+    return { ...s, shared, role: shared ? rec.role || 'viewer' : null };
+  });
+}
+
+// Take a Space off this Device: move every window that shows it to Personal, close its tabs, forget
+// the Sessions sites held in it (ADR-0031 §4) and remove it. The Vault's side is the caller's
+// (filesystem.deleteSpace or leaveSpace), or was done on another Device (vault.syncSpacesFromVault).
+export async function dropSpace(id) {
+  id = Number(id);
+  if (id === 1) throw new Error('Your Personal Space can’t be removed');
+  const key = personas.spaceKeyOf(id);
+  const wins = new Set(BrowserWindow.getAllWindows().map(getTopWindow).filter((w) => w && activeTabs[w.id]));
+  for (const win of wins) {
+    if (getWindowActiveSpaceId(win) === id) await setActiveSpace(win, 1).catch(() => {});
+    for (const tab of getAll(win).filter((t) => t.spaceId === id)) await remove(win, tab);
+  }
+  await spacesDb.remove(id).catch(() => {}); // already gone when two calls race
+  if (key) await personas.forgetSpace(key).catch(() => {});
+  emitReplaceStateAllWindows();
+}
+
 export async function setActiveSpace(win, id) {
   win = getTopWindow(win);
   const space = await spacesDb.setActive(id);
@@ -2485,7 +2523,7 @@ rpc.exportAPI('background-process-spaces', spacesRPCManifest, {
   },
 
   async list() {
-    return spacesDb.list();
+    return listSpacesWithShare();
   },
 
   async getActive() {
@@ -2496,21 +2534,40 @@ rpc.exportAPI('background-process-spaces', spacesRPCManifest, {
     return createSpace(opts, { waitForDrive: false });
   },
 
-  async update(id, opts) {
-    const space = await spacesDb.update(id, opts);
+  // Rename or recolor a Space ({ name?, color? }). The other fields are setup's, not the user's.
+  async update(id, opts = {}) {
+    const edit = {};
+    if (opts.name !== undefined) edit.name = opts.name;
+    if (opts.color !== undefined) edit.color = opts.color;
+    const err = spaceEditError(edit);
+    if (err) throw new Error(err);
+    const prev = await spacesDb.get(Number(id));
+    if (!prev) throw new Error('That Space isn’t on this device');
+    const { name, color } = editSpaceRecord({ name: prev.name, color: prev.color }, edit);
+    const space = await spacesDb.update(Number(id), { name, color });
     // Keep the Vault's copy (name, icon, color) in step for the user's other Devices.
     vault.publishSpace(space).catch(() => {});
+    emitReplaceStateAllWindows();
     return space;
   },
 
+  // Delete a Space from all the user's Devices. A shared one is left instead (leave below).
   async remove(id) {
-    // close all tabs for this space before removing
-    for (let win of BrowserWindow.getAllWindows()) {
-      const tabs = getAll(win).filter((t) => t.spaceId === Number(id));
-      for (let tab of tabs) await remove(win, tab);
-    }
-    await spacesDb.remove(id);
-    for (let win of BrowserWindow.getAllWindows()) emitReplaceState(win);
+    id = Number(id);
+    if (id === 1) throw new Error('Your Personal Space can’t be deleted');
+    const space = (await listSpacesWithShare()).find((s) => s.id === id);
+    if (!space) return;
+    if (space.shared) throw new Error('This Space is shared. Leave it instead');
+    await filesystem.deleteSpace(id);
+    await dropSpace(id);
+  },
+
+  // Leave a shared Space: the others keep it; it goes from all the user's Devices.
+  async leave(id) {
+    id = Number(id);
+    if (id === 1) throw new Error('You can’t leave your Personal Space');
+    await filesystem.leaveSpace(id);
+    await dropSpace(id);
   },
 
   async setActive(id) {
