@@ -20,13 +20,15 @@ const KEY_RE = /^[0-9a-f]{64}$/;
 
 function noop(..._args) {}
 
-export function encodeHello(b4a, deviceKey) {
-  return b4a.from(JSON.stringify({ t: 'hello', deviceKey }));
+// `status` is an always-on Peer's (shared/peers.mjs makeStatus, ADR-0038): a small object, or none.
+export function encodeHello(b4a, deviceKey, status = null) {
+  return b4a.from(JSON.stringify(status ? { t: 'hello', deviceKey, status } : { t: 'hello', deviceKey }));
 }
 
 // The HELLO frame, or null on anything malformed. A peer must never break the channel on bad bytes.
 export function decodeHello(b4a, buf) {
   try {
+    if (buf.length > 4096) return null;
     const obj = JSON.parse(b4a.toString(buf));
     if (
       obj &&
@@ -34,7 +36,8 @@ export function decodeHello(b4a, buf) {
       typeof obj.deviceKey === 'string' &&
       KEY_RE.test(obj.deviceKey)
     ) {
-      return obj;
+      const status = obj.status && typeof obj.status === 'object' && !Array.isArray(obj.status) ? obj.status : null;
+      return status ? { t: 'hello', deviceKey: obj.deviceKey, status } : { t: 'hello', deviceKey: obj.deviceKey };
     }
   } catch {}
   return null;
@@ -42,6 +45,8 @@ export function decodeHello(b4a, buf) {
 
 // getVaultKey / getDeviceKey return hex strings (or null while this Device has no Vault); they may
 // be async. install() is idempotent: call it again once a Vault opens to cover live connections.
+// getStatus (a Peer's, optional) is sent with every HELLO; announce() sends it again on every
+// channel, so a Peer's status stays current. A HELLO may come more than once: the last one counts.
 export function createDevicePresence({
   swarm,
   Protomux,
@@ -49,6 +54,7 @@ export function createDevicePresence({
   b4a,
   getVaultKey,
   getDeviceKey,
+  getStatus = null,
   log = noop,
 }) {
   const peers = new Set(); // { channel, deviceKey }, one per open channel
@@ -87,7 +93,7 @@ export function createDevicePresence({
 
   // createChannel returns null when this mux already has the channel open, so a re-scan is a no-op.
   function openChannel(mux, id, deviceKey) {
-    const peer = { channel: null, deviceKey: null };
+    const peer = { channel: null, deviceKey: null, status: null };
     const channel = mux.createChannel({
       protocol: PRESENCE_PROTOCOL,
       id,
@@ -97,13 +103,14 @@ export function createDevicePresence({
           onmessage(buf) {
             const hello = decodeHello(b4a, buf);
             if (!hello) return;
+            if (peer.deviceKey !== hello.deviceKey) log('device connected', hello.deviceKey.slice(0, 8));
             peer.deviceKey = hello.deviceKey;
-            log('device connected', hello.deviceKey.slice(0, 8));
+            peer.status = hello.status || null;
           },
         },
       ],
       onopen() {
-        channel.messages[0].send(encodeHello(b4a, deviceKey));
+        sendHello(channel, deviceKey);
       },
       onclose() {
         peers.delete(peer);
@@ -114,6 +121,30 @@ export function createDevicePresence({
     peer.channel = channel;
     peers.add(peer);
     channel.open();
+  }
+
+  async function sendHello(channel, deviceKey) {
+    let status = null;
+    try {
+      status = getStatus ? await getStatus() : null;
+    } catch {}
+    try {
+      channel.messages[0].send(encodeHello(b4a, deviceKey, status));
+    } catch {}
+  }
+
+  // Send this side's HELLO again on every open channel (a Peer's new status).
+  async function announce() {
+    const deviceKey = await getDeviceKey();
+    if (!deviceKey) return;
+    for (const peer of peers) if (peer.channel && peer.channel.opened) sendHello(peer.channel, deviceKey);
+  }
+
+  // The status each connected key last sent (a Peer's), by key.
+  function statuses() {
+    const out = new Map();
+    for (const peer of peers) if (peer.deviceKey && peer.status) out.set(peer.deviceKey, peer.status);
+    return out;
   }
 
   // Vault writer keys of the Devices connected right now.
@@ -133,5 +164,5 @@ export function createDevicePresence({
     peers.clear();
   }
 
-  return { install, connectedDevices, reset };
+  return { install, connectedDevices, statuses, announce, reset };
 }

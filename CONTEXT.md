@@ -281,3 +281,22 @@ _Avoid_: credential, password, API key (for the stored thing), env var
 **Device**:
 A single installation of Nomad holding its own keypair. A user's trusted Devices are all Writers of that user's Vault and of every Drive the Vault indexes, so any Device can edit anything the user owns. A Device is added by pairing into the Vault (see Writer Keys).
 _Avoid_: machine, client, peer, node, seat
+
+**Peer**:
+A Nomad with no windows and no user, run by the user on a machine that stays on (a NAS, a home server,
+a small VPS) with `nomad-peer`. It keeps a full copy of its Holdings online and serves it. It is not a
+Device: it writes nothing, is no drive's Writer, and has no tabs or Jobs (ADR-0038).
+_Avoid_: server, relay, seed box, pinning service
+
+**Own Peer**:
+A Peer the user paired with their Vault. It can read everything it holds, and can't change anything.
+_Avoid_: trusted peer, home device
+
+**Blind Peer**:
+A Peer someone else runs. It holds only what is public anyway, or what it can't read. Not built yet.
+_Avoid_: hosting provider, third-party peer
+
+**Holdings**:
+What the Vault says a Peer keeps: the Vault, Spaces with their Libraries and drives, Profile Drives
+(`/.vault/peers/<key>.json` `hold`, rules in `shared/peers.mjs`).
+_Avoid_: pins, mirrors, backups

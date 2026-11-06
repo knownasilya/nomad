@@ -20,6 +20,12 @@ export default {
   renameDevice: 'promise',
   removeDevice: 'promise',
 
+  // Always-on Peers (ADR-0038): a Peer pairs like a Device but never writes
+  listPeers: 'promise', // -> [{ key, name, kind, hold, online, status, summary, spaces: [{ rootDriveKey, name, kept }] }]
+  setPeerSpace: 'promise', // (peerKey, rootDriveKey, on)
+  renamePeer: 'promise', // (peerKey, name)
+  removePeer: 'promise', // (peerKey)
+
   // Editing a Drive another of the user's Devices can write (bg/hyper/drive-writers.js)
   driveEditStatus: 'promise', // (url) -> { writable, canAsk, legacy, linked, request: { pending, granted } | null }
   requestDriveEdit: 'promise', // (url, { note? }) -> the same, after asking the user's other Devices (and a shared Space's members)

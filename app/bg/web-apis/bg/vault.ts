@@ -26,6 +26,12 @@ import * as tabManager from '../../ui/tabs/manager';
 import * as spacePins from '../../ui/space-pins';
 import * as drives from '../../hyper/drives';
 import * as home from '../../../../shared/home-setup.mjs';
+import * as peerRules from '../../../../shared/peers.mjs';
+
+// The Vault's Spaces a Peer can keep: not moved, not removed.
+function liveSpaces(spaces) {
+  return (spaces || []).filter((s) => s && !s.movedTo && !s.removed && peerRules.isKey(s.rootDriveKey));
+}
 
 // The caller's Space key, or null.
 const callerSpace = (ctx) => vaultApps.spaceKey(ctx).catch(() => null);
@@ -221,6 +227,42 @@ export default {
     await vault.removeDevice(deviceKey);
     // Take its writer keys off the Drives this Device writes (bg/hyper/drive-writers.js).
     driveWriters.sync().catch(() => {});
+  },
+
+  // Always-on Peers (ADR-0038): each with whether it is connected now, the status it last sent, a
+  // line for its row, and every Space with whether this Peer keeps it online.
+  async listPeers() {
+    const [list, spaces] = await Promise.all([vault.listPeers(), vault.listSpaces()]);
+    const connected = new Set(devicePresence.connectedDevices());
+    const statuses = devicePresence.peerStatuses();
+    const live = liveSpaces(spaces);
+    return list.map((p) => {
+      const online = connected.has(p.key);
+      const status = peerRules.readStatus(statuses[p.key]);
+      return {
+        ...p,
+        online,
+        status,
+        summary: peerRules.describePeer(p, status, { online }),
+        spaces: live.map((s) => ({ rootDriveKey: s.rootDriveKey, name: s.name || 'Space', kept: peerRules.holdsSpace(p, s.rootDriveKey) })),
+      };
+    });
+  },
+
+  // Keep Space `rootDriveKey` online on Peer `peerKey`, or stop.
+  async setPeerSpace(peerKey, rootDriveKey, on) {
+    const peer = (await vault.listPeers()).find((p) => p.key === peerKey);
+    if (!peer) throw new Error('That Peer was removed');
+    const all = liveSpaces(await vault.listSpaces()).map((s) => s.rootDriveKey);
+    return vault.updatePeer(peerKey, { hold: peerRules.withSpace(peer, rootDriveKey, !!on, all) });
+  },
+
+  async renamePeer(peerKey, name) {
+    return vault.updatePeer(peerKey, { name: String(name || '') });
+  },
+
+  async removePeer(peerKey) {
+    return vault.removePeer(peerKey);
   },
 
   // Editing a Drive one of the user's other Devices can write (ADR-0026 §2, ADR-0029 step 2).

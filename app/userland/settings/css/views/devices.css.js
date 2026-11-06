@@ -152,6 +152,21 @@ const cssStr = css`
     padding: 12px 0;
   }
 
+  /* always-on Peers */
+  .peer-spaces {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 14px;
+    margin-top: 6px;
+  }
+  .list + .actions {
+    margin-top: 12px;
+  }
+  .peer-spaces label.check {
+    font-size: 12px;
+  }
+
   /* invite */
   .invite-code {
     display: flex;

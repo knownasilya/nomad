@@ -183,6 +183,25 @@ Hyperswarm instance in each app. Roles: the **member** (an existing trusted Devi
 ### 2.1 Invite code format
 `z32`-encoded `blind-pairing` invite blob. `z32` is already a dep in mobile; added to nomad in Phase 0.
 
+### 2.2 Always-on Peers (ADR-0038)
+A candidate whose `userData.platform` is `'peer'` is an always-on Peer, not a Device. On approval
+the member **skips** 3a–3c: no `addWriter`, no fan-out and no `/.vault/devices/` record. It writes
+`/.vault/peers/<peerKey>.json` instead (`shared/peers.mjs` `makePeer`):
+
+```
+{ type: 'nomad/peer', key, name, kind: 'own', addedAt, addedBy,
+  hold: { vault: true, spaces: 'all' | [rootDriveKey…], drives: 'all' | 'public' | [driveKey…], profiles: true },
+  updatedAt }
+```
+
+then confirms the pairing as usual, so the Peer gets the Vault key. The Peer reads the Vault and
+mirrors what `hold` names (`holdingsOf`); any Device may change `hold` or delete the record, and a
+Peer that sees its record gone stops and wipes its store. Code that lists Devices reads
+`/.vault/devices/`, so a Peer never shows up in writer fan-out, the Jobs device picker, open tabs,
+remote update or the AI Bridge. A Peer's status (version, uptime, how much it holds and has synced,
+bytes, free disk) rides on its presence HELLO (`nomad/device-presence`, `status`), so it is never
+stored in the Vault.
+
 ## 3. Writer fan-out
 
 When a Device is added, its `deviceKey` must become a Writer of the Vault **and of every Space Root

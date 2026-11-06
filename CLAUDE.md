@@ -379,6 +379,22 @@ over `autobases.buildPutBlobOp`); the phone is `mobile/components/Photos.tsx` ov
 (`mobile/backend/lib/photos.mjs`, the drive manager's `putBlobFor`/`readFileOf`). A Space that isn't
 shared has no album. Only the adder or the owner removes a photo.
 
+### Always-on Peers (ADR-0038)
+
+A Peer is a Nomad with no windows that the user runs on a machine that stays on (`peer/`, the
+`nomad-peer` CLI: `join <code>`, `run`, `status`, `leave`). It pairs like a Device with
+`platform: 'peer'`, and desktop's `approveDevice` then writes `/.vault/peers/<key>.json`
+(`vault.addPeer`) instead of adding a writer: a Peer never writes the Vault or any drive. Rules
+(records, `hold`, `holdingsOf`, status) are `shared/peers.mjs` (tests `tests/unit/peers.test.js`). The
+Peer reads its Holdings (`peer/holdings.mjs`), keeps a full mirror of each with the phone backend's
+`DriveManager.setHosting` (`hostingState` says when it's synced), and sends its status in its
+`nomad/device-presence` HELLO (`getStatus`, `announce()`, `statuses()`). When its record goes, it
+stops and deletes its folder. UI: Settings → Devices (`nomad.vault.listPeers`/`setPeerSpace`/
+`removePeer`) and the phone's Devices screen (`RPC_APPS` `peers`, `mobile/backend/lib/peers.mjs`).
+`peer/` runs the code in `mobile/backend/lib/` under Node, resolving packages from
+`mobile/node_modules`, so a change there must keep `tests/unit/peer.test.js` passing (it includes a
+DHT-testnet mirror test).
+
 ### Highlights (ADR-0020)
 
 Right-click selected text on an http(s) or hyper:// page: Copy Link to Highlight, Highlight, or

@@ -20,6 +20,7 @@ import * as drives from './drives';
 import * as settingsDb from '../dbs/settings';
 import * as spacesDb from '../dbs/spaces';
 import * as pdb from '../dbs/profile-data-db';
+import * as peerRules from '../../../shared/peers.mjs';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'vault' });
 
@@ -619,6 +620,48 @@ export async function removeDevice(deviceKey) {
   fanOutRemoveWriter(deviceKey).catch((e) =>
     logger.warn('removeWriter fan-out failed', { error: e.toString() })
   );
+}
+
+// Always-on Peers (ADR-0038)
+// =
+// A Peer is no Device: it pairs like one, but gets no writer in the Vault or any drive. Its record
+// says what it holds (shared/peers.mjs); the Peer reads it and mirrors that. Removing the record
+// makes the Peer stop and wipe its copies.
+
+export async function listPeers() {
+  const sess = await getVault();
+  if (!sess) return [];
+  return (await _readPrefix(sess, peerRules.PEERS_PREFIX)).filter(peerRules.isPeer);
+}
+
+export async function addPeer(peerKey, { name } = {}) {
+  const sess = await ensureVault();
+  const path = peerRules.peerPath(peerKey);
+  const prev = await _readRecord(sess, path);
+  const own = sess.base?.local?.key ? b4a.toString(sess.base.local.key, 'hex') : null;
+  const rec = peerRules.makePeer({ key: peerKey, name, kind: 'own', addedBy: own }, peerRules.isPeer(prev) ? prev : null);
+  await _putRecord(sess, path, rec);
+  logger.info('Added always-on Peer to vault', { peerKey });
+  return rec;
+}
+
+// Change a Peer's name or what it holds ({ name?, hold? }).
+export async function updatePeer(peerKey, { name, hold } = {}) {
+  const sess = await getVault();
+  if (!sess) throw new Error('No vault on this device');
+  const path = peerRules.peerPath(peerKey);
+  const prev = await _readRecord(sess, path);
+  if (!peerRules.isPeer(prev)) throw new Error('That Peer was removed');
+  const rec = peerRules.makePeer({ key: peerKey, name: name ?? prev.name, hold: hold ?? prev.hold }, prev);
+  await _putRecord(sess, path, rec);
+  return rec;
+}
+
+export async function removePeer(peerKey) {
+  const sess = await getVault();
+  if (!sess) return;
+  await _delRecord(sess, peerRules.peerPath(peerKey));
+  logger.info('Removed always-on Peer from vault', { peerKey });
 }
 
 // Profile

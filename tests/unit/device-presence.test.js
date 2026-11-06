@@ -96,6 +96,26 @@ describe('device-presence channel', () => {
     await until(() => desktop.connectedDevices().size === 0 && phone.connectedDevices().size === 0)
   })
 
+  it('carries an always-on Peer’s status, and the newest one counts (ADR-0038)', async () => {
+    const s1 = fakeSwarm()
+    const s2 = fakeSwarm()
+    let status = { kind: 'peer', holding: 4, synced: 2 }
+    const desktop = createDevicePresence({ swarm: s1, ...app, getVaultKey: () => VAULT, getDeviceKey: () => DESKTOP })
+    const peer = createDevicePresence({ swarm: s2, ...mobile, getVaultKey: () => VAULT, getDeviceKey: () => PHONE, getStatus: async () => status })
+    desktop.install()
+    peer.install()
+    const [a, b] = pipePair()
+    s1.connect(a)
+    s2.connect(b)
+    await until(() => desktop.statuses().get(PHONE)?.synced === 2)
+    expect(peer.statuses().size).toBe(0) // the desktop sends none
+    status = { kind: 'peer', holding: 4, synced: 4 }
+    await peer.announce()
+    await until(() => desktop.statuses().get(PHONE)?.synced === 4)
+    expect([...desktop.connectedDevices()]).toEqual([PHONE])
+    a.destroy()
+  })
+
   it('does not pair with a peer in another Vault', async () => {
     const s1 = fakeSwarm()
     const s2 = fakeSwarm()

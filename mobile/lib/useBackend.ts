@@ -120,7 +120,20 @@ export interface VaultMsg {
   writable?: boolean
   sync?: SyncStatus
   connectedDevices?: string[] // Vault writer keys of the Devices connected to this phone right now
+  peers?: VaultPeer[] // always-on Peers (ADR-0038)
   message?: string
+}
+
+// An always-on Peer (ADR-0038, shared/peers.mjs): a machine that keeps a full copy online and never
+// writes. `summary` is its row's status line ("Online · 12 kept in sync · 3.2 GB").
+export interface VaultPeer {
+  key: string
+  name: string
+  kind: 'own' | 'blind'
+  addedAt: string
+  online: boolean
+  summary: string
+  spaces: { rootDriveKey: string; name: string; kept: boolean }[]
 }
 
 // previous: the last session's lines, sent only when asked for.
@@ -177,7 +190,7 @@ export interface NoteLiveEvent { id: string; conn: string; kind: 'message' | 'st
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages' | 'calendar' | 'photos'
+export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages' | 'calendar' | 'photos' | 'peers'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).

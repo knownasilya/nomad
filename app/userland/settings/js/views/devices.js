@@ -24,6 +24,9 @@ class DevicesView extends LitElement {
       confirmingKey: { type: String },
       sync: { type: Object },
       shareTabs: { type: Boolean },
+      peers: { type: Array },
+      peerInvite: { type: String },
+      confirmingPeer: { type: String },
     };
   }
 
@@ -49,6 +52,9 @@ class DevicesView extends LitElement {
     this.confirmingKey = '';
     this.sync = null; // nomad.vault.getSyncStatus(): { connections, vault, spaces }
     this.shareTabs = true; // the sync_open_tabs setting (bg/ui/open-tabs.js)
+    this.peers = []; // nomad.vault.listPeers(): always-on Peers (ADR-0038)
+    this.peerInvite = ''; // an invite code shown as a `nomad-peer join` command
+    this.confirmingPeer = '';
     this._pendingStream = null;
     this._pollTimer = null;
   }
@@ -108,6 +114,7 @@ class DevicesView extends LitElement {
     this.devices = (await nomad.vault.listDevices()) || [];
     this.pending = (await nomad.vault.listPendingRequests()) || [];
     this.sync = await nomad.vault.getSyncStatus().catch(() => null);
+    this.peers = (await nomad.vault.listPeers().catch(() => [])) || [];
     this.requestUpdate();
   }
 
@@ -176,6 +183,11 @@ class DevicesView extends LitElement {
       <div class="section">
         <h2>Your devices</h2>
         ${this.renderDeviceList()}
+      </div>
+
+      <div class="section">
+        <h2>Always-on Peers</h2>
+        ${this.renderPeers()}
       </div>
 
       <div class="section">
@@ -416,16 +428,103 @@ class DevicesView extends LitElement {
     `;
   }
 
+  // Always-on Peers (ADR-0038): machines that keep a full copy online and never write.
+  renderPeers() {
+    return html`
+      <p class="hint">
+        A Peer is a machine that stays on, like a NAS or a small server, running
+        <code>nomad-peer</code>. It keeps a copy of your Spaces online so your devices, and the people
+        you share a Space with, sync while your computers sleep. It can read what it keeps, but it
+        can't change anything. Use disk encryption on that machine.
+        <a href="https://nomad.dev/docs/api/help/always-on-peer/" target="_blank">How to run a Peer</a>
+      </p>
+      ${this.peers.length
+        ? html`<div class="list">${this.peers.map((p) => this.renderPeer(p))}</div>`
+        : ''}
+      ${this.peerInvite
+        ? html`
+            <p class="hint">In the Nomad folder on the Peer, run this, then approve its request here:</p>
+            <div class="invite-code">
+              <code>node peer/index.mjs join ${this.peerInvite}</code>
+              <button class="btn" @click=${this.onCopyPeerCommand} title="Copy command" aria-label="Copy command">
+                <span class="far fa-copy"></span>
+              </button>
+            </div>
+            <div class="actions">
+              <button class="btn" @click=${() => { this.peerInvite = ''; this.requestUpdate(); }}>Done</button>
+            </div>
+          `
+        : html`<div class="actions">
+            <button class="btn" ?disabled=${this.busy} @click=${this.onAddPeer}>
+              <span class="fas fa-fw fa-server"></span> Add an always-on Peer
+            </button>
+          </div>`}
+    `;
+  }
+
+  renderPeer(p) {
+    return html`
+      <div class="row peer">
+        <span class="icon fas fa-fw fa-server"></span>
+        <div class="body">
+          <div class="name">${p.name}</div>
+          <div class="meta">
+            <span class="tag ${p.online ? 'ok' : ''}">${p.summary}</span>
+            Added ${this._formatDate(p.addedAt)}
+          </div>
+          ${p.spaces && p.spaces.length
+            ? html`<div class="peer-spaces">
+                <span class="meta">Keep online:</span>
+                ${p.spaces.map(
+                  (sp) => html`<label class="check">
+                    <input
+                      type="checkbox"
+                      .checked=${sp.kept}
+                      ?disabled=${this.busy}
+                      @change=${(e) => this.onPeerSpace(p, sp, e.currentTarget.checked)}
+                    />
+                    ${sp.name}
+                  </label>`
+                )}
+              </div>`
+            : ''}
+        </div>
+        ${this.confirmingPeer === p.key
+          ? html`<div class="actions">
+              <button class="btn" ?disabled=${this.busy} @click=${() => this.onRemovePeer(p)}>Confirm remove</button>
+              <button class="btn" ?disabled=${this.busy} @click=${() => { this.confirmingPeer = ''; this.requestUpdate(); }}>Cancel</button>
+            </div>`
+          : html`<div class="actions">
+              <button class="btn" ?disabled=${this.busy} @click=${() => { this.confirmingPeer = p.key; this.requestUpdate(); }} title="Remove this Peer">
+                <span class="fas fa-times"></span> Remove
+              </button>
+            </div>`}
+      </div>
+      ${this.confirmingPeer === p.key
+        ? html`<p class="hint">
+            The Peer stops and deletes its copies once it sees this. A Peer that's been stolen
+            keeps what it already copied.
+          </p>`
+        : ''}
+    `;
+  }
+
   renderPending() {
     return html`
       <div class="list">
         ${this.pending.map(
           (r) => html`
             <div class="row">
-              <span class="icon fas fa-fw fa-user-clock"></span>
+              <span class="icon fas fa-fw ${r.platform === 'peer' ? 'fa-server' : 'fa-user-clock'}"></span>
               <div class="body">
                 <div class="name">${r.name}</div>
-                <div class="meta">Requested ${this._formatDate(r.requestedAt)} · ${r.platform}</div>
+                <div class="meta">Requested ${this._formatDate(r.requestedAt)} · ${r.platform === 'peer' ? 'always-on Peer' : r.platform}</div>
+                ${r.platform === 'peer'
+                  ? html`<div class="meta">
+                      It will keep a full copy of your Vault and Spaces and can read them. It can't
+                      change anything, add a device, or act as you.
+                    </div>`
+                  : ''}
               </div>
               <div class="actions">
                 <button class="btn primary" ?disabled=${this.busy} @click=${() => this.onClickApprove(r)}>
@@ -545,6 +644,55 @@ class DevicesView extends LitElement {
     this.busy = true;
     try {
       await nomad.vault.denyDevice(req.deviceKey);
+      await this._refresh();
+    } catch (e) {
+      toast.create(e.message || String(e), 'error');
+    } finally {
+      this.busy = false;
+      this.requestUpdate();
+    }
+  }
+
+  async onAddPeer() {
+    this.busy = true;
+    try {
+      const { code } = await nomad.vault.createInvite();
+      this.peerInvite = code;
+    } catch (e) {
+      toast.create(e.message || String(e), 'error');
+    } finally {
+      this.busy = false;
+      this.requestUpdate();
+    }
+  }
+
+  onCopyPeerCommand() {
+    try {
+      navigator.clipboard.writeText(`node peer/index.mjs join ${this.peerInvite}`);
+      toast.create('Command copied');
+    } catch {}
+  }
+
+  async onPeerSpace(peer, space, on) {
+    this.busy = true;
+    try {
+      await nomad.vault.setPeerSpace(peer.key, space.rootDriveKey, on);
+      toast.create(on ? `${peer.name} keeps ${space.name} online` : `${peer.name} no longer keeps ${space.name}`);
+      await this._refresh();
+    } catch (e) {
+      toast.create(e.message || String(e), 'error');
+    } finally {
+      this.busy = false;
+      this.requestUpdate();
+    }
+  }
+
+  async onRemovePeer(peer) {
+    this.busy = true;
+    try {
+      await nomad.vault.removePeer(peer.key);
+      this.confirmingPeer = '';
+      toast.create(`Removed ${peer.name}`);
       await this._refresh();
     } catch (e) {
       toast.create(e.message || String(e), 'error');

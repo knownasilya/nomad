@@ -1,0 +1,14 @@
+{
+  "name": "nomad-peer",
+  "version": "0.1.0",
+  "description": "An always-on Nomad Peer: keeps your drives, Vault and shared Spaces online from a machine that stays on.",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "nomad-peer": "./index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

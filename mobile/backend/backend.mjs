@@ -9,6 +9,7 @@ import goodbye from 'graceful-goodbye'
 import DriveManager from './lib/drive-manager.mjs'
 import { HttpGateway } from './lib/http-gateway.mjs'
 import { parseHyperUrl } from './lib/hyper-url.mjs'
+import { listPeers, setPeerSpace, removePeer } from './lib/peers.mjs'
 import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault, publishOwnSpaces, publishOwnVersion } from './lib/vault.mjs'
 import * as drafts from './lib/drafts.mjs'
 import * as vaultApps from './lib/vault-apps.mjs'
@@ -689,7 +690,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
       return
     }
     if (!vault) {
-      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'messages' ? 'Link this phone to your computer to use Messages' : app === 'updates' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : app === 'calendar' ? 'Link this phone to your computer to use the calendar' : app === 'photos' ? 'Link this phone to your computer to see your family photos' : 'Link this phone to use Reader and Notes' })
+      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'messages' ? 'Link this phone to your computer to use Messages' : app === 'updates' || app === 'peers' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : app === 'calendar' ? 'Link this phone to your computer to use the calendar' : app === 'photos' ? 'Link this phone to your computer to see your family photos' : 'Link this phone to use Reader and Notes' })
       return
     }
     let value
@@ -752,6 +753,8 @@ async function handleApps ({ reqId, app, action, ...args }) {
       await inbox.handle('forget', { personaId: args.id }).catch(() => {})
       value = await vaultApps.removePersona(vault, args.id)
     } else if (app === 'messages') value = await inbox.handle(action, args)
+    else if (app === 'peers' && action === 'setSpace') value = await setPeerSpace(vault, args)
+    else if (app === 'peers' && action === 'remove') value = await removePeer(vault, args)
     else if (app === 'updates' && action === 'list') value = await vaultApps.deviceUpdates(vault, args.version)
     else if (app === 'updates' && action === 'request') value = await vaultApps.requestDeviceUpdate(vault, { device: args.device, version: args.version, prerelease: !!args.prerelease })
     else throw new Error(`Unknown ${app} action: ${action}`)
@@ -1215,6 +1218,8 @@ async function handleVaultStatus ({ reqId, spaceKeys = [], ownSpaces = null, own
       thisDeviceKey,
       ...index,
       connectedDevices: [...presence.connectedDevices()],
+      // Always-on Peers (ADR-0038), with the status each connected one last sent.
+      peers: await listPeers(vault, { connected: presence.connectedDevices(), statuses: presence.statuses() }).catch(() => []),
       sync: await syncStatus(index, spaceKeys)
     })
   } catch (err) {
