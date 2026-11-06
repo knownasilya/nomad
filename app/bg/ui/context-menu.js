@@ -11,7 +11,7 @@ import { isHyperOrPearUrl } from '../../lib/urls';
 import * as highlights from './highlights';
 import * as mods from './mods';
 import * as saveToReader from './save-to-reader';
-import { shellMenuTemplate } from './shell-context-menu.mjs';
+import { parseItemLink } from '../../../shared/item-links.mjs';
 
 // NOTE
 // subtle but important!!
@@ -41,10 +41,17 @@ export default function registerContextMenu() {
       }
       var targetTab = tabManager.getActive(targetWindow);
 
-      // the shell's own UI (the AI Sidebar, …): a plain edit menu, see ./shell-context-menu.mjs
-      if (props.pageURL == 'nomad://shell-window/') {
-        return showShellMenu(webContents, targetWindow, props);
+      // The shell's own UI (the AI Sidebar, …) gets the same menu as a page, less what acts on a
+      // page (panes, back/forward, print, …). Parts of the shell with their own menu (tabs, pins,
+      // groups, the location bar) call preventDefault, so this never runs for them. A link here is
+      // in an AI answer: it opens only as parseItemLink allows, like a click on it does.
+      const isShell = props.pageURL == 'nomad://shell-window/';
+      const linkURL = isShell ? parseItemLink(props.linkURL)?.url || '' : props.linkURL;
+      if (isShell && !linkURL && !props.isEditable && !hasText) {
+        return;
       }
+      // a menu role acts on the focused webContents, which can be the tab's page and not the shell
+      const edit = (role) => (isShell ? { click: () => webContents[role]() } : { role });
       if (props.pageURL.startsWith('nomad://modals')) {
         return modals.handleContextMenu(webContents, targetWindow, can, props);
       }
@@ -70,30 +77,34 @@ export default function registerContextMenu() {
       };
 
       // links
-      if (props.linkURL) {
+      if (linkURL) {
         menuItems.push({
           label: 'Open Link in New Tab',
           click: (item, win) =>
-            tabManager.create(win, props.linkURL, {
+            tabManager.create(win, linkURL, {
               setActiveBySettings: true,
               adjacentActive: true,
             }),
         });
         menuItems.push({
           label: 'Copy Link Address',
-          click: () => clipboard.writeText(props.linkURL),
+          click: () => clipboard.writeText(linkURL),
         });
         menuItems.push({
           label: 'Save Link As...',
-          click: downloadPrompt('linkURL', '.html'),
+          click: isShell
+            ? (item, win) => download(win, webContents, linkURL, {})
+            : downloadPrompt('linkURL', '.html'),
         });
-        if (saveToReader.canSave(props.linkURL) && saveToReader.canSave(props.pageURL)) {
+        if (saveToReader.canSave(linkURL) && saveToReader.canSave(props.pageURL)) {
           menuItems.push({
             label: 'Save Link to Reader',
-            click: () => saveToReader.saveLink(webContents, props.linkURL),
+            click: () => saveToReader.saveLink(webContents, linkURL),
           });
         }
         menuItems.push({ type: 'separator' });
+      }
+      if (props.linkURL && !isShell) {
         menuItems.push({
           label: 'Open in Pane Right',
           click() {
@@ -138,7 +149,7 @@ export default function registerContextMenu() {
       }
 
       // images
-      if (props.mediaType == 'image') {
+      if (props.mediaType == 'image' && !isShell) {
         menuItems.push({
           label: 'Save Image As...',
           click: downloadPrompt('srcURL'),
@@ -188,7 +199,7 @@ export default function registerContextMenu() {
       }
 
       // videos and audios
-      if (props.mediaType == 'video' || props.mediaType == 'audio') {
+      if ((props.mediaType == 'video' || props.mediaType == 'audio') && !isShell) {
         menuItems.push({
           label: 'Loop',
           type: 'checkbox',
@@ -215,7 +226,7 @@ export default function registerContextMenu() {
       }
 
       // videos
-      if (props.mediaType == 'video') {
+      if (props.mediaType == 'video' && !isShell) {
         menuItems.push({
           label: 'Save Video As...',
           click: downloadPrompt('srcURL'),
@@ -232,7 +243,7 @@ export default function registerContextMenu() {
       }
 
       // audios
-      if (props.mediaType == 'audio') {
+      if (props.mediaType == 'audio' && !isShell) {
         menuItems.push({
           label: 'Save Audio As...',
           click: downloadPrompt('srcURL'),
@@ -249,7 +260,7 @@ export default function registerContextMenu() {
       }
 
       // spell check
-      if (props.isMisspelled !== '' && props.isEditable) {
+      if (isMisspelled && props.isEditable) {
         menuItems.push({
           label: 'Add to dictionary',
           click: () => webContents.session.addWordToSpellCheckerDictionary(isMisspelled),
@@ -258,10 +269,7 @@ export default function registerContextMenu() {
           for (let i in spellingSuggestions) {
             menuItems.push({
               label: spellingSuggestions[i],
-              click: (item, win) =>
-                webContents.replaceMisspelling(item.label, {
-                  adjacentActive: true,
-                }),
+              click: (item) => webContents.replaceMisspelling(item.label),
             });
           }
         }
@@ -269,20 +277,20 @@ export default function registerContextMenu() {
       }
 
       // highlights (./highlights.js): asks the page what the click was on
-      const marks = await highlights.menuItems(webContents, props);
+      const marks = isShell ? { items: [] } : await highlights.menuItems(webContents, props);
 
       // clipboard
       if (props.isEditable) {
-        menuItems.push({ label: 'Cut', role: 'cut', enabled: can('Cut') });
-        menuItems.push({ label: 'Copy', role: 'copy', enabled: can('Copy') });
+        menuItems.push({ label: 'Cut', ...edit('cut'), enabled: can('Cut') });
+        menuItems.push({ label: 'Copy', ...edit('copy'), enabled: can('Copy') });
         menuItems.push({
           label: 'Paste',
-          role: 'paste',
+          ...edit('paste'),
           enabled: editFlags.canPaste,
         });
         menuItems.push({ type: 'separator' });
       } else if (hasText) {
-        menuItems.push({ label: 'Copy', role: 'copy', enabled: can('Copy') });
+        menuItems.push({ label: 'Copy', ...edit('copy'), enabled: can('Copy') });
         if (marks.copyLink) menuItems.push(marks.copyLink);
         menuItems.push({ type: 'separator' });
       }
@@ -312,6 +320,16 @@ export default function registerContextMenu() {
           click: (item, win) => tabManager.create(win, query, { adjacentActive: true }),
         });
         menuItems.push({ type: 'separator' });
+      }
+
+      // the rest acts on a page: the shell ends with Inspect Element
+      if (isShell) {
+        menuItems.push(
+          createMenuItem('inspect-element', { webContents, tab: targetTab, x: props.x, y: props.y })
+        );
+        menuInstance = Menu.buildFromTemplate(menuItems);
+        menuInstance.popup({ window: targetWindow });
+        return;
       }
 
       if (!props.linkURL && props.mediaType === 'none' && !hasText) {
@@ -398,28 +416,6 @@ export default function registerContextMenu() {
       menuInstance.popup({ window: targetWindow });
     });
   });
-}
-
-// Each action calls the shell's webContents directly, not a menu `role`: a role acts on the
-// focused webContents, which can be the tab's page and not the shell.
-function showShellMenu(webContents, targetWindow, props) {
-  const run = {
-    cut: () => webContents.cut(),
-    copy: () => webContents.copy(),
-    paste: () => webContents.paste(),
-    selectAll: () => webContents.selectAll(),
-    copyLink: (it) => clipboard.writeText(it.url),
-    replaceMisspelling: (it) => webContents.replaceMisspelling(it.word),
-    addToDictionary: (it) => webContents.session.addWordToSpellCheckerDictionary(it.word),
-  };
-  const template = shellMenuTemplate(props).map((it) =>
-    it.type === 'separator'
-      ? it
-      : { label: it.label, enabled: it.enabled !== false, click: () => run[it.action](it) }
-  );
-  if (!template.length) return;
-  menuInstance = Menu.buildFromTemplate(template);
-  menuInstance.popup({ window: targetWindow });
 }
 
 export function shouldShowMenuItem(id, { tab, webContents }) {
