@@ -11,6 +11,12 @@
 //   one Space's (unshared)  /.vault/spaces/<rootKey>/calendar/…
 //   a shared Space's        its Space Library, /calendar/…
 //
+// A drive can be a calendar too (walled.garden/calendar): its /index.json says so, and each of its
+// events is a file in /events/ (walled.garden/calendar-event), in the same wall-time format as the
+// records here. The calendar follows one like an iCal feed: a feed record with `kind: 'drive'` and
+// the drive's root as `url`, whose copy (feedCache) holds the drive's events. Desktop's bg and the
+// phone's backend read the drive (readCalendarDrive's parts below are the rules for what they read).
+//
 // Times are wall-clock times with no zone: '2026-11-10' for a day, '2026-11-10T18:00' for a time
 // (the value an <input type=datetime-local> gives). A household shares a time zone, and "bins at 6pm
 // every Tuesday" stays at 6pm across a clock change. An iCal time in UTC is turned into the fetching
@@ -23,6 +29,10 @@ import { isSpaceKey, spaceLibPrefix } from './vault-apps.mjs';
 export const EVENT_TYPE = 'nomad/calendar-event';
 export const FEED_TYPE = 'nomad/calendar-feed';
 export const FEED_CACHE_TYPE = 'nomad/calendar-feed-cache';
+// The drive kind (index.json `type`) and the record kind of each of its events.
+export const CALENDAR_TYPE = 'walled.garden/calendar';
+export const CALENDAR_EVENT_TYPE = 'walled.garden/calendar-event';
+export const DEFAULT_EVENTS_PATH = '/events/';
 
 export const MAX_TITLE = 200;
 export const MAX_TEXT = 2000;
@@ -30,6 +40,9 @@ export const MAX_FEEDS = 20;
 export const MAX_FEED_EVENTS = 500;
 // A feed is fetched again once its copy is this old.
 export const FEED_TTL_MS = 6 * 60 * 60 * 1000;
+// A calendar drive changes as its writers add to it, and reading it costs nothing, so its copy is
+// read again sooner.
+export const DRIVE_TTL_MS = 5 * 60 * 1000;
 export const MAX_RANGE_DAYS = 400;
 
 export const FREQS = ['daily', 'weekly', 'monthly', 'yearly'];
@@ -67,7 +80,10 @@ export function recordFile(id) {
 
 function randomHex(n = 4) {
   let s = '';
-  for (let i = 0; i < n; i++) s += Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
+  for (let i = 0; i < n; i++)
+    s += Math.floor(Math.random() * 256)
+      .toString(16)
+      .padStart(2, '0');
   return s;
 }
 
@@ -143,7 +159,10 @@ const clean = (s, max) =>
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, max);
-const cleanText = (s, max) => String(s ?? '').trim().slice(0, max);
+const cleanText = (s, max) =>
+  String(s ?? '')
+    .trim()
+    .slice(0, max);
 
 /** @param {{ freq?: string, interval?: number, until?: string, count?: number, byDay?: number[] } | null | undefined} r */
 export function normalizeRepeat(r) {
@@ -191,7 +210,8 @@ export function makeEvent(f, prev = null, now = new Date().toISOString()) {
     if (end && isDate(end)) end += 'T' + start.slice(11);
     if (end && !isDateTime(end)) throw new Error('Not a time: ' + end);
   }
-  if (end && toMinutes(end) < toMinutes(start)) throw new Error('An event can’t end before it starts');
+  if (end && toMinutes(end) < toMinutes(start))
+    throw new Error('An event can’t end before it starts');
   const rec = {
     type: EVENT_TYPE,
     id: f.id,
@@ -214,7 +234,13 @@ export function makeEvent(f, prev = null, now = new Date().toISOString()) {
 }
 
 export function isEvent(rec) {
-  return !!rec && rec.type === EVENT_TYPE && isCalendarId(rec.id) && typeof rec.title === 'string' && (isDate(rec.start) || isDateTime(rec.start));
+  return (
+    !!rec &&
+    rec.type === EVENT_TYPE &&
+    isCalendarId(rec.id) &&
+    typeof rec.title === 'string' &&
+    (isDate(rec.start) || isDateTime(rec.start))
+  );
 }
 
 // An iCal feed URL, tidied: webcal:// is https://. Throws for anything that isn't http(s).
@@ -227,17 +253,49 @@ export function feedUrl(url) {
   } catch {
     throw new Error('That isn’t a calendar link');
   }
-  if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('A calendar link starts with https://');
+  if (u.protocol !== 'https:' && u.protocol !== 'http:')
+    throw new Error('A calendar link starts with https://');
   u.hash = '';
   return u.toString();
+}
+
+// A calendar drive's root, 'hyper://<key>/', from any link into it. Null for anything else.
+const DRIVE_RE = /^hyper:\/\/([0-9a-z]{52,64})(?:[/?#]|$)/i;
+export function driveRoot(url) {
+  const m = DRIVE_RE.exec(String(url || '').trim());
+  return m ? `hyper://${m[1].toLowerCase()}/` : null;
+}
+
+// What a link the user pastes follows: { kind: 'drive', url } for a hyper:// drive, else
+// { kind: 'ics', url } for an iCal link. Throws for anything else.
+export function sourceOf(url) {
+  const s = String(url || '').trim();
+  if (/^hyper:\/\//i.test(s)) {
+    const root = driveRoot(s);
+    if (!root) throw new Error('That isn’t a drive’s hyper:// address');
+    return { kind: 'drive', url: root };
+  }
+  return { kind: 'ics', url: feedUrl(s) };
+}
+
+export function isDriveFeed(feed) {
+  return !!feed && feed.kind === 'drive';
 }
 
 /** @param {{ id: string, url: string, name?: string, color?: string, by?: string }} f */
 export function makeFeed(f, prev = null, now = new Date().toISOString()) {
   if (!isCalendarId(f.id)) throw new Error('Not a calendar id: ' + f.id);
-  const url = feedUrl(f.url);
-  const name = clean(f.name, 80) || hostOf(url);
-  const rec = { type: FEED_TYPE, id: f.id, url, name, createdAt: prev?.createdAt || now, updatedAt: now };
+  const { kind, url } = sourceOf(f.url);
+  const name = clean(f.name, 80) || (kind === 'drive' ? 'Calendar drive' : hostOf(url));
+  const rec = {
+    type: FEED_TYPE,
+    id: f.id,
+    url,
+    name,
+    createdAt: prev?.createdAt || now,
+    updatedAt: now,
+  };
+  if (kind === 'drive') rec.kind = 'drive';
   if (/^#[0-9a-f]{6}$/i.test(String(f.color || ''))) rec.color = f.color.toLowerCase();
   const by = clean(prev?.by || f.by, 60);
   if (by) rec.by = by;
@@ -258,33 +316,166 @@ export function isFeed(rec) {
 
 // The copy of a feed's events: { type, feedId, url, fetchedAt, events, error? }. Keeps what can still
 // show (anything that repeats, or ends within the last 30 days or later), at most MAX_FEED_EVENTS.
-export function makeFeedCache(feed, { events = [], error = '' } = {}, prev = null, now = new Date()) {
+export function makeFeedCache(
+  feed,
+  { events = [], error = '' } = {},
+  prev = null,
+  now = new Date()
+) {
   const cutoff = addDays(localWallTime(now), -30);
   const keep = [];
   for (const e of events) {
     if (keep.length >= MAX_FEED_EVENTS) break;
     if (!e || !e.title || !(isDate(e.start) || isDateTime(e.start))) continue;
     if (!e.repeat && dayOf(e.end || e.start) < cutoff) continue;
-    const out = { uid: clean(e.uid, 200) || e.start + e.title, title: clean(e.title, MAX_TITLE), start: e.start, allDay: !!e.allDay };
+    const out = {
+      uid: clean(e.uid, 200) || e.start + e.title,
+      title: clean(e.title, MAX_TITLE),
+      start: e.start,
+      allDay: !!e.allDay,
+    };
     if (e.end) out.end = e.end;
     if (e.location) out.location = clean(e.location, MAX_TITLE);
+    if (e.notes) out.notes = cleanText(e.notes, MAX_TEXT);
     if (e.repeat) out.repeat = e.repeat;
     if (e.exclude?.length) out.exclude = e.exclude.slice(0, 100);
     keep.push(out);
   }
-  const rec = { type: FEED_CACHE_TYPE, feedId: feed.id, url: feed.url, fetchedAt: now.toISOString(), events: error && prev ? prev.events || [] : keep };
+  const rec = {
+    type: FEED_CACHE_TYPE,
+    feedId: feed.id,
+    url: feed.url,
+    fetchedAt: now.toISOString(),
+    events: error && prev ? prev.events || [] : keep,
+  };
   if (error) rec.error = clean(error, 200);
   return rec;
 }
 
 export function isFeedCache(rec) {
-  return !!rec && rec.type === FEED_CACHE_TYPE && isCalendarId(rec.feedId) && Array.isArray(rec.events);
+  return (
+    !!rec && rec.type === FEED_CACHE_TYPE && isCalendarId(rec.feedId) && Array.isArray(rec.events)
+  );
 }
 
-// Whether a feed's copy is old enough to fetch again.
-export function feedDue(cache, now = Date.now()) {
+// Whether a feed's copy is old enough to fetch again. Pass the feed for its kind's wait: a calendar
+// drive's is DRIVE_TTL_MS.
+export function feedDue(cache, now = Date.now(), feed = null) {
   if (!cache || !cache.fetchedAt) return true;
-  return now - Date.parse(cache.fetchedAt) >= FEED_TTL_MS;
+  return now - Date.parse(cache.fetchedAt) >= (isDriveFeed(feed) ? DRIVE_TTL_MS : FEED_TTL_MS);
+}
+
+// Calendar drives
+// =
+//
+// A drive whose /index.json is { type: 'walled.garden/calendar', title, description?, color?,
+// eventsPath? } keeps one file per event in eventsPath ('/events/' unless it says otherwise):
+// /events/<name>.json, { type: 'walled.garden/calendar-event', title, start, end?, allDay?,
+// location?, notes?, repeat?, exclude?, status? }. `start`, `end`, `repeat` and `exclude` are as an
+// event record's here; a 'cancelled' status leaves the event out. The file's name is its uid.
+
+export function isCalendarManifest(m) {
+  return !!m && typeof m === 'object' && m.type === CALENDAR_TYPE;
+}
+
+// The folder a calendar drive keeps its events in, '/like/this/'. Anything odd is the default.
+export function calendarEventsPath(manifest) {
+  let p = typeof manifest?.eventsPath === 'string' ? manifest.eventsPath.trim() : '';
+  if (!p || p.length > 200 || /(^|\/)\.\.?(\/|$)/.test(p) || /[\\?#]/.test(p))
+    return DEFAULT_EVENTS_PATH;
+  if (!p.startsWith('/')) p = '/' + p;
+  if (!p.endsWith('/')) p += '/';
+  return p.replace(/\/{2,}/g, '/');
+}
+
+// What the calendar takes from a calendar drive's manifest: { name, color }.
+export function calendarInfo(manifest) {
+  const out = { name: clean(manifest?.title, 80) || 'Calendar drive', color: null };
+  if (/^#[0-9a-f]{6}$/i.test(String(manifest?.color || '')))
+    out.color = manifest.color.toLowerCase();
+  return out;
+}
+
+// The event files among a drive's listed paths (`keys`, as nomad.fs.list gives them): the .json
+// files right in eventsPath, sorted, at most `max`.
+export function eventFiles(keys, eventsPath = DEFAULT_EVENTS_PATH, max = MAX_FEED_EVENTS * 2) {
+  const out = [];
+  for (const k of keys || []) {
+    const path = String(typeof k === 'string' ? k : k?.key || '');
+    const p = path.startsWith('/') ? path : '/' + path;
+    if (!p.startsWith(eventsPath)) continue;
+    const name = p.slice(eventsPath.length);
+    if (!/^[^/]{1,120}\.json$/.test(name) || name.startsWith('.')) continue;
+    out.push(p);
+  }
+  return [...new Set(out)].sort().slice(0, max);
+}
+
+// One event file of a calendar drive as the calendar keeps it (a feed copy's event), or null when it
+// isn't one. `path` is the file's path; its name is the event's uid.
+export function driveEvent(rec, path = '') {
+  if (!rec || typeof rec !== 'object' || rec.type !== CALENDAR_EVENT_TYPE) return null;
+  if (String(rec.status || '').toLowerCase() === 'cancelled') return null;
+  const title = clean(rec.title, MAX_TITLE);
+  if (!title) return null;
+  const allDay = rec.allDay === true || (rec.allDay !== false && isDate(rec.start));
+  let start = String(rec.start || '');
+  let end = rec.end ? String(rec.end) : '';
+  if (allDay) {
+    start = dayOf(start);
+    end = end ? dayOf(end) : '';
+    if (!isDate(start) || (end && !isDate(end))) return null;
+  } else {
+    if (!isDateTime(start)) return null;
+    if (end && isDate(end)) end += 'T' + start.slice(11);
+    if (end && !isDateTime(end)) return null;
+  }
+  if (end && toMinutes(end) < toMinutes(start)) end = '';
+  const uid =
+    String(path)
+      .split('/')
+      .pop()
+      .replace(/\.json$/, '') || start + title;
+  const ev = { uid, title, start, allDay };
+  if (end && end !== start) ev.end = end;
+  const location = clean(rec.location, MAX_TITLE);
+  if (location) ev.location = location;
+  const notes = cleanText(rec.notes, MAX_TEXT);
+  if (notes) ev.notes = notes;
+  try {
+    const repeat = normalizeRepeat(rec.repeat);
+    if (repeat) ev.repeat = repeat;
+  } catch {
+    return null;
+  }
+  if (Array.isArray(rec.exclude)) {
+    const ex = rec.exclude
+      .map(String)
+      .filter((x) => (allDay ? isDate(x) : isDateTime(x) || isDate(x)));
+    const full = ex.map((x) => (!allDay && isDate(x) ? x + 'T' + start.slice(11) : x));
+    if (full.length) ev.exclude = full.slice(0, 100);
+  }
+  return ev;
+}
+
+// A calendar drive's events from its files, [{ path, value }] (value is the parsed JSON, or the text),
+// in time order. Anything that isn't an event is left out.
+export function driveEvents(files = []) {
+  const out = [];
+  for (const f of files) {
+    let v = f?.value;
+    if (typeof v === 'string') {
+      try {
+        v = JSON.parse(v);
+      } catch {
+        continue;
+      }
+    }
+    const ev = driveEvent(v, f?.path);
+    if (ev) out.push(ev);
+  }
+  out.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+  return out;
 }
 
 // Repeats
@@ -306,7 +497,10 @@ export function occurrences(ev, from, to, limit = 1000) {
   const out = [];
   const take = (s) => {
     if (s < toMin && s + span > fromMin && !excluded.has(fromMinutes(s, withTime))) {
-      out.push({ start: fromMinutes(s, withTime), end: hasEnd ? fromMinutes(s + length, withTime) : null });
+      out.push({
+        start: fromMinutes(s, withTime),
+        end: hasEnd ? fromMinutes(s + length, withTime) : null,
+      });
     }
   };
   const r = ev.repeat;
@@ -395,15 +589,31 @@ export function agenda({ events = [], feeds = [] }, from, to) {
           end: o.end,
           allDay: !!ev.allDay,
           location: ev.location || '',
-          notes: '',
+          notes: ev.notes || '',
           by: '',
           repeats: !!ev.repeat,
-          feed: { id: feed.id, name: feed.name, color: feed.color || null },
+          feed: {
+            id: feed.id,
+            name: feed.name,
+            color: feed.color || null,
+            kind: isDriveFeed(feed) ? 'drive' : 'ics',
+            url: feed.url,
+          },
         });
       }
     }
   }
-  out.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : a.allDay === b.allDay ? a.title.localeCompare(b.title) : a.allDay ? -1 : 1));
+  out.sort((a, b) =>
+    a.start < b.start
+      ? -1
+      : a.start > b.start
+        ? 1
+        : a.allDay === b.allDay
+          ? a.title.localeCompare(b.title)
+          : a.allDay
+            ? -1
+            : 1
+  );
   return out;
 }
 
@@ -414,7 +624,9 @@ export function describeWhen(o) {
   const label = `${DAY_NAMES[weekday(day)]} ${+day.slice(8, 10)} ${MONTHS[+day.slice(5, 7) - 1]}`;
   if (o.allDay) {
     const last = o.end ? dayOf(o.end) : day;
-    return last > day ? `${label} to ${DAY_NAMES[weekday(last)]} ${+last.slice(8, 10)} ${MONTHS[+last.slice(5, 7) - 1]}` : `${label}, all day`;
+    return last > day
+      ? `${label} to ${DAY_NAMES[weekday(last)]} ${+last.slice(8, 10)} ${MONTHS[+last.slice(5, 7) - 1]}`
+      : `${label}, all day`;
   }
   const t = o.start.slice(11, 16);
   const e = o.end ? (dayOf(o.end) === day ? o.end.slice(11, 16) : null) : null;
@@ -426,7 +638,8 @@ export function describeRepeat(r) {
   if (!r) return '';
   const unit = { daily: 'day', weekly: 'week', monthly: 'month', yearly: 'year' }[r.freq];
   let s = r.interval > 1 ? `Every ${r.interval} ${unit}s` : `Every ${unit}`;
-  if (r.freq === 'weekly' && r.byDay?.length) s += ' on ' + r.byDay.map((d) => DAY_NAMES[d]).join(', ');
+  if (r.freq === 'weekly' && r.byDay?.length)
+    s += ' on ' + r.byDay.map((d) => DAY_NAMES[d]).join(', ');
   if (r.until) s += ` until ${r.until}`;
   if (r.count) s += `, ${r.count} times`;
   return s;
@@ -436,7 +649,11 @@ export function describeRepeat(r) {
 export function agendaText(list, { max = 200 } = {}) {
   if (!list.length) return 'Nothing on the calendar in that time.';
   const lines = list.slice(0, max).map((o) => {
-    const extra = [o.location && `at ${o.location}`, o.feed && `from ${o.feed.name}`, o.by && `added by ${o.by}`].filter(Boolean);
+    const extra = [
+      o.location && `at ${o.location}`,
+      o.feed && `from ${o.feed.name}`,
+      o.by && `added by ${o.by}`,
+    ].filter(Boolean);
     return `- ${describeWhen(o)}: ${o.title}${extra.length ? ` (${extra.join('; ')})` : ''}`;
   });
   if (list.length > max) lines.push(`[${list.length - max} more not shown]`);
@@ -524,7 +741,12 @@ export function parseIcs(text, { toLocal = localWallTime, max = 5000 } = {}) {
     }
     if (/^END:VEVENT$/i.test(line)) {
       if (cur.start && cur.title && !cur.recurrenceId && cur.status !== 'CANCELLED') {
-        const ev = { uid: cur.uid || '', title: cur.title, start: cur.start.value, allDay: cur.start.allDay };
+        const ev = {
+          uid: cur.uid || '',
+          title: cur.title,
+          start: cur.start.value,
+          allDay: cur.start.allDay,
+        };
         if (cur.end) {
           // An all-day DTEND is the day after the last day.
           ev.end = cur.start.allDay && cur.end.allDay ? addDays(cur.end.value, -1) : cur.end.value;
@@ -561,7 +783,12 @@ export function parseIcs(text, { toLocal = localWallTime, max = 5000 } = {}) {
     else if (name === 'EXDATE') {
       for (const v of value.split(',')) {
         const x = icalTime(v, params, toLocal);
-        if (x) cur.exclude.push(cur.start && !cur.start.allDay && x.allDay ? x.value + 'T' + cur.start.value.slice(11) : x.value);
+        if (x)
+          cur.exclude.push(
+            cur.start && !cur.start.allDay && x.allDay
+              ? x.value + 'T' + cur.start.value.slice(11)
+              : x.value
+          );
       }
     }
   }
@@ -571,8 +798,10 @@ export function parseIcs(text, { toLocal = localWallTime, max = 5000 } = {}) {
 // What sharing a Space moves into its Library: the paths of its calendar records there.
 export function shareCalendarPaths(items = {}) {
   const out = [];
-  for (const e of items.events || []) if (isEvent(e)) out.push({ path: libraryPrefix('events') + e.id + '.json', value: e });
-  for (const f of items.feeds || []) if (isFeed(f)) out.push({ path: libraryPrefix('feeds') + f.id + '.json', value: f });
+  for (const e of items.events || [])
+    if (isEvent(e)) out.push({ path: libraryPrefix('events') + e.id + '.json', value: e });
+  for (const f of items.feeds || [])
+    if (isFeed(f)) out.push({ path: libraryPrefix('feeds') + f.id + '.json', value: f });
   return out;
 }
 

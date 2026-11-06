@@ -292,6 +292,17 @@ aside {
   color: var(--text-color--light);
 }
 
+.drive-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+}
+
+.feed a.icon-btn {
+  color: inherit;
+}
+
 .feed .sub.err {
   color: var(--cal-err);
 }

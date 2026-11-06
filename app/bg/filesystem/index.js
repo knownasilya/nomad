@@ -213,7 +213,7 @@ export async function setup() {
 
 export function getDriveIdent(url) {
   const system = isRootUrl(url);
-  return { system, internal: system, profile: false, feed: false, person: false };
+  return { system, internal: system, profile: false, feed: false, person: false, calendar: false };
 }
 
 export async function getDriveIdentFull(url) {
@@ -235,6 +235,8 @@ export async function getDriveIdentFull(url) {
             const manifest = await autobases.readJson(sess, '/index.json');
             if (manifest) {
               ident.feed = manifest.type === 'walled.garden/feed';
+              // A calendar drive: site-info offers Follow in Calendar (ADR-0042 amendment).
+              ident.calendar = manifest.type === 'walled.garden/calendar';
               // A Profile Drive: site-info offers Message (ADR-0036 §9).
               ident.person = manifest.type === 'walled.garden/person';
               _applyListingIdent(ident, manifest);
@@ -261,6 +263,7 @@ export async function getDriveIdentFull(url) {
       const manifest = JSON.parse(buf.toString());
       ident.profile = manifest.type === 'walled.garden/person';
       ident.feed = manifest.type === 'walled.garden/feed';
+      ident.calendar = manifest.type === 'walled.garden/calendar';
       ident.person = manifest.type === 'walled.garden/person';
       _applyListingIdent(ident, manifest);
     }

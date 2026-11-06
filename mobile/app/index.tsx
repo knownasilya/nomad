@@ -1142,6 +1142,9 @@ export default function Browser () {
     return [...persist.drives, ...extras]
   }, [persist.drives, registryDrives])
 
+  // The Space's drives, for the calendar to look for calendar drives among (ADR-0042 amendment).
+  const calendarDriveUrls = useMemo(() => libraryDrives.map((d) => d.url), [libraryDrives])
+
   // The drive in the active tab, if it's one you own (so it can be edited).
   const ownedActive = useMemo(
     () => (active.kind === 'hyper' && active.driveKey
@@ -1419,6 +1422,8 @@ export default function Browser () {
         space={spacesApi.activeSpace.rootDriveKey || undefined}
         spaceName={spacesApi.activeSpace.name}
         onOpenDevices={() => openScreen({ name: 'devices' })}
+        drives={calendarDriveUrls}
+        onOpenUrl={openFromReader}
       />
 
       <Photos

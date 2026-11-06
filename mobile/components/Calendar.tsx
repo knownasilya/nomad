@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Modal, View, Text, TextInput, ScrollView, Pressable, ActivityIndicator, Alert, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
-import type { Backend, CalendarEvent, CalendarFeed, CalendarList, CalendarOccurrence, CalendarRepeat } from '../lib/useBackend'
+import type { Backend, CalendarDrive, CalendarEvent, CalendarFeed, CalendarList, CalendarOccurrence, CalendarRepeat } from '../lib/useBackend'
 import { ListSection, ListRow, SwitchRow, ListEmpty } from './List'
 import ActionSheet from './ActionSheet'
 import BottomSheet from './BottomSheet'
@@ -19,13 +19,16 @@ interface Props {
   spaceName?: string
   openDay?: string // YYYY-MM-DD, e.g. from a link in an AI answer
   onOpenDevices: () => void
+  drives?: string[] // the Space's drives (hyper:// roots): the Follow sheet offers the calendar drives among them
+  onOpenUrl?: (url: string) => void // open a calendar drive in a tab
 }
 
 // The phone's calendar (ADR-0042), the same records as desktop's nomad://calendar: a month to pick a
 // day, that day's events, the two weeks after it, and the iCal feeds this calendar follows. In a
 // shared Space, its events are the household's: everyone who can edit adds and changes them, and
 // each says who added it. Feed events are read-only. A feed's file is fetched here when its copy is
-// old and nobody else has (calendar/feedFetched); usually a computer has.
+// old and nobody else has (calendar/feedFetched); usually a computer has. A calendar drive
+// (walled.garden/calendar) is followed the same way; the backend reads it (calendar/fetchDrive).
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -88,7 +91,7 @@ interface Draft {
   inSpace: boolean
 }
 
-export default function Calendar ({ visible, onClose, apps, onVaultChange, space, spaceName, openDay, onOpenDevices }: Props) {
+export default function Calendar ({ visible, onClose, apps, onVaultChange, space, spaceName, openDay, onOpenDevices, drives, onOpenUrl }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const appsRef = useRef(apps)
@@ -106,6 +109,8 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
   const [feedUrl, setFeedUrl] = useState('')
   const [feedInSpace, setFeedInSpace] = useState(true)
   const [feedMenu, setFeedMenu] = useState<CalendarFeed | null>(null)
+  // The Space's calendar drives the calendar could follow, looked for when the Follow sheet opens.
+  const [calDrives, setCalDrives] = useState<CalendarDrive[]>([])
   const [readOnly, setReadOnly] = useState<CalendarOccurrence | null>(null)
   const fetching = useRef(new Set<string>())
 
@@ -132,6 +137,13 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
     for (const f of feeds) {
       if ((!f.due && !force) || fetching.current.has(f.id)) continue
       fetching.current.add(f.id)
+      if (f.kind === 'drive') {
+        // A calendar drive: the backend reads it and keeps the copy.
+        await call('calendar', 'fetchDrive', { id: f.id })
+        fetching.current.delete(f.id)
+        changed = true
+        continue
+      }
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT)
       let text = ''
@@ -272,8 +284,19 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
     ])
   }
 
-  const follow = async () => {
-    const url = feedUrl.trim()
+  const drivesKey = (drives || []).join(' ')
+  useEffect(() => {
+    if (!feedSheet || !drivesKey) { setCalDrives([]); return }
+    let cancelled = false
+    call<CalendarDrive[]>('calendar', 'drives', { urls: drivesKey.split(' ') }).then((res) => {
+      if (!cancelled && res.ok && Array.isArray(res.value)) setCalDrives(res.value)
+    })
+    return () => { cancelled = true }
+  }, [feedSheet, drivesKey, call])
+
+  // Follow an iCal link or a calendar drive.
+  const follow = async (link = feedUrl.trim()) => {
+    const url = link.trim()
     if (!url) return
     setBusy(true)
     const res = await call<CalendarFeed>('calendar', 'saveFeed', { feed: { url, inSpace: feedInSpace && canWriteSpace } })
@@ -281,7 +304,10 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
     if (!res.ok || !res.value) { Alert.alert('Couldn’t follow it', res.message || 'Unknown error'); return }
     setFeedSheet(false)
     setFeedUrl('')
-    await fetchDue([{ ...(res.value as CalendarFeed), due: true }], true)
+    const feed = res.value as CalendarFeed
+    // A drive's copy was kept as it was followed.
+    if (feed.kind === 'drive') refresh()
+    else await fetchDue([{ ...feed, due: true }], true)
   }
 
   const unfollow = (f: CalendarFeed) => {
@@ -392,14 +418,14 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
             <ListSection
               title='Calendars you follow'
               action={writable ? { label: 'Follow', onPress: () => { setFeedInSpace(canWriteSpace); setFeedSheet(true) } } : undefined}
-              footer='iCal links from a school, a club or another calendar app. Their events show here but are changed where they come from.'
+              footer='iCal links from a school, a club or another calendar app, and calendar drives. Their events show here but are changed where they come from.'
             >
               {list.feeds.length ? list.feeds.map((f, i) => (
                 <ListRow
                   key={f.id}
                   title={f.name}
-                  subtitle={f.error ? f.error : [f.fetchedAt ? `${f.count} event${f.count === 1 ? '' : 's'}` : 'Not fetched yet', f.space ? (shared ? `Shared in ${placeName}` : `Only in ${placeName}`) : ''].filter(Boolean).join(' · ')}
-                  icon='calendar-alt'
+                  subtitle={f.error ? f.error : [f.kind === 'drive' ? 'Drive' : '', f.fetchedAt ? `${f.count} event${f.count === 1 ? '' : 's'}` : 'Not fetched yet', f.space ? (shared ? `Shared in ${placeName}` : `Only in ${placeName}`) : ''].filter(Boolean).join(' · ')}
+                  icon={f.kind === 'drive' ? 'hdd' : 'calendar-alt'}
                   iconColor={f.error ? t.danger : t.textDim}
                   divider={i > 0}
                   onPress={() => setFeedMenu(f)}
@@ -466,8 +492,25 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
         {/* Follow an iCal feed */}
         <BottomSheet visible={feedSheet} onClose={() => setFeedSheet(false)} style={s.sheet}>
           <Text style={s.sheetTitle}>Follow a calendar</Text>
-          <Text style={s.hint}>Paste an iCal link (https:// or webcal://), like the one a school or a club shares.</Text>
-          <TextInput style={s.input} value={feedUrl} onChangeText={setFeedUrl} placeholder='https://…/calendar.ics' placeholderTextColor={t.textMuted} autoCapitalize='none' autoCorrect={false} keyboardType='url' autoFocus />
+          <Text style={s.hint}>Paste an iCal link (https:// or webcal://), like the one a school or a club shares, or a calendar drive’s hyper:// address.</Text>
+          <TextInput style={s.input} value={feedUrl} onChangeText={setFeedUrl} placeholder='iCal link or hyper:// drive' placeholderTextColor={t.textMuted} autoCapitalize='none' autoCorrect={false} keyboardType='url' autoFocus={!calDrives.length} />
+          {calDrives.length > 0 && (
+            <View style={s.switchCard}>
+              {calDrives.map((d, i) => (
+                <ListRow
+                  key={d.url}
+                  title={d.name}
+                  subtitle='Calendar drive in this Space'
+                  icon='hdd'
+                  iconColor={d.color || t.textDim}
+                  divider={i > 0}
+                  disabled={busy}
+                  right={<Text style={s.linkText}>Follow</Text>}
+                  onPress={() => follow(d.url)}
+                />
+              ))}
+            </View>
+          )}
           {canWriteSpace && (
             <View style={s.switchCard}>
               <SwitchRow title={shared ? `Share with ${placeName}` : `Only in ${placeName}`} value={feedInSpace} onValueChange={setFeedInSpace} />
@@ -476,7 +519,7 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
           <View style={s.actions}>
             <View style={{ flex: 1 }} />
             <Pressable style={s.btn} onPress={() => setFeedSheet(false)} accessibilityRole='button'><Text style={s.btnText}>Cancel</Text></Pressable>
-            <Pressable style={[s.btn, s.btnPrimary]} onPress={follow} disabled={busy || !feedUrl.trim()} accessibilityRole='button'><Text style={s.btnPrimaryText}>{busy ? 'Following…' : 'Follow'}</Text></Pressable>
+            <Pressable style={[s.btn, s.btnPrimary]} onPress={() => follow()} disabled={busy || !feedUrl.trim()} accessibilityRole='button'><Text style={s.btnPrimaryText}>{busy ? 'Following…' : 'Follow'}</Text></Pressable>
           </View>
         </BottomSheet>
 
@@ -487,7 +530,8 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
           title={feedMenu?.name}
           subtitle={feedMenu?.url}
           groups={[[
-            { label: 'Fetch it now', icon: 'redo-alt', disabled: !writable, onPress: () => feedMenu && fetchDue([{ ...feedMenu, due: true }], true) },
+            ...(feedMenu?.kind === 'drive' && onOpenUrl ? [{ label: 'Open the drive', icon: 'external-link-alt', onPress: () => { const url = feedMenu.url; setFeedMenu(null); onOpenUrl(url) } }] : []),
+            { label: feedMenu?.kind === 'drive' ? 'Read it now' : 'Fetch it now', icon: 'redo-alt', disabled: !writable, onPress: () => feedMenu && fetchDue([{ ...feedMenu, due: true }], true) },
             { label: 'Stop following', icon: 'trash', destructive: true, disabled: !writable || (!!feedMenu?.space && !canWriteSpace), onPress: () => feedMenu && unfollow(feedMenu) }
           ]]}
         />
@@ -500,7 +544,7 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
               <Text style={s.body}>{dayLabel(readOnly.start.slice(0, 10))}, {timeOf(readOnly, readOnly.start.slice(0, 10))}</Text>
               {!!readOnly.location && <Text style={s.body}>At {readOnly.location}</Text>}
               {!!readOnly.notes && <Text style={s.body}>{readOnly.notes}</Text>}
-              <Text style={s.hint}>{readOnly.feed ? `From ${readOnly.feed.name}. Change it where it comes from.` : `Added by ${readOnly.by || 'someone'} in ${placeName}. You can view this Space’s calendar, but not change it.`}</Text>
+              <Text style={s.hint}>{readOnly.feed ? `From ${readOnly.feed.name}. ${readOnly.feed.kind === 'drive' ? 'Change it in the drive.' : 'Change it where it comes from.'}` : `Added by ${readOnly.by || 'someone'} in ${placeName}. You can view this Space’s calendar, but not change it.`}</Text>
             </View>
           )}
         </BottomSheet>
@@ -562,6 +606,7 @@ function makeStyles (t: Theme) {
     btnPrimary: { backgroundColor: t.accent, borderColor: t.accent },
     btnPrimaryText: { color: t.onAccent, fontSize: 14, fontWeight: '600' },
     btnDanger: { borderColor: t.danger },
-    btnDangerText: { color: t.danger, fontSize: 14, fontWeight: '600' }
+    btnDangerText: { color: t.danger, fontSize: 14, fontWeight: '600' },
+    linkText: { color: t.accent, fontSize: 14, fontWeight: '600' }
   })
 }

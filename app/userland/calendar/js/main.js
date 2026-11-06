@@ -1,5 +1,6 @@
 // nomad://calendar — the Calendar: events the user adds, a shared Space's events its members add,
-// and iCal feeds (the school's, a club's) the calendar follows.
+// and the calendars it follows: iCal feeds (the school's, a club's) and calendar drives
+// (walled.garden/calendar, a drive that keeps its events as files in /events/).
 //
 // - A month grid; the left panel shows the picked day's events and the feeds.
 // - An event is the user's (it shows in every Space) or the Space's. In a shared Space a new event
@@ -37,6 +38,7 @@ const state = {
   month: today().slice(0, 7) + '-01', // the first day of the month shown
   selected: today(),
   data: null, // nomad.vault.listCalendar()
+  drives: [], // nomad.vault.listCalendarDrives(): calendar drives in this Space not followed yet
   editing: null, // the event form, or null
   feedUrl: '',
   feedShared: true,
@@ -53,12 +55,16 @@ init().catch((err) => {
 
 async function init() {
   const q = new URLSearchParams(location.search)
+  // nomad://calendar/?follow=hyper://<key>/ (site-info's Follow in Calendar): the drive's address
+  // goes in the Follow box, for the user to follow.
+  if (/^hyper:\/\/[0-9a-z]{52,64}\/?$/i.test(q.get('follow') || '')) state.feedUrl = q.get('follow')
   if (/^\d{4}-\d{2}-\d{2}$/.test(q.get('day') || '')) {
     state.selected = q.get('day')
     state.month = state.selected.slice(0, 7) + '-01'
   }
   await load()
   render()
+  loadDrives()
   // Feeds that are due are fetched in the background, then the page loads again.
   nomad.vault
     .refreshCalendarFeeds({})
@@ -87,6 +93,16 @@ function gridRange() {
 async function load() {
   const { from, to } = gridRange()
   state.data = await nomad.vault.listCalendar({ from, to })
+}
+
+// The calendar drives this Space has that the calendar could follow.
+async function loadDrives() {
+  try {
+    state.drives = (await nomad.vault.listCalendarDrives()) || []
+  } catch {
+    state.drives = []
+  }
+  render()
 }
 
 // Each day's occurrences: an all-day event over several days shows on each.
@@ -158,21 +174,32 @@ function renderSide(days) {
               f.error
                 ? el('div', { class: 'sub err', title: f.error }, [`Couldn’t update: ${f.error}`])
                 : el('div', { class: 'sub' }, [
+                    f.kind === 'drive' ? 'Drive · ' : '',
                     `${f.count} event${f.count === 1 ? '' : 's'}`,
                     f.space ? ` · ${data.shared ? 'shared' : 'this Space'}` : ' · yours',
                   ]),
             ]),
+            f.kind === 'drive'
+              ? el('a', { class: 'icon-btn', href: f.url, target: '_blank', title: `Open ${f.name}`, 'aria-label': `Open ${f.name}` }, [icon('external-link-alt')])
+              : null,
             el('button', { class: 'icon-btn danger', title: `Stop following ${f.name}`, 'aria-label': `Stop following ${f.name}`, onclick: () => removeFeed(f) }, [icon('times')]),
           ])
         )
       ),
       el('form', { class: 'subscribe', onsubmit: addFeed }, [
         el('input', {
-          type: 'url',
-          placeholder: 'https://…/calendar.ics',
-          'aria-label': 'iCal link',
+          type: 'text',
+          inputmode: 'url',
+          spellcheck: 'false',
+          placeholder: 'iCal link or hyper:// drive',
+          'aria-label': 'An iCal link, or a calendar drive’s hyper:// address',
           value: state.feedUrl,
-          oninput: (e) => (state.feedUrl = e.target.value),
+          oninput: (e) => {
+            state.feedUrl = e.target.value
+            // No render while typing (it would lose the caret): just turn Follow on or off.
+            const btn = e.target.form?.querySelector('button[type=submit]')
+            if (btn) btn.disabled = state.busy || !state.feedUrl.trim()
+          },
         }),
         el('button', { class: 'btn', type: 'submit', disabled: state.busy || !state.feedUrl.trim() }, ['Follow']),
       ]),
@@ -182,9 +209,25 @@ function renderSide(days) {
             data.shared ? `Everyone in ${data.spaceName || 'this Space'} sees it` : `Only in ${data.spaceName || 'this Space'}`,
           ])
         : null,
-      el('div', { class: 'hint' }, ['Paste the iCal (.ics or webcal://) link of a school, club or team calendar.']),
+      el('div', { class: 'hint' }, ['Paste the iCal (.ics or webcal://) link of a school, club or team calendar, or the hyper:// address of a calendar drive.']),
+      renderDrives(),
       state.error && !state.editing ? el('div', { class: 'hint', style: 'color:var(--cal-err)' }, [state.error]) : null,
     ]),
+  ])
+}
+
+// Calendar drives in this Space the calendar doesn't follow yet, each with Follow.
+function renderDrives() {
+  if (!state.drives.length) return null
+  return el('div', { class: 'drive-picks' }, [
+    el('h3', { class: 'section-title' }, ['Calendar drives in this Space']),
+    ...state.drives.map((d) =>
+      el('div', { class: 'feed' }, [
+        el('span', { class: 'dot', style: d.color ? `background:${d.color}` : null }),
+        el('div', { class: 'meta' }, [el('div', { class: 'name', title: d.url }, [d.name]), el('div', { class: 'sub' }, ['Drive'])]),
+        el('button', { class: 'btn', disabled: state.busy, onclick: () => followDrive(d) }, ['Follow']),
+      ])
+    ),
   ])
 }
 
@@ -196,7 +239,7 @@ function renderItem(o) {
     'button',
     {
       class: 'item' + (readonly ? ' readonly' : ''),
-      title: readonly ? `From ${o.feed.name}. Change it there.` : 'Edit this event',
+      title: readonly ? `From ${o.feed.name}. ${o.feed.kind === 'drive' ? 'Change it in the drive' : 'Change it there'}.${o.notes ? '\n\n' + o.notes : ''}` : 'Edit this event',
       onclick: readonly ? null : () => openEditor(o.id),
     },
     [el('span', { class: 'time' }, [time]), el('span', {}, [el('div', { class: 'title' }, [o.title]), sub ? el('div', { class: 'sub' }, [sub]) : null])]
@@ -440,7 +483,15 @@ async function deleteEvent() {
 
 async function addFeed(ev) {
   ev.preventDefault()
-  const url = state.feedUrl.trim()
+  await follow(state.feedUrl.trim())
+}
+
+function followDrive(d) {
+  return follow(d.url)
+}
+
+// Follow an iCal link or a calendar drive.
+async function follow(url) {
   if (!url || state.busy) return
   state.busy = true
   state.error = ''
@@ -448,7 +499,8 @@ async function addFeed(ev) {
   try {
     const data = state.data || {}
     await nomad.vault.saveCalendarFeed({ url, inSpace: !!(data.space && data.canWriteSpace && state.feedShared) })
-    state.feedUrl = ''
+    if (url === state.feedUrl.trim()) state.feedUrl = ''
+    state.drives = state.drives.filter((d) => d.url !== url)
     await load()
   } catch (err) {
     state.error = cleanError(err)
@@ -463,6 +515,7 @@ async function removeFeed(f) {
   try {
     await nomad.vault.deleteCalendarFeed(f.id)
     await load()
+    if (f.kind === 'drive') loadDrives()
   } catch (err) {
     state.error = cleanError(err)
   }

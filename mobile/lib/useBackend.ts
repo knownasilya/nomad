@@ -203,9 +203,12 @@ export interface Note { type: 'nomad/note'; id: string; body: string; createdAt:
 export interface CalendarRepeat { freq: 'daily' | 'weekly' | 'monthly' | 'yearly'; interval: number; until?: string; count?: number; byDay?: number[] }
 export interface CalendarEvent { type: 'nomad/calendar-event'; id: string; title: string; start: string; end?: string; allDay: boolean; location?: string; notes?: string; repeat?: CalendarRepeat; by?: string; createdAt: string; updatedAt: string; space?: string | null }
 // due: its copy is old and this phone can fetch a new one (calendar/feedFetched).
-export interface CalendarFeed { id: string; url: string; name: string; color?: string | null; by?: string; space?: string | null; fetchedAt: string | null; error: string; count: number; due: boolean }
+// kind 'drive': a calendar drive (walled.garden/calendar), whose `url` is the drive's root; else an iCal link.
+export interface CalendarFeed { id: string; url: string; name: string; kind?: 'drive'; color?: string | null; by?: string; space?: string | null; fetchedAt: string | null; error: string; count: number; due: boolean }
+// A calendar drive in the Space that the calendar doesn't follow yet (calendar/drives).
+export interface CalendarDrive { url: string; name: string; color: string | null }
 // One time an event happens: `id` is the event's, or '<feedId>:<uid>' for one from a feed (`feed`).
-export interface CalendarOccurrence { id: string; title: string; start: string; end?: string; allDay: boolean; location: string; notes: string; by: string; repeats: boolean; feed: { id: string; name: string; color: string | null } | null }
+export interface CalendarOccurrence { id: string; title: string; start: string; end?: string; allDay: boolean; location: string; notes: string; by: string; repeats: boolean; feed: { id: string; name: string; color: string | null; kind?: 'ics' | 'drive'; url?: string } | null }
 export interface CalendarList { space: string | null; shared: boolean; canWriteSpace: boolean; writable: boolean; from: string; to: string; events: CalendarEvent[]; feeds: CalendarFeed[]; occurrences: CalendarOccurrence[] }
 // The family album of a shared Space (shared/photos.mjs, ADR-0043, backend/lib/photos.mjs). by:
 // who added it. canDelete: this person added it, or owns the Space.
