@@ -219,7 +219,7 @@ class ShellWindowSidebar extends LitElement {
         @mouseleave=${this._hidePinTip}
         @click=${() => this._onClickPin(tile)}
         @mousedown=${(e) => this._onMousedownPin(e, tile)}
-        @contextmenu=${() => this._onContextmenuPin(tile)}
+        @contextmenu=${(e) => this._onContextmenuPin(e, tile)}
         @dragstart=${(e) => this._onDragstartPin(e, tile)}
         @dragend=${this._onDragendTab}
         @dragover=${(e) => this._onDragoverPin(e, tile)}
@@ -488,6 +488,7 @@ class ShellWindowSidebar extends LitElement {
   }
 
   _onContextmenuTab(e, index) {
+    e.preventDefault();
     bg.views.showTabContextMenu(index);
   }
 
@@ -665,7 +666,8 @@ class ShellWindowSidebar extends LitElement {
     if (e.which === 2 && tile.index >= 0) bg.views.closeTab(tile.index);
   }
 
-  _onContextmenuPin(tile) {
+  _onContextmenuPin(e, tile) {
+    e.preventDefault();
     if (tile.index >= 0) bg.views.showTabContextMenu(tile.index);
     else bg.views.showPinContextMenu(tile.href);
   }

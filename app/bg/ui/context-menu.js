@@ -11,6 +11,7 @@ import { isHyperOrPearUrl } from '../../lib/urls';
 import * as highlights from './highlights';
 import * as mods from './mods';
 import * as saveToReader from './save-to-reader';
+import { shellMenuTemplate } from './shell-context-menu.mjs';
 
 // NOTE
 // subtle but important!!
@@ -40,9 +41,9 @@ export default function registerContextMenu() {
       }
       var targetTab = tabManager.getActive(targetWindow);
 
-      // handle shell UI specially
+      // the shell's own UI (the AI Sidebar, …): a plain edit menu, see ./shell-context-menu.mjs
       if (props.pageURL == 'nomad://shell-window/') {
-        return;
+        return showShellMenu(webContents, targetWindow, props);
       }
       if (props.pageURL.startsWith('nomad://modals')) {
         return modals.handleContextMenu(webContents, targetWindow, can, props);
@@ -397,6 +398,28 @@ export default function registerContextMenu() {
       menuInstance.popup({ window: targetWindow });
     });
   });
+}
+
+// Each action calls the shell's webContents directly, not a menu `role`: a role acts on the
+// focused webContents, which can be the tab's page and not the shell.
+function showShellMenu(webContents, targetWindow, props) {
+  const run = {
+    cut: () => webContents.cut(),
+    copy: () => webContents.copy(),
+    paste: () => webContents.paste(),
+    selectAll: () => webContents.selectAll(),
+    copyLink: (it) => clipboard.writeText(it.url),
+    replaceMisspelling: (it) => webContents.replaceMisspelling(it.word),
+    addToDictionary: (it) => webContents.session.addWordToSpellCheckerDictionary(it.word),
+  };
+  const template = shellMenuTemplate(props).map((it) =>
+    it.type === 'separator'
+      ? it
+      : { label: it.label, enabled: it.enabled !== false, click: () => run[it.action](it) }
+  );
+  if (!template.length) return;
+  menuInstance = Menu.buildFromTemplate(template);
+  menuInstance.popup({ window: targetWindow });
 }
 
 export function shouldShowMenuItem(id, { tab, webContents }) {
