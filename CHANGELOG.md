@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.43.1](https://github.com/knownasilya/nomad/compare/v1.43.0...v1.43.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **spaces:** stop adding other Devices' Vault keys to Space Root Drives ([67a0e75](https://github.com/knownasilya/nomad/commit/67a0e755a679edad47e76acca234618c2cc73736))
+
 ## [1.43.0](https://github.com/knownasilya/nomad/compare/v1.42.0...v1.43.0) (2026-11-06)
 
 
