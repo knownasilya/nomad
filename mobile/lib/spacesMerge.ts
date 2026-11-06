@@ -21,6 +21,7 @@ export interface MergeVaultSpace {
   icon?: string
   color?: string
   movedTo?: string
+  deleted?: boolean // a tombstone: the Space was deleted or left on one of the user's Devices
   personal?: boolean // set by desktop on its default Personal Space
   originId?: number | string // desktop's local Space id (1 is its Personal), a hint only
   createdAt?: string
@@ -49,14 +50,16 @@ export interface MergeResult<S extends MergeSpace> {
   // The phone's own Spaces that the Vault doesn't list yet. The caller publishes them when the
   // Vault is writable here.
   toPublish: S[]
-  // Ids that left the list (a second copy of the Vault's Personal). The caller moves off them.
+  // Ids that left the list (a second copy of the Vault's Personal, or a Space deleted on another
+  // Device). The caller moves off them.
   dropped: string[]
 }
 
 // Bring `prev` (the phone's list) in line with the Vault's Space index. `vaultSpaces` is every
-// record, `movedTo` pointers included. An empty index (not replicated yet) changes nothing.
+// record, `movedTo` pointers and tombstones (`deleted`, shared/space-records.mjs) included. An empty
+// index (not replicated yet) changes nothing.
 export function mergeVaultSpaces<S extends MergeSpace> (prev: S[], vaultSpaces: MergeVaultSpace[], now = Date.now()): MergeResult<S> {
-  const live = vaultSpaces.filter((vs) => vs.rootDriveKey && !vs.movedTo)
+  const live = vaultSpaces.filter((vs) => vs.rootDriveKey && !vs.movedTo && !vs.deleted)
   if (!live.length) return { next: prev, changed: false, toPublish: [], dropped: [] }
   const byKey = new Map(live.map((vs) => [vs.rootDriveKey, vs]))
   // A Space whose Root Drive got a new key on another device: old key -> new key.
@@ -71,6 +74,17 @@ export function mergeVaultSpaces<S extends MergeSpace> (prev: S[], vaultSpaces: 
     changed = true
     return { ...s, rootDriveKey: to, rootDriveUrl: `hyper://${to}/`, ns: undefined }
   })
+
+  // A Space deleted (or left) on another Device goes from here too. Never the phone's Personal.
+  const gone = new Set(vaultSpaces.filter((vs) => vs.deleted && vs.rootDriveKey).map((vs) => vs.rootDriveKey))
+  if (gone.size) {
+    list = list.filter((s) => {
+      if (s.id === PERSONAL_ID || !s.rootDriveKey || !gone.has(s.rootDriveKey)) return true
+      dropped.push(s.id)
+      changed = true
+      return false
+    })
+  }
 
   // The phone's Personal is the Vault's Personal. It keeps its id (and so its tabs and history);
   // an earlier sync's second copy of the Vault's Personal goes.
@@ -120,7 +134,7 @@ export function mergeVaultSpaces<S extends MergeSpace> (prev: S[], vaultSpaces: 
 
   // Spaces made on this phone before it paired (or while the Vault was still opening) go into the
   // Vault. Never the phone's Personal: that one is the Vault's.
-  const toPublish = list.filter((s) => s.id !== PERSONAL_ID && s.source === 'local' && s.rootDriveKey && !byKey.has(s.rootDriveKey))
+  const toPublish = list.filter((s) => s.id !== PERSONAL_ID && s.source === 'local' && s.rootDriveKey && !byKey.has(s.rootDriveKey) && !gone.has(s.rootDriveKey))
 
   return { next: changed ? list : prev, changed, toPublish, dropped }
 }

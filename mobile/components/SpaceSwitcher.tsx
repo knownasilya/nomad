@@ -7,12 +7,25 @@ import {
   Pressable,
   ScrollView,
   ActivityIndicator,
+  Alert,
   StyleSheet
 } from 'react-native'
 import BottomSheet from './BottomSheet'
 import Icon from './Icon'
+import IconButton from './IconButton'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
-import { SPACE_COLORS, type Space } from '../lib/useSpaces'
+import { SPACE_COLORS, SPACE_NAME_MAX, PERSONAL_ID, type Space } from '../lib/useSpaces'
+
+const COLOR_NAMES: Record<string, string> = {
+  '#6c6cff': 'Blue',
+  '#e85d4a': 'Red',
+  '#e8a025': 'Orange',
+  '#3ab36e': 'Green',
+  '#2b9fd4': 'Sky blue',
+  '#9b59b6': 'Purple',
+  '#e91e8c': 'Pink',
+  '#607d8b': 'Gray'
+}
 
 interface Props {
   visible: boolean
@@ -25,11 +38,16 @@ interface Props {
   onCreate: (opts: { name: string; color: string }) => Promise<unknown> | unknown
   // Join a shared Space with a code from its owner. Resolves once they approve; rejects with why not.
   onJoin?: (opts: { code: string; name: string }) => Promise<unknown>
+  // Rename and recolor a Space; delete it, or leave a shared one. Each resolves to an error, or null.
+  onEdit?: (id: string, edit: { name: string; color: string }) => Promise<string | null>
+  onRemove?: (id: string, action: 'delete' | 'leave') => Promise<string | null>
 }
+
+interface Editing { id: string; name: string; color: string; personal: boolean; shared: boolean }
 
 // Space switcher — a bottom sheet listing spaces (color dot + name + active check) with a create
 // form, mirroring nomad desktop's spaces menu (app/fg/shell-menus/spaces.js).
-export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId, vaultKeys, peopleKeys = [], onSwitch, onCreate, onJoin }: Props) {
+export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId, vaultKeys, peopleKeys = [], onSwitch, onCreate, onJoin, onEdit, onRemove }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const shared = new Set(vaultKeys)
@@ -49,7 +67,13 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
   const [color, setColor] = useState(SPACE_COLORS[0])
   const [busy, setBusy] = useState(false)
 
+  // Editing one Space: its name and color, and Delete (Leave, for a Space shared with other people).
+  const [editing, setEditing] = useState<Editing | null>(null)
+  const [editError, setEditError] = useState('')
+
   const reset = () => {
+    setEditing(null)
+    setEditError('')
     setJoining(false)
     setCode('')
     setWaiting(false)
@@ -78,6 +102,56 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
     }
   }
 
+  const startEdit = (sp: Space) => {
+    setCreating(false)
+    setJoining(false)
+    setEditError('')
+    setEditing({
+      id: sp.id,
+      name: sp.name,
+      color: sp.color,
+      personal: sp.id === PERSONAL_ID,
+      shared: !!sp.rootDriveKey && withPeople.has(sp.rootDriveKey)
+    })
+  }
+
+  const save = async () => {
+    if (!editing || !onEdit || !editing.name.trim()) return
+    setBusy(true)
+    setEditError('')
+    const err = await onEdit(editing.id, { name: editing.name, color: editing.color })
+    setBusy(false)
+    if (err) setEditError(err)
+    else setEditing(null)
+  }
+
+  const remove = () => {
+    if (!editing || !onRemove) return
+    const ed = editing
+    const leave = ed.shared
+    Alert.alert(
+      leave ? `Leave ${ed.name}?` : `Delete ${ed.name}?`,
+      leave
+        ? 'It goes from all your devices. The others keep it, and you need a new invite to come back.'
+        : 'Its tabs close and it goes from all your devices. This can’t be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: leave ? 'Leave' : 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setBusy(true)
+            setEditError('')
+            const err = await onRemove(ed.id, leave ? 'leave' : 'delete')
+            setBusy(false)
+            if (err) setEditError(err)
+            else setEditing(null)
+          }
+        }
+      ]
+    )
+  }
+
   const join = async () => {
     if (!onJoin || !code.trim()) return
     setWaiting(true)
@@ -94,6 +168,57 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
 
   return (
     <BottomSheet visible={visible} onClose={close} style={s.sheet}>
+      {editing ? (
+        <View>
+          <View style={s.editHeader}>
+            <IconButton icon='arrow-left' label='Back to spaces' size={16} onPress={() => { setEditing(null); setEditError('') }} disabled={busy} />
+            <Text style={s.editTitle}>Edit space</Text>
+          </View>
+          <View style={s.form}>
+            <TextInput
+              style={s.input}
+              placeholder='Space name'
+              placeholderTextColor={t.textMuted}
+              accessibilityLabel='Space name'
+              value={editing.name}
+              maxLength={SPACE_NAME_MAX}
+              onChangeText={(v) => { setEditing({ ...editing, name: v }); setEditError('') }}
+              editable={!busy}
+              onSubmitEditing={save}
+            />
+            <View style={s.swatches}>
+              {SPACE_COLORS.map((c) => (
+                <TouchableOpacity
+                  key={c}
+                  style={[s.swatch, { backgroundColor: c }, editing.color === c && s.swatchActive]}
+                  onPress={() => setEditing({ ...editing, color: c })}
+                  accessibilityRole='button'
+                  accessibilityLabel={COLOR_NAMES[c] || c}
+                  accessibilityState={{ selected: editing.color === c }}
+                />
+              ))}
+            </View>
+            {editError ? <Text style={s.error}>{editError}</Text> : null}
+            <View style={s.formActions}>
+              <TouchableOpacity style={s.btnGhost} onPress={() => { setEditing(null); setEditError('') }} disabled={busy}>
+                <Text style={s.btnGhostText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.btn, (!editing.name.trim() || busy) && s.btnDisabled]} onPress={save} disabled={!editing.name.trim() || busy}>
+                {busy ? <ActivityIndicator color={t.onAccent} /> : <Text style={s.btnText}>Save</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+          {editing.personal ? (
+            <Text style={s.note}>Your Personal space can be renamed but not deleted.</Text>
+          ) : onRemove ? (
+            <Pressable style={s.newBtn} onPress={remove} disabled={busy} android_ripple={{ color: t.ripple }} accessibilityRole='button'>
+              <View style={s.newIcon}><Icon name={editing.shared ? 'sign-out-alt' : 'trash-alt'} size={13} color={t.danger} /></View>
+              <Text style={s.dangerText}>{editing.shared ? 'Leave space' : 'Delete space'}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : (
+      <>
       <Text style={s.title}>Spaces</Text>
 
       <ScrollView style={s.list} keyboardShouldPersistTaps='handled'>
@@ -114,6 +239,7 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
                 ? <Icon name='sync-alt' size={13} color={t.secure} style={s.shared} />
                 : null}
             {sp.id === activeSpaceId ? <Icon name='check' size={15} color={t.accent} /> : null}
+            {onEdit ? <IconButton icon='pen' label={`Edit ${sp.name}`} size={14} onPress={() => startEdit(sp)} style={s.editBtn} /> : null}
           </Pressable>
         ))}
       </ScrollView>
@@ -214,6 +340,8 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
           <Text style={s.newBtnText}>Join a shared space</Text>
         </Pressable>
       ) : null}
+      </>
+      )}
     </BottomSheet>
   )
 }
@@ -228,7 +356,12 @@ function makeStyles (t: Theme) {
     },
     title: { fontSize: 16, fontWeight: '600', color: t.text, marginBottom: space.sm, paddingHorizontal: space.lg },
     list: { flexGrow: 0 },
-    row: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 52, paddingHorizontal: space.lg, borderRadius: radius.md, overflow: 'hidden' },
+    row: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 52, paddingLeft: space.lg, paddingRight: space.xs, borderRadius: radius.md, overflow: 'hidden' },
+    editBtn: { marginLeft: -space.xs },
+    editHeader: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: -space.sm },
+    editTitle: { fontSize: 16, fontWeight: '600', color: t.text },
+    note: { color: t.textMuted, fontSize: 13, paddingHorizontal: space.lg, marginTop: space.md },
+    dangerText: { color: t.danger, fontSize: 15, fontWeight: '600' },
     rowActive: { backgroundColor: t.surfaceAlt },
     dot: { width: 14, height: 14, borderRadius: radius.pill },
     rowName: { flex: 1, fontSize: 16, color: t.text },

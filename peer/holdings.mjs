@@ -35,7 +35,7 @@ export async function readHoldings ({ base, b4a, peerKey, readRegistry = async (
   const registries = {}
   for (const s of spaces) {
     const root = s && s.rootDriveKey
-    if (!peers.isKey(root) || s.removed || s.movedTo) continue
+    if (!peers.isKey(root) || s.removed || s.movedTo || s.deleted) continue
     // A Space it doesn't keep only matters when the Peer was given single drives from it.
     if (!peers.holdsSpace(record, root) && hold.drives === 'all') continue
     const from = peers.isKey(s.library) ? s.library : root

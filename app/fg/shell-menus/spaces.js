@@ -2,17 +2,18 @@ import { LitElement, html, css } from 'lit';
 import * as bg from './bg-process-rpc';
 import { spaceDot } from '../lib/space-mark.js';
 import buttonsCSS from './buttons2.css';
+import { SPACE_COLORS as COLORS, SPACE_NAME_MAX } from '../../../shared/space-records.mjs';
 
-const COLORS = [
-  '#6c6cff',
-  '#e85d4a',
-  '#e8a025',
-  '#3ab36e',
-  '#2b9fd4',
-  '#9b59b6',
-  '#e91e8c',
-  '#607d8b',
-];
+const COLOR_NAMES = {
+  '#6c6cff': 'Blue',
+  '#e85d4a': 'Red',
+  '#e8a025': 'Orange',
+  '#3ab36e': 'Green',
+  '#2b9fd4': 'Sky blue',
+  '#9b59b6': 'Purple',
+  '#e91e8c': 'Pink',
+  '#607d8b': 'Gray',
+};
 
 class SpacesMenu extends LitElement {
   static get properties() {
@@ -24,6 +25,8 @@ class SpacesMenu extends LitElement {
       newColor: { type: String },
       persona: { type: Object }, // { personas, defaultId, personaId, resolvedId } for the active Space
       pickingPersona: { type: Boolean },
+      // The Space being edited: { id, name, color, personal, shared, confirming, busy, error }
+      editing: { type: Object },
     };
   }
 
@@ -40,6 +43,7 @@ class SpacesMenu extends LitElement {
     this.newColor = COLORS[0];
     this.persona = null;
     this.pickingPersona = false;
+    this.editing = null;
   }
 
   async init() {
@@ -49,6 +53,7 @@ class SpacesMenu extends LitElement {
   }
 
   render() {
+    if (this.editing) return this.renderEdit();
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="wrapper">
@@ -63,6 +68,14 @@ class SpacesMenu extends LitElement {
                 ${spaceDot(s)}
                 <span class="name">${s.name}</span>
                 ${s.id === this.activeSpace?.id ? html`<span class="fa fa-check"></span>` : ''}
+                <button
+                  class="edit-btn"
+                  title="Edit ${s.name}"
+                  aria-label="Edit ${s.name}"
+                  @click=${(e) => this.onStartEdit(e, s)}
+                >
+                  <span class="fa fa-pen"></span>
+                </button>
               </div>
             `
           )}
@@ -147,6 +160,7 @@ class SpacesMenu extends LitElement {
           class="name-input"
           type="text"
           placeholder="Space name"
+          maxlength=${SPACE_NAME_MAX}
           .value=${this.newName}
           @input=${(e) => {
             this.newName = e.target.value;
@@ -159,6 +173,9 @@ class SpacesMenu extends LitElement {
               <button
                 class="swatch ${c === this.newColor ? 'selected' : ''}"
                 style="background:${c}"
+                title=${COLOR_NAMES[c]}
+                aria-label=${COLOR_NAMES[c]}
+                aria-pressed=${c === this.newColor ? 'true' : 'false'}
                 @click=${() => {
                   this.newColor = c;
                 }}
@@ -176,6 +193,140 @@ class SpacesMenu extends LitElement {
     `;
   }
 
+  // Rename, recolor, and delete (or leave, for a Space shared with other people) one Space.
+  renderEdit() {
+    const ed = this.editing;
+    const what = ed.shared ? 'Leave' : 'Delete';
+    return html`
+      <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
+      <div class="wrapper">
+        <div class="header edit-header">
+          <button class="back-btn" title="Back to Spaces" aria-label="Back to Spaces" @click=${this.onCancelEdit}>
+            <span class="fa fa-angle-left"></span>
+          </button>
+          Edit space
+        </div>
+        ${ed.confirming
+          ? html`
+              <div class="create-form">
+                <div class="confirm">
+                  ${ed.shared
+                    ? html`Leave <strong>${ed.name}</strong>? It goes from all your devices. The others keep it, and
+                        you need a new invite to come back.`
+                    : html`Delete <strong>${ed.name}</strong>? Its tabs close and it goes from all your devices.
+                        This can’t be undone.`}
+                </div>
+                ${ed.error ? html`<div class="error">${ed.error}</div>` : ''}
+                <div class="form-btns">
+                  <button class="cancel" ?disabled=${ed.busy} @click=${() => this.setEdit({ confirming: false, error: '' })}>
+                    Cancel
+                  </button>
+                  <button class="danger-btn" ?disabled=${ed.busy} @click=${this.onRemove}>
+                    ${ed.busy ? `${what === 'Leave' ? 'Leaving' : 'Deleting'}…` : `${what} space`}
+                  </button>
+                </div>
+              </div>
+            `
+          : html`
+              <div class="create-form">
+                <input
+                  class="name-input"
+                  type="text"
+                  placeholder="Space name"
+                  aria-label="Space name"
+                  maxlength=${SPACE_NAME_MAX}
+                  .value=${ed.name}
+                  @input=${(e) => this.setEdit({ name: e.target.value, error: '' })}
+                  @keydown=${this.onEditKeydown}
+                />
+                <div class="color-row">
+                  ${COLORS.map(
+                    (c) => html`
+                      <button
+                        class="swatch ${c === ed.color ? 'selected' : ''}"
+                        style="background:${c}"
+                        title=${COLOR_NAMES[c]}
+                        aria-label=${COLOR_NAMES[c]}
+                        aria-pressed=${c === ed.color ? 'true' : 'false'}
+                        @click=${() => this.setEdit({ color: c, error: '' })}
+                      ></button>
+                    `
+                  )}
+                </div>
+                ${ed.error ? html`<div class="error">${ed.error}</div>` : ''}
+                <div class="form-btns">
+                  <button class="cancel" @click=${this.onCancelEdit}>Cancel</button>
+                  <button class="create" ?disabled=${!ed.name.trim() || ed.busy} @click=${this.onSaveEdit}>Save</button>
+                </div>
+              </div>
+              ${ed.personal
+                ? html`<div class="note">Your Personal Space can be renamed but not deleted.</div>`
+                : html`
+                    <div class="divider"></div>
+                    <div class="danger-row" @click=${() => this.setEdit({ confirming: true, error: '' })}>
+                      <span class="fa ${ed.shared ? 'fa-sign-out-alt' : 'fa-trash-alt'}"></span> ${what} space…
+                    </div>
+                  `}
+            `}
+      </div>
+    `;
+  }
+
+  setEdit(changes) {
+    this.editing = { ...this.editing, ...changes };
+  }
+
+  onStartEdit(e, s) {
+    e.stopPropagation();
+    this.isCreating = false;
+    this.pickingPersona = false;
+    this.editing = {
+      id: s.id,
+      name: s.name,
+      color: s.color,
+      personal: s.id === 1,
+      shared: !!s.shared,
+      confirming: false,
+      busy: false,
+      error: '',
+    };
+    this._focusEdit = true;
+  }
+
+  onCancelEdit() {
+    this.editing = null;
+  }
+
+  async onSaveEdit() {
+    const ed = this.editing;
+    if (!ed.name.trim() || ed.busy) return;
+    this.setEdit({ busy: true, error: '' });
+    try {
+      await bg.spaces.update(ed.id, { name: ed.name, color: ed.color });
+      bg.shellMenus.close();
+    } catch (err) {
+      this.setEdit({ busy: false, error: errorText(err) });
+    }
+  }
+
+  async onRemove() {
+    const ed = this.editing;
+    if (ed.busy) return;
+    this.setEdit({ busy: true, error: '' });
+    try {
+      if (ed.shared) await bg.spaces.leave(ed.id);
+      else await bg.spaces.remove(ed.id);
+      bg.shellMenus.close();
+    } catch (err) {
+      this.setEdit({ busy: false, error: errorText(err) });
+    }
+  }
+
+  onEditKeydown(e) {
+    if (e.key === 'Enter') this.onSaveEdit();
+    if (e.key === 'Escape') this.onCancelEdit();
+  }
+
   updated() {
     var el = this.shadowRoot.querySelector('.wrapper');
     if (el) {
@@ -186,6 +337,12 @@ class SpacesMenu extends LitElement {
     }
     if (this.isCreating) {
       this.shadowRoot.querySelector('.name-input')?.focus();
+    }
+    if (this.editing && this._focusEdit) {
+      this._focusEdit = false;
+      const input = this.shadowRoot.querySelector('.name-input');
+      input?.focus();
+      input?.select();
     }
   }
 
@@ -220,6 +377,18 @@ class SpacesMenu extends LitElement {
 SpacesMenu.styles = [
   buttonsCSS,
   css`
+    :host {
+      --spaces-danger: #d13b3b;
+      --spaces-danger-bg: #d13b3b;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :host {
+        --spaces-danger: #ff7b72;
+        --spaces-danger-bg: #c93a3a;
+      }
+    }
+
     .wrapper {
       width: 200px;
       background: var(--bg-color--background);
@@ -261,6 +430,103 @@ SpacesMenu.styles = [
 
     .space-item .name {
       flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .edit-btn,
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      border: 0;
+      border-radius: 3px;
+      background: transparent;
+      box-shadow: none;
+      color: var(--text-color--menu-item-icon--light, #7a7a7a);
+      font-size: 10px;
+      cursor: default;
+      outline: 0;
+    }
+
+    .edit-btn {
+      margin: -2px -4px -2px 0;
+      opacity: 0;
+    }
+
+    .space-item:hover .edit-btn,
+    .edit-btn:focus-visible {
+      opacity: 1;
+    }
+
+    .edit-btn:hover,
+    .back-btn:hover {
+      background: var(--bg-color--header-btn--hover);
+      color: var(--text-color--menus-wrapper);
+    }
+
+    .edit-header {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding-left: 4px;
+    }
+
+    .back-btn {
+      font-size: 13px;
+    }
+
+    .note,
+    .confirm {
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .note {
+      padding: 0 10px 8px;
+      color: var(--text-color--menus-wrapper--light, #888);
+      font-size: 11px;
+    }
+
+    .error {
+      color: var(--spaces-danger);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .danger-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      font-size: 12px;
+      color: var(--spaces-danger);
+      cursor: default;
+    }
+
+    .danger-row:hover {
+      background: var(--bg-color--menu-item--hover);
+    }
+
+    .danger-btn {
+      padding: 3px 10px;
+      border-radius: 3px;
+      border: 1px solid transparent;
+      font-size: 11px;
+      cursor: default;
+      outline: 0;
+      background: var(--spaces-danger-bg);
+      color: #fff;
+    }
+
+    .danger-btn:disabled,
+    .cancel:disabled {
+      opacity: 0.5;
     }
 
     .dot {
@@ -420,5 +686,11 @@ SpacesMenu.styles = [
     }
   `,
 ];
+
+// An RPC error's own words, without Electron's "Error invoking remote method" wrapper.
+function errorText(err) {
+  const msg = String(err?.message || err || 'Something went wrong');
+  return msg.replace(/^Error invoking remote method '[^']*': (Error: )?/, '').replace(/^Error: /, '');
+}
 
 customElements.define('spaces-menu', SpacesMenu);

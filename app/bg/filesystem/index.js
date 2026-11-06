@@ -452,6 +452,19 @@ export async function leaveSpace(spaceId) {
   delete spaceDrivesMap[spaceId];
 }
 
+// Delete a Space that isn't shared: the Vault keeps a tombstone so the user's other Devices drop it
+// too. The caller closes its tabs and removes it here (tabs/manager.js dropSpace). Its drives and
+// their files stay on disk; only the Space and its list of them go.
+export async function deleteSpace(spaceId) {
+  const space = await spacesDb.get(spaceId);
+  if (!space || spaceId === 1) throw new Error('Your Personal Space can’t be deleted');
+  if (space.root_drive_url) {
+    const rootKey = await hyper.drives.fromURLToKey(space.root_drive_url, true);
+    await vault.removeSpace(rootKey);
+  }
+  delete spaceDrivesMap[spaceId];
+}
+
 export async function configDriveForSpace(url, opts = {}, spaceId = 1) {
   if (spaceId === 1) return configDrive(url, opts);
   const space = await spacesDb.get(spaceId);

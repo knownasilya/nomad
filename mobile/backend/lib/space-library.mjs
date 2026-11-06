@@ -168,6 +168,26 @@ export async function attach ({ vault }, { rootDriveKey, name, icon, color, libr
   await boundedUpdate(vault)
 }
 
+// Leave a shared Space (desktop: leave in app/bg/hyper/space-library.js): drop this person's
+// member record when they can write the Library, and the Library from this phone. The caller
+// tombstones the Space's Vault record (vault.mjs deleteSpaceInVault) and removes the Space.
+export async function leave ({ vault, manager }, space) {
+  const lib = await libraryFor({ vault, manager }, space)
+  if (!lib) return
+  await boundedUpdate(lib.base, 2000)
+  const list = await memberRecords(lib)
+  const err = sl.leaveError(list, lib.memberId)
+  if (err) throw new Error(err)
+  if (lib.writable && lib.memberId && list.some((m) => m.memberId === lib.memberId)) {
+    await lib.base.append({ op: 'del', path: sl.memberPath(lib.memberId) })
+    await boundedUpdate(lib.base)
+  }
+  if (held.delete(lib.library)) {
+    const entry = manager.drives.get(manager.cacheKey(DRIVE_AUTOBASE, lib.library))
+    if (entry && entry.refs > 0) entry.refs--
+  }
+}
+
 // The member records of an open Library (libraryFor's), for Live Notes' check of who may join.
 export async function memberRecords (lib) {
   if (!lib?.base) return []

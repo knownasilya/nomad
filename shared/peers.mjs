@@ -106,7 +106,7 @@ export function holdingsOf(peer, { vaultKey, spaces = [], registries = {}, perso
   if (h.vault && peer.kind === 'own') add(vaultKey, 'autobase', 'vault');
   for (const s of spaces) {
     const root = s?.rootDriveKey;
-    if (!isKey(root) || s.removed || s.movedTo) continue;
+    if (!isKey(root) || s.removed || s.movedTo || s.deleted) continue;
     const keep = peer.kind === 'own' && (h.spaces === 'all' || h.spaces.includes(root));
     if (keep) {
       add(root, 'autobase', 'space', root);

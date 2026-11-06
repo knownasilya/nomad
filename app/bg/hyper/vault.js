@@ -21,6 +21,7 @@ import * as settingsDb from '../dbs/settings';
 import * as spacesDb from '../dbs/spaces';
 import * as pdb from '../dbs/profile-data-db';
 import * as peerRules from '../../../shared/peers.mjs';
+import { deletedSpace, isDeletedSpace } from '../../../shared/space-records.mjs';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'vault' });
 
@@ -127,7 +128,7 @@ export async function getVault() {
 
 // Spaces are shared: one made on another Device (the phone, say) shows up here while this Device
 // runs, not only when it pairs. Debounced, because a sync brings many updates in a row. Emits
-// 'spaces-synced' when it added any, so the shell can redraw its Space list.
+// 'spaces-synced' when it added or removed any, so the shell can redraw its Space list.
 let _spacesWatched = false;
 let _spacesTimer = null;
 function _watchVaultSpaces(sess) {
@@ -136,7 +137,7 @@ function _watchVaultSpaces(sess) {
     _spacesTimer = setTimeout(() => {
       syncSpacesFromVault()
         .then((res) => {
-          if (res.created) events.emit('spaces-synced', res);
+          if (res.created || res.deleted?.length) events.emit('spaces-synced', res);
         })
         .catch((e) => logger.warn('Could not sync spaces from the vault', { error: e.toString() }));
     }, 2000);
@@ -269,7 +270,13 @@ export async function getMeta() {
   return _readRecord(sess, META_PATH);
 }
 
+// The Vault's Space records, `movedTo` pointers included. A deleted Space's tombstone
+// (shared/space-records.mjs) is left out: only the sync below needs those.
 export async function listSpaces() {
+  return (await _listSpaceRecords()).filter((s) => !isDeletedSpace(s));
+}
+
+async function _listSpaceRecords() {
   const sess = await getVault();
   if (!sess) return [];
   return _readPrefix(sess, SPACES_PREFIX);
@@ -341,10 +348,15 @@ export async function putSpaceShare(rootDriveKey, fields) {
   await _putRecord(sess, path, { ...existing, ...fields });
 }
 
-// Forget a Space the user left: drop its record so their other Devices stop showing it.
+// Forget a Space the user deleted or left: its record becomes a tombstone, so their other Devices
+// drop their copy (syncSpacesFromVault, the phone's spacesMerge.ts) and none publishes it again.
+// Does nothing without a Vault: the Space was only ever on this Device.
 export async function removeSpace(rootDriveKey) {
+  if (!(await getVault())) return false;
   const sess = await _writableVault();
-  await _delRecord(sess, `${SPACES_PREFIX}${rootDriveKey}.json`);
+  await _putRecord(sess, `${SPACES_PREFIX}${rootDriveKey}.json`, deletedSpace(rootDriveKey));
+  logger.info('Removed space from vault', { rootDriveKey });
+  return true;
 }
 
 async function _writableVault() {
@@ -404,7 +416,7 @@ export async function publishSpace(space) {
   if (!rootDriveKey) return false;
   const path = `${SPACES_PREFIX}${rootDriveKey}.json`;
   const existing = await _readRecord(sess, path);
-  if (existing?.movedTo) return false;
+  if (existing?.movedTo || isDeletedSpace(existing)) return false;
   if (existing) {
     if (existing.name === space.name && existing.icon === space.icon && existing.color === space.color) return false;
     await _putRecord(sess, path, { ...existing, name: space.name, icon: space.icon, color: space.color });
@@ -684,8 +696,9 @@ async function _forEachSpaceDrive(fn) {
 // (matched by Root Drive key). New Spaces' Root Drives are set up lazily on first activation.
 export async function syncSpacesFromVault() {
   const sess = await getVault();
-  if (!sess) return { created: 0 };
-  const vaultSpaces = await listSpaces();
+  if (!sess) return { created: 0, deleted: [] };
+  const records = await _listSpaceRecords();
+  const vaultSpaces = records.filter((s) => !isDeletedSpace(s));
   const local = await spacesDb.list();
   const haveKeys = new Set(
     local
@@ -712,8 +725,16 @@ export async function syncSpacesFromVault() {
     await spacesDb.update(space.id, { rootDriveUrl: `hyper://${vs.rootDriveKey}/` });
     created++;
   }
-  logger.info('Synced spaces from vault', { created });
-  return { created };
+  // Spaces deleted (or left) on another Device. The caller (tabs/manager.js) closes their tabs and
+  // removes them here. Never the Personal Space.
+  const gone = new Set(records.filter(isDeletedSpace).map((s) => s.rootDriveKey));
+  const deleted = [];
+  for (const space of local) {
+    const key = space.root_drive_url ? drives.fromURLToKey(space.root_drive_url) : null;
+    if (space.id !== 1 && key && gone.has(key)) deleted.push({ id: space.id, rootDriveKey: key });
+  }
+  logger.info('Synced spaces from vault', { created, deleted: deleted.length });
+  return { created, deleted };
 }
 
 // Owner side: publish this Device's local Spaces into the Vault index so they replicate to the
@@ -725,7 +746,8 @@ export async function syncSpacesFromVault() {
 export async function syncSpacesToVault() {
   const sess = await getVault();
   if (!sess) return { registered: 0 };
-  const indexed = new Set((await listSpaces()).map((s) => s.rootDriveKey).filter(Boolean));
+  // Tombstones count: a Space deleted on another Device must not come back from here.
+  const indexed = new Set((await _listSpaceRecords()).map((s) => s.rootDriveKey).filter(Boolean));
   const local = await spacesDb.list();
   let registered = 0;
   for (const space of local) {

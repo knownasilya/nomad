@@ -10,7 +10,7 @@ import DriveManager from './lib/drive-manager.mjs'
 import { HttpGateway } from './lib/http-gateway.mjs'
 import { parseHyperUrl } from './lib/hyper-url.mjs'
 import { listPeers, setPeerSpace, removePeer } from './lib/peers.mjs'
-import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault, publishOwnSpaces, publishOwnVersion } from './lib/vault.mjs'
+import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault, updateSpaceInVault, deleteSpaceInVault, publishOwnSpaces, publishOwnVersion } from './lib/vault.mjs'
 import * as drafts from './lib/drafts.mjs'
 import * as vaultApps from './lib/vault-apps.mjs'
 import * as pe from '../../shared/personas.mjs'
@@ -702,6 +702,23 @@ async function handleApps ({ reqId, app, action, ...args }) {
       value = await spaceLib.status({ vault, manager }, args.rootDriveKey)
       vaultChanged()
     } else if (app === 'spaces' && action === 'status') value = await spaceLib.status({ vault, manager }, space)
+    // Rename, recolor, delete or leave one of the user's Spaces (its Root Drive key). The UI
+    // removes it from the phone's list once this resolves.
+    else if (app === 'spaces' && action === 'update') {
+      value = await updateSpaceInVault(vault, { rootDriveKey: args.rootDriveKey, name: args.name, color: args.color })
+      vaultChanged()
+    } else if (app === 'spaces' && action === 'delete') {
+      if (await spaceLib.shareOf(vault, args.rootDriveKey)) throw new Error('This Space is shared. Leave it instead')
+      await deleteSpaceInVault(vault, args.rootDriveKey)
+      value = true
+      vaultChanged()
+    } else if (app === 'spaces' && action === 'leave') {
+      if (!vault.writable) throw new Error('This phone can’t write to your Vault yet. Keep your other device online until it syncs, then try again.')
+      await spaceLib.leave({ vault, manager }, args.rootDriveKey)
+      await deleteSpaceInVault(vault, args.rootDriveKey)
+      value = true
+      vaultChanged()
+    }
     else if (app === 'reader' && action === 'state') value = await vaultApps.readerState(vault, space)
     else if (app === 'reader' && action === 'follow') value = await vaultApps.follow(vault, space, args.url)
     else if (app === 'reader' && action === 'unfollow') value = await vaultApps.unfollow(vault, space, args.url)

@@ -58,7 +58,6 @@ async function sharedSpacesExcept(exceptId) {
 // The caller's Space key, or null.
 const callerSpace = (ctx) => vaultApps.spaceKey(ctx).catch(() => null);
 import * as mods from '../../ui/mods';
-import * as personas from '../../ui/personas';
 import * as openTabs from '../../ui/open-tabs';
 import * as jobs from '../../ai/jobs';
 import * as jobChat from '../../ai/job-chat';
@@ -385,16 +384,9 @@ export default {
   async leaveSpace() {
     const spaceId = spaceIdOf(this);
     if (spaceId === 1) throw new Error('You can’t leave your Personal Space');
-    const leftKey = personas.spaceKeyOf(spaceId);
     await filesystem.leaveSpace(spaceId);
-    // The Sessions sites held in it go too (ADR-0031 §4).
-    if (leftKey) await personas.forgetSpace(leftKey).catch(() => {});
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (tabManager.getWindowActiveSpaceId(win) === spaceId) await tabManager.setActiveSpace(win, 1).catch(() => {});
-      for (const tab of tabManager.getAll(win).filter((t) => t.spaceId === spaceId)) await tabManager.remove(win, tab);
-    }
-    await spacesDb.remove(spaceId);
-    vault.events.emit('spaces-synced', { removed: 1 });
+    // Its tabs and the Sessions sites held in it (ADR-0031 §4) go with it.
+    await tabManager.dropSpace(spaceId);
   },
 
   // Join a shared Space with a code. Resolves once an owner approves; switches the caller's window

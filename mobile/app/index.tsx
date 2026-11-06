@@ -464,6 +464,17 @@ export default function Browser () {
     return sp
   }, [spacesApi])
 
+  // Delete a Space, or leave a shared one, from the Space switcher's Edit: off the Vault first (so
+  // it goes from the user's other Devices), then off this phone, moving to Personal when it was open.
+  const onRemoveSpace = useCallback(async (id: string, action: 'delete' | 'leave') => {
+    const err = await spacesApi.unpublishSpace(id, action)
+    if (err) return err
+    if (id === activeSpaceIdRef.current) switchSpace(PERSONAL_ID)
+    delete tabsBySpace.current[id]
+    spacesApi.removeSpace(id)
+    return null
+  }, [spacesApi, switchSpace])
+
   // Join a shared Space (ADR-0029) with a code from its owner. Once they approve, the phone makes a
   // Space for it (its own Root Drive, as desktop does) and marks it in the Vault as that Space's
   // Library, so the user's other Devices get it too. Throws with why not.
@@ -1503,6 +1514,8 @@ export default function Browser () {
         onSwitch={switchSpace}
         onCreate={onCreateSpace}
         onJoin={onJoinSpace}
+        onEdit={spacesApi.editSpace}
+        onRemove={onRemoveSpace}
       />
 
       <FileExplorer

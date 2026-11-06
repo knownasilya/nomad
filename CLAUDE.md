@@ -498,6 +498,19 @@ shared Space reads stale data. UI: My Library → Sharing (`library/js/views/sha
 Spaces, the user's other shared Spaces with Open (`nomad.vault.openSpace`), Set up a home and Join), **Ask to
 edit** in site-info, **Join a shared space** in the phone's Space switcher.
 
+### Renaming, recoloring and deleting Spaces
+
+Desktop's Spaces menu (`fg/shell-menus/spaces.js`, a pen button on each Space) and the phone's Space
+switcher (`mobile/components/SpaceSwitcher.tsx`) rename, recolor and delete Spaces, or Leave one shared
+with other people. Rules are `shared/space-records.mjs` (tests `tests/unit/space-records.test.js`; the
+phone's copy of the name rules is `mobile/lib/spaceRules.ts`). Deleting or leaving leaves a
+**tombstone** in the Vault (`{ rootDriveKey, deleted: true }`), never a plain delete, so the user's
+other Devices drop their copy (`syncSpacesFromVault` → `tabs/manager.js` `dropSpace`; the phone's
+`mergeVaultSpaces`) and none publishes the Space again. `vault.listSpaces()` leaves tombstones out;
+phone and Peer code that reads `/.vault/spaces/` itself must skip `deleted` records. Take a Space off
+a desktop with `dropSpace` (it closes the tabs and forgets the Space's Sessions). Personal is never
+deleted.
+
 ### AI Jobs and phone notifications (ADR-0030)
 
 A Job is a saved prompt the user's AI runs by itself, by hand or on a schedule; a run can notify
