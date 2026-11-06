@@ -175,7 +175,7 @@ Hyperswarm instance in each app. Roles: the **member** (an existing trusted Devi
    request** (never auto-accepted — see ADR/grill decision Q8). On user approval the member:
    a. appends `{ addWriter: deviceKey }` to the Vault,
    b. appends `{ op: 'put', path: '/.vault/devices/<deviceKey>.json', data }`,
-   c. runs **writer fan-out** (§3),
+   c. (no longer) runs writer fan-out (§3),
    d. confirms pairing so the candidate receives the Vault key.
 4. The candidate persists the Vault key, replicates the Vault, then replicates and writes each Space
    drive listed in `/.vault/spaces/*`.
@@ -185,10 +185,20 @@ Hyperswarm instance in each app. Roles: the **member** (an existing trusted Devi
 
 ## 3. Writer fan-out
 
-When a Device is added, its `deviceKey` must become a Writer of the Vault **and of every Space Root
-Drive** indexed in the Vault. For each `rootDriveKey` in `/.vault/spaces/*`, append
-`{ addWriter: deviceKey }` to that drive's Autobase. New Spaces created later append the same for all
-known Devices at creation time.
+> **Removed (after 1.43.0).** A Device's `deviceKey` becomes a Writer of the Vault only. It used to be added
+> to every Space Root Drive too (on pairing, and for all known Devices when a Space was made), but
+> `deviceKey` is that Device's **Vault writer core**: a Root Drive that takes it reads the core's Vault
+> ops into its own view (Notes, Reader, Names, Device records), and the core's checkpoints name the
+> Vault's system core. Once two such Writers index a Root Drive, Autobase fast-forwards it to that
+> system, can't find it, and closes the drive (`Cannot read properties of null (reading 'core')` in
+> `_applyFastForward`), which broke making a Space, and Set up a home, on a Vault with two or more
+> other Devices. Each Device now asks for every Root Drive with its own key for it (the Writer grants
+> below). Removing a Device still takes its `deviceKey` off every Root Drive, for Spaces that got it
+> from the old fan-out. Never add a Vault key as a Writer of any drive
+> (`tests/unit/vault-key-writers.test.js`).
+
+What the fan-out used to do: for each `rootDriveKey` in `/.vault/spaces/*`, append
+`{ addWriter: deviceKey }` to that drive's Autobase.
 
 > ⚠️ **Concurrent-writability limitation (ADR-0010, found 2026-07-02, `app/scripts/spike-shared-local-core.mjs`).**
 > `deviceKey` here is the device's single root writer identity — `Autobase.getLocalCore(store)` =
