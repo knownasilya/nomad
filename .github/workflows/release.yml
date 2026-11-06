@@ -93,9 +93,33 @@ jobs:
           security find-identity -v -p codesigning "$KC"
           echo "NOMAD_MAC_SIGN_IDENTITY=Nomad Self-Signed" >> "$GITHUB_ENV"
 
+      # Widevine VMP signing for DRM video (Prime Video, Netflix, …), done by scripts/afterPackHook.js
+      # before code signing. Needs a castLabs EVS account; see docs/releasing.md.
+      - name: Setup Python (castLabs EVS)
+        if: runner.os == 'macOS'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Log in to castLabs EVS (VMP signing)
+        if: runner.os == 'macOS'
+        env:
+          EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+          EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+          EVS_NO_ASK: '1'
+        run: |
+          if [ -z "$EVS_ACCOUNT_NAME" ]; then
+            echo "::warning::EVS_ACCOUNT_NAME is not set: the macOS build is not VMP-signed and DRM streaming sites may not play"
+            exit 0
+          fi
+          python3 -m pip install --upgrade castlabs-evs
+          python3 -m castlabs_evs.account refresh
+
       - name: Package and upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+          EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
           # Pass secrets as neutral names; the run script wires them conditionally
           # to avoid setting CSC_LINK='' which electron-builder resolves to CWD.
           _MAC_CERTS: ${{ secrets.MAC_CERTS }}
