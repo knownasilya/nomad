@@ -308,7 +308,10 @@ class ShellWindowTabs extends LitElement {
         class="tab pinned unloaded"
         title=${tile.title}
         @click=${() => bg.views.openPin(tile.href)}
-        @contextmenu=${() => bg.views.showPinContextMenu(tile.href)}
+        @contextmenu=${(e) => {
+          e.preventDefault();
+          bg.views.showPinContextMenu(tile.href);
+        }}
       >
         <div class="tab-favicon"><img src="asset:favicon:${tile.href}" /></div>
       </div>
@@ -410,6 +413,7 @@ class ShellWindowTabs extends LitElement {
   }
 
   onContextmenuTab(e, index) {
+    e.preventDefault();
     bg.views.showTabContextMenu(index);
   }
 
