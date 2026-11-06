@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.44.0](https://github.com/knownasilya/nomad/compare/v1.43.1...v1.44.0) (2026-11-06)
+
+
+### Features
+
+* **calendar:** a family calendar on desktop and the phone ([b77e106](https://github.com/knownasilya/nomad/commit/b77e106031a8e8baed098b47644c7a0fa6779021))
+* **notes:** live Notes between the people of a shared Space ([2d348b1](https://github.com/knownasilya/nomad/commit/2d348b13896493aa558cb53a146f6f7b6324a79b))
+* **peer:** an always-on Peer that keeps your Spaces online ([b1cc1ea](https://github.com/knownasilya/nomad/commit/b1cc1ea816cdbda0712480b782d781326b184a1a))
+* **photos:** a family album in a shared Space, from the phone and desktop ([77c322e](https://github.com/knownasilya/nomad/commit/77c322edf1d23e85743cde34e1d847c440a77dfb))
+
+
+### Bug Fixes
+
+* **ai-sidebar:** show a copy/paste menu on right-click in the shell window ([7dd185b](https://github.com/knownasilya/nomad/commit/7dd185b3823fba414f1f08c601afabf581b0ac4b))
+
 ### [1.43.1](https://github.com/knownasilya/nomad/compare/v1.43.0...v1.43.1) (2026-11-06)
 
 
