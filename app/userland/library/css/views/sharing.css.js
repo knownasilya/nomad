@@ -14,37 +14,207 @@ const cssStr = css`
     --share-accent: var(--lib-nav-active-text, #4f46e5);
     --share-accent-soft: var(--lib-nav-active-bg, #eef2ff);
     --share-err: #dc2626;
+    --share-warn: #b45309;
   }
 
   @media (prefers-color-scheme: dark) {
     :host {
       --share-err: #f87171;
+      --share-warn: #fbbf24;
     }
   }
 
+  /* Two zones: "This Space" (a card topped with the Space's own color) and "Other Spaces" (open,
+     set up a home, join), so what acts on this Space never blends with what makes another one. */
+  .zone.current {
+    overflow: hidden;
+    border: 1px solid var(--border-color--very-light);
+    border-top: 4px solid var(--space-color, var(--share-fill));
+    border-radius: 12px;
+    background: var(--bg-color--default);
+    color: var(--text-color--default);
+  }
+
+  .space-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px 14px;
+    border-bottom: 1px solid var(--border-color--very-light);
+  }
+
+  .space-mark {
+    display: inline-flex;
+    flex: 0 0 44px;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: var(--space-color, var(--share-fill));
+    color: #fff;
+    font-size: 19px;
+    font-weight: 700;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  }
+
+  .space-mark.small {
+    flex-basis: 30px;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+
+  .head-text {
+    min-width: 0;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-color--pretty-light);
+  }
+
+  h2 {
+    margin: 1px 0 3px;
+    overflow: hidden;
+    font-size: 20px;
+    font-weight: 650;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .status {
+    font-size: 12px;
+    color: var(--text-color--light);
+  }
+
+  .status.on {
+    color: var(--share-accent);
+    font-weight: 500;
+  }
+
+  .zone-body {
+    padding: 14px 18px 18px;
+  }
+
+  .zone-body > :first-child {
+    margin-top: 0;
+  }
+
   .intro {
-    margin: 4px 6px 16px;
+    margin: 0 0 12px;
     font-size: 13px;
     line-height: 1.5;
     color: var(--text-color--light);
   }
 
-  .intro strong {
-    color: var(--text-color--default);
+  .zone-body > .intro:last-child {
+    margin-bottom: 0;
   }
 
-  .card,
-  .row,
-  .notice {
+  .zone.others {
+    margin-top: 34px;
+  }
+
+  .zone-head {
+    margin: 0 6px 12px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border-color--semi-light);
+  }
+
+  .zone-head h2 {
+    margin: 0 0 4px;
+    font-size: 16px;
+  }
+
+  .zone-head p {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-color--light);
+  }
+
+  .list.spaces {
+    margin-bottom: 12px;
+  }
+
+  .options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+  }
+
+  .option {
+    display: flex;
+    flex-direction: column;
+    padding: 14px;
     border: 1px solid var(--border-color--very-light);
     border-radius: 10px;
-    padding: 12px 14px;
     background: var(--bg-color--default);
     color: var(--text-color--default);
   }
 
-  .card {
-    margin: 14px 0;
+  .option-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .option-icon {
+    display: inline-flex;
+    flex: 0 0 30px;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: var(--share-accent-soft);
+    color: var(--share-accent);
+    font-size: 13px;
+  }
+
+  .option-title {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .option-sub {
+    font-size: 12px;
+    color: var(--text-color--light);
+  }
+
+  .option label {
+    margin: 8px 0 4px;
+  }
+
+  .option .what {
+    margin-bottom: 4px;
+  }
+
+  .option-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: auto;
+    padding-top: 12px;
+  }
+
+  .hint {
+    margin-top: 6px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--share-warn);
+  }
+
+  .waiting {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: var(--text-color--light);
   }
 
   /* Just set up a home: what's in it, and what to do next. */
@@ -52,7 +222,7 @@ const cssStr = css`
     display: flex;
     gap: 10px;
     align-items: flex-start;
-    margin: 4px 0 14px;
+    margin: 0 0 14px;
     font-size: 13px;
     line-height: 1.5;
     border-color: var(--share-accent);
@@ -61,16 +231,6 @@ const cssStr = css`
 
   .notice.welcome .fas {
     margin-top: 3px;
-    color: var(--share-accent);
-  }
-
-  .card-title {
-    margin-bottom: 10px;
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  .card-title .fas {
     color: var(--share-accent);
   }
 
@@ -101,6 +261,7 @@ const cssStr = css`
 
   label {
     font-size: 12px;
+    font-weight: 500;
     color: var(--text-color--light);
   }
 
@@ -123,9 +284,18 @@ const cssStr = css`
     outline: none;
   }
 
-  input.code-input {
+  .fields input {
     flex: 1;
-    min-width: 200px;
+    min-width: 160px;
+    max-width: 260px;
+  }
+
+  .option input {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  input.code-input {
     font-family: var(--code-font);
   }
 
@@ -189,24 +359,59 @@ const cssStr = css`
   }
 
   .section-title {
-    margin: 18px 6px 8px;
-    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 20px 0 8px;
+    font-size: 11.5px;
     font-weight: 600;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.03em;
     text-transform: uppercase;
     color: var(--text-color--light);
   }
 
-  .rows {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+  .section-title .fas {
+    color: var(--share-accent);
+  }
+
+  .section-title.attention {
+    color: var(--share-warn);
+  }
+
+  .section-title.attention .fas {
+    color: var(--share-warn);
+  }
+
+  /* Bordered lists, rows split by hairlines (like the other Library views). */
+  .list {
+    overflow: hidden;
+    border: 1px solid var(--border-color--very-light);
+    border-radius: 10px;
+    background: var(--bg-color--default);
   }
 
   .row {
     display: flex;
     align-items: center;
     gap: 12px;
+    min-height: 40px;
+    padding: 10px 14px;
+    color: var(--text-color--default);
+  }
+
+  .row + .row {
+    border-top: 1px solid var(--border-color--very-light);
+  }
+
+  .note {
+    margin: 8px 2px 0;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--text-color--pretty-light);
+  }
+
+  .invite {
+    margin-top: 6px;
   }
 
   .row > .fas {
@@ -271,24 +476,49 @@ const cssStr = css`
   }
 
   .leave {
-    margin: 22px 6px 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin: 20px -18px -18px;
+    padding: 12px 18px;
+    border-top: 1px solid var(--border-color--very-light);
+    background: var(--bg-color--secondary);
   }
 
   .leave .sub {
-    margin-top: 6px;
+    margin: 0;
+  }
+
+  button.danger {
+    color: var(--share-err);
+  }
+
+  button.danger:hover {
+    border-color: var(--share-err);
   }
 
   .notice {
     margin-bottom: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color--very-light);
+    border-radius: 10px;
+    background: var(--bg-color--default);
+    color: var(--text-color--default);
     font-size: 13px;
   }
 
   .row-actions {
-    margin: 0 0 14px;
+    margin: 0;
+  }
+
+  .fields .inline {
+    margin-right: -2px;
   }
 
   .error {
     margin: 8px 6px 0;
+    line-height: 1.45;
     font-size: 12px;
     color: var(--share-err);
   }

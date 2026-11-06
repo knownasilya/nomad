@@ -27,10 +27,32 @@ import * as spacePins from '../../ui/space-pins';
 import * as drives from '../../hyper/drives';
 import * as home from '../../../../shared/home-setup.mjs';
 import * as peerRules from '../../../../shared/peers.mjs';
+import { isShared } from '../../../../shared/space-library.mjs';
 
 // The Vault's Spaces a Peer can keep: not moved, not removed.
 function liveSpaces(spaces) {
   return (spaces || []).filter((s) => s && !s.movedTo && !s.removed && peerRules.isKey(s.rootDriveKey));
+}
+
+// The user's shared Spaces on this Device other than `exceptId`, in Space switcher order, for the
+// Sharing page's list: [{ id, name, color, icon, role, removed }]. Two Spaces can share a name (two
+// "Home"s), so the page tells them apart by color and role, and opens one by id.
+async function sharedSpacesExcept(exceptId) {
+  const recs = await vault.listSpaces().catch(() => []);
+  const byKey = new Map();
+  for (const r of recs || []) if (r && !r.movedTo && isShared(r)) byKey.set(r.rootDriveKey, r);
+  const out = [];
+  for (const s of await spacesDb.list()) {
+    if (s.id === exceptId || s.id === 1 || !s.root_drive_url) continue;
+    let key = null;
+    try {
+      key = drives.fromURLToKey(s.root_drive_url);
+    } catch {}
+    const rec = key ? byKey.get(key) : null;
+    if (!rec) continue;
+    out.push({ id: s.id, name: s.name, color: s.color, icon: s.icon, role: rec.role || 'viewer', removed: !!rec.removed });
+  }
+  return out;
 }
 
 // The caller's Space key, or null.
@@ -278,13 +300,31 @@ export default {
   async getSpaceShare() {
     const spaceId = spaceIdOf(this);
     const space = await spacesDb.get(spaceId);
-    const base = { spaceId, name: space?.name || 'Space', personal: spaceId === 1 };
-    if (spaceId === 1) return { ...base, shared: false };
+    const others = await sharedSpacesExcept(spaceId).catch(() => []);
+    const base = {
+      spaceId,
+      name: space?.name || 'Space',
+      color: space?.color || null,
+      icon: space?.icon || null,
+      personal: spaceId === 1,
+      others,
+    };
+    if (spaceId === 1) return { ...base, shared: false, ownName: defaultOwnName() }; // ownName: for Set up a home and Join
     const key = await vaultApps.spaceKey(this).catch(() => null);
     const st = key ? await spaceLibrary.status(key) : { shared: false };
     if (st.shared) return { ...base, ...st };
     const preview = await filesystem.shareSpacePreview(spaceId).catch(() => null);
     return { ...base, ...st, preview: preview?.summary || null, ownName: defaultOwnName() };
+  },
+
+  // Switch the caller's window to another of the user's Spaces (the Sharing page's Open).
+  async openSpace(id) {
+    const space = await spacesDb.get(Number(id));
+    if (!space) throw new Error('That Space isn’t on this device');
+    const win = this?.sender ? findWebContentsParentWindow(this.sender) : null;
+    if (!win) throw new Error('No window to open it in');
+    await tabManager.setActiveSpace(win, space.id);
+    return { spaceId: space.id, name: space.name };
   },
 
   async shareSpace(opts: any = {}) {

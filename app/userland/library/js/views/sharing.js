@@ -17,6 +17,24 @@ import sharingCSS from '../../css/views/sharing.css.js';
 // with a Groceries list and House info pinned, and opens this page in it (?home=1) to invite them.
 
 const ROLE_LABELS = { owner: 'Owner', editor: 'Can edit', viewer: 'Can view' };
+const YOUR_ROLE = { owner: 'You own it', editor: 'You can edit', viewer: 'You can view' };
+
+// A Space's color, as the Space switcher's dot shows it, or the accent when it isn't a plain hex color.
+function spaceColor(c) {
+  return /^#[0-9a-f]{3,8}$/i.test(String(c || '')) ? c : 'var(--share-fill)';
+}
+
+// A home (shared/home-setup.mjs HOME_ICON). Personal also carries the 'home' icon from the first
+// schema, but it's not a home.
+const isHome = (s) => !!s && s.icon === 'home' && !s.personal && Number(s.id ?? s.spaceId) !== 1;
+
+// A Space's mark: its color, with a house for a home, else its first letter.
+function spaceMark(s, small = false) {
+  const letter = (String(s.name || '').trim()[0] || '?').toUpperCase();
+  return html`<span class="space-mark ${small ? 'small' : ''}" style="--space-color: ${spaceColor(s.color)}" aria-hidden="true">
+    ${isHome(s) ? html`<span class="fas fa-home"></span>` : letter}
+  </span>`;
+}
 
 export class SharingView extends LitElement {
   static get properties() {
@@ -66,8 +84,11 @@ export class SharingView extends LitElement {
   async load() {
     try {
       this.info = await nomad.vault.getSpaceShare();
-      if (!this.ownName) this.ownName = this.info.ownName || '';
-      if (!this.joining.name) this.joining = { ...this.joining, name: this.info.ownName || '' };
+      // A shared Space has no ownName: the user's name in it is their member record's.
+      const me = (this.info.members || []).find((m) => m.memberId && m.memberId === this.info.memberId);
+      const own = this.info.ownName || me?.name || '';
+      if (!this.ownName) this.ownName = own;
+      if (!this.joining.name) this.joining = { ...this.joining, name: own };
     } catch (e) {
       this.info = { shared: false, error: e.message || String(e) };
     }
@@ -90,87 +111,92 @@ export class SharingView extends LitElement {
 
   // rendering
   // =
+  //
+  // Two zones, so what acts on this Space never blends with what makes or joins another one:
+  //  - This Space: a card headed by the Space's own color and name (the dot the Space switcher shows),
+  //    and its state: Personal, not shared, shared (with your role), or removed.
+  //  - Other Spaces: the user's other shared Spaces, each with Open (two "Home"s are told apart by
+  //    color and role), then Set up a home and Join a shared Space side by side.
 
   render() {
     if (!this.info) return html`<div class="empty">Loading…</div>`;
     return html`
       <link rel="stylesheet" href="nomad://app-stdlib/css/fontawesome.css" />
-      ${this.info.shared ? this.renderShared() : this.renderNotShared()}
+      <section class="zone current" style="--space-color: ${spaceColor(this.info.color)}" aria-labelledby="this-space">
+        ${this.renderHead()}
+        <div class="zone-body">${this.renderCurrent()}</div>
+      </section>
       ${this.error ? html`<div class="error">${this.error}</div>` : ''}
-      ${this.renderJoin()}
+      ${this.renderOthers()}
     `;
+  }
+
+  renderHead() {
+    const i = this.info;
+    let status;
+    if (i.personal) status = html`<span class="fas fa-fw fa-lock"></span> Only you`;
+    else if (!i.shared) status = html`<span class="fas fa-fw fa-lock"></span> Not shared`;
+    else if (i.removed) status = html`<span class="fas fa-fw fa-user-slash"></span> You were removed`;
+    else {
+      const n = (i.members || []).length;
+      const who = n > 1 ? `Shared with ${n} people` : 'Shared, just you so far';
+      status = html`<span class="fas fa-fw fa-user-friends"></span> ${who} · ${YOUR_ROLE[i.role] || YOUR_ROLE.viewer}`;
+    }
+    return html`
+      <div class="space-head">
+        ${spaceMark(i)}
+        <div class="head-text">
+          <div class="eyebrow">This Space</div>
+          <h2 id="this-space">${i.name}</h2>
+          <div class="status ${i.shared && !i.removed ? 'on' : ''}">${status}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  renderCurrent() {
+    const i = this.info;
+    if (i.personal) {
+      return html`
+        <p class="intro">
+          Your Personal Space holds your own things, so it can’t be shared. To share with other people, open
+          one of your shared Spaces or set one up below.
+        </p>
+      `;
+    }
+    if (!i.shared) return this.renderNotShared();
+    if (i.removed) {
+      return html`
+        <p class="intro">
+          You were removed from ${i.name}. It no longer syncs new changes from the others. What you already
+          have stays until you remove it.
+        </p>
+        <div class="row-actions"><button @click=${this.onLeave}>Remove ${i.name} from this device</button></div>
+      `;
+    }
+    return this.renderShared();
   }
 
   renderNotShared() {
     const i = this.info;
-    if (i.personal) {
-      return html`
-        <div class="intro">
-          Your Personal Space holds your own things, so it can’t be shared. Make another Space, or switch
-          to one, to share it with other people.
-        </div>
-        ${this.renderHome()}
-      `;
-    }
     return html`
-      <div class="intro">
-        Share <strong>${i.name}</strong> with other people. Each person can view everything in it, or edit
-        everything in it. A person who can only view can ask you to let them edit one drive.
-      </div>
-      <div class="card">
-        <div class="card-title"><span class="fas fa-fw fa-user-friends"></span> Share ${i.name}</div>
-        <div class="what">
-          <div><strong>What they’ll see:</strong> ${i.preview || 'this Space’s drives, contacts, feeds, notes and names'}.</div>
-          <div>
-            Everyone you invite can read every drive listed in this Space. Your private drive
-            (<code>hyper://private/</code>), your AI chats, your Vault and your notes for every Space stay
-            yours.
-          </div>
-        </div>
-        <div class="fields">
-          <label for="own-name">Your name in this Space</label>
-          <input
-            id="own-name"
-            .value=${this.ownName}
-            @input=${(e) => (this.ownName = e.target.value)}
-            placeholder="Your name"
-          />
-          <button class="primary" ?disabled=${this.busy} @click=${this.onShare}>Share this Space</button>
+      <p class="intro">
+        Share ${i.name} with other people. Each person can view everything in it, or edit everything in it.
+        A person who can only view can ask you to let them edit one drive.
+      </p>
+      <div class="what">
+        <div><strong>What they’ll see:</strong> ${i.preview || 'this Space’s drives, contacts, feeds, notes and names'}.</div>
+        <div>
+          Your private drive (<code>hyper://private/</code>), your AI chats, your Vault and your notes for every
+          Space stay yours.
         </div>
       </div>
-      ${this.renderHome()}
-    `;
-  }
-
-  // Set up a home: a new Space for the people the user lives with.
-  renderHome() {
-    return html`
-      <div class="card home">
-        <div class="card-title"><span class="fas fa-fw fa-home"></span> Set up a home</div>
-        <div class="what">
-          <div>
-            A new Space for the people you live with. It comes with a <strong>Groceries</strong> list everyone
-            can tick off, and <strong>House info</strong> for the Wi-Fi, bins and emergency contacts, both pinned.
-            Then you invite them.
-          </div>
-        </div>
-        <div class="fields">
-          <label for="home-name">Name</label>
-          <input
-            id="home-name"
-            .value=${this.homeName}
-            @input=${(e) => (this.homeName = e.target.value)}
-            placeholder="Home"
-          />
-          <label for="home-own-name">Your name</label>
-          <input
-            id="home-own-name"
-            .value=${this.ownName}
-            @input=${(e) => (this.ownName = e.target.value)}
-            placeholder="Your name"
-          />
-          <button class="primary" ?disabled=${this.busy} @click=${this.onSetUpHome}>Set up</button>
-        </div>
+      <div class="fields">
+        <label class="inline" for="own-name">Your name in ${i.name}</label>
+        <input id="own-name" .value=${this.ownName} @input=${(e) => (this.ownName = e.target.value)} placeholder="Your name" />
+        <button class="primary" ?disabled=${this.busy} @click=${this.onShare}>
+          <span class="fas fa-user-friends"></span> Share ${i.name}
+        </button>
       </div>
     `;
   }
@@ -178,20 +204,11 @@ export class SharingView extends LitElement {
   renderShared() {
     const i = this.info;
     const owner = i.role === 'owner' && i.writable;
-    if (i.removed) {
-      return html`
-        <div class="notice">
-          <span class="fas fa-fw fa-user-slash"></span> You were removed from ${i.name}. It no longer syncs
-          new changes from the others.
-        </div>
-        <div class="row-actions"><button @click=${this.onLeave}>Remove ${i.name} from this device</button></div>
-      `;
-    }
     return html`
       ${this.welcome && owner
         ? html`
             <div class="notice welcome">
-              <span class="fas fa-fw fa-home"></span>
+              <span class="fas fa-fw fa-check-circle"></span>
               <div>
                 <strong>${i.name} is ready.</strong> Its Groceries list and House info are pinned at the top of
                 the sidebar. Now make a code for each person you live with, and approve them here when they join.
@@ -199,16 +216,15 @@ export class SharingView extends LitElement {
             </div>
           `
         : ''}
-      <div class="intro">
-        <strong>${i.name}</strong> is shared. You ${i.role === 'viewer' ? 'can view it' : i.role === 'owner' ? 'own it' : 'can edit it'}.
-        ${i.role === 'viewer' ? 'To edit a drive in it, open the drive and ask from its site info.' : ''}
-        ${!i.writable && i.role !== 'viewer' ? html`<br />This device is waiting for your other device to let it edit.` : ''}
-      </div>
+      ${i.role === 'viewer' ? html`<p class="intro">To edit a drive in ${i.name}, open the drive and ask from its site info.</p>` : ''}
+      ${!i.writable && i.role !== 'viewer'
+        ? html`<p class="intro">This device is waiting for your other device to let it edit.</p>`
+        : ''}
 
       ${i.joins?.length
         ? html`
-            <div class="section-title">Waiting to join</div>
-            <div class="rows">
+            <h3 class="section-title attention"><span class="fas fa-fw fa-bell"></span> Waiting to join</h3>
+            <div class="list">
               ${repeat(
                 i.joins,
                 (j) => j.memberId,
@@ -234,8 +250,8 @@ export class SharingView extends LitElement {
 
       ${i.requests?.length
         ? html`
-            <div class="section-title">Asking to edit a drive</div>
-            <div class="rows">
+            <h3 class="section-title attention"><span class="fas fa-fw fa-bell"></span> Asking to edit a drive</h3>
+            <div class="list">
               ${repeat(
                 i.requests,
                 (r) => r.drive + r.writerKey,
@@ -250,12 +266,8 @@ export class SharingView extends LitElement {
                       </div>
                     </div>
                     <div class="actions">
-                      ${i.writable
-                        ? html`<button @click=${() => this.answer(r, false)}>Deny</button>`
-                        : ''}
-                      ${r.canApprove
-                        ? html`<button class="primary" @click=${() => this.answer(r, true)}>Approve</button>`
-                        : ''}
+                      ${i.writable ? html`<button @click=${() => this.answer(r, false)}>Deny</button>` : ''}
+                      ${r.canApprove ? html`<button class="primary" @click=${() => this.answer(r, true)}>Approve</button>` : ''}
                     </div>
                   </div>
                 `
@@ -264,8 +276,8 @@ export class SharingView extends LitElement {
           `
         : ''}
 
-      <div class="section-title">People</div>
-      <div class="rows">
+      <h3 class="section-title">People</h3>
+      <div class="list">
         ${repeat(
           i.members || [],
           (m) => m.memberId,
@@ -280,7 +292,8 @@ export class SharingView extends LitElement {
                 ${owner && m.memberId !== i.memberId
                   ? html`
                       <select
-                        aria-label="Role"
+                        aria-label="Role for ${m.name}"
+                        title="Role for ${m.name}"
                         .value=${m.role}
                         @change=${(e) => this.run(() => nomad.vault.setSpaceRole(m.memberId, e.target.value))}
                       >
@@ -298,13 +311,20 @@ export class SharingView extends LitElement {
           `
         )}
       </div>
+      ${owner
+        ? html`<div class="note">
+            Removing someone stops their changes, but they keep what they already have and can still read the
+            drives this Space listed.
+          </div>`
+        : ''}
 
       ${owner
         ? html`
-            <div class="card">
-              <div class="card-title"><span class="fas fa-fw fa-user-plus"></span> Invite someone</div>
+            <div class="invite">
+              <h3 class="section-title"><span class="fas fa-fw fa-user-plus"></span> Invite someone to ${i.name}</h3>
               <div class="fields">
-                <select aria-label="They can" .value=${this.inviteRole} @change=${(e) => (this.inviteRole = e.target.value)}>
+                <label class="inline" for="invite-role">They can</label>
+                <select id="invite-role" .value=${this.inviteRole} @change=${(e) => (this.inviteRole = e.target.value)}>
                   <option value="viewer">Can view</option>
                   <option value="editor">Can edit</option>
                 </select>
@@ -317,8 +337,8 @@ export class SharingView extends LitElement {
                       <button @click=${() => this.copy(this.invite.code)}><span class="far fa-copy"></span> Copy</button>
                     </div>
                     <div class="sub">
-                      Send this code to one person. They enter it under Join a shared Space, and you
-                      approve them here. They’ll ${this.invite.role === 'editor' ? 'be able to edit' : 'be able to view'} everything.
+                      Send this code to one person. They enter it under Join a shared Space, and you approve them
+                      here. They’ll ${this.invite.role === 'editor' ? 'be able to edit' : 'be able to view'} everything.
                     </div>
                   `
                 : ''}
@@ -327,10 +347,85 @@ export class SharingView extends LitElement {
         : ''}
 
       <div class="leave">
-        <button @click=${this.onLeave}><span class="fas fa-sign-out-alt"></span> Leave ${i.name}</button>
-        <div class="sub">
-          Removing someone stops their changes, but they keep what they already have and can still read
-          the drives this Space listed.
+        <button class="danger" @click=${this.onLeave}><span class="fas fa-sign-out-alt"></span> Leave ${i.name}</button>
+        <span class="sub">It goes from all your devices.</span>
+      </div>
+    `;
+  }
+
+  // The other Spaces: the user's other shared Spaces, then Set up a home and Join, side by side.
+  renderOthers() {
+    const i = this.info;
+    const others = i.others || [];
+    return html`
+      <section class="zone others" aria-labelledby="other-spaces">
+        <div class="zone-head">
+          <h2 id="other-spaces">Other Spaces</h2>
+          <p>
+            ${others.length ? 'Open another of your shared Spaces, set up a home, or join' : 'Set up a home, or join'}
+            someone’s Space with a code. Each is its own Space in your Spaces menu; ${i.name} doesn’t change.
+          </p>
+        </div>
+        ${others.length
+          ? html`
+              <div class="list spaces">
+                ${repeat(
+                  others,
+                  (s) => s.id,
+                  (s) => html`
+                    <div class="row">
+                      ${spaceMark(s, true)}
+                      <div class="meta">
+                        <div class="title">${s.name}</div>
+                        <div class="sub">${s.removed ? 'You were removed' : YOUR_ROLE[s.role] || YOUR_ROLE.viewer}</div>
+                      </div>
+                      <div class="actions">
+                        <button @click=${() => this.onOpenSpace(s)}>Open <span class="fas fa-arrow-right"></span></button>
+                      </div>
+                    </div>
+                  `
+                )}
+              </div>
+            `
+          : ''}
+        <div class="options">${this.renderHome()} ${this.renderJoin()}</div>
+      </section>
+    `;
+  }
+
+  // Set up a home: a new Space for the people the user lives with.
+  renderHome() {
+    const names = [this.info.name, ...(this.info.others || []).map((s) => s.name)];
+    const wanted = (this.homeName || 'Home').trim().toLowerCase();
+    const taken = names.some((n) => String(n || '').trim().toLowerCase() === wanted);
+    const another = (this.info.others || []).some(isHome) || isHome(this.info);
+    return html`
+      <div class="option">
+        <div class="option-head">
+          <span class="option-icon"><span class="fas fa-home"></span></span>
+          <div>
+            <div class="option-title">${another ? 'Set up another home' : 'Set up a home'}</div>
+            <div class="option-sub">A new Space for the people you live with</div>
+          </div>
+        </div>
+        <div class="what">
+          <div>
+            It comes with a <strong>Groceries</strong> list everyone can tick off, and <strong>House info</strong>
+            for the Wi-Fi, bins and emergency contacts, both pinned. Then you invite them.
+          </div>
+        </div>
+        <label for="home-name">Name</label>
+        <input id="home-name" .value=${this.homeName} @input=${(e) => (this.homeName = e.target.value)} placeholder="Home" />
+        ${taken
+          ? html`<div class="hint">
+              <span class="fas fa-info-circle"></span> You already have a Space named ${this.homeName.trim() || 'Home'}.
+              A different name tells them apart.
+            </div>`
+          : ''}
+        <label for="home-own-name">Your name</label>
+        <input id="home-own-name" .value=${this.ownName} @input=${(e) => (this.ownName = e.target.value)} placeholder="Your name" />
+        <div class="option-actions">
+          <button class="primary" ?disabled=${this.busy} @click=${this.onSetUpHome}>Set up</button>
         </div>
       </div>
     `;
@@ -339,25 +434,29 @@ export class SharingView extends LitElement {
   renderJoin() {
     const j = this.joining;
     return html`
-      <div class="card join">
-        <div class="card-title"><span class="fas fa-fw fa-sign-in-alt"></span> Join a shared Space</div>
+      <div class="option">
+        <div class="option-head">
+          <span class="option-icon"><span class="fas fa-sign-in-alt"></span></span>
+          <div>
+            <div class="option-title">Join a shared Space</div>
+            <div class="option-sub">Someone sent you a code</div>
+          </div>
+        </div>
+        <div class="what"><div>Enter the code. Someone who owns the Space approves you, and it opens here.</div></div>
         ${j.waiting
-          ? html`<div class="sub"><span class="spinner"></span> Waiting for an owner to approve you…</div>`
+          ? html`<div class="waiting"><span class="spinner"></span> Waiting for an owner to approve you…</div>`
           : html`
-              <div class="fields">
-                <input
-                  class="code-input"
-                  .value=${j.code}
-                  placeholder="Code"
-                  aria-label="Code"
-                  @input=${(e) => (this.joining = { ...j, code: e.target.value, error: '' })}
-                />
-                <input
-                  .value=${j.name}
-                  placeholder="Your name"
-                  aria-label="Your name"
-                  @input=${(e) => (this.joining = { ...j, name: e.target.value })}
-                />
+              <label for="join-code">Code</label>
+              <input
+                id="join-code"
+                class="code-input"
+                .value=${j.code}
+                placeholder="Paste the code"
+                @input=${(e) => (this.joining = { ...j, code: e.target.value, error: '' })}
+              />
+              <label for="join-name">Your name</label>
+              <input id="join-name" .value=${j.name} placeholder="Your name" @input=${(e) => (this.joining = { ...j, name: e.target.value })} />
+              <div class="option-actions">
                 <button class="primary" ?disabled=${!j.code.trim()} @click=${this.onJoin}>Join</button>
               </div>
             `}
@@ -376,6 +475,10 @@ export class SharingView extends LitElement {
   async onSetUpHome() {
     // The window switches to the new Space, with this page open there.
     await this.run(() => nomad.vault.setUpHome({ name: this.homeName, ownName: this.ownName }));
+  }
+
+  async onOpenSpace(s) {
+    await this.run(() => nomad.vault.openSpace(s.id));
   }
 
   async onInvite() {

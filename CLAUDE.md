@@ -491,7 +491,8 @@ viewer's ask); the phone's is `mobile/backend/lib/space-library.mjs` (open, join
 reads a Space's records must go through `spaceLibrary.records(space, kind)` (desktop) or
 `placeOf(base, space, kind)` (phone `vault-apps.mjs`), and the Drive Registry through
 `_registryDrive(space)` in `bg/filesystem/index.js`, never straight to the Vault or Root Drive, or a
-shared Space reads stale data. UI: My Library → Sharing (`library/js/views/sharing.js`), **Ask to
+shared Space reads stale data. UI: My Library → Sharing (`library/js/views/sharing.js`: a This Space card in the Space's color, then Other
+Spaces, the user's other shared Spaces with Open (`nomad.vault.openSpace`), Set up a home and Join), **Ask to
 edit** in site-info, **Join a shared space** in the phone's Space switcher.
 
 ### AI Jobs and phone notifications (ADR-0030)

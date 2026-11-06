@@ -1,5 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import * as bg from './bg-process-rpc';
+import { spaceDot } from '../lib/space-mark.js';
 import buttonsCSS from './buttons2.css';
 
 const COLORS = [
@@ -59,7 +60,7 @@ class SpacesMenu extends LitElement {
                 class="space-item ${s.id === this.activeSpace?.id ? 'active' : ''}"
                 @click=${() => this.onSwitch(s.id)}
               >
-                <span class="dot" style="background:${s.color}"></span>
+                ${spaceDot(s)}
                 <span class="name">${s.name}</span>
                 ${s.id === this.activeSpace?.id ? html`<span class="fa fa-check"></span>` : ''}
               </div>
@@ -267,6 +268,14 @@ SpacesMenu.styles = [
       height: 10px;
       border-radius: 50%;
       flex: 0 0 10px;
+    }
+
+    .dot.home {
+      width: 13px;
+      height: 13px;
+      flex-basis: 13px;
+      margin: 0 -1.5px;
+      border-radius: 0;
     }
 
     .persona-row {
