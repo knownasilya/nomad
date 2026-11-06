@@ -120,7 +120,7 @@ export default {
         personas: choices.personas,
         pickedId: choices.pickedId,
         perms: [...new Set((o.perms || []).map((p) => String(p).split(':')[0]))],
-        space: { name: space?.name || 'Personal', color: space?.color || '#6c6cff' },
+        space: { id: spaceId, name: space?.name || 'Personal', color: space?.color || '#6c6cff', icon: space?.icon || null },
         vaultReady: choices.vaultReady || !choices.hasVault,
       });
     } catch (e) {

@@ -1,5 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import * as bg from './bg-process-rpc';
+import { spaceDot } from '../lib/space-mark.js';
 
 class ShellWindowSpacesDropdown extends LitElement {
   static get properties() {
@@ -25,7 +26,7 @@ class ShellWindowSpacesDropdown extends LitElement {
         @click=${this.onToggle}
         title=${this.persona ? `Switch space. You are ${this.persona.title || this.persona.label} (${this.persona.label}) here.` : 'Switch space'}
       >
-        <span class="dot" style="background:${space?.color || '#6c6cff'}"></span>
+        ${spaceDot(space)}
         <span class="name">${space?.name || 'Spaces'}</span>
         ${personaAvatar(this.persona, (e) => this.onClickPersona(e))}
         <span class="caret">▾</span>
@@ -144,6 +145,14 @@ ShellWindowSpacesDropdown.styles = css`
     height: 9px;
     border-radius: 50%;
     flex: 0 0 9px;
+  }
+
+  .dot.home {
+    width: 12px;
+    height: 12px;
+    flex-basis: 12px;
+    margin: 0 -1px;
+    border-radius: 0;
   }
 
   .caret {

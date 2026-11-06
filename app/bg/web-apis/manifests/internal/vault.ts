@@ -31,7 +31,8 @@ export default {
   requestDriveEdit: 'promise', // (url, { note? }) -> the same, after asking the user's other Devices (and a shared Space's members)
 
   // Shared Spaces (bg/hyper/space-library.js, ADR-0029), for the caller's Space
-  getSpaceShare: 'promise', // -> { spaceId, name, personal, shared, preview?, role, memberId, members, joins, requests, writable }
+  getSpaceShare: 'promise', // -> { spaceId, name, color, icon, personal, others, shared, preview?, role, memberId, members, joins, requests, writable }; others: the user's other shared Spaces [{ id, name, color, icon, role, removed }]
+  openSpace: 'promise', // (spaceId) -> { spaceId, name }: switch the caller's window to that Space
   shareSpace: 'promise', // ({ name }) -> share info
   setUpHome: 'promise', // ({ name?, ownName? }) -> { spaceId, name }: a new shared Space with a Groceries list and House info
   createSpaceInvite: 'promise', // (role: 'editor' | 'viewer') -> { code, role }

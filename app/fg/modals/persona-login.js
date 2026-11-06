@@ -3,6 +3,7 @@ import * as bg from './bg-process-rpc';
 import commonCSS from './common.css';
 import buttonsCSS from './buttons2.css';
 import { renderPermDesc } from '../../lib/permissions';
+import { spaceDot } from '../lib/space-mark.js';
 
 // The login prompt (ADR-0031 §7): the only way a site gets a Session. It names both sides (who is
 // asking, and as whom you'll appear), looks the same whether or not the user has a Persona (with
@@ -94,7 +95,7 @@ class PersonaLoginModal extends LitElement {
           ${this.renderPerms()}
           ${this.space
             ? html`<div class="space-note">
-                <span class="dot" style="background:${this.space.color}"></span>
+                ${spaceDot(this.space)}
                 In your ${this.space.name}
                 space.${this.personas.length
                   ? ' Using another Persona here switches this space to it.'
@@ -731,6 +732,14 @@ PersonaLoginModal.styles = [
       width: 8px;
       height: 8px;
       border-radius: 50%;
+    }
+
+    .dot.home {
+      flex-basis: 11px;
+      width: 11px;
+      height: 11px;
+      margin: 0 -1.5px;
+      border-radius: 0;
     }
 
     .actions {
