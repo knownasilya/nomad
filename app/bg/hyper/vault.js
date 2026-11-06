@@ -389,11 +389,12 @@ export async function registerSpace(space, rootDriveKey) {
   logger.info('Registered space in vault', { spaceId: space.id, rootDriveKey });
 }
 
-// Publish one local Space to the Vault index, so the user's other Devices pick it up. A new record
-// also makes the Vault's Devices Writers of the Space's Root Drive: addDevice only fanned out to the
-// Root Drives indexed when each Device paired. An existing record gets the Space's current name,
-// icon and color. Does nothing without a writable Vault: an unpaired Device keeps its Spaces local,
-// and making a Space must not make a Vault. Returns true when it wrote to the Vault.
+// Publish one local Space to the Vault index, so the user's other Devices pick it up. Each of them
+// then asks to write the Space's Root Drive with its own key for it (bg/hyper/drive-writers.js,
+// ADR-0026 amendment), never with its Vault key (see _neverAddVaultKeys). An existing record gets
+// the Space's current name, icon and color. Does nothing without a writable Vault: an unpaired
+// Device keeps its Spaces local, and making a Space must not make a Vault. Returns true when it
+// wrote to the Vault.
 export async function publishSpace(space) {
   if (!space?.root_drive_url) return false;
   const sess = await getVault();
@@ -410,10 +411,6 @@ export async function publishSpace(space) {
     return true;
   }
   await registerSpace(space, rootDriveKey);
-  // Background, like addDevice: the record is what other Devices need first.
-  _addDevicesAsWriters(rootDriveKey).catch((e) =>
-    logger.warn('addWriter fan-out to new space failed', { rootDriveKey, error: e.toString() })
-  );
   return true;
 }
 
@@ -438,7 +435,7 @@ export async function runPendingSpaceRootMove() {
 // A Space's Root Drive got a new key on this Device (setup recreates an unusable root drive).
 // Index the Space under the new key and leave the old record as a `movedTo` pointer, so paired
 // Devices repoint their copy of the Space instead of adding a second one. Writers of the old Root
-// Drive are not Writers of the new one, so fan the known Devices out to it.
+// Drive are not Writers of the new one: each Device asks for the new one (bg/hyper/drive-writers.js).
 export async function moveSpaceRoot(fromKey, toKey) {
   const sess = await getVault();
   if (!sess) return;
@@ -457,32 +454,21 @@ export async function moveSpaceRoot(fromKey, toKey) {
       await _carryRecord(sess, `${prefix}${toKey}/${path.slice(from.length)}`, value);
     }
   }
-  await _addDevicesAsWriters(toKey);
   logger.info('Moved space root in vault', { fromKey, toKey });
 }
 
-// Make every other Device in the Vault a Writer of a Root Drive this Device can write. Not this
-// Device: it already writes the Root Drive, and its Device key is its Vault writer core, so adding
-// it would copy every Vault record (Notes, Reader, Names, Devices, …) into the Root Drive.
-async function _addDevicesAsWriters(rootDriveKey) {
-  const root = await autobases.getOrLoadCollaborativeDrive(rootDriveKey);
-  if (!root || !root.writable) return;
-  const sess = await getVault();
-  const own = sess?.base?.local?.key ? b4a.toString(sess.base.local.key, 'hex') : null;
-  for (const device of await listDevices()) {
-    if (device.key === own) continue;
-    try {
-      await root.base.append({ addWriter: device.key });
-    } catch (e) {
-      logger.warn('addWriter on space root failed', { rootDriveKey, deviceKey: device.key, error: e.toString() });
-    }
-  }
-  await root.base.update();
-}
+// _neverAddVaultKeys: a Device's key in the Vault is its Vault writer core, so it must never be
+// added as a Writer of a Root Drive (or any other drive). The drive would take that core's Vault
+// ops into its own view (every Note, Reader feed, Name and Device record), and the core's
+// checkpoints name the Vault's system core, so once two such Writers index the drive, Autobase
+// fast-forwards it to a system it can't find and closes it ("Cannot read properties of null
+// (reading 'core')" in _applyFastForward). This used to happen to every new Space, and so to
+// Set up a home, on a Vault with two or more other Devices. tests/unit/vault-key-writers.test.js.
 
-// Add a Device: make its key a Writer of the Vault AND of every indexed Root Drive (fan-out),
-// then record human-readable metadata. The Autobase oplog (addWriter) is the security boundary;
-// the device record is for naming/management.
+// Add a Device: make its key a Writer of the Vault, then record human-readable metadata. It asks
+// for each Root Drive on its own (bg/hyper/drive-writers.js), never with this key
+// (_neverAddVaultKeys). The Autobase oplog (addWriter) is the security boundary; the device record
+// is for naming/management.
 export async function addDevice(deviceKey, { name, platform } = {}) {
   const sess = await ensureVault();
   logger.info('addDevice: appending addWriter', { deviceKey });
@@ -496,11 +482,6 @@ export async function addDevice(deviceKey, { name, platform } = {}) {
     addedAt: new Date().toISOString(),
   });
   logger.info('Added device to vault', { deviceKey, platform });
-  // Background — do NOT block the approval on slow per-space-drive replication.
-  // The device is already a Vault writer; fan-out catches up async.
-  fanOutAddWriter(deviceKey).catch((e) =>
-    logger.warn('addWriter fan-out failed', { error: e.toString() })
-  );
 }
 
 // Ensure THIS Device has its own record in the Vault index. The creating/owner Device is the
@@ -633,13 +614,8 @@ export async function getProfileUrl() {
 // Writer fan-out
 // =
 
-export async function fanOutAddWriter(deviceKey) {
-  await _forEachSpaceDrive(async (sess) => {
-    await sess.base.append({ addWriter: deviceKey });
-    await sess.base.update();
-  });
-}
-
+// Take a removed Device's Vault key off every Root Drive. Nothing adds that key now
+// (_neverAddVaultKeys), but Spaces made before this got it from the old fan-out.
 export async function fanOutRemoveWriter(deviceKey) {
   await _forEachSpaceDrive(async (sess) => {
     try {
