@@ -9,22 +9,16 @@ import * as toast from 'nomad://app-stdlib/js/com/toast.js';
 import { writeToClipboard } from 'nomad://app-stdlib/js/clipboard.js';
 import * as desktop from './lib/desktop.js';
 import * as addressBook from './lib/address-book.js';
+import { releaseNotesUrl, shouldShowNotice, versionId } from './lib/release.js';
 import css from '../css/main.css.js';
 import 'nomad://app-stdlib/js/com/img-fallbacks.js';
-
-const VERSION_ID = (major, minor, patch, pre) =>
-  major * 1e9 + minor * 1e6 + patch * 1e3 + pre;
-const CURRENT_VERSION = VERSION_ID(1, 2, 1, 0);
-const RELEASE = {
-  label: '1.2.1',
-  url: 'https://nomad.pages.dev/docs/',
-};
 
 class DesktopApp extends LitElement {
   static get properties() {
     return {
       profile: { type: Object },
       pins: { type: Array },
+      version: { type: String },
     };
   }
 
@@ -36,11 +30,11 @@ class DesktopApp extends LitElement {
     super();
     this.profile = undefined;
     this.pins = [];
+    this.version = undefined;
+    this.showReleaseNotice = false;
 
     this.load();
-
-    this.lastDismissedReleaseNotice = localStorage.lastDismissedReleaseNotice;
-    localStorage.lastDismissedReleaseNotice = CURRENT_VERSION;
+    this.loadVersion();
 
     window.addEventListener('focus', (e) => {
       this.load();
@@ -55,6 +49,23 @@ class DesktopApp extends LitElement {
       addressBook.loadProfile(),
       desktop.load(),
     ]);
+  }
+
+  // The notice names the version this app runs, and shows once per new version.
+  async loadVersion() {
+    let version;
+    try {
+      version = (await nomad.browser.getInfo()).version;
+    } catch (e) {
+      return;
+    }
+    let stored;
+    try {
+      stored = localStorage.lastDismissedReleaseNotice;
+      localStorage.lastDismissedReleaseNotice = versionId(version);
+    } catch (e) {}
+    this.showReleaseNotice = shouldShowNotice(version, stored);
+    this.version = version;
   }
 
   // rendering
@@ -78,14 +89,14 @@ class DesktopApp extends LitElement {
   }
 
   renderReleaseNotice() {
-    if (this.lastDismissedReleaseNotice >= CURRENT_VERSION) {
+    if (!this.version || !this.showReleaseNotice) {
       return '';
     }
     return html`
       <div class="release-notice">
-        <a href=${RELEASE.url} class="view-release-notes" target="_blank">
+        <a href=${releaseNotesUrl(this.version)} class="view-release-notes" target="_blank">
           <span class="fas fa-fw fa-rocket"></span>
-          <strong>Welcome to Nomad ${RELEASE.label}!</strong>
+          <strong>Welcome to Nomad ${this.version}!</strong>
           Click here to see what's new.
         </a>
       </div>
