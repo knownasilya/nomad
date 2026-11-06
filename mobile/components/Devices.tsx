@@ -12,9 +12,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ScreenHeader from './ScreenHeader'
 import Icon from './Icon'
+import { SwitchRow } from './List'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
-import type { Backend, DeviceSpace, DriveSync, VaultDevice, VaultMsg } from '../lib/useBackend'
+import type { Backend, DeviceSpace, DriveSync, VaultDevice, VaultMsg, VaultPeer } from '../lib/useBackend'
 import type { Space } from '../lib/useSpaces'
 import { currentVersion } from '../lib/updater'
 import { useDesktopUpdates } from '../lib/deviceUpdates'
@@ -377,6 +378,14 @@ export default function Devices ({ visible, onClose, pair, vaultStatus: vaultSta
                   </View>
                 )}
 
+                <PeerList
+                  peers={status.peers || []}
+                  apps={apps}
+                  onChanged={async () => { const st = await vaultStatus().catch(() => null); if (st) setStatus(st) }}
+                  s={s}
+                  t={t}
+                />
+
                 {/* Debugging detail for a Space that won't sync: collapsed until asked for. */}
                 <TouchableOpacity
                   style={s.detailsToggle}
@@ -523,6 +532,83 @@ function DeviceSpaces ({ device, phoneKeys, colors, s }: { device: VaultDevice; 
   )
 }
 
+// Always-on Peers (ADR-0038): machines that keep the user's Spaces online and never write. They're
+// added on a computer (Settings → Devices); here the user sees them, picks the Spaces each keeps,
+// and removes one.
+function PeerList ({ peers, apps, onChanged, s, t }: { peers: VaultPeer[]; apps: Backend['apps']; onChanged: () => Promise<void>; s: Styles; t: Theme }) {
+  const [busy, setBusy] = useState(false)
+  const [confirming, setConfirming] = useState<string | null>(null)
+  const [err, setErr] = useState('')
+  const call = async (action: string, args: Record<string, unknown>) => {
+    setBusy(true)
+    setErr('')
+    try {
+      const res = await apps('peers', action, args)
+      if (!res.ok) setErr(res.message || 'That didn’t work')
+      await onChanged()
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <View style={s.peers}>
+      <Text style={s.sectionTitle}>Always-on Peers</Text>
+      {err ? <Text style={s.error}>{err}</Text> : null}
+      {peers.length === 0 ? (
+        <Text style={s.hint}>
+          A Peer is a machine that stays on, like a NAS, running nomad-peer. It keeps your Spaces online
+          so your devices sync while your computers sleep. Add one on your computer, in Settings → Devices.
+        </Text>
+      ) : peers.map((p) => (
+        <View key={p.key} style={[s.list, s.peerCard]}>
+          <View style={s.row}>
+            <Icon name='server' size={16} color={t.textDim} style={s.rowIcon} />
+            {confirming === p.key ? (
+              <View style={s.confirmBody}>
+                <Text style={s.confirmText}>
+                  {`Remove “${p.name}”? It stops and deletes its copies once it sees this. A Peer that’s been stolen keeps what it already copied.`}
+                </Text>
+                <View style={s.confirmActions}>
+                  <TouchableOpacity onPress={() => { setConfirming(null); call('remove', { key: p.key }) }} disabled={busy} hitSlop={8}>
+                    <Text style={[s.link, s.danger]}>Remove</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setConfirming(null)} disabled={busy} hitSlop={8}>
+                    <Text style={s.link}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <>
+                <View style={s.rowBody}>
+                  <Text style={s.rowName}>{p.name}</Text>
+                  <View style={s.statusRow}>
+                    <View style={[s.dot, { backgroundColor: p.online ? t.secure : t.textMuted }]} />
+                    <Text style={[s.rowMeta, s.statusText, p.online && { color: t.secure }]}>{p.summary}</Text>
+                  </View>
+                  <Text style={s.rowMeta}>It can read what it keeps, but can’t change anything.</Text>
+                </View>
+                <TouchableOpacity onPress={() => setConfirming(p.key)} hitSlop={8}>
+                  <Text style={[s.link, s.danger]}>Remove</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+          {p.spaces.map((sp) => (
+            <SwitchRow
+              key={sp.rootDriveKey}
+              title={`Keep ${sp.name} online`}
+              value={sp.kept}
+              disabled={busy}
+              divider
+              onValueChange={(on) => call('setSpace', { key: p.key, rootDriveKey: sp.rootDriveKey, on })}
+            />
+          ))}
+        </View>
+      ))}
+    </View>
+  )
+}
+
 // One line for the collapsed Sync details header: the worst thing it would show.
 function syncSummary (status: VaultMsg): string {
   const sync = status.sync
@@ -661,6 +747,8 @@ function makeStyles (t: Theme) {
     confirmText: { fontSize: 13, color: t.textDim, lineHeight: 18 },
     confirmActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: space.md },
     danger: { color: t.danger },
+    peers: { marginTop: space.xl },
+    peerCard: { marginBottom: space.md },
     leaveSection: { marginTop: space.xl, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border, paddingTop: space.lg },
     leaveBtn: { alignSelf: 'flex-start', paddingVertical: space.xs },
     leaveConfirm: { gap: space.sm },

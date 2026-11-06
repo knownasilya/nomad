@@ -12,6 +12,10 @@
 //
 // A session lives while a page has the Note open (and a few seconds after), or while the AI writes
 // into a Note that is open somewhere. The record stays the Note everything else reads.
+//
+// A Note in a shared Space is edited live by every member who has it open (ADR-0041 amendment 2):
+// shared/note-live-spaces.mjs gives each shared Space this Device can write its own hub and link,
+// keyed on its Space Library, and routes each Note to its place's hub.
 
 import Protomux from 'protomux';
 import c from 'compact-encoding';
@@ -23,9 +27,12 @@ import * as logLib from '../logger';
 import * as daemon from '../hyper/daemon';
 import * as vault from '../hyper/vault';
 import * as vaultApps from '../web-apis/bg/vault-apps';
+import * as spaceLibrary from '../hyper/space-library';
 import * as apps from '../../../shared/vault-apps.mjs';
+import * as sl from '../../../shared/space-library.mjs';
 import { createNoteLink } from '../../../shared/note-live.mjs';
 import { createLiveNotes } from '../../../shared/note-live-hub.mjs';
+import { createLiveRouter, editorKeys } from '../../../shared/note-live-spaces.mjs';
 import { LiveNote } from './live-note.mjs';
 
 const logger = logLib.get().child({ category: 'notes', subcategory: 'live' });
@@ -65,26 +72,86 @@ function storeFor(id) {
   };
 }
 
-const notes = createLiveNotes({
-  LiveNote,
-  b4a,
-  locate: async (id) => (await vaultApps.locateNote(id)).prev || null,
-  storeFor,
-  getDeviceKey: deviceKey,
-  onStatus: (id, status) => events.emit('status', { id, ...status }),
-  // The leader folds an outside change (an older app, a shared Space's other members) into the
-  // session, so the Vault is watched while any session is open.
-  onSessions: (count) => {
-    if (count && !watcher) {
-      watcher = vaultApps.watch();
-      watcher.on('changed', () => notes.recordsChanged());
-    } else if (!count && watcher) {
-      watcher.close();
-      watcher = null;
-    }
+const log = (...args) => logger.info(args.join(' '));
+
+// The leader folds an outside change (an older app, a member who isn't live) into the session, so
+// the Vault and the Space Libraries are watched while any session is open.
+function watchWhileOpen() {
+  const count = router ? router.sessions() : 0;
+  if (count && !watcher) {
+    watcher = vaultApps.watch();
+    watcher.on('changed', () => router.recordsChanged());
+  } else if (!count && watcher) {
+    watcher.close();
+    watcher = null;
+  }
+}
+
+function hubOf({ getDeviceKey, canSave }) {
+  return createLiveNotes({
+    LiveNote,
+    b4a,
+    locate: async (id) => (await vaultApps.locateNote(id)).prev || null,
+    storeFor,
+    getDeviceKey,
+    canSave,
+    onStatus: (id, status) => events.emit('status', { id, ...status }),
+    onSessions: () => watchWhileOpen(),
+    log,
+  });
+}
+
+const notes = hubOf({ getDeviceKey: deviceKey });
+
+const randomHex = () => b4a.toString(crypto.randomBytes(32), 'hex');
+const linkOf = (opts) => createNoteLink({ swarm: daemon.getSwarm(), Protomux, c, b4a, randomHex, ...opts });
+
+// A shared Space this Device can edit: its Library, this Device's writer key in it, and the keys of
+// the members who can edit.
+async function libraryOf(space) {
+  const lib = await spaceLibrary.forSpace(space);
+  const base = lib?.sess?.base;
+  if (!lib || !base?.local?.key || !sl.canEdit(lib.role)) return null;
+  return {
+    key: lib.library,
+    writerKey: b4a.toString(base.local.key, 'hex'),
+    sign: async (message) => {
+      const kp = base.local.keyPair;
+      return kp?.secretKey ? b4a.toString(crypto.sign(b4a.from(message), kp.secretKey), 'hex') : '';
+    },
+    canSave: () => !!lib.sess.writable,
+    editors: async () => editorKeys(await spaceLibrary.members(space), sl.canEdit),
+  };
+}
+
+const router = createLiveRouter({
+  vault: notes,
+  spaceOf: async (id) => {
+    const { space } = await vaultApps.locateNote(id);
+    if (!space) return null;
+    const lib = await spaceLibrary.forSpace(space).catch(() => null);
+    return lib && lib.writable && sl.canEdit(lib.role) ? space : null;
   },
-  log: (...args) => logger.info(args.join(' ')),
+  library: libraryOf,
+  verifySig: verifySigner,
+  makeLink: linkOf,
+  makeHub: (space, lib) => hubOf({ getDeviceKey: () => lib.writerKey, canSave: lib.canSave }),
+  log,
 });
+
+// The shared Spaces this Device can edit, each with its own link.
+async function syncSpaces() {
+  try {
+    const spaces = [];
+    for (const s of await vault.listSpaces()) {
+      if (!sl.isShared(s) || s.movedTo || s.removed || !sl.canEdit(s.role)) continue;
+      spaces.push(s.rootDriveKey);
+    }
+    await router.syncSpaces(spaces);
+  } catch (err) {
+    logger.warn('Could not open the shared Spaces’ live notes', { error: String(err) });
+  }
+}
 
 // --- The link to the user's other Devices ---
 
@@ -99,7 +166,7 @@ export function install() {
       b4a,
       getVaultKey: () => vault.getVaultKey(),
       getDeviceKey: deviceKey,
-      randomHex: () => b4a.toString(crypto.randomBytes(32), 'hex'),
+      randomHex,
       sign: async (message) => {
         const sess = await vault.getVault();
         const kp = sess?.base?.local?.keyPair;
@@ -119,9 +186,13 @@ export function install() {
     vault.events.on('changed', () => {
       link.reset();
       link.install();
+      syncSpaces();
     });
+    spaceLibrary.events.on('changed', () => syncSpaces());
   }
   link.install();
+  router.install();
+  syncSpaces();
 }
 
 // A Vault Device, and its signature over `message` by the signer of its Vault writer core.
@@ -129,6 +200,16 @@ async function verifyDevice(key, message, sigHex) {
   try {
     const devices = await vault.listDevices();
     if (!devices.some((d) => d.key === key)) return false;
+    return await verifySigner(key, message, sigHex);
+  } catch (err) {
+    logger.warn('note-live verify failed', { error: String(err) });
+    return false;
+  }
+}
+
+// `sigHex` is the signature over `message` of the signer of writer core `key`.
+async function verifySigner(key, message, sigHex) {
+  try {
     const store = daemon.getCorestore();
     if (!store) return false;
     const core = store.get({ key: b4a.from(key, 'hex') });
@@ -159,9 +240,9 @@ export function openPage(id, connId) {
   let joined = false;
   stream.on('close', () => {
     closed = true;
-    if (joined) notes.closePage(id, connId).catch(() => {});
+    if (joined) router.closePage(id, connId).catch(() => {});
   });
-  notes
+  router
     .openPage(id, connId, {
       send: (bytes) => emitter.emit('message', { data: toB64(bytes) }),
       onStatus: (status) => emitter.emit('status', status),
@@ -175,14 +256,14 @@ export function openPage(id, connId) {
 }
 
 export function pageSend(id, connId, data) {
-  return notes.pageReceive(id, connId, fromB64(data));
+  return router.pageReceive(id, connId, fromB64(data));
 }
 
 // --- The AI ---
 
 // Is Note `id` open for live editing, here or on another of the user's Devices?
 export function isOpen(id) {
-  return notes.isOpen(id);
+  return router.isOpen(id);
 }
 
 // The AI changes Note `id` from `base` (the text it read) to `body`, typing into the open session
@@ -190,7 +271,7 @@ export function isOpen(id) {
 // (the caller saves it as before), or { conflict: true } when the change touches text someone
 // changed since the AI read it.
 export function aiWrite(id, base, body) {
-  return notes.aiWrite(id, base, body);
+  return router.aiWrite(id, base, body);
 }
 
 // The text of each version of a Note the AI read, by updatedAt, so a later writeNote can be put in

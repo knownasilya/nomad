@@ -20,6 +20,12 @@ export default {
   renameDevice: 'promise',
   removeDevice: 'promise',
 
+  // Always-on Peers (ADR-0038): a Peer pairs like a Device but never writes
+  listPeers: 'promise', // -> [{ key, name, kind, hold, online, status, summary, spaces: [{ rootDriveKey, name, kept }] }]
+  setPeerSpace: 'promise', // (peerKey, rootDriveKey, on)
+  renamePeer: 'promise', // (peerKey, name)
+  removePeer: 'promise', // (peerKey)
+
   // Editing a Drive another of the user's Devices can write (bg/hyper/drive-writers.js)
   driveEditStatus: 'promise', // (url) -> { writable, canAsk, legacy, linked, request: { pending, granted } | null }
   requestDriveEdit: 'promise', // (url, { note? }) -> the same, after asking the user's other Devices (and a shared Space's members)
@@ -61,6 +67,19 @@ export default {
   renameNoteLinks: 'promise', // ({ id, from, to }) -> number of notes changed
   setNoteTopics: 'promise', // ({ id, topics }) -> note, its topics set by hand (ADR-0035)
   setNoteTick: 'promise', // ({ id, text, checked }) -> note, who ticked an item noted in a shared Space
+  // The Calendar (bg/web-apis/bg/calendar.ts, shared/calendar.mjs), for the caller's Space
+  listCalendar: 'promise', // ({ from?, to? }) -> { space, spaceName, shared, canWriteSpace, events, feeds, occurrences }
+  saveCalendarEvent: 'promise', // ({ id?, title, start, end?, allDay?, location?, notes?, repeat?, inSpace? }) -> event
+  deleteCalendarEvent: 'promise', // (id) -> boolean
+  saveCalendarFeed: 'promise', // ({ id?, url, name?, color?, inSpace? }) -> feed, fetched once
+  deleteCalendarFeed: 'promise', // (id) -> boolean
+  refreshCalendarFeeds: 'promise', // ({ force? }) -> listCalendar(), after fetching the feeds that are due
+  // The family album (bg/web-apis/bg/photos.ts, shared/photos.mjs), for the caller's shared Space
+  listPhotos: 'promise', // () -> { space, spaceName, shared, canAdd, role, photos }
+  photoData: 'promise', // (id, { thumb? }) -> data:image/jpeg URL, or null until it replicates
+  addPhoto: 'promise', // ({ photo, thumb (base64 JPEG), width, height, takenAt?, caption? }) -> photo
+  setPhotoCaption: 'promise', // ({ id, caption }) -> photo
+  deletePhoto: 'promise', // (id) -> boolean
   suggestNoteTopics: 'promise', // (ids?) -> how many notes the AI will sort into topics
   watchAppData: 'readable', // 'changed' when the Vault changes
   openLiveNote: 'readable', // (id, conn) -> 'message' { data } (y-protocols, base64), 'status', 'failed' (ADR-0041)

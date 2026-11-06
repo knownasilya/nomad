@@ -1,6 +1,6 @@
 # An always-on Peer: a machine the user runs that keeps their drives, Vault and Inbox reachable
 
-**Status: Proposed.** 2026-11-02. Builds on ADR-0006 (the Vault), ADR-0010 (one `nomad.fs` over
+**Status: Accepted for Own Peers** (2026-11-06, see the amendment). Proposed 2026-11-02. Builds on ADR-0006 (the Vault), ADR-0010 (one `nomad.fs` over
 Autobase drives), ADR-0013 (followers are subscriber-side), ADR-0029 (Shared Spaces) and ADR-0036
 (Persona Inbox, which left "a relay for offline delivery" to its own ADR). Three spikes (below) must
 pass before *Accepted*.
@@ -258,3 +258,36 @@ Peers in this version.
 5. **Blind Peers for public drives,** after spike S2.
 6. **Docs.** nomad.dev: "Keep your drives online", covering what an Own Peer can read, how to run one
    at home or on a VPS, and what a Blind Peer operator learns.
+
+## Amendment: the Own Peer is built (2026-11-06)
+
+Rollout steps 1 to 3 are in. What changed from the text above:
+
+- **Status rides on device presence, not a `nomad/peer` channel (§6).** A Peer already opens the
+  `nomad/device-presence` channel with the user's Devices, so its HELLO carries a `status` object
+  (`makeStatus`: version, rules version, uptime, how many Holdings and how many are synced, blocks
+  behind, bytes, free disk) and is sent again every 30 seconds and on every change (`announce()`).
+  `readStatus` drops anything malformed, and it is a display hint only, as presence always was.
+  There is no handshake to sign, because nothing a Device does with it grants anything.
+- **No `SYNC_NOW`.** The Peer re-reads its Holdings on every Vault update and every 30 seconds, which
+  is what `SYNC_NOW` would have asked for, so a Device never sends the Peer a message at all.
+- **Spike S1 passed** in `tests/unit/peer.test.js`: over a local DHT testnet, a Peer that is no
+  writer mirrors an Autobase drive with a 300 KB blob, the owner leaves, and a third Device reads the
+  file from the Peer. The full mirror is `drive-manager.mjs` `setHosting`: every path is read, and for
+  an Autobase every blob core its view names is opened and downloaded in full (`_mirrorBlobCores`).
+  `hostingState` says when a pass found every file and every core has every block. The phone gets the
+  same pass for the drives it hosts. Desktop's `ensureHosting` still downloads Hyperdrives only; that
+  is left for later, as is measuring a year of Vault records.
+- **The program.** `peer/index.mjs` (`join`, `run`, `status`, `leave`), `peer/holdings.mjs` (reads
+  the records `holdingsOf` needs), `peer/peer.mjs` (keeps the mirrors in step and builds the status).
+  Its packages resolve from `mobile/node_modules`, so it runs from a checkout with Node 20 after
+  `npm install` in `mobile/`. `run` writes `status.json` next to the store for `status`.
+- **Removal.** The Peer waits for two reads at least 10 seconds apart that miss its record before it
+  stops and deletes its folder, so a view still catching up can't wipe it.
+- **UI.** Desktop Settings → Devices has an Always-on Peers section (add one, its status line, a Keep
+  online box per Space, Remove), and a pending request from a Peer says what it will be able to do.
+  The phone's Devices screen lists Peers with a switch per Space and Remove
+  (`mobile/backend/lib/peers.mjs`, `RPC_APPS` `peers`). A Peer is added from a computer only.
+- Still not built: per-drive switches (the record supports a list of drives), Blind Peers (§4), the
+  Inbox (§7), "a newer format than it knows" (§9), and a container image.
+

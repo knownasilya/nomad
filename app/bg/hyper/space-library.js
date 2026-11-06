@@ -25,6 +25,7 @@ import * as vault from './vault';
 import * as pairing from './device-pairing';
 import * as settingsDb from '../dbs/settings';
 import * as sl from '../../../shared/space-library.mjs';
+import * as cal from '../../../shared/calendar.mjs';
 import * as apps from '../../../shared/vault-apps.mjs';
 import { namesPrefix } from '../../../shared/names.mjs';
 
@@ -114,10 +115,24 @@ async function delIn(sess, path) {
 }
 
 // A Space's own records of one kind, wherever they are: its Space Library when shared, else the
-// Vault (ADR-0029 §1). `kind` is 'notes', 'names' or 'follows'; each record is a file `<name>`
-// (`<id>.json`, `<word>.json`, `<host>.json`) under one prefix.
-const LIB_PREFIX = { notes: sl.LIB_NOTES, names: sl.LIB_NAMES, follows: sl.LIB_FOLLOWS };
-const VAULT_PREFIX = { notes: apps.notesPrefix, names: namesPrefix, follows: apps.followsPrefix };
+// Vault (ADR-0029 §1). `kind` is 'notes', 'names', 'follows', or a calendar kind ('events', 'feeds',
+// 'feedCache'); each record is a file `<name>` (`<id>.json`, `<word>.json`, `<host>.json`) under one prefix.
+const LIB_PREFIX = {
+  notes: sl.LIB_NOTES,
+  names: sl.LIB_NAMES,
+  follows: sl.LIB_FOLLOWS,
+  events: cal.libraryPrefix('events'),
+  feeds: cal.libraryPrefix('feeds'),
+  feedCache: cal.libraryPrefix('feedCache'),
+};
+const VAULT_PREFIX = {
+  notes: apps.notesPrefix,
+  names: namesPrefix,
+  follows: apps.followsPrefix,
+  events: (space) => cal.calendarPrefix('events', space),
+  feeds: (space) => cal.calendarPrefix('feeds', space),
+  feedCache: (space) => cal.calendarPrefix('feedCache', space),
+};
 
 export async function records(space, kind) {
   const lib = await forSpace(space);
@@ -161,6 +176,8 @@ export async function collect(space, root) {
     follows: await vault.listAppRecords(apps.followsPrefix(space)),
     notes: (await vault.listAppRecords(apps.notesPrefix(space))).filter(apps.isNote),
     names: await vault.listAppRecords(namesPrefix(space)),
+    events: (await vault.listAppRecords(cal.calendarPrefix('events', space))).filter(cal.isEvent),
+    feeds: (await vault.listAppRecords(cal.calendarPrefix('feeds', space))).filter(cal.isFeed),
   };
 }
 
@@ -191,7 +208,14 @@ export async function share({ space, root, meta, name }) {
   // The moved records leave the Root Drive and the Vault.
   await autobases.putInline(root, sl.LIB_DRIVES, JSON.stringify({ drives: [] }));
   for (const b of items.bookmarks) await autobases.deletePath(root, sl.LIB_BOOKMARKS + b.name);
-  for (const prefix of [apps.followsPrefix(space), apps.notesPrefix(space), namesPrefix(space)]) {
+  for (const prefix of [
+    apps.followsPrefix(space),
+    apps.notesPrefix(space),
+    namesPrefix(space),
+    cal.calendarPrefix('events', space),
+    cal.calendarPrefix('feeds', space),
+    cal.calendarPrefix('feedCache', space),
+  ]) {
     for (const r of await vault.listAppRecordPaths(prefix)) await vault.delAppRecord(r);
   }
   _watched.add(lib.keyStr);

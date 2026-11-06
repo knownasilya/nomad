@@ -118,3 +118,29 @@ Note open only on the phone types into it the same way, since the phone's `OPEN`
   phone's packages and desktop's Yjs versions in step.
 - Tests: `tests/unit/note-live-hub.test.js` (a computer and a phone joining one session, the AI
   typing into a Note open only on the phone, a phone that can't save).
+
+## Amendment 2: the people of a shared Space edit together (2026-11-06)
+
+A Note kept in a shared Space (its Space Library, ADR-0029) is edited live by every member who has it
+open, not only by one person's Devices. Before, another member's edit reached the session only
+through the record, so two people typing at once got a conflict copy.
+
+- **One hub and one link per shared Space.** `shared/note-live-spaces.mjs` (`createLiveRouter`) puts
+  each Note on the hub of its place: the Vault hub for the user's own Notes and Spaces that aren't
+  shared, and a hub of its own for each shared Space this Device can edit. Each Space hub has its own
+  `nomad/note-live` channel, keyed on the Space Library's key instead of the Vault's.
+- **The proof is a Library writer key an editor lists.** On a Space's link each side signs the
+  challenge with its writer key in that Library. The other side takes it only when a current member
+  who can edit lists the key in their member record's `writers` (`editorKeys`), and the signature
+  checks against the signer of that writer core. A removed member, a viewer, and anyone who only knows
+  the Library key are refused. The user's own Devices meet on the Space's link too, for its Notes.
+- **One leader for everyone.** Every Device in a Space session is keyed by its Library writer key, so
+  all of them pick the same leader (the lowest key that can save) whoever's Device it is.
+- **The AI goes to the Note's own place.** `aiWrite` asks only the hub of the place that keeps the
+  Note, so a member listing another Note's id in `OPEN` can't pull the AI's write into their session.
+- **Names.** In a shared Space's Note the cursor carries the person's name in the Space
+  (`ownName` from `listNotes` on desktop, the member record on the phone), not the Device's.
+- A Device that can't write the Space's Library yet (a phone waiting for its grant) stays on the Vault
+  hub for that Space's Notes and sees the others' edits through the record, as before.
+- Tests: `tests/unit/note-live-spaces.test.js` (two members in one session, one saver, a member not
+  listed is refused, the AI's write routed to the Note's place).

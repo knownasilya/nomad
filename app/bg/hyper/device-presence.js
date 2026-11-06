@@ -46,6 +46,11 @@ export function connectedDevices() {
   return presence ? [...presence.connectedDevices()] : [];
 }
 
+// The status each connected always-on Peer last sent (shared/peers.mjs makeStatus), by key.
+export function peerStatuses() {
+  return presence ? Object.fromEntries(presence.statuses()) : {};
+}
+
 // This Device left its Vault (or joined another): drop channels keyed on the old one.
 export function reset() {
   if (presence) presence.reset();

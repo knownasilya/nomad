@@ -352,19 +352,22 @@ export async function locateNote(id) {
 // { notes: [note], space, spaceName, writable, linked }, newest first. `space` is the caller's
 // Space key (null outside a Space), and `spaceName` its name, for the Notes page's sections.
 // In a shared Space, `shared` is true, `canWriteSpace` says whether this person can write its Notes,
-// and `members` how many people see them.
+// `members` how many people see them, and `ownName` this person's name among them.
 export async function listNotes(ctx = null) {
   const space = await spaceOrNull(ctx);
   const share = space ? await spaceLibrary.info(space).catch(() => ({ shared: false })) : { shared: false };
   const store = share.shared ? await spaceLibrary.records(space, 'notes') : null;
-  const members = share.shared ? (await spaceLibrary.members(space).catch(() => [])).length : 0;
+  const list = share.shared ? await spaceLibrary.members(space).catch(() => []) : [];
+  // This person's name in the Space: the cursor the other members see in a live Note.
+  const ownName = list.find((m) => m.memberId === share.memberId)?.name || null;
   return {
     notes: await allNotes(space),
     space,
     spaceName: spaceNameOf(space),
     shared: !!share.shared,
     canWriteSpace: store ? store.writable : true,
-    members,
+    members: list.length,
+    ownName,
     ...(await vaultInfo()),
   };
 }

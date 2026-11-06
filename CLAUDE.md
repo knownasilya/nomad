@@ -250,8 +250,11 @@ seed client id, so two Devices don't double the text) and the **leader** (lowest
 session's Devices that can write the Vault, `saves` on `JOIN`) writes it back and folds outside
 changes in (`shared/note-diff.mjs`). The AI's `writeNote` on an open Note (here or on the phone)
 types its edits in with its own cursor (`aiEdit`, from the text `readNote` gave it); when they touch
-text the user changed, it falls back to a conflict copy. Cursors and selections are awareness `cursor`s, drawn by yCollab. The phone's editor sends its own with `shareCursor` (`notes/js/mobile.js`), because yCollab and CodeMirror's `view.hasFocus` ask `document.hasFocus()`, which Android's WebView often answers false. Every awareness that relays others (the session, `live.js`) forgets a removed client's clock (`forgetClients`), so a Device that reconnects shows again at once and not after the 15 s renewal. Tests: `tests/unit/note-diff.test.js`,
-`note-live-session.test.js`, `note-live-link.test.js`, `note-live-hub.test.js`.
+text the user changed, it falls back to a conflict copy. Cursors and selections are awareness `cursor`s, drawn by yCollab. The phone's editor sends its own with `shareCursor` (`notes/js/mobile.js`), because yCollab and CodeMirror's `view.hasFocus` ask `document.hasFocus()`, which Android's WebView often answers false. Every awareness that relays others (the session, `live.js`) forgets a removed client's clock (`forgetClients`), so a Device that reconnects shows again at once and not after the 15 s renewal. A Note in a shared Space is live between its members too (ADR-0041 amendment 2):
+`shared/note-live-spaces.mjs` (`createLiveRouter`) gives each shared Space the Device can edit its own hub
+and link, keyed on its Space Library and proved with a Library writer key an editor's member record lists
+(`editorKeys`); desktop and the phone both route every page and AI write through it. Tests: `tests/unit/note-diff.test.js`,
+`note-live-session.test.js`, `note-live-link.test.js`, `note-live-hub.test.js`, `note-live-spaces.test.js`.
 
 **Yjs on the phone's Bare worklet:** `yjs`, `y-protocols` and `lib0` are in `mobile/package.json`
 at desktop's versions, and lib0's `node:crypto` import is mapped to
@@ -353,6 +356,44 @@ Names are managed in My Library → Names and the site-info panel; the URL bar s
 The name must be spelled from the site's host (or a drive's title), it runs on this Device's runtime
 only (`completeText` in `ai.ts`), and the `ai_auto_names` setting (the AI page, `nomad://ai/setup`) turns it off.
 Such a record has `auto: true` until the user keeps or edits it (ADR-0018 amendment).
+
+### The family calendar (ADR-0042)
+
+Events, followed iCal feeds and the feeds' copies are Vault records kept like Notes: the user's own
+(`/.vault/calendar/`) or a Space's, in its Space Library once shared, so a household edits one
+calendar (`by` says who added an event). Rules, repeats, the agenda and the iCal reader are
+`shared/calendar.mjs` (tests `tests/unit/calendar.test.js`); times are wall time with no zone.
+Desktop is `nomad://calendar` (`app/userland/calendar/`, internal `nomad.vault.listCalendar`/
+`saveCalendarEvent`/…, `app/bg/web-apis/bg/calendar.ts`, which fetches feeds in bg). The phone is
+`mobile/components/Calendar.tsx` over `RPC_APPS` `calendar` (`mobile/backend/lib/calendar.mjs`); its UI
+fetches a due feed and hands the text to `feedFetched`. The AI reads it with `listCalendarEvents`
+(`calendarRead`, Jobs too) and never changes it; links are `nomad://calendar/?day=` (`parseItemLink`).
+
+### The family album (ADR-0043)
+
+A shared Space's photos live in its Space Library: a record `/photos/items/<id>.json` and two blob
+files (`/photos/files/`, `/photos/thumbs/`), in the adder's own blob core. Rules, paths and sizes are
+`shared/photos.mjs` (tests `tests/unit/photos.test.js`); every Device scales to 2560 px and a 480 px
+thumbnail before adding. Desktop is `nomad://photos` (`app/userland/photos/`, `bg/web-apis/bg/photos.ts`
+over `autobases.buildPutBlobOp`); the phone is `mobile/components/Photos.tsx` over `RPC_APPS` `photos`
+(`mobile/backend/lib/photos.mjs`, the drive manager's `putBlobFor`/`readFileOf`). A Space that isn't
+shared has no album. Only the adder or the owner removes a photo.
+
+### Always-on Peers (ADR-0038)
+
+A Peer is a Nomad with no windows that the user runs on a machine that stays on (`peer/`, the
+`nomad-peer` CLI: `join <code>`, `run`, `status`, `leave`). It pairs like a Device with
+`platform: 'peer'`, and desktop's `approveDevice` then writes `/.vault/peers/<key>.json`
+(`vault.addPeer`) instead of adding a writer: a Peer never writes the Vault or any drive. Rules
+(records, `hold`, `holdingsOf`, status) are `shared/peers.mjs` (tests `tests/unit/peers.test.js`). The
+Peer reads its Holdings (`peer/holdings.mjs`), keeps a full mirror of each with the phone backend's
+`DriveManager.setHosting` (`hostingState` says when it's synced), and sends its status in its
+`nomad/device-presence` HELLO (`getStatus`, `announce()`, `statuses()`). When its record goes, it
+stops and deletes its folder. UI: Settings → Devices (`nomad.vault.listPeers`/`setPeerSpace`/
+`removePeer`) and the phone's Devices screen (`RPC_APPS` `peers`, `mobile/backend/lib/peers.mjs`).
+`peer/` runs the code in `mobile/backend/lib/` under Node, resolving packages from
+`mobile/node_modules`, so a change there must keep `tests/unit/peer.test.js` passing (it includes a
+DHT-testnet mirror test).
 
 ### Highlights (ADR-0020)
 

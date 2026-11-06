@@ -20,6 +20,7 @@
 // (the Space Library key), `role` and `memberId`. Read marks stay in each person's Vault.
 
 import { followName } from './vault-apps.mjs';
+import { shareCalendarPaths } from './calendar.mjs';
 
 export const SPACE_TYPE = 'nomad/space';
 export const MEMBER_TYPE = 'nomad/space-member';
@@ -280,7 +281,7 @@ export function noticesToPrune(records, memberId, keep = KEEP_NOTICES) {
 
 // The records a Space Library starts with when its owner shares it: its index, the owner's member
 // record, and the Space's library moved in. `items` holds what the Space has today:
-// { drives, bookmarks: [{ name, value }], follows: [rec], notes: [rec], names: [rec] }.
+// { drives, bookmarks: [{ name, value }], follows: [rec], notes: [rec], names: [rec], events: [rec], feeds: [rec] }.
 // Returns [{ path, value }]; /drives.json is the one record that isn't from a list.
 export function planShare({ space, owner, items = {} }, now = new Date().toISOString()) {
   const out = [
@@ -301,6 +302,8 @@ export function planShare({ space, owner, items = {} }, now = new Date().toISOSt
   for (const n of items.names || []) {
     if (n && typeof n.name === 'string' && /^[a-z0-9-]+$/.test(n.name)) out.push({ path: LIB_NAMES + n.name + '.json', value: n });
   }
+  // The Space's calendar: its events and the feeds it subscribes to (shared/calendar.mjs).
+  out.push(...shareCalendarPaths(items));
   return out;
 }
 
@@ -315,6 +318,7 @@ export function shareSummary(items = {}) {
     [(items.follows || []).length, 'feed'],
     [(items.notes || []).length, 'note'],
     [(items.names || []).length, 'name'],
+    [(items.events || []).length, 'event'],
   ]
     .filter(([n]) => n > 0)
     .map(([n, word]) => `${n} ${word}${n === 1 ? '' : 's'}`);

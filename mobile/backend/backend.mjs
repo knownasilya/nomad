@@ -9,6 +9,7 @@ import goodbye from 'graceful-goodbye'
 import DriveManager from './lib/drive-manager.mjs'
 import { HttpGateway } from './lib/http-gateway.mjs'
 import { parseHyperUrl } from './lib/hyper-url.mjs'
+import { listPeers, setPeerSpace, removePeer } from './lib/peers.mjs'
 import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault, publishOwnSpaces, publishOwnVersion } from './lib/vault.mjs'
 import * as drafts from './lib/drafts.mjs'
 import * as vaultApps from './lib/vault-apps.mjs'
@@ -16,6 +17,8 @@ import * as pe from '../../shared/personas.mjs'
 import hcrypto from 'hypercore-crypto'
 import { decodeInlineJson, WRITERS_PREFIX as DRIVE_WRITERS } from '../../shared/fs-core.mjs'
 import * as spaceLib from './lib/space-library.mjs'
+import * as calendar from './lib/calendar.mjs'
+import { createPhotos } from './lib/photos.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
 import { createPhoneInbox } from './lib/inbox.mjs'
 import Protomux from 'protomux'
@@ -138,6 +141,7 @@ function vaultChanged () {
   vaultChangedTimer = setTimeout(() => {
     send(RPC_VAULT_CHANGED, {})
     liveNotes.recordsChanged().catch(() => {})
+    liveNotes.syncSpaces().catch(() => {})
   }, 400)
 }
 
@@ -203,6 +207,8 @@ async function libraryOf (space) {
   return lib
 }
 vaultApps.useSpaceLibraries(libraryOf)
+// The family album of a shared Space (ADR-0043), in its Library.
+const photos = createPhotos({ libraryOf, blobs: { putBlobFor: (base, buf) => manager.putBlobFor(base, buf), readFileOf: (base, path) => manager.readFileOf(base, path) } })
 
 // Open every shared Space's Library in the background, so a Space switch or a name lookup finds it
 // warm instead of waiting on the swarm.
@@ -227,11 +233,13 @@ const presence = createDevicePresence({
   getDeviceKey: () => (vault && vault.local?.key ? b4a.toString(vault.local.key, 'hex') : null)
 })
 // Live Notes (ADR-0041, lib/live-notes.mjs): the Note open in the editor is a session joined to the
-// same Note open on the user's computers. Late-bound to the Vault like the two above.
+// same Note open on the user's computers, and on the other members' Devices in a shared Space.
+// Late-bound to the Vault like the two above.
 const liveNotes = createPhoneLiveNotes({
   swarm: manager.swarm,
   store,
   getVault: () => vault,
+  libraryOf: (space) => libraryOf(space),
   emit: (event) => send(RPC_NOTE_LIVE_EVENT, event)
 })
 // Set once we've seen THIS device's own record in the Vault index. If it later disappears while the
@@ -682,7 +690,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
       return
     }
     if (!vault) {
-      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'messages' ? 'Link this phone to your computer to use Messages' : app === 'updates' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : 'Link this phone to use Reader and Notes' })
+      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'messages' ? 'Link this phone to your computer to use Messages' : app === 'updates' || app === 'peers' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : app === 'calendar' ? 'Link this phone to your computer to use the calendar' : app === 'photos' ? 'Link this phone to your computer to see your family photos' : 'Link this phone to use Reader and Notes' })
       return
     }
     let value
@@ -709,6 +717,17 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'notes' && action === 'setTopics') value = await vaultApps.setNoteTopics(vault, { id: args.id, topics: Array.isArray(args.topics) ? args.topics : [], space })
     else if (app === 'notes' && action === 'setTick') value = await vaultApps.setNoteTick(vault, { id: args.id, text: args.text, checked: !!args.checked, space })
     else if (app === 'notes' && action === 'renameLinks') value = await vaultApps.renameNoteLinks(vault, { id: args.id, from: args.from, to: args.to, space })
+    else if (app === 'calendar' && action === 'list') value = await calendar.listCalendar(vault, space, { from: args.from, to: args.to })
+    else if (app === 'calendar' && action === 'save') value = await calendar.saveEvent(vault, space, args.event || {})
+    else if (app === 'calendar' && action === 'delete') value = await calendar.deleteEvent(vault, space, args.id)
+    else if (app === 'calendar' && action === 'saveFeed') value = await calendar.saveFeed(vault, space, args.feed || {})
+    else if (app === 'calendar' && action === 'deleteFeed') value = await calendar.deleteFeed(vault, space, args.id)
+    else if (app === 'calendar' && action === 'feedFetched') value = await calendar.feedFetched(vault, space, { id: args.id, text: args.text, error: args.error })
+    else if (app === 'photos' && action === 'list') value = await photos.list(space)
+    else if (app === 'photos' && action === 'read') value = await photos.read(space, args.id, { thumb: !!args.thumb })
+    else if (app === 'photos' && action === 'add') value = await photos.add(space, args.photo || {})
+    else if (app === 'photos' && action === 'caption') value = await photos.caption(space, { id: args.id, caption: args.caption })
+    else if (app === 'photos' && action === 'delete') value = await photos.remove(space, args.id)
     else if (app === 'names' && action === 'list') value = await vaultApps.listNames(vault, space)
     else if (app === 'names' && action === 'resolve') value = await vaultApps.resolveName(vault, args.input, space)
     else if (app === 'names' && action === 'forUrl') value = await vaultApps.namesForUrl(vault, args.url, args.title, space)
@@ -734,6 +753,8 @@ async function handleApps ({ reqId, app, action, ...args }) {
       await inbox.handle('forget', { personaId: args.id }).catch(() => {})
       value = await vaultApps.removePersona(vault, args.id)
     } else if (app === 'messages') value = await inbox.handle(action, args)
+    else if (app === 'peers' && action === 'setSpace') value = await setPeerSpace(vault, args)
+    else if (app === 'peers' && action === 'remove') value = await removePeer(vault, args)
     else if (app === 'updates' && action === 'list') value = await vaultApps.deviceUpdates(vault, args.version)
     else if (app === 'updates' && action === 'request') value = await vaultApps.requestDeviceUpdate(vault, { device: args.device, version: args.version, prerelease: !!args.prerelease })
     else throw new Error(`Unknown ${app} action: ${action}`)
@@ -1197,6 +1218,8 @@ async function handleVaultStatus ({ reqId, spaceKeys = [], ownSpaces = null, own
       thisDeviceKey,
       ...index,
       connectedDevices: [...presence.connectedDevices()],
+      // Always-on Peers (ADR-0038), with the status each connected one last sent.
+      peers: await listPeers(vault, { connected: presence.connectedDevices(), statuses: presence.statuses() }).catch(() => []),
       sync: await syncStatus(index, spaceKeys)
     })
   } catch (err) {

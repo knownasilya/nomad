@@ -168,6 +168,22 @@ export async function attach ({ vault }, { rootDriveKey, name, icon, color, libr
   await boundedUpdate(vault)
 }
 
+// The member records of an open Library (libraryFor's), for Live Notes' check of who may join.
+export async function memberRecords (lib) {
+  if (!lib?.base) return []
+  return (await readPrefix(lib.base, sl.MEMBERS_PREFIX)).filter(sl.isMember)
+}
+
+// The shared Spaces this person can edit, by Root Drive key.
+export async function editableSpaces (vault) {
+  if (!vault) return []
+  const out = []
+  for (const rec of await readPrefix(vault, SPACES_PREFIX).catch(() => [])) {
+    if (sl.isShared(rec) && !rec.movedTo && !rec.removed && sl.canEdit(rec.role) && sl.isKey(rec.rootDriveKey)) out.push(rec.rootDriveKey)
+  }
+  return out
+}
+
 // What the phone shows about a shared Space: { shared, role, writable, members }.
 export async function status (ctx, space) {
   const lib = await libraryFor(ctx, space)

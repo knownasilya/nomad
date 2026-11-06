@@ -1,6 +1,6 @@
 // Links to the user's things in Nomad, as the AI writes them in an answer: a copy of
 // shared/item-links.mjs parseItemLink for the phone's bundle (tests/unit/item-links.test.js checks
-// that the two agree). The AI panel opens a Note, a Job or Reader on its own screen, a web or
+// that the two agree). The AI panel opens a Note, a Job, Reader or the calendar on its own screen, a web or
 // hyper:// page in a new tab, and says where the rest are on the user's computer. A nomad:// link
 // opens only as the URL built here, never as the model wrote it.
 
@@ -9,6 +9,7 @@ export type ItemLink =
   | { kind: 'note' | 'job' | 'mod'; id?: string; url: string; place: string }
   | { kind: 'library' | 'ai'; view: string; url: string; place: string }
   | { kind: 'reader'; url: string; place: string }
+  | { kind: 'calendar'; day?: string; url: string; place: string }
 
 // Note, Job, Mod and memory ids (shared/vault-apps.mjs isNoteId, shared/jobs.mjs, shared/mods.mjs,
 // shared/ai-memory.mjs): all are lowercase letters, digits and dashes.
@@ -19,6 +20,9 @@ export const jobLink = (id: string) => `nomad://library/jobs?id=${id}`
 export const modLink = (id: string) => `nomad://library/mods?id=${id}`
 export const MEMORY_LINK = 'nomad://ai/memory'
 export const READER_LINK = 'nomad://reader/'
+export const CALENDAR_LINK = 'nomad://calendar/'
+export const calendarLink = (day: string) => `${CALENDAR_LINK}?day=${day}`
+const DAY = /^\d{4}-\d{2}-\d{2}$/
 
 // The nomad:// pages a link may open, with where they are in words (for a device that can't open them).
 const AI_VIEWS: Record<string, string> = { chats: 'Chats', memory: 'Memory', skills: 'Skills', setup: 'Setup' }
@@ -60,6 +64,12 @@ export function parseItemLink (href: string): ItemLink | null {
   }
   if (host === 'reader') {
     return seg.length ? null : { kind: 'reader', url: READER_LINK, place: 'Reader' }
+  }
+  if (host === 'calendar') {
+    if (seg.length) return null
+    const day = /[?&]day=([^&]*)/.exec(m[4] || '')?.[1]
+    if (day && DAY.test(day)) return { kind: 'calendar', day, url: calendarLink(day), place: 'Calendar' }
+    return { kind: 'calendar', url: CALENDAR_LINK, place: 'Calendar' }
   }
   if (host === 'ai') {
     const view = seg[0] || 'chats'

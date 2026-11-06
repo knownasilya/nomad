@@ -15,6 +15,8 @@ import RecentsSheet from '../components/RecentsSheet'
 import Library from '../components/Library'
 import Reader from '../components/Reader'
 import Notes from '../components/Notes'
+import Calendar from '../components/Calendar'
+import Photos from '../components/Photos'
 import Jobs from '../components/Jobs'
 import Personas from '../components/Personas'
 import Messages from '../components/Messages'
@@ -72,9 +74,10 @@ type Kind = 'home' | 'web' | 'hyper'
 // The full-screen pages over the browser. They stack (lib/navStack.ts): one opened from another
 // sits on top of it, and back closes only the top one.
 type Screen =
-  | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' | 'personas' }
+  | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' | 'personas' | 'photos' }
   | { name: 'notes'; noteId?: string } // noteId: the note to open, e.g. the one a followed link was in
   | { name: 'jobs'; jobId?: string; runId?: string } // a tapped Job notification opens its run
+  | { name: 'calendar'; day?: string } // day: YYYY-MM-DD to show, e.g. from a link in an AI answer
   | { name: 'messages'; personaId?: string; with?: string; link?: string } // a Conversation, or a message link to answer
   | { name: 'explorer'; drive: ExplorerDrive }
 type ScreenName = Screen['name']
@@ -193,6 +196,7 @@ const VAULT_PROMPTS: Record<string, { title: string; message: string }> = {
   readerWrite: { title: 'Allow AI to change your Reader?', message: 'The AI running on your other device wants to follow or unfollow feeds, or mark posts read.' },
   modsRead: { title: 'Allow AI to read your Mods?', message: 'The AI running on your other device wants to read your Mods: your own styles and scripts for sites.' },
   modsWrite: { title: 'Allow AI to change your Mods?', message: 'The AI running on your other device wants to create or change your Mods. A Mod can run a script on every page of its site.' },
+  calendarRead: { title: 'Allow AI to read your calendar?', message: 'The AI running on your other device wants to read your calendar, your household’s, and the calendars you follow.' },
   jobsRead: { title: 'Allow AI to see your Jobs?', message: 'The AI running on your other device wants to see your AI Jobs and their results.' },
   jobsWrite: { title: 'Allow AI to change your Jobs?', message: 'The AI running on your other device wants to create, change or run your AI Jobs. A Job runs a prompt by itself, reads your Notes and Reader, and notifies this phone.' },
   aiCreateDrive: { title: 'Allow AI to make a drive?', message: 'The AI running on your other device wants to make a new drive in your library on that computer.' },
@@ -321,6 +325,8 @@ export default function Browser () {
   if (explorerDrive) lastExplorerDrive.current = explorerDrive
   const notesScreen = screens.find((sc) => sc.name === 'notes')
   const jobsScreen = screens.find((sc) => sc.name === 'jobs')
+  const calendarScreen = screens.find((sc) => sc.name === 'calendar')
+  const photosOpen = isOpen('photos')
   const messagesScreen = screens.find((sc) => sc.name === 'messages')
   // The sheets over the browser, and the AI panel.
   const [spacesOpen, setSpacesOpen] = useState(false)
@@ -917,6 +923,9 @@ export default function Browser () {
       case 'reader':
         openScreen({ name: 'reader' })
         return
+      case 'calendar':
+        openScreen({ name: 'calendar', day: link.day })
+        return
       case 'library':
         if (link.view === 'drives' || link.view === 'bookmarks') {
           openScreen({ name: 'library' })
@@ -1287,6 +1296,8 @@ export default function Browser () {
             { label: 'My Library', icon: 'book', onPress: () => openScreen({ name: 'library' }) },
             { label: 'Reader', icon: 'rss', onPress: () => openScreen({ name: 'reader' }) },
             { label: 'Notes', icon: 'sticky-note', onPress: () => openScreen({ name: 'notes' }) },
+            { label: 'Calendar', icon: 'calendar-alt', onPress: () => openScreen({ name: 'calendar' }) },
+            { label: 'Photos', icon: 'images', onPress: () => openScreen({ name: 'photos' }) },
             { label: 'Messages', icon: 'comments', onPress: () => openScreen({ name: 'messages' }) },
             { label: 'AI Jobs', icon: 'clock', onPress: () => openScreen({ name: 'jobs' }) },
             { label: 'Personas', icon: 'id-badge', onPress: () => openScreen({ name: 'personas' }) }
@@ -1397,6 +1408,28 @@ export default function Browser () {
         spaceName={spacesApi.activeSpace.name}
         onOpenDevices={() => openScreen({ name: 'devices' })}
         onOpenUrl={openFromNotes}
+      />
+
+      <Calendar
+        visible={!!calendarScreen}
+        onClose={() => closeScreenNamed('calendar')}
+        openDay={calendarScreen?.name === 'calendar' ? calendarScreen.day : undefined}
+        apps={backend.apps}
+        onVaultChange={backend.onVaultChange}
+        space={spacesApi.activeSpace.rootDriveKey || undefined}
+        spaceName={spacesApi.activeSpace.name}
+        onOpenDevices={() => openScreen({ name: 'devices' })}
+      />
+
+      <Photos
+        visible={photosOpen}
+        onClose={() => closeScreenNamed('photos')}
+        apps={backend.apps}
+        onVaultChange={backend.onVaultChange}
+        space={spacesApi.activeSpace.rootDriveKey || undefined}
+        spaceName={spacesApi.activeSpace.name}
+        onOpenDevices={() => openScreen({ name: 'devices' })}
+        onOpenLibrary={() => openScreen({ name: 'library' })}
       />
 
       <Jobs

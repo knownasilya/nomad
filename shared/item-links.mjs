@@ -23,6 +23,9 @@ export const jobLink = (id) => `nomad://library/jobs?id=${id}`;
 export const modLink = (id) => `nomad://library/mods?id=${id}`;
 export const MEMORY_LINK = 'nomad://ai/memory';
 export const READER_LINK = 'nomad://reader/';
+export const CALENDAR_LINK = 'nomad://calendar/';
+export const calendarLink = (day) => `${CALENDAR_LINK}?day=${day}`;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 // The nomad:// pages a link may open, with where they are in words (for a device that can't open them).
 const AI_VIEWS = { chats: 'Chats', memory: 'Memory', skills: 'Skills', setup: 'Setup' };
@@ -45,9 +48,10 @@ const LIBRARY_VIEWS = {
  *   { kind: 'library', view, url, place }         another My Library view
  *   { kind: 'ai', view, url, place }              the AI page: chats, memory, skills, setup
  *   { kind: 'reader', url, place }                nomad://reader
+ *   { kind: 'calendar', day?, url, place }        nomad://calendar, or one day of it
  * `url` is the one to open. `place` says where it is, e.g. "My Library → Mods".
  * @param {string} href
- * @returns {null | { kind: string, url: string, id?: string, view?: string, place?: string }}
+ * @returns {null | { kind: string, url: string, id?: string, view?: string, day?: string, place?: string }}
  */
 export function parseItemLink(href) {
   const s = String(href || '').trim();
@@ -82,6 +86,12 @@ export function parseItemLink(href) {
   }
   if (host === 'reader') {
     return seg.length ? null : { kind: 'reader', url: READER_LINK, place: 'Reader' };
+  }
+  if (host === 'calendar') {
+    if (seg.length) return null;
+    const day = /[?&]day=([^&]*)/.exec(m[4] || '')?.[1];
+    if (day && DAY.test(day)) return { kind: 'calendar', day, url: calendarLink(day), place: 'Calendar' };
+    return { kind: 'calendar', url: CALENDAR_LINK, place: 'Calendar' };
   }
   if (host === 'ai') {
     const view = seg[0] || 'chats';

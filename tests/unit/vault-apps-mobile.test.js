@@ -616,3 +616,136 @@ describe('phone makes a Persona (ADR-0031 amendment)', () => {
     })
   }, 30000)
 })
+
+// The calendar (ADR-0042, mobile/backend/lib/calendar.mjs): the phone reads and writes the records
+// desktop's nomad://calendar keeps, and keeps a feed's copy from the file its UI fetched.
+describe('phone calendar', () => {
+  const ICS = ['BEGIN:VCALENDAR', 'BEGIN:VEVENT', 'UID:inset', 'SUMMARY:Inset day', 'DTSTART;VALUE=DATE:20261113', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n')
+
+  it('lists what the computer added, adds its own, and keeps a fetched feed', async () => {
+    const calendar = await import('../../mobile/backend/lib/calendar.mjs')
+    const cal = await import('../../shared/calendar.mjs')
+    await withDevices(async ({ computer, phone: base }) => {
+      const bins = cal.makeEvent({ id: 'bins', title: 'Bins', start: '2026-11-10T18:00', repeat: { freq: 'weekly' } })
+      await computer.append(putJson(cal.calendarPrefix('events') + 'bins.json', bins))
+      await computer.update()
+      await until(async () => (await calendar.listCalendar(base, null, { from: '2026-11-01', to: '2026-12-01' })).events.length === 1)
+      const list = await calendar.listCalendar(base, null, { from: '2026-11-01', to: '2026-12-01' })
+      expect(list.occurrences.map((o) => o.start)).toEqual(['2026-11-10T18:00', '2026-11-17T18:00', '2026-11-24T18:00'])
+
+      const dentist = await calendar.saveEvent(base, SPACE, { title: 'Dentist', start: '2026-11-12T09:30' })
+      expect(dentist.space).toBe(null) // not asked to be the Space's
+      await until(async () => !!(await readJson(computer, cal.calendarPrefix('events') + dentist.id + '.json')))
+
+      const feed = await calendar.saveFeed(base, SPACE, { url: 'webcal://school.example/cal.ics', inSpace: true })
+      expect(feed).toMatchObject({ url: 'https://school.example/cal.ics', space: SPACE }) // a Space not shared keeps it in the Vault
+      expect((await calendar.listCalendar(base, SPACE)).feeds[0].due).toBe(true)
+      expect(await calendar.feedFetched(base, SPACE, { id: feed.id, text: ICS })).toMatchObject({ count: 1, error: '' })
+      const after = await calendar.listCalendar(base, SPACE, { from: '2026-11-13', to: '2026-11-14' })
+      expect(after.feeds[0]).toMatchObject({ due: false, count: 1 })
+      expect(after.occurrences.map((o) => o.title)).toEqual(['Inset day'])
+      // A failed fetch keeps the last copy.
+      await calendar.feedFetched(base, SPACE, { id: feed.id, error: 'The feed answered 500' })
+      expect((await calendar.listCalendar(base, SPACE, { from: '2026-11-13', to: '2026-11-14' })).occurrences).toHaveLength(1)
+
+      expect(await calendar.deleteEvent(base, SPACE, dentist.id)).toBe(true)
+      expect(await calendar.deleteFeed(base, SPACE, feed.id)).toBe(true)
+      expect((await calendar.listCalendar(base, SPACE)).feeds).toEqual([])
+    })
+  }, 30000)
+
+  it('adds a household event to a shared Space’s Library, saying who added it', async () => {
+    const calendar = await import('../../mobile/backend/lib/calendar.mjs')
+    const sl = await import('../../shared/space-library.mjs')
+    const SHARED = 'e'.repeat(64)
+    const memberId = '1'.repeat(32)
+    await withDevices(async (devices) => {
+      const owner = new Autobase(devices.storeA.namespace('library'), null, { open, apply, ...AUTOBASE_OPTS })
+      await owner.ready()
+      const lib = new Autobase(devices.storeB.namespace('library'), owner.key, { open, apply, ...AUTOBASE_OPTS })
+      await lib.ready()
+      await owner.append({ addWriter: b4a.toString(lib.local.key, 'hex') })
+      await owner.append(putJson(sl.memberPath(memberId), sl.makeMember({ memberId, name: 'Sam', role: 'editor' })))
+      await owner.update()
+      await until(async () => { await lib.update(); return lib.writable })
+      phone.useSpaceLibraries(async (space) => (space === SHARED ? { base: lib, memberId } : null))
+      try {
+        const ev = await calendar.saveEvent(devices.phone, SHARED, { title: 'Early pickup', start: '2026-11-20', allDay: true, inSpace: true })
+        expect(ev).toMatchObject({ space: SHARED, by: 'Sam' })
+        await until(async () => !!(await readJson(owner, '/calendar/events/' + ev.id + '.json')))
+        const list = await calendar.listCalendar(devices.phone, SHARED, { from: '2026-11-20', to: '2026-11-21' })
+        expect(list).toMatchObject({ shared: true, canWriteSpace: true })
+        expect(list.occurrences[0]).toMatchObject({ title: 'Early pickup', by: 'Sam' })
+      } finally {
+        phone.useSpaceLibraries(null)
+        await lib.close(); await owner.close()
+      }
+    })
+  }, 30000)
+})
+
+// The family album (ADR-0043, mobile/backend/lib/photos.mjs): a phone adds a photo to a shared
+// Space's Library as blobs in its own blob core, and the computer reads it back over replication.
+describe('phone family album', () => {
+  it('adds a photo the computer can read, and only its adder or the owner removes it', async () => {
+    const { createPhotos } = await import('../../mobile/backend/lib/photos.mjs')
+    const ph = await import('../../shared/photos.mjs')
+    const sl = await import('../../shared/space-library.mjs')
+    const { createBlobStore, createContentReader } = await import('../../shared/fs-core.mjs')
+    const Hyperblobs = await loadAppDep('hyperblobs')
+    const SHARED = 'e'.repeat(64)
+    const memberId = '2'.repeat(32)
+    await withDevices(async ({ storeA, storeB }) => {
+      const owner = new Autobase(storeA.namespace('library'), null, { open, apply, ...AUTOBASE_OPTS })
+      await owner.ready()
+      const libBase = new Autobase(storeB.namespace('library'), owner.key, { open, apply, ...AUTOBASE_OPTS })
+      await libBase.ready()
+      await owner.append({ addWriter: b4a.toString(libBase.local.key, 'hex') })
+      await owner.append(putJson(sl.memberPath(memberId), sl.makeMember({ memberId, name: 'Sam', role: 'editor' })))
+      await owner.update()
+      await until(async () => { await libBase.update(); return libBase.writable })
+
+      const blobStore = createBlobStore({ Hyperblobs, b4a })
+      const content = createContentReader({ Hyperblobs, b4a })
+      const core = new Hyperblobs(storeB.namespace('photos-test').get({ name: 'blobs' }))
+      const photos = createPhotos({
+        libraryOf: async (space) => (space === SHARED ? { base: libBase, memberId, role: 'editor' } : null),
+        blobs: {
+          putBlobFor: (_base, buf) => blobStore.putBlob(core, buf),
+          readFileOf: async (base, p) => { const n = await base.view.get(p); return n ? content.readContent(n.value, { store: storeB }) : null },
+        },
+      })
+      try {
+        expect(await photos.list(SPACE)).toMatchObject({ shared: false, photos: [] })
+        const jpeg = Buffer.alloc(5000, 7)
+        const thumb = Buffer.alloc(300, 3)
+        const added = await photos.add(SHARED, { photo: jpeg.toString('base64'), thumb: thumb.toString('base64'), width: 2560, height: 1920, takenAt: '2026-10-31T16:20:00Z' })
+        expect(added).toMatchObject({ by: 'Sam', memberId, bytes: 5000, canDelete: true })
+        const listed = await photos.list(SHARED)
+        expect(listed).toMatchObject({ shared: true, canAdd: true })
+        expect(listed.photos.map((p) => p.id)).toEqual([added.id])
+        expect(await photos.read(SHARED, added.id, { thumb: true })).toBe(thumb.toString('base64'))
+
+        // The computer sees the record and fetches the bytes from the phone's blob core.
+        await until(async () => !!(await readJson(owner, ph.itemPath(added.id))))
+        const node = await owner.view.get(ph.filePath(added.id))
+        const bytes = await content.readContent(node.value, { store: storeA })
+        expect(Buffer.compare(Buffer.from(bytes), jpeg)).toBe(0)
+
+        // Someone else's photo: an editor can't remove it.
+        const other = ph.makePhoto({ id: ph.newPhotoId(), by: 'Ilya', memberId: '3'.repeat(32) })
+        await owner.append(putJson(ph.itemPath(other.id), other))
+        await owner.update()
+        await until(async () => (await photos.list(SHARED)).photos.length === 2)
+        await expect(photos.remove(SHARED, other.id)).rejects.toThrow(/Only the person/)
+        expect((await photos.caption(SHARED, { id: added.id, caption: 'Pumpkins' })).caption).toBe('Pumpkins')
+        expect(await photos.remove(SHARED, added.id)).toBe(true)
+        expect((await photos.list(SHARED)).photos.map((p) => p.id)).toEqual([other.id])
+        await expect(photos.add(SHARED, { photo: '', thumb: '' })).rejects.toThrow(/empty/)
+      } finally {
+        await core.close?.()
+        await libBase.close(); await owner.close()
+      }
+    })
+  }, 30000)
+})

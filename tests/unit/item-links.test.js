@@ -26,6 +26,10 @@ const CASES = [
   'nomad://reader/',
   'nomad://reader/?subscribe=https://evil.example/feed',
   'nomad://reader/feed',
+  'nomad://calendar/',
+  'nomad://calendar/?day=2026-11-10',
+  'nomad://calendar/?day=../x&add=1',
+  'nomad://calendar/x',
   'nomad://settings',
   'nomad://library/drives?delete=1',
   'hyper://abc123/notes/todo.md',
@@ -69,6 +73,13 @@ describe('parseItemLink', () => {
       place: 'Reader',
     })
     expect(shared.parseItemLink('nomad://library/drives?delete=1').url).toBe('nomad://library/drives')
+    expect(shared.parseItemLink('nomad://calendar/?day=2026-11-10&add=1')).toEqual({
+      kind: 'calendar',
+      day: '2026-11-10',
+      url: 'nomad://calendar/?day=2026-11-10',
+      place: 'Calendar',
+    })
+    expect(shared.parseItemLink('nomad://calendar/?day=../x').url).toBe('nomad://calendar/')
   })
 
   it('opens web and hyper:// pages as written', () => {
@@ -88,6 +99,7 @@ describe('parseItemLink', () => {
       'nomad://library/../settings',
       'nomad://library/jobs?id=../../x',
       'nomad://reader/feed',
+      'nomad://calendar/x',
       'https://user:pw@example.com/',
       'javascript:alert(1)',
       'data:text/html,<b>x</b>',

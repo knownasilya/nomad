@@ -38,17 +38,21 @@ const AUTOBASE_LOAD_TIMEOUT = 15000
 // How long to wait for a remote Hyperdrive's content to replicate before serving.
 const HYPERDRIVE_LOAD_TIMEOUT = 15000
 
+// How long one mirror pass waits for a file before counting it missing (see _mirror).
+const MIRROR_READ_TIMEOUT = 20000
+
 // DriveManager owns the swarm + a cache of opened drives. The UI navigates by
 // (driveType, key); we open the right read-only structure, replicate it over
 // Hyperswarm, and read files/dirs out of it through a unified reader.
 export default class DriveManager {
-  constructor (store, draftOverlay = null) {
+  // `opts.swarm` lets the always-on Peer (peer/, ADR-0038) and its tests bring their own swarm.
+  constructor (store, draftOverlay = null, opts = {}) {
     this.store = store
     // Draft Mode (ADR-0012): when a Drive is being previewed, the serve path resolves reads through
     // this overlay first so a navigated page shows the merged (unpublished) Draft, not just the
     // in-page nomad.fs bridge. `read(keyHex, path)` → { override, buf } (buf=null = tombstone).
     this.draftOverlay = draftOverlay
-    this.swarm = new Hyperswarm()
+    this.swarm = opts.swarm || new Hyperswarm()
     // Replicate every connection into the shared corestore. All drives —
     // Hyperdrives and Autobase views alike — live in this store, so a single
     // handler feeds them all.
@@ -235,6 +239,18 @@ export default class DriveManager {
       base._nomadBlobs = new Hyperblobs(this.store.namespace(b4a.toString(base.local.key, 'hex')).get({ name: BLOBS_CORE_NAME }))
     }
     return base._nomadBlobs
+  }
+
+  // A file's bytes in this Device's own blob core for Autobase `base` (a Space Library's photos,
+  // ADR-0043): the pointer to put in the op. And a file of `base`, inline or a blob, or null.
+  async putBlobFor (base, buf) {
+    return _blobStore.putBlob(this._blobsForBase(base), buf)
+  }
+
+  async readFileOf (base, path) {
+    const node = await base.view.get(path)
+    if (!node || !node.value) return null
+    return _content.readContent(node.value, { store: this.store })
   }
 
   // Resolve a parsed hyper URL to renderable content.
@@ -716,6 +732,7 @@ export default class DriveManager {
         entry._mirrorHook = entry._mirrorCore = null
       }
       if (entry._meterOff) entry._meterOff()
+      this._closeBlobCores(entry)
     }
     return { hosted: !!on, keyHex }
   }
@@ -753,6 +770,10 @@ export default class DriveManager {
   // then read every path through the entry's reader — bee/metadata traversal plus blob
   // resolution force every missing block to download, for both backends. Passes are
   // serialized per entry; an append during a pass queues exactly one follow-up pass.
+  // An Autobase's blob cores (one per writer that added a file) are also kept open and downloaded
+  // in full, not only the blocks the view points at now, so a full mirror (ADR-0038 §5) can serve
+  // every writer's blobs once the writers are offline. A file that doesn't arrive within
+  // MIRROR_READ_TIMEOUT counts as missing; the next pass tries it again.
   async _mirror (entry) {
     if (!entry.hosted) return
     if (entry._mirroring) { entry._mirrorAgain = true; return }
@@ -760,15 +781,63 @@ export default class DriveManager {
     try {
       do {
         entry._mirrorAgain = false
-        if (entry._driveType === DRIVE_AUTOBASE) { try { await entry.drive.update() } catch {} }
+        let missing = 0
+        if (entry._driveType === DRIVE_AUTOBASE) {
+          try { await entry.drive.update() } catch {}
+          await this._mirrorBlobCores(entry)
+        }
         for await (const path of entry.reader.keys('/')) {
           if (!entry.hosted) return
-          try { await entry.reader.read(path) } catch {}
+          const buf = await withTimeout(entry.reader.read(path).catch(() => null), MIRROR_READ_TIMEOUT)
+          if (buf == null) missing++
         }
+        entry._mirrorPass = { at: Date.now(), missing }
       } while (entry._mirrorAgain && entry.hosted)
     } finally {
       entry._mirroring = false
     }
+  }
+
+  // Every blob core an Autobase drive's view names, opened and downloading in full.
+  async _mirrorBlobCores (entry) {
+    const view = entry.drive.view
+    if (!view) return
+    entry._blobCores = entry._blobCores || new Map()
+    for await (const node of view.createReadStream()) {
+      const hex = node && node.value && node.value.blob && node.value.blob.core
+      if (typeof hex !== 'string' || !/^[0-9a-f]{64}$/.test(hex) || entry._blobCores.has(hex)) continue
+      const core = this.store.get({ key: b4a.from(hex, 'hex') })
+      entry._blobCores.set(hex, core)
+      try {
+        await core.ready()
+        core.download({ start: 0, end: -1 })
+      } catch {}
+    }
+  }
+
+  _closeBlobCores (entry) {
+    for (const core of (entry._blobCores || new Map()).values()) safe(() => core.close())
+    entry._blobCores = null
+  }
+
+  // How far a hosted drive's mirror has got: { hosted, synced, missing, cores, length, have }.
+  // `synced` once a whole pass found every file and every core it holds has all its blocks.
+  hostingState (driveType, keyHex) {
+    const entry = this.drives.get(this.cacheKey(driveType, keyHex))
+    if (!entry || !entry.hosted) return { hosted: false, synced: false, missing: 0, cores: 0, length: 0, have: 0 }
+    const cores = [entry._driveType === DRIVE_AUTOBASE ? entry.drive.view?.core : entry.drive.core, ...((entry._blobCores && entry._blobCores.values()) || [])].filter(Boolean)
+    let length = 0
+    let have = 0
+    for (const core of cores) {
+      try {
+        const remote = Math.max(core.length, ...((core.peers || []).map((p) => p.remoteLength || 0)))
+        length += remote
+        have += Math.min(core.contiguousLength ?? core.length, remote)
+      } catch {}
+    }
+    const pass = entry._mirrorPass
+    const synced = !!pass && pass.missing === 0 && !entry._mirroring && have >= length
+    return { hosted: true, synced, missing: pass ? pass.missing : 0, cores: cores.length, length, have }
   }
 
   release (driveType, keyHex) {
@@ -784,6 +853,7 @@ export default class DriveManager {
 
   async close () {
     for (const [, entry] of this.drives) {
+      this._closeBlobCores(entry)
       await safe(() => entry.close())
     }
     this.drives.clear()
@@ -988,6 +1058,11 @@ function welcomeHtml (title) {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function withTimeout (p, ms) {
+  let t
+  return Promise.race([p, new Promise((resolve) => { t = setTimeout(() => resolve(null), ms) })]).finally(() => clearTimeout(t))
+}
 
 async function safe (fn) {
   try { return await fn() } catch { return null }

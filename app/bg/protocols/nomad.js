@@ -506,6 +506,26 @@ async function nomadProtocol(request) {
         { fallbackToIndexHTML: true }
       );
     }
+    // The family calendar: the user's and the Space's events, and iCal feeds. ?day= is a route.
+    if (requestUrl === 'nomad://calendar' || requestUrl.startsWith('nomad://calendar/')) {
+      return serveAppAsset(
+        requestUrl,
+        path.join(__dirname, 'userland', 'calendar'),
+        cb,
+        // @ts-ignore
+        { fallbackToIndexHTML: true }
+      );
+    }
+    // The family album of a shared Space (ADR-0043).
+    if (requestUrl === 'nomad://photos' || requestUrl.startsWith('nomad://photos/')) {
+      return serveAppAsset(
+        requestUrl,
+        path.join(__dirname, 'userland', 'photos'),
+        cb,
+        // @ts-ignore
+        { fallbackToIndexHTML: true }
+      );
+    }
     // The Persona Inbox (ADR-0036): direct messages. /new and ?persona=&with= are routes of one page.
     if (requestUrl === 'nomad://messages' || requestUrl.startsWith('nomad://messages/')) {
       return serveAppAsset(

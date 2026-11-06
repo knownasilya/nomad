@@ -12,6 +12,8 @@ import * as pairing from '../../hyper/device-pairing';
 import * as devicePresence from '../../hyper/device-presence';
 import * as vaultApps from './vault-apps';
 import * as noteTopics from './note-topics';
+import * as calendar from './calendar';
+import * as photos from './photos';
 import * as liveNotes from '../../notes/live-notes';
 import * as names from '../../hyper/names';
 import * as driveWriters from '../../hyper/drive-writers';
@@ -24,6 +26,12 @@ import * as tabManager from '../../ui/tabs/manager';
 import * as spacePins from '../../ui/space-pins';
 import * as drives from '../../hyper/drives';
 import * as home from '../../../../shared/home-setup.mjs';
+import * as peerRules from '../../../../shared/peers.mjs';
+
+// The Vault's Spaces a Peer can keep: not moved, not removed.
+function liveSpaces(spaces) {
+  return (spaces || []).filter((s) => s && !s.movedTo && !s.removed && peerRules.isKey(s.rootDriveKey));
+}
 
 // The caller's Space key, or null.
 const callerSpace = (ctx) => vaultApps.spaceKey(ctx).catch(() => null);
@@ -219,6 +227,42 @@ export default {
     await vault.removeDevice(deviceKey);
     // Take its writer keys off the Drives this Device writes (bg/hyper/drive-writers.js).
     driveWriters.sync().catch(() => {});
+  },
+
+  // Always-on Peers (ADR-0038): each with whether it is connected now, the status it last sent, a
+  // line for its row, and every Space with whether this Peer keeps it online.
+  async listPeers() {
+    const [list, spaces] = await Promise.all([vault.listPeers(), vault.listSpaces()]);
+    const connected = new Set(devicePresence.connectedDevices());
+    const statuses = devicePresence.peerStatuses();
+    const live = liveSpaces(spaces);
+    return list.map((p) => {
+      const online = connected.has(p.key);
+      const status = peerRules.readStatus(statuses[p.key]);
+      return {
+        ...p,
+        online,
+        status,
+        summary: peerRules.describePeer(p, status, { online }),
+        spaces: live.map((s) => ({ rootDriveKey: s.rootDriveKey, name: s.name || 'Space', kept: peerRules.holdsSpace(p, s.rootDriveKey) })),
+      };
+    });
+  },
+
+  // Keep Space `rootDriveKey` online on Peer `peerKey`, or stop.
+  async setPeerSpace(peerKey, rootDriveKey, on) {
+    const peer = (await vault.listPeers()).find((p) => p.key === peerKey);
+    if (!peer) throw new Error('That Peer was removed');
+    const all = liveSpaces(await vault.listSpaces()).map((s) => s.rootDriveKey);
+    return vault.updatePeer(peerKey, { hold: peerRules.withSpace(peer, rootDriveKey, !!on, all) });
+  },
+
+  async renamePeer(peerKey, name) {
+    return vault.updatePeer(peerKey, { name: String(name || '') });
+  },
+
+  async removePeer(peerKey) {
+    return vault.removePeer(peerKey);
   },
 
   // Editing a Drive one of the user's other Devices can write (ADR-0026 §2, ADR-0029 step 2).
@@ -424,6 +468,43 @@ export default {
   // Who ticked an item of a shared Space's Note: ({ id, text, checked }) -> note.
   async setNoteTick(change) {
     return vaultApps.setNoteTick(this, change);
+  },
+
+  // The Calendar (nomad://calendar, shared/calendar.mjs): the caller's Space's events and feeds.
+  async listCalendar(range: any = {}) {
+    return calendar.listCalendar(this, range || {});
+  },
+  async saveCalendarEvent(fields: any = {}) {
+    return calendar.saveEvent(this, fields || {});
+  },
+  async deleteCalendarEvent(id) {
+    return calendar.deleteEvent(this, id);
+  },
+  async saveCalendarFeed(fields: any = {}) {
+    return calendar.saveFeed(this, fields || {});
+  },
+  async deleteCalendarFeed(id) {
+    return calendar.deleteFeed(this, id);
+  },
+  async refreshCalendarFeeds(opts: any = {}) {
+    return calendar.refreshFeeds(this, { force: !!opts?.force });
+  },
+
+  // The family album (nomad://photos, shared/photos.mjs): the caller's shared Space's photos.
+  async listPhotos() {
+    return photos.listPhotos(this);
+  },
+  async photoData(id, opts: any = {}) {
+    return photos.photoData(this, id, { thumb: !!opts?.thumb });
+  },
+  async addPhoto(fields: any = {}) {
+    return photos.addPhoto(this, fields || {});
+  },
+  async setPhotoCaption(change: any = {}) {
+    return photos.setPhotoCaption(this, change || {});
+  },
+  async deletePhoto(id) {
+    return photos.deletePhoto(this, id);
   },
 
   // Ask the AI for topics now: for `ids`, or every Note with none yet. -> how many it will look at.

@@ -56,6 +56,7 @@ const state = {
   shared: false, // this Space is shared with other people (ADR-0029)
   canWriteSpace: true, // false for a person who can only view the shared Space
   members: 0,
+  ownName: null, // this person's name in the shared Space, for the cursor others see
   topics: [], // the topics ticked in the filter: the list shows notes with any of them; none is All
   // What the AI is doing with topics: { autoTopics, tagging: [noteId], noRuntime }.
   ai: { autoTopics: false, tagging: [], noRuntime: false },
@@ -184,6 +185,7 @@ async function loadNotes() {
   state.shared = !!res.shared;
   state.canWriteSpace = res.canWriteSpace !== false;
   state.members = res.members || 0;
+  state.ownName = res.ownName || null; // this person's name in the shared Space
   state.ai = { autoTopics: false, tagging: [], noRuntime: false, ...(res.ai || {}) };
   // A ticked topic may have gone (its last note lost it, on this Device or another).
   state.topics = keepKnownTopics(state.topics, topicCounts());
@@ -866,6 +868,14 @@ function renderEditor() {
 
 // ── Live editing (ADR-0041) ─────────────────────────────────────────────────
 
+// The cursor the others see: in a shared Space's note, the person's name there (the other members
+// don't know this Device's name); otherwise this Device's.
+function cursorUser(target) {
+  const name = state.shared && target.inSpace && state.ownName ? state.ownName : me.name;
+  const key = me.key || name;
+  return { name, color: colorFor(key), colorLight: colorFor(key) + '33' };
+}
+
 // Join the open note's live session. The editor waits (read only) until it's in step with the
 // session, then is swapped for one bound to it. `keepLocal`: the note was just saved for the first
 // time, and what's typed since goes into the session.
@@ -875,7 +885,7 @@ function startLive({ keepLocal = false } = {}) {
   stopLive();
   const conn = connectLiveNote({
     id: target.id,
-    user: { name: me.name, color: colorFor(me.key || me.name), colorLight: colorFor(me.key || me.name) + '33' },
+    user: cursorUser(target),
     onStatus: (st) => onLiveStatus(target, st),
     onPeers: () => renderPresence(),
     // The session joined another Device's copy of this note: connect again to it.

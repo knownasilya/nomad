@@ -19,6 +19,7 @@ import * as daemon from './daemon';
 import * as autobases from './autobases';
 import * as vault from './vault';
 import * as settingsDb from '../dbs/settings';
+import { PEER_PLATFORM } from '../../../shared/peers.mjs';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'device-pairing' });
 
@@ -179,10 +180,15 @@ export async function approveDevice(deviceKey) {
   const sess = await vault.getVault();
   if (!sess) throw new Error('No vault on this device');
 
-  await vault.addDevice(deviceKey, {
-    name: req.name,
-    platform: req.platform,
-  });
+  // An always-on Peer (ADR-0038 §3) gets a /.vault/peers/ record, never a writer or a fan-out.
+  if (req.platform === PEER_PLATFORM) {
+    await vault.addPeer(deviceKey, { name: req.name });
+  } else {
+    await vault.addDevice(deviceKey, {
+      name: req.name,
+      platform: req.platform,
+    });
+  }
   logger.info('Confirming device', { deviceKey, hasEncryptionKey: !!sess.base.encryptionKey });
   try {
     req.candidate.confirm({ key: sess.base.key, encryptionKey: sess.base.encryptionKey });
