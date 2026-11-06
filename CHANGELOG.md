@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.43.0](https://github.com/knownasilya/nomad/compare/v1.42.0...v1.43.0) (2026-11-06)
+
+
+### Features
+
+* household features: task lists, Set up a home, Jobs that notify a shared Space ([939d67a](https://github.com/knownasilya/nomad/commit/939d67abb2149d02eb6018b6cb93307f2135c742))
+
+
+### Bug Fixes
+
+* **notes:** show the phone's cursor and selection on the computer every time ([e8a622b](https://github.com/knownasilya/nomad/commit/e8a622b4e71d4a8f3b0ea8dbb3fd1c5d11b93905))
+* **settings:** show the Auto Updater heading once ([8539a1e](https://github.com/knownasilya/nomad/commit/8539a1eddc91b7bc92f468ad3bcbec1e4bf1d2a4))
+
 ## [1.42.0](https://github.com/knownasilya/nomad/compare/v1.41.1...v1.42.0) (2026-11-05)
 
 
