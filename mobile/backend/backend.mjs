@@ -138,6 +138,7 @@ function vaultChanged () {
   vaultChangedTimer = setTimeout(() => {
     send(RPC_VAULT_CHANGED, {})
     liveNotes.recordsChanged().catch(() => {})
+    liveNotes.syncSpaces().catch(() => {})
   }, 400)
 }
 
@@ -227,11 +228,13 @@ const presence = createDevicePresence({
   getDeviceKey: () => (vault && vault.local?.key ? b4a.toString(vault.local.key, 'hex') : null)
 })
 // Live Notes (ADR-0041, lib/live-notes.mjs): the Note open in the editor is a session joined to the
-// same Note open on the user's computers. Late-bound to the Vault like the two above.
+// same Note open on the user's computers, and on the other members' Devices in a shared Space.
+// Late-bound to the Vault like the two above.
 const liveNotes = createPhoneLiveNotes({
   swarm: manager.swarm,
   store,
   getVault: () => vault,
+  libraryOf: (space) => libraryOf(space),
   emit: (event) => send(RPC_NOTE_LIVE_EVENT, event)
 })
 // Set once we've seen THIS device's own record in the Vault index. If it later disappears while the

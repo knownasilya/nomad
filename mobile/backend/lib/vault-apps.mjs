@@ -310,6 +310,15 @@ export async function locateNote (base, id, space = null) {
   return prev || null
 }
 
+// The Space whose Library keeps Note `id` (null for the user's own Notes and a Space not shared).
+export async function noteSpace (base, id, space = null) {
+  if (!apps.isNoteId(id) || !base) return null
+  const found = await findStored(base, id, space)
+  if (!found.space) return null
+  const place = await placeOf(base, found.space, 'notes')
+  return place.shared ? found.space : null
+}
+
 // Whether this phone can write Note `id` where it's kept (a shared Space it only views can't).
 export async function canWriteNote (base, id, space = null) {
   if (!base || !base.writable) return false
