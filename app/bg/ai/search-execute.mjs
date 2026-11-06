@@ -515,6 +515,24 @@ export const CAPABILITIES = [
     },
     gates: { personal: true },
   },
+  // The calendar (ADR-0042): the user's events, the Space's, and the iCal feeds they follow.
+  {
+    name: 'listCalendarEvents',
+    description:
+      "List what is on the user's calendar: their own events, the current Space's (a shared Space's are the " +
+      "household's, with who added each), and events from the iCal feeds they follow (school, clubs). " +
+      'Repeats are expanded. From `from` (YYYY-MM-DD, default today) for `days` days (default 7, at most 60). ' +
+      'Asks permission to read the calendar.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'Optional. The first day, YYYY-MM-DD. Default today' },
+        days: { type: 'number', description: 'Optional. How many days, 1 to 60. Default 7' },
+      },
+      required: [],
+    },
+    gates: { personal: true },
+  },
   // The user's Mods (ADR-0023): their own styles and scripts for sites, like Arc's. Reading and
   // changing them are two more permissions (vault-tools.mjs).
   {
@@ -850,6 +868,7 @@ export const JOB_CAPS = new Set([
   'readNote',
   'listReaderPosts',
   'readReaderPost',
+  'listCalendarEvents',
   'notify',
   'listSecrets',
   'httpRequest',

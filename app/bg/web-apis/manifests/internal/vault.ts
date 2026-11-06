@@ -61,6 +61,13 @@ export default {
   renameNoteLinks: 'promise', // ({ id, from, to }) -> number of notes changed
   setNoteTopics: 'promise', // ({ id, topics }) -> note, its topics set by hand (ADR-0035)
   setNoteTick: 'promise', // ({ id, text, checked }) -> note, who ticked an item noted in a shared Space
+  // The Calendar (bg/web-apis/bg/calendar.ts, shared/calendar.mjs), for the caller's Space
+  listCalendar: 'promise', // ({ from?, to? }) -> { space, spaceName, shared, canWriteSpace, events, feeds, occurrences }
+  saveCalendarEvent: 'promise', // ({ id?, title, start, end?, allDay?, location?, notes?, repeat?, inSpace? }) -> event
+  deleteCalendarEvent: 'promise', // (id) -> boolean
+  saveCalendarFeed: 'promise', // ({ id?, url, name?, color?, inSpace? }) -> feed, fetched once
+  deleteCalendarFeed: 'promise', // (id) -> boolean
+  refreshCalendarFeeds: 'promise', // ({ force? }) -> listCalendar(), after fetching the feeds that are due
   suggestNoteTopics: 'promise', // (ids?) -> how many notes the AI will sort into topics
   watchAppData: 'readable', // 'changed' when the Vault changes
   openLiveNote: 'readable', // (id, conn) -> 'message' { data } (y-protocols, base64), 'status', 'failed' (ADR-0041)

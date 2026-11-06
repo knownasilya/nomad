@@ -16,6 +16,7 @@ import * as pe from '../../shared/personas.mjs'
 import hcrypto from 'hypercore-crypto'
 import { decodeInlineJson, WRITERS_PREFIX as DRIVE_WRITERS } from '../../shared/fs-core.mjs'
 import * as spaceLib from './lib/space-library.mjs'
+import * as calendar from './lib/calendar.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
 import { createPhoneInbox } from './lib/inbox.mjs'
 import Protomux from 'protomux'
@@ -685,7 +686,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
       return
     }
     if (!vault) {
-      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'messages' ? 'Link this phone to your computer to use Messages' : app === 'updates' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : 'Link this phone to use Reader and Notes' })
+      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'messages' ? 'Link this phone to your computer to use Messages' : app === 'updates' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : app === 'calendar' ? 'Link this phone to your computer to use the calendar' : 'Link this phone to use Reader and Notes' })
       return
     }
     let value
@@ -712,6 +713,12 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'notes' && action === 'setTopics') value = await vaultApps.setNoteTopics(vault, { id: args.id, topics: Array.isArray(args.topics) ? args.topics : [], space })
     else if (app === 'notes' && action === 'setTick') value = await vaultApps.setNoteTick(vault, { id: args.id, text: args.text, checked: !!args.checked, space })
     else if (app === 'notes' && action === 'renameLinks') value = await vaultApps.renameNoteLinks(vault, { id: args.id, from: args.from, to: args.to, space })
+    else if (app === 'calendar' && action === 'list') value = await calendar.listCalendar(vault, space, { from: args.from, to: args.to })
+    else if (app === 'calendar' && action === 'save') value = await calendar.saveEvent(vault, space, args.event || {})
+    else if (app === 'calendar' && action === 'delete') value = await calendar.deleteEvent(vault, space, args.id)
+    else if (app === 'calendar' && action === 'saveFeed') value = await calendar.saveFeed(vault, space, args.feed || {})
+    else if (app === 'calendar' && action === 'deleteFeed') value = await calendar.deleteFeed(vault, space, args.id)
+    else if (app === 'calendar' && action === 'feedFetched') value = await calendar.feedFetched(vault, space, { id: args.id, text: args.text, error: args.error })
     else if (app === 'names' && action === 'list') value = await vaultApps.listNames(vault, space)
     else if (app === 'names' && action === 'resolve') value = await vaultApps.resolveName(vault, args.input, space)
     else if (app === 'names' && action === 'forUrl') value = await vaultApps.namesForUrl(vault, args.url, args.title, space)

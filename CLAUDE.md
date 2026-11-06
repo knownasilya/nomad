@@ -357,6 +357,18 @@ The name must be spelled from the site's host (or a drive's title), it runs on t
 only (`completeText` in `ai.ts`), and the `ai_auto_names` setting (the AI page, `nomad://ai/setup`) turns it off.
 Such a record has `auto: true` until the user keeps or edits it (ADR-0018 amendment).
 
+### The family calendar (ADR-0042)
+
+Events, followed iCal feeds and the feeds' copies are Vault records kept like Notes: the user's own
+(`/.vault/calendar/`) or a Space's, in its Space Library once shared, so a household edits one
+calendar (`by` says who added an event). Rules, repeats, the agenda and the iCal reader are
+`shared/calendar.mjs` (tests `tests/unit/calendar.test.js`); times are wall time with no zone.
+Desktop is `nomad://calendar` (`app/userland/calendar/`, internal `nomad.vault.listCalendar`/
+`saveCalendarEvent`/…, `app/bg/web-apis/bg/calendar.ts`, which fetches feeds in bg). The phone is
+`mobile/components/Calendar.tsx` over `RPC_APPS` `calendar` (`mobile/backend/lib/calendar.mjs`); its UI
+fetches a due feed and hands the text to `feedFetched`. The AI reads it with `listCalendarEvents`
+(`calendarRead`, Jobs too) and never changes it; links are `nomad://calendar/?day=` (`parseItemLink`).
+
 ### Highlights (ADR-0020)
 
 Right-click selected text on an http(s) or hyper:// page: Copy Link to Highlight, Highlight, or

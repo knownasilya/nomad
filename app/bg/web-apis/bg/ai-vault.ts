@@ -14,12 +14,13 @@ import { highlightForAi, assertCanHighlight } from '../../ui/highlights';
 import * as mods from '../../ui/mods';
 import * as jobs from '../../ai/jobs';
 import * as memory from '../../ai/memory';
+import * as calendar from './calendar';
 import { driveTitle, readJobSource, resolveJobWrites } from './job-source';
 import * as vault from '../../hyper/vault';
 import { readOffset, textPart, partFields, isPartial } from '../../ai/text-part.mjs';
 import { saveWhole, scratchKey } from '../../ai/scratch.mjs';
 import { addedWrites, describeSchedule, describeWrites, keepPageActions } from '../../../../shared/jobs.mjs';
-import { noteLink, jobLink, MEMORY_LINK, READER_LINK } from '../../../../shared/item-links.mjs';
+import { noteLink, jobLink, MEMORY_LINK, READER_LINK, CALENDAR_LINK } from '../../../../shared/item-links.mjs';
 import fsAPI from './fs';
 import * as webFeeds from './web-feeds';
 import {
@@ -188,6 +189,15 @@ export async function runVaultTool(name, args, { ctx, space = null, permit, scra
       }
       await vaultApps.saveReadIn(space, urls, loaded);
       return `Marked ${urls.length} post${urls.length === 1 ? '' : 's'} read`;
+    }
+
+    // The calendar from `from` for `days` days, as lines the model reads (shared/calendar.mjs agendaText).
+    // Feeds due a fetch are fetched first, so "tomorrow" includes the school's latest.
+    case 'listCalendarEvents': {
+      const space = await readerSpace().catch(() => null);
+      await calendar.refreshDue(space).catch(() => {});
+      const { text, from, to } = await calendar.agendaText(space, { from: args.from, days: args.days });
+      return `Calendar from ${from} to ${to} (the day after the last):\n${text}\n\nLink: ${CALENDAR_LINK}`;
     }
 
     case 'listMods':

@@ -11,6 +11,7 @@ import * as jl from '../../../shared/jobs.mjs'
 import * as sl from '../../../shared/space-library.mjs'
 import * as du from '../../../shared/device-updates.mjs'
 import * as pe from '../../../shared/personas.mjs'
+import * as cal from '../../../shared/calendar.mjs'
 import { inlineOp, boundedUpdate } from './vault.mjs'
 import { parseHyperUrl } from './hyper-url.mjs'
 import { DRIVE_AUTOBASE, DRIVE_HYPERDRIVE } from '../../rpc-commands.mjs'
@@ -70,7 +71,11 @@ export function useSpaceLibraries (fn) {
 const KINDS = {
   notes: { vault: apps.notesPrefix, lib: sl.LIB_NOTES },
   names: { vault: names.namesPrefix, lib: sl.LIB_NAMES },
-  follows: { vault: apps.followsPrefix, lib: sl.LIB_FOLLOWS }
+  follows: { vault: apps.followsPrefix, lib: sl.LIB_FOLLOWS },
+  // The calendar (lib/calendar.mjs, shared/calendar.mjs): events, followed iCal feeds, their copies.
+  events: { vault: (s) => cal.calendarPrefix('events', s), lib: cal.libraryPrefix('events') },
+  feeds: { vault: (s) => cal.calendarPrefix('feeds', s), lib: cal.libraryPrefix('feeds') },
+  feedCache: { vault: (s) => cal.calendarPrefix('feedCache', s), lib: cal.libraryPrefix('feedCache') }
 }
 
 // Where a Space's own records of `kind` are: its Space Library once shared, else the Vault. `at`
@@ -98,6 +103,23 @@ async function putAt (place, path, obj) {
 async function delAt (place, path) {
   if (place.shared && !place.writable) throw new Error('You can view this Space, but not change it')
   await delRecord(place.base, place.at(path))
+}
+
+// The records of `kind` for Space `space` (null: the user's own), wherever they're kept, for a module
+// beside this one (lib/calendar.mjs): `writable` is false in a shared Space this person only views.
+export async function recordsOf (base, space, kind) {
+  space = spaceOrNull(space)
+  const place = await placeOf(base, space, kind)
+  if (place.shared) await boundedUpdate(place.base, 2000)
+  return {
+    shared: place.shared,
+    writable: place.writable,
+    lib: space && place.shared ? await libraryOf(space).catch(() => null) : null,
+    list: () => readPrefix(place.base, place.prefix),
+    get: (file) => readAt(place, KINDS[kind].vault(space) + file),
+    put: (file, obj) => putAt(place, KINDS[kind].vault(space) + file, obj),
+    del: (file) => delAt(place, KINDS[kind].vault(space) + file)
+  }
 }
 
 // Reader

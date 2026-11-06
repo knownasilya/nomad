@@ -177,13 +177,23 @@ export interface NoteLiveEvent { id: string; conn: string; kind: 'message' | 'st
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages'
+export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages' | 'calendar'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
 // space: the Space's key when the note is kept only in that Space (ADR-0029), else null.
 // topics: the Note's topics (ADR-0035), set by the user or a computer's AI (topicsBy).
 export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string; space?: string | null; topics?: string[]; topicsBy?: 'ai' | 'user'; ticks?: Record<string, { by: string; at: string }> }
+// The calendar (shared/calendar.mjs, ADR-0042, backend/lib/calendar.mjs). Times are wall time:
+// 'YYYY-MM-DD' for an all-day event, 'YYYY-MM-DDTHH:mm' otherwise. space: the Space's key for an
+// event kept in that Space, else null. by: who added it, in a shared Space.
+export interface CalendarRepeat { freq: 'daily' | 'weekly' | 'monthly' | 'yearly'; interval: number; until?: string; count?: number; byDay?: number[] }
+export interface CalendarEvent { type: 'nomad/calendar-event'; id: string; title: string; start: string; end?: string; allDay: boolean; location?: string; notes?: string; repeat?: CalendarRepeat; by?: string; createdAt: string; updatedAt: string; space?: string | null }
+// due: its copy is old and this phone can fetch a new one (calendar/feedFetched).
+export interface CalendarFeed { id: string; url: string; name: string; color?: string | null; by?: string; space?: string | null; fetchedAt: string | null; error: string; count: number; due: boolean }
+// One time an event happens: `id` is the event's, or '<feedId>:<uid>' for one from a feed (`feed`).
+export interface CalendarOccurrence { id: string; title: string; start: string; end?: string; allDay: boolean; location: string; notes: string; by: string; repeats: boolean; feed: { id: string; name: string; color: string | null } | null }
+export interface CalendarList { space: string | null; shared: boolean; canWriteSpace: boolean; writable: boolean; from: string; to: string; events: CalendarEvent[]; feeds: CalendarFeed[]; occurrences: CalendarOccurrence[] }
 // The user's AI Jobs (shared/jobs.mjs, ADR-0030). A desktop runs them; the phone lists them, pauses
 // them, asks for a run, and notifies on a run that has a notification.
 // What the phone shows is `when` (the schedule in words), so the shapes are loose here.

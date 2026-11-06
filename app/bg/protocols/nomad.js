@@ -506,6 +506,16 @@ async function nomadProtocol(request) {
         { fallbackToIndexHTML: true }
       );
     }
+    // The family calendar: the user's and the Space's events, and iCal feeds. ?day= is a route.
+    if (requestUrl === 'nomad://calendar' || requestUrl.startsWith('nomad://calendar/')) {
+      return serveAppAsset(
+        requestUrl,
+        path.join(__dirname, 'userland', 'calendar'),
+        cb,
+        // @ts-ignore
+        { fallbackToIndexHTML: true }
+      );
+    }
     // The Persona Inbox (ADR-0036): direct messages. /new and ?persona=&with= are routes of one page.
     if (requestUrl === 'nomad://messages' || requestUrl.startsWith('nomad://messages/')) {
       return serveAppAsset(

@@ -232,6 +232,14 @@ export const PERMS = {
     requiresRefresh: false,
     promptTrusted: true,
   },
+  // The AI's access to the user's calendar (ADR-0042): reading only. The calendar page changes it.
+  calendarRead: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    promptTrusted: true,
+  },
   // The AI's access to the user's Mods (ADR-0023). Changing them is dangerous: a Mod can run a
   // script on every page of a site.
   modsRead: {
@@ -417,6 +425,7 @@ export const PERM_ICONS = {
   notesWrite: 'fas fa-sticky-note',
   readerRead: 'fas fa-rss',
   readerWrite: 'fas fa-rss',
+  calendarRead: 'fas fa-calendar-alt',
   modsRead: 'fas fa-magic',
   modsWrite: 'fas fa-magic',
   jobsRead: 'fas fa-clock',
@@ -488,6 +497,8 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Let the AI assistant read your Reader feeds and posts';
     case 'readerWrite':
       return 'Let the AI assistant follow and unfollow feeds and mark posts read';
+    case 'calendarRead':
+      return 'Let the AI assistant read your calendar and the calendars you follow';
     case 'modsRead':
       return 'Let the AI assistant read your Mods (your styles and scripts for sites)';
     case 'modsWrite':

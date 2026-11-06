@@ -616,3 +616,70 @@ describe('phone makes a Persona (ADR-0031 amendment)', () => {
     })
   }, 30000)
 })
+
+// The calendar (ADR-0042, mobile/backend/lib/calendar.mjs): the phone reads and writes the records
+// desktop's nomad://calendar keeps, and keeps a feed's copy from the file its UI fetched.
+describe('phone calendar', () => {
+  const ICS = ['BEGIN:VCALENDAR', 'BEGIN:VEVENT', 'UID:inset', 'SUMMARY:Inset day', 'DTSTART;VALUE=DATE:20261113', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n')
+
+  it('lists what the computer added, adds its own, and keeps a fetched feed', async () => {
+    const calendar = await import('../../mobile/backend/lib/calendar.mjs')
+    const cal = await import('../../shared/calendar.mjs')
+    await withDevices(async ({ computer, phone: base }) => {
+      const bins = cal.makeEvent({ id: 'bins', title: 'Bins', start: '2026-11-10T18:00', repeat: { freq: 'weekly' } })
+      await computer.append(putJson(cal.calendarPrefix('events') + 'bins.json', bins))
+      await computer.update()
+      await until(async () => (await calendar.listCalendar(base, null, { from: '2026-11-01', to: '2026-12-01' })).events.length === 1)
+      const list = await calendar.listCalendar(base, null, { from: '2026-11-01', to: '2026-12-01' })
+      expect(list.occurrences.map((o) => o.start)).toEqual(['2026-11-10T18:00', '2026-11-17T18:00', '2026-11-24T18:00'])
+
+      const dentist = await calendar.saveEvent(base, SPACE, { title: 'Dentist', start: '2026-11-12T09:30' })
+      expect(dentist.space).toBe(null) // not asked to be the Space's
+      await until(async () => !!(await readJson(computer, cal.calendarPrefix('events') + dentist.id + '.json')))
+
+      const feed = await calendar.saveFeed(base, SPACE, { url: 'webcal://school.example/cal.ics', inSpace: true })
+      expect(feed).toMatchObject({ url: 'https://school.example/cal.ics', space: SPACE }) // a Space not shared keeps it in the Vault
+      expect((await calendar.listCalendar(base, SPACE)).feeds[0].due).toBe(true)
+      expect(await calendar.feedFetched(base, SPACE, { id: feed.id, text: ICS })).toMatchObject({ count: 1, error: '' })
+      const after = await calendar.listCalendar(base, SPACE, { from: '2026-11-13', to: '2026-11-14' })
+      expect(after.feeds[0]).toMatchObject({ due: false, count: 1 })
+      expect(after.occurrences.map((o) => o.title)).toEqual(['Inset day'])
+      // A failed fetch keeps the last copy.
+      await calendar.feedFetched(base, SPACE, { id: feed.id, error: 'The feed answered 500' })
+      expect((await calendar.listCalendar(base, SPACE, { from: '2026-11-13', to: '2026-11-14' })).occurrences).toHaveLength(1)
+
+      expect(await calendar.deleteEvent(base, SPACE, dentist.id)).toBe(true)
+      expect(await calendar.deleteFeed(base, SPACE, feed.id)).toBe(true)
+      expect((await calendar.listCalendar(base, SPACE)).feeds).toEqual([])
+    })
+  }, 30000)
+
+  it('adds a household event to a shared Space’s Library, saying who added it', async () => {
+    const calendar = await import('../../mobile/backend/lib/calendar.mjs')
+    const sl = await import('../../shared/space-library.mjs')
+    const SHARED = 'e'.repeat(64)
+    const memberId = '1'.repeat(32)
+    await withDevices(async (devices) => {
+      const owner = new Autobase(devices.storeA.namespace('library'), null, { open, apply, ...AUTOBASE_OPTS })
+      await owner.ready()
+      const lib = new Autobase(devices.storeB.namespace('library'), owner.key, { open, apply, ...AUTOBASE_OPTS })
+      await lib.ready()
+      await owner.append({ addWriter: b4a.toString(lib.local.key, 'hex') })
+      await owner.append(putJson(sl.memberPath(memberId), sl.makeMember({ memberId, name: 'Sam', role: 'editor' })))
+      await owner.update()
+      await until(async () => { await lib.update(); return lib.writable })
+      phone.useSpaceLibraries(async (space) => (space === SHARED ? { base: lib, memberId } : null))
+      try {
+        const ev = await calendar.saveEvent(devices.phone, SHARED, { title: 'Early pickup', start: '2026-11-20', allDay: true, inSpace: true })
+        expect(ev).toMatchObject({ space: SHARED, by: 'Sam' })
+        await until(async () => !!(await readJson(owner, '/calendar/events/' + ev.id + '.json')))
+        const list = await calendar.listCalendar(devices.phone, SHARED, { from: '2026-11-20', to: '2026-11-21' })
+        expect(list).toMatchObject({ shared: true, canWriteSpace: true })
+        expect(list.occurrences[0]).toMatchObject({ title: 'Early pickup', by: 'Sam' })
+      } finally {
+        phone.useSpaceLibraries(null)
+        await lib.close(); await owner.close()
+      }
+    })
+  }, 30000)
+})

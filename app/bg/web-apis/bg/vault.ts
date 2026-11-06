@@ -12,6 +12,7 @@ import * as pairing from '../../hyper/device-pairing';
 import * as devicePresence from '../../hyper/device-presence';
 import * as vaultApps from './vault-apps';
 import * as noteTopics from './note-topics';
+import * as calendar from './calendar';
 import * as liveNotes from '../../notes/live-notes';
 import * as names from '../../hyper/names';
 import * as driveWriters from '../../hyper/drive-writers';
@@ -424,6 +425,26 @@ export default {
   // Who ticked an item of a shared Space's Note: ({ id, text, checked }) -> note.
   async setNoteTick(change) {
     return vaultApps.setNoteTick(this, change);
+  },
+
+  // The Calendar (nomad://calendar, shared/calendar.mjs): the caller's Space's events and feeds.
+  async listCalendar(range: any = {}) {
+    return calendar.listCalendar(this, range || {});
+  },
+  async saveCalendarEvent(fields: any = {}) {
+    return calendar.saveEvent(this, fields || {});
+  },
+  async deleteCalendarEvent(id) {
+    return calendar.deleteEvent(this, id);
+  },
+  async saveCalendarFeed(fields: any = {}) {
+    return calendar.saveFeed(this, fields || {});
+  },
+  async deleteCalendarFeed(id) {
+    return calendar.deleteFeed(this, id);
+  },
+  async refreshCalendarFeeds(opts: any = {}) {
+    return calendar.refreshFeeds(this, { force: !!opts?.force });
   },
 
   // Ask the AI for topics now: for `ids`, or every Note with none yet. -> how many it will look at.
