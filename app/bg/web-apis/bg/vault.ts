@@ -21,6 +21,9 @@ import * as spacesDb from '../../dbs/spaces';
 import { BrowserWindow } from 'electron';
 import { findWebContentsParentWindow } from '../../lib/electron';
 import * as tabManager from '../../ui/tabs/manager';
+import * as spacePins from '../../ui/space-pins';
+import * as drives from '../../hyper/drives';
+import * as home from '../../../../shared/home-setup.mjs';
 
 // The caller's Space key, or null.
 const callerSpace = (ctx) => vaultApps.spaceKey(ctx).catch(() => null);
@@ -245,6 +248,31 @@ export default {
     return filesystem.shareSpace(spaceId, { name: String(opts?.name || defaultOwnName()).slice(0, 100) });
   },
 
+  // Set up a home (shared/home-setup.mjs): make a Space for the people the user lives with, share
+  // it, put a Groceries list and House info in it, pin both, and switch the caller's window to it
+  // with its Sharing page open, to invite them. ({ name?, ownName? }) -> { spaceId, name }.
+  async setUpHome(opts: any = {}) {
+    const { name, ownName } = home.homeNames(opts || {}, defaultOwnName());
+    const space = await tabManager.createSpace(
+      { name, icon: home.HOME_ICON, color: home.HOME_COLOR },
+      { waitForDrive: true }
+    );
+    await filesystem.shareSpace(space.id, { name: ownName });
+    const rootKey = await drives.fromURLToKey(filesystem.getSpaceRootDriveUrl(space.id), true);
+    const ids = {};
+    for (const n of home.starterNotes()) {
+      const note = await vaultApps.saveNote(null, { body: n.body, inSpace: true, space: rootKey });
+      ids[n.key] = note.id;
+    }
+    await spacePins.pinAll(space.id, home.starterPins(ids)).catch(() => {});
+    const win = this?.sender ? findWebContentsParentWindow(this.sender) : null;
+    if (win) {
+      tabManager.create(win, 'nomad://library/sharing?home=1', { spaceId: space.id, setActive: false } as any);
+      await tabManager.setActiveSpace(win, space.id).catch(() => {});
+    }
+    return { spaceId: space.id, name };
+  },
+
   async createSpaceInvite(role) {
     return spaceLibrary.createInvite(await vaultApps.spaceKey(this), role);
   },
@@ -391,6 +419,11 @@ export default {
   // A Note's topics, by hand (ADR-0035): ({ id, topics }) -> note.
   async setNoteTopics(change) {
     return vaultApps.setNoteTopics(this, change);
+  },
+
+  // Who ticked an item of a shared Space's Note: ({ id, text, checked }) -> note.
+  async setNoteTick(change) {
+    return vaultApps.setNoteTick(this, change);
   },
 
   // Ask the AI for topics now: for `ids`, or every Note with none yet. -> how many it will look at.
@@ -553,8 +586,26 @@ export default {
     const titles = new Map(
       await Promise.all(urls.map(async (u) => [u, await driveTitle(u).catch(() => null)] as const))
     );
+    // Which Spaces are shared, so the editor offers "Everyone in <Space>" (shared/jobs.mjs audience).
+    let here = null;
+    try {
+      here = await vaultApps.spaceKey(this);
+    } catch {}
+    const spaceKeys = [...new Set([here, ...list.map((j) => j.space)].filter(Boolean))];
+    const sharedSpaces = new Map(
+      await Promise.all(
+        spaceKeys.map(async (k) => {
+          const i: any = await spaceLibrary.info(k).catch(() => ({ shared: false, role: null }));
+          const ok = !!i.shared && !i.removed && (i.role === 'owner' || i.role === 'editor');
+          return [k, ok ? vaultApps.spaceNameOf(k) || 'this Space' : null] as const;
+        })
+      )
+    );
     return {
+      // The caller's Space, when a Job made here could notify everyone in it.
+      sharedSpace: here && sharedSpaces.get(here) ? { space: here, name: sharedSpaces.get(here) } : null,
       jobs: list.map((j) => ({
+        sharedSpaceName: (j.space && sharedSpaces.get(j.space)) || null,
         ...j,
         ...(j.writes
           ? {
@@ -606,6 +657,15 @@ export default {
       space = await vaultApps.spaceKey(this);
     } catch {}
     const { id, title, prompt, schedule, notify, enabled, runHere } = f;
+    // Notifying the Space is for a Job in a shared Space the user can edit.
+    const audience = f.audience === undefined ? undefined : f.audience === 'space' ? 'space' : 'me';
+    if (audience === 'space') {
+      const jobSpace = id ? jobs.list().find((j) => j.id === id)?.space : space;
+      const i: any = jobSpace ? await spaceLibrary.info(jobSpace).catch(() => null) : null;
+      if (!i?.shared || i.removed || !(i.role === 'owner' || i.role === 'editor')) {
+        throw new Error('Only a Job in a shared Space you can edit can notify everyone in it');
+      }
+    }
     let source;
     if (f.source === null) source = null;
     else if (typeof f.source === 'string') source = await readJobSource(f.source, space || null);
@@ -622,6 +682,7 @@ export default {
       writes,
       schedule,
       notify,
+      audience,
       enabled,
       runHere: !!runHere,
       space: f.id ? undefined : space,

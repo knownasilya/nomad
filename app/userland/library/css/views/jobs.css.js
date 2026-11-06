@@ -168,6 +168,18 @@ const cssStr = css`
     color: var(--text-color--link);
   }
 
+  /* Notify everyone in the Job's shared Space, too. */
+  .audience {
+    margin-top: 10px;
+  }
+
+  .audience .check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+
   .last-error {
     margin-top: 3px;
     font-size: 12px;

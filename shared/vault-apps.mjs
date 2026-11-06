@@ -2,7 +2,7 @@
 //
 // The records the built-in Reader and Notes keep in the Vault (ADR-0017), so every linked Device —
 // the phone too — reads and writes the same data. Shared by desktop (app/bg/web-apis/bg/vault-apps.ts)
-// and mobile (mobile/backend/lib/vault-apps.mjs). Pure: no imports, no I/O. Each side stores these as
+// and mobile (mobile/backend/lib/vault-apps.mjs). Pure: no I/O. Each side stores these as
 // inline Vault control records with its own helpers. Layout: docs/multi-device-protocol.md §1.2.
 //
 //   /.vault/reader/<space>/follows/<host>.json   { url, addedAt }       one per subscribed hyper:// Feed
@@ -11,7 +11,7 @@
 //   /.vault/reader/<space>/web-read.json         { read: { feedUrl: [itemUrl] } }  RSS and Atom items read
 //   /.vault/reader/<space>/imported.json         { importedAt }         the Space's old file was copied in
 //   /.vault/notes/<id>.json                      { type, id, body, createdAt, updatedAt, conflictOf?,
-//                                                  topics?, topicsBy? }
+//                                                  topics?, topicsBy?, ticks? }
 //   /.vault/space-lib/<space>/notes/<id>.json    the same Note, kept only in that Space (ADR-0029)
 //
 // <space> is the Space's Root Drive key (hex): each Space has its own subscriptions. Notes belong to
@@ -25,6 +25,11 @@
 //
 // A Note can have topics (ADR-0035), set by the user or picked by this Device's AI. They are on the
 // Note record, and a save keeps them (makeNote). Rules: shared/note-topics.mjs.
+//
+// A Note's task lines work as a list (shared/note-lists.mjs). In a shared Space the record says who
+// ticked each item (`ticks`); a save keeps the ticks of the items still ticked.
+
+import { keepTicks } from './note-lists.mjs';
 
 export const READER_PREFIX = '/.vault/reader/';
 export const NOTES_PREFIX = '/.vault/notes/';
@@ -268,6 +273,9 @@ export function makeNote({ id, body, conflictOf }, prev = null, now = new Date()
     note.topics = prev.topics;
     if (prev.topicsBy) note.topicsBy = prev.topicsBy;
   }
+  // So do the ticks of the items it still has ticked.
+  const ticks = prev && !conflictOf ? keepTicks(prev.ticks, text) : null;
+  if (ticks) note.ticks = ticks;
   return note;
 }
 

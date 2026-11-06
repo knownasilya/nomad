@@ -204,6 +204,7 @@ function watchOtherDevices() {
     } catch {
       return;
     }
+    if (draft && draft.id) editor?.setTicks(openTicks());
     if (draft && draft.id && !dirty && !saving) {
       const fresh = state.notes.find((n) => n.id === draft.id);
       if (!fresh) {
@@ -824,6 +825,7 @@ function renderEditor() {
   mainEl.replaceChildren(
     el('div', { class: 'toolbar' }, [
       ...toolbarButtons(),
+      clearDoneButton(),
       el('span', { class: 'spacer' }),
       presenceEl,
       savedEl,
@@ -840,6 +842,7 @@ function renderEditor() {
     parent: host,
     doc: draft.body,
     notes: state.notes,
+    ticks: openTicks(),
     readOnly: !state.writable,
     placeholder: EDITOR_HINT,
     onChange: (text) => {
@@ -848,10 +851,13 @@ function renderEditor() {
       setSaveMsg('idle', '');
       renderList();
       updateTitle();
+      renderClearDone();
       scheduleSave();
     },
     onOpenLink: openLink,
+    onTick: noteTick,
   });
+  renderClearDone();
   if (!draft.id) editor.focus();
   renderAround();
   renderSaveMsg();
@@ -923,6 +929,7 @@ function bindLive(conn) {
     parent: editorHost,
     doc: text,
     notes: state.notes,
+    ticks: openTicks(),
     readOnly: !state.writable,
     placeholder: EDITOR_HINT,
     onChange: (t) => {
@@ -930,14 +937,17 @@ function bindLive(conn) {
       draft.body = t;
       renderList();
       updateTitle();
+      renderClearDone();
     },
     onOpenLink: openLink,
+    onTick: noteTick,
     // Undo takes back this tab's own edits, never the AI's or another Device's.
     collab: [yCollab(conn.ytext, conn.awareness), keymap.of(yUndoManagerKeymap)],
   });
   const clamp = (n) => Math.min(n, text.length);
   editor.view.dispatch({ selection: { anchor: clamp(anchor), head: clamp(head) } });
   if (hadFocus) editor.focus();
+  renderClearDone();
   if (draft.body !== text) {
     draft.body = text;
     renderList();
@@ -1054,6 +1064,53 @@ const TOOLS = [
   ['code', 'code', 'Code (⌘E)'],
   ['link', 'link', 'Link to a note (⌘K)'],
 ];
+
+// "Clear done": shown while the note has ticked items (shared/note-lists.mjs). It takes them out.
+function clearDoneButton() {
+  return el(
+    'button',
+    {
+      class: 'btn clear-done',
+      title: 'Remove the ticked items',
+      hidden: true,
+      disabled: !state.writable,
+      onmousedown: (e) => {
+        e.preventDefault();
+        editor?.run('clearDone');
+      },
+    },
+    [icon('broom'), el('span', { class: 'clear-done-label' }, ['Clear done'])]
+  );
+}
+
+function renderClearDone() {
+  const btn = mainEl.querySelector('.toolbar .clear-done');
+  if (!btn) return;
+  const n = editor ? editor.doneCount() : 0;
+  btn.hidden = !n;
+  const label = btn.querySelector('.clear-done-label');
+  if (label) label.textContent = n ? `Clear done (${n})` : 'Clear done';
+}
+
+// Who ticked which item, for the open note: only a shared Space's notes say, since everyone else
+// who ticks your own notes is you.
+function openTicks() {
+  if (!state.shared || !draft?.id || !draft.inSpace) return null;
+  return state.notes.find((n) => n.id === draft.id)?.ticks || null;
+}
+
+// The user ticked or unticked an item: in a shared Space, note who, so the others see it.
+async function noteTick({ text, checked }) {
+  const target = draft;
+  if (!state.shared || !target?.id || !target.inSpace) return;
+  try {
+    const note = await nomad.vault.setNoteTick({ id: target.id, text, checked });
+    replaceNote(note);
+    if (draft === target) editor?.setTicks(openTicks());
+  } catch (e) {
+    console.warn('[notes] could not note who ticked an item', e);
+  }
+}
 
 function toolbarButtons() {
   return TOOLS.map(([cmd, ic, label]) =>

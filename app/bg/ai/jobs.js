@@ -24,6 +24,7 @@ import { powerMonitor } from 'electron';
 import { EventEmitter } from 'events';
 import b4a from 'b4a';
 import * as vault from '../hyper/vault';
+import * as spaceLibrary from '../hyper/space-library';
 import * as logLib from '../logger';
 import * as jl from '../../../shared/jobs.mjs';
 import * as secretStore from './secret-store';
@@ -157,7 +158,7 @@ export { ownKey };
 // Device.
 // `source` is what job-source.ts read from a drive (shared/jobs.mjs makeSource), null to drop it.
 // `writes` is what the Job may change (shared/jobs.mjs normalizeWrites), null for nothing.
-/** @param {{ id?: string, title?: string, prompt?: string, source?: any, writes?: any, schedule?: any, notify?: string, enabled?: boolean, space?: string, runHere?: boolean }} fields */
+/** @param {{ id?: string, title?: string, prompt?: string, source?: any, writes?: any, schedule?: any, notify?: string, audience?: string, enabled?: boolean, space?: string, runHere?: boolean }} fields */
 export function save(fields) {
   const run = writes.then(async () => {
     const { runHere, ...rest } = fields;
@@ -359,6 +360,13 @@ async function runOne(job, trigger, watch = null) {
     runs.set(job.id, keep);
   } catch (err) {
     logger.warn('Could not save a Job’s run', { id: job.id, error: err?.message });
+  }
+  // A Job that notifies its shared Space tells everyone in it, too.
+  const shared = jl.spaceNotification(job, run);
+  if (shared) {
+    spaceLibrary
+      .postNotice(job.space, { title: shared.title, body: shared.body, jobId: job.id })
+      .catch((err) => logger.warn('Could not notify the Space', { id: job.id, error: err?.message }));
   }
   events.emit('changed');
 }

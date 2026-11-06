@@ -27,6 +27,7 @@ export default {
   // Shared Spaces (bg/hyper/space-library.js, ADR-0029), for the caller's Space
   getSpaceShare: 'promise', // -> { spaceId, name, personal, shared, preview?, role, memberId, members, joins, requests, writable }
   shareSpace: 'promise', // ({ name }) -> share info
+  setUpHome: 'promise', // ({ name?, ownName? }) -> { spaceId, name }: a new shared Space with a Groceries list and House info
   createSpaceInvite: 'promise', // (role: 'editor' | 'viewer') -> { code, role }
   approveSpaceJoin: 'promise', // (memberId)
   denySpaceJoin: 'promise', // (memberId)
@@ -59,6 +60,7 @@ export default {
   deleteNote: 'promise',
   renameNoteLinks: 'promise', // ({ id, from, to }) -> number of notes changed
   setNoteTopics: 'promise', // ({ id, topics }) -> note, its topics set by hand (ADR-0035)
+  setNoteTick: 'promise', // ({ id, text, checked }) -> note, who ticked an item noted in a shared Space
   suggestNoteTopics: 'promise', // (ids?) -> how many notes the AI will sort into topics
   watchAppData: 'readable', // 'changed' when the Vault changes
   openLiveNote: 'readable', // (id, conn) -> 'message' { data } (y-protocols, base64), 'status', 'failed' (ADR-0041)

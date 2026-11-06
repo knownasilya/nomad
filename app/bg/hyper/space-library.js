@@ -201,6 +201,25 @@ export async function share({ space, root, meta, name }) {
   return info(space);
 }
 
+// Notices
+// =
+
+// Tell everyone in a shared Space (shared/space-library.mjs notices): a Job's notification, which
+// each member's phone shows. Does nothing for a Space that isn't shared or that this Device can't
+// write. Keeps this member's newest KEEP_NOTICES. Returns the notice, or null.
+export async function postNotice(space, { title, body, jobId = null }) {
+  const lib = await forSpace(space).catch(() => null);
+  if (!lib || !lib.writable || !sl.canEdit(lib.role) || !sl.isMemberId(lib.memberId)) return null;
+  const list = (await listIn(lib.sess, sl.MEMBERS_PREFIX)).map((r) => r.value);
+  const me = list.find((m) => sl.isMember(m) && m.memberId === lib.memberId);
+  const notice = sl.makeNotice({ id: sl.newNoticeId(), memberId: lib.memberId, from: me?.name, title, body, jobId });
+  await putIn(lib.sess, sl.noticePath(notice.id), notice);
+  const all = (await listIn(lib.sess, sl.NOTICES_PREFIX)).map((r) => r.value);
+  for (const old of sl.noticesToPrune(all, lib.memberId)) await delIn(lib.sess, sl.noticePath(old.id)).catch(() => {});
+  logger.info('Posted a notice to a shared space', { space, jobId });
+  return notice;
+}
+
 // Members and roles (ADR-0029 §3, §8)
 // =
 

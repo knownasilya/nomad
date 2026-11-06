@@ -14,8 +14,13 @@ import type { Backend, JobNotifications } from './useBackend'
 //
 // The mark of what's been shown is the newest run's finishedAt (shared/jobs.mjs pendingNotifications),
 // a time from the desktop's clock, never the phone's. The first time, nothing older shows.
+//
+// A Job someone else made in a shared Space this person is in can notify everyone in it ("bins go
+// out tonight"): those come as the Space's notices (shared/space-library.mjs), each Space with its
+// own mark. A tap just opens the app: the Job isn't this person's.
 
 const SINCE_KEY = 'nomad:job-notifications:since'
+const SPACE_SINCE_KEY = 'nomad:space-notices:since'
 const CHANNEL = 'jobs'
 const MAX_AT_ONCE = 4 // more than this since the last look become one "N Job results" notification
 
@@ -40,7 +45,7 @@ export function useJobNotifications (backend: Pick<Backend, 'apps' | 'onVaultCha
   // A tap on a notification, now or the one that launched the app.
   useEffect(() => {
     // A Message's notification (useMessageNotifications) is the other kind; it opens Messages.
-    const mine = (data: any) => data?.kind !== 'message'
+    const mine = (data: any) => data?.kind !== 'message' && data?.kind !== 'space-notice'
     const open = (data: any) => onOpenRef.current({ jobId: data?.jobId, runId: data?.runId })
     const sub = Notifications.addNotificationResponseReceivedListener((res) => {
       const data = res.notification.request.content.data
@@ -75,9 +80,13 @@ export function useJobNotifications (backend: Pick<Backend, 'apps' | 'onVaultCha
     }
     const checkOnce = async () => {
       const stored = await AsyncStorage.getItem(SINCE_KEY).catch(() => null)
-      const res = await appsRef.current<JobNotifications>('jobs', 'notifications', { since: stored })
+      const storedSpaces = await AsyncStorage.getItem(SPACE_SINCE_KEY).catch(() => null)
+      let spaceSince: Record<string, string> = {}
+      try { spaceSince = storedSpaces ? JSON.parse(storedSpaces) || {} : {} } catch {}
+      const res = await appsRef.current<JobNotifications>('jobs', 'notifications', { since: stored, spaceSince })
       if (!res.ok || !res.value) return
       const { notify, since, wants } = res.value
+      const fromSpaces = res.value.spaceNotify || []
       if (wants && !asked) {
         asked = true
         await ensurePermission()
@@ -87,7 +96,14 @@ export function useJobNotifications (backend: Pick<Backend, 'apps' | 'onVaultCha
       } else {
         for (const n of notify) await show(n.title, n.body, { jobId: n.jobId, runId: n.id })
       }
+      if (fromSpaces.length > MAX_AT_ONCE) {
+        await show(`${fromSpaces.length} notifications from your shared Spaces`, fromSpaces.map((n) => n.title).join(', '), { kind: 'space-notice' })
+      } else {
+        for (const n of fromSpaces) await show(n.title, [n.body, n.from && `from ${n.from}`].filter(Boolean).join(' · '), { kind: 'space-notice' })
+      }
       if (since !== stored) await AsyncStorage.setItem(SINCE_KEY, since).catch(() => {})
+      const nextSpaces = JSON.stringify(res.value.spaceSince || {})
+      if (nextSpaces !== storedSpaces) await AsyncStorage.setItem(SPACE_SINCE_KEY, nextSpaces).catch(() => {})
     }
     check()
     const stop = backend.onVaultChange(check)

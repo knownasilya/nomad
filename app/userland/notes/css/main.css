@@ -773,6 +773,21 @@ main {
   white-space: nowrap;
 }
 
+.toolbar .clear-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  margin-left: 8px;
+  padding: 0 9px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.toolbar .clear-done[hidden] {
+  display: none;
+}
+
 .toolbar .saved.err {
   color: var(--nts-err);
 }

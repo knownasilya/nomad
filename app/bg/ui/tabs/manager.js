@@ -1774,6 +1774,21 @@ export function emitReplaceState(win) {
   triggerSessionSnapshot(win);
 }
 
+// Make a Space. Its Root Drive is made in the background, or before this returns with
+// `waitForDrive` (Set up a home shares it next, which needs the drive).
+export async function createSpace(opts, { waitForDrive = false } = {}) {
+  let space = await spacesDb.create(opts);
+  // register protocols on the new session partition before any tab loads
+  if (space.partition) registerForPartition(space.partition);
+  const setup = filesystem.getOrSetupSpaceDrive(space);
+  if (waitForDrive) {
+    await setup;
+    space = await spacesDb.get(space.id);
+  } else setup.catch(() => {});
+  for (let win of BrowserWindow.getAllWindows()) emitReplaceState(win);
+  return space;
+}
+
 export async function setActiveSpace(win, id) {
   win = getTopWindow(win);
   const space = await spacesDb.setActive(id);
@@ -2478,13 +2493,7 @@ rpc.exportAPI('background-process-spaces', spacesRPCManifest, {
   },
 
   async create(opts) {
-    const space = await spacesDb.create(opts);
-    // register protocols on the new session partition before any tab loads
-    if (space.partition) registerForPartition(space.partition);
-    // provision the root drive for the new space in the background
-    filesystem.getOrSetupSpaceDrive(space).catch(() => {});
-    for (let win of BrowserWindow.getAllWindows()) emitReplaceState(win);
-    return space;
+    return createSpace(opts, { waitForDrive: false });
   },
 
   async update(id, opts) {

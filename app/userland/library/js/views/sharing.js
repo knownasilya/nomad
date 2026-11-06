@@ -12,6 +12,9 @@ import sharingCSS from '../../css/views/sharing.css.js';
 // members replicate. Owners invite people with a single-use code, approve them, set who can edit
 // and who can view, and answer viewers' asks to edit one drive. Anyone can join a shared Space with
 // a code here, too.
+//
+// Set up a home (shared/home-setup.mjs) makes a new shared Space for the people the user lives with,
+// with a Groceries list and House info pinned, and opens this page in it (?home=1) to invite them.
 
 const ROLE_LABELS = { owner: 'Owner', editor: 'Can edit', viewer: 'Can view' };
 
@@ -25,6 +28,8 @@ export class SharingView extends LitElement {
       joining: { type: Object }, // { code, name, waiting, error }
       busy: { type: Boolean },
       error: { type: String },
+      homeName: { type: String }, // Set up a home: the new Space's name
+      welcome: { type: Boolean }, // just set up a home: say what's in it
     };
   }
 
@@ -41,6 +46,17 @@ export class SharingView extends LitElement {
     this.joining = { code: '', name: '', waiting: false, error: '' };
     this.busy = false;
     this.error = '';
+    this.homeName = 'Home';
+    this.welcome = false;
+    try {
+      const url = new URL(location.href);
+      if (url.searchParams.get('home') === '1') {
+        this.welcome = true;
+        this.inviteRole = 'editor'; // the people you live with edit the lists too
+        url.searchParams.delete('home');
+        history.replaceState(history.state, '', url.pathname + url.search);
+      }
+    } catch {}
     this.load();
     try {
       nomad.vault.watchSpaceShare().addEventListener('changed', () => this.load());
@@ -93,6 +109,7 @@ export class SharingView extends LitElement {
           Your Personal Space holds your own things, so it can’t be shared. Make another Space, or switch
           to one, to share it with other people.
         </div>
+        ${this.renderHome()}
       `;
     }
     return html`
@@ -121,6 +138,40 @@ export class SharingView extends LitElement {
           <button class="primary" ?disabled=${this.busy} @click=${this.onShare}>Share this Space</button>
         </div>
       </div>
+      ${this.renderHome()}
+    `;
+  }
+
+  // Set up a home: a new Space for the people the user lives with.
+  renderHome() {
+    return html`
+      <div class="card home">
+        <div class="card-title"><span class="fas fa-fw fa-home"></span> Set up a home</div>
+        <div class="what">
+          <div>
+            A new Space for the people you live with. It comes with a <strong>Groceries</strong> list everyone
+            can tick off, and <strong>House info</strong> for the Wi-Fi, bins and emergency contacts, both pinned.
+            Then you invite them.
+          </div>
+        </div>
+        <div class="fields">
+          <label for="home-name">Name</label>
+          <input
+            id="home-name"
+            .value=${this.homeName}
+            @input=${(e) => (this.homeName = e.target.value)}
+            placeholder="Home"
+          />
+          <label for="home-own-name">Your name</label>
+          <input
+            id="home-own-name"
+            .value=${this.ownName}
+            @input=${(e) => (this.ownName = e.target.value)}
+            placeholder="Your name"
+          />
+          <button class="primary" ?disabled=${this.busy} @click=${this.onSetUpHome}>Set up</button>
+        </div>
+      </div>
     `;
   }
 
@@ -137,6 +188,17 @@ export class SharingView extends LitElement {
       `;
     }
     return html`
+      ${this.welcome && owner
+        ? html`
+            <div class="notice welcome">
+              <span class="fas fa-fw fa-home"></span>
+              <div>
+                <strong>${i.name} is ready.</strong> Its Groceries list and House info are pinned at the top of
+                the sidebar. Now make a code for each person you live with, and approve them here when they join.
+              </div>
+            </div>
+          `
+        : ''}
       <div class="intro">
         <strong>${i.name}</strong> is shared. You ${i.role === 'viewer' ? 'can view it' : i.role === 'owner' ? 'own it' : 'can edit it'}.
         ${i.role === 'viewer' ? 'To edit a drive in it, open the drive and ask from its site info.' : ''}
@@ -309,6 +371,11 @@ export class SharingView extends LitElement {
 
   async onShare() {
     await this.run(() => nomad.vault.shareSpace({ name: this.ownName }), 'Shared. Now invite people');
+  }
+
+  async onSetUpHome() {
+    // The window switches to the new Space, with this page open there.
+    await this.run(() => nomad.vault.setUpHome({ name: this.homeName, ownName: this.ownName }));
   }
 
   async onInvite() {

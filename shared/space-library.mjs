@@ -14,6 +14,7 @@
 //   /names/<name>.json                           a Name (shared/names.mjs)
 //   /.space/members/<memberId>.json              a Member
 //   /.space/writers/<driveKey>/<writerKey>.json  a Space Writer grant
+//   /.space/notices/<id>.json                    a Notice: a Job's notification for everyone in the Space
 //
 // A member's own Vault record for the Space (/.vault/spaces/<rootDriveKey>.json) gains `library`
 // (the Space Library key), `role` and `memberId`. Read marks stay in each person's Vault.
@@ -23,6 +24,7 @@ import { followName } from './vault-apps.mjs';
 export const SPACE_TYPE = 'nomad/space';
 export const MEMBER_TYPE = 'nomad/space-member';
 export const SPACE_WRITER_TYPE = 'nomad/space-writer';
+export const NOTICE_TYPE = 'nomad/space-notice';
 
 export const ROLES = ['owner', 'editor', 'viewer'];
 export const ROLE_LABELS = { owner: 'Owner', editor: 'Can edit', viewer: 'Can view' };
@@ -35,6 +37,7 @@ export const LIB_NOTES = '/notes/';
 export const LIB_NAMES = '/names/';
 export const MEMBERS_PREFIX = '/.space/members/';
 export const WRITERS_PREFIX = '/.space/writers/';
+export const NOTICES_PREFIX = '/.space/notices/';
 
 const KEY = /^[0-9a-f]{64}$/;
 const MEMBER_ID = /^[0-9a-f]{32}$/;
@@ -202,6 +205,74 @@ export function writerState(records, { drive, writerKey }) {
 
 function roleMap(members) {
   return new Map((members || []).filter(isMember).map((m) => [m.memberId, m.role]));
+}
+
+// Notices
+// =
+//
+// A Job made in a shared Space can notify everyone in it (shared/jobs.mjs `audience: 'space'`):
+// "bins go out tonight". The computer that runs it writes the notification here, and each member's
+// phone shows the ones other members sent (their own phone already has it from their Vault). Each
+// member's Devices keep their own newest KEEP_NOTICES and delete older ones.
+
+export const KEEP_NOTICES = 50;
+export const MAX_NOTICE_TITLE = 80;
+export const MAX_NOTICE_BODY = 300;
+const NOTICE_ID = /^[0-9a-z]{8,12}-[0-9a-f]{8}$/;
+
+// A notice id that sorts by time: base-36 milliseconds, then random hex.
+export function newNoticeId(now = Date.now(), rand = randomHex) {
+  return Math.floor(now).toString(36).padStart(9, '0') + '-' + rand(4);
+}
+
+export function isNoticeId(id) {
+  return typeof id === 'string' && NOTICE_ID.test(id);
+}
+
+export function noticePath(id) {
+  if (!isNoticeId(id)) throw new Error('Not a notice id: ' + id);
+  return NOTICES_PREFIX + id + '.json';
+}
+
+export function makeNotice({ id, memberId, from, title, body, jobId = null }, now = new Date().toISOString()) {
+  noticePath(id); // validates
+  if (!isMemberId(memberId)) throw new Error('Not a member id: ' + memberId);
+  const t = String(title || '').replace(/\s+/g, ' ').trim().slice(0, MAX_NOTICE_TITLE);
+  const b = String(body || '').replace(/\s+/g, ' ').trim().slice(0, MAX_NOTICE_BODY);
+  if (!t && !b) throw new Error('A notice needs a title or a body');
+  return {
+    type: NOTICE_TYPE,
+    id,
+    memberId,
+    from: String(from || 'Someone').slice(0, 100),
+    title: t,
+    body: b,
+    ...(typeof jobId === 'string' && jobId ? { jobId: jobId.slice(0, 40) } : {}),
+    at: now,
+  };
+}
+
+export function isNotice(rec) {
+  return !!rec && rec.type === NOTICE_TYPE && isNoticeId(rec.id) && isMemberId(rec.memberId) && typeof rec.at === 'string';
+}
+
+// The notices a member's phone hasn't shown: other members' notices with an id after `since` (the
+// newest id it already handled), oldest first. `since` null means it never looked: none show, and
+// it starts from the newest. Returns { notify, since }. Ids are the sender's clock, never the phone's.
+export function pendingNotices(records, since, ownMemberId = null) {
+  const list = (records || []).filter(isNotice).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const newest = list.length ? list[list.length - 1].id : since || null;
+  const next = since && newest && since > newest ? since : newest;
+  if (since == null) return { notify: [], since: next };
+  return { notify: list.filter((n) => n.id > since && n.memberId !== ownMemberId), since: next };
+}
+
+// This member's notices past the newest KEEP_NOTICES, to delete.
+export function noticesToPrune(records, memberId, keep = KEEP_NOTICES) {
+  return (records || [])
+    .filter((n) => isNotice(n) && n.memberId === memberId)
+    .sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+    .slice(keep);
 }
 
 // Sharing a Space (ADR-0029 §2)
