@@ -436,7 +436,7 @@ class DevicesView extends LitElement {
         <code>nomad-peer</code>. It keeps a copy of your Spaces online so your devices, and the people
         you share a Space with, sync while your computers sleep. It can read what it keeps, but it
         can't change anything. Use disk encryption on that machine.
-        <a href="https://nomad.dev/docs/api/help/always-on-peer/" target="_blank">How to run a Peer</a>
+        <a href="https://nomad.pages.dev/docs/api/help/always-on-peer/" target="_blank">How to run a Peer</a>
       </p>
       ${this.peers.length
         ? html`<div class="list">${this.peers.map((p) => this.renderPeer(p))}</div>`
