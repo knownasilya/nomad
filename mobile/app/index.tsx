@@ -16,6 +16,7 @@ import Library from '../components/Library'
 import Reader from '../components/Reader'
 import Notes from '../components/Notes'
 import Calendar from '../components/Calendar'
+import Photos from '../components/Photos'
 import Jobs from '../components/Jobs'
 import Personas from '../components/Personas'
 import Messages from '../components/Messages'
@@ -73,7 +74,7 @@ type Kind = 'home' | 'web' | 'hyper'
 // The full-screen pages over the browser. They stack (lib/navStack.ts): one opened from another
 // sits on top of it, and back closes only the top one.
 type Screen =
-  | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' | 'personas' }
+  | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' | 'personas' | 'photos' }
   | { name: 'notes'; noteId?: string } // noteId: the note to open, e.g. the one a followed link was in
   | { name: 'jobs'; jobId?: string; runId?: string } // a tapped Job notification opens its run
   | { name: 'calendar'; day?: string } // day: YYYY-MM-DD to show, e.g. from a link in an AI answer
@@ -325,6 +326,7 @@ export default function Browser () {
   const notesScreen = screens.find((sc) => sc.name === 'notes')
   const jobsScreen = screens.find((sc) => sc.name === 'jobs')
   const calendarScreen = screens.find((sc) => sc.name === 'calendar')
+  const photosOpen = isOpen('photos')
   const messagesScreen = screens.find((sc) => sc.name === 'messages')
   // The sheets over the browser, and the AI panel.
   const [spacesOpen, setSpacesOpen] = useState(false)
@@ -1295,6 +1297,7 @@ export default function Browser () {
             { label: 'Reader', icon: 'rss', onPress: () => openScreen({ name: 'reader' }) },
             { label: 'Notes', icon: 'sticky-note', onPress: () => openScreen({ name: 'notes' }) },
             { label: 'Calendar', icon: 'calendar-alt', onPress: () => openScreen({ name: 'calendar' }) },
+            { label: 'Photos', icon: 'images', onPress: () => openScreen({ name: 'photos' }) },
             { label: 'Messages', icon: 'comments', onPress: () => openScreen({ name: 'messages' }) },
             { label: 'AI Jobs', icon: 'clock', onPress: () => openScreen({ name: 'jobs' }) },
             { label: 'Personas', icon: 'id-badge', onPress: () => openScreen({ name: 'personas' }) }
@@ -1416,6 +1419,17 @@ export default function Browser () {
         space={spacesApi.activeSpace.rootDriveKey || undefined}
         spaceName={spacesApi.activeSpace.name}
         onOpenDevices={() => openScreen({ name: 'devices' })}
+      />
+
+      <Photos
+        visible={photosOpen}
+        onClose={() => closeScreenNamed('photos')}
+        apps={backend.apps}
+        onVaultChange={backend.onVaultChange}
+        space={spacesApi.activeSpace.rootDriveKey || undefined}
+        spaceName={spacesApi.activeSpace.name}
+        onOpenDevices={() => openScreen({ name: 'devices' })}
+        onOpenLibrary={() => openScreen({ name: 'library' })}
       />
 
       <Jobs

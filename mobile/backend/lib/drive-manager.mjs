@@ -237,6 +237,18 @@ export default class DriveManager {
     return base._nomadBlobs
   }
 
+  // A file's bytes in this Device's own blob core for Autobase `base` (a Space Library's photos,
+  // ADR-0043): the pointer to put in the op. And a file of `base`, inline or a blob, or null.
+  async putBlobFor (base, buf) {
+    return _blobStore.putBlob(this._blobsForBase(base), buf)
+  }
+
+  async readFileOf (base, path) {
+    const node = await base.view.get(path)
+    if (!node || !node.value) return null
+    return _content.readContent(node.value, { store: this.store })
+  }
+
   // Resolve a parsed hyper URL to renderable content.
   // Returns { kind: 'file', mime, buffer } or { kind: 'dir', entries }.
   // opts.wantsHTML mirrors desktop's Accept-header check: only an HTML navigation is served the

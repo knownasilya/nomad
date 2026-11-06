@@ -177,7 +177,7 @@ export interface NoteLiveEvent { id: string; conn: string; kind: 'message' | 'st
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages' | 'calendar'
+export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages' | 'calendar' | 'photos'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
@@ -194,6 +194,10 @@ export interface CalendarFeed { id: string; url: string; name: string; color?: s
 // One time an event happens: `id` is the event's, or '<feedId>:<uid>' for one from a feed (`feed`).
 export interface CalendarOccurrence { id: string; title: string; start: string; end?: string; allDay: boolean; location: string; notes: string; by: string; repeats: boolean; feed: { id: string; name: string; color: string | null } | null }
 export interface CalendarList { space: string | null; shared: boolean; canWriteSpace: boolean; writable: boolean; from: string; to: string; events: CalendarEvent[]; feeds: CalendarFeed[]; occurrences: CalendarOccurrence[] }
+// The family album of a shared Space (shared/photos.mjs, ADR-0043, backend/lib/photos.mjs). by:
+// who added it. canDelete: this person added it, or owns the Space.
+export interface AlbumPhotoRecord { type: 'nomad/photo'; id: string; addedAt: string; takenAt: string; width: number; height: number; bytes: number; by: string; memberId: string | null; caption?: string; updatedAt: string; canDelete: boolean }
+export interface PhotosList { shared: boolean; canAdd: boolean; role: string | null; photos: AlbumPhotoRecord[] }
 // The user's AI Jobs (shared/jobs.mjs, ADR-0030). A desktop runs them; the phone lists them, pauses
 // them, asks for a run, and notifies on a run that has a notification.
 // What the phone shows is `when` (the schedule in words), so the shapes are loose here.

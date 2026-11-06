@@ -68,6 +68,12 @@ export default {
   saveCalendarFeed: 'promise', // ({ id?, url, name?, color?, inSpace? }) -> feed, fetched once
   deleteCalendarFeed: 'promise', // (id) -> boolean
   refreshCalendarFeeds: 'promise', // ({ force? }) -> listCalendar(), after fetching the feeds that are due
+  // The family album (bg/web-apis/bg/photos.ts, shared/photos.mjs), for the caller's shared Space
+  listPhotos: 'promise', // () -> { space, spaceName, shared, canAdd, role, photos }
+  photoData: 'promise', // (id, { thumb? }) -> data:image/jpeg URL, or null until it replicates
+  addPhoto: 'promise', // ({ photo, thumb (base64 JPEG), width, height, takenAt?, caption? }) -> photo
+  setPhotoCaption: 'promise', // ({ id, caption }) -> photo
+  deletePhoto: 'promise', // (id) -> boolean
   suggestNoteTopics: 'promise', // (ids?) -> how many notes the AI will sort into topics
   watchAppData: 'readable', // 'changed' when the Vault changes
   openLiveNote: 'readable', // (id, conn) -> 'message' { data } (y-protocols, base64), 'status', 'failed' (ADR-0041)

@@ -17,6 +17,7 @@ import hcrypto from 'hypercore-crypto'
 import { decodeInlineJson, WRITERS_PREFIX as DRIVE_WRITERS } from '../../shared/fs-core.mjs'
 import * as spaceLib from './lib/space-library.mjs'
 import * as calendar from './lib/calendar.mjs'
+import { createPhotos } from './lib/photos.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
 import { createPhoneInbox } from './lib/inbox.mjs'
 import Protomux from 'protomux'
@@ -205,6 +206,8 @@ async function libraryOf (space) {
   return lib
 }
 vaultApps.useSpaceLibraries(libraryOf)
+// The family album of a shared Space (ADR-0043), in its Library.
+const photos = createPhotos({ libraryOf, blobs: { putBlobFor: (base, buf) => manager.putBlobFor(base, buf), readFileOf: (base, path) => manager.readFileOf(base, path) } })
 
 // Open every shared Space's Library in the background, so a Space switch or a name lookup finds it
 // warm instead of waiting on the swarm.
@@ -686,7 +689,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
       return
     }
     if (!vault) {
-      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'messages' ? 'Link this phone to your computer to use Messages' : app === 'updates' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : app === 'calendar' ? 'Link this phone to your computer to use the calendar' : 'Link this phone to use Reader and Notes' })
+      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'messages' ? 'Link this phone to your computer to use Messages' : app === 'updates' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : app === 'calendar' ? 'Link this phone to your computer to use the calendar' : app === 'photos' ? 'Link this phone to your computer to see your family photos' : 'Link this phone to use Reader and Notes' })
       return
     }
     let value
@@ -719,6 +722,11 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'calendar' && action === 'saveFeed') value = await calendar.saveFeed(vault, space, args.feed || {})
     else if (app === 'calendar' && action === 'deleteFeed') value = await calendar.deleteFeed(vault, space, args.id)
     else if (app === 'calendar' && action === 'feedFetched') value = await calendar.feedFetched(vault, space, { id: args.id, text: args.text, error: args.error })
+    else if (app === 'photos' && action === 'list') value = await photos.list(space)
+    else if (app === 'photos' && action === 'read') value = await photos.read(space, args.id, { thumb: !!args.thumb })
+    else if (app === 'photos' && action === 'add') value = await photos.add(space, args.photo || {})
+    else if (app === 'photos' && action === 'caption') value = await photos.caption(space, { id: args.id, caption: args.caption })
+    else if (app === 'photos' && action === 'delete') value = await photos.remove(space, args.id)
     else if (app === 'names' && action === 'list') value = await vaultApps.listNames(vault, space)
     else if (app === 'names' && action === 'resolve') value = await vaultApps.resolveName(vault, args.input, space)
     else if (app === 'names' && action === 'forUrl') value = await vaultApps.namesForUrl(vault, args.url, args.title, space)

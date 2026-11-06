@@ -13,6 +13,7 @@ import * as devicePresence from '../../hyper/device-presence';
 import * as vaultApps from './vault-apps';
 import * as noteTopics from './note-topics';
 import * as calendar from './calendar';
+import * as photos from './photos';
 import * as liveNotes from '../../notes/live-notes';
 import * as names from '../../hyper/names';
 import * as driveWriters from '../../hyper/drive-writers';
@@ -445,6 +446,23 @@ export default {
   },
   async refreshCalendarFeeds(opts: any = {}) {
     return calendar.refreshFeeds(this, { force: !!opts?.force });
+  },
+
+  // The family album (nomad://photos, shared/photos.mjs): the caller's shared Space's photos.
+  async listPhotos() {
+    return photos.listPhotos(this);
+  },
+  async photoData(id, opts: any = {}) {
+    return photos.photoData(this, id, { thumb: !!opts?.thumb });
+  },
+  async addPhoto(fields: any = {}) {
+    return photos.addPhoto(this, fields || {});
+  },
+  async setPhotoCaption(change: any = {}) {
+    return photos.setPhotoCaption(this, change || {});
+  },
+  async deletePhoto(id) {
+    return photos.deletePhoto(this, id);
   },
 
   // Ask the AI for topics now: for `ids`, or every Note with none yet. -> how many it will look at.

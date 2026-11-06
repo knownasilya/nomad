@@ -369,6 +369,16 @@ Desktop is `nomad://calendar` (`app/userland/calendar/`, internal `nomad.vault.l
 fetches a due feed and hands the text to `feedFetched`. The AI reads it with `listCalendarEvents`
 (`calendarRead`, Jobs too) and never changes it; links are `nomad://calendar/?day=` (`parseItemLink`).
 
+### The family album (ADR-0043)
+
+A shared Space's photos live in its Space Library: a record `/photos/items/<id>.json` and two blob
+files (`/photos/files/`, `/photos/thumbs/`), in the adder's own blob core. Rules, paths and sizes are
+`shared/photos.mjs` (tests `tests/unit/photos.test.js`); every Device scales to 2560 px and a 480 px
+thumbnail before adding. Desktop is `nomad://photos` (`app/userland/photos/`, `bg/web-apis/bg/photos.ts`
+over `autobases.buildPutBlobOp`); the phone is `mobile/components/Photos.tsx` over `RPC_APPS` `photos`
+(`mobile/backend/lib/photos.mjs`, the drive manager's `putBlobFor`/`readFileOf`). A Space that isn't
+shared has no album. Only the adder or the owner removes a photo.
+
 ### Highlights (ADR-0020)
 
 Right-click selected text on an http(s) or hyper:// page: Copy Link to Highlight, Highlight, or

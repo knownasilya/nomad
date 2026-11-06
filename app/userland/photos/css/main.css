@@ -1,0 +1,333 @@
+/* nomad://photos — the family album, styled like nomad://calendar and nomad://notes: the app-stdlib
+   tokens, the 50px header with the favicon. Light and dark follow the OS. */
+@import 'nomad://app-stdlib/css/common.css';
+@import 'nomad://app-stdlib/css/fontawesome.css';
+
+body {
+  --ph-header-bg: #fff;
+  --ph-panel-bg: #fff;
+  --ph-accent: #4040e7;
+  --ph-fill: #4f46e5;
+  --ph-row-hover: #f5f5fb;
+  --ph-soft: rgba(0, 0, 0, 0.055);
+  --ph-tile: #ececf2;
+  --ph-err: #dc2626;
+  --ph-drop: rgba(64, 64, 231, 0.08);
+  --ph-viewer-bg: #101014;
+
+  margin: 0;
+  font-size: 13px;
+  background: var(--bg-color--secondary);
+  color: var(--text-color--default);
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    --ph-header-bg: #1e1e24;
+    --ph-panel-bg: #1e1e24;
+    --ph-accent: #7b9fff;
+    --ph-row-hover: #2a2a34;
+    --ph-soft: rgba(255, 255, 255, 0.07);
+    --ph-tile: #2a2a32;
+    --ph-err: #f87171;
+    --ph-drop: rgba(93, 128, 255, 0.12);
+    --ph-viewer-bg: #08080a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 50px;
+  padding: 0 12px 0 0;
+  background: var(--ph-header-bg);
+  border-bottom: 1px solid var(--border-color--semi-light);
+}
+
+header .brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+header .brand img {
+  width: 18px;
+  height: 18px;
+}
+
+header .brand .space {
+  font-weight: 400;
+  color: var(--text-color--light);
+}
+
+header .count {
+  color: var(--text-color--light);
+}
+
+header .status {
+  color: var(--text-color--light);
+}
+
+header .status.err {
+  color: var(--ph-err);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color--light);
+  border-radius: 6px;
+  background: var(--bg-color--default);
+  color: var(--text-color--default);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:hover {
+  background: var(--ph-row-hover);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn.primary {
+  border-color: var(--ph-fill);
+  background: var(--ph-fill);
+  color: #fff;
+}
+
+.btn.primary:hover {
+  filter: brightness(1.08);
+}
+
+.btn.danger {
+  color: var(--ph-err);
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 18px 20px 60px;
+}
+
+main.dropping {
+  outline: 2px dashed var(--ph-accent);
+  outline-offset: -8px;
+  background: var(--ph-drop);
+}
+
+.month {
+  margin-bottom: 26px;
+}
+
+.month h2 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.month h2 .n {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--text-color--light);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+
+.tile {
+  position: relative;
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 6px;
+  background: var(--ph-tile);
+  cursor: pointer;
+}
+
+.tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tile .by {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.tile:hover .by,
+.tile:focus-visible .by {
+  opacity: 1;
+}
+
+.tile:focus-visible {
+  outline: 2px solid var(--ph-accent);
+  outline-offset: 2px;
+}
+
+.notice {
+  margin: 60px auto;
+  max-width: 440px;
+  text-align: center;
+  color: var(--text-color--light);
+  line-height: 1.5;
+}
+
+.notice h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--text-color--default);
+}
+
+.notice .fas {
+  font-size: 28px;
+  margin-bottom: 12px;
+  color: var(--text-color--pretty-light);
+}
+
+.notice .btn {
+  margin-top: 14px;
+}
+
+/* the viewer */
+
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-rows: 50px 1fr auto;
+  background: var(--ph-viewer-bg);
+  color: #fff;
+}
+
+.viewer .bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 16px;
+}
+
+.viewer .bar .meta {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.viewer .stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 0;
+  padding: 0 8px;
+}
+
+.viewer .stage img {
+  max-width: calc(100% - 100px);
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.viewer .stage .loading {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.viewer .caption {
+  display: flex;
+  justify-content: center;
+  padding: 12px 16px 18px;
+}
+
+.viewer .caption input {
+  width: min(560px, 100%);
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  text-align: center;
+}
+
+.viewer .caption input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.viewer .caption p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+[hidden] {
+  display: none !important;
+}

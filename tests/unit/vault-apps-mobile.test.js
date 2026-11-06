@@ -683,3 +683,69 @@ describe('phone calendar', () => {
     })
   }, 30000)
 })
+
+// The family album (ADR-0043, mobile/backend/lib/photos.mjs): a phone adds a photo to a shared
+// Space's Library as blobs in its own blob core, and the computer reads it back over replication.
+describe('phone family album', () => {
+  it('adds a photo the computer can read, and only its adder or the owner removes it', async () => {
+    const { createPhotos } = await import('../../mobile/backend/lib/photos.mjs')
+    const ph = await import('../../shared/photos.mjs')
+    const sl = await import('../../shared/space-library.mjs')
+    const { createBlobStore, createContentReader } = await import('../../shared/fs-core.mjs')
+    const Hyperblobs = await loadAppDep('hyperblobs')
+    const SHARED = 'e'.repeat(64)
+    const memberId = '2'.repeat(32)
+    await withDevices(async ({ storeA, storeB }) => {
+      const owner = new Autobase(storeA.namespace('library'), null, { open, apply, ...AUTOBASE_OPTS })
+      await owner.ready()
+      const libBase = new Autobase(storeB.namespace('library'), owner.key, { open, apply, ...AUTOBASE_OPTS })
+      await libBase.ready()
+      await owner.append({ addWriter: b4a.toString(libBase.local.key, 'hex') })
+      await owner.append(putJson(sl.memberPath(memberId), sl.makeMember({ memberId, name: 'Sam', role: 'editor' })))
+      await owner.update()
+      await until(async () => { await libBase.update(); return libBase.writable })
+
+      const blobStore = createBlobStore({ Hyperblobs, b4a })
+      const content = createContentReader({ Hyperblobs, b4a })
+      const core = new Hyperblobs(storeB.namespace('photos-test').get({ name: 'blobs' }))
+      const photos = createPhotos({
+        libraryOf: async (space) => (space === SHARED ? { base: libBase, memberId, role: 'editor' } : null),
+        blobs: {
+          putBlobFor: (_base, buf) => blobStore.putBlob(core, buf),
+          readFileOf: async (base, p) => { const n = await base.view.get(p); return n ? content.readContent(n.value, { store: storeB }) : null },
+        },
+      })
+      try {
+        expect(await photos.list(SPACE)).toMatchObject({ shared: false, photos: [] })
+        const jpeg = Buffer.alloc(5000, 7)
+        const thumb = Buffer.alloc(300, 3)
+        const added = await photos.add(SHARED, { photo: jpeg.toString('base64'), thumb: thumb.toString('base64'), width: 2560, height: 1920, takenAt: '2026-10-31T16:20:00Z' })
+        expect(added).toMatchObject({ by: 'Sam', memberId, bytes: 5000, canDelete: true })
+        const listed = await photos.list(SHARED)
+        expect(listed).toMatchObject({ shared: true, canAdd: true })
+        expect(listed.photos.map((p) => p.id)).toEqual([added.id])
+        expect(await photos.read(SHARED, added.id, { thumb: true })).toBe(thumb.toString('base64'))
+
+        // The computer sees the record and fetches the bytes from the phone's blob core.
+        await until(async () => !!(await readJson(owner, ph.itemPath(added.id))))
+        const node = await owner.view.get(ph.filePath(added.id))
+        const bytes = await content.readContent(node.value, { store: storeA })
+        expect(Buffer.compare(Buffer.from(bytes), jpeg)).toBe(0)
+
+        // Someone else's photo: an editor can't remove it.
+        const other = ph.makePhoto({ id: ph.newPhotoId(), by: 'Ilya', memberId: '3'.repeat(32) })
+        await owner.append(putJson(ph.itemPath(other.id), other))
+        await owner.update()
+        await until(async () => (await photos.list(SHARED)).photos.length === 2)
+        await expect(photos.remove(SHARED, other.id)).rejects.toThrow(/Only the person/)
+        expect((await photos.caption(SHARED, { id: added.id, caption: 'Pumpkins' })).caption).toBe('Pumpkins')
+        expect(await photos.remove(SHARED, added.id)).toBe(true)
+        expect((await photos.list(SHARED)).photos.map((p) => p.id)).toEqual([other.id])
+        await expect(photos.add(SHARED, { photo: '', thumb: '' })).rejects.toThrow(/empty/)
+      } finally {
+        await core.close?.()
+        await libBase.close(); await owner.close()
+      }
+    })
+  }, 30000)
+})
