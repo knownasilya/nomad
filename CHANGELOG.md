@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.45.0](https://github.com/knownasilya/nomad/compare/v1.44.0...v1.45.0) (2026-11-06)
+
+
+### Features
+
+* **calendar:** follow calendar drives (walled.garden/calendar) beside iCal feeds ([c10a20b](https://github.com/knownasilya/nomad/commit/c10a20b377a65c16962384f5672289c7c9fd91c1))
+* **sharing:** split the Sharing page into This Space and Other Spaces ([0b4faf0](https://github.com/knownasilya/nomad/commit/0b4faf004f812f6df13d4b0a3fd71446ac839204))
+* **spaces:** rename, recolor, delete and leave Spaces on desktop and the phone ([c89c62a](https://github.com/knownasilya/nomad/commit/c89c62a146fb63d6bf522056f85380c42e0c7e5d))
+
+
+### Bug Fixes
+
+* **ai-sidebar:** use the browser's own right-click menu in the shell ([2d70653](https://github.com/knownasilya/nomad/commit/2d70653328720e6400784e6e8bc62d332770ed24)), closes [#172](https://github.com/knownasilya/nomad/issues/172)
+* **desktop:** show the running version on the new tab notice ([405670c](https://github.com/knownasilya/nomad/commit/405670c0c50c02b311ddcd2843f3eb8f7429d7bc))
+* **settings:** link How to run a Peer to nomad.pages.dev ([d2d113b](https://github.com/knownasilya/nomad/commit/d2d113b97d70ed9fa083955d07699ff154fdd42f))
+
 ## [1.44.0](https://github.com/knownasilya/nomad/compare/v1.43.1...v1.44.0) (2026-11-06)
 
 
