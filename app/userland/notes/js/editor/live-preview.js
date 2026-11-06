@@ -8,6 +8,10 @@
 // cursor steps over it as one piece, so it is never hidden inside the "- " (a selection across the
 // "[ ]" still shows the source).
 //
+// Ticking a task moves it down to its list's done items, and unticking moves it back up
+// (shared/note-lists.mjs planTick), so a Note works as a shopping list. In a shared Space each ticked
+// item shows who ticked it (setTicks).
+//
 // Note links ([[Title]], [[Title#Heading|text]], or a relative [text](Title.md)) render as links.
 // A link to a note that doesn't exist yet renders faded; following it creates the note.
 
@@ -15,6 +19,7 @@ import { StateEffect, StateField } from '@codemirror/state';
 import { Decoration, ViewPlugin, WidgetType, EditorView } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
 import { WIKILINK, hrefTarget, makeResolver } from '../../../../../shared/vault-apps.mjs';
+import { planTick, tickFor } from '../../../../../shared/note-lists.mjs';
 
 // The notes links resolve against: set with setNotes, read through the resolver.
 export const setNotes = StateEffect.define();
@@ -24,6 +29,17 @@ export const notesField = StateField.define({
   update(resolve, tr) {
     for (const e of tr.effects) if (e.is(setNotes)) return makeResolver(e.value || []);
     return resolve;
+  },
+});
+
+// Who ticked which item, in a shared Space: the Note record's `ticks` (shared/note-lists.mjs).
+export const setTicks = StateEffect.define();
+
+export const ticksField = StateField.define({
+  create: () => null,
+  update(ticks, tr) {
+    for (const e of tr.effects) if (e.is(setTicks)) return e.value || null;
+    return ticks;
   },
 });
 
@@ -63,6 +79,28 @@ class CheckboxWidget extends WidgetType {
   }
   ignoreEvent() {
     return false;
+  }
+}
+
+// "Sam" after an item Sam ticked, with when in its tooltip.
+class TickedByWidget extends WidgetType {
+  constructor(by, at) {
+    super();
+    this.by = by;
+    this.at = at;
+  }
+  eq(o) {
+    return o.by === this.by && o.at === this.at;
+  }
+  toDOM() {
+    const s = document.createElement('span');
+    s.className = 'cm-ticked-by';
+    s.textContent = this.by;
+    const when = new Date(this.at);
+    const label = `Ticked by ${this.by}` + (Number.isNaN(when.getTime()) ? '' : `, ${when.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`);
+    s.title = label;
+    s.setAttribute('aria-label', label);
+    return s;
   }
 }
 
@@ -114,6 +152,7 @@ function buildDecorations(view) {
   }
   const onActiveLine = (pos) => activeLines.has(doc.lineAt(pos).number);
   const resolve = state.field(notesField);
+  const ticks = state.field(ticksField, false);
   const tree = syntaxTree(state);
   const decos = [];
   // The "- [ ] " of each task drawn as a checkbox: the cursor moves over it as one piece.
@@ -241,6 +280,10 @@ function buildDecorations(view) {
           const textFrom = doc.sliceString(node.to, node.to + 1) === ' ' ? node.to + 1 : node.to;
           const lineEnd = doc.lineAt(node.from).to;
           if (checked && textFrom < lineEnd) decos.push(mark('cm-task-done').range(textFrom, lineEnd));
+          const by = checked && ticks ? tickFor(ticks, doc.sliceString(textFrom, lineEnd)) : null;
+          if (by && !onActiveLine(node.from)) {
+            decos.push(Decoration.widget({ widget: new TickedByWidget(by.by, by.at), side: 1 }).range(lineEnd));
+          }
           if (!touches(node.from, node.to)) {
             decos.push(Decoration.replace({ widget: new CheckboxWidget(checked, node.from) }).range(node.from, node.to));
           }
@@ -268,7 +311,7 @@ export const livePreview = ViewPlugin.fromClass(
         u.selectionSet ||
         u.focusChanged ||
         syntaxTree(u.startState) !== syntaxTree(u.state) ||
-        u.transactions.some((tr) => tr.effects.some((e) => e.is(setNotes)))
+        u.transactions.some((tr) => tr.effects.some((e) => e.is(setNotes) || e.is(setTicks)))
       ) {
         ({ decorations: this.decorations, atoms: this.atoms } = buildDecorations(u.view));
       }
@@ -281,8 +324,9 @@ export const livePreview = ViewPlugin.fromClass(
 );
 
 // Clicks on the rendered parts: tick a task, follow a link. `onOpenLink` gets
-// { kind: 'note', target, heading } or { kind: 'url', href }.
-export function previewClicks(onOpenLink) {
+// { kind: 'note', target, heading } or { kind: 'url', href }; `onTick` gets { text, checked } after
+// a task was ticked or unticked.
+export function previewClicks(onOpenLink, onTick) {
   return EditorView.domEventHandlers({
     mousedown(e, view) {
       const el = e.target instanceof Element ? e.target : null;
@@ -292,8 +336,15 @@ export function previewClicks(onOpenLink) {
         e.preventDefault();
         if (view.state.readOnly) return true;
         const pos = Number(box.dataset.pos);
-        const cur = view.state.sliceDoc(pos + 1, pos + 2);
-        view.dispatch({ changes: { from: pos + 1, to: pos + 2, insert: /x/i.test(cur) ? ' ' : 'x' } });
+        const line = view.state.doc.lineAt(pos);
+        const plan = planTick(view.state.doc.toString(), line.from);
+        if (plan) {
+          view.dispatch({ changes: plan.changes, userEvent: 'input.tick' });
+          if (onTick) onTick({ text: plan.text, checked: plan.checked });
+        } else {
+          const cur = view.state.sliceDoc(pos + 1, pos + 2);
+          view.dispatch({ changes: { from: pos + 1, to: pos + 2, insert: /x/i.test(cur) ? ' ' : 'x' } });
+        }
         return true;
       }
       const link = el.closest('.cm-note-link');

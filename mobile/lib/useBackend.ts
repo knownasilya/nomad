@@ -183,7 +183,7 @@ export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boo
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
 // space: the Space's key when the note is kept only in that Space (ADR-0029), else null.
 // topics: the Note's topics (ADR-0035), set by the user or a computer's AI (topicsBy).
-export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string; space?: string | null; topics?: string[]; topicsBy?: 'ai' | 'user' }
+export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string; space?: string | null; topics?: string[]; topicsBy?: 'ai' | 'user'; ticks?: Record<string, { by: string; at: string }> }
 // The user's AI Jobs (shared/jobs.mjs, ADR-0030). A desktop runs them; the phone lists them, pauses
 // them, asks for a run, and notifies on a run that has a notification.
 // What the phone shows is `when` (the schedule in words), so the shapes are loose here.
@@ -238,7 +238,9 @@ export interface InboxThread { personaId: string; other: string; title: string; 
 export interface InboxLookup { profileUrl: string; title: string; thumb: string; isPerson: boolean; published: boolean }
 export interface MessageNotifications { notify: { id: string; personaId: string; from: string; title: string; body: string }[]; since: string }
 
-export interface JobNotifications { notify: { id: string; jobId: string; title: string; body: string }[]; since: string; wants: boolean }
+// spaceNotify: other members' Jobs that notify a shared Space this person is in, newer than
+// spaceSince (the newest notice id shown, per Space Library).
+export interface JobNotifications { notify: { id: string; jobId: string; title: string; body: string }[]; since: string; spaceNotify?: { id: string; title: string; body: string; from: string }[]; spaceSince?: Record<string, string>; wants: boolean }
 // shared: the Space is shared (ADR-0029); canFollow is false for someone who can only view it.
 // webRead: RSS and Atom items read, per feed. postTopics: feed posts' topics, from a computer's AI.
 export interface ReaderState { follows: string[]; read: string[]; webRead?: Record<string, string[]>; postTopics?: PostTopics[]; articles?: SavedArticle[]; writable: boolean; shared?: boolean; canFollow?: boolean }

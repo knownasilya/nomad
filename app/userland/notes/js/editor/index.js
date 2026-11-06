@@ -14,7 +14,8 @@ import { markdownLanguage, markdownKeymap } from '@codemirror/lang-markdown';
 import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { tags } from '@lezer/highlight';
 import { noteTitle, sortNotes } from '../../../../../shared/vault-apps.mjs';
-import { livePreview, previewClicks, notesField, setNotes } from './live-preview.js';
+import { livePreview, previewClicks, notesField, setNotes, ticksField, setTicks } from './live-preview.js';
+import { doneCount } from '../../../../../shared/note-lists.mjs';
 import { commands, formattingKeymap } from './commands.js';
 
 export { commands };
@@ -65,6 +66,15 @@ const theme = EditorView.theme({
   '.cm-bullet': { color: 'var(--note-muted)', display: 'inline-block', width: '0.9em' },
   '.cm-task-checkbox': { margin: '0 7px 0 0', verticalAlign: '-2px', cursor: 'pointer', accentColor: 'var(--note-accent)' },
   '.cm-task-done': { color: 'var(--note-muted)', textDecoration: 'line-through' },
+  '.cm-ticked-by': {
+    marginLeft: '8px',
+    padding: '0 6px',
+    borderRadius: '8px',
+    fontSize: '0.78em',
+    color: 'var(--note-muted)',
+    background: 'var(--note-code-bg)',
+    whiteSpace: 'nowrap',
+  },
   '.cm-hr': { display: 'inline-block', width: '100%', borderTop: '1px solid var(--note-border)', verticalAlign: 'middle' },
   '.cm-placeholder': { color: 'var(--note-muted)' },
   '.cm-tooltip': { background: 'var(--note-bg)', color: 'var(--note-text)', border: '1px solid var(--note-border)', borderRadius: '8px' },
@@ -104,12 +114,13 @@ function noteCompletions(getNotes) {
   };
 }
 
-// Make an editor in `parent`. Returns { view, getText, setText, setNotes, setReadOnly, focus, run,
-// goToHeading, destroy }. `onChange(text)` fires on the user's edits; `onOpenLink(link)` when the
-// user follows a link: { kind: 'note', target, heading } or { kind: 'url', href }. `collab` is a
+// Make an editor in `parent`. Returns { view, getText, setText, setNotes, setTicks, doneCount,
+// setReadOnly, focus, run, goToHeading, destroy }. `onChange(text)` fires on the user's edits;
+// `onOpenLink(link)` when the user follows a link: { kind: 'note', target, heading } or
+// { kind: 'url', href }; `onTick({ text, checked })` after the user ticks or unticks a task. `collab` is a
 // shared-editing extension (yCollab, for a Live Doc): it brings its own undo history, so the
 // editor's is left out, and the text then comes from the shared document, not `doc`.
-export function createNoteEditor({ parent, doc = '', notes = [], readOnly = false, placeholder: hint = '', onChange, onOpenLink, collab = null }) {
+export function createNoteEditor({ parent, doc = '', notes = [], ticks = null, readOnly = false, placeholder: hint = '', onChange, onOpenLink, onTick, collab = null }) {
   let currentNotes = notes;
   const editable = new Compartment();
   const view = new EditorView({
@@ -128,8 +139,12 @@ export function createNoteEditor({ parent, doc = '', notes = [], readOnly = fals
         closeBrackets(),
         syntaxHighlighting(highlight),
         notesField,
+        ticksField,
         livePreview,
-        previewClicks((link) => onOpenLink && onOpenLink(link)),
+        previewClicks(
+          (link) => onOpenLink && onOpenLink(link),
+          (t) => onTick && onTick(t)
+        ),
         autocompletion({ override: [noteCompletions(() => currentNotes)], icons: false }),
         keymap.of([
           ...formattingKeymap,
@@ -151,7 +166,7 @@ export function createNoteEditor({ parent, doc = '', notes = [], readOnly = fals
       ],
     }),
   });
-  view.dispatch({ effects: setNotes.of(notes) });
+  view.dispatch({ effects: [setNotes.of(notes), setTicks.of(ticks)] });
 
   return {
     view,
@@ -171,6 +186,12 @@ export function createNoteEditor({ parent, doc = '', notes = [], readOnly = fals
       currentNotes = list || [];
       view.dispatch({ effects: setNotes.of(currentNotes) });
     },
+    // Who ticked which item (the Note record's `ticks`), shown in a shared Space. null for none.
+    setTicks(map) {
+      view.dispatch({ effects: setTicks.of(map || null) });
+    },
+    // How many items are ticked, for a "Clear done" button.
+    doneCount: () => doneCount(view.state.doc.toString()),
     setReadOnly(ro) {
       view.dispatch({ effects: editable.reconfigure([EditorState.readOnly.of(ro), EditorView.editable.of(!ro)]) });
     },

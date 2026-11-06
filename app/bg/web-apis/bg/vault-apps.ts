@@ -18,6 +18,7 @@ import * as logLib from '../../logger';
 import fsAPI from './fs';
 import * as apps from '../../../../shared/vault-apps.mjs';
 import * as nt from '../../../../shared/note-topics.mjs';
+import * as nl from '../../../../shared/note-lists.mjs';
 import { findWebContentsParentWindow } from '../../lib/electron';
 import * as tabManager from '../../ui/tabs/manager';
 import * as spaceLibrary from '../../hyper/space-library';
@@ -436,6 +437,25 @@ export async function setNoteTopics(
   if (!found.prev) throw new Error('No note with that id');
   if (found.space && !(await canWriteNotesIn(found.space))) throw new Error('You can only view this Space’s notes');
   const note = nt.withNoteTopics(found.prev, topics, 'user', nt.knownNoteTopics(await allNotes(space)));
+  await putNote(found.space, note);
+  return withSpace(found.space)(note);
+}
+
+// The user ticked or unticked an item of a Note in a shared Space (shared/note-lists.mjs): note who,
+// so the others see it. Doesn't change updatedAt, like topics. A Note that isn't in a shared Space
+// is left as it is: everyone who ticks it is the user. Returns the Note.
+export async function setNoteTick(
+  ctx,
+  { id, text, checked }: { id?: string; text?: string; checked?: boolean } = {}
+) {
+  const found = await findStored(id, await spaceOrNull(ctx)); // notePath validates the id
+  if (!found.prev) throw new Error('No note with that id');
+  if (!found.space) return withSpace(null)(found.prev);
+  const share = await spaceLibrary.info(found.space).catch(() => ({ shared: false, memberId: null }));
+  if (!share.shared) return withSpace(found.space)(found.prev);
+  if (!(await canWriteNotesIn(found.space))) throw new Error('You can only view this Space’s notes');
+  const me = (await spaceLibrary.members(found.space).catch(() => [])).find((m) => m.memberId === share.memberId);
+  const note = nl.withTick(found.prev, { text: String(text || ''), checked: !!checked, by: me?.name || 'Someone' });
   await putNote(found.space, note);
   return withSpace(found.space)(note);
 }

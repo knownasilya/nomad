@@ -47,6 +47,23 @@ const cssStr = css`
     margin: 14px 0;
   }
 
+  /* Just set up a home: what's in it, and what to do next. */
+  .notice.welcome {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin: 4px 0 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    border-color: var(--share-accent);
+    background: var(--share-accent-soft);
+  }
+
+  .notice.welcome .fas {
+    margin-top: 3px;
+    color: var(--share-accent);
+  }
+
   .card-title {
     margin-bottom: 10px;
     font-size: 13px;

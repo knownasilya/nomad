@@ -3,6 +3,7 @@ import { decodeInlineJson } from '../../../shared/fs-core.mjs'
 import * as apps from '../../../shared/vault-apps.mjs'
 import * as ra from '../../../shared/reader-articles.mjs'
 import * as nt from '../../../shared/note-topics.mjs'
+import * as nl from '../../../shared/note-lists.mjs'
 import { parseWebFeed, isFeedXml, findFeedLinks } from '../../../shared/web-feeds.mjs'
 import * as names from '../../../shared/names.mjs'
 import * as ot from '../../../shared/open-tabs.mjs'
@@ -372,6 +373,22 @@ export async function setNoteTopics (base, { id, topics, space = null } = {}) {
   return withPreview(withSpace(found.space)(note))
 }
 
+// Someone ticked or unticked an item of a Note in a shared Space (shared/note-lists.mjs): note who
+// (this person's name in the Space), so the others see it. updatedAt stays, as for topics. A Note
+// that isn't in a shared Space is left alone. Returns the Note.
+export async function setNoteTick (base, { id, text, checked, space = null } = {}) {
+  space = spaceOrNull(space)
+  const found = await findStored(base, id, space) // notePath validates the id
+  if (!found.prev) throw new Error('No note with that id')
+  const lib = found.space ? await libraryOf(found.space).catch(() => null) : null
+  if (!lib) return withPreview(withSpace(found.space)(found.prev))
+  if (!lib.base.writable) throw new Error('You can only view this Space’s notes')
+  const me = lib.memberId ? await readRecord(lib.base, sl.memberPath(lib.memberId)).catch(() => null) : null
+  const note = nl.withTick(found.prev, { text: String(text || ''), checked: !!checked, by: (me && me.name) || 'Someone' })
+  await putNote(base, id, found.space, note)
+  return withPreview(withSpace(found.space)(note))
+}
+
 // A Note's title changed: point the other Notes' links at the new title. Returns how many changed.
 // Covers the Notes the Space sees: the user's and the Space's.
 export async function renameNoteLinks (base, { id, from, to, space = null } = {}) {
@@ -637,14 +654,34 @@ export async function deleteJob (base, id) {
 }
 
 // Runs that finished after `since` with a notification, and the mark to keep (pendingNotifications).
-export async function jobNotifications (base, since) {
+export async function jobNotifications (base, since, spaceSince = {}) {
   await boundedUpdate(base)
   const { notify, since: next } = jl.pendingNotifications(await readPrefix(base, jl.RUNS_PREFIX), since ?? null)
   // Whether any Job wants to notify, so the phone asks for the notification permission only then.
-  const wants = (await readPrefix(base, jl.JOBS_PREFIX)).some((j) => jl.isJob(j) && j.notify !== 'never')
+  let wants = (await readPrefix(base, jl.JOBS_PREFIX)).some((j) => jl.isJob(j) && j.notify !== 'never')
+  // Other members' Jobs that notify a shared Space this person is in (shared/space-library.mjs
+  // notices). `spaceSince` is the newest notice id shown, per Space Library.
+  const spaceNotify = []
+  const nextSpaceSince = {}
+  const marks = spaceSince && typeof spaceSince === 'object' ? spaceSince : {}
+  for (const sp of await readPrefix(base, '/.vault/spaces/')) {
+    if (!sl.isShared(sp) || sp.movedTo || sp.removed) continue
+    const lib = await libraryOf(sp.rootDriveKey).catch(() => null)
+    if (!lib) continue
+    await boundedUpdate(lib.base, 2000)
+    const notices = await readPrefix(lib.base, sl.NOTICES_PREFIX).catch(() => [])
+    const { notify: fresh, since: mark } = sl.pendingNotices(notices, marks[sp.library] ?? null, lib.memberId)
+    if (mark) nextSpaceSince[sp.library] = mark
+    if (notices.length) wants = true
+    for (const n of fresh) {
+      spaceNotify.push({ id: n.id, title: n.title ? `${sp.name || 'Shared Space'} · ${n.title}` : sp.name || 'Shared Space', body: n.body, from: n.from })
+    }
+  }
   return {
     notify: notify.map((r) => ({ id: r.id, jobId: r.jobId, title: r.notification.title, body: r.notification.body })),
     since: next,
+    spaceNotify,
+    spaceSince: nextSpaceSince,
     wants
   }
 }

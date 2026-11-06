@@ -3,6 +3,7 @@
 
 import { EditorSelection } from '@codemirror/state';
 import { startCompletion } from '@codemirror/autocomplete';
+import { clearDoneChanges } from '../../../../../shared/note-lists.mjs';
 
 // Put `mark` around each selection, or take it off when it's already there. With nothing
 // selected, insert a pair and put the cursor between.
@@ -100,6 +101,14 @@ function noteLink(view) {
   return true;
 }
 
+// Remove every ticked item (shared/note-lists.mjs), as a shopping list's "Clear done".
+function clearDone(view) {
+  const changes = clearDoneChanges(view.state.doc.toString());
+  if (!changes.length) return false;
+  view.dispatch({ changes, userEvent: 'delete.clearDone' });
+  return true;
+}
+
 export const commands = {
   bold: toggleWrap('**'),
   italic: toggleWrap('*'),
@@ -110,6 +119,7 @@ export const commands = {
   task: toggleLinePrefix('- [ ] ', /^[-*+]\s+\[[ xX]\]\s+$/),
   quote: toggleLinePrefix('> ', /^>\s*$/),
   link: noteLink,
+  clearDone,
 };
 
 export const formattingKeymap = [

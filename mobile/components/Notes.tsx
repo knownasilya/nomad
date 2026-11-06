@@ -101,6 +101,8 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive
   // A shared Space (ADR-0029): its Notes are its members'. canWriteSpace is false for a viewer.
   const [shared, setShared] = useState(false)
   const [canWriteSpace, setCanWriteSpace] = useState(true)
+  // How many items of the open note are ticked, for Clear done (shared/note-lists.mjs).
+  const [doneCount, setDoneCount] = useState(0)
   // The open note can be changed: the Vault writes, and a Space note needs the Space to, too.
   const editable = writable && (!inSpace || canWriteSpace)
 
@@ -142,6 +144,13 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive
   const [peers, setPeers] = useState<Peer[]>([])
   const noteLiveRef = useRef(noteLive)
   noteLiveRef.current = noteLive
+
+  // Who ticked which item of a note: only a shared Space's notes say (everyone else who ticks your
+  // own notes is you).
+  const ticksOf = useCallback((d: { id: string | null; inSpace: boolean } | null) => {
+    if (!shared || !d || !d.id || !d.inSpace) return null
+    return notesRef.current.find((n) => n.id === d.id)?.ticks || null
+  }, [shared])
 
   const keepNotes = (list: Note[]) => {
     notesRef.current = list
@@ -192,6 +201,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive
     return onVaultChange(async () => {
       await load()
       const d = draft.current
+      if (d && d.id) send({ type: 'ticks', ticks: ticksOf(d) })
       if (!d || !d.id || dirty.current || saving.current) return
       const fresh = notesRef.current.find((n) => n.id === d.id)
       if (!fresh) {
@@ -208,15 +218,15 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive
         send({ type: 'setText', body: fresh.body })
       }
     })
-  }, [visible, onVaultChange, load, send, endLive])
+  }, [visible, onVaultChange, load, send, endLive, ticksOf])
 
   const showDraft = useCallback((focus: boolean) => {
     const d = draft.current
     if (!d) return
     const readOnly = !writable || (d.inSpace && !canWriteSpace)
-    send({ type: 'load', theme: t, id: d.id, body: d.body, notes: notesRef.current, readOnly, focus, heading: pendingHeading.current, live: !!d.id && !readOnly })
+    send({ type: 'load', theme: t, id: d.id, body: d.body, notes: notesRef.current, ticks: ticksOf(d), readOnly, focus, heading: pendingHeading.current, live: !!d.id && !readOnly })
     pendingHeading.current = ''
-  }, [send, t, writable, canWriteSpace])
+  }, [send, t, writable, canWriteSpace, ticksOf])
 
   const save = useCallback(async (): Promise<void> => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null }
@@ -404,6 +414,17 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive
       else setStatus((prev) => (prev === 'Saving…' || prev === 'AI is editing…' ? 'Saved' : prev))
     } else if (msg.type === 'livePeers' && d && d.id === msg.id) {
       setPeers(Array.isArray(msg.others) ? msg.others : [])
+    } else if (msg.type === 'done') {
+      setDoneCount(Number(msg.count) || 0)
+    } else if (msg.type === 'tick' && d && d.id && d.inSpace && shared) {
+      // In a shared Space, note who ticked it, so the others see.
+      const id = d.id
+      call<Note>('notes', 'setTick', { id, text: String(msg.text || ''), checked: !!msg.checked }).then((res) => {
+        if (!res.ok || !res.value) return
+        const note = res.value
+        keepNotes(notesRef.current.map((n) => (n.id === note.id ? note : n)))
+        if (draft.current?.id === id) send({ type: 'ticks', ticks: note.ticks || null })
+      })
     } else if (msg.type === 'openNote') {
       openLinked(msg.id, msg.heading || '')
     } else if (msg.type === 'createNote') {
@@ -571,6 +592,12 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive
               </View>
             )}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tools} contentContainerStyle={s.toolsContent} keyboardShouldPersistTaps='always'>
+              {doneCount > 0 && editable ? (
+                <TouchableOpacity style={s.clearDone} onPress={() => send({ type: 'command', name: 'clearDone' })} accessibilityRole='button' accessibilityLabel={`Clear done, ${doneCount} ticked`}>
+                  <Icon name='broom' size={13} color={t.accent} />
+                  <Text style={s.clearDoneText}>Clear done ({doneCount})</Text>
+                </TouchableOpacity>
+              ) : null}
               {TOOLS.map(([cmd, label]) => (
                 <TouchableOpacity key={cmd} style={s.tool} disabled={!editable} onPress={() => send({ type: 'command', name: cmd })}>
                   <Text style={[s.toolText, cmd === 'bold' && s.bold, cmd === 'italic' && s.italic, cmd === 'strike' && s.strike, !editable && { color: t.textMuted }]}>{label}</Text>
@@ -821,6 +848,8 @@ function makeStyles (t: Theme) {
     toolsContent: { paddingHorizontal: 6, alignItems: 'center' },
     tool: { minWidth: 40, height: 40, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
     toolText: { color: t.textDim, fontSize: 15, fontWeight: '600' },
+    clearDone: { height: 32, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, marginHorizontal: 4, borderRadius: radius.lg, backgroundColor: t.trustBg },
+    clearDoneText: { color: t.accent, fontSize: 13, fontWeight: '600' },
     bold: { fontWeight: '800' },
     italic: { fontStyle: 'italic' },
     strike: { textDecorationLine: 'line-through' },

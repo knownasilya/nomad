@@ -3,8 +3,9 @@
 // mobile/lib/noteEditorHtml.ts, which mobile/components/Notes.tsx loads.
 //
 // React Native → page: window.__noteEditor(msg), sent with injectJavaScript.
-//   { type: 'load', theme, id, body, notes, readOnly, focus, live }   show a note
+//   { type: 'load', theme, id, body, notes, ticks, readOnly, focus, live }   show a note
 //   { type: 'notes', notes }        the notes changed (links, the [[ picker, linked mentions)
+//   { type: 'ticks', ticks }        who ticked which item, in a shared Space (shared/note-lists.mjs)
 //   { type: 'setText', body }       replace the text (a conflict copy, another Device's edit)
 //   { type: 'setId', id }           the new note got its id
 //   { type: 'command', name }       a toolbar button (commands in ./editor/commands.js)
@@ -13,6 +14,7 @@
 // Page → React Native: window.ReactNativeWebView.postMessage(JSON)
 //   { type: 'ready' } · { type: 'change', body, title, live? } · { type: 'openNote', id, heading }
 //   { type: 'createNote', title } · { type: 'openUrl', href }
+//   { type: 'tick', text, checked } (a task ticked or unticked) · { type: 'done', count } (ticked items, for Clear done)
 //   { type: 'liveOpen' | 'liveClose', id, conn } · { type: 'liveSend', id, conn, data }
 //   { type: 'liveSynced', id } · { type: 'liveOff', id, message } · { type: 'liveStatus', id, status }
 //   { type: 'livePeers', id, others: [{ name, color, ai }] }
@@ -39,6 +41,7 @@ let current = { id: null, body: '' };
 let notes = [];
 let mentionsOpen = false; // the user opened Linked mentions; it stays open from note to note
 let readOnly = false;
+let ticks = null; // who ticked which item, in a shared Space
 let liveWanted = false; // React Native asked for live editing of this note
 // The open note's live session: { id, conn, synced }. Null while the note is new, read only, or
 // live editing isn't available.
@@ -123,11 +126,19 @@ function renderMentions() {
   }
 }
 
+let lastDone = -1;
+function postDone() {
+  const count = editor ? editor.doneCount() : 0;
+  if (count !== lastDone) post({ type: 'done', count });
+  lastDone = count;
+}
+
 function makeEditor(doc, collab = null) {
   editor = createNoteEditor({
     parent: document.getElementById('editor'),
     doc,
     notes,
+    ticks,
     readOnly,
     placeholder: HINT,
     onChange: (text) => {
@@ -136,10 +147,14 @@ function makeEditor(doc, collab = null) {
       // saves it, React Native only updates the title.
       post({ type: 'change', body: text, title: noteTitle(text), live: !!collab });
       renderMentions();
+      postDone();
     },
     onOpenLink: openLink,
+    onTick: ({ text, checked }) => post({ type: 'tick', text, checked }),
     collab,
   });
+  lastDone = -1;
+  postDone();
 }
 
 // ── Live editing (ADR-0041) ─────────────────────────────────────────────────
@@ -290,6 +305,7 @@ window.__noteEditor = (msg) => {
     stopLive();
     current = { id: msg.id || null, body: msg.body || '' };
     notes = msg.notes || [];
+    ticks = msg.ticks || null;
     readOnly = !!msg.readOnly;
     liveWanted = !!msg.live;
     editor?.destroy();
@@ -299,6 +315,9 @@ window.__noteEditor = (msg) => {
     if (msg.focus) editor.focus();
     renderMentions();
     startLive();
+  } else if (msg.type === 'ticks') {
+    ticks = msg.ticks || null;
+    editor?.setTicks(ticks);
   } else if (msg.type === 'notes') {
     notes = msg.notes || [];
     editor?.setNotes(notes);

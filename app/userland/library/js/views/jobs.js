@@ -70,6 +70,8 @@ const blank = () => ({
   text: '', // a typed schedule: a phrase or cron
   preview: null, // { when, next } or { error } from bg previewSchedule
   notify: 'always',
+  audience: 'me', // 'space': everyone in the Job's shared Space gets its notifications too
+  sharedSpaceName: null, // that Space's name, when the Job's Space is shared
   enabled: true,
   error: '',
 });
@@ -86,6 +88,7 @@ export class JobsView extends LitElement {
       runQuery: { type: String }, // words to find in the open Job's history
       newer: { type: Object }, // a newer version of the open Job's source: { jobId, url, module, prompt } or { jobId, error }
       secrets: { type: Array }, // the user's secrets on this computer, without values
+      sharedSpace: { type: Object }, // { space, name }: this Space is shared, so a Job can notify everyone in it
     };
   }
 
@@ -120,9 +123,12 @@ export class JobsView extends LitElement {
 
   async load() {
     try {
-      this.jobs = (await nomad.vault.listJobs()).jobs;
+      const res = await nomad.vault.listJobs();
+      this.jobs = res.jobs;
+      this.sharedSpace = res.sharedSpace || null;
     } catch {
       this.jobs = [];
+      this.sharedSpace = null;
     }
     // The secrets each Job may use on this computer (ADR-0033), granted in Secrets.
     try {
@@ -245,7 +251,10 @@ export class JobsView extends LitElement {
     if (j.enabled && j.nextRunAt && j.here) parts.push(`next ${inTime(j.nextRunAt)}`);
     if (!j.enabled) parts.push('paused');
     if (!j.here) parts.push(`runs on ${j.deviceName}`);
-    if (j.notify !== 'never') parts.push(j.notify === 'auto' ? 'notifies when it finds something' : 'notifies your phone');
+    if (j.notify !== 'never') {
+      const who = j.audience === 'space' && j.sharedSpaceName ? `everyone in ${j.sharedSpaceName}` : 'your phone';
+      parts.push(j.notify === 'auto' ? `notifies ${who} when it finds something` : `notifies ${who}`);
+    }
     if (j.source?.changed) parts.push('a newer version is in its drive');
     const w = j.writes;
     if (w?.notes || w?.reader || w?.drives?.length) parts.push('can change things');
@@ -620,12 +629,31 @@ export class JobsView extends LitElement {
         ${this.renderPages(e, set)}
 
         <div class="block">
-          <div class="label">Notify my phone</div>
+          <div class="label">${e.audience === 'space' && e.sharedSpaceName ? 'Notify' : 'Notify my phone'}</div>
           <select .value=${e.notify} @change=${(ev) => set({ notify: ev.target.value })}>
             ${NOTIFY.map((n) => html`<option value=${n.id} ?selected=${e.notify === n.id}>${n.label}</option>`)}
           </select>
           ${e.notify === 'auto'
             ? html`<div class="hint-row">Say in the prompt when you want to hear, like “notify me only if Ada posted”.</div>`
+            : ''}
+          ${e.sharedSpaceName && e.notify !== 'never'
+            ? html`
+                <div class="audience">
+                  <label class="check">
+                    <input
+                      type="checkbox"
+                      .checked=${e.audience === 'space'}
+                      @change=${(ev) => set({ audience: ev.target.checked ? 'space' : 'me' })}
+                    />
+                    Everyone in ${e.sharedSpaceName}
+                  </label>
+                  <div class="hint-row">
+                    ${e.audience === 'space'
+                      ? html`Each person’s phone shows what this Job sends, like “bins go out tonight”. Keep your private notes out of it: they’ll see whatever it says.`
+                      : html`Send its notifications to the phones of everyone in ${e.sharedSpaceName}, not only yours.`}
+                  </div>
+                </div>
+              `
             : ''}
         </div>
 
@@ -804,6 +832,8 @@ export class JobsView extends LitElement {
       newDrives: !!j.writes?.newDrives,
       pages: (j.writes?.pages || []).map((p) => ({ site: p.site, control: !!p.control, actions: p.actions || [] })),
       notify: j.notify,
+      audience: j.audience === 'space' ? 'space' : 'me',
+      sharedSpaceName: j.sharedSpaceName || null,
       enabled: j.enabled,
     };
     if (s?.kind === 'interval') {
@@ -886,7 +916,7 @@ export class JobsView extends LitElement {
   // =
 
   onNew() {
-    this.editing = { ...blank(), at: localInput(new Date(Date.now() + 3600e3)) };
+    this.editing = { ...blank(), sharedSpaceName: this.sharedSpace?.name || null, at: localInput(new Date(Date.now() + 3600e3)) };
   }
 
   async onOpen(j) {
@@ -925,6 +955,7 @@ export class JobsView extends LitElement {
             : null,
         schedule: this.schedule(e),
         notify: e.notify,
+        ...(e.sharedSpaceName ? { audience: e.audience } : {}),
       });
       this.editing = null;
       this.openId = rec.id;

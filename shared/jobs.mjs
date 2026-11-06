@@ -70,6 +70,9 @@ export const JOB_TYPE = 'nomad/job';
 export const RUN_TYPE = 'nomad/job-run';
 
 export const NOTIFY = ['always', 'auto', 'never'];
+// Whose phones a Job's notifications go to: the user's, or everyone's in the Job's shared Space
+// (shared/space-library.mjs notices). Only the user sets 'space', in My Library; the AI can't.
+export const AUDIENCES = ['me', 'space'];
 export const MIN_INTERVAL = 15; // minutes
 export const MAX_INTERVAL = 7 * 24 * 60;
 export const KEEP_RUNS = 10; // per Job, with their whole answer; older runs are trimmed
@@ -724,6 +727,8 @@ export function makeJob(fields, prev = null, now = new Date()) {
   }
   const notify = f.notify !== undefined ? f.notify : prev?.notify || 'always';
   if (!NOTIFY.includes(notify)) throw new Error('notify is "always", "auto" or "never"');
+  const audience = f.audience !== undefined ? f.audience || 'me' : prev?.audience || 'me';
+  if (!AUDIENCES.includes(audience)) throw new Error('audience is "me" or "space"');
   const enabled = f.enabled !== undefined ? !!f.enabled : prev ? prev.enabled : true;
   const writes = f.writes !== undefined ? normalizeWrites(f.writes) : prev?.writes || null;
 
@@ -748,6 +753,7 @@ export function makeJob(fields, prev = null, now = new Date()) {
     ...(writes ? { writes } : {}),
     schedule,
     notify,
+    ...(audience === 'space' ? { audience } : {}),
     enabled,
     device,
     space,
@@ -1196,6 +1202,14 @@ export function finalNotification(job, { status, output, error, notified = null,
   if (job.notify === 'always')
     return makeNotification({ title: job.title, body: summarize(output) || 'Done' });
   return null;
+}
+
+// The notification a run sends to everyone in the Job's shared Space, or null: the run's own
+// notification, when the Job is set to notify the Space and the run went well. A failure is only the
+// user's business.
+export function spaceNotification(job, run) {
+  if (!job || job.audience !== 'space' || !job.space || !run || run.status !== 'ok') return null;
+  return run.notification || null;
 }
 
 export function makeRun({
