@@ -103,6 +103,19 @@ class Identity extends LitElement {
                         </div>
                       `
                     : ''}
+                  ${this.cert.ident && this.cert.ident.calendar
+                    ? html`
+                        <div class="field-group">
+                          <button
+                            style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:6px;font-size:13px"
+                            @click=${this.onFollowCalendar}
+                          >
+                            <span class="fa-fw fas fa-calendar-alt"></span> Follow in
+                            Calendar
+                          </button>
+                        </div>
+                      `
+                    : ''}
                 `
               : ''}
           `
@@ -144,6 +157,16 @@ class Identity extends LitElement {
     // Reader then throws `nomad is not defined`. openUrl routes to a real tab in the current Space
     // (the same call the rest of site-info uses to open drive URLs).
     nomad.browser.openUrl('nomad://reader/?subscribe=' + encodeURIComponent(this.url), {
+      setActive: true,
+    });
+  }
+
+  // A calendar drive: open nomad://calendar with its address in the Follow box (the user follows it
+  // there, so nothing is added without a click on the calendar's own page).
+  onFollowCalendar() {
+    const m = /^hyper:\/\/([0-9a-z]{52,64})/i.exec(this.url || '');
+    if (!m) return;
+    nomad.browser.openUrl('nomad://calendar/?follow=' + encodeURIComponent(`hyper://${m[1].toLowerCase()}/`), {
       setActive: true,
     });
   }

@@ -80,7 +80,7 @@ describe('the agenda', () => {
     const cache = cal.makeFeedCache(feed, { events: [{ uid: 'u1', title: 'Inset day', start: '2026-11-10', allDay: true }] }, null, new Date(T0))
     const list = cal.agenda({ events, feeds: [{ feed, cache }] }, '2026-11-10', '2026-11-11')
     expect(list.map((o) => o.title)).toEqual(['Inset day', 'Dentist', 'Bins'])
-    expect(list[0].feed).toEqual({ id: 'f1', name: 'School', color: null })
+    expect(list[0].feed).toEqual({ id: 'f1', name: 'School', color: null, kind: 'ics', url: 'https://school.example/cal.ics' })
     expect(cal.agendaText(list)).toBe(
       ['- Tue 10 Nov, all day: Inset day (from School)', '- Tue 10 Nov, 09:30: Dentist (at High St)', '- Tue 10 Nov, 18:00: Bins (added by Sam)'].join('\n')
     )
@@ -161,5 +161,73 @@ describe('the iCal reader', () => {
     const e = cal.makeEvent({ id: 'e1', title: 'Bins', start: '2026-11-10' , allDay: true }, null, T0)
     const f = cal.makeFeed({ id: 'f1', url: 'https://school.example/cal.ics' }, null, T0)
     expect(cal.shareCalendarPaths({ events: [e, { bad: true }], feeds: [f] }).map((p) => p.path)).toEqual(['/calendar/events/e1.json', '/calendar/feeds/f1.json'])
+  })
+})
+
+describe('calendar drives (walled.garden/calendar)', () => {
+  const KEY = 'a'.repeat(52)
+  const manifest = { type: cal.CALENDAR_TYPE, title: 'Swim club', color: '#3366CC' }
+
+  it('follows a hyper:// drive as a source, beside iCal links', () => {
+    expect(cal.driveRoot(`hyper://${KEY.toUpperCase()}/events/x.json`)).toBe(`hyper://${KEY}/`)
+    expect(cal.driveRoot('hyper://family/')).toBe(null)
+    expect(cal.sourceOf(`hyper://${KEY}`)).toEqual({ kind: 'drive', url: `hyper://${KEY}/` })
+    expect(cal.sourceOf('webcal://school.example/cal.ics')).toEqual({ kind: 'ics', url: 'https://school.example/cal.ics' })
+    expect(() => cal.sourceOf('hyper://not-a-key/')).toThrow(/drive/)
+    const f = cal.makeFeed({ id: 'f2', url: `hyper://${KEY}/`, name: 'Swim club', color: '#3366cc' }, null, T0)
+    expect(f).toMatchObject({ type: cal.FEED_TYPE, kind: 'drive', url: `hyper://${KEY}/`, name: 'Swim club', color: '#3366cc' })
+    expect(cal.isFeed(f) && cal.isDriveFeed(f)).toBe(true)
+    expect(cal.makeFeed({ id: 'f3', url: `hyper://${KEY}/` }, null, T0).name).toBe('Calendar drive')
+    expect(cal.makeFeed({ id: 'f1', url: 'https://school.example/cal.ics' }, null, T0).kind).toBeUndefined()
+  })
+
+  it('reads the manifest: the kind, where the events are, the name and color', () => {
+    expect(cal.isCalendarManifest(manifest)).toBe(true)
+    expect(cal.isCalendarManifest({ type: 'walled.garden/feed' })).toBe(false)
+    expect(cal.calendarEventsPath(manifest)).toBe('/events/')
+    expect(cal.calendarEventsPath({ eventsPath: 'club/dates' })).toBe('/club/dates/')
+    expect(cal.calendarEventsPath({ eventsPath: '/../secret/' })).toBe('/events/')
+    expect(cal.calendarInfo(manifest)).toEqual({ name: 'Swim club', color: '#3366cc' })
+    expect(cal.calendarInfo({})).toEqual({ name: 'Calendar drive', color: null })
+  })
+
+  it('takes the event files right in the events folder', () => {
+    const keys = ['/events/b.json', { key: '/events/a.json' }, 'events/c.json', '/events/sub/d.json', '/events/notes.txt', '/events/.hidden.json', '/posts/x.json']
+    expect(cal.eventFiles(keys, '/events/')).toEqual(['/events/a.json', '/events/b.json', '/events/c.json'])
+  })
+
+  it('reads its events in the calendar’s own format, and leaves out what isn’t one', () => {
+    const files = [
+      { path: '/events/gala.json', value: JSON.stringify({ type: cal.CALENDAR_EVENT_TYPE, title: 'Gala', start: '2026-11-21T10:00', end: '2026-11-21T13:00', location: 'Leisure centre', notes: 'Bring a towel' }) },
+      { path: '/events/training.json', value: { type: cal.CALENDAR_EVENT_TYPE, title: 'Training', start: '2026-11-03T17:00', repeat: { freq: 'weekly', byDay: [2, 4] }, exclude: ['2026-11-05'] } },
+      { path: '/events/break.json', value: { type: cal.CALENDAR_EVENT_TYPE, title: 'Winter break', start: '2026-12-20', end: '2026-12-31' } },
+      { path: '/events/off.json', value: { type: cal.CALENDAR_EVENT_TYPE, title: 'Off', start: '2026-11-10', status: 'cancelled' } },
+      { path: '/events/bad.json', value: { type: cal.CALENDAR_EVENT_TYPE, title: 'Bad', start: 'tomorrow' } },
+      { path: '/events/rule.json', value: { type: cal.CALENDAR_EVENT_TYPE, title: 'Rule', start: '2026-11-10', repeat: { freq: 'hourly' } } },
+      { path: '/events/other.json', value: { type: 'walled.garden/post', title: 'Hi', start: '2026-11-10' } },
+      { path: '/events/junk.json', value: '{nope' },
+    ]
+    const events = cal.driveEvents(files)
+    expect(events.map((e) => e.uid)).toEqual(['training', 'gala', 'break'])
+    expect(events[1]).toEqual({ uid: 'gala', title: 'Gala', start: '2026-11-21T10:00', end: '2026-11-21T13:00', allDay: false, location: 'Leisure centre', notes: 'Bring a towel' })
+    expect(events[2]).toMatchObject({ allDay: true, start: '2026-12-20', end: '2026-12-31' })
+    expect(events[0].exclude).toEqual(['2026-11-05T17:00'])
+
+    // On the calendar like a feed's: read-only, with the drive named, notes kept.
+    const feed = cal.makeFeed({ id: 'f2', url: `hyper://${KEY}/`, name: 'Swim club' }, null, T0)
+    const cache = cal.makeFeedCache(feed, { events }, null, new Date(T0))
+    const list = cal.agenda({ feeds: [{ feed, cache }] }, '2026-11-02', '2026-11-09')
+    expect(list.map((o) => o.start)).toEqual(['2026-11-03T17:00']) // the 5th is skipped
+    expect(list[0]).toMatchObject({ id: 'f2:training', feed: { id: 'f2', name: 'Swim club', kind: 'drive', url: `hyper://${KEY}/` } })
+    const gala = cal.agenda({ feeds: [{ feed, cache }] }, '2026-11-21', '2026-11-22')
+    expect(gala[0].notes).toBe('Bring a towel')
+  })
+
+  it('reads a drive again sooner than an iCal link', () => {
+    const feed = cal.makeFeed({ id: 'f2', url: `hyper://${KEY}/` }, null, T0)
+    const cache = cal.makeFeedCache(feed, { events: [] }, null, new Date(T0))
+    expect(cal.feedDue(cache, Date.parse(T0) + 60e3, feed)).toBe(false)
+    expect(cal.feedDue(cache, Date.parse(T0) + cal.DRIVE_TTL_MS, feed)).toBe(true)
+    expect(cal.feedDue(cache, Date.parse(T0) + cal.DRIVE_TTL_MS)).toBe(false) // an iCal link's wait
   })
 })

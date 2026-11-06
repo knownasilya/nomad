@@ -71,9 +71,10 @@ export default {
   listCalendar: 'promise', // ({ from?, to? }) -> { space, spaceName, shared, canWriteSpace, events, feeds, occurrences }
   saveCalendarEvent: 'promise', // ({ id?, title, start, end?, allDay?, location?, notes?, repeat?, inSpace? }) -> event
   deleteCalendarEvent: 'promise', // (id) -> boolean
-  saveCalendarFeed: 'promise', // ({ id?, url, name?, color?, inSpace? }) -> feed, fetched once
+  saveCalendarFeed: 'promise', // ({ id?, url, name?, color?, inSpace? }) -> feed, fetched once. url: an iCal link or a calendar drive's hyper:// address
   deleteCalendarFeed: 'promise', // (id) -> boolean
   refreshCalendarFeeds: 'promise', // ({ force? }) -> listCalendar(), after fetching the feeds that are due
+  listCalendarDrives: 'promise', // () -> [{ url, name, color }]: calendar drives in the caller's Space not followed yet
   // The family album (bg/web-apis/bg/photos.ts, shared/photos.mjs), for the caller's shared Space
   listPhotos: 'promise', // () -> { space, spaceName, shared, canAdd, role, photos }
   photoData: 'promise', // (id, { thumb? }) -> data:image/jpeg URL, or null until it replicates

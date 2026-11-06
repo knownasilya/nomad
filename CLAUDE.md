@@ -366,7 +366,10 @@ calendar (`by` says who added an event). Rules, repeats, the agenda and the iCal
 Desktop is `nomad://calendar` (`app/userland/calendar/`, internal `nomad.vault.listCalendar`/
 `saveCalendarEvent`/…, `app/bg/web-apis/bg/calendar.ts`, which fetches feeds in bg). The phone is
 `mobile/components/Calendar.tsx` over `RPC_APPS` `calendar` (`mobile/backend/lib/calendar.mjs`); its UI
-fetches a due feed and hands the text to `feedFetched`. The AI reads it with `listCalendarEvents`
+fetches a due feed and hands the text to `feedFetched`. A drive can be a calendar too (`walled.garden/calendar`, one
+`walled.garden/calendar-event` file per event in `/events/`): it is followed as a feed with `kind: 'drive'`, read
+by desktop's bg over `nomad.fs` and by the phone's backend (`calendar/fetchDrive`), into the same copy (ADR-0042
+amendment). The AI reads it with `listCalendarEvents`
 (`calendarRead`, Jobs too) and never changes it; links are `nomad://calendar/?day=` (`parseItemLink`).
 
 ### The family album (ADR-0043)

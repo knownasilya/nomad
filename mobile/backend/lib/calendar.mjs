@@ -5,10 +5,14 @@
 // iCal feeds: the phone's UI fetches a feed's file itself (React Native's fetch, as Reader does for
 // RSS) when its copy is old and this phone can write the copy, and hands the text to `feedFetched`,
 // which reads it here and keeps the copy for every Device. Usually a computer has fetched it already.
+// A calendar drive (walled.garden/calendar) is read here instead, over the drive manager, when the UI
+// asks (`fetchDrive`): the backend reads drives itself, as Reader's hyper:// feeds do.
 
 import * as cal from '../../../shared/calendar.mjs'
 import { recordsOf } from './vault-apps.mjs'
 import { memberRecords } from './space-library.mjs'
+import { parseHyperUrl } from './hyper-url.mjs'
+import { DRIVE_AUTOBASE, DRIVE_HYPERDRIVE } from '../../rpc-commands.mjs'
 
 const withSpace = (space) => (rec) => ({ ...rec, space: space || null })
 
@@ -72,7 +76,7 @@ export async function listCalendar (base, space, { from, to } = {}) {
       fetchedAt: (cache && cache.fetchedAt) || null,
       error: (cache && cache.error) || '',
       count: (cache && cache.events && cache.events.length) || 0,
-      due: writable && cal.feedDue(cache)
+      due: writable && cal.feedDue(cache, Date.now(), feed)
     })),
     occurrences: cal.agenda({ events, feeds: withCache.filter((f) => f.cache) }, from, to)
   }
@@ -97,18 +101,109 @@ export async function deleteEvent (base, space, id) {
   return true
 }
 
-// Follow an iCal feed (the user's, or the Space's when `inSpace`). The UI fetches it next.
-export async function saveFeed (base, space, fields = {}) {
+// Follow an iCal feed or a calendar drive (the user's, or the Space's when `inSpace`). The UI
+// fetches an iCal feed next; a drive is read here first (it must be a calendar), and its copy kept.
+export async function saveFeed (base, space, fields = {}, manager = null) {
   space = cal.isSpaceKey(space) ? space : null
   const id = fields.id ? String(fields.id) : cal.newCalendarId()
   const found = fields.id ? await locate(base, 'feeds', id, space) : { space: null, prev: null }
   const where = found.prev ? found.space : fields.inSpace && space && (await canWrite(base, space, 'feeds')) ? space : null
   if (where && !(await canWrite(base, where, 'feeds'))) throw new Error('You can view this Space’s calendar, but not change it')
-  const count = (await listKind(base, where, 'feeds', cal.isFeed)).length
-  if (!found.prev && count >= cal.MAX_FEEDS) throw new Error(`A calendar can follow at most ${cal.MAX_FEEDS} feeds`)
-  const rec = cal.makeFeed({ ...fields, id, by: await memberName(base, where) }, found.prev)
+  const list = await listKind(base, where, 'feeds', cal.isFeed)
+  if (!found.prev && list.length >= cal.MAX_FEEDS) throw new Error(`A calendar can follow at most ${cal.MAX_FEEDS} feeds`)
+  const source = cal.sourceOf(fields.url ?? (found.prev && found.prev.url))
+  const same = list.find((f) => f.url === source.url && f.id !== id)
+  if (same) throw new Error(`The calendar already follows ${same.name}`)
+  let extra = {}
+  let drive = null
+  if (source.kind === 'drive') {
+    if (!manager) throw new Error('Can’t read drives here')
+    drive = await readCalendarDrive(manager, source.url)
+    const info = cal.calendarInfo(drive.manifest)
+    const prev = found.prev || {}
+    extra = { name: fields.name || prev.name || info.name, color: fields.color || prev.color || info.color }
+  }
+  const rec = cal.makeFeed({ ...fields, ...extra, url: source.url, id, by: await memberName(base, where) }, found.prev)
   await (await recordsOf(base, where, 'feeds')).put(cal.recordFile(id), rec)
+  if (drive) {
+    const store = await recordsOf(base, where, 'feedCache')
+    if (store.shared ? store.writable : base.writable) await store.put(cal.recordFile(id), cal.makeFeedCache(rec, { events: drive.events }))
+  }
   return withSpace(where)(rec)
+}
+
+function withTimeout (p, ms, message) {
+  let t
+  return Promise.race([p, new Promise((resolve, reject) => { t = setTimeout(() => reject(new Error(message)), ms) })]).finally(() => clearTimeout(t))
+}
+
+// A calendar drive's manifest and events, the same reading desktop's bg does over nomad.fs. New
+// drives are Autobases; an older one may be a Hyperdrive, so that is the second try.
+export async function readCalendarDrive (manager, url, { timeout = 20e3 } = {}) {
+  const root = cal.driveRoot(url)
+  if (!root) throw new Error('That isn’t a drive’s hyper:// address')
+  const { key, keyHex } = parseHyperUrl(root)
+  const read = (type, path) => withTimeout(manager.bridgeRead(type, key, path), timeout, 'timeout')
+  let type = DRIVE_AUTOBASE
+  let text = await read(type, '/index.json').catch(() => null)
+  if (text == null) {
+    manager.release(DRIVE_AUTOBASE, keyHex)
+    type = DRIVE_HYPERDRIVE
+    text = await read(type, '/index.json').catch(() => null)
+  }
+  if (text == null) {
+    manager.release(DRIVE_HYPERDRIVE, keyHex)
+    throw new Error('Couldn’t reach that drive. Is it online?')
+  }
+  let manifest = null
+  try { manifest = JSON.parse(text) } catch {}
+  if (!cal.isCalendarManifest(manifest)) throw new Error('That drive isn’t a calendar (its index.json type isn’t walled.garden/calendar)')
+  const dir = cal.calendarEventsPath(manifest)
+  const keys = await withTimeout(manager.bridgeListKeys(type, key, dir), timeout, 'timeout').catch(() => [])
+  const files = []
+  for (const path of cal.eventFiles(keys, dir)) {
+    const value = await read(type, path).catch(() => null)
+    if (value != null) files.push({ path, value })
+  }
+  return { url: root, manifest, events: cal.driveEvents(files) }
+}
+
+// Read the calendar drive feed `id` follows and keep its events (or the error) for every Device.
+export async function fetchDrive (base, manager, space, { id } = {}) {
+  const found = await locate(base, 'feeds', String(id || ''), cal.isSpaceKey(space) ? space : null)
+  if (!found.prev || !cal.isDriveFeed(found.prev)) return null
+  const store = await recordsOf(base, found.space, 'feedCache')
+  if (store.shared ? !store.writable : !base.writable) return null
+  const prev = await store.get(cal.recordFile(found.prev.id)).catch(() => null)
+  let rec
+  try {
+    const { events } = await readCalendarDrive(manager, found.prev.url)
+    rec = cal.makeFeedCache(found.prev, { events }, prev)
+  } catch (err) {
+    rec = cal.makeFeedCache(found.prev, { error: String((err && err.message) || err) }, cal.isFeedCache(prev) ? prev : null)
+  }
+  await store.put(cal.recordFile(found.prev.id), rec)
+  return { fetchedAt: rec.fetchedAt, error: rec.error || '', count: rec.events.length }
+}
+
+// Which of `urls` (the Space's drives) are calendar drives the calendar doesn't follow yet:
+// [{ url, name, color }]. Each is given a few seconds; one that isn't online is left out.
+export async function calendarDrives (base, manager, space, urls = []) {
+  space = cal.isSpaceKey(space) ? space : null
+  const followed = new Set([...(await listKind(base, null, 'feeds', cal.isFeed)), ...(space ? await listKind(base, space, 'feeds', cal.isFeed) : [])].map((f) => f.url))
+  const roots = [...new Set((Array.isArray(urls) ? urls : []).map(cal.driveRoot).filter(Boolean))].filter((u) => !followed.has(u)).slice(0, 100)
+  const out = await Promise.all(roots.map(async (url) => {
+    try {
+      const { key } = parseHyperUrl(url)
+      const text = await withTimeout(manager.bridgeRead(DRIVE_AUTOBASE, key, '/index.json'), 3e3, 'timeout')
+      const manifest = JSON.parse(text)
+      if (!cal.isCalendarManifest(manifest)) return null
+      return { url, ...cal.calendarInfo(manifest) }
+    } catch {
+      return null
+    }
+  }))
+  return out.filter(Boolean).sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export async function deleteFeed (base, space, id) {

@@ -489,6 +489,10 @@ export default {
   async refreshCalendarFeeds(opts: any = {}) {
     return calendar.refreshFeeds(this, { force: !!opts?.force });
   },
+  // Calendar drives (walled.garden/calendar) in the caller's Space that the calendar doesn't follow.
+  async listCalendarDrives() {
+    return calendar.listCalendarDrives(this);
+  },
 
   // The family album (nomad://photos, shared/photos.mjs): the caller's shared Space's photos.
   async listPhotos() {

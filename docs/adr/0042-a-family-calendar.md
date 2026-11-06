@@ -52,3 +52,33 @@ be able to read it, so a Job can tell the family "tomorrow: early pickup".
 - There is no reminder at an event's time yet; a Job that reads the calendar is the way to be told.
 - Times have no zone, so a family split across zones sees the same wall time. That is the common case
   for a household, and the rare other one is for a later amendment.
+
+## Amendment: calendar drives (2026-11-06)
+
+A club, a team or a family member can publish a calendar as a drive, and the calendar follows it
+beside iCal feeds.
+
+1. **The schema.** A drive is a calendar when its `/index.json` is
+   `{ "type": "walled.garden/calendar", "title", "description"?, "color"?, "eventsPath"? }`
+   (`app/lib/schemas/walled.garden/calendar.ts`). Each event is one file in `eventsPath` (`/events/`
+   unless it says otherwise), `/events/<name>.json`:
+   `{ "type": "walled.garden/calendar-event", "title", "start", "end"?, "allDay"?, "location"?,
+   "notes"?, "repeat"?, "exclude"?, "status"? }`, in the same wall-time format and repeat rules as an
+   event record (§2). The file's name is the event's uid; `status: "cancelled"` leaves it out. What
+   the calendar takes from a drive is `shared/calendar.mjs` (`isCalendarManifest`,
+   `calendarEventsPath`, `eventFiles`, `driveEvent`, `driveEvents`).
+
+2. **Followed like a feed.** A drive is a feed record with `kind: 'drive'` and the drive's root
+   (`hyper://<key>/`) as `url` (`sourceOf` tells the two apart from what the user pastes). Its events
+   are kept in the same copy (`feedCache`), so a Space viewer and the other members read the copy.
+   Following one reads it first: a drive that isn't a calendar is refused, and its title and color
+   become the feed's name and color. The copy is read again after `DRIVE_TTL_MS` (five minutes; a
+   drive changes as its writers add to it and costs nothing to read), on desktop in bg over
+   `nomad.fs` (`readCalendarDrive` in `calendar.ts`), on the phone in its backend over the drive
+   manager (`calendar/fetchDrive`). Its events are read-only here; they are changed in the drive.
+
+3. **Finding them.** The Follow box takes an iCal link or a hyper:// address. Desktop also lists the
+   calendar drives in the page's Space that the calendar doesn't follow (`listCalendarDrives`), and
+   site-info shows **Follow in Calendar** on a calendar drive (`ident.calendar`), which opens
+   `nomad://calendar/?follow=<drive>` with the address in the box; the user still clicks Follow. The
+   phone's Follow sheet lists the calendar drives among the Space's drives (`calendar/drives`).
