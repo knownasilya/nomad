@@ -63,6 +63,8 @@ export const setup = function (rpc) {
   internal.vault = Object.assign({}, vaultRPC);
   internal.vault.watchPendingRequests = () => fromEventStream(vaultRPC.watchPendingRequests());
   internal.vault.watchAppData = () => fromEventStream(vaultRPC.watchAppData());
+  internal.vault.watchJobs = () => fromEventStream(vaultRPC.watchJobs());
+  internal.vault.watchJobProgress = (id) => fromEventStream(vaultRPC.watchJobProgress(id));
   internal.vault.openLiveNote = (id, conn) => fromEventStream(vaultRPC.openLiveNote(id, conn));
   internal.secrets = Object.assign({}, secretsRPC);
   internal.secrets.watch = () => fromEventStream(secretsRPC.watch());

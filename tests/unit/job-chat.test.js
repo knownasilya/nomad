@@ -1,8 +1,15 @@
 // A Job run the user watches is a chat in the AI Sidebar (app/bg/ai/job-chat-messages.mjs): the
 // session it starts as, how the run's events add to it, how it ends, and the run record naming it.
 import { describe, it, expect } from 'vitest';
-import { jobOf, jobChatStart, applyJobEvent, jobChatEnd } from '../../app/bg/ai/job-chat-messages.mjs';
-import { makeRun } from '../../shared/jobs.mjs';
+import {
+  jobOf,
+  jobChatStart,
+  applyJobEvent,
+  jobChatEnd,
+  jobProgressStart,
+  applyJobProgress,
+} from '../../app/bg/ai/job-chat-messages.mjs';
+import { makeRun, finalNotification, runPreview } from '../../shared/jobs.mjs';
 
 const JOB = { id: 'j1', title: 'Morning digest' };
 
@@ -99,5 +106,75 @@ describe('makeRun chat', () => {
   it('has no chat otherwise, or for anything that isn’t a chat id', () => {
     expect('chat' in makeRun(base)).toBe(false);
     expect('chat' in makeRun({ ...base, chat: '../x' })).toBe(false);
+  });
+});
+
+describe('makeRun stopped', () => {
+  const base = { id: 'r1', job: JOB, startedAt: new Date(0), finishedAt: new Date(1000), status: 'ok', output: '' };
+
+  it('marks a run the user stopped, which isn’t a failure', () => {
+    const run = makeRun({ ...base, stopped: true });
+    expect(run).toMatchObject({ status: 'ok', stopped: true });
+    expect(runPreview(run)).toBe('You stopped it');
+    expect(runPreview(makeRun({ ...base, output: 'Two of three', stopped: true }))).toBe('Two of three');
+  });
+
+  it('isn’t marked otherwise', () => {
+    expect('stopped' in makeRun(base)).toBe(false);
+    expect('stopped' in makeRun({ ...base, status: 'error', error: 'x', stopped: true })).toBe(false);
+  });
+
+  it('sends no notification', () => {
+    const job = { title: 'Digest', notify: 'always' };
+    expect(finalNotification(job, { status: 'ok', output: 'x', stopped: true })).toBe(null);
+    expect(finalNotification(job, { status: 'ok', output: 'x', notified: { body: 'Hi' }, stopped: true })).toBe(null);
+  });
+});
+
+describe('applyJobProgress', () => {
+  const run = (events) => events.reduce((p, [t, e]) => applyJobProgress(p, t, e), jobProgressStart());
+
+  it('lists what the run said and each step, in order', () => {
+    const p = run([
+      ['chunk', { text: 'Looking ' }],
+      ['chunk', { text: 'now.' }],
+      ['tool', { phase: 'start', id: 'a', name: 'execute', summary: 'Running code' }],
+      ['tool', { phase: 'start', id: 'b', parentId: 'a', name: 'listNotes', summary: 'Looking through your Notes' }],
+      ['tool', { phase: 'end', id: 'b', name: 'listNotes' }],
+      ['tool', { phase: 'end', id: 'a', name: 'execute', error: 'Boom' }],
+      ['chunk', { text: 'Done.' }],
+    ]);
+    expect(p.items).toEqual([
+      { kind: 'text', text: 'Looking now.' },
+      { kind: 'step', id: 'a', summary: 'Running code', child: false, state: 'error', error: 'Boom' },
+      { kind: 'step', id: 'b', summary: 'Looking through your Notes', child: true, state: 'done' },
+      { kind: 'text', text: 'Done.' },
+    ]);
+    expect(p.thinking).toBe(false);
+  });
+
+  it('says it’s thinking until it says or does something', () => {
+    let p = run([['reasoning', { text: 'Hmm' }]]);
+    expect(p.thinking).toBe(true);
+    p = applyJobProgress(p, 'tool', { phase: 'start', id: 'x', summary: 'Fetching' });
+    expect(p.thinking).toBe(false);
+  });
+
+  it('marks an older Provider’s step done once the next starts', () => {
+    const p = run([
+      ['tool', { phase: 'start', summary: 'One' }],
+      ['tool', { phase: 'start', summary: 'Two' }],
+    ]);
+    expect(p.items.map((i) => i.state)).toEqual(['done', 'running']);
+  });
+
+  it('keeps the newest steps and the end of long text, and ignores the rest', () => {
+    const many = Array.from({ length: 80 }, (_, i) => ['tool', { phase: 'start', id: `c${i}`, summary: `S${i}` }]);
+    const p = run([...many, ['chunk', { text: 'x'.repeat(5000) }]]);
+    expect(p.items).toHaveLength(60);
+    expect(p.items.at(-2).summary).toBe('S79');
+    expect(p.items.at(-1).text.length).toBe(2001);
+    const same = applyJobProgress(p, 'tool', { phase: 'write', drive: 'd', path: '/a' });
+    expect(same).toBe(p);
   });
 });

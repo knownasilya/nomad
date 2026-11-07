@@ -511,5 +511,102 @@ const cssStr = css`
     cursor: default;
     opacity: 0.7;
   }
+  .running-badge.waiting {
+    background: var(--bg-color--semi-light);
+    color: var(--text-color--light);
+  }
+
+  button.icon.stop {
+    color: var(--mods-err);
+  }
+
+  button.icon.stop:hover {
+    color: var(--mods-err);
+  }
+
+  .run .stopped {
+    color: var(--text-color--light);
+  }
+
+  /* The run going on now, as it goes (renderLive). */
+  .live {
+    margin: 4px 0 12px;
+    border: 1px solid var(--mods-accent);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .live-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px 6px 10px;
+    background: var(--mods-accent-soft);
+    font-size: 13px;
+  }
+
+  .live-head .live-title {
+    font-weight: 600;
+    color: var(--mods-accent);
+  }
+
+  .live-head .live-spin {
+    color: var(--mods-accent);
+  }
+
+  .live-head .muted {
+    color: var(--text-color--light);
+  }
+
+  .live-head .spacer {
+    flex: 1;
+  }
+
+  .live-steps {
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 8px 10px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .live-step {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 1px 0;
+    color: var(--text-color--light);
+  }
+
+  .live-step.child {
+    padding-left: 20px;
+  }
+
+  .live-step.running {
+    color: var(--text-color--default);
+  }
+
+  .live-step.done .fas {
+    color: var(--jobs-ok);
+  }
+
+  .live-step.error,
+  .live-step.error .fas {
+    color: var(--mods-err);
+  }
+
+  .live-step.thinking {
+    font-style: italic;
+  }
+
+  .live-text {
+    margin: 4px 0;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: var(--bg-color--secondary);
+    color: var(--text-color--default);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
 `;
 export default cssStr;

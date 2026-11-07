@@ -89,6 +89,8 @@ export class JobsView extends LitElement {
       newer: { type: Object }, // a newer version of the open Job's source: { jobId, url, module, prompt } or { jobId, error }
       secrets: { type: Array }, // the user's secrets on this computer, without values
       sharedSpace: { type: Object }, // { space, name }: this Space is shared, so a Job can notify everyone in it
+      live: { type: Object }, // the open Job's run going on now: bg job-chat.js progress(), or null
+      stopping: { type: Object }, // a Set of Job ids the user stopped, until their run ends
     };
   }
 
@@ -106,11 +108,16 @@ export class JobsView extends LitElement {
     this.runQuery = '';
     this.newer = null;
     this.secrets = [];
+    this.live = null;
+    this.stopping = new Set();
+    this.liveJobId = null; // the Job whose progress this.liveWatch follows
+    this.liveWatch = null;
     this.openId = new URLSearchParams(location.search).get('id') || null;
     this.load();
     // Jobs change on other Devices, from the AI, and when a run starts or ends.
     try {
-      nomad.vault.watchJobs().addEventListener('changed', () => this.load());
+      this.jobsWatch = nomad.vault.watchJobs();
+      this.jobsWatch.addEventListener('changed', () => this.load());
     } catch {}
     // "Next run in 5 minutes" goes stale on its own.
     this.clock = setInterval(() => this.requestUpdate(), 60_000);
@@ -119,6 +126,28 @@ export class JobsView extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     clearInterval(this.clock);
+    this.followLive(null);
+    try {
+      this.jobsWatch?.close?.();
+    } catch {}
+  }
+
+  // Follow the open Job's run while it goes on, so it can be watched from here partway through.
+  followLive(jobId) {
+    if (jobId === this.liveJobId) return;
+    try {
+      this.liveWatch?.close?.();
+    } catch {}
+    this.liveWatch = null;
+    this.liveJobId = jobId;
+    this.live = null;
+    if (!jobId) return;
+    try {
+      this.liveWatch = nomad.vault.watchJobProgress(jobId);
+      this.liveWatch.addEventListener('progress', (e) => {
+        if (this.liveJobId === jobId) this.live = e.progress || null;
+      });
+    } catch {}
   }
 
   async load() {
@@ -135,6 +164,11 @@ export class JobsView extends LitElement {
       this.secrets = (await nomad.secrets.list()).secrets;
     } catch {
       this.secrets = [];
+    }
+    // A run that ended isn't being stopped anymore.
+    const busy = new Set((this.jobs || []).filter((j) => j.running || j.queued).map((j) => j.id));
+    if ([...this.stopping].some((id) => !busy.has(id))) {
+      this.stopping = new Set([...this.stopping].filter((id) => busy.has(id)));
     }
     if (this.openId) this.runs = await nomad.vault.listJobRuns(this.openId).catch(() => []);
   }
@@ -160,6 +194,11 @@ export class JobsView extends LitElement {
 
   updated() {
     setItemTitle(this, this.itemTitle());
+    const open = this.openId && !this.editing ? this.jobs?.find((j) => j.id === this.openId) : null;
+    this.followLive(open?.running ? open.id : null);
+    // The live run's steps stay scrolled to the newest, unless the user scrolled up to read.
+    const steps = this.renderRoot?.querySelector('.live-steps');
+    if (steps && !this.liveScrolledUp) steps.scrollTop = steps.scrollHeight;
   }
 
   render() {
@@ -209,8 +248,10 @@ export class JobsView extends LitElement {
             <div class="title">
               ${j.title}
               ${j.running
-                ? html`<span class="running-badge"><span class="fas fa-fw fa-circle-notch fa-spin"></span> Running</span>`
-                : ''}
+                ? html`<span class="running-badge" title=${open ? '' : 'Open it to see what it’s doing'}><span class="fas fa-fw fa-circle-notch fa-spin"></span> ${this.stopping.has(j.id) ? 'Stopping' : 'Running'}</span>`
+                : j.queued
+                  ? html`<span class="running-badge waiting" title="It runs once the Job running now is done"><span class="fas fa-fw fa-hourglass-half"></span> Waiting</span>`
+                  : ''}
             </div>
             <div class="summary">${this.summary(j)}</div>
             ${!j.running && j.lastRun?.status === 'error' && !open && !e
@@ -220,9 +261,19 @@ export class JobsView extends LitElement {
               : ''}
           </div>
           <div class="actions">
-            <button class="icon" title="Run now" aria-label="Run ${j.title} now" ?disabled=${j.running} @click=${() => this.onRun(j)}>
-              <span class="fas fa-fw ${j.running ? 'fa-circle-notch fa-spin' : 'fa-play'}"></span>
-            </button>
+            ${j.running || j.queued
+              ? html`<button
+                  class="icon stop"
+                  title=${this.stopping.has(j.id) ? 'Stopping…' : j.running ? 'Stop this run' : 'Don’t run it'}
+                  aria-label=${j.running ? `Stop ${j.title}` : `Don’t run ${j.title}`}
+                  ?disabled=${this.stopping.has(j.id)}
+                  @click=${() => this.onStop(j)}
+                >
+                  <span class="fas fa-fw ${this.stopping.has(j.id) ? 'fa-circle-notch fa-spin' : 'fa-stop'}"></span>
+                </button>`
+              : html`<button class="icon" title="Run now" aria-label="Run ${j.title} now" @click=${() => this.onRun(j)}>
+                  <span class="fas fa-fw fa-play"></span>
+                </button>`}
             ${j.running
               ? html`<button class="watch-btn" title="Watch this run: its page, and its chat in the AI sidebar" @click=${() => this.onWatch(j)}>
                   <span class="fas fa-fw fa-eye"></span> Watch
@@ -246,7 +297,9 @@ export class JobsView extends LitElement {
   summary(j) {
     const parts = [j.when];
     if (j.lastRun && !j.running) {
-      parts.push(`${j.lastRun.status === 'error' ? 'Failed' : 'Ran'} ${ago(j.lastRun.finishedAt)}`);
+      parts.push(
+        `${j.lastRun.status === 'error' ? 'Failed' : j.lastRun.stopped ? 'Stopped' : 'Ran'} ${ago(j.lastRun.finishedAt)}`
+      );
     }
     if (j.enabled && j.nextRunAt && j.here) parts.push(`next ${inTime(j.nextRunAt)}`);
     if (!j.enabled) parts.push('paused');
@@ -266,6 +319,7 @@ export class JobsView extends LitElement {
     const runs = this.runs || [];
     return html`
       <div class="job-body">
+        ${j.running ? this.renderLive(j) : ''}
         ${j.source ? this.renderSource(j) : ''}
         ${j.prompt
           ? html`<div class="label">${j.source ? 'More instructions' : 'Prompt'}</div>
@@ -282,6 +336,45 @@ export class JobsView extends LitElement {
         ${this.renderHistory(j)}
       </div>
     `;
+  }
+
+  // The run going on now, as it goes: what it said and each step it took, newest last. The row's
+  // Stop ends it, and its Watch follows it in the AI sidebar (its chat, and its page when it has one).
+  renderLive(j) {
+    const p = this.liveJobId === j.id ? this.live : null;
+    const items = p?.items || [];
+    const stopping = this.stopping.has(j.id) || p?.stopping;
+    return html`
+      <div class="live" aria-live="polite">
+        <div class="live-head">
+          <span class="fas fa-fw fa-circle-notch fa-spin live-spin"></span>
+          <span class="live-title">${stopping ? 'Stopping…' : 'Running now'}</span>
+          ${p?.startedAt ? html`<span class="muted">· started ${ago(p.startedAt)}</span>` : ''}
+          <span class="spacer"></span>
+          <span class="muted">Watch follows it in the AI sidebar${p?.page ? ', with its page' : ''}</span>
+        </div>
+        <div class="live-steps" @scroll=${(ev) => this.onLiveScroll(ev)}>
+          ${items.map((it) =>
+            it.kind === 'text'
+              ? html`<div class="live-text">${it.text}</div>`
+              : html`<div class="live-step ${it.child ? 'child' : ''} ${it.state}" title=${it.error || ''}>
+                  <span class="fas fa-fw ${it.state === 'running' ? 'fa-circle-notch fa-spin' : it.state === 'error' ? 'fa-exclamation-circle' : 'fa-check'}"></span>
+                  <span>${it.summary}</span>
+                </div>`
+          )}
+          ${p?.thinking
+            ? html`<div class="live-step thinking"><span class="fas fa-fw fa-ellipsis-h"></span> Thinking…</div>`
+            : !items.length
+              ? html`<div class="live-step thinking"><span class="fas fa-fw fa-ellipsis-h"></span> ${p ? 'Starting…' : 'Loading…'}</div>`
+              : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  onLiveScroll(ev) {
+    const el = ev.target;
+    this.liveScrolledUp = el.scrollHeight - el.scrollTop - el.clientHeight > 24;
   }
 
   // The Job's history: its saved runs, newest first, with what each answered or why it failed. The
@@ -335,7 +428,10 @@ export class JobsView extends LitElement {
               (r) => html`
                 <details class="run ${r.status === 'error' ? 'failed' : ''}" ?open=${r.id === runs[0].id || (words.length && shown.length <= 3)}>
                   <summary>
-                    <span class="fas fa-fw ${r.status === 'error' ? 'fa-exclamation-circle err' : 'fa-check-circle ok'}"></span>
+                    <span
+                      class="fas fa-fw ${r.status === 'error' ? 'fa-exclamation-circle err' : r.stopped ? 'fa-stop-circle stopped' : 'fa-check-circle ok'}"
+                      title=${r.status === 'error' ? 'Failed' : r.stopped ? 'You stopped it' : 'Done'}
+                    ></span>
                     <span class="run-when">${new Date(r.startedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>
                     <span class="muted">· ${runMeta(r, j)}</span>
                     <span class="run-preview">${r.preview || ''}</span>
@@ -346,9 +442,11 @@ export class JobsView extends LitElement {
                     : r.summary
                       ? html`<div class="output trimmed">${r.summary}</div>
                           <div class="hint-row">An older run: only the start of its answer is kept.</div>`
-                      : r.status !== 'error'
-                        ? html`<div class="hint-row">No answer.</div>`
-                        : ''}
+                      : r.stopped
+                        ? html`<div class="hint-row">You stopped it before it answered.</div>`
+                        : r.status !== 'error'
+                          ? html`<div class="hint-row">No answer.</div>`
+                          : ''}
                   ${r.chat
                     ? html`<div class="run-chat">
                         <button class="link" title="Open this run’s chat in the AI sidebar" @click=${() => this.onOpenRunChat(j, r)}>
@@ -972,6 +1070,8 @@ export class JobsView extends LitElement {
     try {
       await nomad.vault.runJob(j.id, watch ? { watch: true } : undefined);
       if (this.openId !== j.id) await this.onOpen(j);
+      // Its play button turns into Stop, and its progress shows here.
+      await this.load();
       toast.create(
         watch
           ? `Running “${j.title}” with you: its page opens in a tab, and its chat in the AI sidebar`
@@ -980,6 +1080,20 @@ export class JobsView extends LitElement {
     } catch (err) {
       toast.create(cleanError(err), 'error');
     }
+  }
+
+  // Stop the run going on now (or the one waiting to start). Its chat says it was stopped, and its
+  // record keeps what it had written by then.
+  async onStop(j) {
+    this.stopping = new Set([...this.stopping, j.id]);
+    try {
+      const stopped = await nomad.vault.stopJob(j.id);
+      if (!stopped) toast.create(`“${j.title}” isn’t running anymore`);
+      else if (!j.running) toast.create(`“${j.title}” won’t run`);
+    } catch (err) {
+      toast.create(cleanError(err), 'error');
+    }
+    await this.load();
   }
 
   // A run going on now: its chat opens in this window's AI sidebar, and its page comes to the front
@@ -1075,6 +1189,7 @@ export class JobsView extends LitElement {
 // notified.
 function runMeta(r, j) {
   const parts = [r.trigger === 'manual' ? 'by hand' : 'on schedule'];
+  if (r.stopped) parts.push('stopped');
   if (r.took) parts.push(`took ${r.took}`);
   if (r.deviceName && r.deviceName !== j.deviceName) parts.push(`on ${r.deviceName}`);
   if (r.notification) parts.push('notified');

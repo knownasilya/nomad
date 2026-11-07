@@ -316,7 +316,7 @@ function RunRow ({ r, jobDevice, s, t, divider, open, onToggle }: { r: JobRun; j
   return (
     <View style={divider ? s.divider : undefined}>
       <Pressable style={s.runHead} onPress={onToggle} android_ripple={{ color: t.ripple }} accessibilityRole='button' accessibilityState={{ expanded: open }}>
-        <Icon name={failed ? 'exclamation-circle' : 'check-circle'} size={16} color={failed ? t.danger : t.secure} />
+        <Icon name={failed ? 'exclamation-circle' : r.stopped ? 'stop-circle' : 'check-circle'} size={16} color={failed ? t.danger : r.stopped ? t.textMuted : t.secure} />
         <View style={s.runText}>
           <Text style={s.runTitle}>{new Date(r.startedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</Text>
           {open
@@ -364,6 +364,7 @@ const KEEP_RUNS = 10
 // own), and whether it notified.
 function howRun (r: JobRun, jobDevice: string) {
   const parts = [r.trigger === 'manual' ? 'Run by hand' : 'On schedule']
+  if (r.stopped) parts.push('stopped')
   if (r.took) parts.push(`took ${r.took}`)
   if (r.deviceName && r.deviceName !== jobDevice) parts.push(`on ${r.deviceName}`)
   if (r.notification) parts.push('notified')
@@ -372,7 +373,7 @@ function howRun (r: JobRun, jobDevice: string) {
 
 function summary (j: Job) {
   const parts = [j.enabled ? j.when : 'Paused']
-  if (j.lastRun) parts.push(`${j.lastRun.status === 'error' ? 'failed' : 'ran'} ${when(j.lastRun.finishedAt)}`)
+  if (j.lastRun) parts.push(`${j.lastRun.status === 'error' ? 'failed' : j.lastRun.stopped ? 'stopped' : 'ran'} ${when(j.lastRun.finishedAt)}`)
   const line = parts.join(' · ')
   // The last error, so a failing Job says why without opening it.
   return j.lastRun?.status === 'error' && j.lastRun.error ? `${line}\n${j.lastRun.error}` : line

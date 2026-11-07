@@ -51,7 +51,7 @@ const running = new Map(); // jobId -> AbortController
 const attempted = new Map(); // jobId -> ISO time
 let draining = false;
 
-/** @param {{ runTurn: (job: any, opts: { signal: AbortSignal, notify: (n: any) => void, trigger: string, lastRun: any, changes: any[], needs: any[], watch: any, onGrant: (writes: any) => Promise<any>, chat: { id: string | null } }) => Promise<{ output: string, sourceHash?: string | null }> }} opts */
+/** @param {{ runTurn: (job: any, opts: { signal: AbortSignal, notify: (n: any) => void, trigger: string, lastRun: any, changes: any[], needs: any[], watch: any, onGrant: (writes: any) => Promise<any>, chat: { id: string | null }, outcome: { stopped: boolean } }) => Promise<{ output: string, sourceHash?: string | null }> }} opts */
 export function setup(opts) {
   runTurn = opts.runTurn;
   refresh();
@@ -134,11 +134,13 @@ async function ownKey() {
 // Data
 // =
 
-// Every Job, A to Z, with its newest run, when it next runs, and whether it is running here now.
+// Every Job, A to Z, with its newest run, when it next runs, and whether it is running here now
+// or waiting here to run (`queued`: another Job's run is going on).
 export function list() {
   return jl.jobsWithRuns([...jobs.values()], [...runs.values()].flat()).map((j) => ({
     ...j,
     running: running.has(j.id),
+    queued: !running.has(j.id) && queue.some((q) => q.id === j.id),
   }));
 }
 
@@ -179,7 +181,7 @@ export function save(fields) {
 // Delete a Job and its runs. A run in progress is stopped.
 export function remove(id) {
   const run = writes.then(async () => {
-    running.get(id)?.abort();
+    running.get(id)?.abort('deleted');
     for (const r of runsOf(id)) await vault.delAppRecord(jl.runPath(id, r.id)).catch(() => {});
     if (await vault.readAppRecord(jl.requestPath(id)).catch(() => null)) {
       await vault.delAppRecord(jl.requestPath(id)).catch(() => {});
@@ -232,6 +234,22 @@ export function runNow(id, { watch = null } = {}) {
   enqueue(id, 'manual', watch);
 }
 
+// Stop a Job's run (the Jobs page's Stop): the one going on now ends, its chat says it was stopped
+// and its record says so (not a failure). A run still waiting in line is dropped. false when
+// neither.
+export function stop(id) {
+  const controller = running.get(id);
+  if (controller) {
+    if (!controller.signal.aborted) controller.abort('stopped');
+    return true;
+  }
+  const i = queue.findIndex((q) => q.id === id);
+  if (i < 0) return false;
+  queue.splice(i, 1);
+  events.emit('changed');
+  return true;
+}
+
 // The user let a Job use another site, or another click, on a run they watched (ADR-0038): save
 // its writes with that grant, on the latest record.
 export function grantPages(id, nextWrites) {
@@ -276,6 +294,7 @@ function enqueue(id, trigger, watch = null) {
     return;
   }
   queue.push({ id, trigger, watch });
+  events.emit('changed');
   drain();
 }
 
@@ -295,7 +314,7 @@ async function drain() {
 
 async function runOne(job, trigger, watch = null) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), RUN_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort('timeout'), RUN_TIMEOUT_MS);
   running.set(job.id, controller);
   events.emit('changed');
   const startedAt = new Date();
@@ -308,6 +327,7 @@ async function runOne(job, trigger, watch = null) {
   const changes = [];
   const needs = [];
   const chat = { id: null }; // the run's chat in the AI Sidebar, when someone watched it
+  const outcome = { stopped: false }; // the user stopped it from its chat or its page
   logger.info('Running a Job', { id: job.id, trigger, watched: !!watch });
   try {
     if (!runTurn) throw new Error('The AI isn’t ready yet');
@@ -323,16 +343,22 @@ async function runOne(job, trigger, watch = null) {
       watch,
       onGrant: (w) => grantPages(job.id, w),
       chat,
+      outcome,
     });
     output = res?.output || '';
     if (res?.sourceHash) noteSourceChange(job.id, res.sourceHash);
-    if (controller.signal.aborted) error = 'The Job took longer than 10 minutes and was stopped';
   } catch (err) {
     error = err?.message || String(err);
   } finally {
     clearTimeout(timer);
     running.delete(job.id);
   }
+  const reason = controller.signal.aborted ? controller.signal.reason : null;
+  // Stopped by the user, here or in its chat or page: not a failure, whatever the turn threw as it
+  // ended.
+  const stopped = reason === 'stopped' || (outcome.stopped && reason !== 'timeout');
+  if (stopped) error = null;
+  else if (reason === 'timeout') error = 'The Job took longer than 10 minutes and was stopped';
   // Deleted while it ran: nothing to save.
   if (!jobs.has(job.id)) return;
   const status = error ? 'error' : 'ok';
@@ -346,10 +372,11 @@ async function runOne(job, trigger, watch = null) {
     status,
     output,
     error,
-    notification: jl.finalNotification(job, { status, output, error, notified, prevRun }),
+    notification: jl.finalNotification(job, { status, output, error, notified, prevRun, stopped }),
     changes,
     needs,
     chat: chat.id,
+    stopped,
   });
   if (error) logger.warn('A Job failed', { id: job.id, error });
   try {

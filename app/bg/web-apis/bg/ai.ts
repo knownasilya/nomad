@@ -509,7 +509,8 @@ export { routeChat };
 // window, for Run with me) a tab the user watches, where each site the Job reaches asks them and
 // `onGrant` saves their yes on the Job. `needs` gets what a run with nobody watching wanted and
 // wasn't given. `chat.id` gets the id of the run's chat in the AI Sidebar, when someone watched it
-// (job-chat.js).
+// (job-chat.js). `outcome.stopped` says whether the user stopped it: from the Jobs page (`signal`
+// aborts with 'stopped'), the run's chat in the sidebar, or the Stop bar on its page.
 export async function runJobTurn(
   job,
   {
@@ -522,6 +523,7 @@ export async function runJobTurn(
     watch = null,
     onGrant = async (_writes) => {},
     chat: chatOut = { id: null },
+    outcome = { stopped: false },
   }
 ) {
   const newer =
@@ -564,6 +566,12 @@ export async function runJobTurn(
       console.warn('[ai] Could not open a Job’s chat', job.id, err?.message);
       return null;
     });
+  // The Jobs page's Stop: the chat says it was stopped, as the sidebar's Stop does.
+  const markStopped = () => {
+    if (signal?.reason === 'stopped' && chat) jobChat.stop(chat.sessionId);
+  };
+  if (signal?.aborted) markStopped();
+  else signal?.addEventListener?.('abort', markStopped);
   let result = null;
   let failure = null;
   try {
@@ -573,6 +581,8 @@ export async function runJobTurn(
     failure = err;
     throw err;
   } finally {
+    // Stopped by the user, not by the 10-minute limit (jobs.js aborts that with 'timeout').
+    outcome.stopped = stop.signal.aborted && signal?.reason !== 'timeout';
     jobPage.end();
     // The chat someone watched, for the run's record.
     chatOut.id =

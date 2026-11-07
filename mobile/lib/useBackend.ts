@@ -232,6 +232,8 @@ export interface JobRun {
   changes?: ({ drive: string; path: string; draft: boolean } | { tool: string; summary: string })[]
   // An older run keeps only the start of its answer (shared/jobs.mjs trimRun).
   summary?: string; trimmed?: boolean
+  // The user stopped it on the computer: not a failure (status 'ok'), its answer is what it had by then.
+  stopped?: boolean
   // From the backend's history (jobs/runs): who ran it, how long it took, a line to show folded, and
   // the text its search looks in.
   deviceName?: string; took?: string; preview?: string; searchText?: string
