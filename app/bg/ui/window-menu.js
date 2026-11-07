@@ -839,6 +839,17 @@ export function buildWindowMenu(opts = {}) {
           });
         },
       },
+      {
+        // Not `reserved`: a page that uses Cmd/Ctrl+K itself (Notes' "insert link") keeps it there.
+        id: 'commandPalette',
+        label: 'Command Palette…',
+        accelerator: 'CmdOrCtrl+K',
+        click: function (item) {
+          createWindowIfNone(win, (win) => {
+            shellMenus.toggle(win, 'command-palette');
+          });
+        },
+      },
       { type: 'separator' },
       {
         id: 'nextTab',

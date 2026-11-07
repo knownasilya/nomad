@@ -9,4 +9,8 @@ export default {
   showInpageFind: 'promise',
   getWindowMenu: 'promise',
   triggerWindowMenuItemById: 'promise',
+  getPalette: 'promise',
+  searchPaletteHistory: 'promise',
+  switchToTab: 'promise',
+  openFromPalette: 'promise',
 };
