@@ -122,6 +122,8 @@ export default {
   deleteJob: 'promise',
   runJob: 'promise', // (id, { watch? }) runs it now, on this Device; watch: in a tab the user watches (Run with me)
   viewJob: 'promise', // (id, { chat? }) opens a running Job's chat in the AI Sidebar and shows its page; after, a run's chat
+  stopJob: 'promise', // (id) -> stops its run going on now on this Device, or one waiting; false when none
+  watchJobProgress: 'readable', // (id) 'progress' { progress }: its run on this Device as it goes, or null
   watchJobs: 'readable', // 'changed' when a Job or a run changes, or a run starts
 
   // Open tabs on the user's other Devices (bg/ui/open-tabs.js)

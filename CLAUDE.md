@@ -550,6 +550,11 @@ page's **Watch** (`nomad.vault.viewJob`) does it for a run already going, bringi
 too. The sidebar draws it with `aiShell.followJob` (its Stop is `aiShell.stopJob`). The chat is a
 sidebar session with `job: { id, title }`, saved only once someone watches; the run's record names
 it (`chat`), and the sidebar's history and nomad://ai/chats mark it as a Job's.
+While a run goes on, the Jobs page swaps its play button for **Stop** (`nomad.vault.stopJob`,
+`jobs.stop`, which aborts with reason `'stopped'`; a run still waiting in line is dropped), and an
+open running Job shows its steps and text live (`nomad.vault.watchJobProgress`, `job-chat.js`
+`progress()`, pure rules `applyJobProgress` in `job-chat-messages.mjs`). A run the user stopped, from
+there, the sidebar or its page, is saved `stopped: true` with status `ok` and notifies no one.
 
 ### The AI page, chats and memory (ADR-0032)
 

@@ -8,7 +8,7 @@
 //                                           device, space, createdAt, updatedAt, scheduleFrom, cleared? }
 //   /.vault/job-runs/<jobId>/<runId>.json { type, id, jobId, title, device, trigger, startedAt, finishedAt,
 //                                           status, output, error?, notification, changes?, needs?, summary?,
-//                                           trimmed? }
+//                                           trimmed?, stopped? }
 //
 // A Job's runs are its history: the newest KEEP_HISTORY, of which the newest KEEP_RUNS keep their
 // whole answer. An older run is `trimmed`: its answer gives way to a short `summary`, and its status,
@@ -1189,8 +1189,9 @@ export function summarize(text, max = MAX_NOTE_BODY) {
 
 // The notification a finished run sends, or null. `notified` is what the AI sent with notify, if
 // it did; `prevRun` is the Job's run before this one.
-export function finalNotification(job, { status, output, error, notified = null, prevRun = null }) {
-  if (!job || job.notify === 'never') return null;
+// A run the user stopped tells nobody: they were there.
+export function finalNotification(job, { status, output, error, notified = null, prevRun = null, stopped = false }) {
+  if (!job || job.notify === 'never' || stopped) return null;
   if (status === 'error') {
     if (prevRun?.status === 'error') return null; // already told: the last run failed too
     return makeNotification({
@@ -1226,6 +1227,7 @@ export function makeRun({
   changes = [],
   needs = [],
   chat = null,
+  stopped = false,
 }) {
   const changed = normalizeChanges(changes);
   const wanted = normalizeNeeds(needs);
@@ -1246,6 +1248,9 @@ export function makeRun({
     ...(wanted.length ? { needs: wanted } : {}),
     // The run's chat in the AI Sidebar (app/bg/ai/job-chat.js), when the user watched it.
     ...(typeof chat === 'string' && CHAT_ID.test(chat) ? { chat } : {}),
+    // The user stopped it (the Jobs page's Stop, the sidebar's, or its page's Stop bar): not a
+    // failure, and its answer is whatever it had written by then.
+    ...(stopped && status !== 'error' ? { stopped: true } : {}),
   };
 }
 
@@ -1358,7 +1363,8 @@ export function runDuration(run) {
 export function runPreview(run, max = 160) {
   if (!run) return '';
   if (run.status === 'error') return clip(oneParagraph(run.error || 'The Job didn’t finish'), max);
-  return summarize(run.output || run.summary || run.notification?.body || '', max);
+  const text = summarize(run.output || run.summary || run.notification?.body || '', max);
+  return run.stopped && !text ? 'You stopped it' : text;
 }
 
 // The text a history's search looks in (app-stdlib search-match.js, mobile/lib/search.ts).

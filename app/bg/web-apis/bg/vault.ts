@@ -856,6 +856,39 @@ export default {
     return jobChat.view(id, win, { chat });
   },
 
+  // Stop a Job's run on this Device: the one going on now, or one waiting to start. false when
+  // neither.
+  async stopJob(id) {
+    if (!jobs.get(id)) throw new Error('No Job with that id');
+    return jobs.stop(id);
+  },
+
+  // A Job's run on this Device as it goes on, for the Jobs page: 'progress' with { progress } at
+  // once and as the run goes (a quarter second apart at most), where progress is job-chat.js
+  // progress() or null when nothing is running.
+  watchJobProgress(id) {
+    const emitter: any = new EventEmitter();
+    const jobId = String(id || '');
+    let timer = null;
+    let closed = false;
+    const send = () => {
+      timer = null;
+      if (!closed) emitter.emit('progress', { progress: jobChat.progress(jobId) });
+    };
+    const changed = (changedId) => {
+      if (changedId === jobId && !timer) timer = setTimeout(send, 250);
+    };
+    jobChat.progressEvents.on('progress', changed);
+    // The first one once the page is listening.
+    timer = setTimeout(send, 0);
+    emitter.close = () => {
+      closed = true;
+      clearTimeout(timer);
+      jobChat.progressEvents.removeListener('progress', changed);
+    };
+    return emitter;
+  },
+
   // 'changed' when a Job or a run changes, here or on another Device, and when a run starts.
   watchJobs() {
     const emitter: any = new EventEmitter();

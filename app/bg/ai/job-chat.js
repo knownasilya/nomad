@@ -22,7 +22,13 @@ import EventEmitter from 'events';
 import * as logLib from '../logger';
 import * as chatStore from './chat-store';
 import { openAiSidebarChat, emitAiChatsChanged } from '../ui/tabs/manager';
-import { jobChatStart, applyJobEvent, jobChatEnd } from './job-chat-messages.mjs';
+import {
+  jobChatStart,
+  applyJobEvent,
+  jobChatEnd,
+  jobProgressStart,
+  applyJobProgress,
+} from './job-chat-messages.mjs';
 
 const logger = logLib.get().child({ category: 'ai', subcategory: 'job-chat' });
 
@@ -31,6 +37,11 @@ const RELAYED = ['chunk', 'reasoning', 'tool'];
 const live = new Map(); // sessionId -> entry, while the run goes on
 const liveByJob = new Map(); // jobId -> entry
 const lastByJob = new Map(); // jobId -> { sessionId | null, page }, the Job's last run here
+
+// 'progress' (jobId) when a live run's progress changes, starts or ends: the Jobs page shows it
+// (progress()).
+export const progressEvents = new EventEmitter();
+progressEvents.setMaxListeners(0);
 
 export function isLive(sessionId) {
   return live.has(sessionId);
@@ -56,16 +67,24 @@ export async function open({ job, prompt, emitter, stop, page = null, watchWin =
     stopped: false,
     stop,
     page,
+    startedAt: new Date().toISOString(),
+    progress: jobProgressStart(),
   };
   entry.bus.setMaxListeners(0);
   live.set(sessionId, entry);
   liveByJob.set(job.id, entry);
+  progressEvents.emit('progress', job.id);
 
   const listeners = RELAYED.map((type) => {
     const fn = (e) => {
       if (entry.ended) return;
       entry.events.push([type, e]);
       entry.messages = applyJobEvent(entry.messages, type, e);
+      const progress = applyJobProgress(entry.progress, type, e);
+      if (progress !== entry.progress) {
+        entry.progress = progress;
+        progressEvents.emit('progress', job.id);
+      }
       entry.bus.emit('event', type, e);
     };
     emitter.on(type, fn);
@@ -88,6 +107,7 @@ export async function open({ job, prompt, emitter, stop, page = null, watchWin =
       if (liveByJob.get(job.id) === entry) liveByJob.delete(job.id);
       lastByJob.set(job.id, { sessionId: saved ? sessionId : null, page });
       entry.bus.emit('end');
+      progressEvents.emit('progress', job.id);
       return saved ? sessionId : null;
     },
   };
@@ -140,6 +160,32 @@ export function follow(sessionId, emitter, signal) {
     entry.bus.on('end', onEnd);
     signal?.addEventListener?.('abort', onAbort);
   });
+}
+
+// A Job's run going on now, as the Jobs page shows it: { startedAt, items, thinking, stopping,
+// watched, page }, or null when none is. `watched`: its chat is open in a sidebar; `page`: it has a
+// page to show.
+export function progress(jobId) {
+  const entry = liveByJob.get(jobId);
+  if (!entry || entry.ended) return null;
+  return {
+    startedAt: entry.startedAt,
+    items: entry.progress.items,
+    thinking: entry.progress.thinking,
+    stopping: entry.stopped,
+    watched: entry.senders.size > 0,
+    page: !!entry.page,
+  };
+}
+
+// The Jobs page's Stop: the Job's run going on now ends as it does from the sidebar's Stop, and its
+// chat says it was stopped. false when none is.
+export function stopJob(jobId) {
+  const entry = liveByJob.get(jobId);
+  if (!entry || entry.ended) return false;
+  const ok = stop(entry.sessionId);
+  progressEvents.emit('progress', jobId);
+  return ok;
 }
 
 // The sidebar's Stop on a run's chat: the run ends as it does from its page's Stop bar.

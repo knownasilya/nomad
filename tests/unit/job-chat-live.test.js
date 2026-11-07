@@ -76,6 +76,34 @@ describe('job-chat', () => {
     expect(opened).toEqual([{ win: 3, id: chat.sessionId }]);
   });
 
+  it('shows the Jobs page a live run’s progress, and its Stop says it stopped', async () => {
+    const turn = new EventEmitter();
+    const stop = vi.fn();
+    const seen = [];
+    const onProgress = (id) => seen.push(id);
+    jobChat.progressEvents.on('progress', onProgress);
+    const chat = await jobChat.open({ job: { id: 'j2', title: 'Watch me' }, prompt: 'Go', emitter: turn, stop });
+    turn.emit('tool', { phase: 'start', id: 'a', summary: 'Fetching a page' });
+    turn.emit('chunk', { text: 'Found it' });
+    expect(jobChat.progress('j2')).toMatchObject({
+      items: [
+        { kind: 'step', summary: 'Fetching a page', state: 'running' },
+        { kind: 'text', text: 'Found it' },
+      ],
+      stopping: false,
+      watched: false,
+      page: false,
+    });
+    expect(jobChat.stopJob('j2')).toBe(true);
+    expect(stop).toHaveBeenCalled();
+    expect(jobChat.progress('j2').stopping).toBe(true);
+    await chat.end({});
+    expect(jobChat.progress('j2')).toBe(null);
+    expect(jobChat.stopJob('j2')).toBe(false);
+    expect(seen.filter((id) => id === 'j2').length).toBeGreaterThanOrEqual(4);
+    jobChat.progressEvents.removeListener('progress', onProgress);
+  });
+
   it('gives a follower the run’s failure', async () => {
     const turn = new EventEmitter();
     const chat = await jobChat.open({ job: JOB, prompt: 'Go', emitter: turn, stop: () => {}, watchWin: win(1) });
