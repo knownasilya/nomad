@@ -15,7 +15,10 @@
 //   fromURLToKey(url, dns?)     — resolve a url (incl. dns aliases like 'private') to a hex key
 //   spaceRootKeyForSender(ctx)  — hex key of the caller's space root, or null (per-space 'private')
 //   parseDriveUrl(url)          — { hostname, version, pathname, search }
+//   lookupCap(host)             — { key, version } for a `<token>.cap` host (nomad.capabilities),
+//                                 or undefined when there's no such capability
 const HEX_KEY = /^[0-9a-f]{64}$/i;
+const CAP_HOST = /^[a-z0-9]+\.cap$/i;
 
 export function createFsRouter(deps) {
   const {
@@ -27,6 +30,7 @@ export function createFsRouter(deps) {
     fromURLToKey,
     spaceRootKeyForSender,
     parseDriveUrl,
+    lookupCap,
   } = deps;
 
   const _other = (api) => (api === autobaseAPI ? hyperdriveAPI : autobaseAPI);
@@ -37,6 +41,18 @@ export function createFsRouter(deps) {
       return url;
     }
   };
+
+  // A capability URL (`hyper://<token>.cap/…`, nomad.capabilities) stands in for a drive without
+  // naming its key. Both backends need the real key, so it is swapped in before anything else.
+  const isCapUrl = (url) => typeof url === 'string' && CAP_HOST.test(_keyFromUrl(url) || '');
+
+  function _resolveCap(url) {
+    const urlp = parseDriveUrl(url);
+    const target = lookupCap ? lookupCap(urlp.hostname) : undefined;
+    if (!target || !target.key) throw new Error('Capability does not exist');
+    const version = target.version || urlp.version;
+    return `hyper://${target.key}${version ? `+${version}` : ''}${urlp.pathname || '/'}${urlp.search || ''}`;
+  }
 
   // Resolve the hostname (incl. the per-space `private` alias) to its real hex key.
   async function _resolveKey(ctx, url) {
@@ -50,7 +66,10 @@ export function createFsRouter(deps) {
   // Rewrite a url to canonical `hyper://<hexkey>/…` form BEFORE detection, so aliases (esp.
   // `private`) resolve and both detection AND the backend impl see the real key. This is what
   // stops an Autobase root drive from being mis-routed to the Hyperdrive backend (which hangs).
+  // A capability resolves to its target first (an unknown one throws), and that target goes through
+  // the same alias resolution, so a capability for `hyper://private/` is still the caller's own Space.
   async function canonical(ctx, url) {
+    if (isCapUrl(url)) url = _resolveCap(url);
     try {
       const key = await _resolveKey(ctx, url);
       if (key && HEX_KEY.test(key)) {
@@ -130,5 +149,5 @@ export function createFsRouter(deps) {
     }
   }
 
-  return { canonical, dispatch, backendKnown, read };
+  return { canonical, dispatch, backendKnown, read, isCapUrl };
 }

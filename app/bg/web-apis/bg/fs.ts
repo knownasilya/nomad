@@ -17,6 +17,7 @@ import autobaseAPI from './autobase';
 import * as filesystem from '../../filesystem/index';
 import * as drives from '../../hyper/drives';
 import * as drafts from '../../hyper/drafts';
+import * as capabilities from '../../hyper/capabilities';
 import { parseDriveUrl } from '../../../lib/urls';
 import { createFsRouter } from './fs-router';
 import { createFsWriteGuard } from './fs-write-guard';
@@ -44,7 +45,32 @@ const router = createFsRouter({
     return spaceUrl ? drives.fromURLToKey(spaceUrl, true) : null;
   },
   parseDriveUrl,
+  lookupCap: (host) => capabilities.lookupCap(host)?.target,
 });
+// A capability URL (nomad.capabilities) gives read access to its drive and hides the drive's key.
+// Writes, writer management, Drafts and other whole-drive calls through one are refused: they would
+// act on a drive the holder was only meant to read.
+function _assertCapRead(url, capOk) {
+  if (!capOk && router.isCapUrl(url)) {
+    throw new Error('A capability URL can only be read: ' + url);
+  }
+}
+// What getInfo shows through a capability: the capability, never the drive's key or this Device's
+// writer key.
+function _capInfo(capUrl, info: any = {}) {
+  const host = parseDriveUrl(capUrl).hostname;
+  return {
+    key: host,
+    url: `hyper://${host}/`,
+    writable: false,
+    version: info.version,
+    peers: info.peers,
+    title: info.title || '',
+    description: info.description || '',
+    type: info.type || '',
+    isCollaborative: !!info.isCollaborative,
+  };
+}
 // Every call that reaches a drive passes the private-drive guard (private-drive-guard.ts) on the
 // canonical url, so a page can't reach any Space's `hyper://private/` through either backend.
 // `access` is 'read', 'write', or 'drive' (a call on the whole drive, never granted to a page).
@@ -60,7 +86,8 @@ async function _assertPrivate(ctx, canonicalUrl, access) {
   }
   await privateDrive.assert(ctx, key, path, access);
 }
-async function _dispatch(ctx, url, access = 'drive') {
+async function _dispatch(ctx, url, access = 'drive', capOk = access === 'read') {
+  _assertCapRead(url, capOk);
   const d = await router.dispatch(ctx, url);
   await _assertPrivate(ctx, d.url, access);
   return d;
@@ -71,6 +98,7 @@ async function _read(ctx, method, url, rest) {
 }
 // For the methods that hand a url straight to the Autobase backend.
 async function _assertDrive(ctx, url) {
+  _assertCapRead(url, false);
   await _assertPrivate(ctx, await router.canonical(ctx, url), 'drive');
 }
 
@@ -211,8 +239,9 @@ async function _readMerged(ctx, url, opts) {
 
 const fsAPI = {
   async getInfo(url, opts = {}) {
-    const { api, url: u } = await _dispatch(this, url);
-    return api.getInfo.call(this, u, opts);
+    const { api, url: u } = await _dispatch(this, url, 'drive', true);
+    const info = await api.getInfo.call(this, u, opts);
+    return router.isCapUrl(url) ? _capInfo(url, info) : info;
   },
 
   // --- Read ---
@@ -264,7 +293,7 @@ const fsAPI = {
     return out;
   },
   async diff(url, other, opts = {}) {
-    const { api, url: u } = await _dispatch(this, url);
+    const { api, url: u } = await _dispatch(this, url, 'drive', true);
     return api.diff.call(this, u, other, opts);
   },
 
@@ -348,7 +377,7 @@ const fsAPI = {
 
   // --- Change notifications ('readable' — return the backend's emitter) ---
   async watch(url, pathPattern) {
-    const { api, url: u } = await _dispatch(this, url);
+    const { api, url: u } = await _dispatch(this, url, 'drive', true);
     return _toEventStream(await api.watch.call(this, u, pathPattern));
   },
 

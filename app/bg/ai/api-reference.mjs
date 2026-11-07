@@ -150,6 +150,12 @@ const html = await drive.readFile('/index.html', { draft: true })   // preview t
 const { mode, changes } = await drive.draftStatus()    // changes: [{ path, op, conflict }]
 await drive.publishDraft({ paths: ['/posts/x/'] })     // fold a subtree onto the drive (goes live)
 await drive.discardDraft()                             // throw the whole Draft away
+
+// Capability URLs (nomad.capabilities): let another app (e.g. in an iframe) read a drive without
+// learning its key, then revoke it. Read-only through nomad.fs; in memory, gone on restart.
+const capUrl = await nomad.capabilities.create('hyper://key.../')   // 'hyper://<token>.cap/'
+await nomad.fs.drive(capUrl).readdir('/')
+await nomad.capabilities.delete(capUrl)                // later reads through it fail
 \`\`\`
 
 ## nomad.shell — Browser dialogs and library management

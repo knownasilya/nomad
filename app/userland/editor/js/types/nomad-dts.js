@@ -350,10 +350,18 @@ declare namespace Nomad {
     list(): string[];
   }
 
+  /**
+   * Capability URLs (`hyper://<token>.cap/`): stand-ins for a drive that give read access without
+   * naming its key, and can be pointed elsewhere or revoked. In memory on this Device only; gone when
+   * Nomad restarts. Read them with nomad.fs; writes and drive management through one are refused.
+   */
   interface Capabilities {
-    create(opts?: object): Promise<any>;
-    modify(opts?: object): Promise<any>;
-    delete(opts?: object): Promise<any>;
+    /** Make a capability for a drive (`hyper://<key>/` or `hyper://<key>+<version>/`). Resolves to the `hyper://<token>.cap/` URL. */
+    create(targetUrl: string): Promise<string>;
+    /** Point a capability this page made at another drive. */
+    modify(capUrl: string, targetUrl: string): Promise<void>;
+    /** Revoke a capability this page made. Later reads through it fail. */
+    delete(capUrl: string): Promise<void>;
   }
 
   interface TerminalCommand {
