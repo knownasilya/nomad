@@ -38,7 +38,7 @@ list the AI wrote. And a Space that isn't shared wants the same place for the us
    first time it lists them: the same blobs at the new paths, a `nomad/asset` record (`legacyMove`),
    then the old paths go. Until then (a viewer's Device) they are read where they are
    (`fromPhoto`, `legacyPaths`). Their ids keep their `p` prefix; new ones start with `a`.
-   `nomad://photos` goes to `nomad://assets`.
+   `nomad://photos` is gone; Assets is `nomad://assets`.
 
 5. **The AI can put things there.** The user's own AI (a personal turn: the sidebar, the phone's AI
    panel, the loopback MCP) has `saveAsset`: `text` it wrote, `base64` bytes its code made, or a

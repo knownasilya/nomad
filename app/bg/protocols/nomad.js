@@ -531,10 +531,6 @@ async function nomadProtocol(request) {
         { fallbackToIndexHTML: true }
       );
     }
-    // The family album (ADR-0043) is Assets now (ADR-0044): an old link opens it.
-    if (requestUrl === 'nomad://photos' || requestUrl.startsWith('nomad://photos/')) {
-      return cb(200, 'OK', 'text/html; charset=utf-8', () => '<!doctype html><meta http-equiv="refresh" content="0;url=nomad://assets/">');
-    }
     // The Persona Inbox (ADR-0036): direct messages. /new and ?persona=&with= are routes of one page.
     if (requestUrl === 'nomad://messages' || requestUrl.startsWith('nomad://messages/')) {
       return serveAppAsset(
