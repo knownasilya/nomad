@@ -43,6 +43,21 @@ for (const [name, m] of [['desktop', desktop], ['phone', phone]]) {
       expect(m.isTime('24:00')).toBe(false)
     })
 
+    it('shows times on a 12-hour clock', () => {
+      expect(m.formatTime('00:00')).toBe('12:00 AM')
+      expect(m.formatTime('00:30')).toBe('12:30 AM')
+      expect(m.formatTime('09:05')).toBe('9:05 AM')
+      expect(m.formatTime('12:00')).toBe('12:00 PM')
+      expect(m.formatTime('15:30')).toBe('3:30 PM')
+      expect(m.formatTime('23:45')).toBe('11:45 PM')
+      expect(m.formatTime('17:00', true)).toBe('5pm')
+      expect(m.formatTime('17:30', true)).toBe('5:30pm')
+      expect(m.formatTime('00:00', true)).toBe('12am')
+      expect(m.formatTime('nope')).toBe('nope')
+      // What it shows reads back as the same time.
+      for (const o of m.timeOptions()) expect(m.parseTime(o.label)).toBe(o.value)
+    })
+
     it('says how long an event is', () => {
       expect(m.durationLabel(15)).toBe('15 min')
       expect(m.durationLabel(60)).toBe('1 h')
@@ -54,18 +69,19 @@ for (const [name, m] of [['desktop', desktop], ['phone', phone]]) {
     it('lists every quarter hour of a day', () => {
       const all = m.timeOptions()
       expect(all).toHaveLength(96)
-      expect(all[0]).toEqual({ value: '00:00', label: '00:00' })
+      expect(all[0]).toEqual({ value: '00:00', label: '12:00 AM' })
+      expect(all[54]).toEqual({ value: '13:30', label: '1:30 PM' })
       expect(all[95].value).toBe('23:45')
       expect(m.timeOptions(30)).toHaveLength(48)
     })
 
     it('lists end times after the start, with how long each makes it', () => {
       const ends = m.endOptions('09:00')
-      expect(ends[0]).toEqual({ value: '09:15', label: '09:15 (15 min)' })
-      expect(ends[3]).toEqual({ value: '10:00', label: '10:00 (1 h)' })
+      expect(ends[0]).toEqual({ value: '09:15', label: '9:15 AM (15 min)' })
+      expect(ends[3]).toEqual({ value: '10:00', label: '10:00 AM (1 h)' })
       expect(ends.at(-1).value).toBe('23:45')
       // A start off the quarter hour still offers the next quarter.
-      expect(m.endOptions('09:10')[0]).toEqual({ value: '09:15', label: '09:15 (5 min)' })
+      expect(m.endOptions('09:10')[0]).toEqual({ value: '09:15', label: '9:15 AM (5 min)' })
       // On a later day, or with a late start, every time.
       expect(m.endOptions('09:00', false)).toHaveLength(96)
       expect(m.endOptions('23:50')).toHaveLength(96)

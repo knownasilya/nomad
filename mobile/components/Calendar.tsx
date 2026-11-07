@@ -10,7 +10,7 @@ import IconButton from './IconButton'
 import LinkPhone from './LinkPhone'
 import ScreenHeader from './ScreenHeader'
 import { TimeField, TimePicker } from './TimePicker'
-import { isTime, minutesOf, shiftEnd, timeFrom } from '../lib/timeOfDay'
+import { formatTime, isTime, minutesOf, shiftEnd, timeFrom } from '../lib/timeOfDay'
 
 interface Props {
   visible: boolean
@@ -57,11 +57,11 @@ const dayLabel = (day: string) => `${DAY_NAMES[weekday(day)]} ${+day.slice(8, 10
 // The first day of the six weeks that show `month` ('YYYY-MM'), from a Sunday.
 const gridStart = (month: string) => { const first = month + '-01'; return addDays(first, -weekday(first)) }
 
-// What a row says about when: "All day", "09:30", "18:00 to 19:30".
+// What a row says about when: "All day", "9:30 AM", "6:00 PM to 7:30 PM".
 function timeOf (o: { start: string; end?: string; allDay: boolean }, day: string) {
   if (o.allDay) return 'All day'
-  const start = o.start.slice(0, 10) === day ? o.start.slice(11, 16) : 'Until'
-  const end = o.end && o.end.slice(0, 10) === day ? o.end.slice(11, 16) : ''
+  const start = o.start.slice(0, 10) === day ? formatTime(o.start.slice(11, 16)) : 'Until'
+  const end = o.end && o.end.slice(0, 10) === day ? formatTime(o.end.slice(11, 16)) : ''
   return start === 'Until' ? (end ? `Until ${end}` : 'All day') : end ? `${start} to ${end}` : start
 }
 

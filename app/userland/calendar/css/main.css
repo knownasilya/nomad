@@ -224,7 +224,7 @@ aside {
 
 .item {
   display: grid;
-  grid-template-columns: 54px 1fr;
+  grid-template-columns: 64px 1fr;
   gap: 8px;
   align-items: baseline;
   width: 100%;
@@ -538,7 +538,7 @@ main {
 }
 
 .dialog .fields .time-field .time-input {
-  width: 64px;
+  width: 78px;
   height: 28px;
   padding: 0 0 0 8px;
   border: 0;

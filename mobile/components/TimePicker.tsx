@@ -1,14 +1,15 @@
 import { useMemo } from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
-import { durationLabel, minutesOf, timeFrom } from '../lib/timeOfDay'
+import { durationLabel, formatTime, minutesOf, timeFrom } from '../lib/timeOfDay'
 import Icon from './Icon'
 
-// The calendar editor's times (Calendar.tsx). A TimeField shows a time and opens a TimePicker under
-// it: the hours of the day and the minutes in fives, one tap each, so nobody types "HH:MM". An end
-// time's picker also offers lengths ("1 h") counted from the start, and "No end time".
+// The calendar editor's times (Calendar.tsx), on a 12-hour clock. A TimeField shows a time and opens
+// a TimePicker under it: the hours 1 to 12 with AM and PM, and the minutes in fives, one tap each, so
+// nobody types a time. An end time's picker also offers lengths ("1 h") counted from the start, and
+// "No end time". Times are still kept as "HH:MM" (24-hour).
 
-const HOURS = Array.from({ length: 24 }, (_, h) => h)
+const HOURS = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5)
 const LENGTHS = [30, 60, 90, 120]
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -27,11 +28,11 @@ export function TimeField ({ label, value, open, onPress, placeholder = 'No end 
       style={[s.field, open && s.fieldOpen]}
       onPress={onPress}
       accessibilityRole='button'
-      accessibilityLabel={`${label}, ${value || placeholder}`}
+      accessibilityLabel={`${label}, ${value ? formatTime(value) : placeholder}`}
       accessibilityHint={open ? 'Closes the time picker' : 'Opens the time picker'}
       accessibilityState={{ expanded: open }}
     >
-      <Text style={[s.fieldText, !value && s.fieldEmpty]}>{value || placeholder}</Text>
+      <Text style={[s.fieldText, !value && s.fieldEmpty]}>{value ? formatTime(value) : placeholder}</Text>
       <Icon name='clock' size={16} color={open ? t.accent : t.textMuted} regular />
     </Pressable>
   )
@@ -50,8 +51,11 @@ export function TimePicker ({ label, value, onChange, start, onLength, onClear, 
   const s = useMemo(() => makeStyles(t), [t])
   // With no time yet, an hour or a minute is set on the start plus an hour (or 09:00).
   const base = value || (start ? timeFrom(minutesOf(start) + 60) : '09:00')
-  const hour = value ? Number(value.slice(0, 2)) : -1
+  const h24 = Number(base.slice(0, 2))
+  const pm = h24 >= 12
+  const hour = value ? h24 % 12 || 12 : -1 // the hour on a 12-hour clock
   const minute = value ? Number(value.slice(3, 5)) : -1
+  const setHour = (h12: number, toPm = pm) => onChange(`${pad((h12 % 12) + (toPm ? 12 : 0))}:${base.slice(3, 5)}`)
   const length = start && value ? minutesOf(value) - minutesOf(start) : NaN
 
   const chip = (key: string | number, text: string, on: boolean, onPress: () => void, a11y: string) => (
@@ -80,13 +84,17 @@ export function TimePicker ({ label, value, onChange, start, onLength, onClear, 
         <>
           <Text style={s.label}>How long</Text>
           <View style={s.lengths}>
-            {LENGTHS.map((m) => chip(`l${m}`, durationLabel(m), length === m, () => onLength(m), `${durationLabel(m)}, until ${timeFrom(minutesOf(start) + m)}`))}
+            {LENGTHS.map((m) => chip(`l${m}`, durationLabel(m), length === m, () => onLength(m), `${durationLabel(m)}, until ${formatTime(timeFrom(minutesOf(start) + m))}`))}
           </View>
         </>
       )}
       <Text style={s.label}>Hour</Text>
       <View style={s.grid}>
-        {HOURS.map((h) => chip(`h${h}`, pad(h), h === hour, () => onChange(`${pad(h)}:${base.slice(3, 5)}`), `${pad(h)} hours`))}
+        {HOURS.map((h) => chip(`h${h}`, String(h), h === hour, () => setHour(h), `${h} o’clock`))}
+      </View>
+      <View style={[s.lengths, s.ampm]}>
+        {chip('am', 'AM', !!value && !pm, () => setHour(h24 % 12 || 12, false), 'AM, morning')}
+        {chip('pm', 'PM', !!value && pm, () => setHour(h24 % 12 || 12, true), 'PM, afternoon and evening')}
       </View>
       <Text style={s.label}>Minute</Text>
       <View style={s.grid}>
@@ -114,6 +122,7 @@ function makeStyles (t: Theme) {
     label: { color: t.textDim, fontSize: 12, fontWeight: '600', marginTop: space.sm, marginBottom: space.xs },
     grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
     lengths: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    ampm: { marginTop: 6 },
     chip: { flexGrow: 1, flexBasis: '14%', minHeight: 40, borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, backgroundColor: t.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
     chipOn: { backgroundColor: t.accent, borderColor: t.accent },
     chipText: { color: t.text, fontSize: 14, fontVariant: ['tabular-nums'] },

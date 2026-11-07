@@ -11,7 +11,7 @@
 //
 // Vanilla JS (served as-is, no bundle), styled with the app-stdlib tokens like nomad://messages.
 
-import { parseTime, timeOptions, endOptions, shiftEnd } from 'nomad://app-stdlib/js/time-of-day.js'
+import { parseTime, formatTime, timeOptions, endOptions, shiftEnd } from 'nomad://app-stdlib/js/time-of-day.js'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -234,7 +234,7 @@ function renderDrives() {
 }
 
 function renderItem(o) {
-  const time = o.allDay ? 'All day' : o.start.slice(11, 16)
+  const time = o.allDay ? 'All day' : formatTime(o.start.slice(11, 16))
   const sub = [o.location, o.feed && `From ${o.feed.name}`, o.repeats && 'Repeats', o.by && `Added by ${o.by}`].filter(Boolean).join(' · ')
   const readonly = !!o.feed
   return el(
@@ -274,7 +274,7 @@ function renderGrid(days) {
                 else openEditor(o.id)
               },
             },
-            [!o.allDay ? el('span', { class: 't' }, [o.start.slice(11, 16)]) : null, o.title]
+            [!o.allDay ? el('span', { class: 't' }, [formatTime(o.start.slice(11, 16), true)]) : null, o.title]
           )
         ),
         list.length > shown.length ? el('span', { class: 'more' }, [`${list.length - shown.length} more`]) : null,
@@ -460,7 +460,7 @@ function renderEditor() {
   ])
 }
 
-// A time of day: type it ("9", "930", "3:30pm", "18:30") or pick one from the list that opens under
+// A time of day, shown on a 12-hour clock: type it ("9", "930", "3:30pm", "18:30") or pick one from the list that opens under
 // it (every quarter hour; an end time's list starts after the start and says how long that makes
 // the event). The arrow keys move through the list, Enter picks, Escape closes it. A time that
 // can't be read goes back to the one before. Electron's <input type="time"> has no picker on macOS.
@@ -473,9 +473,9 @@ function timeField({ id, label, value, options, disabled, onChange }) {
     id,
     type: 'text',
     class: 'time-input',
-    value,
+    value: formatTime(value),
     disabled,
-    placeholder: 'HH:MM',
+    placeholder: '9:00 AM',
     autocomplete: 'off',
     spellcheck: 'false',
     role: 'combobox',
@@ -501,7 +501,7 @@ function timeField({ id, label, value, options, disabled, onChange }) {
       } else if (ev.key === 'Escape' && !list.hidden) {
         ev.preventDefault()
         ev.stopPropagation() // close the list, not the dialog
-        input.value = current
+        input.value = formatTime(current)
         close()
       } else if (ev.key === 'Tab') close()
     },
@@ -611,7 +611,7 @@ function timeField({ id, label, value, options, disabled, onChange }) {
   }
   function pick(t) {
     close()
-    input.value = t
+    input.value = formatTime(t)
     if (t !== current) {
       current = t
       onChange(t)
@@ -626,7 +626,7 @@ function timeField({ id, label, value, options, disabled, onChange }) {
       wrap.classList.add('invalid')
       setTimeout(() => wrap.classList.remove('invalid'), 900)
     }
-    input.value = current
+    input.value = formatTime(current)
   }
   return wrap
 }

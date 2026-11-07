@@ -18,6 +18,18 @@ export function timeFrom (min: number): string {
   return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`
 }
 
+// How a time reads, on a 12-hour clock: "3:30 PM", "9:00 AM", "12:00 PM" (noon). `short` is for tight
+// spots like the month grid: "3:30pm", "9am". Anything that isn't a time comes back as it was.
+export function formatTime (t: string, short = false): string {
+  if (!isTime(t)) return t
+  const h = Number(t.slice(0, 2))
+  const m = t.slice(3, 5)
+  const h12 = h % 12 || 12
+  const ampm = h < 12 ? 'AM' : 'PM'
+  if (short) return `${h12}${m === '00' ? '' : ':' + m}${ampm.toLowerCase()}`
+  return `${h12}:${m} ${ampm}`
+}
+
 // What the person typed, as "HH:MM", or null: "9" → 09:00, "930" / "9:30" / "9.30" → 09:30,
 // "1830" → 18:30, "3pm" / "3:30 pm" / "3:30p" → 15:00 / 15:30, "12am" → 00:00, "noon", "midnight".
 export function parseTime (text: unknown): string | null {
@@ -58,18 +70,18 @@ export interface TimeOption { value: string; label: string }
 
 export function timeOptions (step = 15): TimeOption[] {
   const out: TimeOption[] = []
-  for (let m = 0; m < DAY; m += step) out.push({ value: timeFrom(m), label: timeFrom(m) })
+  for (let m = 0; m < DAY; m += step) out.push({ value: timeFrom(m), label: formatTime(timeFrom(m)) })
   return out
 }
 
 // The times an end-time picker lists on the start's day: every `step` minutes after the start,
-// up to 23:45, each with how long the event would be ("10:30 (1.5 h)"). On a later day, every time.
+// up to 23:45, each with how long the event would be ("10:30 AM (1.5 h)"). On a later day, every time.
 export function endOptions (start: string, sameDay = true, step = 15): TimeOption[] {
   const s = minutesOf(start)
   if (!sameDay || Number.isNaN(s)) return timeOptions(step)
   const out: TimeOption[] = []
   for (let m = Math.floor(s / step) * step + step; m < DAY; m += step) {
-    out.push({ value: timeFrom(m), label: `${timeFrom(m)} (${durationLabel(m - s)})` })
+    out.push({ value: timeFrom(m), label: `${formatTime(timeFrom(m))} (${durationLabel(m - s)})` })
   }
   return out.length ? out : timeOptions(step)
 }
