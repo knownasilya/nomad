@@ -136,11 +136,14 @@ mobile shim + dispatcher, plus `nomad-dts.js` / `API_REFERENCE` in `app/bg/ai/ap
 without naming its key. Rules (paths, scope, what a page sees, what is kept) are
 `app/bg/hyper/capability-rules.mjs` (tests `tests/unit/capability-rules.test.js`); the store is
 `app/bg/hyper/capabilities.js`. A page's own `create()` covers a whole drive and lives in memory. A
-**picked** one comes from `nomad.shell.selectFileDialog({ capability: true })` (`pickedCapability`
-in `bg/web-apis/bg/shell.ts`): it covers only the picked item, can reach `hyper://private/` (the
-user's pick is the grant, so `fs.ts` skips the private-drive guard for it), and is kept in
-`<userData>/capabilities.json` until the user removes it in site-info (Permissions → Files this site
-can read, internal `nomad.sharedFiles`) or the page deletes it. Every capability is read-only:
+**picked** one is the user's share: `nomad.shell.selectFileDialog` always returns them to a web page
+(only a trusted nomad:// page gets real URLs; `pickedCapability` in `bg/web-apis/bg/shell.ts`), and
+`selectDriveDialog` warns a web page's user that it keeps the drive's address and, unless
+`writable: true`, offers "Share read-only instead" (`readOnlyDrive`, a whole-drive one, never a
+private drive). A picked one covers only what was picked, can reach `hyper://private/` (the user's
+pick is the grant, so `fs.ts` skips the private-drive guard for it), and is kept in
+`<userData>/capabilities.json` until the user removes it in site-info (Permissions → Shared with this
+site, internal `nomad.sharedFiles`) or the page deletes it. Every capability is read-only:
 `fs-router.ts` swaps it for its target, `fs.ts` `_capCheck` checks the call and the path, `getInfo`
 hides the key, and Drafts are never read through one. The serve path (`bg/protocols/hyper.js`
 `serveCapFile`) serves a scoped or private one as plain sandboxed files only.

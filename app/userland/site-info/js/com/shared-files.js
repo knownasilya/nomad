@@ -1,8 +1,9 @@
 import { LitElement, html, css } from 'lit';
 import sitePermsCSS from '../../css/com/site-perms.css.js';
 
-// The files and folders the user picked for this site in the capability file picker
-// (nomad.shell.selectFileDialog({ capability: true })). The site can read each one until the user
+// The files, folders and drives the user shared with this site read-only: picked in the file picker
+// (nomad.shell.selectFileDialog, always capabilities for a web page) or shared read-only from the
+// drive dialog (selectDriveDialog's "Share read-only instead"). The site can read each one until the user
 // removes it here. Data: the internal nomad.sharedFiles API (bg/web-apis/bg/shared-files.ts).
 class SharedFiles extends LitElement {
   static get properties() {
@@ -71,20 +72,25 @@ class SharedFiles extends LitElement {
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div class="field-group">
-        <div class="field-group-title">Files this site can read</div>
+        <div class="field-group-title">Shared with this site (read-only)</div>
         ${this.files.map((f) => this.renderFile(f))}
       </div>
     `;
   }
 
   renderFile(f) {
-    const isFolder = f.path === '/' || f.path.endsWith('/');
+    const isDrive = f.path === '/';
+    const isFolder = f.path.endsWith('/');
     const name = f.title || f.path;
     return html`
       <div class="shared-file">
-        <span class="fa-fw ${isFolder ? 'far fa-folder' : 'far fa-file'}" aria-hidden="true"></span>
+        <span
+          class="fa-fw ${isDrive ? 'far fa-hdd' : isFolder ? 'far fa-folder' : 'far fa-file'}"
+          aria-hidden="true"
+        ></span>
         <span class="name" title=${f.path}>
-          ${name} ${f.driveTitle ? html`<span class="where">in ${f.driveTitle}</span>` : ''}
+          ${name}
+          ${f.driveTitle && !isDrive ? html`<span class="where">in ${f.driveTitle}</span>` : ''}
         </span>
         <button
           class="remove-btn"

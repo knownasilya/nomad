@@ -67,8 +67,9 @@ export async function drivePropertiesDialog(url) {
  * @param {boolean} [opts.filters.networked]
  * @param {boolean} [opts.allowMultiple]
  * @param {boolean} [opts.disallowCreate]
- * @param {boolean} [opts.capability] - give the page capability URLs for what the user picks, not the
- *   drives' own URLs: read-only, only the picked items, and they can come from the private drive
+ * @param {boolean} [opts.capability] - give capability URLs for what the user picks, not the drives'
+ *   own URLs: read-only, only the picked items, and they can come from the private drive. A web page
+ *   always gets them; only a trusted nomad:// page gets the drives' own URLs, unless it passes this.
  * @returns {Promise<string[]>}
  */
 export async function selectFileDialog(opts: any = {}) {
@@ -109,6 +110,8 @@ export async function selectFileDialog(opts: any = {}) {
     '.filters.disallowCreate must be a boolean'
   );
   assert(!opts.capability || typeof opts.capability === 'boolean', '.capability must be a boolean');
+  // A web page never learns which drive a picked file lives in: it always gets capabilities.
+  if (!wcTrust.isWcTrusted(this.sender)) opts.capability = true;
 
   // initiate the modal
   var res;
@@ -281,10 +284,20 @@ export async function selectDriveDialog(opts: any = {}) {
     throw new Error('.template must be a hyper:// URL');
   }
 
+  // A web page that gets a drive's own URL keeps it for good, so the dialog says so. When the page
+  // doesn't need to write, the user can share it read-only instead: a capability for the whole
+  // drive, which they can take back in site-info.
+  const trusted = wcTrust.isWcTrusted(this.sender);
+  const modalOpts = {
+    ...opts,
+    warnShare: !trusted,
+    offerReadOnly: !trusted && opts.writable !== true,
+  };
+
   // initiate the modal
   var res;
   try {
-    res = await modals.create(this.sender, 'select-drive', opts);
+    res = await modals.create(this.sender, 'select-drive', modalOpts);
     if (res && res.gotoCreate) {
       if (opts.template) {
         res = await modals.create(this.sender, 'fork-drive', {
@@ -314,7 +327,28 @@ export async function selectDriveDialog(opts: any = {}) {
     }
   }
   if (!res) throw new UserDeniedError();
+  if (res.readOnly && modalOpts.offerReadOnly) {
+    if (res.urls) return Promise.all(res.urls.map((u) => readOnlyDrive(this.sender, u)));
+    return readOnlyDrive(this.sender, res.url);
+  }
   return res.urls || res.url;
+}
+
+// The user chose "Share read-only" in the drive dialog: a capability for the whole drive, owned by
+// the page that asked, kept like a picked file. Never for a private drive.
+async function readOnlyDrive(sender, url) {
+  const key = await drives.fromURLToKey(url, true);
+  if (!/^[0-9a-f]{64}$/i.test(String(key || ''))) throw new Error('Could not find that drive');
+  if (filesystem.isRootUrl(`hyper://${key}/`)) {
+    throw new Error('Your private drive cannot be shared with a site');
+  }
+  const info: any = await fsAPI.getInfo.call({}, `hyper://${key}/`).catch(() => null);
+  const cap = await capabilities.createPickedCap(
+    normalizeOrigin(sender.getURL()),
+    { key, path: '/' },
+    { title: info?.title || '', driveTitle: info?.title || '' }
+  );
+  return capUrlFor(cap.token, '/');
 }
 
 /**
