@@ -11,6 +11,7 @@ import * as nomadPermissions from '../../../lib/permissions';
 import mainCSS from '../css/main.css.js';
 import { nameTarget, normalizeName, suggestName } from '../../../../shared/names.mjs';
 import './com/site-perms.js';
+import './com/shared-files.js';
 import './com/identity.js';
 import './com/drive-forks.js';
 
@@ -566,6 +567,7 @@ class SiteInfoApp extends LitElement {
                 origin=${this.origin}
                 .requestedPerms=${this.requestedPerms}
               ></site-perms>
+              <shared-files origin=${this.origin}></shared-files>
             `
           : ''}
         ${this.view === 'session' && this.session ? this.renderSession() : ''}

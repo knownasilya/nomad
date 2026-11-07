@@ -150,6 +150,13 @@ const html = await drive.readFile('/index.html', { draft: true })   // preview t
 const { mode, changes } = await drive.draftStatus()    // changes: [{ path, op, conflict }]
 await drive.publishDraft({ paths: ['/posts/x/'] })     // fold a subtree onto the drive (goes live)
 await drive.discardDraft()                             // throw the whole Draft away
+
+// Capability URLs (nomad.capabilities): let another app (e.g. in an iframe) read a drive without
+// learning its key, then revoke it. Read-only through nomad.fs; in memory, gone on restart.
+const capUrl = await nomad.capabilities.create('hyper://key.../')   // 'hyper://<token>.cap/'
+await nomad.fs.drive(capUrl).readdir('/')
+await nomad.capabilities.delete(capUrl)                // later reads through it fail
+const mine = await nomad.capabilities.list()           // [{ url, path, picked, title, createdAt }]
 \`\`\`
 
 ## nomad.shell — Browser dialogs and library management
@@ -158,9 +165,16 @@ await drive.discardDraft()                             // throw the whole Draft 
 // Dialogs
 const files = await nomad.shell.selectFileDialog({ title, select: ['file'], filters: { extensions: ['png'] }, allowMultiple: true })
 // => [{ path, origin, url }]
+// A web page always gets a read-only capability URL for only what the user picks (it can be in
+// their private drive), never the drive's own URL. Kept until the user removes it in site-info or
+// the page calls nomad.capabilities.delete(url). Read it with nomad.fs; to write, ask for a drive.
+const [pick] = await nomad.shell.selectFileDialog({ select: ['file'] })
+const text = await nomad.fs.readFile(pick.url)         // pick.url: 'hyper://<token>.cap/notes/a.md'
 
 const file  = await nomad.shell.saveFileDialog({ title, defaultFilename: 'out.txt', extension: 'txt' })
 const url   = await nomad.shell.selectDriveDialog({ title, writable: true, tag: 'website' })
+// The drive dialog warns that the site keeps the address. Without writable: true the user may share
+// read-only instead, and url is then a whole-drive capability ('hyper://<token>.cap/').
 
 // Library
 await nomad.shell.saveDriveDialog(url)

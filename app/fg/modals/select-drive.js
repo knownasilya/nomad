@@ -42,6 +42,35 @@ class SelectDriveModal extends LitElement {
           margin-right: 5px;
         }
 
+        .share-warning {
+          margin: 0 15px 10px;
+          padding: 8px 10px;
+          border-radius: 4px;
+          background: #fff8e5;
+          border: 1px solid #f0d78c;
+          color: #5c4500;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+
+        .share-warning p {
+          margin: 0;
+        }
+
+        .share-warning label {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-top: 6px;
+          font-weight: normal;
+          color: #333;
+        }
+
+        .share-warning input[type='checkbox'] {
+          margin: 0;
+          height: auto;
+        }
+
         h1.title {
           padding: 14px 20px;
           margin: 0;
@@ -171,6 +200,9 @@ class SelectDriveModal extends LitElement {
     this.tag = null;
     this.writable = undefined;
     this.allowMultiple = undefined;
+    this.warnShare = false;
+    this.offerReadOnly = false;
+    this.readOnly = false;
     this.cbs = null;
   }
 
@@ -181,6 +213,10 @@ class SelectDriveModal extends LitElement {
     this.tag = params.tag;
     this.writable = params.writable;
     this.allowMultiple = params.allowMultiple;
+    // A web page is asking (bg/web-apis/bg/shell.ts selectDriveDialog): it will keep the drive's
+    // address, so say so, and offer a read-only share the user can take back when it needn't write.
+    this.warnShare = !!params.warnShare;
+    this.offerReadOnly = !!params.offerReadOnly;
     await this.requestUpdate();
     this.adjustHeight();
 
@@ -263,6 +299,8 @@ class SelectDriveModal extends LitElement {
             ${isDriveUrl(this.currentTitleFilter) ? html`` : html` ${this.renderDrivesList()} `}
           </div>
 
+          ${this.warnShare ? this.renderShareWarning() : ''}
+
           <div class="form-actions">
             <div class="left">
               ${this.writable !== false && !this.allowMultiple
@@ -293,6 +331,35 @@ class SelectDriveModal extends LitElement {
             </div>
           </div>
         </form>
+      </div>
+    `;
+  }
+
+  renderShareWarning() {
+    return html`
+      <div class="share-warning">
+        <p>
+          <span class="fas fa-fw fa-exclamation-triangle" aria-hidden="true"></span>
+          ${this.readOnly
+            ? 'This site will be able to read this drive until you take it back in the site’s Permissions.'
+            : 'This site will get the drive’s address. It can keep reading the drive, including what you add later, and that can’t be taken back.'}
+        </p>
+        ${this.offerReadOnly
+          ? html`
+              <label>
+                <input
+                  type="checkbox"
+                  .checked=${this.readOnly}
+                  @change=${(e) => {
+                    this.readOnly = e.currentTarget.checked;
+                    this.requestUpdate();
+                    this.updateComplete.then(() => this.adjustHeight());
+                  }}
+                />
+                Share read-only instead, so you can take it back later
+              </label>
+            `
+          : ''}
       </div>
     `;
   }
@@ -388,18 +455,19 @@ class SelectDriveModal extends LitElement {
   onSubmit(e) {
     if (e) e.preventDefault();
     this.cleanup();
+    const readOnly = this.offerReadOnly && this.readOnly;
     if (this.selection.length) {
       if (this.allowMultiple) {
-        this.cbs.resolve({ urls: this.selection });
+        this.cbs.resolve({ urls: this.selection, readOnly });
       } else {
-        this.cbs.resolve({ url: this.selection[0] });
+        this.cbs.resolve({ url: this.selection[0], readOnly });
       }
     } else {
       let url = new URL(this.currentTitleFilter).origin;
       if (this.allowMultiple) {
-        this.cbs.resolve({ urls: [url] });
+        this.cbs.resolve({ urls: [url], readOnly });
       } else {
-        this.cbs.resolve({ url });
+        this.cbs.resolve({ url, readOnly });
       }
     }
   }

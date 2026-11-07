@@ -11,13 +11,17 @@ import {
   removeDrive,
 } from '../../filesystem/index';
 import { lookupDrive } from './hyperdrive';
-import { isHyperUrl, parseDriveUrl } from '../../../lib/urls';
+import { isHyperUrl, parseDriveUrl, normalizeOrigin } from '../../../lib/urls';
 import { joinPath } from '../../../lib/strings';
 import * as permissions from '../../ui/permissions';
 import assert from 'assert';
 import { UserDeniedError, ArchiveNotWritableError } from 'beaker-error-constants';
 import { pick } from '../../../lib/async';
 import * as wcTrust from '../../wc-trust';
+import * as filesystem from '../../filesystem/index';
+import * as capabilities from '../../hyper/capabilities';
+import { scopeFor, capUrlFor } from '../../hyper/capability-rules.mjs';
+import fsAPI from './fs';
 
 // typedefs
 // =
@@ -63,6 +67,9 @@ export async function drivePropertiesDialog(url) {
  * @param {boolean} [opts.filters.networked]
  * @param {boolean} [opts.allowMultiple]
  * @param {boolean} [opts.disallowCreate]
+ * @param {boolean} [opts.capability] - give capability URLs for what the user picks, not the drives'
+ *   own URLs: read-only, only the picked items, and they can come from the private drive. A web page
+ *   always gets them; only a trusted nomad:// page gets the drives' own URLs, unless it passes this.
  * @returns {Promise<string[]>}
  */
 export async function selectFileDialog(opts: any = {}) {
@@ -102,6 +109,9 @@ export async function selectFileDialog(opts: any = {}) {
     !opts.disallowCreate || typeof opts.disallowCreate === 'boolean',
     '.filters.disallowCreate must be a boolean'
   );
+  assert(!opts.capability || typeof opts.capability === 'boolean', '.capability must be a boolean');
+  // A web page never learns which drive a picked file lives in: it always gets capabilities.
+  if (!wcTrust.isWcTrusted(this.sender)) opts.capability = true;
 
   // initiate the modal
   var res;
@@ -127,7 +137,52 @@ export async function selectFileDialog(opts: any = {}) {
     }
   }
   if (!res) throw new UserDeniedError();
+  if (opts.capability) return Promise.all(res.map((sel) => pickedCapability(this.sender, sel)));
   return res;
+}
+
+// The user picked `sel` ({ path, origin: the drive's URL, url }) in a capability picker. Make (or
+// reuse) a capability for that one file or folder, owned by the page that asked, and hand back its
+// URL in the drive's place. `hyper://private/` is the asking tab's own Space.
+async function pickedCapability(sender, sel) {
+  const origin = normalizeOrigin(sender.getURL());
+  let driveUrl = sel.origin;
+  if (parseDriveUrl(driveUrl).hostname === 'private') {
+    const spaceId = filesystem.getSpaceIdForWebContents(sender.id);
+    driveUrl = (spaceId && filesystem.getSpaceRootDriveUrl(spaceId)) || driveUrl;
+  }
+  const key = await drives.fromURLToKey(driveUrl, true);
+  if (!/^[0-9a-f]{64}$/i.test(String(key || ''))) throw new Error('Could not find that drive');
+
+  // Read as the browser (no page sender): the user is choosing, so the private drive is open here.
+  const ctx = {};
+  const itemUrl = `hyper://${key}${sel.path === '/' ? '/' : sel.path}`;
+  const st: any = await fsAPI.stat.call(ctx, itemUrl).catch(() => null);
+  const isFolder =
+    sel.path === '/' ||
+    (!!st &&
+      (typeof st.isDirectory === 'function'
+        ? st.isDirectory()
+        : (st.mode & 0o170000) === 0o040000));
+  const scope = scopeFor(sel.path, isFolder);
+  if (!scope) throw new Error('Cannot share that path');
+  // As with the private-drive guard, the whole private drive is never handed to a page.
+  if (scope === '/' && filesystem.isRootUrl(`hyper://${key}/`)) {
+    throw new Error('Pick a file or folder inside your private drive, not the whole drive');
+  }
+  const info: any = await fsAPI.getInfo.call(ctx, `hyper://${key}/`).catch(() => null);
+  const name = scope === '/' ? '' : scope.replace(/\/$/, '').split('/').pop();
+
+  const cap = await capabilities.createPickedCap(
+    origin,
+    { key, path: scope },
+    { title: name || info?.title || '', driveTitle: info?.title || '' }
+  );
+  return {
+    path: sel.path,
+    origin: capUrlFor(cap.token, '/'),
+    url: capUrlFor(cap.token, scope),
+  };
 }
 
 /**
@@ -229,10 +284,20 @@ export async function selectDriveDialog(opts: any = {}) {
     throw new Error('.template must be a hyper:// URL');
   }
 
+  // A web page that gets a drive's own URL keeps it for good, so the dialog says so. When the page
+  // doesn't need to write, the user can share it read-only instead: a capability for the whole
+  // drive, which they can take back in site-info.
+  const trusted = wcTrust.isWcTrusted(this.sender);
+  const modalOpts = {
+    ...opts,
+    warnShare: !trusted,
+    offerReadOnly: !trusted && opts.writable !== true,
+  };
+
   // initiate the modal
   var res;
   try {
-    res = await modals.create(this.sender, 'select-drive', opts);
+    res = await modals.create(this.sender, 'select-drive', modalOpts);
     if (res && res.gotoCreate) {
       if (opts.template) {
         res = await modals.create(this.sender, 'fork-drive', {
@@ -262,7 +327,28 @@ export async function selectDriveDialog(opts: any = {}) {
     }
   }
   if (!res) throw new UserDeniedError();
+  if (res.readOnly && modalOpts.offerReadOnly) {
+    if (res.urls) return Promise.all(res.urls.map((u) => readOnlyDrive(this.sender, u)));
+    return readOnlyDrive(this.sender, res.url);
+  }
   return res.urls || res.url;
+}
+
+// The user chose "Share read-only" in the drive dialog: a capability for the whole drive, owned by
+// the page that asked, kept like a picked file. Never for a private drive.
+async function readOnlyDrive(sender, url) {
+  const key = await drives.fromURLToKey(url, true);
+  if (!/^[0-9a-f]{64}$/i.test(String(key || ''))) throw new Error('Could not find that drive');
+  if (filesystem.isRootUrl(`hyper://${key}/`)) {
+    throw new Error('Your private drive cannot be shared with a site');
+  }
+  const info: any = await fsAPI.getInfo.call({}, `hyper://${key}/`).catch(() => null);
+  const cap = await capabilities.createPickedCap(
+    normalizeOrigin(sender.getURL()),
+    { key, path: '/' },
+    { title: info?.title || '', driveTitle: info?.title || '' }
+  );
+  return capUrlFor(cap.token, '/');
 }
 
 /**

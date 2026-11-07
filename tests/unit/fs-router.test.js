@@ -63,7 +63,15 @@ function build({ hyper = {}, ab = {} } = {}) {
     },
     spaceRootKeyForSender: async (ctx) => ctx?.spaceKey || null,
     parseDriveUrl: fakeParseDriveUrl,
+    lookupCap: (host) => CAPS[host],
   })
+}
+
+// nomad.capabilities mappings: `<token>.cap` host → { key, version }.
+const CAPS = {
+  'blogcap.cap': { key: BLOGKEY, version: undefined },
+  'hdcap.cap': { key: HDKEY, version: '7' },
+  'privcap.cap': { key: 'private', version: undefined },
 }
 
 beforeEach(() => { calls = [] })
@@ -174,5 +182,49 @@ describe('wrong-backend decode errors override "known" typing', () => {
     })
     await expect(router.read(null, 'readdir', `hyper://${HDKEY}/`, [{}])).rejects.toThrow('boom')
     expect(called('autobase', 'readdir')).toHaveLength(0)
+  })
+})
+
+describe('capability URLs (nomad.capabilities)', () => {
+  it('reads an Autobase drive through its capability on the real key', async () => {
+    const router = build({ ab: { readdir: ['index.json'] } })
+    const res = await router.read(null, 'readdir', 'hyper://blogcap.cap/posts/?x=1', [{}])
+
+    expect(res).toEqual(['index.json'])
+    expect(called('autobase', 'readdir')[0].url).toBe(`hyper://${BLOGKEY}/posts/?x=1`)
+    expect(called('hyperdrive', 'readdir')).toHaveLength(0)
+  })
+
+  it("routes a Hyperdrive capability to the Hyperdrive backend at the capability's version", async () => {
+    const router = build({ hyper: { get: 'hi' } })
+    const res = await router.read(null, 'get', 'hyper://hdcap.cap/a.txt', [{}])
+
+    expect(res).toBe('hi')
+    expect(called('hyperdrive', 'get')[0].url).toBe(`hyper://${HDKEY}+7/a.txt`)
+    expect(called('autobase', 'get')).toHaveLength(0)
+  })
+
+  it('resolves a capability for hyper://private/ to the caller\'s own Space', async () => {
+    const router = build()
+    const d = await router.dispatch({ spaceKey: ROOTKEY }, 'hyper://privcap.cap/')
+    expect(d.url).toBe(`hyper://${ROOTKEY}/`)
+    expect(d.isAutobase).toBe(true)
+  })
+
+  it('an unknown capability throws and opens no backend', async () => {
+    const router = build()
+    await expect(router.read(null, 'get', 'hyper://gone.cap/a.txt', [{}])).rejects.toThrow(
+      'Capability does not exist'
+    )
+    expect(calls).toHaveLength(0)
+  })
+
+  it('isCapUrl() matches only .cap hosts', () => {
+    const router = build()
+    expect(router.isCapUrl('hyper://blogcap.cap/')).toBe(true)
+    expect(router.isCapUrl('blogcap.cap')).toBe(true)
+    expect(router.isCapUrl(`hyper://${BLOGKEY}/`)).toBe(false)
+    expect(router.isCapUrl('hyper://private/')).toBe(false)
+    expect(router.isCapUrl(undefined)).toBe(false)
   })
 })

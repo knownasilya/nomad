@@ -23,27 +23,15 @@
 //   now()                        — current time in ms (optional; for tests)
 //   ttlMs                        — how long a grant lasts (optional; PRIVATE_GRANT_TTL_MS)
 import { PermissionsError, UserDeniedError } from 'beaker-error-constants';
+import { normalizeDrivePath } from '../../hyper/capability-rules.mjs';
 
 export const PRIVATE_GRANT_TTL_MS = 60 * 60 * 1000;
 
 // Normalise a request or grant path: decoded, '/'-rooted, with no empty or '.' segments. A trailing
 // '/' (folder) is kept. Returns null for anything we refuse to reason about (a '..' segment, a
-// backslash, a NUL, bad percent-encoding), so it can never match a grant.
-export function normalizePrivatePath(raw) {
-  if (typeof raw !== 'string') return null;
-  let p;
-  try {
-    p = decodeURIComponent(raw);
-  } catch {
-    return null;
-  }
-  if (p.includes('\\') || p.includes('\0')) return null;
-  const isFolder = p.endsWith('/');
-  const parts = p.split('/').filter((s) => s !== '' && s !== '.');
-  if (parts.includes('..')) return null;
-  if (parts.length === 0) return '/';
-  return '/' + parts.join('/') + (isFolder ? '/' : '');
-}
+// backslash, a NUL, bad percent-encoding), so it can never match a grant. Shared with capability
+// URLs (capability-rules.mjs), so both read a path the same way.
+export const normalizePrivatePath = normalizeDrivePath;
 
 // A folder grant ('/notes/') covers the folder itself and everything below it. A file grant covers
 // that exact path only.
