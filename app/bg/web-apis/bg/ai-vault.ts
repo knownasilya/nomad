@@ -45,8 +45,9 @@ const FEED_TIMEOUT_MS = 8000;
 
 type LoadedFeed = { url: string; title: string; posts: any[]; error?: string };
 
+// saveAsset has its permission here too, but ai.ts runs it: its prompt names the Space (ADR-0044).
 export function isVaultTool(name) {
-  return Object.prototype.hasOwnProperty.call(VAULT_TOOL_PERMS, name);
+  return name !== 'saveAsset' && Object.prototype.hasOwnProperty.call(VAULT_TOOL_PERMS, name);
 }
 
 // opts: ctx ({ sender }), space (a Space key from another Device's turn, else null: the sender's

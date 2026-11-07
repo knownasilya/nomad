@@ -28,6 +28,7 @@ import * as sl from '../../../shared/space-library.mjs';
 import * as cal from '../../../shared/calendar.mjs';
 import * as apps from '../../../shared/vault-apps.mjs';
 import { namesPrefix } from '../../../shared/names.mjs';
+import { vaultRoot as assetsVaultRoot, LIB_ASSETS } from '../../../shared/assets.mjs';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'space-library' });
 
@@ -203,6 +204,9 @@ export async function share({ space, root, meta, name }) {
   for (const { path, value } of sl.planShare({ space: meta, owner, items })) {
     await autobases.putInline(lib, path, JSON.stringify(value));
   }
+  // The Space's Assets (shared/assets.mjs): their files are copied into the Library's own blob
+  // core, so members never need this Device's Vault core.
+  const assetsMoved = await autobases.copyFiles(sess, assetsVaultRoot(space), lib, LIB_ASSETS);
   await vault.putSpaceShare(space, { library: lib.keyStr, role: 'owner', memberId: owner.memberId });
 
   // The moved records leave the Root Drive and the Vault.
@@ -218,6 +222,8 @@ export async function share({ space, root, meta, name }) {
   ]) {
     for (const r of await vault.listAppRecordPaths(prefix)) await vault.delAppRecord(r);
   }
+  for (const p of assetsMoved) await sess.base.append({ op: 'del', path: p });
+  if (assetsMoved.length) await sess.base.update();
   _watched.add(lib.keyStr);
   _attach(lib.keyStr, lib);
   logger.info('Shared a space', { space, library: lib.keyStr, summary: sl.shareSummary(items) });

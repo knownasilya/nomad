@@ -76,12 +76,12 @@ export default {
   deleteCalendarFeed: 'promise', // (id) -> boolean
   refreshCalendarFeeds: 'promise', // ({ force? }) -> listCalendar(), after fetching the feeds that are due
   listCalendarDrives: 'promise', // () -> [{ url, name, color }]: calendar drives in the caller's Space not followed yet
-  // The family album (bg/web-apis/bg/photos.ts, shared/photos.mjs), for the caller's shared Space
-  listPhotos: 'promise', // () -> { space, spaceName, shared, canAdd, role, photos }
-  photoData: 'promise', // (id, { thumb? }) -> data:image/jpeg URL, or null until it replicates
-  addPhoto: 'promise', // ({ photo, thumb (base64 JPEG), width, height, takenAt?, caption? }) -> photo
-  setPhotoCaption: 'promise', // ({ id, caption }) -> photo
-  deletePhoto: 'promise', // (id) -> boolean
+  // Assets (bg/web-apis/bg/assets.ts, shared/assets.mjs), for the caller's Space
+  listAssets: 'promise', // () -> { space, spaceName, shared, canAdd, role, maxBytes, assets }
+  assetData: 'promise', // (id, { thumb? }) -> data: URL, or null until it replicates
+  addAsset: 'promise', // ({ data (base64), name, mime?, thumb? (base64 JPEG), width?, height?, duration?, takenAt?, caption? }) -> asset
+  updateAsset: 'promise', // ({ id, name?, caption? }) -> asset
+  deleteAsset: 'promise', // (id) -> boolean
   suggestNoteTopics: 'promise', // (ids?) -> how many notes the AI will sort into topics
   watchAppData: 'readable', // 'changed' when the Vault changes
   openLiveNote: 'readable', // (id, conn) -> 'message' { data } (y-protocols, base64), 'status', 'failed' (ADR-0041)

@@ -40,6 +40,8 @@ export const VAULT_TOOL_PERMS = {
   // personal turn's prompt already.
   remember: 'memoryWrite',
   forget: 'memoryWrite',
+  // Files into the user's Assets (ADR-0044); ai.ts runs it, not runVaultTool.
+  saveAsset: 'assetsWrite',
 }
 
 export const VAULT_PERMS = [
@@ -53,6 +55,7 @@ export const VAULT_PERMS = [
   'jobsWrite',
   'calendarRead',
   'memoryWrite',
+  'assetsWrite',
 ]
 
 // A Job's turn runs with nobody to ask (ADR-0030). Making the Job was the user's yes to it reading

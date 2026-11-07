@@ -65,6 +65,7 @@
     "oxfmt": "^0.57.0",
     "oxlint": "^1.72.0",
     "patch-package": "^8.0.1",
+    "pdfjs-dist": "^6.5.438",
     "pre-commit": "^1.2.2",
     "q": "^1.4.1",
     "standard-version": "^9.3.2",

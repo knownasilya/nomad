@@ -241,8 +241,8 @@ export default class DriveManager {
     return base._nomadBlobs
   }
 
-  // A file's bytes in this Device's own blob core for Autobase `base` (a Space Library's photos,
-  // ADR-0043): the pointer to put in the op. And a file of `base`, inline or a blob, or null.
+  // A file's bytes in this Device's own blob core for Autobase `base` (a Space's Assets,
+  // ADR-0044): the pointer to put in the op. And a file of `base`, inline or a blob, or null.
   async putBlobFor (base, buf) {
     return _blobStore.putBlob(this._blobsForBase(base), buf)
   }

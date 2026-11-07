@@ -240,6 +240,16 @@ export const PERMS = {
     requiresRefresh: false,
     promptTrusted: true,
   },
+  // The AI saving files to the user's Assets (saveAsset, ADR-0044). In a shared Space that shows them
+  // to everyone in it, so the prompt names the Space. Asked once a turn and never kept, like
+  // aiCreateDrive: the Space can differ from one chat to the next.
+  assetsWrite: {
+    persist: false,
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    promptTrusted: true,
+  },
   // The AI's access to the user's Mods (ADR-0023). Changing them is dangerous: a Mod can run a
   // script on every page of a site.
   modsRead: {
@@ -426,6 +436,7 @@ export const PERM_ICONS = {
   readerRead: 'fas fa-rss',
   readerWrite: 'fas fa-rss',
   calendarRead: 'fas fa-calendar-alt',
+  assetsWrite: 'fas fa-folder-open',
   modsRead: 'fas fa-magic',
   modsWrite: 'fas fa-magic',
   jobsRead: 'fas fa-clock',
@@ -499,6 +510,13 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Let the AI assistant follow and unfollow feeds and mark posts read';
     case 'calendarRead':
       return 'Let the AI assistant read your calendar and the calendars you follow';
+    case 'assetsWrite':
+      return permOpts?.shared
+        ? html`<span
+            >Let the AI assistant save files to the Assets of <strong>${permOpts.space || 'this Space'}</strong>, which
+            everyone in it sees</span
+          >`
+        : 'Let the AI assistant save files to your Assets';
     case 'modsRead':
       return 'Let the AI assistant read your Mods (your styles and scripts for sites)';
     case 'modsWrite':

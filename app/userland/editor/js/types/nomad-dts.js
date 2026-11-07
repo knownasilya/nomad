@@ -247,18 +247,18 @@ declare namespace Nomad {
   interface Shell {
     /**
      * Open a file picker. Returns [{ path, origin, url }]. A web page always gets read-only
-     * capability URLs (`hyper://<token>.cap/<path>`) for just the picked files or folders, never the
+     * capability URLs (\`hyper://<token>.cap/<path>\`) for just the picked files or folders, never the
      * drive's own URL; they can come from the user's private drive. Read them with nomad.fs. Each
      * lasts until the user removes it in site-info or the page calls nomad.capabilities.delete(url).
-     * Only nomad:// pages get the drive's own URLs (unless they pass `capability: true`).
+     * Only nomad:// pages get the drive's own URLs (unless they pass \`capability: true\`).
      */
     selectFileDialog(opts?: { title?: string; buttonLabel?: string; drive?: string; defaultPath?: string; select?: ('file' | 'folder')[]; filters?: { extensions?: string[]; writable?: boolean; networked?: boolean }; allowMultiple?: boolean; disallowCreate?: boolean; capability?: boolean }): Promise<SelectFileResult[]>;
     saveFileDialog(opts?: { title?: string; defaultFilename?: string; extension?: string }): Promise<SelectFileResult>;
     /**
-     * Open a drive picker. Returns the selected drive URL (an array with `allowMultiple`). The dialog
-     * warns the user that the site keeps the drive's address. Unless `writable: true` is asked, the
+     * Open a drive picker. Returns the selected drive URL (an array with \`allowMultiple\`). The dialog
+     * warns the user that the site keeps the drive's address. Unless \`writable: true\` is asked, the
      * user can share it read-only instead, and the page then gets a whole-drive capability URL
-     * (`hyper://<token>.cap/`) they can take back in site-info.
+     * (\`hyper://<token>.cap/\`) they can take back in site-info.
      */
     selectDriveDialog(opts?: { title?: string; buttonLabel?: string; writable?: boolean; tag?: string; allowMultiple?: boolean; template?: string }): Promise<string | string[]>;
     saveDriveDialog(url: string): Promise<void>;
@@ -362,14 +362,14 @@ declare namespace Nomad {
   }
 
   /**
-   * Capability URLs (`hyper://<token>.cap/`): stand-ins for a drive, or one file or folder in it, that
+   * Capability URLs (\`hyper://<token>.cap/\`): stand-ins for a drive, or one file or folder in it, that
    * give read access without naming the drive's key, and can be revoked. A page's own are in memory
    * on this Device only; ones the user shared (the file picker, or the drive dialog's read-only share)
    * are kept.
    * Read them with nomad.fs; writes and drive management through one are refused.
    */
   interface Capabilities {
-    /** Make a capability for a drive (`hyper://<key>/` or `hyper://<key>+<version>/`). Resolves to the `hyper://<token>.cap/` URL. */
+    /** Make a capability for a drive (\`hyper://<key>/\` or \`hyper://<key>+<version>/\`). Resolves to the \`hyper://<token>.cap/\` URL. */
     create(targetUrl: string): Promise<string>;
     /** Point a capability this page made at another drive. */
     modify(capUrl: string, targetUrl: string): Promise<void>;
@@ -379,7 +379,7 @@ declare namespace Nomad {
     list(): Promise<CapabilityRecord[]>;
   }
   interface CapabilityRecord {
-    /** The capability URL (for a picked item, its own path: `hyper://<token>.cap/photos/a.png`). */
+    /** The capability URL (for a picked item, its own path: \`hyper://<token>.cap/photos/a.png\`). */
     url: string;
     /** What it covers: '/' for a whole drive, '/dir/' for a folder, '/file' for one file. */
     path: string;

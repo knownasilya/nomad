@@ -310,6 +310,28 @@ export async function importDirectory(sess, srcPath, { ignore = [], dstPath = '/
   return ops.length;
 }
 
+// Copy every file under `fromPrefix` in one session to `toPrefix` in another (or the same one), as
+// it is: an inline record stays inline, a blob's bytes are written again into `to`'s own blob core,
+// so `to`'s readers never need the old core. Assets move this way when a Space is shared, or the
+// Vault changes (shared/assets.mjs). `only(path)` picks some. Returns the paths copied, in `from`.
+export async function copyFiles(from, fromPrefix, to, toPrefix, only = null) {
+  const copied = [];
+  for (const { path, record } of await listRecords(from, fromPrefix)) {
+    if (!record || (only && !only(path))) continue;
+    const dest = toPrefix + path.slice(fromPrefix.length);
+    if (record.blob) {
+      const bytes = await _content.readContent(record, { store: daemon.getCorestore() });
+      if (!bytes) continue;
+      await to.base.append(await buildPutBlobOp(to, dest, bytes));
+    } else {
+      await to.base.append({ op: 'put', path: dest, metadata: await _writeMeta(to, dest), blob: null, value: record.value || null });
+    }
+    copied.push(path);
+  }
+  if (copied.length) await to.base.update();
+  return copied;
+}
+
 // Read a path's raw content bytes (resolves inline value OR blob pointer). null if missing.
 // `range` = { start, length } for partial reads (e.g. HTTP Range).
 export async function readContent(sess, path, range) {

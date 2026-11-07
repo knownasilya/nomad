@@ -515,6 +515,31 @@ export const CAPABILITIES = [
     },
     gates: { personal: true },
   },
+  // Assets (ADR-0044): the user's files in the current Space, on nomad://assets. The AI only adds.
+  {
+    name: 'saveAsset',
+    description:
+      "Save a file to the user's Assets (nomad://assets), the place for the current Space's files: photos, " +
+      'videos, audio, PDFs, Markdown, code, CSV and anything else up to 25 MB. In a shared Space everyone in it ' +
+      'sees it; in any other Space it is the user\'s own, on their devices. Pass exactly one of `text` (a file you ' +
+      'wrote, such as a Markdown note, a CSV or code, with a `name` like "packing-list.md"), `url` (a picture, ' +
+      'PDF or other file on the web, or a hyper:// file, to download and keep; `name` is optional) or `base64` ' +
+      '(bytes your code made, with a `name`). Returns { id, name, kind, url }: link `url` in your answer. Save ' +
+      'only what the user asks you to keep. Asks permission to save to Assets.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'The file name with its extension, e.g. "recipe.md" or "chart.png"' },
+        text: { type: 'string', description: 'Or the file\'s text' },
+        url: { type: 'string', description: 'Or an http(s) or hyper:// URL to download' },
+        base64: { type: 'string', description: 'Or the file\'s bytes as base64' },
+        mime: { type: 'string', description: 'Optional. Its type, e.g. "text/csv". From the name when left out' },
+        caption: { type: 'string', description: 'Optional. A line about it, shown under it' },
+      },
+      required: [],
+    },
+    gates: { personal: true },
+  },
   // The calendar (ADR-0042): the user's events, the Space's, and the iCal feeds they follow.
   {
     name: 'listCalendarEvents',

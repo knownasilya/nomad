@@ -214,9 +214,14 @@ async function _carry() {
   let copied = 0;
   for (const prefix of CARRY_PREFIXES) {
     for (const { path, value } of await _readPrefixEntries(old, prefix)) {
+      if (_isAssetPath(path)) continue;
       if (await _carryRecord(to, path, value)) copied++;
     }
   }
+  // A Space's Assets are files, not records: copied as they are, the new Vault's blob core holding
+  // the bytes. One the new Vault has already stays.
+  const have = new Set((await autobases.listRecords(to, SPACE_LIB_PREFIX)).map((r) => r.path));
+  copied += (await autobases.copyFiles(old, SPACE_LIB_PREFIX, to, SPACE_LIB_PREFIX, (p) => _isAssetPath(p) && !have.has(p))).length;
   await settingsDb.set(CARRY_FROM_SETTING, '');
   autobases.unloadCollaborativeDrive(from);
   logger.info('Copied data from the old vault', { from, copied });
@@ -464,9 +469,12 @@ export async function moveSpaceRoot(fromKey, toKey) {
   for (const prefix of [READER_PREFIX, SPACE_LIB_PREFIX]) {
     const from = `${prefix}${fromKey}/`;
     for (const { path, value } of await _readPrefixEntries(sess, from)) {
+      if (_isAssetPath(path)) continue;
       await _carryRecord(sess, `${prefix}${toKey}/${path.slice(from.length)}`, value);
     }
   }
+  // Its Assets are files (shared/assets.mjs): they move as they are.
+  await autobases.copyFiles(sess, `${SPACE_LIB_PREFIX}${fromKey}/assets/`, sess, `${SPACE_LIB_PREFIX}${toKey}/assets/`);
   logger.info('Moved space root in vault', { fromKey, toKey });
 }
 
@@ -829,6 +837,12 @@ async function _driveStatus(sess) {
 
 // internal record helpers (Hyperbee view <-> JSON)
 // =
+
+// A Space's Assets in the Vault (`/.vault/space-lib/<space>/assets/…`, shared/assets.mjs): files,
+// which the record copies above would misread.
+function _isAssetPath(path) {
+  return path.startsWith(SPACE_LIB_PREFIX) && path.slice(SPACE_LIB_PREFIX.length).split('/')[1] === 'assets';
+}
 
 async function _putRecord(sess, path, obj) {
   // Vault index records are small JSON control records — stored inline in the view.

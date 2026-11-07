@@ -18,7 +18,7 @@ export const BUILTIN_PAGES = [
   { url: 'nomad://notes/', title: 'Notes', app: 'notes', top: true },
   { url: 'nomad://reader/', title: 'Reader', app: 'reader', keywords: 'feeds rss subscriptions', top: true },
   { url: 'nomad://calendar/', title: 'Calendar', app: 'calendar', keywords: 'events agenda', top: true },
-  { url: 'nomad://photos/', title: 'Photos', app: 'photos', keywords: 'album pictures', top: true },
+  { url: 'nomad://assets/', title: 'Assets', app: 'assets', keywords: 'photos album pictures files videos pdf documents', top: true },
   { url: 'nomad://messages/', title: 'Messages', app: 'messages', keywords: 'inbox', top: true },
   { url: 'nomad://ai/', title: 'AI', app: 'ai', keywords: 'assistant', top: true },
   { url: 'nomad://history/', title: 'History', app: 'history', top: true },

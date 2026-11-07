@@ -13,7 +13,7 @@ import * as devicePresence from '../../hyper/device-presence';
 import * as vaultApps from './vault-apps';
 import * as noteTopics from './note-topics';
 import * as calendar from './calendar';
-import * as photos from './photos';
+import * as assets from './assets';
 import * as liveNotes from '../../notes/live-notes';
 import * as names from '../../hyper/names';
 import * as driveWriters from '../../hyper/drive-writers';
@@ -526,21 +526,22 @@ export default {
     return calendar.listCalendarDrives(this);
   },
 
-  // The family album (nomad://photos, shared/photos.mjs): the caller's shared Space's photos.
-  async listPhotos() {
-    return photos.listPhotos(this);
+  // Assets (nomad://assets, shared/assets.mjs): the caller's Space's files. A shared Space's are
+  // everyone's in it; any other Space's are the user's own, in the Vault.
+  async listAssets() {
+    return assets.listAssets(this);
   },
-  async photoData(id, opts: any = {}) {
-    return photos.photoData(this, id, { thumb: !!opts?.thumb });
+  async assetData(id, opts: any = {}) {
+    return assets.assetData(this, id, { thumb: !!opts?.thumb });
   },
-  async addPhoto(fields: any = {}) {
-    return photos.addPhoto(this, fields || {});
+  async addAsset(fields: any = {}) {
+    return assets.addAsset(this, fields || {});
   },
-  async setPhotoCaption(change: any = {}) {
-    return photos.setPhotoCaption(this, change || {});
+  async updateAsset(change: any = {}) {
+    return assets.updateAsset(this, change || {});
   },
-  async deletePhoto(id) {
-    return photos.deletePhoto(this, id);
+  async deleteAsset(id) {
+    return assets.deleteAsset(this, id);
   },
 
   // Ask the AI for topics now: for `ids`, or every Note with none yet. -> how many it will look at.
