@@ -9,6 +9,8 @@ import BottomSheet from './BottomSheet'
 import IconButton from './IconButton'
 import LinkPhone from './LinkPhone'
 import ScreenHeader from './ScreenHeader'
+import { TimeField, TimePicker } from './TimePicker'
+import { isTime, minutesOf, shiftEnd, timeFrom } from '../lib/timeOfDay'
 
 interface Props {
   visible: boolean
@@ -51,7 +53,6 @@ const fromDate = (d: Date) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}
 const addDays = (day: string, n: number) => { const d = asDate(day); d.setUTCDate(d.getUTCDate() + n); return fromDate(d) }
 const weekday = (day: string) => asDate(day).getUTCDay()
 const isDay = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && fromDate(asDate(s)) === s
-const isTime = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s)
 const dayLabel = (day: string) => `${DAY_NAMES[weekday(day)]} ${+day.slice(8, 10)} ${MONTHS[+day.slice(5, 7) - 1].slice(0, 3)}`
 // The first day of the six weeks that show `month` ('YYYY-MM'), from a Sunday.
 const gridStart = (month: string) => { const first = month + '-01'; return addDays(first, -weekday(first)) }
@@ -105,6 +106,7 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
   const [busy, setBusy] = useState(false)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [draftError, setDraftError] = useState('')
+  const [picking, setPicking] = useState<'start' | 'end' | null>(null) // the time picker open in the editor
   const [feedSheet, setFeedSheet] = useState(false)
   const [feedUrl, setFeedUrl] = useState('')
   const [feedInSpace, setFeedInSpace] = useState(true)
@@ -208,10 +210,25 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
   // The editor: a new event on the selected day, or one of the user's or the Space's.
   const newEvent = () => {
     setDraftError('')
+    setPicking(null)
     setDraft({ id: null, title: '', day: selected, endDay: selected, allDay: false, startTime: '09:00', endTime: '10:00', freq: 'none', interval: '1', until: '', location: '', notes: '', inSpace: canWriteSpace })
+  }
+  // A new start time moves the end with it, so the event keeps its length.
+  const setStartTime = (startTime: string) => {
+    if (!draft) return
+    const days = isDay(draft.day) && isDay(draft.endDay)
+    const end = days ? shiftEnd({ startDay: draft.day, startTime: draft.startTime, endDay: draft.endDay, endTime: draft.endTime }, draft.day, startTime) : null
+    setDraft({ ...draft, startTime, ...(end || {}) })
+  }
+  // "1 h" in the end time's picker: the end is that long after the start, maybe the next day.
+  const setLength = (minutes: number) => {
+    if (!draft || !isTime(draft.startTime)) return
+    const end = minutesOf(draft.startTime) + minutes
+    setDraft({ ...draft, endTime: timeFrom(end), endDay: end >= 24 * 60 && isDay(draft.day) ? addDays(draft.day, 1) : draft.day })
   }
   const editEvent = (ev: CalendarEvent) => {
     setDraftError('')
+    setPicking(null)
     const allDay = !!ev.allDay
     setDraft({
       id: ev.id,
@@ -243,8 +260,8 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
     if (!d.title.trim()) { setDraftError('Give it a title'); return }
     if (!isDay(d.day)) { setDraftError('The day is YYYY-MM-DD, like 2026-11-10'); return }
     if (d.endDay && !isDay(d.endDay)) { setDraftError('The end day is YYYY-MM-DD'); return }
-    if (!d.allDay && !isTime(d.startTime)) { setDraftError('The time is HH:MM, like 18:30'); return }
-    if (!d.allDay && d.endTime && !isTime(d.endTime)) { setDraftError('The end time is HH:MM'); return }
+    if (!d.allDay && !isTime(d.startTime)) { setDraftError('Pick a start time'); return }
+    if (!d.allDay && d.endTime && !isTime(d.endTime)) { setDraftError('Pick an end time, or No end time'); return }
     if (d.until && !isDay(d.until)) { setDraftError('“Until” is a day, YYYY-MM-DD'); return }
     const start = d.allDay ? d.day : `${d.day}T${d.startTime}`
     const endDay = d.endDay || d.day
@@ -446,12 +463,26 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
               </View>
               <View style={s.fieldRow}>
                 <Field label='Day' t={t} s={s}><TextInput style={s.input} value={draft.day} onChangeText={(day) => setDraft({ ...draft, day, endDay: draft.endDay === draft.day ? day : draft.endDay })} placeholder='YYYY-MM-DD' placeholderTextColor={t.textMuted} keyboardType='numbers-and-punctuation' /></Field>
-                {!draft.allDay && <Field label='Time' t={t} s={s}><TextInput style={s.input} value={draft.startTime} onChangeText={(startTime) => setDraft({ ...draft, startTime })} placeholder='HH:MM' placeholderTextColor={t.textMuted} keyboardType='numbers-and-punctuation' /></Field>}
+                {!draft.allDay && <Field label='Time' t={t} s={s}><TimeField label='Starts at' value={draft.startTime} open={picking === 'start'} onPress={() => setPicking(picking === 'start' ? null : 'start')} placeholder='Pick a time' /></Field>}
               </View>
+              {!draft.allDay && picking === 'start' && (
+                <TimePicker label='Start time' value={draft.startTime} onChange={setStartTime} onDone={() => setPicking(null)} />
+              )}
               <View style={s.fieldRow}>
                 <Field label={draft.allDay ? 'Last day' : 'Ends'} t={t} s={s}><TextInput style={s.input} value={draft.endDay} onChangeText={(endDay) => setDraft({ ...draft, endDay })} placeholder='YYYY-MM-DD' placeholderTextColor={t.textMuted} keyboardType='numbers-and-punctuation' /></Field>
-                {!draft.allDay && <Field label='At' t={t} s={s}><TextInput style={s.input} value={draft.endTime} onChangeText={(endTime) => setDraft({ ...draft, endTime })} placeholder='HH:MM' placeholderTextColor={t.textMuted} keyboardType='numbers-and-punctuation' /></Field>}
+                {!draft.allDay && <Field label='At' t={t} s={s}><TimeField label='Ends at' value={draft.endTime} open={picking === 'end'} onPress={() => setPicking(picking === 'end' ? null : 'end')} /></Field>}
               </View>
+              {!draft.allDay && picking === 'end' && (
+                <TimePicker
+                  label='End time'
+                  value={draft.endTime}
+                  start={isTime(draft.startTime) ? draft.startTime : undefined}
+                  onChange={(endTime) => setDraft({ ...draft, endTime, endDay: draft.endDay || draft.day })}
+                  onLength={setLength}
+                  onClear={() => { setDraft({ ...draft, endTime: '' }); setPicking(null) }}
+                  onDone={() => setPicking(null)}
+                />
+              )}
               <Text style={s.label}>Repeats</Text>
               <View style={s.chips}>
                 {FREQS.map((f) => (

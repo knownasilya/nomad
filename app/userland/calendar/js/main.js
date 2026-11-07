@@ -11,6 +11,8 @@
 //
 // Vanilla JS (served as-is, no bundle), styled with the app-stdlib tokens like nomad://messages.
 
+import { parseTime, timeOptions, endOptions, shiftEnd } from 'nomad://app-stdlib/js/time-of-day.js'
+
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const FREQS = [
@@ -353,6 +355,28 @@ function renderEditor() {
     if (again) render()
   }
   const ro = e.readOnly
+  // When the start moves, the end moves with it and the event keeps its length.
+  const moveStart = (startDay, startTime) => {
+    if (!startDay) return
+    const end = e.hasEnd ? shiftEnd(e, startDay, startTime) : { endDay: e.endDay < startDay ? startDay : e.endDay, endTime: e.endTime }
+    set({ startDay, startTime, endDay: end.endDay < startDay ? startDay : end.endDay, endTime: end.endTime }, true)
+  }
+  const startTime = timeField({
+    id: 'ev-start-time',
+    label: 'Start time',
+    value: e.startTime,
+    disabled: ro,
+    options: () => timeOptions(),
+    onChange: (t) => moveStart(e.startDay, t),
+  })
+  const endTime = timeField({
+    id: 'ev-end-time',
+    label: 'End time',
+    value: e.endTime,
+    disabled: ro,
+    options: () => endOptions(e.startTime, e.endDay === e.startDay),
+    onChange: (t) => set({ endTime: t, hasEnd: true }),
+  })
   return el('div', { class: 'backdrop', onclick: (ev) => ev.target === ev.currentTarget && closeEditor() }, [
     el('form', { class: 'dialog', role: 'dialog', 'aria-label': e.id ? 'Edit event' : 'New event', onsubmit: saveEvent }, [
       el('h2', {}, [e.id ? (ro ? e.title : 'Edit event') : 'New event']),
@@ -365,14 +389,14 @@ function renderEditor() {
 
         el('label', { for: 'ev-start' }, ['Starts']),
         el('div', { class: 'row' }, [
-          el('input', { id: 'ev-start', type: 'date', value: e.startDay, disabled: ro, onchange: (ev) => set({ startDay: ev.target.value, endDay: e.endDay < ev.target.value ? ev.target.value : e.endDay }, true) }),
-          e.allDay ? null : el('input', { type: 'time', 'aria-label': 'Start time', value: e.startTime, disabled: ro, onchange: (ev) => set({ startTime: ev.target.value }) }),
+          el('input', { id: 'ev-start', type: 'date', value: e.startDay, disabled: ro, onchange: (ev) => moveStart(ev.target.value, e.startTime) }),
+          e.allDay ? null : startTime,
         ]),
 
         el('label', { for: 'ev-end' }, ['Ends']),
         el('div', { class: 'row' }, [
           el('input', { id: 'ev-end', type: 'date', value: e.endDay, disabled: ro, onchange: (ev) => set({ endDay: ev.target.value, hasEnd: true }) }),
-          e.allDay ? null : el('input', { type: 'time', 'aria-label': 'End time', value: e.endTime, disabled: ro, onchange: (ev) => set({ endTime: ev.target.value, hasEnd: true }) }),
+          e.allDay ? null : endTime,
         ]),
 
         el('label', { for: 'ev-repeat' }, ['Repeats']),
@@ -434,6 +458,177 @@ function renderEditor() {
       ]),
     ]),
   ])
+}
+
+// A time of day: type it ("9", "930", "3:30pm", "18:30") or pick one from the list that opens under
+// it (every quarter hour; an end time's list starts after the start and says how long that makes
+// the event). The arrow keys move through the list, Enter picks, Escape closes it. A time that
+// can't be read goes back to the one before. Electron's <input type="time"> has no picker on macOS.
+function timeField({ id, label, value, options, disabled, onChange }) {
+  let current = value
+  let items = []
+  let active = -1
+  const listId = `${id}-list`
+  const input = el('input', {
+    id,
+    type: 'text',
+    class: 'time-input',
+    value,
+    disabled,
+    placeholder: 'HH:MM',
+    autocomplete: 'off',
+    spellcheck: 'false',
+    role: 'combobox',
+    'aria-label': label,
+    'aria-autocomplete': 'list',
+    'aria-expanded': 'false',
+    'aria-controls': listId,
+    onclick: () => (list.hidden ? open() : null),
+    oninput: () => {
+      if (list.hidden) open()
+      const t = parseTime(input.value)
+      if (t) highlight(nearest(t), true)
+    },
+    onkeydown: (ev) => {
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+        ev.preventDefault()
+        if (list.hidden) open()
+        else highlight(Math.max(0, Math.min(items.length - 1, active + (ev.key === 'ArrowDown' ? 1 : -1))), true)
+      } else if (ev.key === 'Enter') {
+        ev.preventDefault()
+        if (!list.hidden && active >= 0) pick(items[active].value)
+        else commit()
+      } else if (ev.key === 'Escape' && !list.hidden) {
+        ev.preventDefault()
+        ev.stopPropagation() // close the list, not the dialog
+        input.value = current
+        close()
+      } else if (ev.key === 'Tab') close()
+    },
+    onblur: () => {
+      commit()
+      close()
+    },
+  })
+  const list = el('ul', {
+    id: listId,
+    class: 'time-list',
+    role: 'listbox',
+    'aria-label': label,
+    hidden: true,
+    tabindex: '-1',
+    // Keep the focus in the field while a time is clicked.
+    onmousedown: (ev) => ev.preventDefault(),
+  })
+  const button = el(
+    'button',
+    {
+      type: 'button',
+      class: 'time-btn',
+      title: `Pick a ${label.toLowerCase()}`,
+      'aria-label': `Pick a ${label.toLowerCase()}`,
+      tabindex: '-1',
+      disabled,
+      onmousedown: (ev) => ev.preventDefault(),
+      onclick: () => {
+        input.focus()
+        list.hidden ? open() : close()
+      },
+    },
+    [icon('clock')]
+  )
+  const wrap = el('div', { class: 'time-field' }, [input, button, list])
+
+  // The option nearest to a time: itself, or the first after it.
+  function nearest(t) {
+    const i = items.findIndex((o) => o.value >= t)
+    return i < 0 ? items.length - 1 : i
+  }
+  function highlight(i, scroll) {
+    active = i
+    list.querySelectorAll('[role=option]').forEach((li, j) => li.classList.toggle('active', j === i))
+    const li = list.children[i]
+    if (li) {
+      input.setAttribute('aria-activedescendant', li.id)
+      if (scroll) li.scrollIntoView({ block: 'nearest' })
+    }
+  }
+  function place() {
+    const r = wrap.getBoundingClientRect()
+    const below = window.innerHeight - r.bottom
+    list.style.left = `${r.left}px`
+    list.style.minWidth = `${r.width}px`
+    if (below < 200 && r.top > below) {
+      list.style.top = ''
+      list.style.bottom = `${window.innerHeight - r.top + 4}px`
+      list.style.maxHeight = `${Math.min(240, r.top - 12)}px`
+    } else {
+      list.style.bottom = ''
+      list.style.top = `${r.bottom + 4}px`
+      list.style.maxHeight = `${Math.min(240, below - 12)}px`
+    }
+  }
+  const onScroll = (ev) => {
+    if (ev.target !== list) close()
+  }
+  function open() {
+    if (disabled) return
+    items = options()
+    list.replaceChildren(
+      ...items.map((o, i) =>
+        el(
+          'li',
+          {
+            id: `${listId}-${i}`,
+            role: 'option',
+            class: o.value === current ? 'selected' : '',
+            'aria-selected': o.value === current ? 'true' : 'false',
+            onclick: () => pick(o.value),
+            onmousemove: () => active !== i && highlight(i, false),
+          },
+          [o.label]
+        )
+      )
+    )
+    list.hidden = false
+    input.setAttribute('aria-expanded', 'true')
+    place()
+    // Show the current time near the top of the list.
+    const i = nearest(parseTime(input.value) || current || '09:00')
+    highlight(i, false)
+    list.scrollTop = Math.max(0, (list.children[i]?.offsetTop || 0) - 4)
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', close)
+  }
+  function close() {
+    if (list.hidden) return
+    list.hidden = true
+    active = -1
+    input.setAttribute('aria-expanded', 'false')
+    input.removeAttribute('aria-activedescendant')
+    window.removeEventListener('scroll', onScroll, true)
+    window.removeEventListener('resize', close)
+  }
+  function pick(t) {
+    close()
+    input.value = t
+    if (t !== current) {
+      current = t
+      onChange(t)
+      // A change that drew the dialog again: keep the focus on this field.
+      if (!wrap.isConnected) document.getElementById(id)?.focus()
+    }
+  }
+  function commit() {
+    const t = parseTime(input.value)
+    if (t) return pick(t)
+    if (input.value.trim()) {
+      wrap.classList.add('invalid')
+      setTimeout(() => wrap.classList.remove('invalid'), 900)
+    }
+    input.value = current
+  }
+  return wrap
 }
 
 async function saveEvent(ev) {

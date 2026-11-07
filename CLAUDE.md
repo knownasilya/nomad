@@ -387,7 +387,10 @@ Desktop is `nomad://calendar` (`app/userland/calendar/`, internal `nomad.vault.l
 fetches a due feed and hands the text to `feedFetched`. A drive can be a calendar too (`walled.garden/calendar`, one
 `walled.garden/calendar-event` file per event in `/events/`): it is followed as a feed with `kind: 'drive'`, read
 by desktop's bg over `nomad.fs` and by the phone's backend (`calendar/fetchDrive`), into the same copy (ADR-0042
-amendment). The AI reads it with `listCalendarEvents`
+amendment). The event editors pick times with a list (desktop's `timeField` in `calendar/js/main.js`) or an
+hour and minute grid (the phone's `mobile/components/TimePicker.tsx`), and moving the start moves the
+end; the time rules are `app-stdlib/js/time-of-day.js` with the phone's copy in `mobile/lib/timeOfDay.ts`
+(`tests/unit/time-of-day.test.js` runs both, so change them together). The AI reads it with `listCalendarEvents`
 (`calendarRead`, Jobs too) and never changes it; links are `nomad://calendar/?day=` (`parseItemLink`).
 
 ### Assets (ADR-0044)

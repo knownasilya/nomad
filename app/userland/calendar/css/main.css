@@ -328,7 +328,6 @@ input[type='text'],
 input[type='url'],
 input[type='date'],
 input[type='datetime-local'],
-input[type='time'],
 input[type='number'],
 select,
 textarea {
@@ -515,6 +514,95 @@ main {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* A time field: type a time or pick one from the list under it (timeField in main.js). */
+.time-field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  border: 1px solid var(--border-color--light);
+  border-radius: 6px;
+  background: var(--bg-color--default);
+}
+
+.time-field:focus-within {
+  outline: 2px solid var(--cal-accent-soft);
+  border-color: var(--cal-accent);
+}
+
+.time-field.invalid {
+  border-color: var(--cal-err);
+  outline-color: transparent;
+}
+
+.dialog .fields .time-field .time-input {
+  width: 64px;
+  height: 28px;
+  padding: 0 0 0 8px;
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-field .time-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 1px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-color--light);
+  cursor: pointer;
+}
+
+.time-field .time-btn:hover:not(:disabled) {
+  background: var(--cal-soft);
+  color: var(--text-color--default);
+}
+
+.time-field:has(:disabled) {
+  opacity: 0.6;
+}
+
+.time-list {
+  position: fixed;
+  z-index: 20;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow-y: auto;
+  border: 1px solid var(--border-color--semi-light);
+  border-radius: 8px;
+  background: var(--cal-panel-bg);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+}
+
+.time-list li {
+  padding: 5px 10px;
+  border-radius: 5px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.time-list li.active {
+  background: var(--cal-row-hover);
+}
+
+.time-list li.selected {
+  color: var(--cal-accent);
+  font-weight: 600;
+}
+
+.time-list li.selected.active {
+  background: var(--cal-accent-soft);
 }
 
 .check {
