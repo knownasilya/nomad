@@ -23,6 +23,9 @@ const { execFileSync } = require('child_process');
 module.exports = async function (context) {
   if (context.electronPlatformName !== 'darwin') return;
 
+  // VMP signing has to come before code signing on macOS, and this hook runs before both.
+  vmpSign(context);
+
   const hasRealIdentity =
     !!process.env.CSC_LINK || process.env.CSC_IDENTITY_AUTO_DISCOVERY !== 'false';
   if (hasRealIdentity) {
@@ -63,3 +66,46 @@ module.exports = async function (context) {
   );
   console.log('afterPack: signing complete');
 };
+
+// Widevine VMP signing (Verified Media Path), for DRM video: Prime Video, Netflix and the like refuse
+// to send a license to an app without a production VMP signature. Only castLabs' Electron build
+// ("ECS", version ends in +wvcus) has Widevine at all, and the signature comes from castLabs EVS
+// (a free account). The release workflow logs in with the EVS_ACCOUNT_NAME / EVS_PASSWD secrets;
+// without them the build ships with castLabs' development signature only. Linux has no VMP.
+// See app/bg/widevine.js and docs/releasing.md.
+function vmpSign(context) {
+  const version = electronVersion(context);
+  if (!/wvcus/.test(version)) {
+    console.log(`afterPack: Electron ${version || '?'} is not a castLabs build — no Widevine, skipping VMP signing`);
+    return;
+  }
+  if (!process.env.EVS_ACCOUNT_NAME) {
+    console.log(
+      'afterPack: EVS_ACCOUNT_NAME is not set — skipping VMP signing; DRM streaming sites may refuse to play'
+    );
+    return;
+  }
+  console.log(`afterPack: VMP signing ${context.appOutDir}`);
+  const env = { ...process.env, EVS_NO_ASK: '1' };
+  // sign-pkg takes the directory that holds the .app.
+  execFileSync('python3', ['-m', 'castlabs_evs.vmp', 'sign-pkg', context.appOutDir], {
+    stdio: 'inherit',
+    env,
+  });
+  execFileSync('python3', ['-m', 'castlabs_evs.vmp', 'verify-pkg', context.appOutDir], {
+    stdio: 'inherit',
+    env,
+  });
+  console.log('afterPack: VMP signing complete');
+}
+
+function electronVersion(context) {
+  const fromConfig = context.packager.config && context.packager.config.electronVersion;
+  if (fromConfig) return String(fromConfig);
+  try {
+    const pkg = require.resolve('electron/package.json', { paths: [context.packager.projectDir] });
+    return require(pkg).version || '';
+  } catch (e) {
+    return '';
+  }
+}
