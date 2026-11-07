@@ -16,7 +16,7 @@ import Library from '../components/Library'
 import Reader from '../components/Reader'
 import Notes from '../components/Notes'
 import Calendar from '../components/Calendar'
-import Photos from '../components/Photos'
+import Assets from '../components/Assets'
 import Jobs from '../components/Jobs'
 import Personas from '../components/Personas'
 import Messages from '../components/Messages'
@@ -74,7 +74,8 @@ type Kind = 'home' | 'web' | 'hyper'
 // The full-screen pages over the browser. They stack (lib/navStack.ts): one opened from another
 // sits on top of it, and back closes only the top one.
 type Screen =
-  | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' | 'personas' | 'photos' }
+  | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' | 'personas' }
+  | { name: 'assets'; assetId?: string } // assetId: the file to open, e.g. from a link in an AI answer
   | { name: 'notes'; noteId?: string } // noteId: the note to open, e.g. the one a followed link was in
   | { name: 'jobs'; jobId?: string; runId?: string } // a tapped Job notification opens its run
   | { name: 'calendar'; day?: string } // day: YYYY-MM-DD to show, e.g. from a link in an AI answer
@@ -196,6 +197,7 @@ const VAULT_PROMPTS: Record<string, { title: string; message: string }> = {
   readerWrite: { title: 'Allow AI to change your Reader?', message: 'The AI running on your other device wants to follow or unfollow feeds, or mark posts read.' },
   modsRead: { title: 'Allow AI to read your Mods?', message: 'The AI running on your other device wants to read your Mods: your own styles and scripts for sites.' },
   modsWrite: { title: 'Allow AI to change your Mods?', message: 'The AI running on your other device wants to create or change your Mods. A Mod can run a script on every page of its site.' },
+  assetsWrite: { title: 'Allow AI to save to Assets?', message: 'The AI running on your other device wants to save a file to your Assets. In a shared Space, everyone in it sees the file.' },
   calendarRead: { title: 'Allow AI to read your calendar?', message: 'The AI running on your other device wants to read your calendar, your household’s, and the calendars you follow.' },
   jobsRead: { title: 'Allow AI to see your Jobs?', message: 'The AI running on your other device wants to see your AI Jobs and their results.' },
   jobsWrite: { title: 'Allow AI to change your Jobs?', message: 'The AI running on your other device wants to create, change or run your AI Jobs. A Job runs a prompt by itself, reads your Notes and Reader, and notifies this phone.' },
@@ -326,7 +328,7 @@ export default function Browser () {
   const notesScreen = screens.find((sc) => sc.name === 'notes')
   const jobsScreen = screens.find((sc) => sc.name === 'jobs')
   const calendarScreen = screens.find((sc) => sc.name === 'calendar')
-  const photosOpen = isOpen('photos')
+  const assetsScreen = screens.find((sc) => sc.name === 'assets')
   const messagesScreen = screens.find((sc) => sc.name === 'messages')
   // The sheets over the browser, and the AI panel.
   const [spacesOpen, setSpacesOpen] = useState(false)
@@ -916,7 +918,7 @@ export default function Browser () {
     navigate(tb.id, url)
   }, [navigate])
 
-  // A link in the AI's answer (lib/itemLinks.ts). A Note, a Job, Reader or My Library opens its
+  // A link in the AI's answer (lib/itemLinks.ts). A Note, a Job, Reader, Assets or My Library opens its
   // screen over the AI panel, so back comes to the chat again. A page opens in a new tab, and the
   // panel closes to show it. The rest (Mods, the AI's memory and skills) are only on the computer.
   const openAiLink = useCallback((link: ItemLink) => {
@@ -936,6 +938,9 @@ export default function Browser () {
         return
       case 'calendar':
         openScreen({ name: 'calendar', day: link.day })
+        return
+      case 'asset':
+        openScreen({ name: 'assets', assetId: link.id })
         return
       case 'library':
         if (link.view === 'drives' || link.view === 'bookmarks') {
@@ -1311,7 +1316,7 @@ export default function Browser () {
             { label: 'Reader', icon: 'rss', onPress: () => openScreen({ name: 'reader' }) },
             { label: 'Notes', icon: 'sticky-note', onPress: () => openScreen({ name: 'notes' }) },
             { label: 'Calendar', icon: 'calendar-alt', onPress: () => openScreen({ name: 'calendar' }) },
-            { label: 'Photos', icon: 'images', onPress: () => openScreen({ name: 'photos' }) },
+            { label: 'Assets', icon: 'folder-open', onPress: () => openScreen({ name: 'assets' }) },
             { label: 'Messages', icon: 'comments', onPress: () => openScreen({ name: 'messages' }) },
             { label: 'AI Jobs', icon: 'clock', onPress: () => openScreen({ name: 'jobs' }) },
             { label: 'Personas', icon: 'id-badge', onPress: () => openScreen({ name: 'personas' }) }
@@ -1437,9 +1442,10 @@ export default function Browser () {
         onOpenUrl={openFromReader}
       />
 
-      <Photos
-        visible={photosOpen}
-        onClose={() => closeScreenNamed('photos')}
+      <Assets
+        visible={!!assetsScreen}
+        onClose={() => closeScreenNamed('assets')}
+        openAssetId={assetsScreen?.name === 'assets' ? assetsScreen.assetId : undefined}
         apps={backend.apps}
         onVaultChange={backend.onVaultChange}
         space={spacesApi.activeSpace.rootDriveKey || undefined}

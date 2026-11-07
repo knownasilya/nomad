@@ -390,15 +390,25 @@ by desktop's bg over `nomad.fs` and by the phone's backend (`calendar/fetchDrive
 amendment). The AI reads it with `listCalendarEvents`
 (`calendarRead`, Jobs too) and never changes it; links are `nomad://calendar/?day=` (`parseItemLink`).
 
-### The family album (ADR-0043)
+### Assets (ADR-0044)
 
-A shared Space's photos live in its Space Library: a record `/photos/items/<id>.json` and two blob
-files (`/photos/files/`, `/photos/thumbs/`), in the adder's own blob core. Rules, paths and sizes are
-`shared/photos.mjs` (tests `tests/unit/photos.test.js`); every Device scales to 2560 px and a 480 px
-thumbnail before adding. Desktop is `nomad://photos` (`app/userland/photos/`, `bg/web-apis/bg/photos.ts`
-over `autobases.buildPutBlobOp`); the phone is `mobile/components/Photos.tsx` over `RPC_APPS` `photos`
-(`mobile/backend/lib/photos.mjs`, the drive manager's `putBlobFor`/`readFileOf`). A Space that isn't
-shared has no album. Only the adder or the owner removes a photo.
+Every Space has Assets: any file up to 25 MB (photos, video, audio, PDFs, Markdown, code, CSV, …). A
+shared Space's are in its Space Library (`/assets/items/<id>.json`, `/assets/files/<id>`,
+`/assets/thumbs/<id>.jpg`, blobs in the adder's own blob core); any other Space's are the user's own,
+in the Vault under the Space's prefix (`vaultRoot(space)`), and `space-library.js` `share()` moves them
+into the Space Library (`autobases.copyFiles`). Rules, kinds, paths and sizes are `shared/assets.mjs`
+(tests `tests/unit/assets.test.js`); the phone's screens use the copy in `mobile/lib/assetRules.ts`
+(the same test runs on both, so change both together). Desktop is `nomad://assets`
+(`app/userland/assets/`, internal `nomad.vault.listAssets`/`assetData`/`addAsset`/`updateAsset`/
+`deleteAsset`, `app/bg/web-apis/bg/assets.ts`); its PDF preview is pdf.js, copied into
+`assets/js/pdf.build.js` by `scripts/build.js`. The phone is `mobile/components/Assets.tsx` over
+`RPC_APPS` `assets` (`mobile/backend/lib/assets.mjs`; picking and reading files in
+`mobile/lib/assetFiles.ts`). The family album's photos (ADR-0043, `/photos/`) are Assets: a Device
+that can write the Space Library moves them the first time it lists them (`legacyMove`), and until
+then they are read where they are. In a shared Space only the adder or the owner removes one. The
+user's AI saves files there with `saveAsset` (personal turns, `assetsWrite`, once a turn; pure parts
+`app/bg/ai/save-asset.mjs`, run in `ai.ts`, written by `assets.ts` `saveForAi`), and links
+`nomad://assets/?id=` (`assetLink`).
 
 ### Always-on Peers (ADR-0038)
 

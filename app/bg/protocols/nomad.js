@@ -27,6 +27,21 @@ const NOMAD_APP_CSP = `
   style-src 'self' 'unsafe-inline' nomad:;
   child-src 'self' hyper:;
 `.replace(/\n/g, '');
+// nomad://assets shows any file a Space keeps: a video, a song or a PDF plays from a blob: URL the
+// page makes from the file's bytes, and pdf.js renders a PDF in a worker. No frames: an HTML file is
+// shown as source, never run.
+const ASSETS_CSP = `
+  default-src 'self' nomad:;
+  connect-src 'self' nomad: data: blob:;
+  img-src nomad: asset: data: blob:;
+  script-src 'self' nomad: 'unsafe-eval';
+  worker-src 'self' nomad: blob:;
+  media-src 'self' nomad: data: blob:;
+  style-src 'self' 'unsafe-inline' nomad:;
+  font-src 'self' nomad: data:;
+  frame-src 'none';
+  object-src 'none';
+`.replace(/\n/g, '');
 // nomad://search reaches a configurable, external index endpoint (a crawler's HTTP/JSON API,
 // ADR-0014 §6) over fetch(), so it needs connect-src for http/https. The endpoint is the user's own
 // choice (default localhost), matching the "no privileged indexer" stance — the page talks only to
@@ -516,16 +531,6 @@ async function nomadProtocol(request) {
         { fallbackToIndexHTML: true }
       );
     }
-    // The family album of a shared Space (ADR-0043).
-    if (requestUrl === 'nomad://photos' || requestUrl.startsWith('nomad://photos/')) {
-      return serveAppAsset(
-        requestUrl,
-        path.join(__dirname, 'userland', 'photos'),
-        cb,
-        // @ts-ignore
-        { fallbackToIndexHTML: true }
-      );
-    }
     // The Persona Inbox (ADR-0036): direct messages. /new and ?persona=&with= are routes of one page.
     if (requestUrl === 'nomad://messages' || requestUrl.startsWith('nomad://messages/')) {
       return serveAppAsset(
@@ -610,6 +615,18 @@ async function nomadProtocol(request) {
     if (requestUrl.startsWith('nomad://assets/vs/') && requestUrl.endsWith('.ttf')) {
       let filePath = requestUrl.slice('nomad://assets/vs/'.length);
       return cb(200, 'OK', 'font/ttf', path.join(__dirname, `assets/js/editor/vs/${filePath}`));
+    }
+
+    // Assets (ADR-0044): a Space's files. It shares its host with the static assets above, which are
+    // matched first; the page is the root (`?id=` opens one file) and its own css/ and js/.
+    if (
+      requestUrl === 'nomad://assets' ||
+      requestUrl === 'nomad://assets/' ||
+      requestUrl.startsWith('nomad://assets/css/') ||
+      requestUrl.startsWith('nomad://assets/js/')
+    ) {
+      // @ts-ignore
+      return serveAppAsset(requestUrl, path.join(__dirname, 'userland', 'assets'), cb, { CSP: ASSETS_CSP });
     }
 
     // debugging

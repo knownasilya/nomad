@@ -18,8 +18,19 @@ function genSchemaTypes() {
   });
 }
 
+// nomad://assets previews a PDF with pdf.js: its library and worker, as they ship, next to the page.
+// Both are `*.build.js`, so git leaves them out.
+function copyPdfJs() {
+  var fs = require('fs');
+  var dir = pathUtil.dirname(require.resolve('pdfjs-dist/package.json'));
+  var js = pathUtil.join(userlandDir, 'assets/js');
+  fs.copyFileSync(pathUtil.join(dir, 'build/pdf.min.mjs'), pathUtil.join(js, 'pdf.build.js'));
+  fs.copyFileSync(pathUtil.join(dir, 'build/pdf.worker.min.mjs'), pathUtil.join(js, 'pdf.worker.build.js'));
+}
+
 function bundleApplication() {
   genSchemaTypes();
+  copyPdfJs();
   return Promise.all([
     bundle(p(appDir, 'main.js'), p(appDir, 'main.build.js')),
     // The crawler's utility-process entry (bg/hyper/crawler-host.js). Bundled so it carries the
@@ -55,6 +66,10 @@ function bundleApplication() {
       browserify: true,
     }),
     bundle(p(userlandDir, 'settings/js/main.js'), p(userlandDir, 'settings/js/main.build.js'), {
+      browserify: true,
+    }),
+    // nomad://assets carries the repo-root shared/assets.mjs (pdf.js is copied, copyPdfJs).
+    bundle(p(userlandDir, 'assets/js/main.js'), p(userlandDir, 'assets/js/main.build.js'), {
       browserify: true,
     }),
     // nomad://notes carries CodeMirror (its editor) and the repo-root shared/vault-apps.mjs.

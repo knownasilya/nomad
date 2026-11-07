@@ -190,7 +190,7 @@ export interface NoteLiveEvent { id: string; conn: string; kind: 'message' | 'st
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages' | 'calendar' | 'photos' | 'peers'
+export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages' | 'calendar' | 'assets' | 'peers'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
@@ -210,10 +210,10 @@ export interface CalendarDrive { url: string; name: string; color: string | null
 // One time an event happens: `id` is the event's, or '<feedId>:<uid>' for one from a feed (`feed`).
 export interface CalendarOccurrence { id: string; title: string; start: string; end?: string; allDay: boolean; location: string; notes: string; by: string; repeats: boolean; feed: { id: string; name: string; color: string | null; kind?: 'ics' | 'drive'; url?: string } | null }
 export interface CalendarList { space: string | null; shared: boolean; canWriteSpace: boolean; writable: boolean; from: string; to: string; events: CalendarEvent[]; feeds: CalendarFeed[]; occurrences: CalendarOccurrence[] }
-// The family album of a shared Space (shared/photos.mjs, ADR-0043, backend/lib/photos.mjs). by:
-// who added it. canDelete: this person added it, or owns the Space.
-export interface AlbumPhotoRecord { type: 'nomad/photo'; id: string; addedAt: string; takenAt: string; width: number; height: number; bytes: number; by: string; memberId: string | null; caption?: string; updatedAt: string; canDelete: boolean }
-export interface PhotosList { shared: boolean; canAdd: boolean; role: string | null; photos: AlbumPhotoRecord[] }
+// A Space's Assets (shared/assets.mjs, ADR-0044, backend/lib/assets.mjs): any file it keeps. by: who
+// added it in a shared Space. canDelete: this person added it, owns the Space, or it isn't shared.
+export interface AssetRecord { type: 'nomad/asset'; id: string; name: string; mime: string; kind: string; bytes: number; addedAt: string; takenAt: string; width?: number; height?: number; duration?: number; by: string; memberId: string | null; caption?: string; thumb?: boolean; source?: 'ai'; sourceUrl?: string; updatedAt: string; canDelete: boolean }
+export interface AssetsList { shared: boolean; canAdd: boolean; role: string | null; maxBytes: number; assets: AssetRecord[] }
 // The user's AI Jobs (shared/jobs.mjs, ADR-0030). A desktop runs them; the phone lists them, pauses
 // them, asks for a run, and notifies on a run that has a notification.
 // What the phone shows is `when` (the schedule in words), so the shapes are loose here.

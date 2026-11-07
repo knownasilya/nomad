@@ -684,67 +684,140 @@ describe('phone calendar', () => {
   }, 30000)
 })
 
-// The family album (ADR-0043, mobile/backend/lib/photos.mjs): a phone adds a photo to a shared
-// Space's Library as blobs in its own blob core, and the computer reads it back over replication.
-describe('phone family album', () => {
-  it('adds a photo the computer can read, and only its adder or the owner removes it', async () => {
-    const { createPhotos } = await import('../../mobile/backend/lib/photos.mjs')
-    const ph = await import('../../shared/photos.mjs')
+// Assets (ADR-0044, mobile/backend/lib/assets.mjs): a phone adds a file to a shared Space's Library
+// as blobs in its own blob core, and the computer reads it back over replication. A Space that isn't
+// shared keeps its Assets in the Vault. The family album's photos (ADR-0043) move to Assets paths.
+describe('phone Assets', () => {
+  async function setup ({ storeA, storeB }, memberId) {
     const sl = await import('../../shared/space-library.mjs')
     const { createBlobStore, createContentReader } = await import('../../shared/fs-core.mjs')
     const Hyperblobs = await loadAppDep('hyperblobs')
+    const owner = new Autobase(storeA.namespace('library'), null, { open, apply, ...AUTOBASE_OPTS })
+    await owner.ready()
+    const libBase = new Autobase(storeB.namespace('library'), owner.key, { open, apply, ...AUTOBASE_OPTS })
+    await libBase.ready()
+    await owner.append({ addWriter: b4a.toString(libBase.local.key, 'hex') })
+    await owner.append(putJson(sl.memberPath(memberId), sl.makeMember({ memberId, name: 'Sam', role: 'editor' })))
+    await owner.update()
+    await until(async () => { await libBase.update(); return libBase.writable })
+    const blobStore = createBlobStore({ Hyperblobs, b4a })
+    const content = createContentReader({ Hyperblobs, b4a })
+    const core = new Hyperblobs(storeB.namespace('assets-test').get({ name: 'blobs' }))
+    const blobs = {
+      putBlobFor: (_base, buf) => blobStore.putBlob(core, buf),
+      readFileOf: async (base, p) => { const n = await base.view.get(p); return n ? content.readContent(n.value, { store: storeB }) : null },
+    }
+    const close = async () => { await core.close?.(); await libBase.close(); await owner.close() }
+    return { owner, libBase, blobs, content, close }
+  }
+
+  it('adds a file the computer can read, and only its adder or the owner removes it', async () => {
+    const { createAssets } = await import('../../mobile/backend/lib/assets.mjs')
+    const as = await import('../../shared/assets.mjs')
     const SHARED = 'e'.repeat(64)
     const memberId = '2'.repeat(32)
-    await withDevices(async ({ storeA, storeB }) => {
-      const owner = new Autobase(storeA.namespace('library'), null, { open, apply, ...AUTOBASE_OPTS })
-      await owner.ready()
-      const libBase = new Autobase(storeB.namespace('library'), owner.key, { open, apply, ...AUTOBASE_OPTS })
-      await libBase.ready()
-      await owner.append({ addWriter: b4a.toString(libBase.local.key, 'hex') })
-      await owner.append(putJson(sl.memberPath(memberId), sl.makeMember({ memberId, name: 'Sam', role: 'editor' })))
-      await owner.update()
-      await until(async () => { await libBase.update(); return libBase.writable })
-
-      const blobStore = createBlobStore({ Hyperblobs, b4a })
-      const content = createContentReader({ Hyperblobs, b4a })
-      const core = new Hyperblobs(storeB.namespace('photos-test').get({ name: 'blobs' }))
-      const photos = createPhotos({
-        libraryOf: async (space) => (space === SHARED ? { base: libBase, memberId, role: 'editor' } : null),
-        blobs: {
-          putBlobFor: (_base, buf) => blobStore.putBlob(core, buf),
-          readFileOf: async (base, p) => { const n = await base.view.get(p); return n ? content.readContent(n.value, { store: storeB }) : null },
-        },
-      })
+    await withDevices(async (devices) => {
+      const { owner, libBase, blobs, content, close } = await setup(devices, memberId)
+      const assets = createAssets({ libraryOf: async (space) => (space === SHARED ? { base: libBase, memberId, role: 'editor' } : null), blobs })
       try {
-        expect(await photos.list(SPACE)).toMatchObject({ shared: false, photos: [] })
+        expect(await assets.list(SPACE)).toMatchObject({ shared: false, canAdd: false, assets: [] })
         const jpeg = Buffer.alloc(5000, 7)
         const thumb = Buffer.alloc(300, 3)
-        const added = await photos.add(SHARED, { photo: jpeg.toString('base64'), thumb: thumb.toString('base64'), width: 2560, height: 1920, takenAt: '2026-10-31T16:20:00Z' })
-        expect(added).toMatchObject({ by: 'Sam', memberId, bytes: 5000, canDelete: true })
-        const listed = await photos.list(SHARED)
+        const added = await assets.add(SHARED, { data: jpeg.toString('base64'), thumb: thumb.toString('base64'), name: 'Pumpkins.jpg', mime: 'image/jpeg', width: 2560, height: 1920, takenAt: '2026-10-31T16:20:00Z' })
+        expect(added).toMatchObject({ by: 'Sam', memberId, bytes: 5000, kind: 'image', thumb: true, canDelete: true })
+        const listed = await assets.list(SHARED)
         expect(listed).toMatchObject({ shared: true, canAdd: true })
-        expect(listed.photos.map((p) => p.id)).toEqual([added.id])
-        expect(await photos.read(SHARED, added.id, { thumb: true })).toBe(thumb.toString('base64'))
+        expect(listed.assets.map((a) => a.id)).toEqual([added.id])
+        expect(await assets.read(SHARED, added.id, { thumb: true })).toBe(thumb.toString('base64'))
 
         // The computer sees the record and fetches the bytes from the phone's blob core.
-        await until(async () => !!(await readJson(owner, ph.itemPath(added.id))))
-        const node = await owner.view.get(ph.filePath(added.id))
-        const bytes = await content.readContent(node.value, { store: storeA })
+        const p = as.pathsOf(as.LIB_ASSETS)
+        await until(async () => !!(await readJson(owner, p.item(added.id))))
+        const node = await owner.view.get(p.file(added.id))
+        const bytes = await content.readContent(node.value, { store: devices.storeA })
         expect(Buffer.compare(Buffer.from(bytes), jpeg)).toBe(0)
 
-        // Someone else's photo: an editor can't remove it.
-        const other = ph.makePhoto({ id: ph.newPhotoId(), by: 'Ilya', memberId: '3'.repeat(32) })
-        await owner.append(putJson(ph.itemPath(other.id), other))
+        // A PDF from the file picker, kept as it is.
+        const pdf = await assets.add(SHARED, { data: Buffer.from('%PDF-1.4 x').toString('base64'), name: 'Field trip form.pdf', mime: '' })
+        expect(pdf).toMatchObject({ kind: 'pdf', mime: 'application/pdf' })
+        expect(pdf.thumb).toBeUndefined()
+
+        // Someone else's file: an editor can't remove it.
+        const other = as.makeAsset({ id: as.newAssetId(), name: 'Notes.md', by: 'Ilya', memberId: '3'.repeat(32), bytes: 10 })
+        await owner.append(putJson(p.item(other.id), other))
         await owner.update()
-        await until(async () => (await photos.list(SHARED)).photos.length === 2)
-        await expect(photos.remove(SHARED, other.id)).rejects.toThrow(/Only the person/)
-        expect((await photos.caption(SHARED, { id: added.id, caption: 'Pumpkins' })).caption).toBe('Pumpkins')
-        expect(await photos.remove(SHARED, added.id)).toBe(true)
-        expect((await photos.list(SHARED)).photos.map((p) => p.id)).toEqual([other.id])
-        await expect(photos.add(SHARED, { photo: '', thumb: '' })).rejects.toThrow(/empty/)
+        await until(async () => (await assets.list(SHARED)).assets.length === 3)
+        await expect(assets.remove(SHARED, other.id)).rejects.toThrow(/Only the person/)
+        const renamed = await assets.update(SHARED, { id: added.id, name: 'Pumpkin patch.jpg', caption: 'Pumpkins' })
+        expect(renamed).toMatchObject({ name: 'Pumpkin patch.jpg', caption: 'Pumpkins', bytes: 5000, mime: 'image/jpeg' })
+        expect(await assets.remove(SHARED, added.id)).toBe(true)
+        expect((await assets.list(SHARED)).assets.map((a) => a.id).sort()).toEqual([other.id, pdf.id].sort())
+        await expect(assets.add(SHARED, { data: '', name: 'x.txt' })).rejects.toThrow(/empty/)
       } finally {
-        await core.close?.()
-        await libBase.close(); await owner.close()
+        await close()
+      }
+    })
+  }, 30000)
+
+  it('moves the family album’s photos to Assets paths, keeping their bytes', async () => {
+    const { createAssets } = await import('../../mobile/backend/lib/assets.mjs')
+    const as = await import('../../shared/assets.mjs')
+    const SHARED = 'e'.repeat(64)
+    const memberId = '2'.repeat(32)
+    await withDevices(async (devices) => {
+      const { owner, libBase, blobs, close } = await setup(devices, memberId)
+      const assets = createAssets({ libraryOf: async (space) => (space === SHARED ? { base: libBase, memberId, role: 'editor' } : null), blobs })
+      try {
+        // An album photo as ADR-0043 wrote it.
+        const id = 'pmhc2k1a0-abc123'
+        const old = as.legacyPaths(id)
+        const photo = { type: 'nomad/photo', id, addedAt: '2026-10-31T17:00:00.000Z', takenAt: '2026-10-31T16:20:00.000Z', width: 2560, height: 1920, bytes: 4, by: 'Ilya', memberId: '3'.repeat(32), updatedAt: '2026-10-31T17:00:00.000Z', caption: 'Costumes' }
+        const inline = (path, buf) => ({ op: 'put', path, metadata: makeMetadata({ mtime: 1, ctime: 1 }), value: buf.toString('base64') })
+        await owner.append(putJson(old.item, photo))
+        await owner.append(inline(old.file, Buffer.from('JPEG')))
+        await owner.append(inline(old.thumb, Buffer.from('TH')))
+        await owner.update()
+        await until(async () => { await libBase.update(); return !!(await libBase.view.get(old.item)) })
+
+        const listed = await assets.list(SHARED)
+        expect(listed.assets).toHaveLength(1)
+        expect(listed.assets[0]).toMatchObject({ id, name: 'Photo 2026-10-31.jpg', kind: 'image', caption: 'Costumes', by: 'Ilya', thumb: true, addedAt: photo.addedAt, canDelete: false })
+        expect(await assets.read(SHARED, id)).toBe(Buffer.from('JPEG').toString('base64'))
+        expect(await assets.read(SHARED, id, { thumb: true })).toBe(Buffer.from('TH').toString('base64'))
+
+        // The computer sees the move: the new paths, and the old ones gone.
+        const p = as.pathsOf(as.LIB_ASSETS)
+        await until(async () => !!(await readJson(owner, p.item(id))) && !(await owner.view.get(old.item)))
+        expect(await owner.view.get(old.file)).toBeNull()
+        expect(await owner.view.get(p.thumb(id))).toBeTruthy()
+        expect((await assets.list(SHARED)).assets.map((a) => a.id)).toEqual([id])
+      } finally {
+        await close()
+      }
+    })
+  }, 30000)
+
+  it('keeps a Space’s files in the Vault until it is shared', async () => {
+    const { createAssets } = await import('../../mobile/backend/lib/assets.mjs')
+    const as = await import('../../shared/assets.mjs')
+    await withDevices(async (devices) => {
+      const { blobs, close } = await setup(devices, '2'.repeat(32))
+      const assets = createAssets({ libraryOf: async () => null, vaultOf: () => devices.phone, blobs })
+      try {
+        expect(await assets.list(SPACE)).toMatchObject({ shared: false, canAdd: true, assets: [] })
+        const md = await assets.add(SPACE, { data: Buffer.from('# Packing\n- socks').toString('base64'), name: 'Packing.md', mime: 'text/plain' })
+        expect(md).toMatchObject({ kind: 'markdown', mime: 'text/markdown', by: '', memberId: null, canDelete: true })
+        const p = as.pathsOf(as.vaultRoot(SPACE))
+        await until(async () => !!(await readJson(devices.computer, p.item(md.id))))
+        expect(p.item(md.id).startsWith('/.vault/')).toBe(true)
+        expect((await assets.list(SPACE)).assets[0]).toMatchObject({ id: md.id, canDelete: true })
+        expect(Buffer.from(await assets.read(SPACE, md.id), 'base64').toString()).toBe('# Packing\n- socks')
+        // Another Space doesn't see them.
+        expect((await assets.list('d'.repeat(64))).assets).toEqual([])
+        expect(await assets.remove(SPACE, md.id)).toBe(true)
+        expect((await assets.list(SPACE)).assets).toEqual([])
+      } finally {
+        await close()
       }
     })
   }, 30000)

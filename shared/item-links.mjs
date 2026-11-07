@@ -1,4 +1,4 @@
-// Links to the user's things in Nomad: a Note, a Job, a Mod, the AI's memory, Reader. The AI's tools
+// Links to the user's things in Nomad: a Note, a Job, a Mod, an Asset, the AI's memory, Reader. The AI's tools
 // return these as `url` (bg/ai/vault-tools.mjs, bg/web-apis/bg/ai-vault.ts), the AI puts them in its
 // answer as Markdown links, and the AI Sidebar (fg/shell-window/ai-sidebar.js) and the phone's AI
 // panel (mobile/components/AiPanel.tsx, through mobile/lib/itemLinks.ts) open them.
@@ -25,6 +25,10 @@ export const MEMORY_LINK = 'nomad://ai/memory';
 export const READER_LINK = 'nomad://reader/';
 export const CALENDAR_LINK = 'nomad://calendar/';
 export const calendarLink = (day) => `${CALENDAR_LINK}?day=${day}`;
+export const ASSETS_LINK = 'nomad://assets/';
+export const assetLink = (id) => `${ASSETS_LINK}?id=${id}`;
+// shared/assets.mjs isAssetId
+const ASSET_ID = /^[ap][a-z0-9]{6,14}-[a-z0-9]{4,10}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 // The nomad:// pages a link may open, with where they are in words (for a device that can't open them).
@@ -49,6 +53,7 @@ const LIBRARY_VIEWS = {
  *   { kind: 'ai', view, url, place }              the AI page: chats, memory, skills, setup
  *   { kind: 'reader', url, place }                nomad://reader
  *   { kind: 'calendar', day?, url, place }        nomad://calendar, or one day of it
+ *   { kind: 'asset', id?, url, place }            nomad://assets, or one file there
  * `url` is the one to open. `place` says where it is, e.g. "My Library → Mods".
  * @param {string} href
  * @returns {null | { kind: string, url: string, id?: string, view?: string, day?: string, place?: string }}
@@ -92,6 +97,11 @@ export function parseItemLink(href) {
     const day = /[?&]day=([^&]*)/.exec(m[4] || '')?.[1];
     if (day && DAY.test(day)) return { kind: 'calendar', day, url: calendarLink(day), place: 'Calendar' };
     return { kind: 'calendar', url: CALENDAR_LINK, place: 'Calendar' };
+  }
+  if (host === 'assets') {
+    if (seg.length) return null;
+    if (id && ASSET_ID.test(id)) return { kind: 'asset', id, url: assetLink(id), place: 'Assets' };
+    return { kind: 'asset', url: ASSETS_LINK, place: 'Assets' };
   }
   if (host === 'ai') {
     const view = seg[0] || 'chats';

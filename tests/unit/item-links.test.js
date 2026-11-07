@@ -30,6 +30,10 @@ const CASES = [
   'nomad://calendar/?day=2026-11-10',
   'nomad://calendar/?day=../x&add=1',
   'nomad://calendar/x',
+  'nomad://assets/',
+  'nomad://assets/?id=amh2x0k3c-ab12cd',
+  'nomad://assets/?id=../x&delete=1',
+  'nomad://assets/files/x',
   'nomad://settings',
   'nomad://library/drives?delete=1',
   'hyper://abc123/notes/todo.md',
@@ -80,6 +84,13 @@ describe('parseItemLink', () => {
       place: 'Calendar',
     })
     expect(shared.parseItemLink('nomad://calendar/?day=../x').url).toBe('nomad://calendar/')
+    expect(shared.parseItemLink('nomad://assets/?id=amh2x0k3c-ab12cd&delete=1')).toEqual({
+      kind: 'asset',
+      id: 'amh2x0k3c-ab12cd',
+      url: 'nomad://assets/?id=amh2x0k3c-ab12cd',
+      place: 'Assets',
+    })
+    expect(shared.parseItemLink('nomad://assets/?id=../x').url).toBe('nomad://assets/')
   })
 
   it('opens web and hyper:// pages as written', () => {
@@ -100,6 +111,7 @@ describe('parseItemLink', () => {
       'nomad://library/jobs?id=../../x',
       'nomad://reader/feed',
       'nomad://calendar/x',
+      'nomad://assets/files/x',
       'https://user:pw@example.com/',
       'javascript:alert(1)',
       'data:text/html,<b>x</b>',

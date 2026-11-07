@@ -1,6 +1,6 @@
 # A family album in a shared Space
 
-**Status: Accepted.** 2026-11-06.
+**Status: Accepted.** 2026-11-06. **Superseded by ADR-0044:** the album's photos are a Space's Assets now, and move to `/assets/` the first time a Device that can write the Space Library lists them.
 
 A household wants one place for its photos: the kids' school play, the pumpkins on the step, the
 holiday. Each person adds from their own phone; everyone sees all of them; nobody has to set up a

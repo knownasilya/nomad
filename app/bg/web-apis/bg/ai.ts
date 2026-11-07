@@ -43,7 +43,10 @@ import * as secretStore from '../../ai/secret-store';
 import * as sendGrants from '../../ai/send-grants';
 import { describeInject, hostAllowed, permissionFor, redact, redactResult, secretForModel } from '../../ai/secrets.mjs';
 import { createEgressGuard, hostsIn, requestPreview, sendPermission, userText } from '../../ai/egress.mjs';
-import { runHttpRequest } from '../../ai/http-request.mjs';
+import { runHttpRequest, nodeTransport } from '../../ai/http-request.mjs';
+import { ASSETS_PERM, assetRequest, nameForUrl, sizeCheck } from '../../ai/save-asset.mjs';
+import * as assetsBg from './assets';
+import { MAX_BYTES as assetsMaxBytes } from '../../../../shared/assets.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
 import {
   jobWork,
@@ -1514,6 +1517,51 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
       // A Job keeps the drive it made with the run (jobEmitter).
       emitter?.emit('tool', { phase: 'drive', name: 'createDrive', drive: made.url, title: made.title });
       return JSON.stringify(made, null, 2);
+    }
+    case 'saveAsset': {
+      // A file into the user's Assets in the turn's Space (ADR-0044): the user's own AI only, after
+      // their yes (once a turn). The prompt says when the Space is shared, since everyone in it sees it.
+      if (!catalog?.personal || !hasCapability(catalog, 'saveAsset')) {
+        throw new Error('saveAsset is not available here');
+      }
+      const req = assetRequest(args || {});
+      const assetSpace = isSpaceKey(space) ? space : await vaultApps.spaceKey(ctx);
+      const place = await assetsBg.placeFor(assetSpace);
+      if (!place.writable) throw new Error('The user can only view this Space, so its Assets can’t be added to');
+      const allowed = await permit(ASSETS_PERM, sender, { shared: place.shared, space: vaultApps.spaceNameOf(assetSpace) });
+      if (!allowed) throw new Error("The user didn't allow saving to Assets");
+      let { name, mime, bytes } = req as any;
+      let sourceUrl = '';
+      if (req.from === 'url') {
+        const urlp = new URL(req.url);
+        if (urlp.protocol === 'hyper:') {
+          const v = await fsAPI.readFile.call(ctx, urlp.href, { encoding: 'binary' });
+          if (v == null) throw new Error(`File not found: ${urlp.href}`);
+          bytes = typeof v === 'string' ? b4a.from(v, 'binary') : b4a.from(v);
+          name = nameForUrl(urlp.href, '', req.name);
+        } else {
+          let res = null;
+          let at = urlp;
+          // Follow a few redirects, each host checked like fetchUrl's.
+          for (let hops = 0; hops < 5; hops++) {
+            await egress?.check(at.href, { ask: askToSend({ kind: 'fetch', url: at.href }) });
+            res = await nodeTransport({ url: at, method: 'GET', headers: {}, body: null, allowPrivate: false, signal, timeoutMs: 30000, maxBytes: assetsMaxBytes + 1 });
+            const loc = res.status >= 300 && res.status < 400 ? res.headers?.location : null;
+            if (!loc) break;
+            at = new URL(String(loc), at);
+            if (at.protocol !== 'http:' && at.protocol !== 'https:') throw new Error('That URL redirects somewhere that isn’t a web page');
+          }
+          if (!res || res.status < 200 || res.status >= 300) throw new Error(`${at.href} answered ${res?.status || 'nothing'}`);
+          bytes = res.body;
+          const type = String(res.headers?.['content-type'] || '');
+          name = nameForUrl(at.href, type, req.name);
+          mime = req.mime || type;
+          sourceUrl = urlp.href;
+        }
+        sizeCheck(bytes.length);
+      }
+      const saved = await assetsBg.saveForAi(assetSpace, { name, mime, bytes, caption: req.caption, sourceUrl });
+      return JSON.stringify(saved, null, 2);
     }
     case 'notify': {
       // A Job's turn only (ADR-0030). jobs.js saves it with the run, and the phone shows it.
