@@ -5,6 +5,7 @@ import * as bg from './bg-process-rpc';
 import './background-tray';
 import './browser';
 import './bookmark';
+import './command-palette';
 import './mods';
 import './donate';
 import './draft';
@@ -48,6 +49,7 @@ class MenusWrapper extends LitElement {
     window.openMenu = async (v, params) => {
       this.currentMenu = v;
       this.currentParams = params;
+      document.body.dataset.menu = v; // index.html styles the frame per menu (the palette's corners)
       reset(`${v}-menu`);
       await this.updateComplete;
       await init(`${v}-menu`);
@@ -113,6 +115,8 @@ class MenusWrapper extends LitElement {
         return html`<browser-menu active-menu></browser-menu>`;
       case 'bookmark':
         return html`<bookmark-menu active-menu></bookmark-menu>`;
+      case 'command-palette':
+        return html`<command-palette-menu active-menu></command-palette-menu>`;
       case 'bookmark-edit':
         return html`<bookmark-edit-menu active-menu></bookmark-edit-menu>`;
       case 'mods':

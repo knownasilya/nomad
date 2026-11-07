@@ -21,6 +21,10 @@ import * as modals from './modals';
 import { triggerMenuItemById } from '../window-menu';
 import shellMenusRPCManifest from '../../rpc-manifests/shell-menus';
 import { findWebContentsParentWindow } from '../../lib/electron';
+import * as historyDb from '../../dbs/history';
+import * as settingsDb from '../../dbs/settings';
+import * as names from '../../hyper/names';
+import { isNewTabPage } from '../../../lib/command-palette';
 import { watchOutsidePress, createReopenGuard } from './popup-close.mjs';
 
 // globals
@@ -28,6 +32,9 @@ import { watchOutsidePress, createReopenGuard } from './popup-close.mjs';
 
 const IS_OSX = process.platform === 'darwin';
 const MARGIN_SIZE = 10;
+const PALETTE_WIDTH = 620;
+const PALETTE_HEIGHT = 460;
+const PALETTE_RECENT_VISITS = 300; // this Space's newest visits, filtered as you type
 const IS_RIGHT_ALIGNED = ['browser', 'bookmark', 'peers', 'share', 'site', 'donate', 'spaces', 'draft', 'mods', 'persona'];
 var events = new Events();
 var views = {}; // map of {[parentWindow.id] => BrowserView}
@@ -74,7 +81,20 @@ export function reposition(parentWindow) {
       adjustPosition(b, view, parentWindow);
       view.setBounds(b);
     };
-    if (view.menuId === 'background-tray') {
+    if (view.menuId === 'command-palette') {
+      // Centered near the top of the window, over the page (fg/shell-menus/command-palette.js)
+      const parentBounds = parentWindow.getContentBounds();
+      const b = { width: PALETTE_WIDTH, height: PALETTE_HEIGHT };
+      if (view.currentDimensions) Object.assign(b, view.currentDimensions);
+      else adjustDimensions(b);
+      b.width = Math.min(b.width, Math.max(320, parentBounds.width - 40));
+      view.setBounds({
+        x: Math.max(0, Math.round((parentBounds.width - b.width) / 2)),
+        y: Math.min(90, Math.max(10, Math.round(parentBounds.height * 0.12))),
+        width: b.width,
+        height: b.height,
+      });
+    } else if (view.menuId === 'background-tray') {
       setBounds({
         x: IS_OSX ? 75 : 10,
         y: 33,
@@ -302,6 +322,77 @@ rpc.exportAPI('background-process-shell-menus', shellMenusRPCManifest, {
 
   async triggerWindowMenuItemById(menu, id) {
     return triggerMenuItemById(menu, id);
+  },
+
+  // The command palette (Cmd/Ctrl+K): what it lists is the window's current Space's, its tabs in
+  // this window and the history visited in it (app/lib/command-palette.ts).
+  async getPalette() {
+    var win = findWebContentsParentWindow(this.sender);
+    if (!win) return null;
+    const space = tabManager.getWindowActiveSpace(win);
+    const spaceId = tabManager.getWindowActiveSpaceId(win);
+    const tabs = tabManager.getVisibleTabs(win).map((tab, index) => ({
+      index,
+      url: tab.url || tab.loadingURL || '',
+      title: tab.title || '',
+      isActive: !!tab.isActive,
+      isPinned: !!tab.isPinned,
+    }));
+    const [recent, engines] = await Promise.all([
+      historyDb.getVisitHistory(0, { limit: PALETTE_RECENT_VISITS }, spaceId).catch(() => []),
+      settingsDb.getForSpace(spaceId, 'search_engines').catch(() => null),
+    ]);
+    const list = Array.isArray(engines) ? engines : [];
+    const engine = list.find((se) => se && se.selected) || list[0] || null;
+    let nameRecords = [];
+    try {
+      nameRecords = names.list(names.spaceKeyForId(spaceId)).filter((r) => !r.hidden);
+    } catch (e) {
+      // no Vault yet
+    }
+    return {
+      space: space ? { id: space.id, name: space.name, color: space.color, icon: space.icon } : null,
+      names: nameRecords.map((r) => ({ name: r.name, url: r.url, title: r.title || '' })),
+      tabs,
+      recent: (recent || []).map((v) => ({ url: v.url, title: v.title, ts: v.ts })),
+      searchEngine: engine ? { name: engine.name, url: engine.url } : null,
+    };
+  },
+
+  // Older history in the current Space for what's typed (the newest visits come with getPalette).
+  async searchPaletteHistory(query) {
+    var win = findWebContentsParentWindow(this.sender);
+    if (!win || !query || typeof query !== 'string') return [];
+    const spaceId = tabManager.getWindowActiveSpaceId(win);
+    try {
+      const rows = await historyDb.getVisitHistory(0, { search: query, limit: 40 }, spaceId);
+      return rows.map((v) => ({ url: v.url, title: v.title, ts: v.ts }));
+    } catch (e) {
+      return []; // a query sqlite's full-text search can't parse
+    }
+  },
+
+  // Switch to one of the current Space's tabs (its index in getPalette's `tabs`).
+  async switchToTab(index) {
+    var win = findWebContentsParentWindow(this.sender);
+    hide(win);
+    const tab = tabManager.getByIndex(win, index);
+    if (tab) tabManager.setActive(win, tab);
+  },
+
+  // Open an address from the palette: in a new tab in the current Space, or in this tab when it's
+  // the new tab page or `here` is set (Shift+Enter).
+  async openFromPalette(url, opts = {}) {
+    var win = findWebContentsParentWindow(this.sender);
+    hide(win);
+    if (!win || !url || typeof url !== 'string') return;
+    const active = tabManager.getActive(win);
+    if (active && (opts.here || isNewTabPage(active.url || active.loadingURL))) {
+      active.primaryPane.loadURL(url);
+      active.primaryPane.webContents?.focus();
+    } else {
+      tabManager.create(win, url, { setActive: true });
+    }
   },
 });
 
