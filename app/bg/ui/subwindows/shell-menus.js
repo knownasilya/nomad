@@ -23,6 +23,7 @@ import shellMenusRPCManifest from '../../rpc-manifests/shell-menus';
 import { findWebContentsParentWindow } from '../../lib/electron';
 import * as historyDb from '../../dbs/history';
 import * as settingsDb from '../../dbs/settings';
+import * as names from '../../hyper/names';
 import { isNewTabPage } from '../../../lib/command-palette';
 import { watchOutsidePress, createReopenGuard } from './popup-close.mjs';
 
@@ -343,8 +344,15 @@ rpc.exportAPI('background-process-shell-menus', shellMenusRPCManifest, {
     ]);
     const list = Array.isArray(engines) ? engines : [];
     const engine = list.find((se) => se && se.selected) || list[0] || null;
+    let nameRecords = [];
+    try {
+      nameRecords = names.list(names.spaceKeyForId(spaceId)).filter((r) => !r.hidden);
+    } catch (e) {
+      // no Vault yet
+    }
     return {
       space: space ? { id: space.id, name: space.name, color: space.color, icon: space.icon } : null,
+      names: nameRecords.map((r) => ({ name: r.name, url: r.url, title: r.title || '' })),
       tabs,
       recent: (recent || []).map((v) => ({ url: v.url, title: v.title, ts: v.ts })),
       searchEngine: engine ? { name: engine.name, url: engine.url } : null,

@@ -9,6 +9,7 @@
 
 import { examineLocationInput } from './urls';
 import { foldText, queryWords, matchesWords } from '../userland/app-stdlib/js/search-match.js';
+import { matchNames } from '../../shared/names.mjs';
 
 // Nomad's own pages. `app` is the page whose favicon the row shows; `keywords` are other words a
 // person might type for it. `top` pages are listed before anything is typed.
@@ -46,6 +47,7 @@ export const TAB_LIMIT = 20;
 // Group headings, in the order the groups are listed.
 export const GROUPS = {
   tab: 'Open tabs',
+  name: 'Names',
   page: 'Nomad pages',
   recent: 'Recent',
 };
@@ -70,13 +72,15 @@ type PaletteInput = {
   recent?: PaletteVisit[]; // this Space's newest visits, newest first
   history?: PaletteVisit[]; // this Space's history search for the query
   searchEngine?: { name: string; url: string } | null;
+  names?: Array<{ name: string; url: string; title?: string; hidden?: boolean }>; // the user's names and this Space's (hyper/names.js)
 };
 
 // The palette's rows for what's typed, in the order they're listed; Enter opens the first. Each is
-// { kind: 'goto'|'search'|'tab'|'page'|'recent', title, url, subtitle?, tabIndex?, group? }, and one
-// with a tabIndex switches to that tab.
-export function paletteResults({ query = '', tabs = [], recent = [], history = [], searchEngine }: PaletteInput = {}): any[] {
+// { kind: 'goto'|'search'|'name'|'tab'|'page'|'recent', title, url, subtitle?, tabIndex?, group? },
+// and one with a tabIndex switches to that tab.
+export function paletteResults({ query = '', tabs = [], recent = [], history = [], searchEngine, names = [] }: PaletteInput = {}): any[] {
   const q = String(query || '').trim();
+  if (q.startsWith(NAMES_ONLY)) return nameResults(q.slice(NAMES_ONLY.length).trim(), names);
   const words = queryWords(q);
   const otherTabs = tabs.filter((t) => !t.isActive);
   const openUrls = new Map();
@@ -162,9 +166,51 @@ export function paletteResults({ query = '', tabs = [], recent = [], history = [
     url: engine.url + vSearch,
     query: q,
   };
-  const matches = [...tabRows, ...pageRows, ...recentRows];
-  if (isProbablyUrl) return [goto, ...matches, search];
+  // The user's names (ADR-0018), matched the way the location bar matches them (shared/names.mjs):
+  // the exact name goes first, so typing "blog" and pressing Enter opens it; the rest are a group
+  // after the tabs. A name opens as hyper://<name>/, which the tab resolves in this Space. A Space's
+  // name that one of the user's own hides doesn't work, so it isn't offered.
+  const typedName = q.toLowerCase().replace(/^hyper:\/\//, '').replace(/\/$/, '');
+  const nameRows = matchNames(q, names.filter((r) => !r.hidden)).map((r) => ({
+    ...nameRow(r),
+    exact: r.name === typedName,
+  }));
+  // the exact name sits at the top on its own, like Go to
+  const exactName = nameRows.filter((r) => r.exact).map((r) => ({ ...r, group: undefined }));
+  const otherNames = nameRows.filter((r) => !r.exact);
+
+  const matches = [...exactName, ...tabRows, ...otherNames, ...pageRows, ...recentRows];
+  // "hyper://blog/" for a name is already its row
+  const gotoIsName = exactName.some((r) => normalizeUrl(r.url) === normalizeUrl(goto.url));
+  if (isProbablyUrl && !gotoIsName) return [goto, ...matches, search];
   return [...matches, search];
+}
+
+// "#" first searches only the user's names: "#" alone lists them all, A to Z, and "#bl" the ones
+// that match, the exact name first. No Go to and no search, so Enter always opens a name.
+export const NAMES_ONLY = '#';
+export const NAMES_LIMIT = 50;
+
+export function isNamesOnly(query = '') {
+  return String(query || '').trim().startsWith(NAMES_ONLY);
+}
+
+function nameRow(r) {
+  return {
+    kind: 'name',
+    group: GROUPS.name,
+    title: r.name,
+    url: `hyper://${r.name}/`,
+    subtitle: r.title ? `${r.title} · ${r.url}` : r.url,
+  };
+}
+
+function nameResults(q, names = []) {
+  const usable = names.filter((r) => r && r.name && !r.hidden);
+  const found = q
+    ? matchNames(q, usable, NAMES_LIMIT)
+    : [...usable].sort((a, b) => a.name.localeCompare(b.name)).slice(0, NAMES_LIMIT);
+  return found.map(nameRow);
 }
 
 // Is a page open in one of these tabs? Its own address or one under it (nomad://notes/<id>).

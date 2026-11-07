@@ -9,6 +9,7 @@ import {
   isNewTabPage,
   BUILTIN_PAGES,
   RECENT_LIMIT,
+  isNamesOnly,
 } from '../../app/lib/command-palette.ts';
 
 const engine = { name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' };
@@ -131,6 +132,45 @@ describe('command palette with a search', () => {
   it('searches Nomad when no engine is set', () => {
     const rows = paletteResults({ query: 'zzz', tabs: [] });
     expect(rows[rows.length - 1].url).toBe('nomad://search/?q=zzz');
+  });
+});
+
+describe('names', () => {
+  const names = [
+    { name: 'blog', url: 'hyper://' + 'a'.repeat(64) + '/', title: 'My blog' },
+    { name: 'blogroll', url: 'https://example.com/blogroll', title: 'Blogroll' },
+    { name: 'recipes', url: 'hyper://' + 'b'.repeat(64) + '/', title: 'Family recipes' },
+    { name: 'hidden', url: 'https://hidden.example/', hidden: true },
+  ];
+  it('opens the exact name first, as hyper://<name>/', () => {
+    const rows = run('blog', { names });
+    expect(rows[0]).toMatchObject({ kind: 'name', title: 'blog', url: 'hyper://blog/' });
+    expect(rows[0].group).toBeUndefined();
+    const more = rows.filter((r) => r.kind === 'name' && r.group);
+    expect(more.map((r) => r.title)).toEqual(['blogroll']);
+  });
+  it('finds a name by its title', () => {
+    expect(run('family', { names }).find((r) => r.kind === 'name').title).toBe('recipes');
+  });
+  it("doesn't add Go to for hyper://<name>/ itself", () => {
+    const rows = run('hyper://blog/', { names });
+    expect(rows[0]).toMatchObject({ kind: 'name', title: 'blog' });
+    expect(rows.some((r) => r.kind === 'goto')).toBe(false);
+  });
+  it('searches only names after #', () => {
+    expect(kinds(run('#', { names }))).toEqual(['name', 'name', 'name']);
+    expect(run('#', { names }).map((r) => r.title)).toEqual(['blog', 'blogroll', 'recipes']);
+    const rows = run('#blog', { names });
+    expect(rows.map((r) => r.title)).toEqual(['blog', 'blogroll']);
+    // no Go to, no search, no tabs or pages, even when other things match
+    expect(run('# notes', { names })).toEqual([]);
+    expect(isNamesOnly(' #x')).toBe(true);
+    expect(isNamesOnly('x#')).toBe(false);
+  });
+
+  it('leaves out a hidden name and lists none before you type', () => {
+    expect(run('hidden', { names }).some((r) => r.kind === 'name')).toBe(false);
+    expect(run('', { names }).some((r) => r.kind === 'name')).toBe(false);
   });
 });
 

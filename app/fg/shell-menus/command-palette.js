@@ -7,7 +7,7 @@ import { LitElement, html, css } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import * as bg from './bg-process-rpc';
 import { spaceDot } from '../lib/space-mark.js';
-import { paletteResults, moveSelection } from '../../lib/command-palette';
+import { paletteResults, moveSelection, isNamesOnly } from '../../lib/command-palette';
 
 const WIDTH = 620;
 const HISTORY_DEBOUNCE = 120;
@@ -63,6 +63,7 @@ class CommandPaletteMenu extends LitElement {
             recent: this.data.recent,
             history: this.history,
             searchEngine: this.data.searchEngine,
+            names: this.data.names,
           })
         : [];
       if (this.selected >= this.results.length) this.selected = this.results.length ? 0 : -1;
@@ -90,8 +91,8 @@ class CommandPaletteMenu extends LitElement {
             type="text"
             spellcheck="false"
             autocomplete="off"
-            placeholder="Search tabs, pages and history, or type an address"
-            aria-label="Search tabs, pages and history, or type an address"
+            placeholder="Search tabs, names, pages and history, or type an address"
+            aria-label="Search tabs, names, pages and history, or type an address"
             aria-controls="palette-results"
             aria-activedescendant=${this.selected >= 0 ? `palette-row-${this.selected}` : ''}
             .value=${this.query}
@@ -108,7 +109,9 @@ class CommandPaletteMenu extends LitElement {
           ${!this.data
             ? html`<div class="empty">Loading…</div>`
             : !this.results.length
-              ? html`<div class="empty">Nothing in this Space matches.</div>`
+              ? html`<div class="empty">
+                  ${isNamesOnly(this.query) ? 'None of your names match.' : 'Nothing in this Space matches.'}
+                </div>`
               : repeat(
                   this.results,
                   (r) => `${r.kind}:${r.tabIndex ?? ''}:${r.url}`,
@@ -126,6 +129,7 @@ class CommandPaletteMenu extends LitElement {
           <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
           <span><kbd>↵</kbd> open</span>
           <span><kbd>⇧</kbd><kbd>↵</kbd> open in this tab</span>
+          <span><kbd>#</kbd> names only</span>
           <span><kbd>esc</kbd> close</span>
         </div>
       </div>
@@ -158,6 +162,7 @@ class CommandPaletteMenu extends LitElement {
   renderIcon(r) {
     if (r.kind === 'goto') return html`<span class="fas fa-arrow-right" aria-hidden="true"></span>`;
     if (r.kind === 'search') return html`<span class="fas fa-search" aria-hidden="true"></span>`;
+    if (r.kind === 'name') return html`<span class="fas fa-tag" aria-hidden="true"></span>`;
     if (r.kind === 'page' && r.icon) return html`<span class="${r.icon}" aria-hidden="true"></span>`;
     if (r.kind === 'page' && r.app) return html`<img src="asset:favicon:nomad://${r.app}/" alt="" />`;
     return html`<img src=${'asset:favicon-32:' + r.url} alt="" />`;
@@ -177,7 +182,7 @@ class CommandPaletteMenu extends LitElement {
     clearTimeout(this.historyTimer);
     const q = this.query.trim();
     const id = ++this.historyQueryId;
-    if (!q) {
+    if (!q || isNamesOnly(q)) {
       this.history = [];
       return;
     }
