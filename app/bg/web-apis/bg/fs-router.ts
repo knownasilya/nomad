@@ -15,8 +15,8 @@
 //   fromURLToKey(url, dns?)     — resolve a url (incl. dns aliases like 'private') to a hex key
 //   spaceRootKeyForSender(ctx)  — hex key of the caller's space root, or null (per-space 'private')
 //   parseDriveUrl(url)          — { hostname, version, pathname, search }
-//   lookupCap(host)             — { key, version } for a `<token>.cap` host (nomad.capabilities),
-//                                 or undefined when there's no such capability
+//   lookupCap(host)             — { key, version, path, picked } for a `<token>.cap` host
+//                                 (nomad.capabilities), or undefined when there's no such capability
 const HEX_KEY = /^[0-9a-f]{64}$/i;
 const CAP_HOST = /^[a-z0-9]+\.cap$/i;
 
@@ -46,9 +46,19 @@ export function createFsRouter(deps) {
   // naming its key. Both backends need the real key, so it is swapped in before anything else.
   const isCapUrl = (url) => typeof url === 'string' && CAP_HOST.test(_keyFromUrl(url) || '');
 
+  // The capability behind a `.cap` URL ({ key, version, path, picked }), or undefined.
+  function capTarget(url) {
+    if (!isCapUrl(url) || !lookupCap) return undefined;
+    try {
+      return lookupCap(parseDriveUrl(url).hostname) || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   function _resolveCap(url) {
     const urlp = parseDriveUrl(url);
-    const target = lookupCap ? lookupCap(urlp.hostname) : undefined;
+    const target = capTarget(url);
     if (!target || !target.key) throw new Error('Capability does not exist');
     const version = target.version || urlp.version;
     return `hyper://${target.key}${version ? `+${version}` : ''}${urlp.pathname || '/'}${urlp.search || ''}`;
@@ -149,5 +159,5 @@ export function createFsRouter(deps) {
     }
   }
 
-  return { canonical, dispatch, backendKnown, read, isCapUrl };
+  return { canonical, dispatch, backendKnown, read, isCapUrl, capTarget };
 }

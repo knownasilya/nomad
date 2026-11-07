@@ -12,6 +12,8 @@ import * as autobases from '../hyper/autobases';
 import * as drafts from '../hyper/drafts';
 import * as filesystem from '../filesystem/index';
 import * as capabilities from '../hyper/capabilities';
+import { capCovers, isScoped } from '../hyper/capability-rules.mjs';
+import fsAPI from '../web-apis/bg/fs';
 import errorPage from '../lib/error-page';
 import * as mime from '../lib/mime';
 import * as auditLog from '../dbs/audit-log';
@@ -224,6 +226,19 @@ export const protocolHandler = async function (request, respond) {
         errorDescription: 'Invalid capability record',
         errorInfo: `No record found for hyper://${urlp.host}`,
       });
+    }
+    // A capability for part of a drive, or for the user's private drive, serves only the files it
+    // covers, as plain files: no index page, no listing, no `fallback` shell, no script. Only one the
+    // user picked reaches a private drive.
+    const toRoot = filesystem.isRootUrl(`hyper://${cap.target.key}/`);
+    if (toRoot && !cap.picked) {
+      return respondError(404, 'No record found for ' + urlp.host, {
+        errorDescription: 'Invalid capability record',
+        errorInfo: `No record found for hyper://${urlp.host}`,
+      });
+    }
+    if (toRoot || isScoped(cap.target)) {
+      return serveCapFile(cap, urlp, request, respond, respondError);
     }
     driveKey = cap.target.key;
     driveVersion = cap.target.version;
@@ -566,6 +581,53 @@ export const protocolHandler = async function (request, respond) {
     }
   );
 };
+
+// Serve one file through a capability that covers part of a drive or the user's private drive. It
+// reads through nomad.fs as the browser itself (no page sender), so the capability's own scope check
+// in fs.ts applies. HTML is sent as text and every response is sandboxed, so a picked file never
+// runs as a page.
+async function serveCapFile(cap, urlp, request, respond, respondError) {
+  const path = urlp.pathname || '/';
+  const notFound = () =>
+    respondError(404, 'File Not Found', {
+      errorDescription: 'File Not Found',
+      errorInfo: `Nomad could not find the file at ${path}`,
+      title: 'File Not Found',
+    });
+  if (!capCovers(cap.target, path)) return notFound();
+  const url = `hyper://${urlp.host}${path}`;
+  const ctx = {};
+  let st;
+  try {
+    st = await fsAPI.stat.call(ctx, url);
+  } catch {
+    return notFound();
+  }
+  const isDir =
+    !st ||
+    (typeof st.isDirectory === 'function' ? st.isDirectory() : (st.mode & 0o170000) === 0o040000);
+  if (isDir) return notFound();
+  let buf;
+  try {
+    buf = await fsAPI.get.call(ctx, url, { encoding: 'binary', draft: false });
+  } catch {
+    return notFound();
+  }
+  if (buf == null) return notFound();
+  let mimeType = mime.identify(path);
+  if (mimeType.includes('text/html')) mimeType = 'text/plain';
+  const headers = {
+    'Content-Type': mimeType,
+    'Content-Length': '' + buf.length,
+    'Content-Security-Policy': 'sandbox',
+    'X-Content-Type-Options': 'nosniff',
+    // A picked item is the user's grant to the site that asked for it, so that site may fetch it.
+    'Access-Control-Allow-Origin': cap.picked ? '*' : undefined,
+    'Cache-Control': 'no-cache',
+  };
+  if (request.method === 'HEAD') return respond({ statusCode: 200, headers });
+  return respond({ statusCode: 200, headers, data: intoStream(buf) });
+}
 
 function intoStream(text) {
   return new Readable({

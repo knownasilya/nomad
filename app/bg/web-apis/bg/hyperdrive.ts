@@ -902,6 +902,11 @@ export async function lookupDrive(
 
   if (driveHostname && driveHostname.endsWith('.cap')) {
     const cap = capabilities.lookupCap(driveHostname);
+    // nomad.fs resolves capabilities before they reach this backend (fs-router.ts), with their
+    // scope checked. One for part of a drive can't be checked here, where only the host is known.
+    if (cap && (cap.picked || (cap.target.path && cap.target.path !== '/'))) {
+      throw new Error('Read this capability with nomad.fs');
+    }
     if (cap) {
       driveKey = cap.target.key;
       version = cap.target.version;

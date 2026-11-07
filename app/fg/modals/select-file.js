@@ -41,6 +41,19 @@ class SelectFileModal extends LitElement {
           padding: 0 15px 10px;
         }
 
+        .capability-notice {
+          display: flex;
+          gap: 6px;
+          align-items: baseline;
+          margin: 0 0 10px;
+          padding: 8px 10px;
+          border-radius: 4px;
+          background: #f3f3fa;
+          color: #444;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+
         form {
           padding: 0;
           margin: 0;
@@ -275,6 +288,7 @@ class SelectFileModal extends LitElement {
       networked: undefined,
     };
     this.allowMultiple = false;
+    this.capability = false;
     this.cbs = null;
   }
 
@@ -299,6 +313,9 @@ class SelectFileModal extends LitElement {
       }
     }
     this.allowMultiple = !this.saveMode && params.allowMultiple;
+    // nomad.shell.selectFileDialog({ capability: true }): the page gets read-only capability URLs
+    // for what the user picks, so say so (bg/web-apis/bg/shell.ts pickedCapability).
+    this.capability = !this.saveMode && !!params.capability;
     if (!this.title) {
       if (this.saveMode) {
         this.title = 'Save file...';
@@ -523,7 +540,15 @@ class SelectFileModal extends LitElement {
                   </div>
                 `
               : ''}
-
+            ${this.capability
+              ? html`
+                  <div class="capability-notice">
+                    <span class="fas fa-fw fa-lock" aria-hidden="true"></span>
+                    This site can read only what you pick here. It can't change it or see anything
+                    else in the drive. You can take it back in the site's Permissions.
+                  </div>
+                `
+              : ''}
             <div class="layout">
               <div class="column-shortcuts">
                 <div class="shortcuts-list">

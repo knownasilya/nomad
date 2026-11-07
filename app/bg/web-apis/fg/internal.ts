@@ -15,6 +15,7 @@ import secretsManifest from '../manifests/internal/secrets';
 import webmcpDevtoolsManifest from '../manifests/internal/webmcp';
 import aiChatsManifest from '../manifests/internal/ai-chats';
 import aiSitesManifest from '../manifests/internal/ai-sites';
+import sharedFilesManifest from '../manifests/internal/shared-files';
 import personasManifest from '../manifests/internal/personas';
 import inboxManifest from '../manifests/internal/inbox';
 
@@ -37,6 +38,7 @@ export const setup = function (rpc) {
   const webmcpRPC = rpc.importAPI('webmcp-devtools', webmcpDevtoolsManifest, opts);
   const aiChatsRPC = rpc.importAPI('ai-chats', aiChatsManifest, opts);
   const aiSitesRPC = rpc.importAPI('ai-sites', aiSitesManifest, opts);
+  const sharedFilesRPC = rpc.importAPI('shared-files', sharedFilesManifest, opts);
   const personasRPC = rpc.importAPI('personas', personasManifest, opts);
   const inboxRPC = rpc.importAPI('inbox', inboxManifest, opts);
 
@@ -71,6 +73,8 @@ export const setup = function (rpc) {
   // The sites the user let the AI send to for 3 months, for nomad://ai/sites.
   internal.aiSites = Object.assign({}, aiSitesRPC);
   internal.aiSites.watch = () => fromEventStream(aiSitesRPC.watch());
+  // Files and folders the user picked for a site in the capability file picker, for site-info.
+  internal.sharedFiles = Object.assign({}, sharedFilesRPC);
   // The user's Personas and the Sessions sites hold (ADR-0031): My Library → Personas, site-info.
   internal.personas = Object.assign({}, personasRPC);
   internal.personas.watch = () => fromEventStream(personasRPC.watch());
