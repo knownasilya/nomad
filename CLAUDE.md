@@ -130,6 +130,21 @@ mobile, reads work; writes + writer-management currently reject until the mobile
 When you add/rename an fs method, edit `shared/fs-manifest.mjs` AND update `bg/fs.js`, `fg/fs.js`, the
 mobile shim + dispatcher, plus `nomad-dts.js` / `API_REFERENCE` in `app/bg/ai/api-reference.mjs` / nomad.dev docs.
 
+### Capability URLs and the private file picker
+
+`hyper://<token>.cap/…` (`nomad.capabilities`) stands in for a drive, or one file or folder in it,
+without naming its key. Rules (paths, scope, what a page sees, what is kept) are
+`app/bg/hyper/capability-rules.mjs` (tests `tests/unit/capability-rules.test.js`); the store is
+`app/bg/hyper/capabilities.js`. A page's own `create()` covers a whole drive and lives in memory. A
+**picked** one comes from `nomad.shell.selectFileDialog({ capability: true })` (`pickedCapability`
+in `bg/web-apis/bg/shell.ts`): it covers only the picked item, can reach `hyper://private/` (the
+user's pick is the grant, so `fs.ts` skips the private-drive guard for it), and is kept in
+`<userData>/capabilities.json` until the user removes it in site-info (Permissions → Files this site
+can read, internal `nomad.sharedFiles`) or the page deletes it. Every capability is read-only:
+`fs-router.ts` swaps it for its target, `fs.ts` `_capCheck` checks the call and the path, `getInfo`
+hides the key, and Drafts are never read through one. The serve path (`bg/protocols/hyper.js`
+`serveCapFile`) serves a scoped or private one as plain sandboxed files only.
+
 ### Draft Mode (ADR-0012)
 
 `nomad.fs` has a **Draft**: device-private staged edits held out of a Drive's replicated log until

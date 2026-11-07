@@ -17,6 +17,9 @@ import autobaseAPI from './autobase';
 import * as filesystem from '../../filesystem/index';
 import * as drives from '../../hyper/drives';
 import * as drafts from '../../hyper/drafts';
+import * as capabilities from '../../hyper/capabilities';
+import { capCovers, isScoped } from '../../hyper/capability-rules.mjs';
+import { PermissionsError } from 'beaker-error-constants';
 import { parseDriveUrl } from '../../../lib/urls';
 import { createFsRouter } from './fs-router';
 import { createFsWriteGuard } from './fs-write-guard';
@@ -44,7 +47,54 @@ const router = createFsRouter({
     return spaceUrl ? drives.fromURLToKey(spaceUrl, true) : null;
   },
   parseDriveUrl,
+  lookupCap: (host) => {
+    const cap = capabilities.lookupCap(host);
+    return cap ? { ...cap.target, picked: !!cap.picked } : undefined;
+  },
 });
+// A capability URL (nomad.capabilities) gives read access to what it covers and hides the drive's
+// key. Writes, writer management, Drafts and other whole-drive calls through one are refused: they
+// would act on a drive the holder was only meant to read. `capOk` says what the call is:
+//   false       never through a capability
+//   'read'      a read of the path in the URL, which the capability must cover
+//   'unscoped'  a read of the whole drive (watch, diff), only through a whole-drive capability
+// Returns the capability's target, or null for any other URL. A capability the user picked
+// (`picked`) is their grant for that item, so it also reaches their private drive.
+function _capCheck(url, capOk) {
+  if (!router.isCapUrl(url)) return null;
+  if (!capOk) throw new Error('A capability URL can only be read: ' + url);
+  const target = router.capTarget(url);
+  if (!target) throw new Error('Capability does not exist');
+  if (capOk === 'unscoped' && isScoped(target)) {
+    throw new PermissionsError('This capability covers only part of a drive: ' + url);
+  }
+  let path = '/';
+  try {
+    path = parseDriveUrl(url).pathname || '/';
+  } catch {
+    /* the router refuses an unparseable url */
+  }
+  if (!capCovers(target, path)) {
+    throw new PermissionsError('Outside what this capability covers: ' + url);
+  }
+  return target;
+}
+// What getInfo shows through a capability: the capability, never the drive's key or this Device's
+// writer key.
+function _capInfo(capUrl, info: any = {}) {
+  const host = parseDriveUrl(capUrl).hostname;
+  return {
+    key: host,
+    url: `hyper://${host}/`,
+    writable: false,
+    version: info.version,
+    peers: info.peers,
+    title: info.title || '',
+    description: info.description || '',
+    type: info.type || '',
+    isCollaborative: !!info.isCollaborative,
+  };
+}
 // Every call that reaches a drive passes the private-drive guard (private-drive-guard.ts) on the
 // canonical url, so a page can't reach any Space's `hyper://private/` through either backend.
 // `access` is 'read', 'write', or 'drive' (a call on the whole drive, never granted to a page).
@@ -60,17 +110,20 @@ async function _assertPrivate(ctx, canonicalUrl, access) {
   }
   await privateDrive.assert(ctx, key, path, access);
 }
-async function _dispatch(ctx, url, access = 'drive') {
+async function _dispatch(ctx, url, access = 'drive', capOk: any = access === 'read' && 'read') {
+  const cap = _capCheck(url, capOk);
   const d = await router.dispatch(ctx, url);
-  await _assertPrivate(ctx, d.url, access);
+  if (!cap?.picked) await _assertPrivate(ctx, d.url, access);
   return d;
 }
 async function _read(ctx, method, url, rest) {
-  await _assertPrivate(ctx, await router.canonical(ctx, url), 'read');
+  const cap = _capCheck(url, 'read');
+  if (!cap?.picked) await _assertPrivate(ctx, await router.canonical(ctx, url), 'read');
   return router.read(ctx, method, url, rest);
 }
 // For the methods that hand a url straight to the Autobase backend.
 async function _assertDrive(ctx, url) {
+  _capCheck(url, false);
   await _assertPrivate(ctx, await router.canonical(ctx, url), 'drive');
 }
 
@@ -200,7 +253,8 @@ async function _stageWrite(ctx, url, kind, data, opts) {
 // pass it when their Draft Mode is off so a Drive's preview flag can't leak into their published view.
 async function _readMerged(ctx, url, opts) {
   const o = _opts(opts);
-  if (o.draft === false) return { handled: false, value: null };
+  // A capability reads the published Drive only: the Draft is the user's own, unpublished.
+  if (o.draft === false || router.isCapUrl(url)) return { handled: false, value: null };
   if (o.draft !== true && !drafts.anyPreview()) return { handled: false, value: null };
   const { isAutobase, baseKey, path } = await _baseInfo(ctx, url, 'read');
   if (!isAutobase) return { handled: false, value: null };
@@ -211,8 +265,9 @@ async function _readMerged(ctx, url, opts) {
 
 const fsAPI = {
   async getInfo(url, opts = {}) {
-    const { api, url: u } = await _dispatch(this, url);
-    return api.getInfo.call(this, u, opts);
+    const { api, url: u } = await _dispatch(this, url, 'drive', 'read');
+    const info = await api.getInfo.call(this, u, opts);
+    return router.isCapUrl(url) ? _capInfo(url, info) : info;
   },
 
   // --- Read ---
@@ -235,7 +290,8 @@ const fsAPI = {
   async list(url, opts = {}) {
     const base = await _read(this, 'list', url, [opts]);
     const o = _opts(opts);
-    if (o.draft === false || (o.draft !== true && !drafts.anyPreview())) return base;
+    if (router.isCapUrl(url) || o.draft === false || (o.draft !== true && !drafts.anyPreview()))
+      return base;
     const { isAutobase, baseKey, path } = await _baseInfo(this, url, 'read');
     if (!isAutobase || (o.draft !== true && !drafts.isPreview(baseKey))) return base;
     return drafts.mergeList(baseKey, path, base);
@@ -243,7 +299,8 @@ const fsAPI = {
   async readdir(url, opts = {}) {
     const base = await _read(this, 'readdir', url, [opts]);
     const o = _opts(opts);
-    if (o.draft === false || (o.draft !== true && !drafts.anyPreview())) return base;
+    if (router.isCapUrl(url) || o.draft === false || (o.draft !== true && !drafts.anyPreview()))
+      return base;
     const { isAutobase, baseKey, path } = await _baseInfo(this, url, 'read');
     if (!isAutobase || (o.draft !== true && !drafts.isPreview(baseKey))) return base;
     const { removed, put } = await drafts.dirOverlay(baseKey, path);
@@ -264,7 +321,7 @@ const fsAPI = {
     return out;
   },
   async diff(url, other, opts = {}) {
-    const { api, url: u } = await _dispatch(this, url);
+    const { api, url: u } = await _dispatch(this, url, 'drive', 'unscoped');
     return api.diff.call(this, u, other, opts);
   },
 
@@ -348,7 +405,7 @@ const fsAPI = {
 
   // --- Change notifications ('readable' — return the backend's emitter) ---
   async watch(url, pathPattern) {
-    const { api, url: u } = await _dispatch(this, url);
+    const { api, url: u } = await _dispatch(this, url, 'drive', 'unscoped');
     return _toEventStream(await api.watch.call(this, u, pathPattern));
   },
 

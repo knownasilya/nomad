@@ -19,6 +19,7 @@ import webmcpDevtoolsManifest from './manifests/internal/webmcp';
 import aiShellManifest from './manifests/internal/ai-shell';
 import aiChatsManifest from './manifests/internal/ai-chats';
 import aiSitesManifest from './manifests/internal/ai-sites';
+import sharedFilesManifest from './manifests/internal/shared-files';
 import personasManifest from './manifests/internal/personas';
 import inboxManifest from './manifests/internal/inbox';
 
@@ -39,6 +40,7 @@ import webmcpDevtoolsAPI from './bg/webmcp-devtools';
 import aiShellAPI from './bg/ai-shell';
 import aiChatsAPI from './bg/ai-chats';
 import aiSitesAPI from './bg/ai-sites';
+import sharedFilesAPI from './bg/shared-files';
 import personasAPI from './bg/personas';
 import inboxAPI from './bg/inbox';
 import { WEBAPI as downloadsAPI } from '../ui/downloads';
@@ -115,6 +117,7 @@ export const setup = function () {
   rpc.exportAPI('ai-shell', aiShellManifest, aiShellAPI, internalOnly);
   rpc.exportAPI('ai-chats', aiChatsManifest, aiChatsAPI, internalOnly);
   rpc.exportAPI('ai-sites', aiSitesManifest, aiSitesAPI, internalOnly);
+  rpc.exportAPI('shared-files', sharedFilesManifest, sharedFilesAPI, internalOnly);
   rpc.exportAPI('personas', personasManifest, personasAPI, internalOnly);
   rpc.exportAPI('inbox', inboxManifest, inboxAPI, internalOnly);
 

@@ -245,8 +245,13 @@ declare namespace Nomad {
 
   interface SelectFileResult { path: string; origin: string; url: string; }
   interface Shell {
-    /** Open a file picker. Returns [{ path, origin, url }]. */
-    selectFileDialog(opts?: { title?: string; select?: ('file' | 'folder')[]; filters?: object; allowMultiple?: boolean }): Promise<SelectFileResult[]>;
+    /**
+     * Open a file picker. Returns [{ path, origin, url }]. With `capability: true` each `url` is a
+     * read-only capability URL (`hyper://<token>.cap/<path>`) for just the picked file or folder,
+     * which can come from the user's private drive; read it with nomad.fs. It lasts until the user
+     * removes it in site-info or the page calls nomad.capabilities.delete(url).
+     */
+    selectFileDialog(opts?: { title?: string; buttonLabel?: string; drive?: string; defaultPath?: string; select?: ('file' | 'folder')[]; filters?: { extensions?: string[]; writable?: boolean; networked?: boolean }; allowMultiple?: boolean; disallowCreate?: boolean; capability?: boolean }): Promise<SelectFileResult[]>;
     saveFileDialog(opts?: { title?: string; defaultFilename?: string; extension?: string }): Promise<SelectFileResult>;
     /** Open a drive picker. Returns the selected drive URL. */
     selectDriveDialog(opts?: { title?: string; writable?: boolean; tag?: string }): Promise<string>;
@@ -350,10 +355,31 @@ declare namespace Nomad {
     list(): string[];
   }
 
+  /**
+   * Capability URLs (`hyper://<token>.cap/`): stand-ins for a drive, or one file or folder in it, that
+   * give read access without naming the drive's key, and can be revoked. A page's own are in memory
+   * on this Device only; ones the user picked (selectFileDialog({ capability: true })) are kept.
+   * Read them with nomad.fs; writes and drive management through one are refused.
+   */
   interface Capabilities {
-    create(opts?: object): Promise<any>;
-    modify(opts?: object): Promise<any>;
-    delete(opts?: object): Promise<any>;
+    /** Make a capability for a drive (`hyper://<key>/` or `hyper://<key>+<version>/`). Resolves to the `hyper://<token>.cap/` URL. */
+    create(targetUrl: string): Promise<string>;
+    /** Point a capability this page made at another drive. */
+    modify(capUrl: string, targetUrl: string): Promise<void>;
+    /** Revoke a capability this page made, or a file or folder the user picked for it. Later reads through it fail. */
+    delete(capUrl: string): Promise<void>;
+    /** This page's capabilities: the ones it made, and the files and folders the user picked for it. */
+    list(): Promise<CapabilityRecord[]>;
+  }
+  interface CapabilityRecord {
+    /** The capability URL (for a picked item, its own path: `hyper://<token>.cap/photos/a.png`). */
+    url: string;
+    /** What it covers: '/' for a whole drive, '/dir/' for a folder, '/file' for one file. */
+    path: string;
+    /** True when the user picked it in selectFileDialog({ capability: true }); kept across restarts. */
+    picked: boolean;
+    title: string;
+    createdAt: number;
   }
 
   interface TerminalCommand {
