@@ -10,7 +10,7 @@ import modsCSS from '../../css/views/mods.css.js';
 import jobsCSS from '../../css/views/jobs.css.js';
 
 // The user's AI Jobs (bg/ai/jobs.js, ADR-0030): prompts the AI runs by itself, by hand or on a
-// schedule, whose answers are saved here and can notify the user's phone. Jobs and their runs are
+// schedule, whose answers are saved here and can notify the user's phone and computers. Jobs and their runs are
 // Vault records, so the phone lists them too. The AI Sidebar makes them ("every morning, sum up my
 // Reader and send it to my phone"); this is where they're seen, run, changed and paused.
 //
@@ -214,7 +214,7 @@ export class JobsView extends LitElement {
         Draft for you to publish. With a secret you let it use (in Secrets), it can call an API or a
         webhook without seeing the key. It can open web pages signed in as you, and click and type on
         them, on the sites you let it: run it with you once and it asks. Its answers and what it changed are kept here, and it can
-        notify your phone. Ask the AI in the
+        notify you on your phone and your computers. Ask the AI in the
         sidebar to make one, or make it here. A Job can also come from a drive with a
         <code>job.md</code> prompt and a <code>job.js</code> module. A Job runs on the computer that
         made it, while that computer is awake.
@@ -228,7 +228,7 @@ export class JobsView extends LitElement {
         ? html`<div class="empty">
             ${this.jobs.length
               ? 'No Jobs match.'
-              : 'No Jobs yet. Try asking the AI: “Every morning at 8, sum up my unread Reader posts and send it to my phone.”'}
+              : 'No Jobs yet. Try asking the AI: “Every morning at 8, sum up my unread Reader posts and notify me.”'}
           </div>`
         : repeat(rows, (j) => j.id, (j) => this.renderJob(j))}
     `;
@@ -305,7 +305,7 @@ export class JobsView extends LitElement {
     if (!j.enabled) parts.push('paused');
     if (!j.here) parts.push(`runs on ${j.deviceName}`);
     if (j.notify !== 'never') {
-      const who = j.audience === 'space' && j.sharedSpaceName ? `everyone in ${j.sharedSpaceName}` : 'your phone';
+      const who = j.audience === 'space' && j.sharedSpaceName ? `everyone in ${j.sharedSpaceName}` : 'you';
       parts.push(j.notify === 'auto' ? `notifies ${who} when it finds something` : `notifies ${who}`);
     }
     if (j.source?.changed) parts.push('a newer version is in its drive');
@@ -727,7 +727,7 @@ export class JobsView extends LitElement {
         ${this.renderPages(e, set)}
 
         <div class="block">
-          <div class="label">${e.audience === 'space' && e.sharedSpaceName ? 'Notify' : 'Notify my phone'}</div>
+          <div class="label">${e.audience === 'space' && e.sharedSpaceName ? 'Notify' : 'Notify me'}</div>
           <select .value=${e.notify} @change=${(ev) => set({ notify: ev.target.value })}>
             ${NOTIFY.map((n) => html`<option value=${n.id} ?selected=${e.notify === n.id}>${n.label}</option>`)}
           </select>
@@ -747,8 +747,8 @@ export class JobsView extends LitElement {
                   </label>
                   <div class="hint-row">
                     ${e.audience === 'space'
-                      ? html`Each person’s phone shows what this Job sends, like “bins go out tonight”. Keep your private notes out of it: they’ll see whatever it says.`
-                      : html`Send its notifications to the phones of everyone in ${e.sharedSpaceName}, not only yours.`}
+                      ? html`Each person’s phone and computers show what this Job sends, like “bins go out tonight”. Keep your private notes out of it: they’ll see whatever it says.`
+                      : html`Send its notifications to everyone in ${e.sharedSpaceName}, not only you.`}
                   </div>
                 </div>
               `

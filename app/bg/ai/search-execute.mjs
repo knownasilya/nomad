@@ -624,7 +624,7 @@ export const CAPABILITIES = [
     name: 'listJobs',
     description:
       "List the user's AI Jobs: saved prompts the AI runs by itself on a schedule or by hand, each with its schedule, " +
-      'whether it notifies the phone, which device runs it, and its last run (status and answer). Asks permission to read Jobs.',
+      'whether it notifies the user (phone and computers), which device runs it, and its last run (status and answer). Asks permission to read Jobs.',
     inputSchema: {
       type: 'object',
       properties: { query: { type: 'string', description: 'Optional. Words that must all be in the Job' } },
@@ -640,7 +640,7 @@ export const CAPABILITIES = [
       'a complete instruction. A run can read the Notes, Reader, drives and the web, send requests with the ' +
       'secrets the user lets it use (My Library → Secrets), open web pages signed in as the user on the sites the user ' +
       'allows (`writes.pages`), and changes nothing in Nomad unless `writes` lets it. Its answer is ' +
-      'saved for the user, and it can notify their phone. A Job can also come from a drive (`source`): its job.js runs ' +
+      'saved for the user, and it can notify them on their phone and computers. A Job can also come from a drive (`source`): its job.js runs ' +
       'first (an execute-style module with the same capabilities, getting { job, prompt, lastRun }), then the AI gets ' +
       'job.md with what the module returned; with no job.md, the module\'s result is the answer. `prompt` then adds to ' +
       "job.md. The user's own drive runs its latest files; anyone else's is copied now, and a newer version waits for " +
@@ -675,7 +675,7 @@ export const CAPABILITIES = [
           type: 'string',
           enum: ['always', 'auto', 'never'],
           description:
-            'Optional. "always" (default): every run notifies the phone with its answer. "auto": only when the run calls ' +
+            'Optional. "always" (default): every run notifies the user with its answer. "auto": only when the run calls ' +
             'notify, for "tell me if…" Jobs. "never": no notification. A failed run notifies unless "never".',
         },
         enabled: { type: 'boolean', description: 'Optional. On (default) or paused' },
@@ -728,7 +728,7 @@ export const CAPABILITIES = [
     name: 'runJob',
     description:
       'Run one of the user\'s Jobs now, on this computer, in the background. Its answer is saved with the Job, and it ' +
-      'notifies the phone as the Job says. Returns at once. Asks permission to change Jobs.',
+      'notifies the user as the Job says. Returns at once. Asks permission to change Jobs.',
     inputSchema: {
       type: 'object',
       properties: { id: { type: 'string', description: 'The Job id, from listJobs or saveJob' } },
@@ -854,7 +854,7 @@ export const CAPABILITIES = [
   {
     name: 'notify',
     description:
-      "Send the user a notification on their phone: a short title and one or two sentences. " +
+      "Send the user a notification on their phone and computers: a short title and one or two sentences. " +
       'Only in a Job. Tapping it opens this run\'s full answer, so keep the details in your answer.',
     inputSchema: {
       type: 'object',

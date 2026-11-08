@@ -52,6 +52,11 @@ const GLOBAL_SETTINGS = new Set([
   'url_routing_rules',
   'sync_open_tabs',
   'inbox_notify',
+  'notify_jobs',
+  'notify_space_notices',
+  'notify_prompts',
+  'job_notify_since',
+  'space_notice_since',
 ]);
 
 // The built-in search page (userland/search), which runs the ?q= it opens with.
@@ -94,6 +99,11 @@ export const setup = async function (opts) {
     // A notification for each new Message from a Contact (bg/hyper/inbox.js, ADR-0036). Never for
     // a request.
     inbox_notify: 1,
+    // OS notifications on this computer (bg/ui/desktop-notifications.js): a Job's result, another
+    // member's notice in a shared Space, and a permission prompt that waits while Nomad isn't in front.
+    notify_jobs: 1,
+    notify_space_notices: 1,
+    notify_prompts: 1,
     auto_redirect_to_dat: 1,
     custom_start_page: 'blank',
     new_tab: 'nomad://desktop/',
