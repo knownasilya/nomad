@@ -2,7 +2,7 @@
 //
 // Invite links (ADR-0040): an ordinary https link that brings a friend into one of the user's
 // shared Spaces, even before they have Nomad. Everything the invite carries is in the URL fragment,
-// so the site that serves the page (nomad.dev on Cloudflare Pages) never sees it.
+// so the site that serves the page (nomad.pages.dev, on Cloudflare Pages) never sees it.
 //
 //   https://nomad.pages.dev/invite/#<base64url(payload)>      opens anywhere
 //   nomad-invite:<base64url(payload)>                          opens Nomad (desktop and Android)
@@ -19,7 +19,7 @@
 //          its role (1 editor, 2 viewer)
 //   sig:   64 B Ed25519 by the Persona's `sign` key over 'nomad/invite/v1' ‖ every byte above
 //
-// Pure and self-contained (no imports), because nomad.dev's invite page uses a copy of this file to
+// Pure and self-contained (no imports), because the invite page on nomad.pages.dev uses a copy of this file to
 // read the fragment (static/invite/invites.mjs there). Runs on the phone's Bare worklet too, which
 // has no TextEncoder, atob or Buffer, so the UTF-8 and base64 here are by hand when those are missing.
 //

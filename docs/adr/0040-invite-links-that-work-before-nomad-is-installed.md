@@ -81,7 +81,7 @@ page agree byte for byte):
   carries no `from`, `name` or `sig`, and both the page and Nomad say who it's from in the only
   honest way: they can't tell (§4).
 
-### 3. The page on nomad.dev
+### 3. The page on nomad.pages.dev
 
 `src/pages/invite.astro` in nomad.dev: a standalone page (not a Starlight doc, no sidebar), marked
 `noindex`. A short inline script decodes the fragment and shows:
@@ -107,7 +107,7 @@ no analytics, no fonts or images from another origin, and a `Content-Security-Po
 
 **Into Nomad:**
 
-- **Phone, with Nomad installed:** Android App Links. nomad.dev serves
+- **Phone, with Nomad installed:** Android App Links. nomad.pages.dev serves
   `/.well-known/assetlinks.json` for the package and the release keystore's SHA-256 fingerprint, and
   `mobile/app.json` gets an `autoVerify` intent filter for `https://nomad.pages.dev/invite/`. Tapping
   the link anywhere opens Nomad on the accept screen, fragment included. Inside Nomad's own WebView,
@@ -202,7 +202,7 @@ Invites are Vault records, so every Device of the user knows them:
 
 | Who | Learns | Doesn't learn |
 |---|---|---|
-| Cloudflare / nomad.dev | that someone loaded `/invite/` (IP, user agent) | anything in the fragment: who, which Space, the keys |
+| Cloudflare / nomad.pages.dev | that someone loaded `/invite/` (IP, user agent) | anything in the fragment: who, which Space, the keys |
 | Anyone the link is forwarded to | everything in it: the name, the Space's name and role, the message-link keys | anything more until the owner approves a join or the user accepts their hello |
 | The friend, before accepting | the inviter's claimed name, then the real Profile Drive | the inviter's Devices or addresses |
 | The inviter | the friend's Persona and Profile Drive (in the hello or the join request) | anything the friend didn't send |

@@ -145,7 +145,7 @@ app.on('ready', async function () {
 
   await logger.setup(join(commonOpts.userDataPath, 'nomad.log'));
   log.info('Welcome to Nomad');
-  // Invite links (ADR-0040 §4): one narrow scheme, so nomad.dev's "Open the invite" reaches Nomad.
+  // Invite links (ADR-0040 §4): one narrow scheme, so the "Open the invite" button on nomad.pages.dev reaches Nomad.
   // It only ever opens the page that reads an invite (bg/hyper/invites.js acceptUrlFor).
   try {
     if (!app.isDefaultProtocolClient('nomad-invite')) app.setAsDefaultProtocolClient('nomad-invite');

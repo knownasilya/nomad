@@ -444,7 +444,7 @@ export class Pane extends EventEmitter {
     this.isQuietLoading = Boolean(quiet);
     // hyper://<name>/ is a shortcut to what the user named (hyper/names.js): the tab goes to the
     // real address, so the drive keeps one origin and no page can resolve a name for itself.
-    // An invite link (ADR-0040 §4) opens the page that reads it, not nomad.dev's page about it.
+    // An invite link (ADR-0040 §4) opens the page that reads it, not the page about it on nomad.pages.dev.
     const invite = acceptUrlFor(url);
     this.webContents.loadURL(invite || names.resolveUrl(url, this.spaceKey) || url, opts ? loadOpts : undefined);
   }
