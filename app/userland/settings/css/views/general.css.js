@@ -148,7 +148,8 @@ ${spinnerCSS}
     margin: 0 4px 0 6px;
   }
 
-  .auto-updater .hint {
+  .auto-updater .hint,
+  .notifications .hint {
     display: block;
     margin: 2px 0 0 22px;
     font-size: 12px;

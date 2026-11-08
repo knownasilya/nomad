@@ -288,7 +288,7 @@ export const PERMS = {
     promptTrusted: true,
   },
   // The AI's access to the user's AI Jobs (ADR-0030). Changing them is dangerous: a Job runs a prompt
-  // by itself, reads the user's Notes and Reader each time, and can notify their phone.
+  // by itself, reads the user's Notes and Reader each time, and can notify them.
   jobsRead: {
     persist: 'allow', // dont persist 'deny'
     idempotent: true,
@@ -562,7 +562,7 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
     case 'jobsRead':
       return 'Let the AI assistant see your AI Jobs and their results';
     case 'jobsWrite':
-      return 'Let the AI assistant create, change and run your AI Jobs, which run prompts on a schedule, read your Notes and Reader, and notify your phone';
+      return 'Let the AI assistant create, change and run your AI Jobs, which run prompts on a schedule, read your Notes and Reader, and notify you';
     case 'jobWrites': {
       const grants = Array.isArray(permOpts?.grants) ? permOpts.grants : [];
       return html`<span

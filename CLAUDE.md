@@ -588,6 +588,24 @@ open running Job shows its steps and text live (`nomad.vault.watchJobProgress`, 
 `progress()`, pure rules `applyJobProgress` in `job-chat-messages.mjs`). A run the user stopped, from
 there, the sidebar or its page, is saved `stopped: true` with status `ok` and notifies no one.
 
+### Desktop notifications
+
+The desktop shows OS notifications for three things, each with a switch in Settings → Notifications
+(`notify_jobs`, `notify_space_notices`, `notify_prompts`; Messages keep `inbox_notify`,
+`bg/hyper/inbox.js`). `app/bg/ui/desktop-notifications.js` does the I/O and
+`app/bg/ui/notify-rules.mjs` the rules (tests `tests/unit/notify-rules.test.js`,
+`desktop-notifications.test.js`):
+- A Job's run with a notification, from whichever Device ran it, once its run reaches this Vault
+  (`jobs.allRuns()`, `pendingNotifications` with the mark in the `job_notify_since` setting, as the
+  phone does). A run someone watched in the sidebar stays quiet while a Nomad window is in front. A
+  click opens `nomad://library/jobs?id=`.
+- Another member's notice in a shared Space (`spaceLibrary.notices(space)` on each Library sync,
+  marks per Library in `space_notice_since`).
+- A permission prompt that opens while Nomad isn't in front or on a tab that isn't showing (the AI
+  asking on a page, a watched Job's tab): `bg/ui/permissions.js` calls the hook
+  (`setPromptHook`) with the prompt's text (`renderPermDesc` with `textTag`), and the dock bounces
+  (macOS) or the taskbar flashes until it's answered. A click brings the window and tab forward.
+
 ### The AI page, chats and memory (ADR-0032)
 
 `nomad://ai` (`app/userland/ai/`, in the browser menu) is the AI's own page: `/chats`, `/memory`,

@@ -90,6 +90,10 @@ class GeneralSettingsView extends LitElement {
         ${this.renderProtocolSettings()} ${this.renderThemeSettings()}
       </div>
       <div class="form-group">
+        <h2 id="notifications">Notifications</h2>
+        ${this.renderNotificationSettings()}
+      </div>
+      <div class="form-group">
         <h2 id="search">Search Settings</h2>
         ${this.renderSearchSettings()} ${this.renderCrawlerSettings()}
       </div>
@@ -378,6 +382,52 @@ class GeneralSettingsView extends LitElement {
           : ''}
       </div>
     `;
+  }
+
+  // OS notifications on this computer (bg/ui/desktop-notifications.js, bg/hyper/inbox.js).
+  renderNotificationSettings() {
+    const item = (key, label, hint) => html`<p>
+      <label>
+        <input
+          type="checkbox"
+          ?checked=${+(this.settings[key] ?? 1) === 1}
+          @change=${(e) => this.onToggleNotify(key, e.target.checked)}
+        />
+        ${label}
+        <span class="hint">${hint}</span>
+      </label>
+    </p>`;
+    return html`
+      <div class="section notifications">
+        ${item(
+          'notify_prompts',
+          'When the AI or a site is waiting for your answer',
+          "If Nomad isn't in front, or the question is on another tab. Click the notification to go there."
+        )}
+        ${item(
+          'notify_jobs',
+          'AI Job results',
+          'When a Job set to notify finishes, on whichever of your devices ran it.'
+        )}
+        ${item(
+          'notify_space_notices',
+          'Notices from your shared Spaces',
+          'When a Job someone else in a shared Space made tells everyone, like “bins go out tonight”.'
+        )}
+        ${item(
+          'inbox_notify',
+          'Messages',
+          'A new message from one of your contacts.'
+        )}
+      </div>
+    `;
+  }
+
+  onToggleNotify(key, on) {
+    this.settings[key] = on ? 1 : 0;
+    this.requestUpdate();
+    nomad.browser.setSetting(key, this.settings[key]);
+    toast.create(on ? 'Notifications on' : 'Notifications off');
   }
 
   renderRunBackgroundSettings() {

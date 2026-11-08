@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { session } from 'electron';
-import { PERMS, getPermId } from '../../lib/permissions';
+import { PERMS, getPermId, getPermParam, renderPermDesc } from '../../lib/permissions';
 import hyper from '../hyper/index';
 import * as sitedata from '../dbs/sitedata';
 import { parseDriveUrl } from '../../lib/urls';
@@ -10,12 +10,16 @@ import { PermissionsError, UserDeniedError } from 'beaker-error-constants';
 import * as wcTrust from '../wc-trust';
 import * as personas from './personas';
 import * as filesystem from '../filesystem/index';
+import { textTag } from './notify-rules.mjs';
 
 // globals
 // =
 
 var idCounter = 0;
 var activeRequests = [];
+// Told when a prompt opens, so the OS can say so when nobody sees it (bg/ui/desktop-notifications.js).
+// Returns { done() } for when it's answered.
+var promptHook = null;
 
 // exported api
 // =
@@ -23,6 +27,10 @@ var activeRequests = [];
 export function setup() {
   // wire up handlers
   session.defaultSession.setPermissionRequestHandler(onPermissionRequestHandler);
+}
+
+export function setPromptHook(fn) {
+  promptHook = fn;
 }
 
 export function requestPermission(permission, webContents, opts) {
@@ -164,11 +172,17 @@ async function onPermissionRequestHandler(webContents, permission, cb, opts) {
 
   // run the UI flow
   tab.setActivePane(tab.findPane(webContents));
-  var decision = await permPromptSubwindow.create(win, tab, {
-    permission,
-    url,
-    opts,
-  });
+  var alert = await openPromptAlert({ win, tab, url, permission, opts, PERM });
+  var decision;
+  try {
+    decision = await permPromptSubwindow.create(win, tab, {
+      permission,
+      url,
+      opts,
+    });
+  } finally {
+    alert.done();
+  }
 
   // persist decisions
   if (PERM && PERM.persist) {
@@ -187,6 +201,29 @@ async function onPermissionRequestHandler(webContents, permission, cb, opts) {
   // hand down the decision
   for (let cb of req.cbs) {
     cb(decision);
+  }
+}
+
+// A notification for a prompt nobody sees (Nomad isn't in front, or its tab isn't showing), with
+// what the prompt asks as plain text.
+async function openPromptAlert({ win, tab, url, permission, opts, PERM }) {
+  const none = { done() {} };
+  if (!promptHook) return none;
+  try {
+    let desc = '';
+    try {
+      desc = renderPermDesc({
+        html: textTag,
+        bg: null,
+        url,
+        permId: getPermId(permission),
+        permParam: getPermParam(permission),
+        permOpts: opts || {},
+      });
+    } catch {}
+    return (await promptHook({ win, tab, url, desc, ai: !!PERM?.promptTrusted })) || none;
+  } catch {
+    return none;
   }
 }
 
