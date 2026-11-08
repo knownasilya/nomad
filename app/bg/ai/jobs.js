@@ -153,6 +153,11 @@ export function runsOf(id) {
   return runs.get(id) || [];
 }
 
+// Every Job's runs, from all of the user's Devices: what bg/ui/desktop-notifications.js notifies of.
+export function allRuns() {
+  return [...runs.values()].flat();
+}
+
 export { ownKey };
 
 // Save a Job: a new one (no id) or changes to one. Fields left out keep their values. A new Job

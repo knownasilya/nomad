@@ -235,8 +235,8 @@ export async function share({ space, root, meta, name }) {
 // =
 
 // Tell everyone in a shared Space (shared/space-library.mjs notices): a Job's notification, which
-// each member's phone shows. Does nothing for a Space that isn't shared or that this Device can't
-// write. Keeps this member's newest KEEP_NOTICES. Returns the notice, or null.
+// each member's phone and computers show. Does nothing for a Space that isn't shared or that this
+// Device can't write. Keeps this member's newest KEEP_NOTICES. Returns the notice, or null.
 export async function postNotice(space, { title, body, jobId = null }) {
   const lib = await forSpace(space).catch(() => null);
   if (!lib || !lib.writable || !sl.canEdit(lib.role) || !sl.isMemberId(lib.memberId)) return null;
@@ -248,6 +248,20 @@ export async function postNotice(space, { title, body, jobId = null }) {
   for (const old of sl.noticesToPrune(all, lib.memberId)) await delIn(lib.sess, sl.noticePath(old.id)).catch(() => {});
   logger.info('Posted a notice to a shared space', { space, jobId });
   return notice;
+}
+
+// A shared Space's notices, for this Device to show the ones other members sent
+// (bg/ui/desktop-notifications.js). null when the Space isn't shared or its Library isn't open.
+export async function notices(space) {
+  const lib = await forSpace(space);
+  if (!lib) return null;
+  const rec = await spaceRecord(space);
+  return {
+    library: lib.library,
+    memberId: lib.memberId,
+    name: rec?.name || '',
+    list: (await listIn(lib.sess, sl.NOTICES_PREFIX)).map((r) => r.value),
+  };
 }
 
 // Members and roles (ADR-0029 §3, §8)

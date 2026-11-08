@@ -48,6 +48,7 @@ import * as pageControl from './bg/ui/page-control';
 import * as openTabs from './bg/ui/open-tabs';
 import * as remoteUpdate from './bg/remote-update';
 import * as inbox from './bg/hyper/inbox';
+import * as desktopNotifications from './bg/ui/desktop-notifications';
 import * as trayIcon from './bg/ui/tray-icon';
 import * as downloads from './bg/ui/downloads';
 import * as permissions from './bg/ui/permissions';
@@ -241,6 +242,19 @@ app.on('ready', async function () {
   noteTopics.setup({ complete: completeText });
   // The user's AI Jobs: this Device runs the ones it owns when they're due (Vault records).
   aiJobs.setup({ runTurn: runJobTurn });
+  // OS notifications for Job results, shared-Space notices, and permission prompts nobody sees
+  // (Settings → Notifications). A click opens the Job, or brings Nomad forward.
+  desktopNotifications.setup({
+    openUrl: (url) => {
+      windows.ensureOneWindowExists();
+      const win = windows.getActiveWindow();
+      if (!win) return;
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+      if (url) tabManager.create(win, url, { setActive: true });
+    },
+  });
   log.info('Starting the discovery crawler');
   crawlerHost.setup();
   log.info('Program setup complete');
