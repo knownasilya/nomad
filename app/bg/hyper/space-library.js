@@ -26,6 +26,7 @@ import * as pairing from './device-pairing';
 import * as settingsDb from '../dbs/settings';
 import * as sl from '../../../shared/space-library.mjs';
 import * as cal from '../../../shared/calendar.mjs';
+import * as hc from '../../../shared/household-contacts.mjs';
 import * as inv from '../../../shared/invites.mjs';
 import * as apps from '../../../shared/vault-apps.mjs';
 import { namesPrefix } from '../../../shared/names.mjs';
@@ -126,6 +127,7 @@ const LIB_PREFIX = {
   events: cal.libraryPrefix('events'),
   feeds: cal.libraryPrefix('feeds'),
   feedCache: cal.libraryPrefix('feedCache'),
+  contacts: hc.LIB_CONTACTS,
 };
 const VAULT_PREFIX = {
   notes: apps.notesPrefix,
@@ -134,6 +136,7 @@ const VAULT_PREFIX = {
   events: (space) => cal.calendarPrefix('events', space),
   feeds: (space) => cal.calendarPrefix('feeds', space),
   feedCache: (space) => cal.calendarPrefix('feedCache', space),
+  contacts: (space) => hc.contactsPrefix(space),
 };
 
 export async function records(space, kind) {
@@ -180,6 +183,7 @@ export async function collect(space, root) {
     names: await vault.listAppRecords(namesPrefix(space)),
     events: (await vault.listAppRecords(cal.calendarPrefix('events', space))).filter(cal.isEvent),
     feeds: (await vault.listAppRecords(cal.calendarPrefix('feeds', space))).filter(cal.isFeed),
+    contacts: (await vault.listAppRecords(hc.contactsPrefix(space))).filter(hc.isContact),
   };
 }
 
@@ -220,6 +224,7 @@ export async function share({ space, root, meta, name }) {
     cal.calendarPrefix('events', space),
     cal.calendarPrefix('feeds', space),
     cal.calendarPrefix('feedCache', space),
+    hc.contactsPrefix(space),
   ]) {
     for (const r of await vault.listAppRecordPaths(prefix)) await vault.delAppRecord(r);
   }

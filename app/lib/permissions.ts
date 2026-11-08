@@ -240,6 +240,14 @@ export const PERMS = {
     requiresRefresh: false,
     promptTrusted: true,
   },
+  // The AI's access to the Space's household contacts (ADR-0046): reading only. My Library changes them.
+  contactsRead: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    promptTrusted: true,
+  },
   // The AI saving files to the user's Assets (saveAsset, ADR-0044). In a shared Space that shows them
   // to everyone in it, so the prompt names the Space. Asked once a turn and never kept, like
   // aiCreateDrive: the Space can differ from one chat to the next.
@@ -436,6 +444,7 @@ export const PERM_ICONS = {
   readerRead: 'fas fa-rss',
   readerWrite: 'fas fa-rss',
   calendarRead: 'fas fa-calendar-alt',
+  contactsRead: 'far fa-address-book',
   assetsWrite: 'fas fa-folder-open',
   modsRead: 'fas fa-magic',
   modsWrite: 'fas fa-magic',
@@ -510,6 +519,8 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
       return 'Let the AI assistant follow and unfollow feeds and mark posts read';
     case 'calendarRead':
       return 'Let the AI assistant read your calendar and the calendars you follow';
+    case 'contactsRead':
+      return 'Let the AI assistant read this Space’s contacts';
     case 'assetsWrite':
       return permOpts?.shared
         ? html`<span

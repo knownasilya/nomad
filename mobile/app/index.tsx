@@ -27,6 +27,7 @@ import { ListSection, ListRow, ListEmpty } from '../components/List'
 import Devices from '../components/Devices'
 import SpaceSwitcher, { type InvitePreview } from '../components/SpaceSwitcher'
 import InviteSheet, { type InviteSpace } from '../components/InviteSheet'
+import HouseholdContacts from '../components/HouseholdContacts'
 import Settings from '../components/Settings'
 import Logs from '../components/Logs'
 import UpdateBanner from '../components/UpdateBanner'
@@ -76,7 +77,7 @@ type Kind = 'home' | 'web' | 'hyper'
 // The full-screen pages over the browser. They stack (lib/navStack.ts): one opened from another
 // sits on top of it, and back closes only the top one.
 type Screen =
-  | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' | 'personas' }
+  | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' | 'personas' | 'contacts' }
   | { name: 'assets'; assetId?: string } // assetId: the file to open, e.g. from a link in an AI answer
   | { name: 'notes'; noteId?: string } // noteId: the note to open, e.g. the one a followed link was in
   | { name: 'jobs'; jobId?: string; runId?: string } // a tapped Job notification opens its run
@@ -201,6 +202,7 @@ const VAULT_PROMPTS: Record<string, { title: string; message: string }> = {
   modsWrite: { title: 'Allow AI to change your Mods?', message: 'The AI running on your other device wants to create or change your Mods. A Mod can run a script on every page of its site.' },
   assetsWrite: { title: 'Allow AI to save to Assets?', message: 'The AI running on your other device wants to save a file to your Assets. In a shared Space, everyone in it sees the file.' },
   calendarRead: { title: 'Allow AI to read your calendar?', message: 'The AI running on your other device wants to read your calendar, your household’s, and the calendars you follow.' },
+  contactsRead: { title: 'Allow AI to read your contacts?', message: 'The AI running on your other device wants to read this Space’s contacts: names, phone numbers, emails and addresses.' },
   jobsRead: { title: 'Allow AI to see your Jobs?', message: 'The AI running on your other device wants to see your AI Jobs and their results.' },
   jobsWrite: { title: 'Allow AI to change your Jobs?', message: 'The AI running on your other device wants to create, change or run your AI Jobs. A Job runs a prompt by itself, reads your Notes and Reader, and notifies this phone.' },
   aiCreateDrive: { title: 'Allow AI to make a drive?', message: 'The AI running on your other device wants to make a new drive in your library on that computer.' },
@@ -973,6 +975,10 @@ export default function Browser () {
         openScreen({ name: 'assets', assetId: link.id })
         return
       case 'library':
+        if (link.view === 'contacts') {
+          openScreen({ name: 'contacts' })
+          return
+        }
         if (link.view === 'drives' || link.view === 'bookmarks') {
           openScreen({ name: 'library' })
           return
@@ -1347,6 +1353,7 @@ export default function Browser () {
             { label: 'Reader', icon: 'rss', onPress: () => openScreen({ name: 'reader' }) },
             { label: 'Notes', icon: 'sticky-note', onPress: () => openScreen({ name: 'notes' }) },
             { label: 'Calendar', icon: 'calendar-alt', onPress: () => openScreen({ name: 'calendar' }) },
+            { label: 'Contacts', icon: 'address-book', onPress: () => openScreen({ name: 'contacts' }) },
             { label: 'Assets', icon: 'folder-open', onPress: () => openScreen({ name: 'assets' }) },
             { label: 'Messages', icon: 'comments', onPress: () => openScreen({ name: 'messages' }) },
             { label: 'AI Jobs', icon: 'clock', onPress: () => openScreen({ name: 'jobs' }) },
@@ -1458,6 +1465,16 @@ export default function Browser () {
         spaceName={spacesApi.activeSpace.name}
         onOpenDevices={() => openScreen({ name: 'devices' })}
         onOpenUrl={openFromNotes}
+      />
+
+      <HouseholdContacts
+        visible={isOpen('contacts')}
+        onClose={() => closeScreenNamed('contacts')}
+        apps={backend.apps}
+        onVaultChange={backend.onVaultChange}
+        space={spacesApi.activeSpace.rootDriveKey || undefined}
+        spaceName={spacesApi.activeSpace.name}
+        onOpenDevices={() => openScreen({ name: 'devices' })}
       />
 
       <Calendar

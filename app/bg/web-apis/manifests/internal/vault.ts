@@ -72,6 +72,10 @@ export default {
   renameNoteLinks: 'promise', // ({ id, from, to }) -> number of notes changed
   setNoteTopics: 'promise', // ({ id, topics }) -> note, its topics set by hand (ADR-0035)
   setNoteTick: 'promise', // ({ id, text, checked }) -> note, who ticked an item noted in a shared Space
+  // Household contacts (bg/web-apis/bg/household-contacts.ts), for the caller's Space
+  listHouseholdContacts: 'promise', // () -> { space, spaceName, shared, canWrite, contacts }
+  saveHouseholdContact: 'promise', // ({ id?, name, role?, phone?, email?, address?, notes?, profile? }) -> contact
+  deleteHouseholdContact: 'promise', // (id) -> boolean
   // The Calendar (bg/web-apis/bg/calendar.ts, shared/calendar.mjs), for the caller's Space
   listCalendar: 'promise', // ({ from?, to? }) -> { space, spaceName, shared, canWriteSpace, events, feeds, occurrences }
   saveCalendarEvent: 'promise', // ({ id?, title, start, end?, allDay?, location?, notes?, repeat?, inSpace? }) -> event

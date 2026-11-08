@@ -25,6 +25,7 @@ export const MEMORY_LINK = 'nomad://ai/memory';
 export const READER_LINK = 'nomad://reader/';
 export const CALENDAR_LINK = 'nomad://calendar/';
 export const calendarLink = (day) => `${CALENDAR_LINK}?day=${day}`;
+export const CONTACTS_LINK = 'nomad://library/contacts';
 export const ASSETS_LINK = 'nomad://assets/';
 export const assetLink = (id) => `${ASSETS_LINK}?id=${id}`;
 // shared/assets.mjs isAssetId
@@ -36,6 +37,7 @@ const AI_VIEWS = { chats: 'Chats', memory: 'Memory', skills: 'Skills', setup: 'S
 const LIBRARY_VIEWS = {
   drives: 'Drives',
   bookmarks: 'Bookmarks',
+  contacts: 'Contacts',
   names: 'Names',
   mods: 'Mods',
   jobs: 'Jobs',

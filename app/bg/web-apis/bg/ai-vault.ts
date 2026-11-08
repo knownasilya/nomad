@@ -15,12 +15,13 @@ import * as mods from '../../ui/mods';
 import * as jobs from '../../ai/jobs';
 import * as memory from '../../ai/memory';
 import * as calendar from './calendar';
+import * as householdContacts from './household-contacts';
 import { driveTitle, readJobSource, resolveJobWrites } from './job-source';
 import * as vault from '../../hyper/vault';
 import { readOffset, textPart, partFields, isPartial } from '../../ai/text-part.mjs';
 import { saveWhole, scratchKey } from '../../ai/scratch.mjs';
 import { addedWrites, describeSchedule, describeWrites, keepPageActions } from '../../../../shared/jobs.mjs';
-import { noteLink, jobLink, MEMORY_LINK, READER_LINK, CALENDAR_LINK } from '../../../../shared/item-links.mjs';
+import { noteLink, jobLink, MEMORY_LINK, READER_LINK, CALENDAR_LINK, CONTACTS_LINK } from '../../../../shared/item-links.mjs';
 import fsAPI from './fs';
 import * as webFeeds from './web-feeds';
 import {
@@ -199,6 +200,13 @@ export async function runVaultTool(name, args, { ctx, space = null, permit, scra
       await calendar.refreshDue(space).catch(() => {});
       const { text, from, to } = await calendar.agendaText(space, { from: args.from, days: args.days });
       return `Calendar from ${from} to ${to} (the day after the last):\n${text}\n\nLink: ${CALENDAR_LINK}`;
+    }
+
+    // The current Space's household contacts, as lines (shared/household-contacts.mjs contactsText).
+    case 'listContacts': {
+      const space = await readerSpace().catch(() => null);
+      const text = await householdContacts.contactsText(space, typeof args.query === 'string' ? args.query.trim() : '');
+      return `${text}\n\nLink: ${CONTACTS_LINK}`;
     }
 
     case 'listMods':

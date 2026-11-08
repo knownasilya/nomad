@@ -12,6 +12,7 @@ import * as sl from '../../../shared/space-library.mjs'
 import * as du from '../../../shared/device-updates.mjs'
 import * as pe from '../../../shared/personas.mjs'
 import * as cal from '../../../shared/calendar.mjs'
+import * as hc from '../../../shared/household-contacts.mjs'
 import { inlineOp, boundedUpdate } from './vault.mjs'
 import { parseHyperUrl } from './hyper-url.mjs'
 import { DRIVE_AUTOBASE, DRIVE_HYPERDRIVE } from '../../rpc-commands.mjs'
@@ -75,7 +76,9 @@ const KINDS = {
   // The calendar (lib/calendar.mjs, shared/calendar.mjs): events, followed iCal feeds, their copies.
   events: { vault: (s) => cal.calendarPrefix('events', s), lib: cal.libraryPrefix('events') },
   feeds: { vault: (s) => cal.calendarPrefix('feeds', s), lib: cal.libraryPrefix('feeds') },
-  feedCache: { vault: (s) => cal.calendarPrefix('feedCache', s), lib: cal.libraryPrefix('feedCache') }
+  feedCache: { vault: (s) => cal.calendarPrefix('feedCache', s), lib: cal.libraryPrefix('feedCache') },
+  // Household contacts (lib/household-contacts.mjs, shared/household-contacts.mjs).
+  contacts: { vault: (s) => hc.contactsPrefix(s), lib: hc.LIB_CONTACTS }
 }
 
 // Where a Space's own records of `kind` are: its Space Library once shared, else the Vault. `at`

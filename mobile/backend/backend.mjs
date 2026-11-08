@@ -18,6 +18,7 @@ import hcrypto from 'hypercore-crypto'
 import { decodeInlineJson, WRITERS_PREFIX as DRIVE_WRITERS } from '../../shared/fs-core.mjs'
 import * as spaceLib from './lib/space-library.mjs'
 import * as calendar from './lib/calendar.mjs'
+import * as householdContacts from './lib/household-contacts.mjs'
 import { createAssets } from './lib/assets.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
 import { createPhoneInbox } from './lib/inbox.mjs'
@@ -728,7 +729,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
       return
     }
     if (!vault) {
-      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'messages' ? 'Link this phone to your computer to use Messages' : app === 'vouches' ? 'Link this phone to your computer to see your vouches' : app === 'updates' || app === 'peers' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : app === 'calendar' ? 'Link this phone to your computer to use the calendar' : app === 'assets' ? 'Link this phone to your computer to keep your files in Assets' : 'Link this phone to use Reader and Notes' })
+      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'messages' ? 'Link this phone to your computer to use Messages' : app === 'vouches' ? 'Link this phone to your computer to see your vouches' : app === 'updates' || app === 'peers' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : app === 'calendar' ? 'Link this phone to your computer to use the calendar' : app === 'contacts' ? 'Link this phone to your computer to keep your household’s contacts' : app === 'assets' ? 'Link this phone to your computer to keep your files in Assets' : 'Link this phone to use Reader and Notes' })
       return
     }
     let value
@@ -781,6 +782,9 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'notes' && action === 'setTopics') value = await vaultApps.setNoteTopics(vault, { id: args.id, topics: Array.isArray(args.topics) ? args.topics : [], space })
     else if (app === 'notes' && action === 'setTick') value = await vaultApps.setNoteTick(vault, { id: args.id, text: args.text, checked: !!args.checked, space })
     else if (app === 'notes' && action === 'renameLinks') value = await vaultApps.renameNoteLinks(vault, { id: args.id, from: args.from, to: args.to, space })
+    else if (app === 'contacts' && action === 'list') value = await householdContacts.listContacts(vault, space)
+    else if (app === 'contacts' && action === 'save') value = await householdContacts.saveContact(vault, space, args.contact || {})
+    else if (app === 'contacts' && action === 'delete') value = await householdContacts.deleteContact(vault, space, args.id)
     else if (app === 'calendar' && action === 'list') value = await calendar.listCalendar(vault, space, { from: args.from, to: args.to })
     else if (app === 'calendar' && action === 'save') value = await calendar.saveEvent(vault, space, args.event || {})
     else if (app === 'calendar' && action === 'delete') value = await calendar.deleteEvent(vault, space, args.id)

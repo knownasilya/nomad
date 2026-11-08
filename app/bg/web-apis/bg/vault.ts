@@ -13,6 +13,7 @@ import * as devicePresence from '../../hyper/device-presence';
 import * as vaultApps from './vault-apps';
 import * as noteTopics from './note-topics';
 import * as calendar from './calendar';
+import * as householdContacts from './household-contacts';
 import * as assets from './assets';
 import * as liveNotes from '../../notes/live-notes';
 import * as names from '../../hyper/names';
@@ -523,6 +524,17 @@ export default {
   // Who ticked an item of a shared Space's Note: ({ id, text, checked }) -> note.
   async setNoteTick(change) {
     return vaultApps.setNoteTick(this, change);
+  },
+
+  // Household contacts (My Library → Contacts, shared/household-contacts.mjs): the caller's Space's.
+  async listHouseholdContacts() {
+    return householdContacts.listContacts(this);
+  },
+  async saveHouseholdContact(fields: any = {}) {
+    return householdContacts.saveContact(this, fields || {});
+  },
+  async deleteHouseholdContact(id) {
+    return householdContacts.deleteContact(this, id);
   },
 
   // The Calendar (nomad://calendar, shared/calendar.mjs): the caller's Space's events and feeds.
