@@ -89,7 +89,27 @@ interface Draft {
   until: string
   location: string
   notes: string
+  remind: number | null // minutes before (shared/calendar.mjs REMIND_OPTIONS)
   inSpace: boolean
+}
+
+// Reminder choices (shared/calendar.mjs REMIND_OPTIONS, describeRemind): everyone who sees the event
+// is reminded, so a shared Space's remind the whole household. An all-day one's count from 9 AM.
+const REMIND_TIMED: (number | null)[] = [null, 0, 10, 30, 60, 1440]
+const REMIND_ALL_DAY: (number | null)[] = [null, 0, 1440, 2880, 10080]
+function remindLabel (n: number | null, allDay: boolean) {
+  if (n === null) return 'None'
+  if (allDay) return n < 1440 ? 'On the day' : n === 10080 ? 'A week before' : n === 1440 ? 'Day before' : `${n / 1440} days before`
+  if (n === 0) return 'At the start'
+  if (n < 60) return `${n} min before`
+  if (n < 1440) return `${n / 60} hr before`
+  if (n === 10080) return 'A week before'
+  return n === 1440 ? 'Day before' : `${n / 1440} days before`
+}
+function remindChoices (allDay: boolean, current: number | null) {
+  const list = [...(allDay ? REMIND_ALL_DAY : REMIND_TIMED)]
+  if (current !== null && !list.includes(current)) list.push(current)
+  return list.sort((a, b) => (a === null ? -1 : b === null ? 1 : a - b))
 }
 
 export default function Calendar ({ visible, onClose, apps, onVaultChange, space, spaceName, openDay, onOpenDevices, drives, onOpenUrl }: Props) {
@@ -211,7 +231,7 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
   const newEvent = () => {
     setDraftError('')
     setPicking(null)
-    setDraft({ id: null, title: '', day: selected, endDay: selected, allDay: false, startTime: '09:00', endTime: '10:00', freq: 'none', interval: '1', until: '', location: '', notes: '', inSpace: canWriteSpace })
+    setDraft({ id: null, title: '', day: selected, endDay: selected, allDay: false, startTime: '09:00', endTime: '10:00', freq: 'none', interval: '1', until: '', location: '', notes: '', remind: null, inSpace: canWriteSpace })
   }
   // A new start time moves the end with it, so the event keeps its length.
   const setStartTime = (startTime: string) => {
@@ -243,6 +263,7 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
       until: ev.repeat?.until || '',
       location: ev.location || '',
       notes: ev.notes || '',
+      remind: typeof ev.remind === 'number' ? ev.remind : null,
       inSpace: !!ev.space
     })
   }
@@ -272,7 +293,7 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
     // A weekly event made on desktop can repeat on several days: keep them.
     const prev = d.id ? list?.events.find((e) => e.id === d.id) : null
     if (repeat && d.freq === 'weekly' && prev?.repeat?.freq === 'weekly' && prev.repeat.byDay?.length) (repeat as CalendarRepeat).byDay = prev.repeat.byDay
-    const event = { id: d.id || undefined, title: d.title.trim(), start, end, allDay: d.allDay, location: d.location.trim(), notes: d.notes.trim(), repeat, inSpace: d.inSpace }
+    const event = { id: d.id || undefined, title: d.title.trim(), start, end, allDay: d.allDay, location: d.location.trim(), notes: d.notes.trim(), repeat, remind: d.remind, inSpace: d.inSpace }
     setBusy(true)
     const res = await call<CalendarEvent>('calendar', 'save', { event })
     setBusy(false)
@@ -497,6 +518,14 @@ export default function Calendar ({ visible, onClose, apps, onVaultChange, space
                   <Field label='Until (optional)' t={t} s={s}><TextInput style={s.input} value={draft.until} onChangeText={(until) => setDraft({ ...draft, until })} placeholder='YYYY-MM-DD' placeholderTextColor={t.textMuted} keyboardType='numbers-and-punctuation' /></Field>
                 </View>
               )}
+              <Text style={s.label}>{draft.allDay ? 'Remind (at 9 AM)' : 'Remind'}</Text>
+              <View style={s.chips}>
+                {remindChoices(draft.allDay, draft.remind).map((n) => (
+                  <Pressable key={String(n)} style={[s.chip, draft.remind === n && s.chipOn]} onPress={() => setDraft({ ...draft, remind: n })} accessibilityRole='button' accessibilityState={{ selected: draft.remind === n }}>
+                    <Text style={[s.chipText, draft.remind === n && s.chipTextOn]}>{remindLabel(n, draft.allDay)}</Text>
+                  </Pressable>
+                ))}
+              </View>
               <TextInput style={s.input} value={draft.location} onChangeText={(location) => setDraft({ ...draft, location })} placeholder='Where' placeholderTextColor={t.textMuted} />
               <TextInput style={[s.input, s.notes]} value={draft.notes} onChangeText={(notes) => setDraft({ ...draft, notes })} placeholder='Notes' placeholderTextColor={t.textMuted} multiline />
               {canWriteSpace && !draft.id && (

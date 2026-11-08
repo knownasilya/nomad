@@ -410,6 +410,11 @@ class GeneralSettingsView extends LitElement {
           'When a Job set to notify finishes, on whichever of your devices ran it.'
         )}
         ${item(
+          'notify_calendar',
+          'Calendar reminders',
+          'When an event you or someone in your shared Space set a reminder on is coming up.'
+        )}
+        ${item(
           'notify_space_notices',
           'Notices from your shared Spaces',
           'When a Job someone else in a shared Space made tells everyone, like “bins go out tonight”.'

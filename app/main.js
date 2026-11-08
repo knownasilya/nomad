@@ -28,6 +28,7 @@ import * as names from './bg/hyper/names';
 import * as autoNames from './bg/hyper/auto-names';
 import * as readerArticles from './bg/web-apis/bg/reader-articles';
 import * as noteTopics from './bg/web-apis/bg/note-topics';
+import { remindersBetween } from './bg/web-apis/bg/calendar';
 import { completeText, runJobTurn } from './bg/web-apis/bg/ai';
 import * as aiJobs from './bg/ai/jobs';
 import * as crawlerHost from './bg/hyper/crawler-host';
@@ -255,6 +256,7 @@ app.on('ready', async function () {
   // OS notifications for Job results, shared-Space notices, and permission prompts nobody sees
   // (Settings → Notifications). A click opens the Job, or brings Nomad forward.
   desktopNotifications.setup({
+    reminders: remindersBetween,
     openUrl: (url) => {
       windows.ensureOneWindowExists();
       const win = windows.getActiveWindow();

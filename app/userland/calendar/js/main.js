@@ -23,6 +23,29 @@ const FREQS = [
   ['yearly', 'Every year'],
 ]
 
+// Reminders (shared/calendar.mjs REMIND_OPTIONS, remindOptions, describeRemind): minutes before the
+// start. Everyone who sees the event is reminded, so a shared Space's remind the whole household.
+const REMIND_TIMED = [0, 5, 10, 15, 30, 60, 120, 1440, 2880, 10080]
+const REMIND_ALL_DAY = [0, 1440, 2880, 10080]
+function remindLabel(n, allDay) {
+  if (allDay) {
+    if (n < 1440) return 'On the day, at 9 AM'
+    if (n === 10080) return '1 week before, at 9 AM'
+    return `${n / 1440} day${n === 1440 ? '' : 's'} before, at 9 AM`
+  }
+  if (n === 0) return 'At the start'
+  if (n < 60) return `${n} minutes before`
+  if (n < 1440) return `${n / 60} hour${n === 60 ? '' : 's'} before`
+  if (n === 10080) return '1 week before'
+  return `${n / 1440} day${n === 1440 ? '' : 's'} before`
+}
+// The choices for this event, keeping the one it has even if it's not usual for it.
+function remindChoices(allDay, current) {
+  const list = [...(allDay ? REMIND_ALL_DAY : REMIND_TIMED)]
+  if (current !== '' && !list.includes(Number(current))) list.push(Number(current))
+  return list.sort((a, b) => a - b).map((n) => [String(n), remindLabel(n, allDay)])
+}
+
 const pad = (n) => String(n).padStart(2, '0')
 const dayStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const parseDay = (s) => {
@@ -303,6 +326,7 @@ function blankForm(day) {
     until: '',
     location: '',
     notes: '',
+    remind: '',
     inSpace: !!(data.space && data.canWriteSpace),
     by: '',
     readOnly: false,
@@ -333,6 +357,7 @@ function openEditor(id, day = state.selected) {
       until: r?.until || '',
       location: ev.location || '',
       notes: ev.notes || '',
+      remind: typeof ev.remind === 'number' ? String(ev.remind) : '',
       inSpace: !!ev.space,
       by: ev.by || '',
       readOnly: !!ev.space && !data.canWriteSpace,
@@ -433,6 +458,13 @@ function renderEditor() {
 
         e.freq !== 'none' ? el('label', { for: 'ev-until' }, ['Until']) : null,
         e.freq !== 'none' ? el('input', { id: 'ev-until', type: 'date', value: e.until, disabled: ro, onchange: (ev) => set({ until: ev.target.value }) }) : null,
+
+        el('label', { for: 'ev-remind' }, ['Remind']),
+        el(
+          'select',
+          { id: 'ev-remind', disabled: ro, onchange: (ev) => set({ remind: ev.target.value }) },
+          [['', 'No reminder'], ...remindChoices(e.allDay, e.remind)].map(([v, label]) => el('option', { value: v, selected: e.remind === v }, [label]))
+        ),
 
         el('label', { for: 'ev-where' }, ['Where']),
         el('input', { id: 'ev-where', type: 'text', value: e.location, placeholder: 'Optional', disabled: ro, oninput: (ev) => set({ location: ev.target.value }) }),
@@ -647,6 +679,7 @@ async function saveEvent(ev) {
       allDay: e.allDay,
       location: e.location,
       notes: e.notes,
+      remind: e.remind === '' ? null : Number(e.remind),
       repeat: e.freq === 'none' ? null : { freq: e.freq, interval: e.interval, byDay: e.freq === 'weekly' ? e.byDay : undefined, until: e.until || undefined },
       inSpace: e.inSpace,
     })

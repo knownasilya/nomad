@@ -230,6 +230,8 @@ export function makeEvent(f, prev = null, now = new Date().toISOString()) {
   if (repeat) rec.repeat = repeat;
   const by = clean(prev?.by || f.by, 60);
   if (by) rec.by = by;
+  const remind = normalizeRemind(f.remind);
+  if (remind !== null) rec.remind = remind;
   return rec;
 }
 
@@ -806,3 +808,116 @@ export function shareCalendarPaths(items = {}) {
 }
 
 export { isSpaceKey };
+
+// Reminders
+// =
+//
+// An event can remind everyone who sees it (`remind`: minutes before it starts). It's on the
+// record, so in a shared Space every member's phone and computers remind them: "remind the whole
+// house". An all-day event's reminder counts from ALL_DAY_AT on its day, so "1 day before" is 9 AM
+// the day before. Feeds' events don't remind. Desktop shows them from bg/ui/desktop-notifications.js
+// (the `notify_calendar` setting); the phone schedules them ahead with expo-notifications
+// (mobile/lib/useCalendarReminders.ts). Tests: tests/unit/calendar-reminders.test.js.
+
+export const REMIND_OPTIONS = [0, 5, 10, 15, 30, 60, 120, 1440, 2880, 10080];
+export const ALL_DAY_AT = '09:00';
+// A reminder missed while the Device was off or asleep still shows if it's this recent.
+export const REMIND_LATE_MS = 30 * 60 * 1000;
+
+export function normalizeRemind(v) {
+  if (v === null || v === undefined || v === '' || v === false) return null;
+  const n = Number(v);
+  return REMIND_OPTIONS.includes(n) ? n : null;
+}
+
+// The choices for an all-day event: a reminder under a day is "on the day", so offer one of those.
+export function remindOptions(allDay = false) {
+  return allDay ? [0, 1440, 2880, 10080] : REMIND_OPTIONS;
+}
+
+// How a choice reads: "At the start", "10 minutes before", "1 day before". All day: "On the day, at 9 AM".
+export function describeRemind(min, allDay = false) {
+  const n = normalizeRemind(min);
+  if (n === null) return 'No reminder';
+  if (allDay) {
+    if (n < 1440) return 'On the day, at 9 AM';
+    if (n === 10080) return '1 week before, at 9 AM';
+    const days = n / 1440;
+    return `${days} day${days === 1 ? '' : 's'} before, at 9 AM`;
+  }
+  if (n === 0) return 'At the start';
+  if (n < 60) return `${n} minutes before`;
+  if (n < 1440) return `${n / 60} hour${n === 60 ? '' : 's'} before`;
+  if (n === 10080) return '1 week before';
+  return `${n / 1440} day${n === 1440 ? '' : 's'} before`;
+}
+
+// When one occurrence's reminder is due, as a wall time.
+export function reminderAt(o, remind) {
+  const n = normalizeRemind(remind);
+  if (n === null) return null;
+  const base = o.allDay ? `${dayOf(o.start)}T${ALL_DAY_AT}` : o.start;
+  const m = toMinutes(base);
+  if (Number.isNaN(m)) return null;
+  // An all-day event's reminder on the day itself is at ALL_DAY_AT, whatever under a day was picked.
+  const before = o.allDay && n < 1440 ? 0 : n;
+  return fromMinutes(m - before, true);
+}
+
+// 12-hour times, as the calendar shows them ("6:30 PM").
+function time12(hhmm) {
+  const h = +hhmm.slice(0, 2);
+  return `${h % 12 || 12}:${hhmm.slice(3, 5)} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+// What a reminder says: the event's title, and when, from the time it shows.
+export function reminderText(r) {
+  const day = dayOf(r.start);
+  const remindDay = dayOf(r.at);
+  const when =
+    day === remindDay
+      ? 'Today'
+      : day === addDays(remindDay, 1)
+        ? 'Tomorrow'
+        : describeWhen({ start: day, allDay: true }).replace(/, all day$/, '');
+  const parts = [`${when}, ${r.allDay ? 'all day' : time12(r.start.slice(11, 16))}`];
+  if (r.location) parts.push(r.location);
+  return { title: r.title, body: parts.join(' · ') };
+}
+
+// Every reminder due in [from, to) (wall times, 'YYYY-MM-DDTHH:MM') for these events, soonest
+// first. `key` names one occurrence's reminder, so a Device shows or schedules it once.
+export function remindersBetween(events, from, to) {
+  const out = [];
+  const lo = toMinutes(from);
+  const hi = toMinutes(to);
+  if (Number.isNaN(lo) || Number.isNaN(hi) || hi <= lo) return out;
+  // An occurrence can start up to a week after its reminder: look that far past `to`.
+  const fromDay = dayOf(from);
+  const toDay = addDays(dayOf(to), 8);
+  for (const ev of events || []) {
+    if (!isEvent(ev) || normalizeRemind(ev.remind) === null) continue;
+    for (const o of occurrences(ev, fromDay, toDay)) {
+      const at = reminderAt({ start: o.start, allDay: !!ev.allDay }, ev.remind);
+      const m = at ? toMinutes(at) : NaN;
+      if (!(m >= lo && m < hi)) continue;
+      out.push({
+        key: `${ev.id}@${o.start}`,
+        id: ev.id,
+        title: ev.title,
+        start: o.start,
+        allDay: !!ev.allDay,
+        location: ev.location || '',
+        at,
+        space: ev.space || null,
+      });
+    }
+  }
+  out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.key.localeCompare(b.key)));
+  return out;
+}
+
+// A wall time `ms` milliseconds from `wall` (for "now minus REMIND_LATE_MS").
+export function addWallMs(wall, ms) {
+  return fromMinutes(toMinutes(wall) + Math.round(ms / 60000), true);
+}

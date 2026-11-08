@@ -785,6 +785,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'contacts' && action === 'list') value = await householdContacts.listContacts(vault, space)
     else if (app === 'contacts' && action === 'save') value = await householdContacts.saveContact(vault, space, args.contact || {})
     else if (app === 'contacts' && action === 'delete') value = await householdContacts.deleteContact(vault, space, args.id)
+    else if (app === 'calendar' && action === 'reminders') value = await calendar.reminders(vault, { from: args.from, to: args.to })
     else if (app === 'calendar' && action === 'list') value = await calendar.listCalendar(vault, space, { from: args.from, to: args.to })
     else if (app === 'calendar' && action === 'save') value = await calendar.saveEvent(vault, space, args.event || {})
     else if (app === 'calendar' && action === 'delete') value = await calendar.deleteEvent(vault, space, args.id)

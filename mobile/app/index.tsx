@@ -41,6 +41,7 @@ import { useBackend, type SpaceJoin, type AiPromptRequest } from '../lib/useBack
 import { useJobNotifications } from '../lib/useJobNotifications'
 import { useMessageNotifications } from '../lib/useMessageNotifications'
 import { useInviteJoins } from '../lib/useInviteJoins'
+import { useCalendarReminders } from '../lib/useCalendarReminders'
 import { usePersonaOnboarding } from '../lib/usePersonaOnboarding'
 import { syncHostingService } from '../lib/hostingService'
 import HostingSettings from '../components/HostingSettings'
@@ -426,6 +427,8 @@ export default function Browser () {
   useJobNotifications(backend, ({ jobId, runId }) => openScreen({ name: 'jobs', jobId, runId }))
   // A notification for each new Message to a Persona (ADR-0036); a tap opens the Conversation.
   useMessageNotifications(backend, (c) => openScreen({ name: 'messages', personaId: c.personaId, with: c.with }))
+  // Calendar reminders scheduled a week ahead; a tap opens that day.
+  useCalendarReminders(backend, (day) => openScreen({ name: 'calendar', day }))
 
   // Spaces — each has its own Root Drive; bookmarks/history/drives are scoped to the active space.
   const spacesApi = useSpaces(backend)

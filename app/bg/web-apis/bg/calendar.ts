@@ -21,6 +21,7 @@ import * as tabManager from '../../ui/tabs/manager';
 import fsAPI from './fs';
 import * as vaultApps from './vault-apps';
 import * as cal from '../../../../shared/calendar.mjs';
+import * as vault from '../../hyper/vault';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'calendar' });
 
@@ -354,4 +355,17 @@ export async function listCalendarDrives(ctx) {
     })
   );
   return out.filter(Boolean).sort((a: any, b: any) => a.name.localeCompare(b.name));
+}
+
+// Reminders due in [from, to) (wall times) across the user's own events and every Space in their
+// Vault (shared/calendar.mjs remindersBetween), for bg/ui/desktop-notifications.js. A shared Space's
+// events are its household's, so everyone in it is reminded.
+export async function remindersBetween(from: string, to: string) {
+  const spaces = (await vault.listSpaces().catch(() => []))
+    .filter((s) => s && cal.isSpaceKey(s.rootDriveKey) && !s.movedTo && !s.removed)
+    .map((s) => ({ key: s.rootDriveKey, name: s.name || '' }));
+  const events = await listKind(null, 'events', cal.isEvent).catch(() => []);
+  const names = new Map(spaces.map((s) => [s.key, s.name]));
+  for (const s of spaces) events.push(...(await listKind(s.key, 'events', cal.isEvent).catch(() => [])));
+  return cal.remindersBetween(events, from, to).map((r) => ({ ...r, spaceName: r.space ? names.get(r.space) || '' : '' }));
 }
