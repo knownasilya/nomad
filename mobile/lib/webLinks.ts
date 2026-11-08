@@ -8,9 +8,12 @@ export type LinkRoute =
   | { to: 'tab'; url: string } // the tab goes there instead (a web page or a drive)
   | { to: 'reader'; url: string } // a feed: offer to subscribe in Reader
   | { to: 'messages'; url: string } // a Persona's message link (ADR-0036): write to them in Messages
+  | { to: 'invite'; url: string } // an invite link (ADR-0040): the Space switcher's join form
   | { to: 'app'; url: string; fallback?: string } // another app's link; fallback is a web page for when no app takes it
 
 const WEB = /^https?:\/\//i
+// The invite page with an invite in its fragment (shared/invites.mjs LINK_BASE).
+const INVITE_PAGE = /^https:\/\/nomad\.pages\.dev\/invite\/?#./i
 
 export function routeLink (url: string): LinkRoute {
   const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(url)?.[1].toLowerCase()
@@ -18,6 +21,9 @@ export function routeLink (url: string): LinkRoute {
   switch (scheme) {
     case 'http':
     case 'https':
+      return INVITE_PAGE.test(url) ? { to: 'invite', url } : { to: 'page' }
+    case 'nomad-invite':
+      return { to: 'invite', url }
     case 'about':
     case 'data':
     case 'blob':

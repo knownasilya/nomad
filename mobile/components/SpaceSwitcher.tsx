@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -41,13 +41,36 @@ interface Props {
   // Rename and recolor a Space; delete it, or leave a shared one. Each resolves to an error, or null.
   onEdit?: (id: string, edit: { name: string; color: string }) => Promise<string | null>
   onRemove?: (id: string, action: 'delete' | 'leave') => Promise<string | null>
+  // What an invite link says (ADR-0040), shown before joining. Rejects when it can't be read.
+  onReadInvite?: (link: string) => Promise<InvitePreview>
+  // An invite link the user opened from outside: the sheet opens on the join form with it filled in.
+  initialInvite?: string | null
+  // Invite people to a Space shared with other people (InviteSheet).
+  onInvite?: (space: { rootDriveKey: string; name: string }) => void
 }
 
-interface Editing { id: string; name: string; color: string; personal: boolean; shared: boolean }
+export interface InvitePreview {
+  title: string
+  role: string
+  check: 'ok' | 'unknown' | 'unsigned'
+  expired: boolean
+  from?: { name: string; profileTitle: string; nameDiffers: boolean } | null
+}
+
+// An invite link rather than a bare code: nomad-invite:… or the invite page with its # payload.
+const isLink = (v: string) => /^nomad-invite:|^https?:\/\/[^/\s]+\/invite\/?#/i.test(v.trim())
+
+function checkText (p: InvitePreview) {
+  if (p.check === 'ok') return p.from?.nameDiffers ? `Signed by the Persona whose profile is named ${p.from.profileTitle}.` : 'Signed by their Persona. Nomad checked it.'
+  if (p.check === 'unknown') return 'Nomad couldn’t reach their profile to check who sent it. Join only if you know who did.'
+  return 'This invite isn’t signed, so nobody can check who sent it. Join only if you know who did.'
+}
+
+interface Editing { id: string; name: string; color: string; personal: boolean; shared: boolean; rootDriveKey?: string }
 
 // Space switcher — a bottom sheet listing spaces (color dot + name + active check) with a create
 // form, mirroring nomad desktop's spaces menu (app/fg/shell-menus/spaces.js).
-export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId, vaultKeys, peopleKeys = [], onSwitch, onCreate, onJoin, onEdit, onRemove }: Props) {
+export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId, vaultKeys, peopleKeys = [], onSwitch, onCreate, onJoin, onEdit, onRemove, onReadInvite, initialInvite, onInvite }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const shared = new Set(vaultKeys)
@@ -61,6 +84,33 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
   const [ownName, setOwnName] = useState('')
   const [waiting, setWaiting] = useState(false)
   const [joinError, setJoinError] = useState('')
+  const [preview, setPreview] = useState<InvitePreview | null>(null)
+  const [reading, setReading] = useState(false)
+
+  // A link opened from outside Nomad lands here, ready to join.
+  useEffect(() => {
+    if (!visible || !initialInvite) return
+    setEditing(null)
+    setCreating(false)
+    setJoining(true)
+    setCode(initialInvite)
+    setJoinError('')
+  }, [visible, initialInvite])
+
+  // Read a pasted invite link so the user sees who it's from before joining.
+  useEffect(() => {
+    setPreview(null)
+    if (!joining || !onReadInvite || !isLink(code)) return
+    let live = true
+    setReading(true)
+    const timer = setTimeout(() => {
+      onReadInvite(code.trim())
+        .then((p) => { if (live) setPreview(p) })
+        .catch((err) => { if (live) setJoinError((err as Error)?.message || String(err)) })
+        .finally(() => { if (live) setReading(false) })
+    }, 300)
+    return () => { live = false; clearTimeout(timer); setReading(false) }
+  }, [code, joining, onReadInvite])
 
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -78,6 +128,7 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
     setCode('')
     setWaiting(false)
     setJoinError('')
+    setPreview(null)
     setCreating(false)
     setName('')
     setColor(SPACE_COLORS[0])
@@ -111,7 +162,8 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
       name: sp.name,
       color: sp.color,
       personal: sp.id === PERSONAL_ID,
-      shared: !!sp.rootDriveKey && withPeople.has(sp.rootDriveKey)
+      shared: !!sp.rootDriveKey && withPeople.has(sp.rootDriveKey),
+      rootDriveKey: sp.rootDriveKey || undefined
     })
   }
 
@@ -208,6 +260,18 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
               </TouchableOpacity>
             </View>
           </View>
+          {editing.shared && editing.rootDriveKey && onInvite ? (
+            <Pressable
+              style={s.newBtn}
+              onPress={() => { const ed = editing; reset(); onInvite({ rootDriveKey: ed.rootDriveKey!, name: ed.name }) }}
+              disabled={busy}
+              android_ripple={{ color: t.ripple }}
+              accessibilityRole='button'
+            >
+              <View style={s.newIcon}><Icon name='user-plus' size={13} color={t.accent} /></View>
+              <Text style={s.newBtnText}>Invite people</Text>
+            </Pressable>
+          ) : null}
           {editing.personal ? (
             <Text style={s.note}>Your Personal space can be renamed but not deleted.</Text>
           ) : onRemove ? (
@@ -267,15 +331,24 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
             <>
               <TextInput
                 style={s.input}
-                placeholder='Code'
+                placeholder='Invite link or code'
                 placeholderTextColor={t.textMuted}
                 value={code}
                 onChangeText={(v) => { setCode(v); setJoinError('') }}
                 autoCapitalize='none'
                 autoCorrect={false}
                 spellCheck={false}
-                autoFocus
+                autoFocus={!initialInvite}
               />
+              {reading ? <ActivityIndicator color={t.accent} /> : null}
+              {preview ? (
+                <View style={s.preview}>
+                  <Text style={s.previewTitle}>{preview.title}.</Text>
+                  {preview.role ? <Text style={s.previewText}>{preview.role}</Text> : null}
+                  <Text style={[s.previewCheck, preview.check !== 'ok' && { color: t.warn }]}>{checkText(preview)}</Text>
+                  {preview.expired ? <Text style={s.error}>This invite has run out. Ask for a new one.</Text> : null}
+                </View>
+              ) : null}
               <TextInput
                 style={s.input}
                 placeholder='Your name, as the others see it'
@@ -292,7 +365,7 @@ export default function SpaceSwitcher ({ visible, onClose, spaces, activeSpaceId
               <Text style={s.btnGhostText}>Cancel</Text>
             </TouchableOpacity>
             {waiting ? null : (
-              <TouchableOpacity style={[s.btn, !code.trim() && s.btnDisabled]} onPress={join} disabled={!code.trim()}>
+              <TouchableOpacity style={[s.btn, (!code.trim() || preview?.expired) && s.btnDisabled]} onPress={join} disabled={!code.trim() || !!preview?.expired}>
                 <Text style={s.btnText}>Join</Text>
               </TouchableOpacity>
             )}
@@ -394,6 +467,10 @@ function makeStyles (t: Theme) {
     btnText: { color: t.onAccent, fontSize: 15, fontWeight: '600' },
     waitRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 48 },
     waitText: { color: t.textDim, fontSize: 14 },
-    error: { color: t.danger, fontSize: 13 }
+    error: { color: t.danger, fontSize: 13 },
+    preview: { gap: 2, padding: space.md, borderRadius: radius.md, backgroundColor: t.surfaceAlt },
+    previewTitle: { color: t.text, fontSize: 15, fontWeight: '600' },
+    previewText: { color: t.textDim, fontSize: 14 },
+    previewCheck: { color: t.textMuted, fontSize: 13, marginTop: space.xs }
   })
 }
