@@ -354,7 +354,7 @@ class PersonaLoginModal extends LitElement {
         <div class="vouches-head">
           <span class="fas fa-fw fa-home"></span>
           <span>
-            Show who has had you over
+            Show who vouched for you
             <span class="sub">The site will see their names. Leave them unticked to show none.</span>
           </span>
         </div>
@@ -368,7 +368,7 @@ class PersonaLoginModal extends LitElement {
                     @change=${(e) => this.toggleVouch(v.id, e.target.checked)}
                   />
                   <span>
-                    <strong>${v.hostTitle || shortKey(v.host)}</strong> has had you over
+                    <strong>${v.hostTitle || shortKey(v.host)}</strong> vouched for you
                     <span class="sub"
                       ><code title=${v.host}>${shortKey(v.host)}</code>${v.note
                         ? html` · “${v.note}”`

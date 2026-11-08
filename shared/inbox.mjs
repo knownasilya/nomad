@@ -473,7 +473,7 @@ export function messageError(m) {
 // A line for a list or a notification: the text, or what a Vouch with no text says.
 export function messagePreview(m) {
   if (m?.text) return m.text;
-  if (m?.vouch) return 'Says they’ve had you over (a vouch)';
+  if (m?.vouch) return 'Vouched for you';
   return '';
 }
 

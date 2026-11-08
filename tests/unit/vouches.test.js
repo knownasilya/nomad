@@ -152,7 +152,7 @@ describe('from a Message', () => {
     const m = msg();
     expect(m.text).toBe('');
     expect(I.messageError(m)).toBeNull();
-    expect(I.messagePreview(m)).toMatch(/had you over/);
+    expect(I.messagePreview(m)).toMatch(/vouched for you/i);
     expect(I.messageError({ ...m, vouch: undefined })).toBe('bad text');
     expect(I.messageError({ ...m, from: OTHER })).toBe('bad vouch');
     expect(I.messageError({ ...m, vouch: { ...m.vouch, kind: 'x' } })).toBe('bad vouch');

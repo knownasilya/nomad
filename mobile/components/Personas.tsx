@@ -180,7 +180,7 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
       const name = hostName(r)
       if (r.state === 'new') {
         return {
-          title: `${name} has had you over`,
+          title: `${name} vouched for you`,
           subtitle: `${r.vouch.note ? `“${r.vouch.note}” · ` : ''}${shortKey(r.vouch.host)}. Accepting keeps it; only you see it until you choose where it shows.`,
           groups: [
             [{ label: 'Accept', icon: 'check', onPress: () => vouchAct('accept', r, {}, 'Couldn’t accept it') }],
@@ -189,7 +189,7 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
         }
       }
       return {
-        title: `${name} has had you over`,
+        title: `${name} vouched for you`,
         subtitle: 'Who sees it',
         groups: [
           [
@@ -205,7 +205,7 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
       const r = sheet.given
       const done = !!r.withdrawnAt || r.expired
       return {
-        title: `You’ve had ${guestName(r)} over`,
+        title: `You vouched for ${guestName(r)}`,
         subtitle: `${r.vouch.note ? `“${r.vouch.note}” · ` : ''}${givenStatus(r)}`,
         groups: [[
           { label: 'Renew for a year', icon: 'redo-alt', hidden: !r.renewDue || done, onPress: () => vouchAct('renew', r, {}, 'Couldn’t renew it') },
@@ -316,7 +316,7 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
                 {vouches.held.map((r, i) => (
                   <ListRow
                     key={`held-${r.personaId}-${r.id}`}
-                    title={`${hostName(r)} has had you over`}
+                    title={`${hostName(r)} vouched for you`}
                     subtitle={heldStatus(r)}
                     subtitleLines={3}
                     left={<Initial name={hostName(r)} s={s} />}
@@ -328,7 +328,7 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
                 {vouches.given.map((r, i) => (
                   <ListRow
                     key={`given-${r.personaId}-${r.id}`}
-                    title={`You’ve had ${guestName(r)} over`}
+                    title={`You vouched for ${guestName(r)}`}
                     subtitle={`${r.vouch.note ? `“${r.vouch.note}” · ` : ''}${givenStatus(r)}`}
                     subtitleLines={2}
                     left={<Initial name={guestName(r)} s={s} />}
@@ -424,7 +424,7 @@ function givenStatus (r: GivenVouch) {
 
 function describePerms (perms: string[]) {
   const names = perms.map((p) => p.split(':')[0])
-  const sees = [names.includes('profile') && 'your profile', names.includes('email') && 'your email', names.includes('vouches') && 'who has had you over'].filter(Boolean)
+  const sees = [names.includes('profile') && 'your profile', names.includes('email') && 'your email', names.includes('vouches') && 'who vouched for you'].filter(Boolean)
   if (!sees.length) return 'knows only a random ID'
   return `sees ${sees.join(' and ')}${names.includes('modifyDrive') ? ', and can change your profile' : ''}`
 }

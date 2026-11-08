@@ -110,7 +110,7 @@ class Identity extends LitElement {
                             <span class="fa-fw fas fa-comment"></span> Message
                           </button>
                           <button class="vouch-btn" @click=${this.onVouch} title="Say you’ve had this person over at your home">
-                            <span class="fa-fw fas fa-home"></span> I’ve had them over
+                            <span class="fa-fw fas fa-home"></span> Vouch for them
                           </button>
                         </div>
                         ${this.renderVouches()}
@@ -163,7 +163,7 @@ class Identity extends LitElement {
             ? html`<img class="vouch-avatar" src=${it.host.thumbUrl} alt="" @error=${(e) => (e.target.style.visibility = 'hidden')} />`
             : html`<span class="vouch-avatar initial">${host.slice(0, 1).toUpperCase()}</span>`}
           <span class="vouch-text">
-            <span><strong>${host}</strong> has had ${guest} over${it.state === 'unreachable' ? html` <span class="muted">(couldn’t check)</span>` : ''}</span>
+            <span><strong>${host}</strong> vouched for ${guest}${it.state === 'unreachable' ? html` <span class="muted">(couldn’t check)</span>` : ''}</span>
             ${it.vouch.note ? html`<span class="vouch-note">“${it.vouch.note}”</span>` : ''}
             <code class="muted" title=${it.vouch.host}>${shortKey(it.vouch.host)}</code>
           </span>
@@ -172,7 +172,7 @@ class Identity extends LitElement {
     };
     return html`
       <div class="field-group vouches">
-        <div class="vouches-title">Who has had them over</div>
+        <div class="vouches-title">Who vouched for them</div>
         <ul class="vouch-list">${repeat(v.known, (it) => it.vouch.id, row)}</ul>
         ${v.others.length
           ? this.showOthers

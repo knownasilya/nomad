@@ -46,7 +46,7 @@ export class PersonasView extends LitElement {
     this.filter = undefined;
     const q = new URLSearchParams(location.search);
     this.editing = q.get('new') ? blank() : null;
-    // site-info's "I've had them over" opens the giving form for that profile.
+    // site-info's "Vouch for them" opens the giving form for that profile.
     this.giving = q.get('vouch') ? blankVouch({ to: q.get('vouch'), personaId: q.get('persona') || '' }) : null;
     this.scrollToVouches = !!this.giving;
     this.load();
@@ -436,13 +436,13 @@ export class PersonasView extends LitElement {
       ${held.length
         ? html`<div class="card list">${repeat(held, (r) => `${r.personaId}:${r.id}`, (r) => this.renderHeld(r, many ? label(r.personaId) : ''))}</div>`
         : html`<div class="empty small">
-            ${v?.held?.length ? 'No vouches match.' : 'No one has vouched for you yet. When someone who has had you over sends one, it waits here for you to accept.'}
+            ${v?.held?.length ? 'No vouches match.' : 'No one has vouched for you yet. When someone vouches for you, it waits here for you to accept.'}
           </div>`}
       <div class="subsection-title">You gave</div>
       ${given.length
         ? html`<div class="card list">${repeat(given, (r) => `${r.personaId}:${r.id}`, (r) => this.renderGiven(r, many ? label(r.personaId) : ''))}</div>`
         : html`<div class="empty small">
-            ${v?.given?.length ? 'No vouches match.' : 'You haven’t vouched for anyone. Open someone’s profile drive and choose I’ve had them over in site info, or use Give a vouch.'}
+            ${v?.given?.length ? 'No vouches match.' : 'You haven’t vouched for anyone. Open someone’s profile drive and choose Vouch for them in site info, or use Give a vouch.'}
           </div>`}
       <div class="hint-row">
         A vouch says one thing: someone has had this person over at home. It isn’t proof that an account is a real person, and Nomad never turns
@@ -471,7 +471,7 @@ export class PersonasView extends LitElement {
         ${this.renderPerson(r.host)}
         <div class="grow meta-col">
           <div class="title">
-            ${host} has had you over
+            ${host} vouched for you
             ${r.state === 'new' ? html`<span class="badge">New</span>` : ''}
           </div>
           ${r.vouch.note ? html`<div class="note">“${r.vouch.note}”</div>` : ''}
@@ -506,7 +506,7 @@ export class PersonasView extends LitElement {
       <div class="list-row vouch-row ${done ? 'is-done' : ''}">
         ${this.renderPerson(r.guest)}
         <div class="grow meta-col">
-          <div class="title">You’ve had ${guest} over</div>
+          <div class="title">You vouched for ${guest}</div>
           ${r.vouch.note ? html`<div class="note">“${r.vouch.note}”</div>` : ''}
           <div class="summary">
             <code title=${r.vouch.guest}>${shortDriveUrl(r.vouch.guest)}</code>${personaLabel ? ` · as “${personaLabel}”` : ''} ·
@@ -536,7 +536,7 @@ export class PersonasView extends LitElement {
     const name = pv?.title || 'They';
     return html`
       <form class="editor persona-form vouch-form" @submit=${this.onGiveVouch} autocomplete="off">
-        <div class="form-title">I’ve had them over</div>
+        <div class="form-title">Vouch for them</div>
         <label class="field">
           <span class="field-label">Their profile</span>
           <input
@@ -800,7 +800,7 @@ function describePerms(perms) {
   const sees = [];
   if (names.includes('profile')) sees.push('your profile');
   if (names.includes('email')) sees.push('your email');
-  if (names.includes('vouches')) sees.push('who has had you over');
+  if (names.includes('vouches')) sees.push('who vouched for you');
   if (!sees.length) return 'knows only a random ID';
   return `sees ${sees.join(' and ')}${names.includes('modifyDrive') ? ', and can change your profile' : ''}`;
 }

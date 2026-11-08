@@ -333,7 +333,7 @@ export default function Messages ({ visible, onClose, apps, onVaultChange, onOpe
               <ListRow
                 key={`${c.personaId}:${c.other}`}
                 title={`${c.unread ? '● ' : ''}${nameOf(c)}`}
-                subtitle={`${c.last.direction === 'out' ? 'You: ' : ''}${c.last.message.text || (c.last.message.vouch ? (c.last.direction === 'out' ? 'Sent a vouch' : 'Says they’ve had you over') : '')}${many ? ` · to ${summary.personas.find((p) => p.personaId === c.personaId)?.label || ''}` : ''}`}
+                subtitle={`${c.last.direction === 'out' ? 'You: ' : ''}${c.last.message.text || (c.last.message.vouch ? (c.last.direction === 'out' ? 'Sent a vouch' : 'Vouched for you') : '')}${many ? ` · to ${summary.personas.find((p) => p.personaId === c.personaId)?.label || ''}` : ''}`}
                 subtitleLines={2}
                 left={<View style={s.avatar}><Text style={s.avatarText}>{initials(nameOf(c))}</Text></View>}
                 divider={i > 0}
@@ -378,7 +378,7 @@ function Bubble ({ r, s, onRetry, onLink }: { r: InboxRecord; s: Styles; onRetry
         <View style={s.vouchCard}>
           <Icon name='home' size={14} color={s.vouchIcon.color} />
           <View style={s.vouchBody}>
-            <Text style={s.vouchTitle}>{out ? 'You said you’ve had them over' : 'Says they’ve had you over'}</Text>
+            <Text style={s.vouchTitle}>{out ? 'You vouched for them' : 'Vouched for you'}</Text>
             {r.message.vouch.note ? <Text style={s.bubbleText} selectable>“{r.message.vouch.note}”</Text> : null}
             <Text style={s.meta}>A vouch, until {new Date(r.message.vouch.expiresAt).toLocaleDateString()}.{out ? '' : ' Accept or decline it in Personas.'}</Text>
           </View>

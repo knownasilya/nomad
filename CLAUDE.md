@@ -719,8 +719,8 @@ each: only them, sites they pick it for at login (`nomad.session` `vouches` perm
 `persona-login`), or their profile (`/.data/walled.garden/vouches.json`). Rules: `shared/vouches.mjs`;
 moving parts: `shared/vouch-engine.mjs`, run by `app/bg/ui/vouches.js` and
 `mobile/backend/lib/vouches.mjs` (`RPC_APPS` `vouches`). UI: My Library → Personas → Vouches
-(`nomad.personas.listVouches`/`giveVouch`/…), site-info's *I've had them over* and *Who has had them
-over*, the phone's Personas screen. Never show a total, a score or "verified", and never give the AI
+(`nomad.personas.listVouches`/`giveVouch`/…), site-info's *Vouch for them* and *Who vouched for
+them*, the phone's Personas screen. Never show a total, a score or "verified", and never give the AI
 or a page a way to give, list or accept one. Tests `tests/unit/vouches.test.js` hold a golden hash:
 don't change the record's bytes without a new `v`.
 

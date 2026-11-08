@@ -295,10 +295,13 @@ on a Profile Drive's info sheet.
 - **`vouches` asks for `profile`.** `requestedPerms` adds `profile` when a page asks only for
   `vouches`. A Session keeps the ticked ids (`session.vouches`); its view gives the records it still
   holds, accepted and not expired. The prompt offers the Vouches shown to sites or on the profile.
-- **Giving is on desktop only** (site-info's *I've had them over* opens My Library → Personas with the
+- **Giving is on desktop only** (site-info's *Vouch for them* opens My Library → Personas with the
   form filled in). The phone accepts, declines, removes, chooses where each shows, renews and
   withdraws. The phone has no info sheet for a Profile Drive yet, so it doesn't show a profile's
   Vouches; on the phone "people you know" is Contacts and Names (desktop adds Reader follows).
+- **The labels say "vouched for"** (2026-11-08): the UI reads *Maya vouched for you*, *You vouched
+  for Sam*, *Vouch for them* and *Who vouched for them*. "Had you over" stays as what a Vouch means,
+  in the hints and the giving form, not as the label on each one.
 
 [#128]: https://github.com/knownasilya/nomad/pull/128
 [#129]: https://github.com/knownasilya/nomad/pull/129

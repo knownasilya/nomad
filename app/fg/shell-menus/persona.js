@@ -166,8 +166,8 @@ class PersonaMenu extends LitElement {
     if (permId === 'vouches') {
       const n = this.session?.vouches || 0;
       return n
-        ? `See who has had you over (${n} ${n === 1 ? 'vouch' : 'vouches'})`
-        : 'See who has had you over';
+        ? `See who vouched for you (${n} ${n === 1 ? 'vouch' : 'vouches'})`
+        : 'See who vouched for you';
     }
     return token;
   }

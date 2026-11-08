@@ -285,7 +285,7 @@ function renderRow(c) {
         ]),
         el('div', { class: 'conv-last' }, [
           c.last.direction === 'out' ? 'You: ' : '',
-          (last.text || (last.vouch ? (c.last.direction === 'out' ? 'Sent a vouch' : 'Says they’ve had you over') : '')).slice(0, 120),
+          (last.text || (last.vouch ? (c.last.direction === 'out' ? 'Sent a vouch' : 'Vouched for you') : '')).slice(0, 120),
         ]),
         manyPersonas() && p ? el('div', { class: 'conv-persona' }, [`to ${p.label}`]) : null,
       ]),
@@ -411,7 +411,7 @@ function renderVouch(r, out) {
   return el('div', { class: `vouch-card${r.status === 'failed' ? ' failed' : ''}` }, [
     el('span', { class: 'fas fa-home vouch-icon', 'aria-hidden': 'true' }),
     el('div', { class: 'vouch-body' }, [
-      el('div', { class: 'vouch-title' }, [out ? 'You said you’ve had them over' : 'Says they’ve had you over']),
+      el('div', { class: 'vouch-title' }, [out ? 'You vouched for them' : 'Vouched for you']),
       v.note ? el('div', { class: 'vouch-note' }, [`“${v.note}”`]) : null,
       el('div', { class: 'vouch-sub' }, [
         `A vouch, until ${new Date(v.expiresAt).toLocaleDateString()}. `,
