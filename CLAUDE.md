@@ -394,6 +394,36 @@ the end. Records keep `HH:MM`, but the calendar shows times on a 12-hour clock (
 (`tests/unit/time-of-day.test.js` runs both, so change them together). The AI reads it with `listCalendarEvents`
 (`calendarRead`, Jobs too) and never changes it; links are `nomad://calendar/?day=` (`parseItemLink`).
 
+Events can remind (`remind`, minutes before; ADR-0042 amendment): `remindersBetween` in
+`shared/calendar.mjs` finds them across the user's own and every Space's events. Desktop checks each
+minute from `bg/ui/desktop-notifications.js` (`notify_calendar`, mark `calendar_remind_since`; the
+source is injected from `main.js` as `calendar.ts` `remindersBetween`); the phone schedules the next
+week as local notifications (`mobile/lib/useCalendarReminders.ts`, `calendar/reminders`).
+
+### Household contacts (ADR-0046)
+
+A Space's address book of people who aren't on Nomad (`nomad/household-contact`, rules in
+`shared/household-contacts.mjs`, tests `tests/unit/household-contacts.test.js`). Records kind
+`contacts` in `spaceLibrary.records` / the phone's `recordsOf`, so a shared Space's are in its Space
+Library and move on share. Desktop: My Library → Contacts (above the Profile-Drive contacts), internal
+`nomad.vault.listHouseholdContacts`/`saveHouseholdContact`/`deleteHouseholdContact`
+(`bg/web-apis/bg/household-contacts.ts`). Phone: `mobile/components/HouseholdContacts.tsx` over
+`RPC_APPS` `contacts`. The AI reads them with `listContacts` (`contactsRead`, also in Jobs). Not the
+same thing as a **Contact** (a Profile Drive a Persona talks to).
+
+### Invite links (ADR-0040)
+
+`https://nomad.pages.dev/invite/#<payload>` and `nomad-invite:<payload>` carry a Space invite,
+signed by the Space's Persona when it can (`shared/invites.mjs`; a byte-for-byte copy is
+`nomad.dev/static/invite/invites.mjs`, and `tests/unit/invites.test.js` checks they match). Invite
+records are in the Vault (`/.vault/invites/`), so any Device that manages the Space Library matches
+and approves a join (desktop `space-library.js` `_matchable`, phone `mobile/backend/lib/invites.mjs`
+over the shared `pairingFor` BlindPairing). Desktop opens a link as
+`nomad://library/sharing#invite=…` (`acceptUrlFor` in `bg/hyper/invites.js`, from `open-url.js`,
+`handleArgv` and `pane.js`); joining needs a click. The phone opens the Space switcher's join form
+(`routeLink` → `invite`, `Linking` in `app/index.tsx`) and invites from `InviteSheet.tsx`. Never give
+the AI or a page a way to make or accept one.
+
 ### Assets (ADR-0044)
 
 Every Space has Assets: any file up to 25 MB (photos, video, audio, PDFs, Markdown, code, CSV, …). A

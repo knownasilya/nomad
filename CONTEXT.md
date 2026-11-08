@@ -238,6 +238,25 @@ and notify. A Message from anyone else is a **Message request**: it waits, silen
 accepts, ignores or blocks the sender, and the sender is never told which (ADR-0036).
 _Avoid_: friend, follower, connection
 
+**Household contact**:
+A person in a Space's address book who isn't on Nomad: the doctor, the school office, the babysitter,
+with a role, phone, email, address and notes. A Shared Space's are its household's, so every Member
+reads them and an editor changes them. Not a **Contact**, which is a Profile Drive one of the user's
+Personas talks to (ADR-0046).
+_Avoid_: address book entry (in code), phonebook, person
+
+**Invite link**:
+An `https://nomad.pages.dev/invite/#…` link (or `nomad-invite:…`) that carries a Space invite in its
+fragment, signed by the inviter's Persona when they have one. It opens anywhere, says who sent it, and
+hands the invite to Nomad. Works once, for one person, until it expires; an owner still approves the
+join (ADR-0040).
+_Avoid_: invite code (that's the bare code inside it), share link
+
+**Reminder**:
+An event's `remind`: minutes before it starts that everyone who sees it is notified, on each of their
+Devices. A Shared Space's events remind the whole household (ADR-0042 amendment).
+_Avoid_: alarm, alert, notification (for the setting on the event)
+
 **Vouch**:
 A `walled.garden/vouch`: one Profile Drive (the host) says it has had another (the guest) over at
 home, with an optional note. Shows nowhere until the guest accepts it; private to the guest unless
