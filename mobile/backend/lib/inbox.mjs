@@ -183,6 +183,20 @@ export function createPhoneInbox (deps) {
       await engine?.close()
     },
 
+    // For Vouches (lib/vouches.mjs, ADR-0045): the Personas with their writer check, sending a
+    // Message that carries a Vouch, and whether someone can be reached.
+    personas: () => personas,
+    refreshPersonas: () => refreshPersonas(),
+    send: (o) => {
+      if (!engine) throw new Error('Link this phone to your computer to use Messages')
+      return engine.send(o)
+    },
+    thread: (personaId, profileUrl) => {
+      if (!engine) throw new Error('Link this phone to your computer to use Messages')
+      return engine.thread(personaId, profileUrl)
+    },
+    readProfile: (url) => readProfile(url),
+
     // RPC_APPS `messages`
     async handle (action, args) {
       if (!engine) throw new Error('Link this phone to your computer to use Messages')
@@ -231,7 +245,7 @@ export function createPhoneInbox (deps) {
             personaId: r.personaId,
             from: r.message.from,
             title: titleOf(r),
-            body: r.message.text.length > 200 ? `${r.message.text.slice(0, 200)}…` : r.message.text
+            body: ((t) => (t.length > 200 ? `${t.slice(0, 200)}…` : t))(I.messagePreview(r.message))
           })),
           since
         }

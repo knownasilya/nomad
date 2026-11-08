@@ -48,6 +48,7 @@ import * as pageControl from './bg/ui/page-control';
 import * as openTabs from './bg/ui/open-tabs';
 import * as remoteUpdate from './bg/remote-update';
 import * as inbox from './bg/hyper/inbox';
+import * as vouches from './bg/ui/vouches';
 import * as trayIcon from './bg/ui/tray-icon';
 import * as downloads from './bg/ui/downloads';
 import * as permissions from './bg/ui/permissions';
@@ -219,6 +220,8 @@ app.on('ready', async function () {
       tabManager.create(win, `nomad://messages/?${q}`, { setActive: true });
     },
   });
+  // Vouches between Personas (ADR-0045): taken in from Messages, checked, and guarded.
+  vouches.setup();
   log.info('Initializing tray icon');
   trayIcon.setup();
   log.info('Initializing browser windows');

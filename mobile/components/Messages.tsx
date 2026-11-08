@@ -8,6 +8,7 @@ import ActionSheet, { type SheetAction } from './ActionSheet'
 import LinkPhone from './LinkPhone'
 import ScreenHeader from './ScreenHeader'
 import IconButton from './IconButton'
+import Icon from './Icon'
 import KeyboardInset from './KeyboardInset'
 import Tabs from './Tabs'
 
@@ -332,7 +333,7 @@ export default function Messages ({ visible, onClose, apps, onVaultChange, onOpe
               <ListRow
                 key={`${c.personaId}:${c.other}`}
                 title={`${c.unread ? '● ' : ''}${nameOf(c)}`}
-                subtitle={`${c.last.direction === 'out' ? 'You: ' : ''}${c.last.message.text}${many ? ` · to ${summary.personas.find((p) => p.personaId === c.personaId)?.label || ''}` : ''}`}
+                subtitle={`${c.last.direction === 'out' ? 'You: ' : ''}${c.last.message.text || (c.last.message.vouch ? (c.last.direction === 'out' ? 'Sent a vouch' : 'Says they’ve had you over') : '')}${many ? ` · to ${summary.personas.find((p) => p.personaId === c.personaId)?.label || ''}` : ''}`}
                 subtitleLines={2}
                 left={<View style={s.avatar}><Text style={s.avatarText}>{initials(nameOf(c))}</Text></View>}
                 divider={i > 0}
@@ -372,13 +373,26 @@ function Bubble ({ r, s, onRetry, onLink }: { r: InboxRecord; s: Styles; onRetry
   else if (out && r.status === 'delivered') meta += ' · Delivered'
   return (
     <View style={[s.bubbleRow, out && s.bubbleRowOut]}>
-      <View style={[s.bubble, out && s.bubbleOut]}>
-        <Text style={[s.bubbleText, out && s.bubbleTextOut]} selectable>
-          {splitLinks(r.message.text).map((part, i) => part.link
-            ? <Text key={i} style={[s.link, out && s.bubbleTextOut]} onPress={() => onLink(part.text)}>{part.text}</Text>
-            : part.text)}
-        </Text>
-      </View>
+      {r.message.vouch ? (
+        // A Message that carries a Vouch (ADR-0045): accepting it is on the Personas screen.
+        <View style={s.vouchCard}>
+          <Icon name='home' size={14} color={s.vouchIcon.color} />
+          <View style={s.vouchBody}>
+            <Text style={s.vouchTitle}>{out ? 'You said you’ve had them over' : 'Says they’ve had you over'}</Text>
+            {r.message.vouch.note ? <Text style={s.bubbleText} selectable>“{r.message.vouch.note}”</Text> : null}
+            <Text style={s.meta}>A vouch, until {new Date(r.message.vouch.expiresAt).toLocaleDateString()}.{out ? '' : ' Accept or decline it in Personas.'}</Text>
+          </View>
+        </View>
+      ) : null}
+      {r.message.text ? (
+        <View style={[s.bubble, out && s.bubbleOut]}>
+          <Text style={[s.bubbleText, out && s.bubbleTextOut]} selectable>
+            {splitLinks(r.message.text).map((part, i) => part.link
+              ? <Text key={i} style={[s.link, out && s.bubbleTextOut]} onPress={() => onLink(part.text)}>{part.text}</Text>
+              : part.text)}
+          </Text>
+        </View>
+      ) : null}
       <Text style={s.meta}>
         {meta}
         {out && r.status === 'failed' ? <Text style={s.link} onPress={onRetry}>  Retry</Text> : null}
@@ -473,6 +487,10 @@ function makeStyles (t: Theme) {
     bubbleRowOut: { alignItems: 'flex-end' },
     bubble: { maxWidth: '85%', paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.lg, backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border },
     bubbleOut: { backgroundColor: t.accent, borderColor: t.accent },
+    vouchCard: { flexDirection: 'row', gap: space.sm, maxWidth: '85%', marginBottom: 4, padding: space.md, borderRadius: radius.lg, backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border },
+    vouchIcon: { color: t.accent },
+    vouchBody: { flexShrink: 1, gap: 2 },
+    vouchTitle: { color: t.text, fontSize: 15, fontWeight: '600' },
     bubbleText: { color: t.text, fontSize: 15, lineHeight: 21 },
     bubbleTextOut: { color: t.onAccent },
     link: { color: t.accent, textDecorationLine: 'underline' },

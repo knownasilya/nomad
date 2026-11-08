@@ -190,7 +190,7 @@ export interface NoteLiveEvent { id: string; conn: string; kind: 'message' | 'st
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages' | 'calendar' | 'assets' | 'peers'
+export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages' | 'vouches' | 'calendar' | 'assets' | 'peers'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
@@ -262,12 +262,19 @@ export interface PersonaSession { path: string; origin: string; site: string; pe
 export interface PersonasList { personas: PersonaSummary[]; defaultId: string | null; spacePersonaId: string | null; resolvedId: string | null; spaceKnown: boolean; sessions: PersonaSession[]; writable: boolean }
 // The Persona Inbox (ADR-0036, backend/lib/inbox.mjs over RPC_APPS `messages`)
 export interface InboxPersona { personaId: string; label: string; profileUrl: string; usable: boolean; enabled: boolean; mode: 'off' | 'link' | 'anyone'; sent: boolean; state: string; reason: string }
-export interface InboxMessage { type: 'walled.garden/message'; id: string; from: string; to: string; createdAt: string; text: string; inReplyTo?: string }
+export interface InboxMessage { type: 'walled.garden/message'; id: string; from: string; to: string; createdAt: string; text: string; inReplyTo?: string; vouch?: Vouch }
 export interface InboxRecord { personaId: string; direction: 'in' | 'out'; message: InboxMessage; status: 'queued' | 'delivered' | 'failed' | 'received'; request?: boolean; verified?: boolean; readAt?: string; attempts?: number }
 export interface InboxConversation { personaId: string; other: string; title: string; last: InboxRecord; unread: number; request: boolean; count: number; contact: 'accepted' | 'blocked' | null }
 export interface InboxSummary { vaultReady: boolean; personas: InboxPersona[]; conversations: InboxConversation[]; requests: InboxConversation[]; blocked: { personaId: string; profileUrl: string }[] }
 export interface InboxThread { personaId: string; other: string; title: string; thumb: string; contact: 'accepted' | 'blocked' | null; reachable: boolean; records: InboxRecord[] }
 export interface InboxLookup { profileUrl: string; title: string; thumb: string; isPerson: boolean; published: boolean }
+// Vouches (ADR-0045, backend/lib/vouches.mjs over RPC_APPS `vouches`): "I've had this person over".
+export interface Vouch { type: 'walled.garden/vouch'; v: 1; id: string; kind: 'hosted'; host: string; guest: string; note?: string; issuedAt: string; expiresAt: string }
+export interface VouchPerson { url: string; title: string; thumb: string }
+export type VouchCheck = 'valid' | 'withdrawn' | 'expired' | 'unreachable' | 'invalid' | null
+export interface HeldVouch { personaId: string; id: string; vouch: Vouch; state: 'new' | 'accepted'; shown: 'me' | 'sites' | 'profile'; receivedAt: string; acceptedAt: string | null; host: VouchPerson; check: VouchCheck }
+export interface GivenVouch { personaId: string; id: string; vouch: Vouch; createdAt: string; withdrawnAt: string | null; expired: boolean; renewDue: boolean; guest: VouchPerson }
+export interface VouchesSummary { personas: { id: string; label: string; profileUrl: string; usable: boolean }[]; held: HeldVouch[]; given: GivenVouch[]; foreign: { personaId: string; label: string; hash: string; since: string }[] }
 export interface MessageNotifications { notify: { id: string; personaId: string; from: string; title: string; body: string }[]; since: string }
 
 // spaceNotify: other members' Jobs that notify a shared Space this person is in, newer than

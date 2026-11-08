@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Modal, View, Text, ScrollView, ActivityIndicator, Alert, Share, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useTheme, type Theme } from '../lib/theme'
-import type { Backend, InboxPersona, InboxSummary, PersonasList, PersonaSession, PersonaSummary } from '../lib/useBackend'
+import type { Backend, GivenVouch, HeldVouch, InboxPersona, InboxSummary, PersonasList, PersonaSession, PersonaSummary, VouchesSummary } from '../lib/useBackend'
 import { ListSection, ListRow, ListEmpty } from './List'
 import ActionSheet, { type SheetAction } from './ActionSheet'
 import LinkPhone from './LinkPhone'
@@ -24,7 +24,8 @@ interface Props {
 // and deletes them here as on a computer (NewPersona; every device writes every profile drive), picks
 // this Space's Persona and the default, and sees and ends the logins sites hold, on every device at
 // once. The records are in the Vault. Each Persona's sheet also has its Messages settings
-// (ADR-0036): who can write to it, its message link, and a new inbox address.
+// (ADR-0036): who can write to it, its message link, and a new inbox address. Vouches (ADR-0045)
+// wait here too: accept or decline one, pick who sees it, and renew or withdraw the ones you gave.
 export default function Personas ({ visible, onClose, apps, onVaultChange, space, spaceName, onOpenDevices }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
@@ -35,8 +36,9 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
   const [noVault, setNoVault] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [sheet, setSheet] = useState<'space' | PersonaSummary | PersonaSession | { modeFor: PersonaSummary } | null>(null)
+  const [sheet, setSheet] = useState<'space' | PersonaSummary | PersonaSession | { modeFor: PersonaSummary } | { held: HeldVouch } | { given: GivenVouch } | null>(null)
   const [inbox, setInbox] = useState<InboxPersona[]>([])
+  const [vouches, setVouches] = useState<VouchesSummary | null>(null)
   const [making, setMaking] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
 
@@ -50,6 +52,8 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
     // Messages settings per Persona; Personas still work without them.
     const ib = await call<InboxSummary>('messages', 'summary', {})
     setInbox(ib.ok && ib.value ? ib.value.personas : [])
+    const vs = await call<VouchesSummary>('vouches', 'list', {})
+    setVouches(vs.ok && vs.value ? vs.value : null)
   }, [call, space])
 
   useEffect(() => { if (visible) refresh() }, [visible, refresh])
@@ -104,6 +108,43 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
     ])
   }
 
+  const vouchAct = async (action: string, r: HeldVouch | GivenVouch, args: Record<string, unknown>, failed: string) => {
+    setBusy(true)
+    const res = await call('vouches', action, { personaId: r.personaId, id: r.id, ...args })
+    setBusy(false)
+    if (!res.ok) { Alert.alert(failed, res.message || 'Unknown error'); return false }
+    await refresh()
+    return true
+  }
+
+  const hostName = (r: HeldVouch) => r.host.title || shortKey(r.vouch.host)
+  const guestName = (r: GivenVouch) => r.guest.title || shortKey(r.vouch.guest)
+
+  const declineVouch = (r: HeldVouch) => {
+    const name = hostName(r)
+    const accepted = r.state === 'accepted'
+    Alert.alert(accepted ? `Remove the vouch from ${name}?` : `Decline the vouch from ${name}?`, accepted ? `It comes off your profile and sites stop seeing it. ${name} isn’t told.` : `It’s deleted from all your devices. ${name} isn’t told.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: accepted ? 'Remove' : 'Decline', style: 'destructive', onPress: () => vouchAct('decline', r, {}, 'Couldn’t remove it') }
+    ])
+  }
+
+  const showVouch = (r: HeldVouch, shown: HeldVouch['shown']) => {
+    if (shown !== 'profile') { vouchAct('setShown', r, { shown }, 'Couldn’t change it'); return }
+    Alert.alert('Show it on your profile?', 'Anyone with your profile drive’s address can see it and who gave it. Like anything published, copies may stay after you take it off.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Show it', onPress: () => vouchAct('setShown', r, { shown }, 'Couldn’t change it') }
+    ])
+  }
+
+  const withdrawVouch = (r: GivenVouch) => {
+    const name = guestName(r)
+    Alert.alert(`Withdraw your vouch for ${name}?`, `It stops counting everywhere it’s shown. Nothing is sent to ${name}.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Withdraw', style: 'destructive', onPress: () => vouchAct('withdraw', r, {}, 'Couldn’t withdraw it') }
+    ])
+  }
+
   const byId = (id: string | null) => list?.personas.find((p) => p.id === id) || null
   const current = list ? byId(list.resolvedId) : null
   const def = list ? byId(list.defaultId) : null
@@ -131,6 +172,45 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
           { label: 'Only people I write to', icon: 'user-lock', active: !m || m.mode === 'off', onPress: () => set('off') },
           { label: 'People I give a link to', icon: 'link', active: m?.mode === 'link', onPress: () => set('link') },
           { label: 'Anyone, as requests', icon: 'globe', active: m?.mode === 'anyone', onPress: () => set('anyone') }
+        ]]
+      }
+    }
+    if ('held' in sheet) {
+      const r = sheet.held
+      const name = hostName(r)
+      if (r.state === 'new') {
+        return {
+          title: `${name} has had you over`,
+          subtitle: `${r.vouch.note ? `“${r.vouch.note}” · ` : ''}${shortKey(r.vouch.host)}. Accepting keeps it; only you see it until you choose where it shows.`,
+          groups: [
+            [{ label: 'Accept', icon: 'check', onPress: () => vouchAct('accept', r, {}, 'Couldn’t accept it') }],
+            [{ label: 'Decline', icon: 'times', destructive: true, onPress: () => declineVouch(r) }]
+          ]
+        }
+      }
+      return {
+        title: `${name} has had you over`,
+        subtitle: 'Who sees it',
+        groups: [
+          [
+            { label: 'Only me', icon: 'lock', active: r.shown === 'me', onPress: () => showVouch(r, 'me') },
+            { label: 'Sites I log into, when I pick it', icon: 'sign-in-alt', active: r.shown === 'sites', onPress: () => showVouch(r, 'sites') },
+            { label: 'On my profile', icon: 'globe', active: r.shown === 'profile', onPress: () => showVouch(r, 'profile') }
+          ],
+          [{ label: 'Remove', icon: 'trash', destructive: true, onPress: () => declineVouch(r) }]
+        ]
+      }
+    }
+    if ('given' in sheet) {
+      const r = sheet.given
+      const done = !!r.withdrawnAt || r.expired
+      return {
+        title: `You’ve had ${guestName(r)} over`,
+        subtitle: `${r.vouch.note ? `“${r.vouch.note}” · ` : ''}${givenStatus(r)}`,
+        groups: [[
+          { label: 'Renew for a year', icon: 'redo-alt', hidden: !r.renewDue || done, onPress: () => vouchAct('renew', r, {}, 'Couldn’t renew it') },
+          { label: 'Withdraw', icon: 'undo-alt', destructive: true, hidden: done, onPress: () => withdrawVouch(r) },
+          { label: 'Remove from this list', icon: 'times', hidden: !done, onPress: () => vouchAct('forget', r, {}, 'Couldn’t remove it') }
         ]]
       }
     }
@@ -221,6 +301,44 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
                 </ListSection>
               </>
             )}
+            {vouches && (vouches.held.length > 0 || vouches.given.length > 0 || vouches.foreign.length > 0) && (
+              <ListSection title='Vouches' footer='A vouch says someone has had this person over at home. It isn’t proof an account is a real person, and it’s never a score. Each lasts a year. Give one from a computer, in site info on their profile.'>
+                {vouches.foreign.map((f, i) => (
+                  <ListRow
+                    key={`foreign-${f.hash}`}
+                    title={`Someone added a vouch to “${f.label}”`}
+                    subtitle='None of your devices wrote it, so someone else may be able to change that profile drive.'
+                    subtitleLines={3}
+                    icon='exclamation-triangle'
+                    divider={i > 0}
+                  />
+                ))}
+                {vouches.held.map((r, i) => (
+                  <ListRow
+                    key={`held-${r.personaId}-${r.id}`}
+                    title={`${hostName(r)} has had you over`}
+                    subtitle={heldStatus(r)}
+                    subtitleLines={3}
+                    left={<Initial name={hostName(r)} s={s} />}
+                    divider={i > 0 || vouches.foreign.length > 0}
+                    disabled={busy || !list.writable}
+                    onPress={() => setSheet({ held: r })}
+                  />
+                ))}
+                {vouches.given.map((r, i) => (
+                  <ListRow
+                    key={`given-${r.personaId}-${r.id}`}
+                    title={`You’ve had ${guestName(r)} over`}
+                    subtitle={`${r.vouch.note ? `“${r.vouch.note}” · ` : ''}${givenStatus(r)}`}
+                    subtitleLines={2}
+                    left={<Initial name={guestName(r)} s={s} />}
+                    divider={i > 0 || vouches.held.length > 0 || vouches.foreign.length > 0}
+                    disabled={busy || !list.writable}
+                    onPress={() => setSheet({ given: r })}
+                  />
+                ))}
+              </ListSection>
+            )}
             <ListSection title='Sites you’re logged in to'>
               {list.sessions.length === 0 ? (
                 <ListEmpty text='None yet. When a site asks you to log in and you say yes, it shows here.' />
@@ -275,9 +393,38 @@ function Avatar ({ p, s }: { p: PersonaSummary | null; s: Styles }) {
   )
 }
 
+function Initial ({ name, s }: { name: string; s: Styles }) {
+  return (
+    <View style={s.avatar}>
+      <Text style={s.avatarText}>{name.slice(0, 1).toUpperCase() || '?'}</Text>
+    </View>
+  )
+}
+
+function shortKey (url: string) {
+  const m = /^hyper:\/\/([0-9a-f]{64})/i.exec(url || '')
+  return m ? `hyper://${m[1].slice(0, 6)}…${m[1].slice(-4)}/` : url
+}
+
+const SHOWN_LABELS: Record<HeldVouch['shown'], string> = { me: 'Only you see it', sites: 'Sites you pick it for', profile: 'On your profile' }
+const CHECK_LABELS: Record<string, string> = { withdrawn: 'No longer valid: they withdrew it', expired: 'Expired', unreachable: 'Couldn’t check just now', invalid: 'Not a valid vouch' }
+
+function heldStatus (r: HeldVouch) {
+  const parts = [r.state === 'new' ? 'New: tap to accept or decline' : SHOWN_LABELS[r.shown]]
+  if (r.check && CHECK_LABELS[r.check]) parts.push(CHECK_LABELS[r.check])
+  else parts.push(`until ${new Date(r.vouch.expiresAt).toLocaleDateString()}`)
+  return `${r.vouch.note ? `“${r.vouch.note}” · ` : ''}${parts.join(' · ')}`
+}
+
+function givenStatus (r: GivenVouch) {
+  if (r.withdrawnAt) return `Withdrawn ${new Date(r.withdrawnAt).toLocaleDateString()}`
+  if (r.expired) return `Expired ${new Date(r.vouch.expiresAt).toLocaleDateString()}`
+  return `${r.renewDue ? 'Renew it soon · ' : ''}until ${new Date(r.vouch.expiresAt).toLocaleDateString()}`
+}
+
 function describePerms (perms: string[]) {
   const names = perms.map((p) => p.split(':')[0])
-  const sees = [names.includes('profile') && 'your profile', names.includes('email') && 'your email'].filter(Boolean)
+  const sees = [names.includes('profile') && 'your profile', names.includes('email') && 'your email', names.includes('vouches') && 'who has had you over'].filter(Boolean)
   if (!sees.length) return 'knows only a random ID'
   return `sees ${sees.join(' and ')}${names.includes('modifyDrive') ? ', and can change your profile' : ''}`
 }

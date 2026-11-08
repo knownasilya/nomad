@@ -3,7 +3,7 @@
 // Registered with monaco.languages.json.jsonDefaults so a .json file whose "type"
 // field matches a walled.garden schema gets that schema's autocomplete/validation.
 
-export const WALLED_GARDEN_TYPES = ["walled.garden/person","walled.garden/post","walled.garden/feed","walled.garden/bookmark","walled.garden/comment","walled.garden/follows","walled.garden/reaction","walled.garden/status","walled.garden/vote","walled.garden/message","walled.garden/calendar","walled.garden/calendar-event"];
+export const WALLED_GARDEN_TYPES = ["walled.garden/person","walled.garden/post","walled.garden/feed","walled.garden/bookmark","walled.garden/comment","walled.garden/follows","walled.garden/reaction","walled.garden/status","walled.garden/vote","walled.garden/message","walled.garden/vouch","walled.garden/vouch-index","walled.garden/vouches","walled.garden/calendar","walled.garden/calendar-event"];
 export const WALLED_GARDEN_JSON_SCHEMA = {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "walled.garden records & drive manifest",
@@ -1186,12 +1186,66 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
           },
           "text": {
             "type": "string",
-            "minLength": 1,
             "maxLength": 8000
           },
           "inReplyTo": {
             "type": "string",
             "maxLength": 40
+          },
+          "vouch": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "walled.garden/vouch"
+              },
+              "v": {
+                "type": "number",
+                "const": 1
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z2-7]{16,40}$"
+              },
+              "kind": {
+                "type": "string",
+                "const": "hosted"
+              },
+              "host": {
+                "type": "string",
+                "format": "uri"
+              },
+              "guest": {
+                "type": "string",
+                "format": "uri"
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 280
+              },
+              "issuedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              }
+            },
+            "required": [
+              "type",
+              "v",
+              "id",
+              "kind",
+              "host",
+              "guest",
+              "issuedAt",
+              "expiresAt"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
@@ -1201,6 +1255,404 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
           "to",
           "createdAt",
           "text"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "const": "walled.garden/vouch"
+          }
+        }
+      },
+      "then": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Manifest: human-readable name for the drive"
+          },
+          "description": {
+            "type": "string",
+            "description": "Manifest: short description of the drive's contents"
+          },
+          "type": {
+            "type": "string",
+            "const": "walled.garden/vouch"
+          },
+          "thumb": {
+            "type": "string",
+            "description": "Manifest: path within the drive to the thumbnail image"
+          },
+          "author": {
+            "type": "object",
+            "description": "Manifest: information about the drive author",
+            "properties": {
+              "url": {
+                "type": "string",
+                "description": "The author profile drive's hyper:// URL"
+              }
+            }
+          },
+          "forkOf": {
+            "type": "string",
+            "description": "Manifest: hyper:// URL this drive was forked from"
+          },
+          "links": {
+            "type": "object",
+            "description": "Manifest: map of named link arrays",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "href": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "csp": {
+            "type": "string",
+            "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
+          },
+          "ai": {
+            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (the AI page, nomad://ai/setup, or the model picker in the AI sidebar), never something a drive can set.",
+            "oneOf": [
+              {
+                "type": "boolean",
+                "description": "Opt this drive into nomad.ai using its own /ai/system.md"
+              },
+              {
+                "type": "string",
+                "description": "Pointer: delegate to another drive's AI Config"
+              }
+            ]
+          },
+          "fallback": {
+            "type": "string",
+            "pattern": "^/.*[^/]$",
+            "description": "Manifest: absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses (ADR-0015). Real files always win. Supersedes the legacy /.ui/ui.html convention."
+          },
+          "collaborative": {
+            "type": "boolean",
+            "description": "Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default."
+          },
+          "v": {
+            "type": "number",
+            "const": 1
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z2-7]{16,40}$"
+          },
+          "kind": {
+            "type": "string",
+            "const": "hosted"
+          },
+          "host": {
+            "type": "string",
+            "format": "uri"
+          },
+          "guest": {
+            "type": "string",
+            "format": "uri"
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 280
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": [
+          "type",
+          "v",
+          "id",
+          "kind",
+          "host",
+          "guest",
+          "issuedAt",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "const": "walled.garden/vouch-index"
+          }
+        }
+      },
+      "then": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Manifest: human-readable name for the drive"
+          },
+          "description": {
+            "type": "string",
+            "description": "Manifest: short description of the drive's contents"
+          },
+          "type": {
+            "type": "string",
+            "const": "walled.garden/vouch-index"
+          },
+          "thumb": {
+            "type": "string",
+            "description": "Manifest: path within the drive to the thumbnail image"
+          },
+          "author": {
+            "type": "object",
+            "description": "Manifest: information about the drive author",
+            "properties": {
+              "url": {
+                "type": "string",
+                "description": "The author profile drive's hyper:// URL"
+              }
+            }
+          },
+          "forkOf": {
+            "type": "string",
+            "description": "Manifest: hyper:// URL this drive was forked from"
+          },
+          "links": {
+            "type": "object",
+            "description": "Manifest: map of named link arrays",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "href": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "csp": {
+            "type": "string",
+            "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
+          },
+          "ai": {
+            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (the AI page, nomad://ai/setup, or the model picker in the AI sidebar), never something a drive can set.",
+            "oneOf": [
+              {
+                "type": "boolean",
+                "description": "Opt this drive into nomad.ai using its own /ai/system.md"
+              },
+              {
+                "type": "string",
+                "description": "Pointer: delegate to another drive's AI Config"
+              }
+            ]
+          },
+          "fallback": {
+            "type": "string",
+            "pattern": "^/.*[^/]$",
+            "description": "Manifest: absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses (ADR-0015). Real files always win. Supersedes the legacy /.ui/ui.html convention."
+          },
+          "collaborative": {
+            "type": "boolean",
+            "description": "Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default."
+          },
+          "v": {
+            "type": "number",
+            "const": 1
+          },
+          "hashes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "required": [
+          "type",
+          "v",
+          "hashes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "const": "walled.garden/vouches"
+          }
+        }
+      },
+      "then": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Manifest: human-readable name for the drive"
+          },
+          "description": {
+            "type": "string",
+            "description": "Manifest: short description of the drive's contents"
+          },
+          "type": {
+            "type": "string",
+            "const": "walled.garden/vouches"
+          },
+          "thumb": {
+            "type": "string",
+            "description": "Manifest: path within the drive to the thumbnail image"
+          },
+          "author": {
+            "type": "object",
+            "description": "Manifest: information about the drive author",
+            "properties": {
+              "url": {
+                "type": "string",
+                "description": "The author profile drive's hyper:// URL"
+              }
+            }
+          },
+          "forkOf": {
+            "type": "string",
+            "description": "Manifest: hyper:// URL this drive was forked from"
+          },
+          "links": {
+            "type": "object",
+            "description": "Manifest: map of named link arrays",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "href": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "csp": {
+            "type": "string",
+            "description": "Manifest: Content-Security-Policy applied to pages served from the drive"
+          },
+          "ai": {
+            "description": "Manifest: opts the drive into nomad.ai, reading /ai/system.md for its system prompt — true, or a pointer hyper:// URL to delegate to another drive's AI Config. Which MODEL runs is a user preference (the AI page, nomad://ai/setup, or the model picker in the AI sidebar), never something a drive can set.",
+            "oneOf": [
+              {
+                "type": "boolean",
+                "description": "Opt this drive into nomad.ai using its own /ai/system.md"
+              },
+              {
+                "type": "string",
+                "description": "Pointer: delegate to another drive's AI Config"
+              }
+            ]
+          },
+          "fallback": {
+            "type": "string",
+            "pattern": "^/.*[^/]$",
+            "description": "Manifest: absolute in-drive path to an HTML app shell served (200 rewrite, URL unchanged) when a page navigation misses (ADR-0015). Real files always win. Supersedes the legacy /.ui/ui.html convention."
+          },
+          "collaborative": {
+            "type": "boolean",
+            "description": "Manifest: whether the drive accepts new writers (multi-writer unlocked). Managed by nomad.fs.configure — every drive is multi-writer-capable but LOCKED by default."
+          },
+          "v": {
+            "type": "number",
+            "const": 1
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "walled.garden/vouch"
+                },
+                "v": {
+                  "type": "number",
+                  "const": 1
+                },
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z2-7]{16,40}$"
+                },
+                "kind": {
+                  "type": "string",
+                  "const": "hosted"
+                },
+                "host": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "guest": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "note": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 280
+                },
+                "issuedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                },
+                "expiresAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                }
+              },
+              "required": [
+                "type",
+                "v",
+                "id",
+                "kind",
+                "host",
+                "guest",
+                "issuedAt",
+                "expiresAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "type",
+          "v",
+          "items"
         ],
         "additionalProperties": false
       }
@@ -1529,6 +1981,9 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
                 "walled.garden/status",
                 "walled.garden/vote",
                 "walled.garden/message",
+                "walled.garden/vouch",
+                "walled.garden/vouch-index",
+                "walled.garden/vouches",
                 "walled.garden/calendar",
                 "walled.garden/calendar-event"
               ]

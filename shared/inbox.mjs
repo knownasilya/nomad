@@ -26,12 +26,14 @@
 // key unreachable until another re-announces (about five minutes). So each Device listens on its own
 // mailbox key, and the published inbox and every message link carry a short list of them.
 //
-// Pure: no imports, so desktop (bg/hyper/inbox.js) and the phone (mobile/backend/lib/inbox.mjs)
-// share it byte for byte. Hashing, key pairs, signatures and sealed boxes come from the caller as a
+// Pure: no imports but the Vouch rules (a Message can carry a Vouch, ADR-0045), so desktop
+// (bg/hyper/inbox.js) and the phone (mobile/backend/lib/inbox.mjs) share it byte for byte. Hashing, key pairs, signatures and sealed boxes come from the caller as a
 // `crypto` object (see inbox-crypto in each runtime):
 //   { hash(bytes) -> 32 bytes, signKeyPair(seed32), boxKeyPair(seed32),
 //     sign(msg, secretKey) -> 64 bytes, verify(sig, msg, publicKey) -> bool,
 //     seal(msg, boxPublicKey) -> bytes, unseal(bytes, boxPublicKey, boxSecretKey) -> bytes | null }
+
+import { vouchError } from './vouches.mjs';
 
 export const INBOX_PREFIX = '/.vault/inbox/';
 export const INBOX_TYPE = 'nomad/inbox';
@@ -426,17 +428,19 @@ export function normalizeText(text) {
   return s;
 }
 
-/** @param {{ id: string, from: string, to: string, text: string, inReplyTo?: string }} f */
-export function makeMessage({ id, from, to, text, inReplyTo }, now = new Date().toISOString()) {
+// A Message can carry a Vouch (ADR-0045 §3.2); its text may then be empty.
+/** @param {{ id: string, from: string, to: string, text: string, inReplyTo?: string, vouch?: any }} f */
+export function makeMessage({ id, from, to, text, inReplyTo, vouch }, now = new Date().toISOString()) {
   const m = {
     type: MESSAGE_TYPE,
     id,
     from: profileUrlOf(from),
     to: profileUrlOf(to),
     createdAt: now,
-    text: normalizeText(text),
+    text: vouch && !String(text ?? '').trim() ? '' : normalizeText(text),
   };
   if (inReplyTo) m.inReplyTo = String(inReplyTo);
+  if (vouch) m.vouch = vouch;
   const err = messageError(m);
   if (err) throw new Error(err);
   return m;
@@ -452,12 +456,25 @@ export function messageError(m) {
   if (!profileKeyOf(m.to) || m.to !== profileUrlOf(m.to)) return 'bad to';
   if (m.from === m.to) return 'to self';
   if (!ISO.test(String(m.createdAt || ''))) return 'bad createdAt';
-  if (typeof m.text !== 'string' || !m.text.length || m.text.length > MAX_TEXT) return 'bad text';
+  if (typeof m.text !== 'string' || m.text.length > MAX_TEXT) return 'bad text';
+  if (!m.text.length && m.vouch === undefined) return 'bad text';
   if (m.inReplyTo !== undefined && (typeof m.inReplyTo !== 'string' || m.inReplyTo.length > 40))
     return 'bad inReplyTo';
-  const allowed = new Set(['type', 'id', 'from', 'to', 'createdAt', 'text', 'inReplyTo']);
+  // A Vouch rides from its host to its guest only.
+  if (m.vouch !== undefined) {
+    if (vouchError(m.vouch)) return 'bad vouch';
+    if (m.vouch.host !== m.from || m.vouch.guest !== m.to) return 'bad vouch';
+  }
+  const allowed = new Set(['type', 'id', 'from', 'to', 'createdAt', 'text', 'inReplyTo', 'vouch']);
   for (const k of Object.keys(m)) if (!allowed.has(k)) return `unknown field ${k}`;
   return null;
+}
+
+// A line for a list or a notification: the text, or what a Vouch with no text says.
+export function messagePreview(m) {
+  if (m?.text) return m.text;
+  if (m?.vouch) return 'Says they’ve had you over (a vouch)';
+  return '';
 }
 
 // sha256(sort([myProfileKey, theirProfileKey]).join(':')) — `sha256hex` from the caller.

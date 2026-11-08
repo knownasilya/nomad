@@ -476,6 +476,50 @@ main.with-thread {
   opacity: 0.7;
 }
 
+/* A Message that carries a Vouch (ADR-0045). */
+.vouch-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: min(420px, 80%);
+  margin-bottom: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color--semi-light);
+  border-radius: 12px;
+  background: var(--msg-in-bg);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.vouch-card.failed {
+  opacity: 0.7;
+}
+
+.vouch-icon {
+  margin-top: 2px;
+  color: var(--msg-accent);
+}
+
+.vouch-title {
+  font-weight: 600;
+}
+
+.vouch-note {
+  margin-top: 2px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.vouch-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-color--light);
+}
+
+.vouch-sub a {
+  color: var(--msg-accent);
+}
+
 .bubble-meta {
   margin: 3px 4px 0;
   font-size: 11px;

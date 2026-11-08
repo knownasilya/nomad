@@ -11,6 +11,14 @@ import { ReactionSchema, type Reaction } from './reaction.ts';
 import { StatusSchema, type Status } from './status.ts';
 import { VoteSchema, type Vote } from './vote.ts';
 import { MessageSchema, type Message } from './message.ts';
+import {
+  VouchSchema,
+  type Vouch,
+  VouchIndexSchema,
+  type VouchIndex,
+  VouchesSchema,
+  type Vouches,
+} from './vouch.ts';
 import { CalendarSchema, type Calendar, CalendarEventSchema, type CalendarEvent } from './calendar.ts';
 
 export {
@@ -24,6 +32,9 @@ export {
   StatusSchema,
   VoteSchema,
   MessageSchema,
+  VouchSchema,
+  VouchIndexSchema,
+  VouchesSchema,
   CalendarSchema,
   CalendarEventSchema,
 };
@@ -39,6 +50,9 @@ export type {
   Status,
   Vote,
   Message,
+  Vouch,
+  VouchIndex,
+  Vouches,
   Calendar,
   CalendarEvent,
 };
@@ -54,6 +68,9 @@ export const SCHEMAS = {
   'walled.garden/status': StatusSchema,
   'walled.garden/vote': VoteSchema,
   'walled.garden/message': MessageSchema,
+  'walled.garden/vouch': VouchSchema,
+  'walled.garden/vouch-index': VouchIndexSchema,
+  'walled.garden/vouches': VouchesSchema,
   'walled.garden/calendar': CalendarSchema,
   'walled.garden/calendar-event': CalendarEventSchema,
 } as const;
@@ -73,5 +90,8 @@ export type WalledGardenRecord =
   | Status
   | Vote
   | Message
+  | Vouch
+  | VouchIndex
+  | Vouches
   | Calendar
   | CalendarEvent;

@@ -11,6 +11,8 @@ class Identity extends LitElement {
     return {
       url: { type: String },
       cert: { type: Object },
+      vouches: { type: Object },
+      showOthers: { type: Boolean },
     };
   }
 
@@ -22,6 +24,26 @@ class Identity extends LitElement {
     super();
     this.url = undefined;
     this.cert = undefined;
+    this.vouches = null; // nomad.personas.profileVouches(url) on a Profile Drive (ADR-0045)
+    this.showOthers = false;
+    this.loadedFor = null;
+  }
+
+  updated(changed) {
+    if ((changed.has('cert') || changed.has('url')) && this.cert?.ident?.person && this.url !== this.loadedFor) {
+      this.loadedFor = this.url;
+      this.loadVouches();
+    }
+  }
+
+  async loadVouches() {
+    const url = this.url;
+    try {
+      const v = await nomad.personas.profileVouches(url);
+      if (url === this.url) this.vouches = v;
+    } catch {
+      this.vouches = null;
+    }
   }
   // rendering
   // =
@@ -80,14 +102,18 @@ class Identity extends LitElement {
                       `}
                   ${this.cert.ident && this.cert.ident.person
                     ? html`
-                        <div class="field-group">
+                        <div class="field-group person-actions">
                           <button
                             style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:6px;font-size:13px"
                             @click=${this.onMessage}
                           >
                             <span class="fa-fw fas fa-comment"></span> Message
                           </button>
+                          <button class="vouch-btn" @click=${this.onVouch} title="Say you’ve had this person over at your home">
+                            <span class="fa-fw fas fa-home"></span> I’ve had them over
+                          </button>
                         </div>
+                        ${this.renderVouches()}
                       `
                     : ''}
                   ${this.cert.ident && this.cert.ident.feed
@@ -123,6 +149,43 @@ class Identity extends LitElement {
     `;
   }
 
+  // Who has had this person over (ADR-0045 §6): Vouches from people the viewer knows by name, the
+  // rest folded into one line. Never a total, never a badge.
+  renderVouches() {
+    const v = this.vouches;
+    if (!v || !v.readable || (!v.known.length && !v.others.length)) return '';
+    const guest = this.cert?.driveInfo?.title || 'them';
+    const row = (it) => {
+      const host = it.host?.title || shortKey(it.vouch.host);
+      return html`
+        <li class="vouch">
+          ${it.host?.thumbUrl
+            ? html`<img class="vouch-avatar" src=${it.host.thumbUrl} alt="" @error=${(e) => (e.target.style.visibility = 'hidden')} />`
+            : html`<span class="vouch-avatar initial">${host.slice(0, 1).toUpperCase()}</span>`}
+          <span class="vouch-text">
+            <span><strong>${host}</strong> has had ${guest} over${it.state === 'unreachable' ? html` <span class="muted">(couldn’t check)</span>` : ''}</span>
+            ${it.vouch.note ? html`<span class="vouch-note">“${it.vouch.note}”</span>` : ''}
+            <code class="muted" title=${it.vouch.host}>${shortKey(it.vouch.host)}</code>
+          </span>
+        </li>
+      `;
+    };
+    return html`
+      <div class="field-group vouches">
+        <div class="vouches-title">Who has had them over</div>
+        <ul class="vouch-list">${repeat(v.known, (it) => it.vouch.id, row)}</ul>
+        ${v.others.length
+          ? this.showOthers
+            ? html`<ul class="vouch-list others">${repeat(v.others, (it) => it.vouch.id, row)}</ul>`
+            : html`<button class="link-btn" @click=${() => (this.showOthers = true)}>
+                ${v.others.length} more from people you don’t know
+              </button>`
+          : ''}
+        <div class="muted vouches-hint">Someone says so; it isn’t proof. Weigh it by whether you know who said it.</div>
+      </div>
+    `;
+  }
+
   // ${this.renderSignal({icon: 'fab fa-twitter', url: 'https://twitter.com/pfrazee', userid: 'pfrazee', directory})}
   // ${this.renderSignal({icon: 'fab fa-github', url: 'https://github.com/pfrazee', userid: 'pfrazee', directory})}
   // renderSignal (signal) {
@@ -150,6 +213,15 @@ class Identity extends LitElement {
     nomad.browser.openUrl(`nomad://messages/new?${q}`, { setActive: true });
   }
 
+  // Give this person a Vouch: My Library → Personas, with the form filled in.
+  async onVouch() {
+    const m = /^hyper:\/\/([0-9a-f]{64})/i.exec(this.url || '');
+    if (!m) return;
+    const persona = await nomad.personas.tabPersona().catch(() => null);
+    const q = `vouch=${encodeURIComponent(`hyper://${m[1].toLowerCase()}/`)}${persona ? `&persona=${encodeURIComponent(persona)}` : ''}`;
+    nomad.browser.openUrl(`nomad://library/personas?${q}`, { setActive: true });
+  }
+
   onSubscribe() {
     if (!this.url) return;
     // Open in a TAB via the browser API — NOT window.open. The site-info panel is a subwindow, so
@@ -170,6 +242,11 @@ class Identity extends LitElement {
       setActive: true,
     });
   }
+}
+
+function shortKey(url) {
+  const m = /^hyper:\/\/([0-9a-f]{64})/i.exec(String(url || ''));
+  return m ? `hyper://${m[1].slice(0, 6)}…${m[1].slice(-4)}/` : String(url || '');
 }
 
 customElements.define('identity-signals', Identity);

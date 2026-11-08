@@ -1,6 +1,7 @@
 # Vouches: one Persona says "I've had this person over at my home"
 
-**Status: Proposed.** 2026-11-02. Builds on ADR-0031 (Personas and Sessions, implemented in [#128]),
+**Status: Accepted** 2026-11-08, built as below (see *As built*). Proposed 2026-11-02 as ADR-0037 and
+renumbered, since another ADR had taken 0037. Builds on ADR-0031 (Personas and Sessions, implemented in [#128]),
 ADR-0036 (the Persona Inbox, proposed in [#129]), ADR-0013 (followers are subscriber-side) and
 ADR-0018 (Names). Amends ADR-0031 §8 and §9 (a new `vouches` permission on `nomad.session`) and
 ADR-0036 §5 (a Message can carry a Vouch).
@@ -278,6 +279,26 @@ on a Profile Drive's info sheet.
 4. **Phone.** Accept, decline and choose where each is shown; the display on a Profile Drive.
 5. **Docs.** nomad.dev: a Vouches page under Personas that says what a Vouch does and doesn't prove,
    the schema entries, and `vouches` on the `nomad.session` page.
+
+## As built (2026-11-08)
+
+- **Rules and moving parts.** `shared/vouches.mjs` (records, paths, the hash, `verifyVouch`,
+  `groupForViewer`, intake and renewal rules) and `shared/vouch-engine.mjs` (give, renew, withdraw,
+  take in, accept, decline, show, check, the guard), run by desktop (`app/bg/ui/vouches.js`) and the
+  phone (`mobile/backend/lib/vouches.mjs`). Tests `tests/unit/vouches.test.js`, with the golden hash.
+- **Taking a Vouch in.** Any of the guest's Devices that sees a received, checked Message carrying a
+  Vouch writes the held record and marks the Message `vouchSeen: '<id>@<issuedAt>'`, so a declined or
+  removed Vouch doesn't come back from the Message still in the Vault.
+- **The guard** checks each Persona's list every five minutes and reports a hash only once it has been
+  unknown for ten: another Device's Vault record may still be on its way. A withdrawn hash that is
+  still listed (a Device that couldn't write the drive withdrew it) is taken out instead.
+- **`vouches` asks for `profile`.** `requestedPerms` adds `profile` when a page asks only for
+  `vouches`. A Session keeps the ticked ids (`session.vouches`); its view gives the records it still
+  holds, accepted and not expired. The prompt offers the Vouches shown to sites or on the profile.
+- **Giving is on desktop only** (site-info's *I've had them over* opens My Library → Personas with the
+  form filled in). The phone accepts, declines, removes, chooses where each shows, renews and
+  withdraws. The phone has no info sheet for a Profile Drive yet, so it doesn't show a profile's
+  Vouches; on the phone "people you know" is Contacts and Names (desktop adds Reader follows).
 
 [#128]: https://github.com/knownasilya/nomad/pull/128
 [#129]: https://github.com/knownasilya/nomad/pull/129

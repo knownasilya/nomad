@@ -2,6 +2,7 @@
 // Personas, only after the user says yes in the login prompt (ADR-0031 §7–10).
 //
 //   requestLogin({ perms?, maxAge? })  the prompt; resolves to the Session, or rejects with
+//                                      perms: 'profile', 'modifyDrive', 'email', 'vouches' (ADR-0045)
 //                                      UserDeniedError on a cancel, a "no", or no Persona at all
 //   getCurrent()                       the Session the prompt already made, or null. Never a prompt.
 //   revoke()                           the page logs itself out
@@ -15,6 +16,7 @@ import emitStream from 'emit-stream';
 import { EventEmitter } from 'events';
 import { PermissionsError, UserDeniedError } from 'beaker-error-constants';
 import * as personas from '../../ui/personas';
+import * as vouches from '../../ui/vouches';
 import * as modals from '../../ui/subwindows/modals';
 import * as filesystem from '../../filesystem/index';
 import * as autobases from '../../hyper/autobases';
@@ -111,6 +113,12 @@ export default {
     }
 
     const choices = await personas.loginChoices(spaceId);
+    const asked = [...new Set((o.perms || []).map((p) => String(p).split(':')[0]))];
+    if (asked.includes('vouches') && !asked.includes('profile')) asked.unshift('profile');
+    // The Vouches each Persona could show (ADR-0045 §5): accepted ones the user lets sites see.
+    const vouchChoices = asked.includes('vouches')
+      ? await vouches.loginChoices(choices.personas.map((p) => p.id)).catch(() => ({}))
+      : {};
     const space = spacesDb.getCachedAll().find((s) => s.id === spaceId);
     const started = Date.now();
     let res: any = null;
@@ -119,7 +127,8 @@ export default {
         site: await siteIdentity(url, origin),
         personas: choices.personas,
         pickedId: choices.pickedId,
-        perms: [...new Set((o.perms || []).map((p) => String(p).split(':')[0]))],
+        perms: asked,
+        vouches: vouchChoices,
         space: { id: spaceId, name: space?.name || 'Personal', color: space?.color || '#6c6cff', icon: space?.icon || null },
         vaultReady: choices.vaultReady || !choices.hasVault,
       });
@@ -157,12 +166,15 @@ export default {
 
     const key = P.driveKeyOf(p.profileUrl);
     const requested = P.requestedPerms(o.perms, key);
+    // Only Vouches the prompt offered for this Persona.
+    const offered = new Set((vouchChoices[personaId] || []).map((v) => v.id));
+    const picked = (Array.isArray(res.vouches) ? res.vouches : []).map(String).filter((id) => offered.has(id));
     const perms = P.grantedPerms(
       requested,
       P.requestedPerms(Array.isArray(res.perms) ? res.perms : [], key),
-      { hasEmail: !!p.email }
+      { hasEmail: !!p.email, vouches: picked.length }
     );
-    await personas.grant({ origin, spaceKey, personaId, perms, maxAge });
+    await personas.grant({ origin, spaceKey, personaId, perms, vouches: picked, maxAge });
     return personas.sessionViewFor(url, spaceId);
   },
 
@@ -188,9 +200,11 @@ export default {
       emitter.emit('change', { session: view });
     };
     personas.events.on('changed', changed);
+    vouches.events.on('changed', changed);
     // A new page load makes its own stream.
     const stop = () => {
       personas.events.removeListener('changed', changed);
+      vouches.events.removeListener('changed', changed);
       sender.removeListener('did-navigate', stop);
       sender.removeListener('destroyed', stop);
     };

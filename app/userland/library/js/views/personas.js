@@ -16,6 +16,8 @@ import personasCSS from '../../css/views/personas.css.js';
 
 const blank = () => ({ isNew: true, label: '', title: '', description: '', email: '', thumb: '', thumbPreview: '', useDrive: false, profileUrl: '', error: '', busy: false });
 
+const blankVouch = (o = {}) => ({ to: '', personaId: '', note: '', preview: null, checking: false, busy: false, error: '', ...o });
+
 const STATE_ICON = { 'foreign-writers': 'fa-exclamation-triangle', 'not-ready': 'fa-sync-alt' };
 
 export class PersonasView extends LitElement {
@@ -24,6 +26,8 @@ export class PersonasView extends LitElement {
       st: { type: Object },
       sessions: { type: Array },
       inbox: { type: Object },
+      vouches: { type: Object },
+      giving: { type: Object },
       filter: { type: String },
       editing: { type: Object },
     };
@@ -38,8 +42,13 @@ export class PersonasView extends LitElement {
     this.st = undefined; // undefined = loading
     this.sessions = [];
     this.inbox = null; // nomad.inbox.summary() and the notification setting (ADR-0036)
+    this.vouches = null; // nomad.personas.listVouches() (ADR-0045)
     this.filter = undefined;
-    this.editing = new URLSearchParams(location.search).get('new') ? blank() : null;
+    const q = new URLSearchParams(location.search);
+    this.editing = q.get('new') ? blank() : null;
+    // site-info's "I've had them over" opens the giving form for that profile.
+    this.giving = q.get('vouch') ? blankVouch({ to: q.get('vouch'), personaId: q.get('persona') || '' }) : null;
+    this.scrollToVouches = !!this.giving;
     this.load();
     try {
       nomad.personas.watch().addEventListener('changed', () => this.load());
@@ -56,12 +65,28 @@ export class PersonasView extends LitElement {
     }
   }
 
+  async loadVouches() {
+    try {
+      this.vouches = await nomad.personas.listVouches();
+    } catch {
+      this.vouches = null;
+    }
+    if (this.giving && !this.giving.personaId) {
+      const usable = this.st?.personas?.filter((p) => p.state === 'usable') || [];
+      const tab = await nomad.personas.tabPersona().catch(() => null);
+      const pick = usable.find((p) => p.id === tab) || usable[0];
+      if (pick) this.setGiving({ personaId: pick.id });
+    }
+    if (this.giving?.to && !this.giving.preview && !this.giving.checking) this.checkGiving();
+  }
+
   async load() {
     try {
       const [st, sessions] = await Promise.all([nomad.personas.list(), nomad.personas.listSessions()]);
       this.st = st;
       this.sessions = sessions;
       this.loadInbox();
+      this.loadVouches();
     } catch (e) {
       this.st = { personas: [], spaces: [], hasVault: false, vaultReady: false, error: e.message };
       this.sessions = [];
@@ -76,13 +101,19 @@ export class PersonasView extends LitElement {
   // The tab title names the Persona that is open (lib/page-title.js).
   itemTitle() {
     const e = this.editing;
-    if (!e) return '';
+    if (!e) return this.giving ? 'Give a vouch' : '';
     if (e.isNew) return 'New Persona';
     return this.st?.personas?.find((p) => p.id === e.id)?.label || e.label;
   }
 
   updated() {
     setItemTitle(this, this.itemTitle());
+    const form = this.scrollToVouches && this.shadowRoot.querySelector('.vouch-form');
+    if (form) {
+      this.scrollToVouches = false;
+      form.scrollIntoView({ block: 'center' });
+      form.querySelector('textarea')?.focus();
+    }
   }
 
   render() {
@@ -117,6 +148,7 @@ export class PersonasView extends LitElement {
 
       ${st.personas.length ? this.renderSpaces() : ''}
       ${st.personas.length ? this.renderMessages() : ''}
+      ${st.personas.length || this.vouches?.held?.length ? this.renderVouches() : ''}
       ${this.renderSessions()}
     `;
   }
@@ -374,6 +406,258 @@ export class PersonasView extends LitElement {
     }
   }
 
+  // Vouches (ADR-0045)
+  // =
+  //
+  // "I've had this person over." Vouches for the user wait here as New until they accept or decline;
+  // an accepted one is shown only to them until they pick sites or their profile. Vouches they gave
+  // can be renewed in their last month and withdrawn at any time, quietly.
+
+  renderVouches() {
+    const v = this.vouches;
+    const held = (v?.held || []).filter((r) => this.matches(r.host.title, r.vouch.note));
+    const given = (v?.given || []).filter((r) => this.matches(r.guest.title, r.vouch.note));
+    const label = (pid) => this.st.personas.find((p) => p.id === pid)?.label || '';
+    const many = this.st.personas.length > 1;
+    return html`
+      <div class="toolbar section" id="vouches">
+        <span class="section-title">Vouches</span>
+        ${this.giving ? '' : html`<button class="link" @click=${() => this.startGiving()}>Give a vouch</button>`}
+      </div>
+      ${this.giving ? html`<div class="card editing">${this.renderGiving()}</div>` : ''}
+      ${(v?.foreign || []).map(
+        (f) => html`<div class="notice warn-notice" role="alert">
+          <span class="fas fa-exclamation-triangle"></span>
+          <strong>Someone added a vouch to your Persona “${f.label}”.</strong> None of your devices wrote it, so someone else may be able to
+          change that profile drive. Check its writers in your Hyperdrives.
+        </div>`
+      )}
+      <div class="subsection-title">For you</div>
+      ${held.length
+        ? html`<div class="card list">${repeat(held, (r) => `${r.personaId}:${r.id}`, (r) => this.renderHeld(r, many ? label(r.personaId) : ''))}</div>`
+        : html`<div class="empty small">
+            ${v?.held?.length ? 'No vouches match.' : 'No one has vouched for you yet. When someone who has had you over sends one, it waits here for you to accept.'}
+          </div>`}
+      <div class="subsection-title">You gave</div>
+      ${given.length
+        ? html`<div class="card list">${repeat(given, (r) => `${r.personaId}:${r.id}`, (r) => this.renderGiven(r, many ? label(r.personaId) : ''))}</div>`
+        : html`<div class="empty small">
+            ${v?.given?.length ? 'No vouches match.' : 'You haven’t vouched for anyone. Open someone’s profile drive and choose I’ve had them over in site info, or use Give a vouch.'}
+          </div>`}
+      <div class="hint-row">
+        A vouch says one thing: someone has had this person over at home. It isn’t proof that an account is a real person, and Nomad never turns
+        vouches into a score or a badge. Each lasts a year. Anyone can see how many vouches you’ve given, but not who they’re for.
+      </div>
+    `;
+  }
+
+  renderPerson(who, fallback = '?') {
+    const name = who.title || fallback;
+    return who.thumbUrl
+      ? html`<img class="avatar small" src=${who.thumbUrl} alt="" @error=${(ev) => (ev.target.style.visibility = 'hidden')} />`
+      : html`<span class="avatar small initial">${name.slice(0, 1).toUpperCase()}</span>`;
+  }
+
+  renderHeld(r, personaLabel) {
+    const host = r.host.title || shortDriveUrl(r.vouch.host);
+    const status = {
+      withdrawn: html`<span class="state warn">No longer valid: ${host} withdrew it</span>`,
+      expired: html`<span class="state warn">Expired</span>`,
+      unreachable: html`<span class="state">Couldn’t check just now</span>`,
+      invalid: html`<span class="state warn">Not a valid vouch</span>`,
+    }[r.check];
+    return html`
+      <div class="list-row vouch-row ${r.state === 'new' ? 'is-new' : ''}">
+        ${this.renderPerson(r.host)}
+        <div class="grow meta-col">
+          <div class="title">
+            ${host} has had you over
+            ${r.state === 'new' ? html`<span class="badge">New</span>` : ''}
+          </div>
+          ${r.vouch.note ? html`<div class="note">“${r.vouch.note}”</div>` : ''}
+          <div class="summary">
+            <code title=${r.vouch.host}>${shortDriveUrl(r.vouch.host)}</code>${personaLabel ? ` · to “${personaLabel}”` : ''} · until
+            ${new Date(r.vouch.expiresAt).toLocaleDateString()}${status ? html` · ${status}` : ''}
+          </div>
+        </div>
+        ${r.state === 'new'
+          ? html`<div class="row-actions">
+              <button class="primary" @click=${() => this.onVouch('acceptVouch', r, 'Accepted. Only you see it until you choose where it shows.')}>Accept</button>
+              <button @click=${() => this.onDeclineVouch(r, host)}>Decline</button>
+            </div>`
+          : html`<div class="row-actions">
+              <select aria-label="Who sees the vouch from ${host}" title="Who sees it" @change=${(ev) => this.onSetShown(r, ev.target.value)}>
+                <option value="me" ?selected=${r.shown === 'me'}>Only me</option>
+                <option value="sites" ?selected=${r.shown === 'sites'}>Sites I log into</option>
+                <option value="profile" ?selected=${r.shown === 'profile'}>On my profile</option>
+              </select>
+              <button class="icon danger" title="Remove this vouch" aria-label="Remove the vouch from ${host}" @click=${() => this.onDeclineVouch(r, host, true)}>
+                <span class="fas fa-fw fa-trash"></span>
+              </button>
+            </div>`}
+      </div>
+    `;
+  }
+
+  renderGiven(r, personaLabel) {
+    const guest = r.guest.title || shortDriveUrl(r.vouch.guest);
+    const done = r.withdrawnAt || r.expired;
+    return html`
+      <div class="list-row vouch-row ${done ? 'is-done' : ''}">
+        ${this.renderPerson(r.guest)}
+        <div class="grow meta-col">
+          <div class="title">You’ve had ${guest} over</div>
+          ${r.vouch.note ? html`<div class="note">“${r.vouch.note}”</div>` : ''}
+          <div class="summary">
+            <code title=${r.vouch.guest}>${shortDriveUrl(r.vouch.guest)}</code>${personaLabel ? ` · as “${personaLabel}”` : ''} ·
+            ${r.withdrawnAt
+              ? `withdrawn ${new Date(r.withdrawnAt).toLocaleDateString()}`
+              : r.expired
+                ? `expired ${new Date(r.vouch.expiresAt).toLocaleDateString()}`
+                : `until ${new Date(r.vouch.expiresAt).toLocaleDateString()}`}
+          </div>
+        </div>
+        <div class="row-actions">
+          ${r.renewDue && !r.expired ? html`<button @click=${() => this.onVouch('renewVouch', r, `Renewed for another year and sent to ${guest}`)}>Renew</button>` : ''}
+          ${done
+            ? html`<button class="icon" title="Remove from this list" aria-label="Remove the vouch for ${guest} from this list" @click=${() => this.onVouch('forgetVouch', r)}>
+                <span class="fas fa-fw fa-times"></span>
+              </button>`
+            : html`<button @click=${() => this.onWithdrawVouch(r, guest)}>Withdraw</button>`}
+        </div>
+      </div>
+    `;
+  }
+
+  renderGiving() {
+    const g = this.giving;
+    const usable = this.st.personas.filter((p) => p.state === 'usable');
+    const pv = g.preview;
+    const name = pv?.title || 'They';
+    return html`
+      <form class="editor persona-form vouch-form" @submit=${this.onGiveVouch} autocomplete="off">
+        <div class="form-title">I’ve had them over</div>
+        <label class="field">
+          <span class="field-label">Their profile</span>
+          <input
+            class="drive-url"
+            placeholder="hyper://…/ or their message link"
+            .value=${g.to}
+            @input=${(ev) => this.setGiving({ to: ev.target.value, preview: null })}
+            @change=${() => this.checkGiving()}
+          />
+          ${pv && pv.profileUrl
+            ? html`<span class="field-hint guest-line">
+                ${pv.title ? html`<strong>${pv.title}</strong> · ` : ''}<code title=${pv.profileUrl}>${shortDriveUrl(pv.profileUrl)}</code>
+              </span>`
+            : html`<span class="field-hint">Their profile drive, or the message link they gave you.</span>`}
+        </label>
+        <label class="field">
+          <span class="field-label">From</span>
+          <select aria-label="The Persona the vouch comes from" .value=${g.personaId} @change=${(ev) => {
+            this.setGiving({ personaId: ev.target.value, preview: null });
+            this.checkGiving();
+          }}>
+            ${usable.map((p) => html`<option value=${p.id} ?selected=${p.id === g.personaId}>${p.title || p.label} (“${p.label}”)</option>`)}
+          </select>
+          ${usable.length ? '' : html`<span class="field-hint">None of your Personas can give vouches right now.</span>`}
+        </label>
+        <label class="field">
+          <span class="field-label">A note <span class="optional">Optional</span></span>
+          <textarea rows="2" maxlength="280" placeholder="Lovely to have you for dinner" .value=${g.note} @input=${(ev) => this.setGiving({ note: ev.target.value })}></textarea>
+          <span class="field-hint">Plain text, at most 280 characters. Don’t put where you live or when they came.</span>
+        </label>
+        <div class="field-hint notice-hint">
+          <span class="fas fa-fw fa-info-circle"></span>
+          ${name} can show this to sites and on their profile, with your name on it. It lasts a year, and you can withdraw it at any time without telling them.
+        </div>
+        ${pv && !pv.ok ? html`<div class="error">${pv.reason}</div>` : ''}
+        ${g.error ? html`<div class="error">${g.error}</div>` : ''}
+        <div class="buttons">
+          <button type="submit" class="primary" ?disabled=${g.busy || g.checking || !g.personaId || !pv?.ok}>${g.busy ? 'Sending…' : 'Send vouch'}</button>
+          <button type="button" @click=${() => (this.giving = null)}>Cancel</button>
+        </div>
+      </form>
+    `;
+  }
+
+  setGiving(patch) {
+    this.giving = { ...this.giving, ...patch, error: '' };
+  }
+
+  startGiving() {
+    const usable = this.st.personas.filter((p) => p.state === 'usable');
+    this.giving = blankVouch({ personaId: usable[0]?.id || '' });
+    this.updateComplete.then(() => this.shadowRoot.querySelector('.vouch-form input')?.focus());
+  }
+
+  async checkGiving() {
+    const g = this.giving;
+    if (!g?.to?.trim()) return;
+    const asked = `${g.personaId}|${g.to}`;
+    this.setGiving({ checking: true });
+    try {
+      const preview = await nomad.personas.previewVouch({ personaId: g.personaId || null, to: g.to.trim() });
+      if (this.giving && `${this.giving.personaId}|${this.giving.to}` === asked) this.setGiving({ preview, checking: false });
+    } catch (err) {
+      if (this.giving) this.setGiving({ preview: { ok: false, reason: cleanError(err) }, checking: false });
+    }
+  }
+
+  async onGiveVouch(ev) {
+    ev.preventDefault();
+    const g = this.giving;
+    if (!g?.preview?.ok) return;
+    this.setGiving({ busy: true });
+    try {
+      await nomad.personas.giveVouch({ personaId: g.personaId, to: g.to.trim(), note: g.note });
+      toast.create(`Vouch sent to ${g.preview.title || 'them'}. It shows once they accept it.`, 'success');
+      this.giving = null;
+      await this.loadVouches();
+    } catch (err) {
+      this.giving = { ...this.giving, busy: false, error: cleanError(err) };
+    }
+  }
+
+  async onVouch(method, r, done = '') {
+    try {
+      await nomad.personas[method](r.personaId, r.id);
+      if (done) toast.create(done, 'success');
+      await this.loadVouches();
+    } catch (err) {
+      toast.create(cleanError(err), 'error');
+    }
+  }
+
+  async onDeclineVouch(r, host, accepted = false) {
+    const ok = confirm(
+      accepted
+        ? `Remove the vouch from ${host}?\n\nIt comes off your profile and sites stop seeing it. ${host} isn’t told.`
+        : `Decline the vouch from ${host}?\n\nIt’s deleted from all your devices. ${host} isn’t told.`
+    );
+    if (!ok) return;
+    await this.onVouch('declineVouch', r, accepted ? 'Vouch removed' : 'Vouch declined');
+  }
+
+  async onWithdrawVouch(r, guest) {
+    if (!confirm(`Withdraw your vouch for ${guest}?\n\nIt stops counting everywhere it’s shown. Nothing is sent to ${guest}.`)) return;
+    await this.onVouch('withdrawVouch', r, 'Vouch withdrawn');
+  }
+
+  async onSetShown(r, shown) {
+    if (shown === 'profile' && !confirm('Show this vouch on your profile?\n\nAnyone with your profile drive’s address can see it and who gave it. Like anything published, copies may stay after you take it off.')) {
+      await this.loadVouches();
+      return;
+    }
+    try {
+      await nomad.personas.setVouchShown(r.personaId, r.id, shown);
+      await this.loadVouches();
+    } catch (err) {
+      toast.create(cleanError(err), 'error');
+      await this.loadVouches();
+    }
+  }
+
   renderSessions() {
     const rows = this.sessions.filter((s) => this.matches(s.site, s.personaLabel, s.spaceName));
     return html`
@@ -472,7 +756,7 @@ export class PersonasView extends LitElement {
     const n = p.sessions ? ` You’ll be logged out of ${p.sessions} site${p.sessions === 1 ? '' : 's'}.` : '';
     if (
       !confirm(
-        `Delete the Persona “${p.label}”?${n} Its messages and contacts are deleted from all your devices. Its profile drive stays in your Hyperdrives.`
+        `Delete the Persona “${p.label}”?${n} Its messages and contacts are deleted from all your devices, every vouch it gave is withdrawn and every vouch it holds is deleted. Its profile drive stays in your Hyperdrives.`
       )
     )
       return;
@@ -516,6 +800,7 @@ function describePerms(perms) {
   const sees = [];
   if (names.includes('profile')) sees.push('your profile');
   if (names.includes('email')) sees.push('your email');
+  if (names.includes('vouches')) sees.push('who has had you over');
   if (!sees.length) return 'knows only a random ID';
   return `sees ${sees.join(' and ')}${names.includes('modifyDrive') ? ', and can change your profile' : ''}`;
 }

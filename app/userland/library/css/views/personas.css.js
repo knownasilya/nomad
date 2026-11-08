@@ -373,5 +373,93 @@ const cssStr = css`
     text-align: left;
     font-size: 12px;
   }
+
+  /* Vouches (ADR-0045) */
+  .toolbar button.link {
+    margin-left: auto;
+    font-size: 12px;
+  }
+
+  .subsection-title {
+    margin: 12px 6px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-color--pretty-light);
+  }
+
+  .avatar.small {
+    flex-basis: 28px;
+    width: 28px;
+    height: 28px;
+  }
+
+  .avatar.small.initial {
+    font-size: 12px;
+  }
+
+  .vouch-row {
+    align-items: flex-start;
+  }
+
+  .vouch-row .avatar {
+    margin-top: 2px;
+  }
+
+  .vouch-row .note {
+    margin-top: 2px;
+    font-size: 12.5px;
+    color: var(--text-color--default);
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+  }
+
+  .vouch-row .summary {
+    font-size: 12px;
+    color: var(--text-color--light);
+  }
+
+  .vouch-row .summary code {
+    font-size: 11px;
+  }
+
+  .vouch-row.is-done .meta-col {
+    opacity: 0.65;
+  }
+
+  .vouch-row .state.warn {
+    color: var(--personas-warn);
+  }
+
+  .row-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .notice.warn-notice {
+    border-color: var(--personas-warn);
+    color: var(--text-color--default);
+  }
+
+  .notice.warn-notice .fas {
+    color: var(--personas-warn);
+  }
+
+  .vouch-form {
+    margin-top: 0;
+  }
+
+  .form-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-color--default);
+  }
+
+  .guest-line code {
+    font-size: 11px;
+  }
 `;
 export default cssStr;
