@@ -18,6 +18,7 @@ import * as liveNotes from '../../notes/live-notes';
 import * as names from '../../hyper/names';
 import * as driveWriters from '../../hyper/drive-writers';
 import * as spaceLibrary from '../../hyper/space-library';
+import * as invites from '../../hyper/invites';
 import * as filesystem from '../../filesystem/index';
 import * as spacesDb from '../../dbs/spaces';
 import { BrowserWindow } from 'electron';
@@ -357,7 +358,27 @@ export default {
   },
 
   async createSpaceInvite(role) {
-    return spaceLibrary.createInvite(await vaultApps.spaceKey(this), role);
+    const { code } = await spaceLibrary.createInvite(await vaultApps.spaceKey(this), role);
+    return { code, role };
+  },
+
+  // Invite links (ADR-0040, bg/hyper/invites.js): one https link a friend opens anywhere.
+  async createSpaceInviteLink(role, opts: any = {}) {
+    return invites.makeSpaceLink(await vaultApps.spaceKey(this), role, { days: opts?.days });
+  },
+
+  async listSpaceInvites() {
+    const key = await vaultApps.spaceKey(this).catch(() => null);
+    return key ? spaceLibrary.listInvites(key) : [];
+  },
+
+  async revokeSpaceInvite(id) {
+    return spaceLibrary.revokeInvite(await vaultApps.spaceKey(this), String(id || ''));
+  },
+
+  // What an invite link says, after checking it, for the Sharing page's join card.
+  async readInvite(link) {
+    return invites.read(String(link || ''));
   },
 
   async approveSpaceJoin(memberId) {
@@ -392,6 +413,8 @@ export default {
   // Join a shared Space with a code. Resolves once an owner approves; switches the caller's window
   // to the new Space.
   async joinSpace(code, opts: any = {}) {
+    // A code, or an invite link around one (checked first: expiry, signature).
+    code = await invites.codeFor(code);
     const space = await filesystem.joinSpace(code, { name: String(opts?.name || defaultOwnName()).slice(0, 100) });
     const win = this?.sender ? findWebContentsParentWindow(this.sender) : null;
     if (win) await tabManager.setActiveSpace(win, space.id).catch(() => {});

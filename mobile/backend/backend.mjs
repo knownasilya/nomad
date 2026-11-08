@@ -22,6 +22,7 @@ import { createAssets } from './lib/assets.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
 import { createPhoneInbox } from './lib/inbox.mjs'
 import { createPhoneVouches } from './lib/vouches.mjs'
+import { createInvites } from './lib/invites.mjs'
 import Protomux from 'protomux'
 import c from 'compact-encoding'
 import { createDevicePresence } from '../../shared/device-presence.mjs'
@@ -157,6 +158,7 @@ function setVault (base) {
   if (vault) vault.on('update', inboxVaultUpdated)
   vaultChanged()
   personaWritersSoon()
+  invitesListenSoon()
   inbox.setVault(vault).catch((e) => console.log('[inbox] setVault', e?.message || e))
   vouches.setVault(vault)
 }
@@ -179,6 +181,7 @@ function inboxVaultUpdated () {
   inboxTimer = setTimeout(() => {
     inbox.vaultUpdated()
     vouches.vaultUpdated()
+    invites.listenAll().catch(() => {})
   }, 1000)
 }
 
@@ -197,6 +200,20 @@ const vouches = createPhoneVouches({
   onChange: () => vaultChanged()
 })
 goodbye(() => vouches.close())
+
+// Invite links (ADR-0040, lib/invites.mjs): make them for a shared Space this phone owns, answer the
+// joins they bring, and read one a friend sent. The UI notifies from `pending` (useInviteJoins).
+const invites = createInvites({
+  vault: () => vault,
+  manager,
+  inbox,
+  onChange: () => vaultChanged()
+})
+var invitesTimer = null // var: setVault can run before this line
+function invitesListenSoon () {
+  clearTimeout(invitesTimer)
+  invitesTimer = setTimeout(() => { invites.listenAll().catch((e) => console.log('[invites] listen', e?.message || e)) }, 2000)
+}
 Bare.on('resume', () => inbox.resume())
 goodbye(() => inbox.close())
 
@@ -717,7 +734,16 @@ async function handleApps ({ reqId, app, action, ...args }) {
     let value
     const { space } = args // the active Space (its Root Drive key)
     // Shared Spaces (ADR-0029): join one with a code, then mark the Space the UI made for it.
-    if (app === 'spaces' && action === 'join') value = await spaceLib.join({ store, manager }, args.code, { name: args.name }, rememberJoined)
+    if (app === 'spaces' && action === 'join') value = await spaceLib.join({ store, manager }, await invites.codeFor(args.code), { name: args.name }, rememberJoined)
+    // Invite links (ADR-0040): make, list and revoke them for the active Space, answer joins, and
+    // read one a friend sent.
+    else if (app === 'invites' && action === 'link') value = await invites.link(args.rootDriveKey || space, args.role, args.days)
+    else if (app === 'invites' && action === 'list') value = await invites.list(args.rootDriveKey || space)
+    else if (app === 'invites' && action === 'revoke') value = await invites.revoke(args.rootDriveKey || space, args.id)
+    else if (app === 'invites' && action === 'approve') value = await invites.approve(args.rootDriveKey || space, args.memberId)
+    else if (app === 'invites' && action === 'deny') value = await invites.deny(args.rootDriveKey || space, args.memberId)
+    else if (app === 'invites' && action === 'read') value = await invites.read(args.link)
+    else if (app === 'invites' && action === 'pending') value = invites.pending()
     else if (app === 'spaces' && action === 'attach') {
       await spaceLib.attach({ vault }, args)
       value = await spaceLib.status({ vault, manager }, args.rootDriveKey)

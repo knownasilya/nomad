@@ -26,6 +26,7 @@ import * as pairing from './device-pairing';
 import * as settingsDb from '../dbs/settings';
 import * as sl from '../../../shared/space-library.mjs';
 import * as cal from '../../../shared/calendar.mjs';
+import * as inv from '../../../shared/invites.mjs';
 import * as apps from '../../../shared/vault-apps.mjs';
 import { namesPrefix } from '../../../shared/names.mjs';
 import { vaultRoot as assetsVaultRoot, LIB_ASSETS } from '../../../shared/assets.mjs';
@@ -297,7 +298,10 @@ export async function status(space) {
     removed: lib.removed,
     writable: lib.writable,
     members: list,
-    joins: canManageHere(lib) ? listJoinRequests(lib.library) : [],
+    // A join another of the user's Devices approved already is no longer waiting here.
+    joins: canManageHere(lib)
+      ? listJoinRequests(lib.library).filter((j) => !list.some((m) => m.memberId === j.memberId))
+      : [],
     requests,
   };
 }
@@ -381,17 +385,95 @@ async function _saveInvites() {
   await settingsDb.set(INVITES_SETTING, JSON.stringify(_invites || [])).catch(() => {});
 }
 
-// A single-use code for someone to join the Space with `role`. Only an owner invites.
-export async function createInvite(space, role) {
+// A single-use code for someone to join the Space with `role`. Only an owner invites. A bare code
+// never expires and only this Device answers it (it's kept in this Device's settings). An invite
+// link's code (`link: true`) is kept as a Vault invite record instead (ADR-0040 §5, inviteLink
+// below), so any of the user's Devices that manages the Space answers it, and it runs out.
+export async function createInvite(space, role, { link = false } = {}) {
   if (role !== 'editor' && role !== 'viewer') throw new Error('Pick Can edit or Can view');
   const lib = await _manage(space);
   const { invite, publicKey } = BlindPairing.createInvite(lib.sess.base.key);
-  const invites = await _loadInvites();
-  invites.push({ library: lib.library, publicKey: hex(publicKey), role, createdAt: new Date().toISOString() });
-  await _saveInvites();
+  if (!link) {
+    const invites = await _loadInvites();
+    invites.push({ library: lib.library, publicKey: hex(publicKey), role, createdAt: new Date().toISOString() });
+    await _saveInvites();
+  }
   _listen(lib.library, lib.sess);
-  logger.info('Made a space invite', { space, role });
-  return { code: z32.encode(invite), role };
+  logger.info('Made a space invite', { space, role, link });
+  return { code: z32.encode(invite), role, publicKey: hex(publicKey), library: lib.library };
+}
+
+// Invite links (ADR-0040 §6)
+// =
+
+// The Space's invites as a link: the blind-pairing invite, wrapped in a link that names the Space
+// and who sent it, signed by the Space's Persona when it has one. `sign(personaId, bytes)` and
+// `persona` ({ id, profileUrl, title } | null) come from the caller (bg/hyper/invites.js).
+// Returns { link, code, role, expiresAt, signed, id }.
+export async function inviteLink(space, role, { days, persona = null, sign = null, spaceName = '' } = {}) {
+  const made = await createInvite(space, role, { link: true });
+  const id = randomBytes(16).toString('hex');
+  const expiresAt = inv.expiryOf(days);
+  const index = await autobases.readJson((await forSpace(space)).sess, sl.LIB_INDEX).catch(() => null);
+  const name = String(index?.name || spaceName || 'Space');
+  const fields = { id, expiresAt, space: { code: made.code, name, role } };
+  let payload;
+  let signed = false;
+  if (persona && sign) {
+    const from = persona.profileUrl.slice('hyper://'.length, 'hyper://'.length + 64);
+    const body = inv.encodeBody({ ...fields, from, name: persona.title || '', signed: true });
+    const sig = await sign(persona.id, inv.signedBytes(body)).catch((e) => {
+      logger.warn('Could not sign an invite; sending it unsigned', { error: String(e) });
+      return null;
+    });
+    if (sig) {
+      payload = inv.encodeInvite({ ...fields, from, name: persona.title || '' }, () => sig);
+      signed = true;
+    }
+  }
+  if (!payload) payload = inv.encodeInvite(fields);
+  const rec = inv.makeInviteRecord({
+    id,
+    personaId: signed ? persona.id : null,
+    space: { space, library: made.library, publicKey: made.publicKey, role, name },
+    device: await _ownDevice(),
+    expiresAt,
+    signed,
+  });
+  await vault.putAppRecord(inv.invitePath(id), rec);
+  return { id, link: inv.linkOf(payload), code: made.code, role, expiresAt, signed };
+}
+
+// The Space's invite links, newest first: [{ id, role, state, createdAt, expiresAt, usedBy }].
+// Drops records closed for a month.
+export async function listInvites(space) {
+  const records = await vault.listAppRecords(inv.INVITES_PREFIX).catch(() => []);
+  const { shown, stale } = inv.listFor(records, space);
+  for (const id of stale) vault.delAppRecord(inv.invitePath(id)).catch(() => {});
+  return shown.map((r) => ({
+    id: r.id,
+    role: r.space.role,
+    state: r.state,
+    createdAt: r.createdAt,
+    expiresAt: r.expiresAt,
+    usedAt: r.usedAt || null,
+    usedBy: r.usedBy?.name || null,
+    signed: !!r.signed,
+  }));
+}
+
+export async function revokeInvite(space, id) {
+  await _manage(space);
+  const rec = await vault.readAppRecord(inv.invitePath(id)).catch(() => null);
+  if (!inv.isInviteRecord(rec) || rec.space.space !== space) throw new Error('That invite is gone');
+  await vault.putAppRecord(inv.invitePath(id), inv.markRevoked(rec));
+}
+
+// The invites a join to `library` can match: this Device's bare codes, and every open invite link.
+async function _matchable(library) {
+  const own = (await _loadInvites()).filter((i) => i.library === library);
+  const records = inv.openInvitesFor(await vault.listAppRecords(inv.INVITES_PREFIX).catch(() => []), library);
+  return [...own, ...records.map((r) => ({ library, publicKey: r.space.publicKey, role: r.space.role, recordId: r.id }))];
 }
 
 // library key -> blind-pairing member; library key -> Map(memberId -> pending join)
@@ -419,7 +501,7 @@ function _listen(library, sess) {
 }
 
 async function _onCandidate(library, candidate, resolve) {
-  const invites = (await _loadInvites()).filter((i) => i.library === library);
+  const invites = await _matchable(library);
   const invite = invites.find((i) => {
     try {
       candidate.open(b4a.from(i.publicKey, 'hex'));
@@ -441,7 +523,15 @@ async function _onCandidate(library, candidate, resolve) {
     return resolve();
   }
   if (!_joins.has(library)) _joins.set(library, new Map());
-  _joins.get(library).set(req.memberId, { ...req, role: invite.role, invite: invite.publicKey, candidate, resolve, requestedAt: new Date().toISOString() });
+  _joins.get(library).set(req.memberId, {
+    ...req,
+    role: invite.role,
+    invite: invite.publicKey,
+    recordId: invite.recordId || null,
+    candidate,
+    resolve,
+    requestedAt: new Date().toISOString(),
+  });
   const space = await _spaceOfLibrary(library);
   logger.info('Someone asks to join a space', { space, role: invite.role });
   events.emit('join-request', { space, memberId: req.memberId, name: req.name, role: invite.role });
@@ -471,6 +561,12 @@ export async function approveJoin(space, memberId) {
   }
   _invites = (await _loadInvites()).filter((i) => i.publicKey !== req.invite);
   await _saveInvites();
+  if (req.recordId) {
+    const path = inv.invitePath(req.recordId);
+    const prev = await vault.readAppRecord(path).catch(() => null);
+    if (inv.isInviteRecord(prev))
+      await vault.putAppRecord(path, inv.markUsed(prev, { name: req.name, profileUrl: req.profileUrl })).catch(() => {});
+  }
   logger.info('Approved a member', { space, memberId, role: req.role });
   events.emit('join-resolved', { space, memberId, approved: true });
   return rec;

@@ -133,3 +133,8 @@ export const linkFor = (personaId) => need().linkFor(personaId);
 export function personaForSpace(spaceId) {
   return personas.personaForSpaceId(spaceId)?.id || null;
 }
+
+// Invite links (ADR-0040, bg/hyper/invites.js): sign with a Persona's `sign` key, and read the
+// `sign` key a Profile Drive publishes.
+export const signInvite = (personaId, bytes) => need().signInvite(personaId, bytes);
+export const publishedSign = (profileUrl) => need().publishedSign(profileUrl);

@@ -32,6 +32,7 @@ import hyper from '../../hyper/index';
 import * as drafts from '../../hyper/drafts';
 import * as mods from '../mods';
 import * as personas from '../personas';
+import { acceptUrlFor } from '../../hyper/invites';
 import fsAPI from '../../web-apis/bg/fs';
 
 const ERR_ABORTED = -3;
@@ -443,7 +444,9 @@ export class Pane extends EventEmitter {
     this.isQuietLoading = Boolean(quiet);
     // hyper://<name>/ is a shortcut to what the user named (hyper/names.js): the tab goes to the
     // real address, so the drive keeps one origin and no page can resolve a name for itself.
-    this.webContents.loadURL(names.resolveUrl(url, this.spaceKey) || url, opts ? loadOpts : undefined);
+    // An invite link (ADR-0040 §4) opens the page that reads it, not nomad.dev's page about it.
+    const invite = acceptUrlFor(url);
+    this.webContents.loadURL(invite || names.resolveUrl(url, this.spaceKey) || url, opts ? loadOpts : undefined);
   }
 
   reload() {
@@ -827,7 +830,7 @@ export class Pane extends EventEmitter {
 
   async onWillNavigate(e, url) {
     // A link to hyper://<name>/ in a page: go to the real address instead (see loadURL).
-    const named = names.resolveUrl(url, this.spaceKey);
+    const named = names.resolveUrl(url, this.spaceKey) || acceptUrlFor(url);
     if (named) {
       e.preventDefault();
       this.loadURL(named);

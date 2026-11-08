@@ -122,6 +122,12 @@
         "schemes": [
           "dat"
         ]
+      },
+      {
+        "name": "Nomad invite",
+        "schemes": [
+          "nomad-invite"
+        ]
       }
     ],
     "linux": {

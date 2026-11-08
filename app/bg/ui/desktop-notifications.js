@@ -42,6 +42,10 @@ export function setup(opts = {}) {
     );
   });
   checkJobs().catch(() => {});
+  // Someone asks to join a Space this computer manages, from an invite link or a code (ADR-0040).
+  spaceLibrary.events.on('join-request', ({ space, name } = {}) => {
+    joinRequest(space, name).catch((err) => logger.warn('Join notification failed', { error: err?.message }));
+  });
   const spaceTimers = new Map();
   spaceLibrary.events.on('changed', ({ space } = {}) => {
     if (!space) return;
@@ -148,6 +152,17 @@ async function checkSpaceOnce(space) {
   }
   if (!alerts.length || !(await enabled('spaces'))) return;
   for (const a of alerts) show({ title: a.title, body: a.body, onClick: () => openUrl?.(null) });
+}
+
+async function joinRequest(space, name) {
+  if (!(await enabled('spaces'))) return;
+  const info = space ? await spaceLibrary.notices(space).catch(() => null) : null;
+  const where = info?.name || 'your Space';
+  show({
+    title: `${String(name || 'Someone').slice(0, 60)} asks to join ${where}`,
+    body: 'Approve or deny them in My Library → Sharing, in that Space.',
+    onClick: () => openUrl?.('nomad://library/sharing'),
+  });
 }
 
 // Permission prompts

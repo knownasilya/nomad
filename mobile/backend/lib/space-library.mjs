@@ -12,7 +12,8 @@ import { DRIVE_AUTOBASE } from '../../rpc-commands.mjs'
 // The phone's side of shared Spaces (ADR-0029; desktop: app/bg/hyper/space-library.js). A shared
 // Space's drives, feeds, Notes and Names are in its Space Library, an Autobase its members
 // replicate. The phone reads them there and writes them when this person can edit. It joins a
-// shared Space with a code too. Sharing a Space and managing its people stay on desktop.
+// shared Space with a code or an invite link, and an owner invites people from it (lib/invites.mjs).
+// Sharing a Space and changing people's roles stay on desktop.
 //
 // `vault` is the opened Vault Autobase, `manager` the DriveManager. The Library opens through the
 // manager, so its records and the drive registry read the same way any drive does.
@@ -100,6 +101,15 @@ export async function keepWriter ({ vault }, lib) {
   return true
 }
 
+// One BlindPairing instance for every Space join and every Library this phone answers joins for
+// (lib/invites.mjs), as desktop shares one (ADR-0029 spike S2): two instances on one swarm would
+// both claim the pairing channel on each connection.
+let _bp = null
+export function pairingFor (manager) {
+  if (!_bp) _bp = new BlindPairing(manager.swarm, { poll: 5000 })
+  return _bp
+}
+
 // Join a shared Space with a code. Mints the Library writer key in a fresh namespace first (the
 // Library's key isn't known yet), asks, and once an owner approves, opens the Library there and
 // waits for its index. `remember(library, ns)` keeps the namespace so the Library opens there
@@ -119,20 +129,15 @@ export async function join ({ store, manager }, code, { name } = {}, remember = 
   const memberId = sl.newMemberId(randomHex)
   const userData = b4a.from(JSON.stringify(sl.makeJoinRequest({ memberId, name, writerKey })))
 
-  const bp = new BlindPairing(manager.swarm, { poll: 5000 })
-  let library
-  try {
-    library = await new Promise((resolve, reject) => {
-      try {
-        const candidate = bp.addCandidate({ invite, userData, onadd: (result) => resolve(hex(result.key)) })
-        candidate.pairing.catch(reject)
-      } catch (e) {
-        reject(e)
-      }
-    })
-  } finally {
-    Promise.resolve().then(() => bp.close()).catch(() => {})
-  }
+  const bp = pairingFor(manager)
+  const library = await new Promise((resolve, reject) => {
+    try {
+      const candidate = bp.addCandidate({ invite, userData, onadd: (result) => resolve(hex(result.key)) })
+      candidate.pairing.catch(reject)
+    } catch (e) {
+      reject(e)
+    }
+  })
   manager.joinedNs.set(library, ns)
   remember(library, ns)
   const entry = await manager.open(DRIVE_AUTOBASE, b4a.from(library, 'hex'))

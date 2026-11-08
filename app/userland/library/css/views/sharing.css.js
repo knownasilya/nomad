@@ -475,6 +475,38 @@ const cssStr = css`
     user-select: all;
   }
 
+  input.code.link {
+    border: 1px solid var(--border-color--light);
+    color: var(--text-color--default);
+    font-family: var(--code-font);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .invite .fields {
+    flex-wrap: wrap;
+  }
+
+  button.link-btn {
+    border-color: transparent;
+    background: none;
+    color: var(--share-accent);
+  }
+
+  button.link-btn:hover {
+    border-color: transparent;
+    text-decoration: underline;
+  }
+
+  .option.offer {
+    border-color: var(--share-accent);
+  }
+
+  .option.offer .what .fas {
+    color: var(--share-accent);
+  }
+
   .leave {
     display: flex;
     flex-wrap: wrap;

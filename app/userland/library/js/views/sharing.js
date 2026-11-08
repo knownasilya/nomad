@@ -42,7 +42,10 @@ export class SharingView extends LitElement {
       info: { type: Object }, // nomad.vault.getSpaceShare(), undefined while loading
       ownName: { type: String },
       inviteRole: { type: String },
-      invite: { type: Object }, // { code, role } once made
+      invite: { type: Object }, // { link?, code, role, expiresAt? } once made
+      inviteDays: { type: Number },
+      invites: { type: Array }, // nomad.vault.listSpaceInvites(): this Space's invite links
+      offer: { type: Object }, // an invite link opened here: { link, info, error, checking }
       joining: { type: Object }, // { code, name, waiting, error }
       busy: { type: Boolean },
       error: { type: String },
@@ -61,6 +64,9 @@ export class SharingView extends LitElement {
     this.ownName = '';
     this.inviteRole = 'viewer';
     this.invite = null;
+    this.inviteDays = 14;
+    this.invites = [];
+    this.offer = null;
     this.joining = { code: '', name: '', waiting: false, error: '' };
     this.busy = false;
     this.error = '';
@@ -75,15 +81,32 @@ export class SharingView extends LitElement {
         history.replaceState(history.state, '', url.pathname + url.search);
       }
     } catch {}
+    this.readOffer();
     this.load();
     try {
       nomad.vault.watchSpaceShare().addEventListener('changed', () => this.load());
     } catch {}
   }
 
+  // An invite link opened in Nomad (ADR-0040 §4) comes here with its payload in the fragment.
+  // Reading it checks the expiry and the signature; joining waits for the user's click.
+  async readOffer() {
+    const m = /^#invite=([A-Za-z0-9_-]+)$/.exec(location.hash || '');
+    if (!m) return;
+    const link = `https://nomad.pages.dev/invite/#${m[1]}`;
+    history.replaceState(history.state, '', location.pathname + location.search);
+    this.offer = { link, info: null, error: '', checking: true };
+    try {
+      this.offer = { ...this.offer, info: await nomad.vault.readInvite(link), checking: false };
+    } catch (e) {
+      this.offer = { ...this.offer, error: e.message || String(e), checking: false };
+    }
+  }
+
   async load() {
     try {
       this.info = await nomad.vault.getSpaceShare();
+      if (this.info.shared && this.info.role === 'owner') this.invites = await nomad.vault.listSpaceInvites().catch(() => []);
       // A shared Space has no ownName: the user's name in it is their member record's.
       const me = (this.info.members || []).find((m) => m.memberId && m.memberId === this.info.memberId);
       const own = this.info.ownName || me?.name || '';
@@ -328,20 +351,42 @@ export class SharingView extends LitElement {
                   <option value="viewer">Can view</option>
                   <option value="editor">Can edit</option>
                 </select>
-                <button class="primary" ?disabled=${this.busy} @click=${this.onInvite}>Make a code</button>
+                <label class="inline" for="invite-days">Link works for</label>
+                <select id="invite-days" .value=${String(this.inviteDays)} @change=${(e) => (this.inviteDays = Number(e.target.value))}>
+                  <option value="1">1 day</option>
+                  <option value="7">7 days</option>
+                  <option value="14">14 days</option>
+                  <option value="30">30 days</option>
+                </select>
+                <button class="primary" ?disabled=${this.busy} @click=${this.onInviteLink}>Make an invite link</button>
+                <button class="link-btn" ?disabled=${this.busy} @click=${this.onInvite}>Make a code instead</button>
               </div>
-              ${this.invite
+              ${this.invite?.link
                 ? html`
                     <div class="code-row">
-                      <code class="code">${this.invite.code}</code>
-                      <button @click=${() => this.copy(this.invite.code)}><span class="far fa-copy"></span> Copy</button>
+                      <input class="code link" readonly .value=${this.invite.link} aria-label="Invite link" @focus=${(e) => e.target.select()} />
+                      <button @click=${() => this.copy(this.invite.link, 'Link copied')}><span class="far fa-copy"></span> Copy</button>
                     </div>
                     <div class="sub">
-                      Send this code to one person. They enter it under Join a shared Space, and you approve them
-                      here. They’ll ${this.invite.role === 'editor' ? 'be able to edit' : 'be able to view'} everything.
+                      Send this link to one person, by text or email. It opens on any phone or computer, helps them
+                      get Nomad, and brings them here to join. You approve them on any of your devices. They’ll
+                      ${this.invite.role === 'editor' ? 'be able to edit' : 'be able to view'} everything. It works until
+                      ${new Date(this.invite.expiresAt).toLocaleDateString()}${this.invite.signed ? '' : ', and it doesn’t say who sent it, because this Space has no Persona that can sign it'}.
                     </div>
                   `
-                : ''}
+                : this.invite
+                  ? html`
+                      <div class="code-row">
+                        <code class="code">${this.invite.code}</code>
+                        <button @click=${() => this.copy(this.invite.code)}><span class="far fa-copy"></span> Copy</button>
+                      </div>
+                      <div class="sub">
+                        Send this code to one person who already has Nomad. They enter it under Join a shared Space,
+                        and you approve them here. They’ll ${this.invite.role === 'editor' ? 'be able to edit' : 'be able to view'} everything.
+                      </div>
+                    `
+                  : ''}
+              ${this.renderInvites()}
             </div>
           `
         : ''}
@@ -349,6 +394,40 @@ export class SharingView extends LitElement {
       <div class="leave">
         <button class="danger" @click=${this.onLeave}><span class="fas fa-sign-out-alt"></span> Leave ${i.name}</button>
         <span class="sub">It goes from all your devices.</span>
+      </div>
+    `;
+  }
+
+  // This Space's invite links, with Revoke while one is open.
+  renderInvites() {
+    const list = this.invites || [];
+    if (!list.length) return '';
+    const STATE = { open: 'Waiting', used: 'Used', expired: 'Ran out', revoked: 'Revoked' };
+    return html`
+      <h3 class="section-title">Invite links</h3>
+      <div class="list">
+        ${repeat(
+          list,
+          (r) => r.id,
+          (r) => html`
+            <div class="row">
+              <span class="fas fa-fw fa-link"></span>
+              <div class="meta">
+                <div class="title">${ROLE_LABELS[r.role]} · ${STATE[r.state] || r.state}${r.usedBy ? html` by ${r.usedBy}` : ''}</div>
+                <div class="sub">
+                  Made ${new Date(r.createdAt).toLocaleDateString()}${r.state === 'open' && r.expiresAt
+                    ? html` · works until ${new Date(r.expiresAt).toLocaleDateString()}`
+                    : ''}
+                </div>
+              </div>
+              <div class="actions">
+                ${r.state === 'open'
+                  ? html`<button @click=${() => this.onRevoke(r)}>Revoke</button>`
+                  : ''}
+              </div>
+            </div>
+          `
+        )}
       </div>
     `;
   }
@@ -433,25 +512,27 @@ export class SharingView extends LitElement {
 
   renderJoin() {
     const j = this.joining;
+    const o = this.offer;
+    if (o && !j.waiting) return this.renderOffer(o);
     return html`
       <div class="option">
         <div class="option-head">
           <span class="option-icon"><span class="fas fa-sign-in-alt"></span></span>
           <div>
             <div class="option-title">Join a shared Space</div>
-            <div class="option-sub">Someone sent you a code</div>
+            <div class="option-sub">Someone sent you an invite link or a code</div>
           </div>
         </div>
-        <div class="what"><div>Enter the code. Someone who owns the Space approves you, and it opens here.</div></div>
+        <div class="what"><div>Paste the link or the code. Someone who owns the Space approves you, and it opens here.</div></div>
         ${j.waiting
           ? html`<div class="waiting"><span class="spinner"></span> Waiting for an owner to approve you…</div>`
           : html`
-              <label for="join-code">Code</label>
+              <label for="join-code">Invite link or code</label>
               <input
                 id="join-code"
                 class="code-input"
                 .value=${j.code}
-                placeholder="Paste the code"
+                placeholder="Paste the link or the code"
                 @input=${(e) => (this.joining = { ...j, code: e.target.value, error: '' })}
               />
               <label for="join-name">Your name</label>
@@ -460,6 +541,60 @@ export class SharingView extends LitElement {
                 <button class="primary" ?disabled=${!j.code.trim()} @click=${this.onJoin}>Join</button>
               </div>
             `}
+        ${j.error ? html`<div class="error">${j.error}</div>` : ''}
+      </div>
+    `;
+  }
+
+  // An invite link someone sent, opened in Nomad: who it's from, what joining does, and Join.
+  renderOffer(o) {
+    const j = this.joining;
+    const info = o.info;
+    const from = info?.from;
+    return html`
+      <div class="option offer">
+        <div class="option-head">
+          <span class="option-icon"><span class="fas fa-envelope-open-text"></span></span>
+          <div>
+            <div class="option-title">${info ? info.title : o.error ? 'This invite can’t be used' : 'Reading the invite…'}</div>
+            <div class="option-sub">${info?.role || ''}</div>
+          </div>
+        </div>
+        ${o.checking ? html`<div class="waiting"><span class="spinner"></span> Checking who it’s from…</div>` : ''}
+        ${o.error ? html`<div class="error">${o.error}</div>` : ''}
+        ${info
+          ? html`
+              <div class="what">
+                ${info.check === 'ok' && from
+                  ? html`<div>
+                      <span class="fas fa-fw fa-check-circle"></span> Signed by
+                      <a href=${from.url} target="_blank">${from.profileTitle || from.name}</a>.
+                      ${from.nameDiffers ? html`The link says ${from.name}. Their profile says ${from.profileTitle}.` : ''}
+                    </div>`
+                  : info.check === 'unknown'
+                    ? html`<div>
+                        <span class="fas fa-fw fa-hourglass-half"></span> Couldn’t check who sent it yet: their profile
+                        isn’t reachable. An owner of the Space still approves you before you see anything.
+                      </div>`
+                    : html`<div>
+                        <span class="fas fa-fw fa-exclamation-triangle"></span> This invite isn’t signed. Join only if you
+                        know who sent it.
+                      </div>`}
+              </div>
+              ${info.expired
+                ? html`<div class="error">This invite has run out. Ask for a new one.</div>`
+                : html`
+                    <label for="join-name">Your name</label>
+                    <input id="join-name" .value=${j.name} placeholder="Your name" @input=${(e) => (this.joining = { ...j, name: e.target.value })} />
+                    <div class="option-actions">
+                      <button @click=${() => (this.offer = null)}>Not now</button>
+                      <button class="primary" ?disabled=${!info.space} @click=${() => this.onJoin(o.link)}>
+                        Join ${info.space?.name || ''}
+                      </button>
+                    </div>
+                  `}
+            `
+          : html`<div class="option-actions"><button @click=${() => (this.offer = null)}>Close</button></div>`}
         ${j.error ? html`<div class="error">${j.error}</div>` : ''}
       </div>
     `;
@@ -486,6 +621,16 @@ export class SharingView extends LitElement {
     if (res) this.invite = res;
   }
 
+  async onInviteLink() {
+    const res = await this.run(() => nomad.vault.createSpaceInviteLink(this.inviteRole, { days: this.inviteDays }));
+    if (res) this.invite = res;
+  }
+
+  async onRevoke(r) {
+    if (!confirm('Revoke this invite link? Nobody can join with it after this.')) return;
+    await this.run(() => nomad.vault.revokeSpaceInvite(r.id), 'Revoked');
+  }
+
   async onRemove(m) {
     if (!confirm(`Remove ${m.name} from ${this.info.name}? Their changes stop, but they keep what they already have.`)) return;
     await this.run(() => nomad.vault.removeSpaceMember(m.memberId), `Removed ${m.name}`);
@@ -503,11 +648,13 @@ export class SharingView extends LitElement {
     await this.run(() => nomad.vault.leaveSpace(), 'Left the Space');
   }
 
-  async onJoin() {
+  async onJoin(link) {
     const j = this.joining;
+    const code = typeof link === 'string' ? link : j.code.trim();
     this.joining = { ...j, waiting: true, error: '' };
     try {
-      const res = await nomad.vault.joinSpace(j.code.trim(), { name: j.name });
+      const res = await nomad.vault.joinSpace(code, { name: j.name });
+      this.offer = null;
       this.joining = { code: '', name: j.name, waiting: false, error: '' };
       toast.create(`Joined ${res.name}`, 'success');
       await this.load();
@@ -516,9 +663,9 @@ export class SharingView extends LitElement {
     }
   }
 
-  copy(text) {
+  copy(text, msg = 'Code copied') {
     writeToClipboard(text);
-    toast.create('Code copied', '', 2e3);
+    toast.create(msg, '', 2e3);
   }
 }
 

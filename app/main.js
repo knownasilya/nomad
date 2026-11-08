@@ -144,6 +144,13 @@ app.on('ready', async function () {
 
   await logger.setup(join(commonOpts.userDataPath, 'nomad.log'));
   log.info('Welcome to Nomad');
+  // Invite links (ADR-0040 §4): one narrow scheme, so nomad.dev's "Open the invite" reaches Nomad.
+  // It only ever opens the page that reads an invite (bg/hyper/invites.js acceptUrlFor).
+  try {
+    if (!app.isDefaultProtocolClient('nomad-invite')) app.setAsDefaultProtocolClient('nomad-invite');
+  } catch (e) {
+    log.warn('Could not register nomad-invite:', { error: String(e) });
+  }
   nomadProtocol.register(protocol);
   webapis.setup();
   initWindow.open();
@@ -310,7 +317,7 @@ if (!isFirstInstance) {
 function handleArgv(argv) {
   if (process.platform !== 'darwin') {
     // look for URLs, windows & linux use argv instead of open-url
-    let url = argv.find((v) => v.indexOf('://') !== -1);
+    let url = argv.find((v) => v.indexOf('://') !== -1 || v.startsWith('nomad-invite:'));
     if (url) {
       openURL.open(url);
     }

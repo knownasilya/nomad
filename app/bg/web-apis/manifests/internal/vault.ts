@@ -36,13 +36,17 @@ export default {
   shareSpace: 'promise', // ({ name }) -> share info
   setUpHome: 'promise', // ({ name?, ownName? }) -> { spaceId, name }: a new shared Space with a Groceries list and House info
   createSpaceInvite: 'promise', // (role: 'editor' | 'viewer') -> { code, role }
+  createSpaceInviteLink: 'promise', // (role, { days? }) -> { id, link, code, role, expiresAt, signed } (ADR-0040)
+  listSpaceInvites: 'promise', // -> [{ id, role, state, createdAt, expiresAt, usedAt, usedBy, signed }]
+  revokeSpaceInvite: 'promise', // (id)
+  readInvite: 'promise', // (link) -> { title, role, from, check, expired, expiresAt, space }; throws for a changed invite
   approveSpaceJoin: 'promise', // (memberId)
   denySpaceJoin: 'promise', // (memberId)
   setSpaceRole: 'promise', // (memberId, role)
   removeSpaceMember: 'promise', // (memberId)
   answerSpaceRequest: 'promise', // ({ drive, writerKey, approve })
   leaveSpace: 'promise',
-  joinSpace: 'promise', // (code, { name }) -> { spaceId, name }, once an owner approves
+  joinSpace: 'promise', // (code or invite link, { name }) -> { spaceId, name }, once an owner approves
   watchSpaceShare: 'readable', // 'changed'
 
   // Reader and Notes data (bg/vault-apps.ts)
