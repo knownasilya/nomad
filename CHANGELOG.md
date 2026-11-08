@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.46.0](https://github.com/knownasilya/nomad/compare/v1.45.0...v1.46.0) (2026-11-08)
+
+
+### Features
+
+* **assets:** turn the family album into Assets, a place for any file in a Space ([85f5342](https://github.com/knownasilya/nomad/commit/85f5342ffe00870fb26b2f62059cbca767d84dfd))
+* **calendar:** reminders that reach everyone who sees the event, on desktop and the phone ([800f5b3](https://github.com/knownasilya/nomad/commit/800f5b35c09d0be6e2eccf232a5d7cdcb9a15b44))
+* **calendar:** time pickers for events on desktop and the phone ([350382f](https://github.com/knownasilya/nomad/commit/350382f14cde96e45358859d049a667d6ce04435))
+* Cmd/Ctrl+K command palette on desktop ([bb03f21](https://github.com/knownasilya/nomad/commit/bb03f21ccaed06448cb6dd6b492dc6abcac3d916))
+* **desktop:** OS notifications for Jobs, Space notices and waiting prompts ([409bb7a](https://github.com/knownasilya/nomad/commit/409bb7a437d163dc6cf5d5d0edab4c8dac6a0361))
+* household contacts, a shared Space's address book, on desktop, the phone and the AI ([c166253](https://github.com/knownasilya/nomad/commit/c16625352cc78d77d01681861d215e512583793b))
+* **jobs:** Stop a running Job and watch its progress on the Jobs page ([8f52ce9](https://github.com/knownasilya/nomad/commit/8f52ce914cb486d955777dfbcb3db2c5a1eb3c20))
+* **mobile:** invite people to a shared Space and join with an invite link (ADR-0040) ([6b923c5](https://github.com/knownasilya/nomad/commit/6b923c5e868d546cbdaebc87bedd29dd132b97fe))
+* names in the command palette, and # to search only names ([83bc036](https://github.com/knownasilya/nomad/commit/83bc036fe60fff556e340c40c3dda207b36e085f))
+* **personas:** every vouch needs a note ([0c030b6](https://github.com/knownasilya/nomad/commit/0c030b6db415b5f9304fb2f483ea2fdc243941bd))
+* **personas:** open a logged-in site from its row ([b165f90](https://github.com/knownasilya/nomad/commit/b165f905b38ed24b23d46aef56833077689ec2cc))
+* **personas:** vouches, "I've had this person over at my home" (ADR-0045) ([0761f5e](https://github.com/knownasilya/nomad/commit/0761f5e493801a7c0de6b8769187219e82dbb37e))
+* **sharing:** Space invite links on desktop, phone backend for inviting (ADR-0040) ([cdd324f](https://github.com/knownasilya/nomad/commit/cdd324f0988157c28ae6defc58f7c48e9ca835a6))
+* **shell:** a private file picker that hands out capability URLs ([40bc0dd](https://github.com/knownasilya/nomad/commit/40bc0ddea2aa21d14d90b5bd5cb5445643115104))
+* **shell:** pages always get capabilities from the file picker ([04d055d](https://github.com/knownasilya/nomad/commit/04d055dbd681b54efc75730c1f8cb3c2d0887188))
+
+
+### Bug Fixes
+
+* **assets:** drop the nomad://photos redirect ([7677485](https://github.com/knownasilya/nomad/commit/7677485e7d7cd6bf11583c47e3d03a9ba478f0ce))
+* **calendar:** show times on a 12-hour clock ([3f0e12c](https://github.com/knownasilya/nomad/commit/3f0e12c71fbb479dd5ad006132cbef6559b5aa06))
+* **fs:** read drives through nomad.capabilities URLs on both backends ([cf80a2e](https://github.com/knownasilya/nomad/commit/cf80a2e1b07a11b4c83ee50a195b5f7a23dd44d7))
+* **library:** readable invite link in dark mode, phone icon, clearer contact buttons ([e3dc754](https://github.com/knownasilya/nomad/commit/e3dc754ca68140b7aa212ef5746da9b505ced6a8))
+* **personas:** say "vouched for you" instead of "had you over" ([b84bcc3](https://github.com/knownasilya/nomad/commit/b84bcc3c129b8f05b0e7d04adee027e95d98889f))
+* **test:** find the repo from vitest.config.js's own location ([4090f97](https://github.com/knownasilya/nomad/commit/4090f97054682d088b1cf86dd56c8e115a79acd8))
+
 ## [1.45.0](https://github.com/knownasilya/nomad/compare/v1.44.0...v1.45.0) (2026-11-06)
 
 
