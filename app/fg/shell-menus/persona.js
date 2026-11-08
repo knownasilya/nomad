@@ -163,6 +163,12 @@ class PersonaMenu extends LitElement {
     if (permId === 'modifyDrive') return 'Change files in your profile drive';
     if (permId === 'email')
       return p?.email ? html`See your email, <strong>${p.email}</strong>` : 'See your email';
+    if (permId === 'vouches') {
+      const n = this.session?.vouches || 0;
+      return n
+        ? `See who vouched for you (${n} ${n === 1 ? 'vouch' : 'vouches'})`
+        : 'See who vouched for you';
+    }
     return token;
   }
 

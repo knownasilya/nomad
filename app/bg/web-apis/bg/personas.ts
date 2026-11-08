@@ -3,6 +3,8 @@
 
 import { EventEmitter } from 'events';
 import * as personas from '../../ui/personas';
+import * as vouches from '../../ui/vouches';
+import * as I from '../../../../shared/inbox.mjs';
 import * as filesystem from '../../filesystem/index';
 import * as tabManager from '../../ui/tabs/manager';
 import { findWebContentsParentWindow } from '../../lib/electron';
@@ -60,11 +62,74 @@ export default {
     await personas.endSessionFor(String(url || ''), spaceIdOf(this));
   },
 
+  // Vouches (ADR-0045)
+  // =
+
+  async listVouches() {
+    return vouches.summary();
+  },
+
+  // `to` is a Profile Drive, or the guest's message link (its address lets the Vouch reach them).
+  async previewVouch({ personaId, to, link }: any = {}) {
+    const parsed = link || /^nomad:/.test(String(to || '')) ? I.parseMessageLink(String(link || to)) : null;
+    return vouches.preview({
+      personaId: personaId ? String(personaId) : null,
+      to: parsed?.profileUrl || String(to || ''),
+      replyTo: parsed?.replyTo || null,
+    });
+  },
+
+  async giveVouch({ personaId, to, note, link }: any = {}) {
+    const parsed = link || /^nomad:/.test(String(to || '')) ? I.parseMessageLink(String(link || to)) : null;
+    return vouches.give({
+      personaId: String(personaId || ''),
+      to: parsed?.profileUrl || String(to || ''),
+      note: note == null ? undefined : String(note),
+      replyTo: parsed?.replyTo || null,
+    });
+  },
+
+  async renewVouch(personaId, id) {
+    return vouches.renew(String(personaId), String(id));
+  },
+
+  async withdrawVouch(personaId, id) {
+    await vouches.withdraw(String(personaId), String(id));
+  },
+
+  async forgetVouch(personaId, id) {
+    await vouches.forgetGiven(String(personaId), String(id));
+  },
+
+  async acceptVouch(personaId, id) {
+    await vouches.accept(String(personaId), String(id));
+  },
+
+  async declineVouch(personaId, id) {
+    await vouches.decline(String(personaId), String(id));
+  },
+
+  async setVouchShown(personaId, id, shown) {
+    await vouches.setShown(String(personaId), String(id), String(shown));
+  },
+
+  async profileVouches(url) {
+    return vouches.profileVouches(String(url || ''));
+  },
+
+  async tabPersona() {
+    return personas.personaForSpaceId(spaceIdOf(this))?.id || null;
+  },
+
   watch() {
     const emitter: any = new EventEmitter();
     const changed = () => emitter.emit('changed', {});
     personas.events.on('changed', changed);
-    emitter.close = () => personas.events.removeListener('changed', changed);
+    vouches.events.on('changed', changed);
+    emitter.close = () => {
+      personas.events.removeListener('changed', changed);
+      vouches.events.removeListener('changed', changed);
+    };
     return emitter;
   },
 };

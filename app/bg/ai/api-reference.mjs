@@ -225,6 +225,7 @@ const session = await nomad.session.requestLogin({ perms: ['profile', 'email'], 
 //   perms: ['profile'],    // what the user left checked: a partial grant is normal
 //   profile: { url: 'hyper://…/', title: 'Ada', thumb: '/thumb.png' },  // only with 'profile'
 //   email: 'ada@example.org',  // only with 'email', and only when the Persona has one
+//   vouches: [ { type: 'walled.garden/vouch', host, guest, note, … } ],  // only with 'vouches'
 //   createdAt: '…', expiresAt?: '…' }
 const current = await nomad.session.getCurrent()   // the Session, or null. Never prompts.
 await nomad.session.revoke()                       // log out
@@ -233,7 +234,12 @@ nomad.session.addEventListener('change', e => { /* e.session: the new Session or
 
 - \`perms\`: \`'profile'\` (the Persona's drive URL, name and picture) and \`'modifyDrive'\` (write the Persona's own
   profile drive; needs \`'profile'\`) and \`'email'\` (the Persona's email, on its own; Nomad doesn't verify it, so
-  send your own code if you need to). Without any of them the site only gets the random \`id\`: a stable stranger.
+  send your own code if you need to) and \`'vouches'\` (the \`walled.garden/vouch\` records the user ticks, each saying
+  someone has had them over at home; needs and asks for \`'profile'\`; every one starts unticked, so none is normal).
+  Without any of them the site only gets the random \`id\`: a stable stranger.
+- A vouch is valid while its host's profile drive lists \`sha256(canonicalJSON(vouch))\` in
+  \`/.data/walled.garden/vouches-given.json\` (\`{ type: 'walled.garden/vouch-index', hashes }\`) and \`expiresAt\` hasn't passed.
+  It's the host's word, not proof of a real person: check it, weigh it by whether you know the host, never score it.
 - \`change\` fires when the Session ends or changes: \`revoke()\`, the user logged out in site-info or My Library,
   switched or deleted the Space's Persona, changed its email, or did so on another device. Show a login button again.
 - Only http(s):// sites and hyper://<key> drives can ask. Personas themselves can't be listed by a page.

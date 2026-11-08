@@ -285,7 +285,7 @@ function renderRow(c) {
         ]),
         el('div', { class: 'conv-last' }, [
           c.last.direction === 'out' ? 'You: ' : '',
-          last.text.slice(0, 120),
+          (last.text || (last.vouch ? (c.last.direction === 'out' ? 'Sent a vouch' : 'Vouched for you') : '')).slice(0, 120),
         ]),
         manyPersonas() && p ? el('div', { class: 'conv-persona' }, [`to ${p.label}`]) : null,
       ]),
@@ -398,8 +398,26 @@ function renderBubble(r) {
     retry = el('button', { class: 'link-btn', onclick: () => act('retry', r.message.id) }, ['Retry'])
   } else if (out && r.status === 'delivered') meta += ' · Delivered'
   return el('div', { class: `bubble-row ${out ? 'out' : 'in'}` }, [
-    el('div', { class: `bubble${r.status === 'failed' ? ' failed' : ''}` }, textWithLinks(r.message.text)),
+    r.message.vouch ? renderVouch(r, out) : null,
+    r.message.text ? el('div', { class: `bubble${r.status === 'failed' ? ' failed' : ''}` }, textWithLinks(r.message.text)) : null,
     el('div', { class: 'bubble-meta' }, [meta, retry ? ' ' : '', retry]),
+  ])
+}
+
+// A Message that carries a Vouch (ADR-0045): a card, not a bubble. Accepting it is in
+// My Library → Personas, where the user also picks who sees it.
+function renderVouch(r, out) {
+  const v = r.message.vouch
+  return el('div', { class: `vouch-card${r.status === 'failed' ? ' failed' : ''}` }, [
+    el('span', { class: 'fas fa-home vouch-icon', 'aria-hidden': 'true' }),
+    el('div', { class: 'vouch-body' }, [
+      el('div', { class: 'vouch-title' }, [out ? 'You vouched for them' : 'Vouched for you']),
+      v.note ? el('div', { class: 'vouch-note' }, [`“${v.note}”`]) : null,
+      el('div', { class: 'vouch-sub' }, [
+        `A vouch, until ${new Date(v.expiresAt).toLocaleDateString()}. `,
+        out ? '' : el('a', { href: 'nomad://library/personas#vouches' }, ['Accept or decline it in Personas']),
+      ]),
+    ]),
   ])
 }
 

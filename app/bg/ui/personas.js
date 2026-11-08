@@ -127,7 +127,7 @@ function apply(recs, def, spaces, sessRecs, devices, asks = []) {
     [...nextPersonas.values()].map((p) => [p.id, p.updatedAt]),
     nextDefault,
     [...nextOverrides],
-    [...nextSessions.values()].map((s) => [s.space, s.personaId, s.origin, s.id, s.perms]),
+    [...nextSessions.values()].map((s) => [s.space, s.personaId, s.origin, s.id, s.perms, s.vouches]),
     vaultReady,
     deviceKeys,
     writerAsks.map((a) => [a.drive, a.writerKey, a.device, !!a.grantedBy]),
@@ -402,6 +402,7 @@ export function listSessions() {
     space: s.space,
     spaceName: spaceName(s.space),
     perms: s.perms,
+    vouches: s.perms.includes('vouches') ? vouchesFor(s.personaId, s.vouches || []).length : 0,
     createdAt: s.createdAt,
     expiresAt: s.expiresAt || null,
     expired: P.isExpired(s),
@@ -658,6 +659,13 @@ export function sessionGrants(url, spaceId, token) {
   return P.sessionGrants(sessionFor(url, spaceId), token);
 }
 
+// The Vouches a Session shows its site (ADR-0045 §5), from bg/ui/vouches.js, which imports this
+// module and registers itself here.
+let vouchesFor = (_personaId, _ids) => [];
+export function onSessionVouches(fn) {
+  vouchesFor = fn;
+}
+
 // What a page sees of its Session (null when it has none).
 export function sessionViewFor(url, spaceId) {
   const s = sessionFor(url, spaceId);
@@ -667,7 +675,8 @@ export function sessionViewFor(url, spaceId) {
   const profile = p
     ? { url: p.profileUrl, title: info?.title || p.label, thumb: info?.thumb || '' }
     : null;
-  return P.sessionView(s, profile, p?.email || null);
+  const vouches = s.perms.includes('vouches') ? vouchesFor(s.personaId, s.vouches || []) : null;
+  return P.sessionView(s, profile, p?.email || null, vouches);
 }
 
 // For site-info and the location bar: who you are on this site, and what the Session can do.
@@ -679,6 +688,7 @@ export function siteSession(url, spaceId) {
     path: P.sessionPath(s.space, s.personaId, hashOrigin(s.origin)),
     origin: s.origin,
     perms: s.perms,
+    vouches: s.perms.includes('vouches') ? vouchesFor(s.personaId, s.vouches || []).length : 0,
     createdAt: s.createdAt,
     expiresAt: s.expiresAt || null,
     persona: p ? view(p) : null,
@@ -686,13 +696,14 @@ export function siteSession(url, spaceId) {
 }
 
 // Make (or widen) the Session for this origin, Persona and Space. A Session already there keeps its id.
-export function grant({ origin, spaceKey, personaId, perms, maxAge }) {
+// `vouches`: the ids of the Vouches the user ticked (with the `vouches` permission).
+export function grant({ origin, spaceKey, personaId, perms, vouches = [], maxAge }) {
   return serial(async () => {
     const path = P.sessionPath(spaceKey, personaId, hashOrigin(origin));
     const prev = await vault.readAppRecord(path);
     const id =
       P.isSession(prev) && !P.isExpired(prev) ? prev.id : P.newSessionId(crypto.randomBytes(16));
-    const rec = P.makeSession({ id, origin, personaId, space: spaceKey, perms, maxAge });
+    const rec = P.makeSession({ id, origin, personaId, space: spaceKey, perms, vouches, maxAge });
     await vault.putAppRecord(path, rec);
     await refresh();
     return rec;
@@ -812,6 +823,47 @@ export async function readProfileManifest(url) {
     LOAD_TIMEOUT
   );
   return autobases.readJson(sess, '/index.json').catch(() => null);
+}
+
+// One JSON file from a Profile Drive (Vouches, ADR-0045): { value } with the file's JSON, or
+// { value: null } when it has none; null when the drive couldn't be read in time or hasn't synced
+// (no /index.json yet), so a reader says "Couldn't check" and never "withdrawn". Like
+// readProfileManifest, a stranger's drive is only looked up.
+export async function readProfileFile(url, path) {
+  const key = P.driveKeyOf(url);
+  if (!key) return null;
+  const own = [...personas.values()].some((p) => P.driveKeyOf(p.profileUrl) === key);
+  const sess = await withTimeout(
+    autobases.getOrLoadCollaborativeDrive(key, own ? {} : { lookupOnly: true }).catch(() => null),
+    LOAD_TIMEOUT
+  );
+  if (!sess) return null;
+  await withTimeout(
+    sess.base.update().catch(() => {}),
+    LOAD_TIMEOUT
+  );
+  const manifest = await withTimeout(autobases.readJson(sess, '/index.json').catch(() => null), LOAD_TIMEOUT);
+  if (!manifest) return null;
+  if (path === '/index.json') return { value: manifest };
+  const value = await withTimeout(autobases.readJson(sess, path).catch(() => null), LOAD_TIMEOUT);
+  return { value: value ?? null };
+}
+
+// Write one JSON file into a Persona's own Profile Drive, or remove it (null). False when this
+// Device can't write the drive yet; another of the user's Devices will.
+export function writeProfileFile(id, path, obj) {
+  return serial(async () => {
+    const p = personas.get(id);
+    if (!p) return false;
+    const sess = await openProfile(p.profileUrl);
+    if (!sess?.writable) return false;
+    if (obj == null) {
+      if (await autobases.readJson(sess, path).catch(() => null)) await autobases.deletePath(sess, path);
+    } else {
+      await autobases.putInline(sess, path, JSON.stringify(obj, null, 2));
+    }
+    return true;
+  });
 }
 
 // Write (or with null, remove) the `inbox` field of a Persona's Profile Drive. False when this

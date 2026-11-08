@@ -1,14 +1,14 @@
 # Invite links: one https link that brings a friend onto Nomad
 
 **Status: Proposed.** 2026-11-02. Builds on ADR-0029 (Shared Spaces), ADR-0031 (Personas and
-Sessions), ADR-0036 (Persona Inbox, proposed), ADR-0037 (Vouches, proposed) and ADR-0038
+Sessions), ADR-0036 (Persona Inbox, proposed), ADR-0045 (Vouches) and ADR-0038
 (the always-on Peer, proposed). Amends ADR-0029 §4 (a Space invite can expire) and ADR-0036 §4 (a
 sealed frame can carry an invite id) and §2 (a Persona's `sign` key can exist before its Inbox is
 turned on). Settles ADR-0038's open item "a web view through a Peer" for now: not yet (§9).
 
 Every social feature Nomad has or is adding assumes the other person already runs Nomad. A Shared
 Space invite is a z32 code. A message link is `nomad://messages/new?…`, which only opens inside
-Nomad. A Vouch (ADR-0037) needs the guest to have a Persona. A friend who gets any of these by text can't do
+Nomad. A Vouch (ADR-0045) needs the guest to have a Persona. A friend who gets any of these by text can't do
 anything with it, and nothing tells them what Nomad is or where to get it.
 
 This ADR adds an **Invite link**: an ordinary `https://` link that opens anywhere, says who sent it
@@ -162,7 +162,7 @@ Invites are Vault records, so every Device of the user knows them:
   message-link sender: Requests. Two Devices racing on one invite both write `usedAt`; the earlier
   one wins on merge, and the later sender lands in Requests.
 - **The inviter hears about it.** *"Sam accepted your invite."* (an OS notification like a Message
-  from a Contact, `inbox_notify`), with **Message** and **I've had them over** (ADR-0037) beside it.
+  from a Contact, `inbox_notify`), with **Message** and **I've had them over** (ADR-0045) beside it.
   Nothing is vouched automatically.
 - **Invites are listed** in My Library → Personas → Invites (and the phone's Personas screen):
   label, kind, sent, expires, used by, **Revoke**. Revoking marks the record; the mailbox and box
@@ -265,7 +265,7 @@ If it comes back, it's opt-in per Persona and served from a separate origin. Its
 
 - A Shared Space invite becomes something a person without Nomad can act on, and that a person with
   Nomad opens in one tap instead of copying a code.
-- Messages (ADR-0036) and Vouches (ADR-0037) get a way in for the second person. A personal invite
+- Messages (ADR-0036) and Vouches (ADR-0045) get a way in for the second person. A personal invite
   skips Requests, so the first conversation isn't a stranger's request.
 - nomad.dev gains a page whose contents are private by construction, and a rule that keeps it that
   way: no third-party script on `/invite/`, ever.

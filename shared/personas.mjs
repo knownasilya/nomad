@@ -394,7 +394,9 @@ export function ownWriterKeys(records, { driveKey, deviceKeys = [] } = {}) {
 // The permissions a page may ask a Session for. `modifyDrive` is write access to the Persona's own
 // Profile Drive and comes only with `profile` (a page can't write a drive it can't name). `email` is
 // the Persona's email (ADR-0031 amendment), on its own: it doesn't need `profile`, nor give it.
-export const SESSION_PERMS = ['profile', 'modifyDrive', 'email'];
+// `vouches` is the Vouches the user ticks at login (ADR-0045 §5); each names the Persona's Profile
+// Drive, so it needs `profile`.
+export const SESSION_PERMS = ['profile', 'modifyDrive', 'email', 'vouches'];
 
 // The tokens a page asked for, checked: known names only, `modifyDrive` (or
 // `modifyDrive:<profileKey>`) turned into the token for the Persona's own drive. Throws on any other
@@ -406,7 +408,7 @@ export function requestedPerms(perms, profileKey = null) {
   for (const raw of perms) {
     const p = String(raw || '');
     const [name, param] = [p.split(':')[0], p.split(':').slice(1).join(':')];
-    if (!SESSION_PERMS.includes(name) || ((name === 'profile' || name === 'email') && param)) {
+    if (!SESSION_PERMS.includes(name) || (name !== 'modifyDrive' && param)) {
       throw new TypeError(
         `nomad.session can’t grant “${p}”. It grants ${SESSION_PERMS.slice(0, -1).join(', ')} and ${SESSION_PERMS.at(-1)}.`
       );
@@ -419,15 +421,20 @@ export function requestedPerms(perms, profileKey = null) {
     const token = name === 'modifyDrive' ? (profileKey ? `modifyDrive:${profileKey}` : null) : name;
     if (token && !out.includes(token)) out.push(token);
   }
+  // A Vouch names the Persona's Profile Drive, so asking for Vouches asks for the profile too.
+  if (out.includes('vouches') && !out.includes('profile')) out.unshift('profile');
   return out;
 }
 
-// What the user left checked, cut to what was asked: a partial grant is normal, writing needs the
-// profile, and `email` needs an email on the Persona (hasEmail).
-export function grantedPerms(requested, checked, { hasEmail = true } = {}) {
+// What the user left checked, cut to what was asked: a partial grant is normal, writing and
+// Vouches need the profile, `email` needs an email on the Persona (hasEmail), and `vouches` needs at
+// least one Vouch ticked (vouches: how many).
+export function grantedPerms(requested, checked, { hasEmail = true, vouches = 0 } = {}) {
   let keep = requested.filter((t) => checked.includes(t));
-  if (!keep.includes('profile')) keep = keep.filter((t) => !t.startsWith('modifyDrive:'));
+  if (!keep.includes('profile'))
+    keep = keep.filter((t) => !t.startsWith('modifyDrive:') && t !== 'vouches');
   if (!hasEmail) keep = keep.filter((t) => t !== 'email');
+  if (!vouches) keep = keep.filter((t) => t !== 'vouches');
   return keep;
 }
 
@@ -439,13 +446,15 @@ export function normalizeMaxAge(maxAge) {
   return Math.min(Math.floor(n), MAX_AGE_LIMIT);
 }
 
-/** @param {{ id?: string, origin?: string, personaId?: string, space?: string, perms?: string[], maxAge?: number | null, now?: Date | string | number }} [o] */
+// `vouches`: the ids of the Vouches the user ticked, kept with the `vouches` permission only.
+/** @param {{ id?: string, origin?: string, personaId?: string, space?: string, perms?: string[], vouches?: string[], maxAge?: number | null, now?: Date | string | number }} [o] */
 export function makeSession({
   id,
   origin,
   personaId,
   space,
   perms = [],
+  vouches = [],
   maxAge = null,
   now = new Date(),
 } = {}) {
@@ -464,6 +473,11 @@ export function makeSession({
     perms: [...new Set(perms)],
     createdAt: t.toISOString(),
   };
+  if (rec.perms.includes('vouches')) {
+    const ids = [...new Set((vouches || []).map(String).filter((v) => /^[a-z2-7]{16,40}$/.test(v)))];
+    if (ids.length) rec.vouches = ids;
+    else rec.perms = rec.perms.filter((t) => t !== 'vouches');
+  }
   const age = normalizeMaxAge(maxAge);
   if (age) rec.expiresAt = new Date(t.getTime() + age * 1000).toISOString();
   return rec;
@@ -498,9 +512,11 @@ export function sessionGrants(session, token, now = Date.now()) {
 }
 
 // What a page sees of its Session: the id always (tier 1), the profile only with `profile` (tier 2),
-// and the Persona's email only with `email`. `perms` are the names the page asked with. The email
-// is read from the Persona each time, so a changed address reaches the site (and fires `change`).
-export function sessionView(session, profile = null, email = null) {
+// the Persona's email only with `email`, and with `vouches` the Vouch records the user ticked that it
+// still holds (the caller passes them; the site checks each against its host). `perms` are the names
+// the page asked with. The email is read from the Persona each time, so a changed address reaches
+// the site (and fires `change`).
+export function sessionView(session, profile = null, email = null, vouches = null) {
   if (!session) return null;
   const perms = session.perms.map((t) => t.split(':')[0]);
   const view = { id: session.id, perms, createdAt: session.createdAt };
@@ -513,6 +529,7 @@ export function sessionView(session, profile = null, email = null) {
     };
   }
   if (perms.includes('email') && email) view.email = email;
+  if (perms.includes('vouches') && perms.includes('profile')) view.vouches = vouches || [];
   return view;
 }
 

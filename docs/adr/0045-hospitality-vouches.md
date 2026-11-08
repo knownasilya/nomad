@@ -1,6 +1,7 @@
 # Vouches: one Persona says "I've had this person over at my home"
 
-**Status: Proposed.** 2026-11-02. Builds on ADR-0031 (Personas and Sessions, implemented in [#128]),
+**Status: Accepted** 2026-11-08, built as below (see *As built*). Proposed 2026-11-02 as ADR-0037 and
+renumbered, since another ADR had taken 0037. Builds on ADR-0031 (Personas and Sessions, implemented in [#128]),
 ADR-0036 (the Persona Inbox, proposed in [#129]), ADR-0013 (followers are subscriber-side) and
 ADR-0018 (Names). Amends ADR-0031 §8 and §9 (a new `vouches` permission on `nomad.session`) and
 ADR-0036 §5 (a Message can carry a Vouch).
@@ -33,7 +34,7 @@ that means "verified".
 ### 1. Words
 
 - A **Vouch** is one `walled.garden/vouch` record: one Profile Drive (the **host**) says it has had
-  another (the **guest**) over at home, with an optional note.
+  another (the **guest**) over at home, with a note in the host's words (required, 2026-11-08 amendment).
 - **Giving** a Vouch is the host's act. **Accepting** it is the guest's. A Vouch the guest hasn't
   accepted shows nowhere.
 - **Standing behind** a Vouch is the host's Profile Drive listing its hash (§4). A Vouch the host no
@@ -52,7 +53,7 @@ export const VouchSchema = z.object({
   kind: z.literal('hosted'),
   host: z.url(),                      // the host's Profile Drive, hyper://<key>/
   guest: z.url(),                     // the guest's Profile Drive
-  note: z.string().max(280).optional(), // plain text, shown, never rendered or fetched
+  note: z.string().max(280), // required, non-blank; plain text, shown, never rendered or fetched
   issuedAt: z.iso.datetime(),
   expiresAt: z.iso.datetime(),        // issuedAt + 1 year
 });
@@ -76,7 +77,7 @@ export const VouchSchema = z.object({
 
 1. **The host gives it from the guest's Profile Drive.** site-info on a Profile Drive gets
    **I've had them over**, which opens a short form: the host's Persona (the tab's, ADR-0031 §4, with
-   Change), an optional note, and one sentence that says what giving means (§5): *"Sam can show this
+   Change), a note (required), and one sentence that says what giving means (§5): *"Sam can show this
    to sites and on their profile, with your name on it."* Only a `usable` Persona (ADR-0031 §5) can
    give one.
 2. **Giving writes three things:** the record in the host's Vault (§7), its hash in the host's
@@ -278,6 +279,32 @@ on a Profile Drive's info sheet.
 4. **Phone.** Accept, decline and choose where each is shown; the display on a Profile Drive.
 5. **Docs.** nomad.dev: a Vouches page under Personas that says what a Vouch does and doesn't prove,
    the schema entries, and `vouches` on the `nomad.session` page.
+
+## As built (2026-11-08)
+
+- **Rules and moving parts.** `shared/vouches.mjs` (records, paths, the hash, `verifyVouch`,
+  `groupForViewer`, intake and renewal rules) and `shared/vouch-engine.mjs` (give, renew, withdraw,
+  take in, accept, decline, show, check, the guard), run by desktop (`app/bg/ui/vouches.js`) and the
+  phone (`mobile/backend/lib/vouches.mjs`). Tests `tests/unit/vouches.test.js`, with the golden hash.
+- **Taking a Vouch in.** Any of the guest's Devices that sees a received, checked Message carrying a
+  Vouch writes the held record and marks the Message `vouchSeen: '<id>@<issuedAt>'`, so a declined or
+  removed Vouch doesn't come back from the Message still in the Vault.
+- **The guard** checks each Persona's list every five minutes and reports a hash only once it has been
+  unknown for ten: another Device's Vault record may still be on its way. A withdrawn hash that is
+  still listed (a Device that couldn't write the drive withdrew it) is taken out instead.
+- **`vouches` asks for `profile`.** `requestedPerms` adds `profile` when a page asks only for
+  `vouches`. A Session keeps the ticked ids (`session.vouches`); its view gives the records it still
+  holds, accepted and not expired. The prompt offers the Vouches shown to sites or on the profile.
+- **Giving is on desktop only** (site-info's *Vouch for them* opens My Library → Personas with the
+  form filled in). The phone accepts, declines, removes, chooses where each shows, renews and
+  withdraws. The phone has no info sheet for a Profile Drive yet, so it doesn't show a profile's
+  Vouches; on the phone "people you know" is Contacts and Names (desktop adds Reader follows).
+- **The labels say "vouched for"** (2026-11-08): the UI reads *Maya vouched for you*, *You vouched
+  for Sam*, *Vouch for them* and *Who vouched for them*. "Had you over" stays as what a Vouch means,
+  in the hints and the giving form, not as the label on each one.
+- **Every Vouch has a note** (2026-11-08): the host writes a few words about the guest. `note` is
+  required and can't be blank in `vouchError` and the schema, and Send stays off until there is one.
+  Nothing had shipped yet, so `v` stays 1.
 
 [#128]: https://github.com/knownasilya/nomad/pull/128
 [#129]: https://github.com/knownasilya/nomad/pull/129

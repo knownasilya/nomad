@@ -21,6 +21,7 @@ import * as calendar from './lib/calendar.mjs'
 import { createAssets } from './lib/assets.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
 import { createPhoneInbox } from './lib/inbox.mjs'
+import { createPhoneVouches } from './lib/vouches.mjs'
 import Protomux from 'protomux'
 import c from 'compact-encoding'
 import { createDevicePresence } from '../../shared/device-presence.mjs'
@@ -157,6 +158,7 @@ function setVault (base) {
   vaultChanged()
   personaWritersSoon()
   inbox.setVault(vault).catch((e) => console.log('[inbox] setVault', e?.message || e))
+  vouches.setVault(vault)
 }
 
 // The Persona Inbox (ADR-0036, lib/inbox.mjs): this phone's mailboxes and outbox. While the worklet
@@ -174,8 +176,27 @@ const inbox = createPhoneInbox({
 let inboxTimer = null
 function inboxVaultUpdated () {
   clearTimeout(inboxTimer)
-  inboxTimer = setTimeout(() => inbox.vaultUpdated(), 1000)
+  inboxTimer = setTimeout(() => {
+    inbox.vaultUpdated()
+    vouches.vaultUpdated()
+  }, 1000)
 }
+
+// Vouches between Personas (ADR-0045, lib/vouches.mjs): taken in from Messages any Device received,
+// accepted, shown, renewed and withdrawn here as on a computer.
+const vouches = createPhoneVouches({
+  inbox,
+  openProfile: (url, ms) => openProfile(url, ms),
+  writeProfileFile: async (url, path, bytes) => {
+    const key = pe.driveKeyOf(url)
+    const kb = keyBuf(key)
+    const ns = drivesNs[key] || null
+    if (bytes) await manager.writeFile(DRIVE_AUTOBASE, kb, ns, path, bytes)
+    else await manager.deletePath(DRIVE_AUTOBASE, kb, ns, path, false).catch(() => {})
+  },
+  onChange: () => vaultChanged()
+})
+goodbye(() => vouches.close())
 Bare.on('resume', () => inbox.resume())
 goodbye(() => inbox.close())
 
@@ -690,7 +711,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
       return
     }
     if (!vault) {
-      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'messages' ? 'Link this phone to your computer to use Messages' : app === 'updates' || app === 'peers' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : app === 'calendar' ? 'Link this phone to your computer to use the calendar' : app === 'assets' ? 'Link this phone to your computer to keep your files in Assets' : 'Link this phone to use Reader and Notes' })
+      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'messages' ? 'Link this phone to your computer to use Messages' : app === 'vouches' ? 'Link this phone to your computer to see your vouches' : app === 'updates' || app === 'peers' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : app === 'calendar' ? 'Link this phone to your computer to use the calendar' : app === 'assets' ? 'Link this phone to your computer to keep your files in Assets' : 'Link this phone to use Reader and Notes' })
       return
     }
     let value
@@ -768,10 +789,13 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'personas' && action === 'get') value = await getPersona(args)
     else if (app === 'personas' && action === 'update') value = await updatePersona(args)
     else if (app === 'personas' && action === 'remove') {
-      // Its Inbox goes with it: the seed, Contacts and Messages (ADR-0036 §7.4).
+      // Its Inbox goes with it: the seed, Contacts and Messages (ADR-0036 §7.4). So do its Vouches:
+      // the ones it gave are withdrawn and the ones it held deleted (ADR-0045 §7).
+      await vouches.handle('forgetPersona', { personaId: args.id }).catch(() => {})
       await inbox.handle('forget', { personaId: args.id }).catch(() => {})
       value = await vaultApps.removePersona(vault, args.id)
     } else if (app === 'messages') value = await inbox.handle(action, args)
+    else if (app === 'vouches') value = await vouches.handle(action, args)
     else if (app === 'peers' && action === 'setSpace') value = await setPeerSpace(vault, args)
     else if (app === 'peers' && action === 'remove') value = await removePeer(vault, args)
     else if (app === 'updates' && action === 'list') value = await vaultApps.deviceUpdates(vault, args.version)

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VouchSchema } from './vouch.ts';
 
 // A direct message from one Persona to another (ADR-0036 §5). It travels sealed to the recipient's
 // inbox box key and is stored in each side's Vault. Text only: nothing in it makes the reader's
@@ -13,11 +14,17 @@ export const MessageSchema = z
     // The recipient's Profile Drive.
     to: z.url(),
     createdAt: z.iso.datetime(),
-    // Plain text; links are shown, never fetched.
-    text: z.string().min(1).max(8000),
+    // Plain text; links are shown, never fetched. Empty only when the Message carries a Vouch.
+    text: z.string().max(8000),
     // Another Message id in the Conversation.
     inReplyTo: z.string().max(40).optional(),
+    // A Vouch the sender gives the recipient (ADR-0045): its host is `from` and its guest `to`.
+    vouch: VouchSchema.optional(),
   })
-  .strict();
+  .strict()
+  .refine((m) => m.text.length > 0 || !!m.vouch, { message: 'A Message needs text or a Vouch' })
+  .refine((m) => !m.vouch || (m.vouch.host === m.from && m.vouch.guest === m.to), {
+    message: 'A Vouch rides from its host to its guest',
+  });
 
 export type Message = z.infer<typeof MessageSchema>;

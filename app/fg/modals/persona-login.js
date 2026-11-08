@@ -19,6 +19,8 @@ class PersonaLoginModal extends LitElement {
       pickedId: { type: String },
       perms: { type: Array },
       checked: { type: Array },
+      vouches: { type: Object },
+      checkedVouches: { type: Array },
       space: { type: Object },
       choosing: { type: Boolean },
       making: { type: Boolean },
@@ -37,6 +39,8 @@ class PersonaLoginModal extends LitElement {
     this.pickedId = null;
     this.perms = [];
     this.checked = [];
+    this.vouches = {};
+    this.checkedVouches = [];
     this.space = null;
     this.choosing = false;
     this.making = false;
@@ -54,9 +58,12 @@ class PersonaLoginModal extends LitElement {
     this.personas = params.personas || [];
     this.pickedId = params.pickedId || null;
     this.perms = (params.perms || []).filter((p) =>
-      ['profile', 'modifyDrive', 'email'].includes(p)
+      ['profile', 'modifyDrive', 'email', 'vouches'].includes(p)
     );
-    this.checked = [...this.perms];
+    // Every Vouch starts unticked (ADR-0045 §5): the user picks each one for this site.
+    this.checked = this.perms.filter((p) => p !== 'vouches');
+    this.vouches = params.vouches || {};
+    this.checkedVouches = [];
     this.space = params.space || null;
     this.vaultReady = params.vaultReady !== false;
     // No usable Persona: the same window offers to make one.
@@ -188,7 +195,10 @@ class PersonaLoginModal extends LitElement {
                 name="persona"
                 .checked=${p.id === this.pickedId}
                 ?disabled=${!ok}
-                @change=${() => (this.pickedId = p.id)}
+                @change=${() => {
+                  this.pickedId = p.id;
+                  this.checkedVouches = [];
+                }}
               />
               ${this.renderAvatar(p, 'small')}
               <span class="who">
@@ -293,6 +303,7 @@ class PersonaLoginModal extends LitElement {
             </li>`
           : ''}
         ${this.perms.includes('email') ? this.renderEmail(p) : ''}
+        ${this.perms.includes('vouches') ? this.renderVouches(p) : ''}
       </ul>
     `;
   }
@@ -333,6 +344,56 @@ class PersonaLoginModal extends LitElement {
     `;
   }
 
+  // The `vouches` permission (ADR-0045 §5): the picked Persona's accepted Vouches it lets sites see,
+  // one checkbox each, all unticked. A Vouch names the profile, so ticking one ticks `profile`, and
+  // unticking `profile` unticks them.
+  renderVouches(p) {
+    const list = p ? this.vouches[p.id] || [] : [];
+    return html`
+      <li class="vouches">
+        <div class="vouches-head">
+          <span class="fas fa-fw fa-home"></span>
+          <span>
+            Show who vouched for you
+            <span class="sub">The site will see their names. Leave them unticked to show none.</span>
+          </span>
+        </div>
+        ${list.length
+          ? html`<div class="vouch-list">
+              ${list.map(
+                (v) => html`<label class="vouch">
+                  <input
+                    type="checkbox"
+                    .checked=${this.checkedVouches.includes(v.id)}
+                    @change=${(e) => this.toggleVouch(v.id, e.target.checked)}
+                  />
+                  <span>
+                    <strong>${v.hostTitle || shortKey(v.host)}</strong> vouched for you
+                    <span class="sub"
+                      ><code title=${v.host}>${shortKey(v.host)}</code>${v.note
+                        ? html` · “${v.note}”`
+                        : ''}</span
+                    >
+                  </span>
+                </label>`
+              )}
+            </div>`
+          : html`<div class="sub vouch-none">
+              ${p
+                ? 'This Persona has no vouches you let sites see. Choose them in My Library → Personas.'
+                : 'A new Persona has no vouches yet.'}
+            </div>`}
+      </li>
+    `;
+  }
+
+  toggleVouch(id, on) {
+    this.checkedVouches = on
+      ? [...new Set([...this.checkedVouches, id])]
+      : this.checkedVouches.filter((v) => v !== id);
+    if (on && this.perms.includes('profile')) this.toggle('profile', true);
+  }
+
   get emailInvalid() {
     const v = this.newEmail.trim();
     return !!v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
@@ -348,6 +409,7 @@ class PersonaLoginModal extends LitElement {
     this.checked = on
       ? [...new Set([...this.checked, perm])]
       : this.checked.filter((p) => p !== perm);
+    if (perm === 'profile' && !on) this.checkedVouches = [];
   }
 
   // events
@@ -389,6 +451,10 @@ class PersonaLoginModal extends LitElement {
     const known = this.making ? '' : this.picked.email || '';
     const email = perms.includes('email') && !known ? this.newEmail.trim() : '';
     if (!known && !email) perms = perms.filter((p) => p !== 'email');
+    // Vouches only with the profile, and only the picked Persona's.
+    const offered = new Set(((!this.making && this.vouches[this.picked?.id]) || []).map((v) => v.id));
+    const vouches = perms.includes('profile') ? this.checkedVouches.filter((id) => offered.has(id)) : [];
+    if (vouches.length) perms = [...perms, 'vouches'];
     if (this.making) {
       const title = this.newTitle.trim();
       this.cbs.resolve({
@@ -402,10 +468,16 @@ class PersonaLoginModal extends LitElement {
         allow: true,
         personaId: this.picked.id,
         perms,
+        vouches,
         ...(email ? { email } : {}),
       });
     }
   }
+}
+
+function shortKey(url) {
+  const m = /^hyper:\/\/([0-9a-f]{64})/i.exec(String(url || ''));
+  return m ? `hyper://${m[1].slice(0, 6)}…${m[1].slice(-4)}/` : String(url || '');
 }
 
 function hideImg(e) {
@@ -708,6 +780,45 @@ PersonaLoginModal.styles = [
       width: 13px;
       margin-top: 2px;
       color: var(--m-text-very-light);
+    }
+
+    .perms li.vouches {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+    }
+
+    .vouches-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .vouches-head .fas {
+      width: 13px;
+      margin-top: 2px;
+      color: var(--m-text-very-light);
+    }
+
+    .vouch-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-left: 22px;
+      max-height: 132px;
+      overflow-y: auto;
+    }
+
+    .perms .vouch {
+      align-items: flex-start;
+    }
+
+    .perms .vouch code {
+      font-size: 11px;
+    }
+
+    .vouch-none {
+      margin-left: 22px;
     }
 
     .perms .nested {

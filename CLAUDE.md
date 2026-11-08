@@ -727,6 +727,21 @@ reads or sends messages (§7.1, §7.6). The phone keeps its backend running for
 `BACKGROUND_GRACE_MS` (five minutes) after it leaves the screen, so its mailbox and the AI keep
 answering.
 
+### Vouches (ADR-0045)
+
+A Vouch (`walled.garden/vouch`) is one Persona saying it has had another over at home. It rides to the
+guest in a Persona Inbox Message (`message.vouch`, text may be empty), shows nowhere until the guest
+accepts it, and is valid while the host's Profile Drive lists its hash
+(`/.data/walled.garden/vouches-given.json`, `sha256(canonicalJSON(vouch))`). The guest picks who sees
+each: only them, sites they pick it for at login (`nomad.session` `vouches` permission, all unticked in
+`persona-login`), or their profile (`/.data/walled.garden/vouches.json`). Rules: `shared/vouches.mjs`;
+moving parts: `shared/vouch-engine.mjs`, run by `app/bg/ui/vouches.js` and
+`mobile/backend/lib/vouches.mjs` (`RPC_APPS` `vouches`). UI: My Library → Personas → Vouches
+(`nomad.personas.listVouches`/`giveVouch`/…), site-info's *Vouch for them* and *Who vouched for
+them*, the phone's Personas screen. Never show a total, a score or "verified", and never give the AI
+or a page a way to give, list or accept one. Tests `tests/unit/vouches.test.js` hold a golden hash:
+don't change the record's bytes without a new `v`.
+
 **`shared/*.mjs` also runs on the phone's Bare worklet**, which has no `TextEncoder`/`TextDecoder`,
 `crypto`, `Buffer` or `structuredClone` globals. A shared module must not touch one as it loads: an
 error there kills the worklet and the app closes at launch (1.39.0, `shared/inbox.mjs`). Use `b4a`,

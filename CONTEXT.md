@@ -243,7 +243,7 @@ A `walled.garden/vouch`: one Profile Drive (the host) says it has had another (t
 home, with an optional note. Shows nowhere until the guest accepts it; private to the guest unless
 they show it to a site or on their profile. Valid while the host's Profile Drive lists its hash and
 for a year at most. Weighed by whether the viewer knows the host, never as a score. Not proof of
-personhood (ADR-0037, proposed).
+personhood (ADR-0045).
 _Avoid_: badge, verification, endorsement, rating, reference
 
 **Shared Space**:

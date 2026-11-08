@@ -382,7 +382,7 @@ export function createInboxEngine(deps) {
         conversationKey,
         from,
         title: String(title),
-        text: record.message.text,
+        text: I.messagePreview(record.message),
       });
     } catch {}
   }
@@ -416,7 +416,8 @@ export function createInboxEngine(deps) {
     return I.normalizeReplyTo(manifest?.inbox);
   }
 
-  async function send({ personaId, to, text, inReplyTo, replyTo = null }) {
+  // `vouch`: a Vouch this Persona gives the recipient (ADR-0045 §3.2), carried in the Message.
+  async function send({ personaId, to, text, inReplyTo, replyTo = null, vouch = undefined }) {
     const p = personaById(personaId);
     if (!p) throw new Error('That Persona is gone');
     const toUrl = I.profileUrlOf(to);
@@ -427,7 +428,7 @@ export function createInboxEngine(deps) {
     await ensureInbox(personaId, { sent: true });
     const at = new Date(now()).toISOString();
     const message = I.makeMessage(
-      { id: I.newMessageId(deps.randomBytes(16)), from: p.profileUrl, to: toUrl, text, inReplyTo },
+      { id: I.newMessageId(deps.randomBytes(16)), from: p.profileUrl, to: toUrl, text, inReplyTo, vouch },
       at
     );
     // Writing to someone makes them a Contact for this Persona (§3.2).

@@ -6,7 +6,7 @@ its eleven tickets ([#28]–[#38]) into one decision. Two of them were closed wi
 settled here, each marked with the ticket it answers. The two prototypes ([#36], [#37]) were
 skipped: the real login prompt and switcher were built and looked at instead (see Rollout). Builds
 on ADR-0006 (the Vault), ADR-0010 (`nomad.fs`), ADR-0022 (pages can't open the private drive) and
-ADR-0029 (Shared Spaces). ADR-0036 and ADR-0037 propose amendments that are not built.
+ADR-0029 (Shared Spaces). ADR-0036 (the Inbox) and ADR-0045 (Vouches) amend it.
 
 The user wants a drive to be able to ask "who are you?" with a button, and the browser to answer
 with one of the user's identities: a default one for the whole Vault, and a different one for a
