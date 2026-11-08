@@ -357,6 +357,15 @@ const cssStr = css`
     font-size: 12px;
   }
 
+  .site-link {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .site-link:hover code {
+    text-decoration: underline;
+  }
+
   .inbox-row .summary {
     font-size: 12px;
     color: var(--text-color--light);

@@ -9,6 +9,7 @@ import LinkPhone from './LinkPhone'
 import ScreenHeader from './ScreenHeader'
 import SiteIcon from './SiteIcon'
 import NewPersona from './NewPersona'
+import IconButton from './IconButton'
 
 interface Props {
   visible: boolean
@@ -18,6 +19,7 @@ interface Props {
   space: string | null // the active Space's Root Drive key
   spaceName: string
   onOpenDevices: () => void
+  onOpenSite: (url: string) => void // opens a site in the current tab; back comes here again
 }
 
 // The phone's Personas (ADR-0031): who you are when a site asks you to log in. The user makes, edits
@@ -26,7 +28,7 @@ interface Props {
 // once. The records are in the Vault. Each Persona's sheet also has its Messages settings
 // (ADR-0036): who can write to it, its message link, and a new inbox address. Vouches (ADR-0045)
 // wait here too: accept or decline one, pick who sees it, and renew or withdraw the ones you gave.
-export default function Personas ({ visible, onClose, apps, onVaultChange, space, spaceName, onOpenDevices }: Props) {
+export default function Personas ({ visible, onClose, apps, onVaultChange, space, spaceName, onOpenDevices, onOpenSite }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const appsRef = useRef(apps)
@@ -218,7 +220,10 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
       return {
         title: sheet.site,
         subtitle: `As “${sheet.personaLabel}” in ${sheet.spaceName}`,
-        groups: [[{ label: 'Log out', icon: 'sign-out-alt', destructive: true, onPress: () => logOut(sheet) }]]
+        groups: [
+          [{ label: 'Open site', icon: 'external-link-alt', onPress: () => { setSheet(null); onOpenSite(`${sheet.origin}/`) } }],
+          [{ label: 'Log out', icon: 'sign-out-alt', destructive: true, disabled: busy || !list.writable, onPress: () => logOut(sheet) }]
+        ]
       }
     }
     return {
@@ -349,10 +354,11 @@ export default function Personas ({ visible, onClose, apps, onVaultChange, space
                   subtitle={`As “${x.personaLabel}” in ${x.spaceName} · ${describePerms(x.perms)} · ${x.expired ? 'expired' : `since ${new Date(x.createdAt).toLocaleDateString()}`}`}
                   subtitleLines={2}
                   left={<View style={s.lead}><SiteIcon url={`${x.origin}/`} title={x.site} size={20} /></View>}
+                  right={<IconButton icon='ellipsis-v' label={`More for ${x.site}`} size={16} onPress={() => setSheet(x)} />}
                   divider={i > 0}
-                  disabled={busy || !list.writable}
-                  onPress={() => setSheet(x)}
-                  onLongPress={() => logOut(x)}
+                  accessibilityLabel={`Open ${x.site}`}
+                  onPress={() => onOpenSite(`${x.origin}/`)}
+                  onLongPress={() => setSheet(x)}
                 />
               ))}
             </ListSection>
