@@ -1485,6 +1485,7 @@ export default function Browser () {
         space={spacesApi.activeSpace.rootDriveKey || null}
         spaceName={spacesApi.activeSpace.name}
         onOpenDevices={() => openScreen({ name: 'devices' })}
+        onOpenSite={openFromLibrary}
       />
 
       <NewPersona

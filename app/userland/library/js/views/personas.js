@@ -674,11 +674,16 @@ export class PersonasView extends LitElement {
                 <div class="list-row session-row">
                   <img class="favicon" src=${`asset:favicon:${s.origin}/`} alt="" @error=${(ev) => (ev.target.style.visibility = 'hidden')} />
                   <div class="grow meta-col">
-                    <div class="title"><code title=${s.origin}>${s.site}</code></div>
+                    <div class="title">
+                      <a class="site-link" href=${`${s.origin}/`} target="_blank" title=${`Open ${s.origin}`}><code>${s.site}</code></a>
+                    </div>
                     <div class="summary">
                       As “${s.personaLabel}” in ${s.spaceName} · ${describePerms(s.perms)} · since ${new Date(s.createdAt).toLocaleDateString()}${s.expiresAt ? ` · ${s.expired ? 'expired' : `until ${new Date(s.expiresAt).toLocaleDateString()}`}` : ''}
                     </div>
                   </div>
+                  <a class="icon-link" href=${`${s.origin}/`} target="_blank" title=${`Open ${s.site}`} aria-label=${`Open ${s.site}`}>
+                    <span class="fas fa-fw fa-external-link-alt"></span>
+                  </a>
                   <button @click=${() => this.onEndSession(s)}>Log out</button>
                 </div>
               `
