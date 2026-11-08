@@ -18,10 +18,12 @@ import hcrypto from 'hypercore-crypto'
 import { decodeInlineJson, WRITERS_PREFIX as DRIVE_WRITERS } from '../../shared/fs-core.mjs'
 import * as spaceLib from './lib/space-library.mjs'
 import * as calendar from './lib/calendar.mjs'
+import * as householdContacts from './lib/household-contacts.mjs'
 import { createAssets } from './lib/assets.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
 import { createPhoneInbox } from './lib/inbox.mjs'
 import { createPhoneVouches } from './lib/vouches.mjs'
+import { createInvites } from './lib/invites.mjs'
 import Protomux from 'protomux'
 import c from 'compact-encoding'
 import { createDevicePresence } from '../../shared/device-presence.mjs'
@@ -157,6 +159,7 @@ function setVault (base) {
   if (vault) vault.on('update', inboxVaultUpdated)
   vaultChanged()
   personaWritersSoon()
+  invitesListenSoon()
   inbox.setVault(vault).catch((e) => console.log('[inbox] setVault', e?.message || e))
   vouches.setVault(vault)
 }
@@ -179,6 +182,7 @@ function inboxVaultUpdated () {
   inboxTimer = setTimeout(() => {
     inbox.vaultUpdated()
     vouches.vaultUpdated()
+    invites.listenAll().catch(() => {})
   }, 1000)
 }
 
@@ -197,6 +201,20 @@ const vouches = createPhoneVouches({
   onChange: () => vaultChanged()
 })
 goodbye(() => vouches.close())
+
+// Invite links (ADR-0040, lib/invites.mjs): make them for a shared Space this phone owns, answer the
+// joins they bring, and read one a friend sent. The UI notifies from `pending` (useInviteJoins).
+const invites = createInvites({
+  vault: () => vault,
+  manager,
+  inbox,
+  onChange: () => vaultChanged()
+})
+var invitesTimer = null // var: setVault can run before this line
+function invitesListenSoon () {
+  clearTimeout(invitesTimer)
+  invitesTimer = setTimeout(() => { invites.listenAll().catch((e) => console.log('[invites] listen', e?.message || e)) }, 2000)
+}
 Bare.on('resume', () => inbox.resume())
 goodbye(() => inbox.close())
 
@@ -711,13 +729,22 @@ async function handleApps ({ reqId, app, action, ...args }) {
       return
     }
     if (!vault) {
-      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'messages' ? 'Link this phone to your computer to use Messages' : app === 'vouches' ? 'Link this phone to your computer to see your vouches' : app === 'updates' || app === 'peers' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : app === 'calendar' ? 'Link this phone to your computer to use the calendar' : app === 'assets' ? 'Link this phone to your computer to keep your files in Assets' : 'Link this phone to use Reader and Notes' })
+      send(RPC_APPS_RESULT, { reqId, ok: false, noVault: true, message: app === 'names' ? 'Link this phone to use your names' : app === 'jobs' ? 'Link this phone to see your AI Jobs' : app === 'personas' ? 'Link this phone to see your Personas' : app === 'messages' ? 'Link this phone to your computer to use Messages' : app === 'vouches' ? 'Link this phone to your computer to see your vouches' : app === 'updates' || app === 'peers' ? 'Link this phone to your computer first' : app === 'spaces' ? 'Link this phone to your computer first. A shared Space joins all your devices.' : app === 'calendar' ? 'Link this phone to your computer to use the calendar' : app === 'contacts' ? 'Link this phone to your computer to keep your household’s contacts' : app === 'assets' ? 'Link this phone to your computer to keep your files in Assets' : 'Link this phone to use Reader and Notes' })
       return
     }
     let value
     const { space } = args // the active Space (its Root Drive key)
     // Shared Spaces (ADR-0029): join one with a code, then mark the Space the UI made for it.
-    if (app === 'spaces' && action === 'join') value = await spaceLib.join({ store, manager }, args.code, { name: args.name }, rememberJoined)
+    if (app === 'spaces' && action === 'join') value = await spaceLib.join({ store, manager }, await invites.codeFor(args.code), { name: args.name }, rememberJoined)
+    // Invite links (ADR-0040): make, list and revoke them for the active Space, answer joins, and
+    // read one a friend sent.
+    else if (app === 'invites' && action === 'link') value = await invites.link(args.rootDriveKey || space, args.role, args.days)
+    else if (app === 'invites' && action === 'list') value = await invites.list(args.rootDriveKey || space)
+    else if (app === 'invites' && action === 'revoke') value = await invites.revoke(args.rootDriveKey || space, args.id)
+    else if (app === 'invites' && action === 'approve') value = await invites.approve(args.rootDriveKey || space, args.memberId)
+    else if (app === 'invites' && action === 'deny') value = await invites.deny(args.rootDriveKey || space, args.memberId)
+    else if (app === 'invites' && action === 'read') value = await invites.read(args.link)
+    else if (app === 'invites' && action === 'pending') value = invites.pending()
     else if (app === 'spaces' && action === 'attach') {
       await spaceLib.attach({ vault }, args)
       value = await spaceLib.status({ vault, manager }, args.rootDriveKey)
@@ -755,6 +782,10 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'notes' && action === 'setTopics') value = await vaultApps.setNoteTopics(vault, { id: args.id, topics: Array.isArray(args.topics) ? args.topics : [], space })
     else if (app === 'notes' && action === 'setTick') value = await vaultApps.setNoteTick(vault, { id: args.id, text: args.text, checked: !!args.checked, space })
     else if (app === 'notes' && action === 'renameLinks') value = await vaultApps.renameNoteLinks(vault, { id: args.id, from: args.from, to: args.to, space })
+    else if (app === 'contacts' && action === 'list') value = await householdContacts.listContacts(vault, space)
+    else if (app === 'contacts' && action === 'save') value = await householdContacts.saveContact(vault, space, args.contact || {})
+    else if (app === 'contacts' && action === 'delete') value = await householdContacts.deleteContact(vault, space, args.id)
+    else if (app === 'calendar' && action === 'reminders') value = await calendar.reminders(vault, { from: args.from, to: args.to })
     else if (app === 'calendar' && action === 'list') value = await calendar.listCalendar(vault, space, { from: args.from, to: args.to })
     else if (app === 'calendar' && action === 'save') value = await calendar.saveEvent(vault, space, args.event || {})
     else if (app === 'calendar' && action === 'delete') value = await calendar.deleteEvent(vault, space, args.id)

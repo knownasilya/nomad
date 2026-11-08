@@ -1,6 +1,6 @@
 # Invite links: one https link that brings a friend onto Nomad
 
-**Status: Proposed.** 2026-11-02. Builds on ADR-0029 (Shared Spaces), ADR-0031 (Personas and
+**Status: Phase 1 built** 2026-11-08 (Space invites, with the changes in *Amendment: Phase 1 as built*). Proposed 2026-11-02. Builds on ADR-0029 (Shared Spaces), ADR-0031 (Personas and
 Sessions), ADR-0036 (Persona Inbox, proposed), ADR-0045 (Vouches) and ADR-0038
 (the always-on Peer, proposed). Amends ADR-0029 §4 (a Space invite can expire) and ADR-0036 §4 (a
 sealed frame can carry an invite id) and §2 (a Persona's `sign` key can exist before its Inbox is
@@ -81,7 +81,7 @@ page agree byte for byte):
   carries no `from`, `name` or `sig`, and both the page and Nomad say who it's from in the only
   honest way: they can't tell (§4).
 
-### 3. The page on nomad.dev
+### 3. The page on nomad.pages.dev
 
 `src/pages/invite.astro` in nomad.dev: a standalone page (not a Starlight doc, no sidebar), marked
 `noindex`. A short inline script decodes the fragment and shows:
@@ -107,7 +107,7 @@ no analytics, no fonts or images from another origin, and a `Content-Security-Po
 
 **Into Nomad:**
 
-- **Phone, with Nomad installed:** Android App Links. nomad.dev serves
+- **Phone, with Nomad installed:** Android App Links. nomad.pages.dev serves
   `/.well-known/assetlinks.json` for the package and the release keystore's SHA-256 fingerprint, and
   `mobile/app.json` gets an `autoVerify` intent filter for `https://nomad.pages.dev/invite/`. Tapping
   the link anywhere opens Nomad on the accept screen, fragment included. Inside Nomad's own WebView,
@@ -202,7 +202,7 @@ Invites are Vault records, so every Device of the user knows them:
 
 | Who | Learns | Doesn't learn |
 |---|---|---|
-| Cloudflare / nomad.dev | that someone loaded `/invite/` (IP, user agent) | anything in the fragment: who, which Space, the keys |
+| Cloudflare / nomad.pages.dev | that someone loaded `/invite/` (IP, user agent) | anything in the fragment: who, which Space, the keys |
 | Anyone the link is forwarded to | everything in it: the name, the Space's name and role, the message-link keys | anything more until the owner approves a join or the user accepts their hello |
 | The friend, before accepting | the inviter's claimed name, then the real Profile Drive | the inviter's Devices or addresses |
 | The inviter | the friend's Persona and Profile Drive (in the hello or the join request) | anything the friend didn't send |
@@ -305,3 +305,44 @@ If it comes back, it's opt-in per Persona and served from a separate origin. Its
 8. Phone: the Personas screen's Invites and share sheet.
 
 **Later:** the hello rides the always-on Peer's Inbox relay (ADR-0038 §7) with no change here.
+
+## Amendment: Phase 1 as built (2026-11-08)
+
+Space invites are links on desktop and the phone. What changed from the plan above:
+
+1. **Any of the user's Devices approves.** §6 kept the blind-pairing invite in the minting Device's
+   `space_invites` setting, so only that Device could approve. A link's invite is a Vault record
+   instead (`/.vault/invites/<id>.json`, `makeInviteRecord` in `shared/invites.mjs`), holding the
+   blind-pairing public key, the role, the Space Library and the expiry. Every Device that manages
+   the Library listens for joins and matches a candidate against the open records
+   (`openInvitesFor`): desktop's `_matchable` in `app/bg/hyper/space-library.js`, the phone's
+   `mobile/backend/lib/invites.mjs`. The first approval marks it used (`markUsed`, the earlier
+   `usedAt` wins); a join another Device already approved is answered without asking again, since
+   its member record is there. A bare code (**Make a code instead**) stays in the setting and only
+   its Device approves it, as before.
+2. **The accept prompt is My Library → Sharing.** An invite link from the OS scheme, a tab
+   navigation or the address bar opens `nomad://library/sharing#invite=<payload>`
+   (`acceptUrlFor` in `app/bg/hyper/invites.js`). The page reads it with the internal
+   `nomad.vault.readInvite`, shows who it's from and the signature check, and joins on **Join**. The
+   fragment never leaves the page, and nothing happens without the click. The phone opens the
+   Space switcher's join form with the link filled in; the form shows the same check
+   (`invites/read`) before **Join**.
+3. **No App Links yet.** `autoVerify` needs the release keystore's fingerprint in
+   `/.well-known/assetlinks.json`, which isn't settled. The phone registers the `nomad-invite`
+   scheme and the `https://nomad.pages.dev/invite` path as plain intent filters (`mobile/app.json`),
+   so Android asks which app opens one; `app/+native-intent.tsx` keeps the router out of it.
+   Inside Nomad, `routeLink` sends both to the join form.
+4. **Inviting from the phone.** The Space switcher's edit view has **Invite people** for a shared
+   Space (`InviteSheet.tsx`): make a link for Can edit or Can view and 1, 7, 14 or 30 days, send it
+   with Android's share sheet, approve or deny who's waiting, and revoke an unused link. A join to
+   a Space the phone manages notifies (`useInviteJoins.ts`); so does one on desktop
+   (`notify_space_notices`).
+5. **Signed when there's a Persona.** The link is signed by the Space's Persona (its own, else the
+   default) when that Persona is usable and its Profile Drive has a title, which becomes the link's
+   `name`. Signing makes the inbox seed and publishes `inbox.sign` (`signInvite` in
+   `shared/inbox-engine.mjs`). With no such Persona the link is unsigned, and every screen that
+   shows it says so.
+6. **Not built:** **I have an invite** in first-run setup (the link opens Sharing or the join form
+   once Nomad is installed, which covers it), QR codes (no QR library in userland yet), and all of
+   Phase 2.
+

@@ -244,7 +244,7 @@ export class LibraryApp extends LitElement {
       return html`<button class="new-action-btn" @click=${this.onCreateBookmark}>New Bookmark</button>`;
     }
     if (this.view === 'contacts') {
-      return html`<button class="new-action-btn" @click=${this.onCreateContact}>New Contact</button>`;
+      return html`<button class="new-action-btn" @click=${this.onCreateContact}>New Nomad Contact</button>`;
     }
   }
 

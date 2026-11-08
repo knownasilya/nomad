@@ -10,6 +10,10 @@
 //   flashes the taskbar. A click brings its window and tab forward. Answering the prompt takes the
 //   notification and the bounce away.
 //
+// - A calendar event's reminder (shared/calendar.mjs remindersBetween), the user's own or any of
+//   their Spaces' (a shared Space's remind the whole household). Looked for each minute; one missed
+//   while the computer slept still shows if it's under REMIND_LATE_MS old. A click opens its day.
+//
 // Settings → Notifications turns each kind off (SETTINGS in notify-rules.mjs).
 
 import { app, BrowserWindow, Notification } from 'electron';
@@ -20,15 +24,18 @@ import * as spaceLibrary from '../hyper/space-library';
 import * as permissions from './permissions';
 import * as tabManager from './tabs/manager';
 import * as nr from './notify-rules.mjs';
+import * as cal from '../../../shared/calendar.mjs';
 
 const logger = logLib.get().child({ category: 'browser', subcategory: 'notifications' });
 
 let openUrl = null; // (url) => open it in a tab of a shell window, making one if none is open
+let reminders = null; // (from, to) => the calendar's reminders due then (bg/web-apis/bg/calendar.ts)
 const live = new Set(); // shown notifications, kept so a click still reaches its handler (GC)
 
-/** @param {{ openUrl: (url: string) => void }} opts */
+/** @param {{ openUrl?: (url: string) => void, reminders?: (from: string, to: string) => Promise<any[]> }} opts */
 export function setup(opts = {}) {
   openUrl = opts.openUrl || null;
+  reminders = opts.reminders || null;
   permissions.setPromptHook(promptWaiting);
   let jobTimer = null;
   jobs.events.on('changed', () => {
@@ -42,6 +49,15 @@ export function setup(opts = {}) {
     );
   });
   checkJobs().catch(() => {});
+  // Calendar reminders, on the minute.
+  const remindTick = () =>
+    checkReminders(reminders).catch((err) => logger.warn('Calendar reminders failed', { error: err?.message }));
+  setTimeout(remindTick, 15e3);
+  setInterval(remindTick, 60e3).unref?.();
+  // Someone asks to join a Space this computer manages, from an invite link or a code (ADR-0040).
+  spaceLibrary.events.on('join-request', ({ space, name } = {}) => {
+    joinRequest(space, name).catch((err) => logger.warn('Join notification failed', { error: err?.message }));
+  });
   const spaceTimers = new Map();
   spaceLibrary.events.on('changed', ({ space } = {}) => {
     if (!space) return;
@@ -148,6 +164,51 @@ async function checkSpaceOnce(space) {
   }
   if (!alerts.length || !(await enabled('spaces'))) return;
   for (const a of alerts) show({ title: a.title, body: a.body, onClick: () => openUrl?.(null) });
+}
+
+async function joinRequest(space, name) {
+  if (!(await enabled('spaces'))) return;
+  const info = space ? await spaceLibrary.notices(space).catch(() => null) : null;
+  const where = info?.name || 'your Space';
+  show({
+    title: `${String(name || 'Someone').slice(0, 60)} asks to join ${where}`,
+    body: 'Approve or deny them in My Library → Sharing, in that Space.',
+    onClick: () => openUrl?.('nomad://library/sharing'),
+  });
+}
+
+// Calendar reminders
+// =
+
+let checkingReminders = null;
+// Exported for tests, which pass their own source.
+export function checkReminders(source = reminders) {
+  const once = () => checkRemindersOnce(source);
+  checkingReminders = (checkingReminders || Promise.resolve()).then(once, once);
+  return checkingReminders;
+}
+
+async function checkRemindersOnce(source) {
+  if (!source) return;
+  // Wall times on this computer's clock, to the minute: [since, now + 1 minute).
+  const now = cal.localWallTime();
+  const to = cal.addWallMs(now, 60e3);
+  const late = cal.addWallMs(now, -cal.REMIND_LATE_MS);
+  const stored = await settingsDb.get(nr.CALENDAR_SINCE).catch(() => null);
+  const since = cal.isDateTime(stored) && stored > late && stored <= to ? stored : late;
+  if (since >= to) return;
+  const due = await source(since, to);
+  await settingsDb.set(nr.CALENDAR_SINCE, to).catch(() => {});
+  if (!due.length || !(await enabled('calendar'))) return;
+  const shown = due.slice(-nr.MAX_AT_ONCE);
+  for (const r of shown) {
+    const { title, body } = cal.reminderText(r);
+    show({
+      title: title.slice(0, 80),
+      body: r.spaceName ? `${body} · ${r.spaceName}` : body,
+      onClick: () => openUrl?.(`nomad://calendar/?day=${cal.dayOf(r.start)}`),
+    });
+  }
 }
 
 // Permission prompts

@@ -558,6 +558,23 @@ export const CAPABILITIES = [
     },
     gates: { personal: true },
   },
+  // Household contacts (ADR-0046): the current Space's address book of people who aren't on Nomad.
+  {
+    name: 'listContacts',
+    description:
+      "List the current Space's household contacts: people who aren't on Nomad, such as the plumber, the " +
+      "school office, the babysitter or the doctor, with each one's role, phone, email, address and notes (a " +
+      "shared Space's are the household's, with who added each). `query` keeps the ones whose details have " +
+      'every word in it. Asks permission to read the contacts.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Optional. Words to find, e.g. "plumber" or "school"' },
+      },
+      required: [],
+    },
+    gates: { personal: true },
+  },
   // The user's Mods (ADR-0023): their own styles and scripts for sites, like Arc's. Reading and
   // changing them are two more permissions (vault-tools.mjs).
   {
@@ -894,6 +911,7 @@ export const JOB_CAPS = new Set([
   'listReaderPosts',
   'readReaderPost',
   'listCalendarEvents',
+  'listContacts',
   'notify',
   'listSecrets',
   'httpRequest',

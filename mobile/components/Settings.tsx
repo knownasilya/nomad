@@ -7,6 +7,7 @@ import { useTheme, type Theme } from '../lib/theme'
 import type { Backend } from '../lib/useBackend'
 import { useDesktopUpdates } from '../lib/deviceUpdates'
 import { useMessageNotifySetting } from '../lib/useMessageNotifications'
+import { useCalendarRemindSetting } from '../lib/useCalendarReminders'
 import { checkForUpdate, currentVersion, installUpdate, setAutoInstall, setBetaUpdates, updatesSupported, useAutoInstall, useBetaUpdates, useUpdateState } from '../lib/updater'
 
 interface Props {
@@ -32,6 +33,7 @@ export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosti
   // The user's computers, so one on an older Nomad can be updated from here too.
   const computers = useDesktopUpdates(apps, visible)
   const [notifyMessages, setNotifyMessages] = useMessageNotifySetting()
+  const [notifyCalendar, setNotifyCalendar] = useCalendarRemindSetting()
 
   return (
     <Modal visible={visible} animationType='slide' onRequestClose={onClose} presentationStyle='fullScreen'>
@@ -58,6 +60,14 @@ export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosti
               subtitle='A notification for each new message to your Personas. Message requests never notify.'
               value={notifyMessages}
               onValueChange={setNotifyMessages}
+            />
+            <SwitchRow
+              icon='bell'
+              title='Calendar reminders'
+              subtitle='When an event you or someone in your shared Space set a reminder on is coming up.'
+              value={notifyCalendar}
+              onValueChange={setNotifyCalendar}
+              divider
             />
           </ListSection>
           {updatesSupported ? (

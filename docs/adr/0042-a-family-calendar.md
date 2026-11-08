@@ -82,3 +82,26 @@ beside iCal feeds.
    site-info shows **Follow in Calendar** on a calendar drive (`ident.calendar`), which opens
    `nomad://calendar/?follow=<drive>` with the address in the box; the user still clicks Follow. The
    phone's Follow sheet lists the calendar drives among the Space's drives (`calendar/drives`).
+
+## Amendment: reminders (2026-11-08)
+
+An event can remind everyone who sees it, so the household hears about the dentist or the bins
+without one person telling the rest.
+
+1. **On the record.** `remind` is minutes before the start, one of `REMIND_OPTIONS` (at the start,
+   5, 10, 15 or 30 minutes, 1 or 2 hours, 1 or 2 days, a week). An all-day event's reminder counts
+   from 9 AM on its day (`ALL_DAY_AT`), so "1 day before" is 9 AM the day before, and anything under
+   a day is 9 AM on the day. Feed and drive events don't remind. Because it's on the event, a
+   shared Space's events remind every member, on each of their Devices. The rules are
+   `shared/calendar.mjs` (`normalizeRemind`, `reminderAt`, `remindersBetween`, `reminderText`;
+   tests `tests/unit/calendar-reminders.test.js`).
+2. **Desktop** looks each minute for reminders due across the user's own events and every Space in
+   the Vault (`remindersBetween` in `calendar.ts`, run by `bg/ui/desktop-notifications.js`). It
+   keeps the last minute it looked in `calendar_remind_since`, so nothing shows twice; one missed
+   while the computer slept still shows if it's under 30 minutes old. A click opens the day. The
+   `notify_calendar` setting (Settings → Notifications) turns it off.
+3. **The phone** has no push server, so it schedules them ahead: the next seven days' reminders
+   (`calendar/reminders`) as local notifications with a date trigger, again when the Vault changes
+   and when the app comes back (`mobile/lib/useCalendarReminders.ts`). They show even when Nomad
+   isn't running. Settings → Notifications → Calendar reminders turns it off.
+4. **The editors** pick one: a Remind select on desktop, chips on the phone.

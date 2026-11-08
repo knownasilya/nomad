@@ -25,7 +25,9 @@ import ActionSheet from '../components/ActionSheet'
 import SiteIcon from '../components/SiteIcon'
 import { ListSection, ListRow, ListEmpty } from '../components/List'
 import Devices from '../components/Devices'
-import SpaceSwitcher from '../components/SpaceSwitcher'
+import SpaceSwitcher, { type InvitePreview } from '../components/SpaceSwitcher'
+import InviteSheet, { type InviteSpace } from '../components/InviteSheet'
+import HouseholdContacts from '../components/HouseholdContacts'
 import Settings from '../components/Settings'
 import Logs from '../components/Logs'
 import UpdateBanner from '../components/UpdateBanner'
@@ -38,6 +40,8 @@ import type { HyperRender } from '../components/HyperView'
 import { useBackend, type SpaceJoin, type AiPromptRequest } from '../lib/useBackend'
 import { useJobNotifications } from '../lib/useJobNotifications'
 import { useMessageNotifications } from '../lib/useMessageNotifications'
+import { useInviteJoins } from '../lib/useInviteJoins'
+import { useCalendarReminders } from '../lib/useCalendarReminders'
 import { usePersonaOnboarding } from '../lib/usePersonaOnboarding'
 import { syncHostingService } from '../lib/hostingService'
 import HostingSettings from '../components/HostingSettings'
@@ -74,7 +78,7 @@ type Kind = 'home' | 'web' | 'hyper'
 // The full-screen pages over the browser. They stack (lib/navStack.ts): one opened from another
 // sits on top of it, and back closes only the top one.
 type Screen =
-  | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' | 'personas' }
+  | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' | 'personas' | 'contacts' }
   | { name: 'assets'; assetId?: string } // assetId: the file to open, e.g. from a link in an AI answer
   | { name: 'notes'; noteId?: string } // noteId: the note to open, e.g. the one a followed link was in
   | { name: 'jobs'; jobId?: string; runId?: string } // a tapped Job notification opens its run
@@ -199,6 +203,7 @@ const VAULT_PROMPTS: Record<string, { title: string; message: string }> = {
   modsWrite: { title: 'Allow AI to change your Mods?', message: 'The AI running on your other device wants to create or change your Mods. A Mod can run a script on every page of its site.' },
   assetsWrite: { title: 'Allow AI to save to Assets?', message: 'The AI running on your other device wants to save a file to your Assets. In a shared Space, everyone in it sees the file.' },
   calendarRead: { title: 'Allow AI to read your calendar?', message: 'The AI running on your other device wants to read your calendar, your household’s, and the calendars you follow.' },
+  contactsRead: { title: 'Allow AI to read your contacts?', message: 'The AI running on your other device wants to read this Space’s contacts: names, phone numbers, emails and addresses.' },
   jobsRead: { title: 'Allow AI to see your Jobs?', message: 'The AI running on your other device wants to see your AI Jobs and their results.' },
   jobsWrite: { title: 'Allow AI to change your Jobs?', message: 'The AI running on your other device wants to create, change or run your AI Jobs. A Job runs a prompt by itself, reads your Notes and Reader, and notifies this phone.' },
   aiCreateDrive: { title: 'Allow AI to make a drive?', message: 'The AI running on your other device wants to make a new drive in your library on that computer.' },
@@ -332,6 +337,10 @@ export default function Browser () {
   const messagesScreen = screens.find((sc) => sc.name === 'messages')
   // The sheets over the browser, and the AI panel.
   const [spacesOpen, setSpacesOpen] = useState(false)
+  // An invite link opened from outside or followed in a tab (ADR-0040): the join form opens with it.
+  const [openedInvite, setOpenedInvite] = useState<string | null>(null)
+  // The shared Space whose invite sheet is open.
+  const [inviteSpace, setInviteSpace] = useState<InviteSpace | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [nameSheetOpen, setNameSheetOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
@@ -418,9 +427,34 @@ export default function Browser () {
   useJobNotifications(backend, ({ jobId, runId }) => openScreen({ name: 'jobs', jobId, runId }))
   // A notification for each new Message to a Persona (ADR-0036); a tap opens the Conversation.
   useMessageNotifications(backend, (c) => openScreen({ name: 'messages', personaId: c.personaId, with: c.with }))
+  // Calendar reminders scheduled a week ahead; a tap opens that day.
+  useCalendarReminders(backend, (day) => openScreen({ name: 'calendar', day }))
 
   // Spaces — each has its own Root Drive; bookmarks/history/drives are scoped to the active space.
   const spacesApi = useSpaces(backend)
+  // Someone asks to join a shared Space this phone manages; a tap opens its invite sheet.
+  const spacesRef = useRef(spacesApi.spaces)
+  spacesRef.current = spacesApi.spaces
+  useInviteJoins(backend, (key, spaceName) => {
+    const sp = spacesRef.current.find((x) => x.rootDriveKey === key)
+    setInviteSpace({ rootDriveKey: key, name: sp?.name || spaceName || 'Space' })
+  })
+  const openInvite = useCallback((url: string) => {
+    setOpenedInvite(url)
+    setSpacesOpen(true)
+  }, [])
+  // Invite links from other apps (app.json intentFilters; app/+native-intent.tsx keeps the router out).
+  useEffect(() => {
+    const take = (url: string | null) => { if (url && routeLink(url).to === 'invite') openInvite(url) }
+    Linking.getInitialURL().then(take).catch(() => {})
+    const sub = Linking.addEventListener('url', ({ url }) => take(url))
+    return () => sub.remove()
+  }, [openInvite])
+  const readInvite = useCallback(async (link: string): Promise<InvitePreview> => {
+    const res = await backend.apps<InvitePreview>('invites', 'read', { link })
+    if (!res.ok || !res.value) throw new Error(res.message || 'This invite can’t be read')
+    return res.value
+  }, [backend])
   // Onboarding: once this phone is linked and the user has no Persona, offer to make the first one.
   const personaStep = usePersonaOnboarding(backend.apps, backend.onVaultChange, spacesApi.activeSpace.rootDriveKey || null)
   const persist = usePersistence(spacesApi.activeSpaceId, {
@@ -561,10 +595,11 @@ export default function Browser () {
       }
       // A Persona's message link typed or pasted in the address bar opens Messages to write to them.
       if (routeLink(rawInput.trim()).to === 'messages') return openScreen({ name: 'messages', link: rawInput.trim() })
+      if (routeLink(rawInput.trim()).to === 'invite') return openInvite(rawInput.trim())
       if (!mayBeName(rawInput)) return go(rawInput)
       names.resolve(rawInput).then(go)
     },
-    [navTo, persist, names.resolve, openScreen]
+    [navTo, persist, names.resolve, openScreen, openInvite]
   )
 
   // The recent-sites card (no dropdown under the bar, which covered the page as you typed). The
@@ -943,6 +978,10 @@ export default function Browser () {
         openScreen({ name: 'assets', assetId: link.id })
         return
       case 'library':
+        if (link.view === 'contacts') {
+          openScreen({ name: 'contacts' })
+          return
+        }
         if (link.view === 'drives' || link.view === 'bookmarks') {
           openScreen({ name: 'library' })
           return
@@ -969,9 +1008,10 @@ export default function Browser () {
     if (route.to === 'tab') navigate(id, route.url)
     else if (route.to === 'reader') openFeed(route.url)
     else if (route.to === 'messages') openScreen({ name: 'messages', link: route.url })
+    else if (route.to === 'invite') openInvite(route.url)
     else openOutside(id, route.url, route.fallback)
     return false
-  }, [navigate, openFeed, openOutside, openScreen])
+  }, [navigate, openFeed, openOutside, openScreen, openInvite])
 
   // A page's new windows (modules/nomad-webview-windows): a target="_blank" link opens a new tab, as
   // in Chrome, and a feed it tried to download goes to Reader. A sign-in popup shows over the tab
@@ -1316,6 +1356,7 @@ export default function Browser () {
             { label: 'Reader', icon: 'rss', onPress: () => openScreen({ name: 'reader' }) },
             { label: 'Notes', icon: 'sticky-note', onPress: () => openScreen({ name: 'notes' }) },
             { label: 'Calendar', icon: 'calendar-alt', onPress: () => openScreen({ name: 'calendar' }) },
+            { label: 'Contacts', icon: 'address-book', onPress: () => openScreen({ name: 'contacts' }) },
             { label: 'Assets', icon: 'folder-open', onPress: () => openScreen({ name: 'assets' }) },
             { label: 'Messages', icon: 'comments', onPress: () => openScreen({ name: 'messages' }) },
             { label: 'AI Jobs', icon: 'clock', onPress: () => openScreen({ name: 'jobs' }) },
@@ -1429,6 +1470,16 @@ export default function Browser () {
         onOpenUrl={openFromNotes}
       />
 
+      <HouseholdContacts
+        visible={isOpen('contacts')}
+        onClose={() => closeScreenNamed('contacts')}
+        apps={backend.apps}
+        onVaultChange={backend.onVaultChange}
+        space={spacesApi.activeSpace.rootDriveKey || undefined}
+        spaceName={spacesApi.activeSpace.name}
+        onOpenDevices={() => openScreen({ name: 'devices' })}
+      />
+
       <Calendar
         visible={!!calendarScreen}
         onClose={() => closeScreenNamed('calendar')}
@@ -1513,7 +1564,7 @@ export default function Browser () {
 
       <SpaceSwitcher
         visible={spacesOpen}
-        onClose={() => setSpacesOpen(false)}
+        onClose={() => { setSpacesOpen(false); setOpenedInvite(null) }}
         spaces={spacesApi.spaces}
         activeSpaceId={spacesApi.activeSpaceId}
         vaultKeys={spacesApi.vaultKeys}
@@ -1523,7 +1574,12 @@ export default function Browser () {
         onJoin={onJoinSpace}
         onEdit={spacesApi.editSpace}
         onRemove={onRemoveSpace}
+        onReadInvite={readInvite}
+        initialInvite={openedInvite}
+        onInvite={(sp) => { setSpacesOpen(false); setInviteSpace(sp) }}
       />
+
+      <InviteSheet space={inviteSpace} onClose={() => setInviteSpace(null)} backend={backend} />
 
       <FileExplorer
         visible={!!explorerDrive}

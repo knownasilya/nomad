@@ -16,11 +16,14 @@ export const SETTINGS = {
   jobs: 'notify_jobs',
   spaces: 'notify_space_notices',
   prompts: 'notify_prompts',
+  calendar: 'notify_calendar',
 };
 // Where this computer keeps what it already showed: a run's finishedAt, and a notice id per Space
 // Library. Both are the sender's clock, never this computer's.
 export const JOB_SINCE = 'job_notify_since';
 export const SPACE_SINCE = 'space_notice_since';
+// The wall time this computer last looked for due calendar reminders (this computer's own clock).
+export const CALENDAR_SINCE = 'calendar_remind_since';
 
 // More than this at once (a laptop that slept, a Vault that just synced) become one notification.
 export const MAX_AT_ONCE = 4;

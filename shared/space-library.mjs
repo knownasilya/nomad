@@ -21,6 +21,7 @@
 
 import { followName } from './vault-apps.mjs';
 import { shareCalendarPaths } from './calendar.mjs';
+import { shareContactPaths } from './household-contacts.mjs';
 
 export const SPACE_TYPE = 'nomad/space';
 export const MEMBER_TYPE = 'nomad/space-member';
@@ -304,6 +305,8 @@ export function planShare({ space, owner, items = {} }, now = new Date().toISOSt
   }
   // The Space's calendar: its events and the feeds it subscribes to (shared/calendar.mjs).
   out.push(...shareCalendarPaths(items));
+  // Its household contacts (shared/household-contacts.mjs).
+  out.push(...shareContactPaths(items));
   return out;
 }
 
@@ -313,7 +316,7 @@ export function shareSummary(items = {}) {
   const contacts = drives.filter((d) => Array.isArray(d.tags) && d.tags.includes('contact')).length;
   const parts = [
     [drives.length - contacts, 'drive'],
-    [contacts, 'contact'],
+    [contacts + (items.contacts || []).length, 'contact'],
     [(items.bookmarks || []).length, 'bookmark'],
     [(items.follows || []).length, 'feed'],
     [(items.notes || []).length, 'note'],

@@ -28,6 +28,7 @@ import * as names from './bg/hyper/names';
 import * as autoNames from './bg/hyper/auto-names';
 import * as readerArticles from './bg/web-apis/bg/reader-articles';
 import * as noteTopics from './bg/web-apis/bg/note-topics';
+import { remindersBetween } from './bg/web-apis/bg/calendar';
 import { completeText, runJobTurn } from './bg/web-apis/bg/ai';
 import * as aiJobs from './bg/ai/jobs';
 import * as crawlerHost from './bg/hyper/crawler-host';
@@ -144,6 +145,13 @@ app.on('ready', async function () {
 
   await logger.setup(join(commonOpts.userDataPath, 'nomad.log'));
   log.info('Welcome to Nomad');
+  // Invite links (ADR-0040 §4): one narrow scheme, so the "Open the invite" button on nomad.pages.dev reaches Nomad.
+  // It only ever opens the page that reads an invite (bg/hyper/invites.js acceptUrlFor).
+  try {
+    if (!app.isDefaultProtocolClient('nomad-invite')) app.setAsDefaultProtocolClient('nomad-invite');
+  } catch (e) {
+    log.warn('Could not register nomad-invite:', { error: String(e) });
+  }
   nomadProtocol.register(protocol);
   webapis.setup();
   initWindow.open();
@@ -248,6 +256,7 @@ app.on('ready', async function () {
   // OS notifications for Job results, shared-Space notices, and permission prompts nobody sees
   // (Settings → Notifications). A click opens the Job, or brings Nomad forward.
   desktopNotifications.setup({
+    reminders: remindersBetween,
     openUrl: (url) => {
       windows.ensureOneWindowExists();
       const win = windows.getActiveWindow();
@@ -310,7 +319,7 @@ if (!isFirstInstance) {
 function handleArgv(argv) {
   if (process.platform !== 'darwin') {
     // look for URLs, windows & linux use argv instead of open-url
-    let url = argv.find((v) => v.indexOf('://') !== -1);
+    let url = argv.find((v) => v.indexOf('://') !== -1 || v.startsWith('nomad-invite:'));
     if (url) {
       openURL.open(url);
     }

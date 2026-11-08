@@ -673,6 +673,23 @@ export function createInboxEngine(deps) {
     await schedule();
   }
 
+  // Invite links (ADR-0040 §5): sign an invite's bytes with the Persona's `sign` key. Making one
+  // does what sending a Message does: the inbox seed if there's none, and `inbox.sign` published
+  // in the Profile Drive, so the friend's Nomad can check it. Returns the 64-byte signature.
+  async function signInvite(personaId, bytes) {
+    const rec = await ensureInbox(personaId, { sent: true });
+    schedule().catch(() => {});
+    return crypto.sign(bytes, keysOf(rec).sign.secretKey);
+  }
+
+  // The `sign` key a Profile Drive publishes (hex), read fresh, or null when it can't be read or
+  // publishes none: what an invite from that Persona is checked against.
+  async function publishedSign(profileUrl) {
+    const manifest = await profile(I.profileUrlOf(profileUrl), true).catch(() => null);
+    const sign = manifest?.inbox?.sign;
+    return I.isHex64(sign) ? String(sign) : null;
+  }
+
   // The message link for a Persona (§3.1), or null when it has no inbox.
   async function linkFor(personaId) {
     const p = personaById(personaId);
@@ -833,6 +850,8 @@ export function createInboxEngine(deps) {
     setMode: setInboxMode,
     rotate,
     linkFor,
+    signInvite,
+    publishedSign,
     forgetPersona,
     summary,
     thread,

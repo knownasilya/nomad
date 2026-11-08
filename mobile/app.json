@@ -22,10 +22,40 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0f2747"
       },
-      "package": "to.holepunch.bare.expo"
+      "package": "to.holepunch.bare.expo",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "scheme": "nomad-invite"
+            }
+          ]
+        },
+        {
+          "action": "VIEW",
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "scheme": "https",
+              "host": "nomad.pages.dev",
+              "pathPrefix": "/invite"
+            }
+          ]
+        }
+      ]
     },
     "plugins": [
-      ["expo-router"],
+      [
+        "expo-router"
+      ],
       [
         "expo-build-properties",
         {

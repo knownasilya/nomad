@@ -36,13 +36,17 @@ export default {
   shareSpace: 'promise', // ({ name }) -> share info
   setUpHome: 'promise', // ({ name?, ownName? }) -> { spaceId, name }: a new shared Space with a Groceries list and House info
   createSpaceInvite: 'promise', // (role: 'editor' | 'viewer') -> { code, role }
+  createSpaceInviteLink: 'promise', // (role, { days? }) -> { id, link, code, role, expiresAt, signed } (ADR-0040)
+  listSpaceInvites: 'promise', // -> [{ id, role, state, createdAt, expiresAt, usedAt, usedBy, signed }]
+  revokeSpaceInvite: 'promise', // (id)
+  readInvite: 'promise', // (link) -> { title, role, from, check, expired, expiresAt, space }; throws for a changed invite
   approveSpaceJoin: 'promise', // (memberId)
   denySpaceJoin: 'promise', // (memberId)
   setSpaceRole: 'promise', // (memberId, role)
   removeSpaceMember: 'promise', // (memberId)
   answerSpaceRequest: 'promise', // ({ drive, writerKey, approve })
   leaveSpace: 'promise',
-  joinSpace: 'promise', // (code, { name }) -> { spaceId, name }, once an owner approves
+  joinSpace: 'promise', // (code or invite link, { name }) -> { spaceId, name }, once an owner approves
   watchSpaceShare: 'readable', // 'changed'
 
   // Reader and Notes data (bg/vault-apps.ts)
@@ -68,6 +72,10 @@ export default {
   renameNoteLinks: 'promise', // ({ id, from, to }) -> number of notes changed
   setNoteTopics: 'promise', // ({ id, topics }) -> note, its topics set by hand (ADR-0035)
   setNoteTick: 'promise', // ({ id, text, checked }) -> note, who ticked an item noted in a shared Space
+  // Household contacts (bg/web-apis/bg/household-contacts.ts), for the caller's Space
+  listHouseholdContacts: 'promise', // () -> { space, spaceName, shared, canWrite, contacts }
+  saveHouseholdContact: 'promise', // ({ id?, name, role?, phone?, email?, address?, notes?, profile? }) -> contact
+  deleteHouseholdContact: 'promise', // (id) -> boolean
   // The Calendar (bg/web-apis/bg/calendar.ts, shared/calendar.mjs), for the caller's Space
   listCalendar: 'promise', // ({ from?, to? }) -> { space, spaceName, shared, canWriteSpace, events, feeds, occurrences }
   saveCalendarEvent: 'promise', // ({ id?, title, start, end?, allDay?, location?, notes?, repeat?, inSpace? }) -> event

@@ -23,6 +23,14 @@ describe('routeLink', () => {
     expect(routeLink('nomad://settings/')).toEqual({ to: 'page' })
   })
 
+  it('opens invite links in the join form, and the invite page without one as a page', () => {
+    for (const url of ['nomad-invite:AQEEASNF', 'https://nomad.pages.dev/invite/#AQEEASNF', 'https://nomad.pages.dev/invite#AQEEASNF']) {
+      expect(routeLink(url)).toEqual({ to: 'invite', url })
+    }
+    expect(routeLink('https://nomad.pages.dev/invite/')).toEqual({ to: 'page' })
+    expect(routeLink('https://example.com/invite/#AQEEASNF')).toEqual({ to: 'page' })
+  })
+
   it('opens hyper:// links in the tab', () => {
     expect(routeLink('hyper://abc/posts/')).toEqual({ to: 'tab', url: 'hyper://abc/posts/' })
   })

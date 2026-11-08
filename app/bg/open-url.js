@@ -3,6 +3,7 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import * as windows from './ui/windows';
 import * as tabManager from './ui/tabs/manager';
+import { acceptUrlFor } from './hyper/invites';
 var queue = [];
 var isLoaded = false;
 var isSetup = false;
@@ -20,6 +21,8 @@ export function setup() {
 
 export function open(url, opts = {}) {
   setup();
+  // An invite link (ADR-0040 §4) opens the page that reads it, never the link as a tab URL.
+  url = acceptUrlFor(url) || url;
   var win = windows.getActiveWindow();
   if (isLoaded && win) {
     // send command now

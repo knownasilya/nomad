@@ -196,6 +196,12 @@ export function createPhoneInbox (deps) {
       return engine.thread(personaId, profileUrl)
     },
     readProfile: (url) => readProfile(url),
+    // Invite links (ADR-0040, lib/invites.mjs): sign with a Persona's key; read a profile's.
+    signInvite: (personaId, bytes) => {
+      if (!engine) throw new Error('Link this phone to your computer first')
+      return engine.signInvite(personaId, bytes)
+    },
+    publishedSign: (profileUrl) => (engine ? engine.publishedSign(profileUrl) : Promise.resolve(null)),
 
     // RPC_APPS `messages`
     async handle (action, args) {

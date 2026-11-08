@@ -24,6 +24,7 @@ export const READER_LINK = 'nomad://reader/'
 export const CALENDAR_LINK = 'nomad://calendar/'
 export const calendarLink = (day: string) => `${CALENDAR_LINK}?day=${day}`
 const DAY = /^\d{4}-\d{2}-\d{2}$/
+export const CONTACTS_LINK = 'nomad://library/contacts'
 export const ASSETS_LINK = 'nomad://assets/'
 export const assetLink = (id: string) => `${ASSETS_LINK}?id=${id}`
 // shared/assets.mjs isAssetId
@@ -34,6 +35,7 @@ const AI_VIEWS: Record<string, string> = { chats: 'Chats', memory: 'Memory', ski
 const LIBRARY_VIEWS: Record<string, string> = {
   drives: 'Drives',
   bookmarks: 'Bookmarks',
+  contacts: 'Contacts',
   names: 'Names',
   mods: 'Mods',
   jobs: 'Jobs',

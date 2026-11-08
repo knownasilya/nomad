@@ -166,4 +166,32 @@ describe('desktop notifications', () => {
     alert.done();
     settings.delete('notify_prompts');
   });
+
+  it('shows a calendar reminder that is due once, and opens its day', async () => {
+    const asked = [];
+    const due = [{ key: 'e1@2026-11-10T17:00', id: 'e1', title: 'Swim', start: '2026-11-10T17:00', allDay: false, location: 'Pool', at: '2026-11-10T16:00', spaceName: 'Home' }];
+    const source = async (from, to) => {
+      asked.push([from, to]);
+      return asked.length === 1 ? due : [];
+    };
+    await dn.checkReminders(source);
+    expect(shown.map((n) => n.opts.title)).toEqual(['Swim']);
+    expect(shown[0].opts.body).toMatch(/5:00 PM · Pool · Home$/);
+    shown[0].emit('click');
+    expect(opened.at(-1)).toBe('nomad://calendar/?day=2026-11-10');
+    // The next look starts where the last one ended, so the same minute isn't asked twice.
+    expect(settings.get('calendar_remind_since')).toBe(asked[0][1]);
+    await dn.checkReminders(source);
+    expect(asked.length === 1 || asked[1][0] === asked[0][1]).toBe(true);
+    expect(shown).toHaveLength(1);
+    settings.delete('calendar_remind_since');
+  });
+
+  it('keeps calendar reminders quiet with the setting off', async () => {
+    settings.set('notify_calendar', 0);
+    await dn.checkReminders(async () => [{ key: 'k', id: 'e', title: 'T', start: '2026-11-10T17:00', allDay: false, at: '2026-11-10T16:00' }]);
+    expect(shown).toEqual([]);
+    settings.delete('notify_calendar');
+    settings.delete('calendar_remind_since');
+  });
 });

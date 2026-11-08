@@ -36,6 +36,8 @@ export const VAULT_TOOL_PERMS = {
   deleteJob: 'jobsWrite',
   // The calendar: the user's events, the Space's, and the iCal feeds they follow.
   listCalendarEvents: 'calendarRead',
+  // Household contacts: the Space's address book (shared/household-contacts.mjs).
+  listContacts: 'contactsRead',
   // What the AI remembers about the user (ADR-0032). Reading needs no grant: every memory is in the
   // personal turn's prompt already.
   remember: 'memoryWrite',
@@ -54,13 +56,14 @@ export const VAULT_PERMS = [
   'jobsRead',
   'jobsWrite',
   'calendarRead',
+  'contactsRead',
   'memoryWrite',
   'assetsWrite',
 ]
 
 // A Job's turn runs with nobody to ask (ADR-0030). Making the Job was the user's yes to it reading
-// their Notes, Reader and calendar; anything else is refused without a prompt.
-export const JOB_GRANTS = ['notesRead', 'readerRead', 'calendarRead']
+// their Notes, Reader, calendar and household contacts; anything else is refused without a prompt.
+export const JOB_GRANTS = ['notesRead', 'readerRead', 'calendarRead', 'contactsRead']
 
 // A Job's permission check with its write grants (shared/jobs.mjs writePermissions): the reads
 // above, plus exactly the writes the user gave it. Anything else is no, with nobody to ask.

@@ -46,6 +46,7 @@ export const PRIVATE_READS = new Set([
   'listMods',
   'listJobs',
   'listCalendarEvents',
+  'listContacts',
 ])
 
 /** Whether a capability's result holds the user's private data. */

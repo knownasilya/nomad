@@ -24,13 +24,12 @@ const cssStr = css`
     }
   }
 
-  /* Two zones: "This Space" (a card topped with the Space's own color) and "Other Spaces" (open,
-     set up a home, join), so what acts on this Space never blends with what makes another one. */
+  /* Two zones: "This Space" (a bordered card, its Space's color on the mark) and "Other Spaces"
+     (open, set up a home, join), so what acts on this Space never blends with what makes another one. */
   .zone.current {
     overflow: hidden;
-    border: 1px solid var(--border-color--very-light);
-    border-top: 4px solid var(--space-color, var(--share-fill));
-    border-radius: 12px;
+    border: 1px solid var(--border-color--light);
+    border-radius: 6px;
     background: var(--bg-color--default);
     color: var(--text-color--default);
   }
@@ -154,7 +153,7 @@ const cssStr = css`
     flex-direction: column;
     padding: 14px;
     border: 1px solid var(--border-color--very-light);
-    border-radius: 10px;
+    border-radius: 6px;
     background: var(--bg-color--default);
     color: var(--text-color--default);
   }
@@ -386,7 +385,7 @@ const cssStr = css`
   .list {
     overflow: hidden;
     border: 1px solid var(--border-color--very-light);
-    border-radius: 10px;
+    border-radius: 6px;
     background: var(--bg-color--default);
   }
 
@@ -475,6 +474,42 @@ const cssStr = css`
     user-select: all;
   }
 
+  input.code.link {
+    border: 1px solid var(--border-color--light);
+    color: var(--text-color--default);
+    font-family: var(--code-font);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .invite .fields {
+    flex-wrap: wrap;
+  }
+
+  button.link-btn {
+    border-color: transparent;
+    background: none;
+    color: var(--share-accent);
+  }
+
+  button.link-btn:hover {
+    border-color: transparent;
+    text-decoration: underline;
+  }
+
+  .option.offer {
+    border-color: var(--share-accent);
+  }
+
+  .option.offer .what .fas {
+    color: var(--share-accent);
+  }
+
+  .option.offer a {
+    color: var(--share-accent);
+  }
+
   .leave {
     display: flex;
     flex-wrap: wrap;
@@ -502,7 +537,7 @@ const cssStr = css`
     margin-bottom: 10px;
     padding: 12px 14px;
     border: 1px solid var(--border-color--very-light);
-    border-radius: 10px;
+    border-radius: 6px;
     background: var(--bg-color--default);
     color: var(--text-color--default);
     font-size: 13px;

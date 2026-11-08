@@ -190,7 +190,7 @@ export interface NoteLiveEvent { id: string; conn: string; kind: 'message' | 'st
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages' | 'vouches' | 'calendar' | 'assets' | 'peers'
+export type AppName = 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages' | 'vouches' | 'calendar' | 'assets' | 'peers' | 'invites' | 'contacts'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
@@ -201,7 +201,7 @@ export interface Note { type: 'nomad/note'; id: string; body: string; createdAt:
 // 'YYYY-MM-DD' for an all-day event, 'YYYY-MM-DDTHH:mm' otherwise. space: the Space's key for an
 // event kept in that Space, else null. by: who added it, in a shared Space.
 export interface CalendarRepeat { freq: 'daily' | 'weekly' | 'monthly' | 'yearly'; interval: number; until?: string; count?: number; byDay?: number[] }
-export interface CalendarEvent { type: 'nomad/calendar-event'; id: string; title: string; start: string; end?: string; allDay: boolean; location?: string; notes?: string; repeat?: CalendarRepeat; by?: string; createdAt: string; updatedAt: string; space?: string | null }
+export interface CalendarEvent { type: 'nomad/calendar-event'; id: string; title: string; start: string; end?: string; allDay: boolean; location?: string; notes?: string; repeat?: CalendarRepeat; by?: string; remind?: number; createdAt: string; updatedAt: string; space?: string | null }
 // due: its copy is old and this phone can fetch a new one (calendar/feedFetched).
 // kind 'drive': a calendar drive (walled.garden/calendar), whose `url` is the drive's root; else an iCal link.
 export interface CalendarFeed { id: string; url: string; name: string; kind?: 'drive'; color?: string | null; by?: string; space?: string | null; fetchedAt: string | null; error: string; count: number; due: boolean }

@@ -55,8 +55,10 @@ const GLOBAL_SETTINGS = new Set([
   'notify_jobs',
   'notify_space_notices',
   'notify_prompts',
+  'notify_calendar',
   'job_notify_since',
   'space_notice_since',
+  'calendar_remind_since',
 ]);
 
 // The built-in search page (userland/search), which runs the ?q= it opens with.
@@ -104,6 +106,8 @@ export const setup = async function (opts) {
     notify_jobs: 1,
     notify_space_notices: 1,
     notify_prompts: 1,
+    // Reminders for calendar events that have one (shared/calendar.mjs remindersBetween).
+    notify_calendar: 1,
     auto_redirect_to_dat: 1,
     custom_start_page: 'blank',
     new_tab: 'nomad://desktop/',

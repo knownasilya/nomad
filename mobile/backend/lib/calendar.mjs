@@ -9,11 +9,14 @@
 // asks (`fetchDrive`): the backend reads drives itself, as Reader's hyper:// feeds do.
 
 import * as cal from '../../../shared/calendar.mjs'
+import b4a from 'b4a'
+import { decodeInlineJson } from '../../../shared/fs-core.mjs'
 import { recordsOf } from './vault-apps.mjs'
 import { memberRecords } from './space-library.mjs'
 import { parseHyperUrl } from './hyper-url.mjs'
 import { DRIVE_AUTOBASE, DRIVE_HYPERDRIVE } from '../../rpc-commands.mjs'
 
+const SPACES_PREFIX = '/.vault/spaces/'
 const withSpace = (space) => (rec) => ({ ...rec, space: space || null })
 
 async function listKind (base, space, kind, test) {
@@ -232,4 +235,22 @@ export async function feedFetched (base, space, { id, text, error } = {}) {
     : cal.makeFeedCache(found.prev, { error: String(error) }, cal.isFeedCache(prev) ? prev : null)
   await store.put(cal.recordFile(found.prev.id), rec)
   return { fetchedAt: rec.fetchedAt, error: rec.error || '', count: rec.events.length }
+}
+
+// Reminders due from `from` to `to` (wall times) across the user's own events and every Space in
+// the Vault (shared/calendar.mjs remindersBetween), for the phone to schedule ahead
+// (lib/useCalendarReminders.ts). Each carries its Space's name.
+export async function reminders (base, { from, to } = {}) {
+  const now = cal.localWallTime()
+  from = cal.isDateTime(from) ? from : now
+  to = cal.isDateTime(to) && to > from ? to : cal.addDays(cal.dayOf(from), 7) + from.slice(10)
+  const spaces = []
+  for await (const node of base.view.createReadStream({ gte: SPACES_PREFIX, lt: SPACES_PREFIX + '\xff' })) {
+    const s = decodeInlineJson(node.value, b4a)
+    if (s && cal.isSpaceKey(s.rootDriveKey) && !s.movedTo && !s.deleted && !s.removed) spaces.push(s)
+  }
+  const events = await listKind(base, null, 'events', cal.isEvent).catch(() => [])
+  for (const s of spaces) events.push(...(await listKind(base, s.rootDriveKey, 'events', cal.isEvent).catch(() => [])))
+  const names = new Map(spaces.map((s) => [s.rootDriveKey, s.name || '']))
+  return cal.remindersBetween(events, from, to).map((r) => ({ ...r, spaceName: r.space ? names.get(r.space) || '' : '', ...cal.reminderText(r) }))
 }
