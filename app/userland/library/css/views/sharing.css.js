@@ -507,6 +507,10 @@ const cssStr = css`
     color: var(--share-accent);
   }
 
+  .option.offer a {
+    color: var(--share-accent);
+  }
+
   .leave {
     display: flex;
     flex-wrap: wrap;

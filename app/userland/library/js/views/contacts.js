@@ -164,7 +164,7 @@ export class ContactsView extends LitElement {
                         <span class="far fa-address-card"></span>
                         <div>No contacts on Nomad yet.</div>
                         <div class="empty-hint">
-                          Use "New Contact" to add someone by their hyper:// link.
+                          Use "New Nomad Contact" to add someone by their hyper:// link.
                         </div>
                       </div>
                     `
@@ -215,7 +215,7 @@ export class ContactsView extends LitElement {
           <div class="hc-name">${c.name}${c.role ? html` <span class="hc-role">${c.role}</span>` : ''}</div>
           <div class="hc-lines">
             ${c.phone
-              ? html`<a href=${tel || '#'} title="Call ${c.name}"><span class="fas fa-phone-alt"></span> ${c.phone}</a>`
+              ? html`<a href=${tel || '#'} title="Call ${c.name}"><span class="fas fa-phone"></span> ${c.phone}</a>`
               : ''}
             ${c.email
               ? html`<a href=${'mailto:' + c.email} title="Email ${c.name}"><span class="far fa-envelope"></span> ${c.email}</a>`

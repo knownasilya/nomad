@@ -442,7 +442,7 @@ export class SharingView extends LitElement {
           <h2 id="other-spaces">Other Spaces</h2>
           <p>
             ${others.length ? 'Open another of your shared Spaces, set up a home, or join' : 'Set up a home, or join'}
-            someone’s Space with a code. Each is its own Space in your Spaces menu; ${i.name} doesn’t change.
+            someone’s Space with an invite link or a code. Each is its own Space in your Spaces menu; ${i.name} doesn’t change.
           </p>
         </div>
         ${others.length
