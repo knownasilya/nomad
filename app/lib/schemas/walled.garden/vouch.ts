@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // A Vouch (ADR-0045): one Profile Drive (the host) says it has had another (the guest) over at home,
-// with an optional note. Nothing in it says where, when or how often, and there are no ratings and
+// with a note in the host's words. Nothing in it says where, when or how often, and there are no ratings and
 // no negative kind. It shows nowhere until the guest accepts it, and it is valid while the host's
 // drive lists its hash (`walled.garden/vouch-index`) and `expiresAt` hasn't passed. Not proof of
 // personhood: it says "the writers of this Profile Drive say so".
@@ -16,8 +16,8 @@ export const VouchSchema = z
     host: z.url(),
     // The guest's Profile Drive.
     guest: z.url(),
-    // Plain text, shown, never rendered or fetched.
-    note: z.string().min(1).max(280).optional(),
+    // Required. Plain text, shown, never rendered or fetched.
+    note: z.string().max(280).refine((s) => s.trim().length > 0, 'A vouch needs a note'),
     issuedAt: z.iso.datetime(),
     // At most a year after issuedAt.
     expiresAt: z.iso.datetime(),

@@ -563,9 +563,9 @@ export class PersonasView extends LitElement {
           ${usable.length ? '' : html`<span class="field-hint">None of your Personas can give vouches right now.</span>`}
         </label>
         <label class="field">
-          <span class="field-label">A note <span class="optional">Optional</span></span>
-          <textarea rows="2" maxlength="280" placeholder="Lovely to have you for dinner" .value=${g.note} @input=${(ev) => this.setGiving({ note: ev.target.value })}></textarea>
-          <span class="field-hint">Plain text, at most 280 characters. Don’t put where you live or when they came.</span>
+          <span class="field-label">A note</span>
+          <textarea rows="2" maxlength="280" required placeholder="Lovely to have you for dinner" .value=${g.note} @input=${(ev) => this.setGiving({ note: ev.target.value })}></textarea>
+          <span class="field-hint">A few words about them, in your own words. Plain text, at most 280 characters. Don’t put where you live or when they came.</span>
         </label>
         <div class="field-hint notice-hint">
           <span class="fas fa-fw fa-info-circle"></span>
@@ -574,7 +574,7 @@ export class PersonasView extends LitElement {
         ${pv && !pv.ok ? html`<div class="error">${pv.reason}</div>` : ''}
         ${g.error ? html`<div class="error">${g.error}</div>` : ''}
         <div class="buttons">
-          <button type="submit" class="primary" ?disabled=${g.busy || g.checking || !g.personaId || !pv?.ok}>${g.busy ? 'Sending…' : 'Send vouch'}</button>
+          <button type="submit" class="primary" ?disabled=${g.busy || g.checking || !g.personaId || !pv?.ok || !g.note?.trim()}>${g.busy ? 'Sending…' : 'Send vouch'}</button>
           <button type="button" @click=${() => (this.giving = null)}>Cancel</button>
         </div>
       </form>
@@ -607,7 +607,7 @@ export class PersonasView extends LitElement {
   async onGiveVouch(ev) {
     ev.preventDefault();
     const g = this.giving;
-    if (!g?.preview?.ok) return;
+    if (!g?.preview?.ok || !g.note?.trim()) return;
     this.setGiving({ busy: true });
     try {
       await nomad.personas.giveVouch({ personaId: g.personaId, to: g.to.trim(), note: g.note });

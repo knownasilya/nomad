@@ -225,7 +225,7 @@ const session = await nomad.session.requestLogin({ perms: ['profile', 'email'], 
 //   perms: ['profile'],    // what the user left checked: a partial grant is normal
 //   profile: { url: 'hyper://…/', title: 'Ada', thumb: '/thumb.png' },  // only with 'profile'
 //   email: 'ada@example.org',  // only with 'email', and only when the Persona has one
-//   vouches: [ { type: 'walled.garden/vouch', host, guest, note?, … } ],  // only with 'vouches'
+//   vouches: [ { type: 'walled.garden/vouch', host, guest, note, … } ],  // only with 'vouches'
 //   createdAt: '…', expiresAt?: '…' }
 const current = await nomad.session.getCurrent()   // the Session, or null. Never prompts.
 await nomad.session.revoke()                       // log out

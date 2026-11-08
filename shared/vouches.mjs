@@ -88,7 +88,8 @@ export function newVouchId(bytes) {
   return base32(bytes.slice(0, 16));
 }
 
-// Plain text, one paragraph or a few lines, at most MAX_NOTE characters. Empty is no note.
+// Plain text, one paragraph or a few lines, at most MAX_NOTE characters. Every Vouch has one: the
+// host says in their own words why they vouch. Empty comes back undefined, which makeVouch refuses.
 export function normalizeNote(note) {
   const s = String(note ?? '')
     .replace(/\r\n?/g, '\n')
@@ -104,7 +105,7 @@ export function normalizeNote(note) {
 const iso = (t) => new Date(t).toISOString();
 const ms = (t) => (t instanceof Date ? t.getTime() : typeof t === 'number' ? t : Date.parse(t));
 
-/** @param {{ id: string, host: string, guest: string, note?: string }} f @param {Date | string | number} [now] */
+/** @param {{ id: string, host: string, guest: string, note: string }} f @param {Date | string | number} [now] */
 export function makeVouch({ id, host, guest, note }, now = new Date()) {
   const t = ms(now);
   const v = {
@@ -118,7 +119,8 @@ export function makeVouch({ id, host, guest, note }, now = new Date()) {
     expiresAt: iso(t + VALID_MS),
   };
   const n = normalizeNote(note);
-  if (n) v.note = n;
+  if (!n) throw new Error('Write a few words about them');
+  v.note = n;
   const err = vouchError(v);
   if (err) throw new Error(err === 'to self' ? 'You can’t vouch for your own profile' : `Not a vouch: ${err}`);
   return v;
@@ -135,8 +137,7 @@ export function vouchError(v) {
   if (!profileKeyOf(v.host) || v.host !== `hyper://${profileKeyOf(v.host)}/`) return 'bad host';
   if (!profileKeyOf(v.guest) || v.guest !== `hyper://${profileKeyOf(v.guest)}/`) return 'bad guest';
   if (v.host === v.guest) return 'to self';
-  if (v.note !== undefined && (typeof v.note !== 'string' || !v.note.length || v.note.length > MAX_NOTE))
-    return 'bad note';
+  if (typeof v.note !== 'string' || !v.note.trim() || v.note.length > MAX_NOTE) return 'bad note';
   if (!ISO.test(String(v.issuedAt || ''))) return 'bad issuedAt';
   if (!ISO.test(String(v.expiresAt || ''))) return 'bad expiresAt';
   const span = Date.parse(v.expiresAt) - Date.parse(v.issuedAt);

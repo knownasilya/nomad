@@ -1221,7 +1221,6 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
               },
               "note": {
                 "type": "string",
-                "minLength": 1,
                 "maxLength": 280
               },
               "issuedAt": {
@@ -1242,6 +1241,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
               "kind",
               "host",
               "guest",
+              "note",
               "issuedAt",
               "expiresAt"
             ],
@@ -1367,7 +1367,6 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
           },
           "note": {
             "type": "string",
-            "minLength": 1,
             "maxLength": 280
           },
           "issuedAt": {
@@ -1388,6 +1387,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
           "kind",
           "host",
           "guest",
+          "note",
           "issuedAt",
           "expiresAt"
         ],
@@ -1621,7 +1621,6 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
                 },
                 "note": {
                   "type": "string",
-                  "minLength": 1,
                   "maxLength": 280
                 },
                 "issuedAt": {
@@ -1642,6 +1641,7 @@ export const WALLED_GARDEN_JSON_SCHEMA = {
                 "kind",
                 "host",
                 "guest",
+                "note",
                 "issuedAt",
                 "expiresAt"
               ],

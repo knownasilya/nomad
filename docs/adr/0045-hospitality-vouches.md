@@ -34,7 +34,7 @@ that means "verified".
 ### 1. Words
 
 - A **Vouch** is one `walled.garden/vouch` record: one Profile Drive (the **host**) says it has had
-  another (the **guest**) over at home, with an optional note.
+  another (the **guest**) over at home, with a note in the host's words (required, 2026-11-08 amendment).
 - **Giving** a Vouch is the host's act. **Accepting** it is the guest's. A Vouch the guest hasn't
   accepted shows nowhere.
 - **Standing behind** a Vouch is the host's Profile Drive listing its hash (§4). A Vouch the host no
@@ -53,7 +53,7 @@ export const VouchSchema = z.object({
   kind: z.literal('hosted'),
   host: z.url(),                      // the host's Profile Drive, hyper://<key>/
   guest: z.url(),                     // the guest's Profile Drive
-  note: z.string().max(280).optional(), // plain text, shown, never rendered or fetched
+  note: z.string().max(280), // required, non-blank; plain text, shown, never rendered or fetched
   issuedAt: z.iso.datetime(),
   expiresAt: z.iso.datetime(),        // issuedAt + 1 year
 });
@@ -77,7 +77,7 @@ export const VouchSchema = z.object({
 
 1. **The host gives it from the guest's Profile Drive.** site-info on a Profile Drive gets
    **I've had them over**, which opens a short form: the host's Persona (the tab's, ADR-0031 §4, with
-   Change), an optional note, and one sentence that says what giving means (§5): *"Sam can show this
+   Change), a note (required), and one sentence that says what giving means (§5): *"Sam can show this
    to sites and on their profile, with your name on it."* Only a `usable` Persona (ADR-0031 §5) can
    give one.
 2. **Giving writes three things:** the record in the host's Vault (§7), its hash in the host's
@@ -302,6 +302,9 @@ on a Profile Drive's info sheet.
 - **The labels say "vouched for"** (2026-11-08): the UI reads *Maya vouched for you*, *You vouched
   for Sam*, *Vouch for them* and *Who vouched for them*. "Had you over" stays as what a Vouch means,
   in the hints and the giving form, not as the label on each one.
+- **Every Vouch has a note** (2026-11-08): the host writes a few words about the guest. `note` is
+  required and can't be blank in `vouchError` and the schema, and Send stays off until there is one.
+  Nothing had shipped yet, so `v` stays 1.
 
 [#128]: https://github.com/knownasilya/nomad/pull/128
 [#129]: https://github.com/knownasilya/nomad/pull/129

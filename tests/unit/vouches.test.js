@@ -40,8 +40,12 @@ describe('the record', () => {
     expect(V.vouchError({ ...v, host: HOST.slice(0, -1) })).toBe('bad host');
   });
 
-  it('cleans the note, and leaves out an empty one', () => {
-    expect(vouch({ note: '  \n ' }).note).toBeUndefined();
+  it('needs a note, and cleans it', () => {
+    expect(() => vouch({ note: '  \n ' })).toThrow(/few words/);
+    expect(() => vouch({ note: undefined })).toThrow(/few words/);
+    const { note: _n, ...noNote } = vouch();
+    expect(V.vouchError(noNote)).toBe('bad note');
+    expect(V.vouchError({ ...vouch(), note: '   ' })).toBe('bad note');
     expect(vouch({ note: 'a\u0007b\r\n\n\n\nc' }).note).toBe('ab\n\nc');
     expect(() => vouch({ note: 'x'.repeat(281) })).toThrow(/280/);
   });
@@ -332,7 +336,7 @@ describe('the engine, end to end', () => {
 
   it('a declined vouch stays gone', async () => {
     const w = world();
-    const v = await w.engines.maya.give({ personaId: 'maya000001', to: GUEST });
+    const v = await w.engines.maya.give({ personaId: 'maya000001', to: GUEST, note: 'Came for dinner' });
     await w.engines.sam.intake();
     await w.engines.sam.decline('sam0000001', v.id);
     expect(await w.engines.sam.intake()).toBe(0);
@@ -341,14 +345,14 @@ describe('the engine, end to end', () => {
 
   it('won’t vouch twice for the same person, or for an unreachable one', async () => {
     const w = world();
-    await w.engines.maya.give({ personaId: 'maya000001', to: GUEST });
-    await expect(w.engines.maya.give({ personaId: 'maya000001', to: GUEST })).rejects.toThrow(/already/);
-    await expect(w.engines.maya.give({ personaId: 'maya000001', to: HOST })).rejects.toThrow(/own/);
+    await w.engines.maya.give({ personaId: 'maya000001', to: GUEST, note: 'Came for dinner' });
+    await expect(w.engines.maya.give({ personaId: 'maya000001', to: GUEST, note: 'Came for dinner' })).rejects.toThrow(/already/);
+    await expect(w.engines.maya.give({ personaId: 'maya000001', to: HOST, note: 'x' })).rejects.toThrow(/own/);
   });
 
   it('flags a hash in the host’s drive that none of their Devices wrote, after a grace period', async () => {
     const w = world();
-    await w.engines.maya.give({ personaId: 'maya000001', to: GUEST });
+    await w.engines.maya.give({ personaId: 'maya000001', to: GUEST, note: 'Came for dinner' });
     const idx = w.drives.get(HOST).get(V.INDEX_PATH);
     w.drives.get(HOST).set(V.INDEX_PATH, V.makeIndex([...idx.hashes, 'f'.repeat(64)]));
     expect(await w.engines.maya.guard()).toEqual([]);
@@ -362,7 +366,7 @@ describe('the engine, end to end', () => {
 
   it('deleting a Persona withdraws what it gave and clears its profile list', async () => {
     const w = world();
-    await w.engines.maya.give({ personaId: 'maya000001', to: GUEST });
+    await w.engines.maya.give({ personaId: 'maya000001', to: GUEST, note: 'Came for dinner' });
     await w.engines.maya.forgetPersona('maya000001');
     expect(w.drives.get(HOST).get(V.INDEX_PATH).hashes).toEqual([]);
     expect([...w.vaults.maya.keys()].filter((k) => k.startsWith('/.vault/vouches-'))).toEqual([]);
