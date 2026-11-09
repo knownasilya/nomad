@@ -183,17 +183,109 @@ const fold = (s: string) =>
     .toLowerCase()
 
 // The Assets a filter and a search show: every word typed, in any order, ignoring case and accents
-// (Notes' and Reader's rule), in the name, caption, who added it, or the kind.
-export function filterAssets<T extends AssetLike> (list: T[], { filter = 'all', query = '' }: { filter?: string; query?: string } = {}): T[] {
+// (Notes' and Reader's rule), in the name, caption, who added it, the kind, the tags or the folder.
+// `tag` keeps those with that tag; `folder` (when given, '' for the top) those right in that folder.
+export function filterAssets<T extends AssetLike> (list: T[], { filter = 'all', query = '', tag = '', folder = null }: { filter?: string; query?: string; tag?: string; folder?: string | null } = {}): T[] {
   const kinds = new Set((FILTERS.find((f) => f.id === filter) || FILTERS[0]).kinds)
   const words = fold(query).split(/\s+/).filter(Boolean)
+  const want = tag ? cleanTag(tag) : ''
   return list.filter((a) => {
     if (!kinds.has(a.kind || kindOf(a.mime, a.name))) return false
+    if (want && !(a.tags || []).includes(want)) return false
+    if (folder != null && (a.folder || '') !== folder) return false
     if (!words.length) return true
-    const hay = fold([a.name, a.caption, a.by, KIND_LABELS[a.kind] || '', a.source === 'ai' ? 'ai' : ''].join(' '))
+    const hay = fold([a.name, a.caption, a.by, KIND_LABELS[a.kind] || '', a.source === 'ai' ? 'ai' : '', ...(a.tags || []), a.folder || ''].join(' '))
     return words.every((w) => hay.includes(w))
   })
 }
 
+// Tags
+// =
 
-export interface AssetLike { name: string; kind: string; mime: string; caption?: string; by?: string; source?: string }
+export const MAX_TAGS = 20
+export const MAX_TAG = 40
+
+// A tag as it is kept: lowercase, no '#' or commas, spaces collapsed, at most MAX_TAG. '' for none.
+export function cleanTag (s: string) {
+  return String(s || '')
+    .normalize('NFC')
+    .replace(/[\u0000-\u001f\u007f,#]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .slice(0, MAX_TAG)
+    .trim()
+}
+
+// Tags from a list or a comma-separated string: cleaned, each once, at most MAX_TAGS.
+export function normalizeTags (list: string[] | string) {
+  const parts = Array.isArray(list) ? list : String(list || '').split(',')
+  const out: string[] = []
+  for (const p of parts) {
+    const t = cleanTag(p)
+    if (t && !out.includes(t)) out.push(t)
+    if (out.length >= MAX_TAGS) break
+  }
+  return out
+}
+
+// Every tag the Assets use, most used first, then by name: [{ tag, count }].
+export function tagCounts (list: AssetLike[]) {
+  const counts = new Map<string, number>()
+  for (const a of list) for (const t of a.tags || []) counts.set(t, (counts.get(t) || 0) + 1)
+  return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+}
+
+// Folders
+// =
+
+export const MAX_FOLDER_PART = 80
+export const MAX_FOLDER_DEPTH = 8
+
+// A folder path as it is kept: parts split on '/', each with no control characters and spaces
+// collapsed, at most MAX_FOLDER_PART, no '.' or '..', at most MAX_FOLDER_DEPTH deep. '' is the top.
+export function cleanFolder (path: string) {
+  return String(path || '')
+    .split(/[\\/]/)
+    .map((p) => p.normalize('NFC').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_FOLDER_PART).trim())
+    .filter((p) => p && p !== '.' && p !== '..')
+    .slice(0, MAX_FOLDER_DEPTH)
+    .join('/')
+}
+
+// One folder name, for New folder and Rename: no '/'. '' when there's nothing left.
+export function cleanFolderName (name: string) {
+  return cleanFolder(String(name || '').replace(/[\\/]/g, ' '))
+}
+
+export const folderName = (path: string) => String(path || '').split('/').pop() || ''
+export const parentFolder = (path: string) => String(path || '').split('/').slice(0, -1).join('/')
+export const joinFolder = (parent: string, name: string) => cleanFolder(parent ? `${parent}/${name}` : name)
+// `path` is `folder` or inside it.
+export const inFolder = (path: string, folder: string) => !folder || path === folder || String(path || '').startsWith(folder + '/')
+
+const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+
+// Every folder there is: the kept ones, the ones files are in, and each of their parents, by path.
+export function allFolders (list: AssetLike[], kept: (string | { path: string })[] = []) {
+  const out = new Set<string>()
+  const addWithParents = (p: string) => {
+    for (let f = cleanFolder(p); f; f = parentFolder(f)) out.add(f)
+  }
+  for (const k of kept) addWithParents(typeof k === 'string' ? k : k?.path)
+  for (const a of list) if (a.folder) addWithParents(a.folder)
+  return [...out].sort(byName)
+}
+
+// The folders right inside `parent` ('' for the top), by name, each with how many files are in it
+// and its own folders: [{ path, name, count }].
+export function childFolders (folders: string[], parent = '', list: AssetLike[] = []) {
+  const depth = parent ? parent.split('/').length + 1 : 1
+  return folders
+    .filter((f) => f.split('/').length === depth && inFolder(f, parent) && f !== parent)
+    .map((path) => ({ path, name: folderName(path), count: list.filter((a) => a.folder && inFolder(a.folder, path)).length }))
+    .sort((a, b) => byName(a.name, b.name))
+}
+
+
+export interface AssetLike { name: string; kind: string; mime: string; caption?: string; by?: string; source?: string; tags?: string[]; folder?: string }

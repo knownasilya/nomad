@@ -83,7 +83,7 @@ type Kind = 'home' | 'web' | 'hyper'
 // sits on top of it, and back closes only the top one.
 type Screen =
   | { name: 'library' | 'reader' | 'devices' | 'settings' | 'logs' | 'hosting' | 'devtools' | 'personas' | 'contacts' }
-  | { name: 'assets'; assetId?: string } // assetId: the file to open, e.g. from a link in an AI answer
+  | { name: 'assets'; assetId?: string; folder?: string; tag?: string } // a file, folder or tag to open, e.g. from a link in an AI answer or a note
   | { name: 'notes'; noteId?: string } // noteId: the note to open, e.g. the one a followed link was in
   | { name: 'jobs'; jobId?: string; runId?: string } // a tapped Job notification opens its run
   | { name: 'calendar'; day?: string } // day: YYYY-MM-DD to show, e.g. from a link in an AI answer
@@ -921,7 +921,7 @@ export default function Browser () {
         openScreen({ name: 'calendar', day: link.day })
         return
       case 'asset':
-        openScreen({ name: 'assets', assetId: link.id })
+        openScreen({ name: 'assets', assetId: link.id, folder: link.folder, tag: link.tag })
         return
       case 'library':
         if (link.view === 'contacts') {
@@ -1463,6 +1463,7 @@ export default function Browser () {
         spaceName={spacesApi.activeSpace.name}
         onOpenDevices={() => openScreen({ name: 'devices' })}
         onOpenUrl={openFromNotes}
+        onOpenAsset={(place) => openScreen({ name: 'assets', assetId: place.id, folder: place.folder, tag: place.tag })}
       />
 
       <HouseholdContacts
@@ -1492,6 +1493,8 @@ export default function Browser () {
         visible={!!assetsScreen}
         onClose={() => closeScreenNamed('assets')}
         openAssetId={assetsScreen?.name === 'assets' ? assetsScreen.assetId : undefined}
+        openFolder={assetsScreen?.name === 'assets' ? assetsScreen.folder : undefined}
+        openTag={assetsScreen?.name === 'assets' ? assetsScreen.tag : undefined}
         apps={backend.apps}
         onVaultChange={backend.onVaultChange}
         space={spacesApi.activeSpace.rootDriveKey || undefined}

@@ -451,6 +451,15 @@ user's AI saves files there with `saveAsset` (personal turns, `assetsWrite`, onc
 `app/bg/ai/save-asset.mjs`, run in `ai.ts`, written by `assets.ts` `saveForAi`; up to `MAX_AI_BYTES`, 100 MB), and links
 `nomad://assets/?id=` (`assetLink`).
 
+Assets have `tags` and a `folder` path (`Recipes/Desserts`); an empty folder is kept by its own record
+(`<root>folders/<folderKey>.json`, `makeFolder`), and moving or removing one follows `moveFolderPlan`/
+`deleteFolderPlan` in `shared/assets.mjs` (ADR-0044 amendment). Both apps select many files to move,
+tag or remove at once: desktop's internal `nomad.vault.updateAssets`/`deleteAssets`/`addAssetFolder`/
+`moveAssetFolder`/`deleteAssetFolder`, the phone's `assets` `updateMany`/`deleteMany`/`addFolder`/
+`moveFolder`/`deleteFolder`. Links are `nomad://assets/?id=`, `?folder=` and `?tag=`
+(`assetFolderLink`, `assetTagLink`). A Note links one with `[[` (files and folders) or `[[#` (tags),
+from `notes/js/editor/asset-links.js`: rerun `npm run build:note-editor` after changing it.
+
 ### Always-on Peers (ADR-0038)
 
 A Peer is a Nomad with no windows that the user runs on a machine that stays on (`peer/`, the

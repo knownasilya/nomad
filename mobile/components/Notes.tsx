@@ -4,7 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 import { useTheme, radius, type Theme } from '../lib/theme'
-import type { Backend, Note } from '../lib/useBackend'
+import type { Backend, Note, AssetsList } from '../lib/useBackend'
 import { showLabel } from '../lib/tooltip'
 import editorHtml from '../lib/noteEditorHtml'
 import LinkPhone from './LinkPhone'
@@ -18,6 +18,7 @@ import TopicFilterSheet from './TopicFilterSheet'
 import SearchField, { Marked } from './SearchField'
 import KeyboardInset from './KeyboardInset'
 import { queryWords, matchesWords, matchSnippet } from '../lib/search'
+import { parseItemLink } from '../lib/itemLinks'
 
 const SAVE_DELAY = 800
 const VIEW_KEY = 'nomad-notes-view' // 'list' or 'canvas', the last one used
@@ -34,6 +35,7 @@ interface Props {
   onOpenDevices: () => void
   // A link to a page; noteId is the note it was in, which openNoteId gets back when back returns here.
   onOpenUrl: (url: string, noteId?: string) => void
+  onOpenAsset: (place: { id?: string; folder?: string; tag?: string }) => void // a link to a file, folder or tag in Assets
   openNoteId?: string // a note to open as Notes shows
 }
 
@@ -75,7 +77,7 @@ const TOOLS: [string, string][] = [['heading', 'H'], ['bold', 'B'], ['italic', '
 // The search box finds notes with every word typed, in their text or topics, in any order and
 // ignoring accents (lib/search.ts, desktop's rules): the list shows the line that matched with the
 // words marked, and the canvas lights up the notes that match.
-export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive, onNoteLive, space, spaceName, onOpenDevices, onOpenUrl, openNoteId }: Props) {
+export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive, onNoteLive, space, spaceName, onOpenDevices, onOpenUrl, onOpenAsset, openNoteId }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const insets = useSafeAreaInsets()
@@ -177,6 +179,16 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive
     if (l) await noteLiveRef.current('close', { id: l.id, conn: l.conn })
   }, [])
 
+  // The Space's files, folders and tags in Assets, which [[ in the editor offers to link.
+  const assetsRef = useRef<{ assets: { id: string; name: string; kind: string; folder?: string; tags?: string[] }[]; folders: string[] } | null>(null)
+  const loadAssets = useCallback(async () => {
+    const res = await call<AssetsList>('assets', 'list')
+    assetsRef.current = res.ok && res.value
+      ? { assets: res.value.assets.map(({ id, name, kind, folder, tags }) => ({ id, name, kind, folder, tags })), folders: res.value.folders || [] }
+      : null
+    if (ready.current) send({ type: 'assets', assets: assetsRef.current })
+  }, [call, send])
+
   const load = useCallback(async () => {
     setError('')
     const res = await call<{ notes: Note[]; writable: boolean; shared?: boolean; canWriteSpace?: boolean }>('notes', 'list')
@@ -189,7 +201,9 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive
     setCanWriteSpace(res.value.canWriteSpace !== false)
     setListLoaded(true)
     if (ready.current) send({ type: 'notes', notes: res.value.notes })
-  }, [call, send])
+    loadAssets()
+  }, [call, send, loadAssets])
+
 
   useEffect(() => { if (visible) load(); else setListLoaded(false) }, [visible, load])
 
@@ -373,6 +387,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive
     const d = draft.current
     if (msg.type === 'ready') {
       ready.current = true
+      send({ type: 'assets', assets: assetsRef.current })
       showDraft(!d?.id)
     } else if (msg.type === 'change' && d && msg.live && live.current?.synced) {
       // Anyone's edit, in the live session: it saves them.
@@ -430,6 +445,13 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive
     } else if (msg.type === 'createNote') {
       createLinked(msg.title)
     } else if (msg.type === 'openUrl') {
+      // A file, folder or tag in Assets opens the Assets screen over the note; back comes here.
+      const item = parseItemLink(String(msg.href || ''))
+      if (item && item.kind === 'asset') {
+        save()
+        onOpenAsset({ id: item.id, folder: item.folder, tag: item.tag })
+        return
+      }
       // The note's id is read after closing: a new note gets one when that saves it.
       const from = draft.current
       closeEditor().then(() => onOpenUrl(msg.href, from?.id || undefined))

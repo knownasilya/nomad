@@ -42,11 +42,12 @@ import { notesPageTitle } from './page-title.js';
 import { isTopicOn, toggleTopic, keepKnownTopics, matchesTopics, topicFilterLabel } from './topic-filter.js';
 
 const SAVE_DELAY = 700;
-const EDITOR_HINT = 'Start typing. The first line is the title. Type [[ to link a note.';
+const EDITOR_HINT = 'Start typing. The first line is the title. Type [[ to link a note or a file in Assets.';
 const VIEW_KEY = 'nomad-notes-view';
 
 const state = {
   notes: [], // stored notes, newest first
+  assets: null, // the Space's files, folders and tags in Assets, for [[ (loadAssets)
   query: '',
   loaded: false,
   writable: true, // false while a Device that just joined waits for the Vault
@@ -190,6 +191,18 @@ async function loadNotes() {
   // A ticked topic may have gone (its last note lost it, on this Device or another).
   state.topics = keepKnownTopics(state.topics, topicCounts());
   editor?.setNotes(state.notes);
+  loadAssets();
+}
+
+// The Space's files, folders and tags in Assets, which [[ offers to link (editor/asset-links.js).
+async function loadAssets() {
+  try {
+    const res = await nomad.vault.listAssets();
+    state.assets = { assets: (res.assets || []).map(({ id, name, kind, folder, tags }) => ({ id, name, kind, folder, tags })), folders: res.folders || [] };
+  } catch {
+    state.assets = null;
+  }
+  editor?.setAssets(state.assets);
 }
 
 // Another Device added, edited, or deleted a note. Our own saves land here too; they change nothing.
@@ -844,6 +857,7 @@ function renderEditor() {
     parent: host,
     doc: draft.body,
     notes: state.notes,
+    assets: state.assets,
     ticks: openTicks(),
     readOnly: !state.writable,
     placeholder: EDITOR_HINT,
@@ -939,6 +953,7 @@ function bindLive(conn) {
     parent: editorHost,
     doc: text,
     notes: state.notes,
+    assets: state.assets,
     ticks: openTicks(),
     readOnly: !state.writable,
     placeholder: EDITOR_HINT,

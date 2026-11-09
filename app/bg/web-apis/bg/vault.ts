@@ -590,8 +590,23 @@ export default {
   async updateAsset(change: any = {}) {
     return assets.updateAsset(this, change || {});
   },
+  async updateAssets(change: any = {}) {
+    return assets.updateAssets(this, change || {});
+  },
   async deleteAsset(id) {
     return assets.deleteAsset(this, id);
+  },
+  async deleteAssets(ids) {
+    return assets.deleteAssets(this, Array.isArray(ids) ? ids : []);
+  },
+  async addAssetFolder(path) {
+    return assets.addFolder(this, String(path || ''));
+  },
+  async moveAssetFolder(change: any = {}) {
+    return assets.moveFolder(this, change || {});
+  },
+  async deleteAssetFolder(path) {
+    return assets.deleteFolder(this, String(path || ''));
   },
 
   // Ask the AI for topics now: for `ids`, or every Note with none yet. -> how many it will look at.

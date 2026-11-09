@@ -34,6 +34,11 @@ const CASES = [
   'nomad://assets/?id=amh2x0k3c-ab12cd',
   'nomad://assets/?id=../x&delete=1',
   'nomad://assets/files/x',
+  'nomad://assets/?folder=Recipes%2FDesserts',
+  'nomad://assets/?folder=..%2F..%2Fx&delete=1',
+  'nomad://assets/?folder=%E0%A4%A',
+  'nomad://assets/?tag=Road%20Trip',
+  'nomad://assets/?tag=%23taxes&x=1',
   'nomad://settings',
   'nomad://library/drives?delete=1',
   'hyper://abc123/notes/todo.md',
@@ -91,6 +96,24 @@ describe('parseItemLink', () => {
       place: 'Assets',
     })
     expect(shared.parseItemLink('nomad://assets/?id=../x').url).toBe('nomad://assets/')
+  })
+
+  it('opens a folder or a tag in Assets, rebuilt from its cleaned name', () => {
+    expect(shared.parseItemLink('nomad://assets/?folder=Recipes%2F%20Desserts&delete=1')).toEqual({
+      kind: 'asset',
+      folder: 'Recipes/Desserts',
+      url: 'nomad://assets/?folder=Recipes%2FDesserts',
+      place: 'Assets → Recipes → Desserts',
+    })
+    expect(shared.parseItemLink('nomad://assets/?folder=..%2F..%2Fx').folder).toBe('x')
+    expect(shared.parseItemLink('nomad://assets/?folder=%2E%2E').url).toBe('nomad://assets/')
+    expect(shared.parseItemLink('nomad://assets/?tag=%23Road%20Trip')).toEqual({
+      kind: 'asset',
+      tag: 'road trip',
+      url: 'nomad://assets/?tag=road%20trip',
+      place: 'Assets → #road trip',
+    })
+    expect(shared.parseItemLink('nomad://assets/?tag=%E0%A4%A').url).toBe('nomad://assets/')
   })
 
   it('opens web and hyper:// pages as written', () => {

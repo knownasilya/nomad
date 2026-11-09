@@ -122,9 +122,16 @@ const forPage = (place: Place) => (a) => {
   return { ...rest, kind: as.kindOf(a.mime, a.name), canDelete: as.canDelete(a, who(place)) };
 };
 
-// { space, spaceName, shared, canAdd, role, assets: [...record, canDelete] }
+// The folder records (shared/assets.mjs makeFolder): folders kept while nothing is in them.
+async function keptFolders(place: Place) {
+  if (!place.sess) return [];
+  return (await readJsonAt(place.sess, as.pathsOf(place.root).folders)).filter(as.isFolder);
+}
+
+// { space, spaceName, shared, canAdd, role, assets: [...record, canDelete], folders: [path] }
 export async function listAssets(ctx) {
   const place = await placeOf(ctx);
+  const list = await items(place);
   return {
     space: place.space,
     spaceName: vaultApps.spaceNameOf(place.space),
@@ -132,7 +139,8 @@ export async function listAssets(ctx) {
     canAdd: place.writable,
     role: place.role,
     maxBytes: as.MAX_BYTES,
-    assets: (await items(place)).map(forPage(place)),
+    assets: list.map(forPage(place)),
+    folders: as.allFolders(list, await keptFolders(place)),
   };
 }
 
@@ -306,6 +314,8 @@ export async function addTo(place: Place, f: any) {
     thumb: !!small?.length,
     source: f.source,
     sourceUrl: f.sourceUrl,
+    tags: f.tags,
+    folder: f.folder,
   });
   const ops: any[] = [
     stored
@@ -324,30 +334,124 @@ export async function addAsset(ctx, f: any = {}) {
   return addTo(await placeOf(ctx), f);
 }
 
-// A new name or caption.
-export async function updateAsset(ctx, { id, name, caption }: any = {}) {
+async function writable(ctx) {
   const place = await placeOf(ctx);
   if (!place.writable || !place.sess) throw new Error('You can view this Space, but not change it');
+  return place;
+}
+
+// The fields of a change the user may make: a name, a caption, tags, a folder.
+function editOf({ name, caption, tags, folder }: any) {
+  return {
+    ...(name !== undefined ? { name } : {}),
+    ...(caption !== undefined ? { caption } : {}),
+    ...(tags !== undefined ? { tags } : {}),
+    ...(folder !== undefined ? { folder } : {}),
+  };
+}
+
+// A new name, caption, tags or folder.
+export async function updateAsset(ctx, change: any = {}) {
+  const place = await writable(ctx);
+  const { id } = change;
   const path = as.pathsOf(place.root).item(id);
   const prev = await autobases.readJson(place.sess, path);
   if (!as.isAsset(prev)) throw new Error('That file was removed');
-  const rec = as.makeAsset({ id, ...(name !== undefined ? { name } : {}), ...(caption !== undefined ? { caption } : {}) }, prev);
+  const rec = as.makeAsset({ id, ...editOf(change) }, prev);
   await autobases.putInline(place.sess, path, rec);
   return rec;
+}
+
+// Many at once (select, then Move or Tag): `folder` moves them, `addTags`/`removeTags` change their
+// tags. Returns how many changed.
+export async function updateAssets(ctx, { ids = [], folder, addTags = [], removeTags = [] }: any = {}) {
+  const place = await writable(ctx);
+  const p = as.pathsOf(place.root);
+  let changed = 0;
+  for (const id of (Array.isArray(ids) ? ids : []).filter(as.isAssetId)) {
+    const prev = await autobases.readJson(place.sess, p.item(id)).catch(() => null);
+    if (!as.isAsset(prev)) continue;
+    const tags = as.changeTags(prev.tags, { add: addTags, remove: removeTags });
+    const rec = as.makeAsset({ id, tags, ...(folder !== undefined ? { folder } : {}) }, prev);
+    await place.sess.base.append(await autobases.buildPutInlineOp(place.sess, p.item(id), rec));
+    changed++;
+  }
+  if (changed) await place.sess.base.update();
+  return { changed };
+}
+
+async function removeFrom(place: Place, id) {
+  const p = as.pathsOf(place.root);
+  const prev = await autobases.readJson(place.sess, p.item(id)).catch(() => null);
+  if (!as.isAsset(prev)) return 'gone';
+  if (!as.canDelete(prev, who(place))) return 'refused';
+  for (const path of [p.item(id), p.file(id), p.thumb(id)]) await place.sess.base.append({ op: 'del', path });
+  return 'removed';
 }
 
 export async function deleteAsset(ctx, id) {
   const place = await placeOf(ctx);
   if (!place.sess || !as.isAssetId(id)) return false;
-  const p = as.pathsOf(place.root);
-  const prev = await autobases.readJson(place.sess, p.item(id));
-  if (!as.isAsset(prev)) return false;
-  if (!as.canDelete(prev, who(place))) {
-    throw new Error('Only the person who added a file, or the Space’s owner, can remove it');
+  const res = await removeFrom(place, id);
+  if (res === 'refused') throw new Error('Only the person who added a file, or the Space’s owner, can remove it');
+  if (res === 'removed') await place.sess.base.update();
+  return res === 'removed';
+}
+
+// Many at once. Files someone else added in a shared Space stay (`refused`).
+export async function deleteAssets(ctx, ids = []) {
+  const place = await placeOf(ctx);
+  let removed = 0;
+  let refused = 0;
+  if (!place.sess) return { removed, refused };
+  for (const id of (Array.isArray(ids) ? ids : []).filter(as.isAssetId)) {
+    const res = await removeFrom(place, id);
+    if (res === 'removed') removed++;
+    else if (res === 'refused') refused++;
   }
-  for (const path of [p.item(id), p.file(id), p.thumb(id)]) await place.sess.base.append({ op: 'del', path });
+  if (removed) await place.sess.base.update();
+  return { removed, refused };
+}
+
+// Folders (shared/assets.mjs): a new one is kept by its record until it is removed.
+export async function addFolder(ctx, path) {
+  const place = await writable(ctx);
+  const rec = as.makeFolder(path);
+  await autobases.putInline(place.sess, as.pathsOf(place.root).folder(rec.path), rec);
+  return rec.path;
+}
+
+// Rename or move folder `from` to `to` (a whole path), with everything in it.
+export async function moveFolder(ctx, { from, to }: any = {}) {
+  const place = await writable(ctx);
+  const p = as.pathsOf(place.root);
+  const list = (await items(place)).filter((a) => !a.legacy);
+  const kept = await keptFolders(place);
+  const plan = as.moveFolderPlan(list, kept, from, to);
+  for (const { id, folder } of plan.assets) {
+    const prev = list.find((a) => a.id === id);
+    await place.sess.base.append(await autobases.buildPutInlineOp(place.sess, p.item(id), as.makeAsset({ id, folder }, prev)));
+  }
+  for (const path of plan.remove) await place.sess.base.append({ op: 'del', path: p.folder(path) });
+  for (const path of plan.keep) await place.sess.base.append(await autobases.buildPutInlineOp(place.sess, p.folder(path), as.makeFolder(path)));
   await place.sess.base.update();
-  return true;
+  return { path: as.cleanFolder(to), moved: plan.assets.length };
+}
+
+// Remove folder `path` and everything in it. Refused, with nothing removed, when it holds a file this
+// user can't remove (someone else's, in a shared Space).
+export async function deleteFolder(ctx, path) {
+  const place = await writable(ctx);
+  const p = as.pathsOf(place.root);
+  const list = (await items(place)).filter((a) => !a.legacy);
+  const plan = as.deleteFolderPlan(list, await keptFolders(place), path);
+  const w = who(place);
+  const theirs = plan.assets.filter((id) => !as.canDelete(list.find((a) => a.id === id), w)).length;
+  if (theirs) throw new Error(`This folder has ${theirs} file${theirs === 1 ? '' : 's'} someone else added. Only they, or the Space’s owner, can remove ${theirs === 1 ? 'it' : 'them'}.`);
+  for (const id of plan.assets) for (const f of [p.item(id), p.file(id), p.thumb(id)]) await place.sess.base.append({ op: 'del', path: f });
+  for (const f of plan.remove) await place.sess.base.append({ op: 'del', path: p.folder(f) });
+  await place.sess.base.update();
+  return { removed: plan.assets.length };
 }
 
 // The AI's saveAsset (ai.ts): bytes it wrote, fetched or read, into Space `space`'s Assets. A

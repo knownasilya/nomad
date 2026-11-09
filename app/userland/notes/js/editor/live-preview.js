@@ -12,7 +12,8 @@
 // (shared/note-lists.mjs planTick), so a Note works as a shopping list. In a shared Space each ticked
 // item shows who ticked it (setTicks).
 //
-// Note links ([[Title]], [[Title#Heading|text]], or a relative [text](Title.md)) render as links.
+// Note links ([[Title]], [[Title#Heading|text]], or a relative [text](Title.md)) render as links, and
+// a link to a file, folder or tag in Assets (nomad://assets/…) as a small pill.
 // A link to a note that doesn't exist yet renders faded; following it creates the note.
 
 import { StateEffect, StateField } from '@codemirror/state';
@@ -236,7 +237,7 @@ function buildDecorations(view) {
           decos.push(hide.range(marks[0].from, marks[0].to));
           decos.push(
             mark(
-              target ? 'cm-note-link' + (resolve(target) ? '' : ' cm-note-link-unresolved') : 'cm-link',
+              target ? 'cm-note-link' + (resolve(target) ? '' : ' cm-note-link-unresolved') : /^nomad:\/\/assets\//i.test(url) ? 'cm-link cm-asset-link' : 'cm-link',
               target ? { 'data-target': target, 'data-heading': '' } : { 'data-href': url }
             ).range(marks[0].to, marks[1].from)
           );

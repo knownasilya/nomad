@@ -17,6 +17,7 @@ import { noteTitle, sortNotes } from '../../../../../shared/vault-apps.mjs';
 import { livePreview, previewClicks, notesField, setNotes, ticksField, setTicks } from './live-preview.js';
 import { doneCount } from '../../../../../shared/note-lists.mjs';
 import { commands, formattingKeymap } from './commands.js';
+import { assetOptions, assetCompletions } from './asset-links.js';
 
 export { commands };
 
@@ -82,15 +83,37 @@ const theme = EditorView.theme({
   '.cm-tooltip.cm-tooltip-autocomplete > ul > li': { padding: '4px 10px' },
   '.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': { background: 'var(--note-accent-soft)', color: 'var(--note-text)' },
   '.cm-completionDetail': { color: 'var(--note-muted)', fontStyle: 'normal', marginLeft: '8px' },
+  '.cm-completionSection': {
+    padding: '6px 10px 2px',
+    fontSize: '0.72em',
+    fontWeight: '600',
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
+    color: 'var(--note-muted)',
+    borderBottom: '0',
+  },
+  // A link to a file, folder or tag in Assets.
+  '.cm-link.cm-asset-link': {
+    background: 'var(--note-accent-soft)',
+    borderRadius: '4px',
+    padding: '0 4px',
+  },
 });
 
-// Typing [[ offers the other notes; picking one finishes the link.
-function noteCompletions(getNotes) {
+// Typing [[ offers the other notes, then the files and folders in Assets; picking a note finishes
+// the link, and picking a file writes a Markdown link to it (asset-links.js). [[# offers the tags.
+function noteCompletions(getNotes, getAssets) {
   return (context) => {
+    const closed = context.state.sliceDoc(context.pos, context.pos + 2) === ']]';
+    const tag = context.matchBefore(/\[\[#[^[\]|\n]*/);
+    if (tag) {
+      const tags = getAssets().filter((o) => o.kind === 'tag');
+      if (!tags.length) return null;
+      return { from: tag.from + 2, options: assetCompletions(tags, tag.from, closed), validFor: /^#[^[\]|\n]*$/ };
+    }
     const m = context.matchBefore(/\[\[[^[\]|#\n]*/);
     if (!m) return null;
     const own = noteTitle(context.state.doc.toString()).toLowerCase();
-    const closed = context.state.sliceDoc(context.pos, context.pos + 2) === ']]';
     const seen = new Set();
     const options = [];
     for (const n of sortNotes(getNotes())) {
@@ -101,6 +124,7 @@ function noteCompletions(getNotes) {
       options.push({
         label: title,
         type: 'text',
+        section: { name: 'Notes', rank: 0 },
         apply: (view, completion, from, to) => {
           const insert = completion.label + ']]';
           view.dispatch({
@@ -110,18 +134,20 @@ function noteCompletions(getNotes) {
         },
       });
     }
+    options.push(...assetCompletions(getAssets().filter((o) => o.kind !== 'tag'), m.from, closed));
     return { from: m.from + 2, options, validFor: /^[^[\]|#\n]*$/ };
   };
 }
 
-// Make an editor in `parent`. Returns { view, getText, setText, setNotes, setTicks, doneCount,
+// Make an editor in `parent`. Returns { view, getText, setText, setNotes, setAssets, setTicks, doneCount,
 // setReadOnly, focus, run, goToHeading, destroy }. `onChange(text)` fires on the user's edits;
 // `onOpenLink(link)` when the user follows a link: { kind: 'note', target, heading } or
 // { kind: 'url', href }; `onTick({ text, checked })` after the user ticks or unticks a task. `collab` is a
 // shared-editing extension (yCollab, for a Live Doc): it brings its own undo history, so the
 // editor's is left out, and the text then comes from the shared document, not `doc`.
-export function createNoteEditor({ parent, doc = '', notes = [], ticks = null, readOnly = false, placeholder: hint = '', onChange, onOpenLink, onTick, collab = null }) {
+export function createNoteEditor({ parent, doc = '', notes = [], assets = null, ticks = null, readOnly = false, placeholder: hint = '', onChange, onOpenLink, onTick, collab = null }) {
   let currentNotes = notes;
+  let currentAssets = assetOptions(assets);
   const editable = new Compartment();
   const view = new EditorView({
     parent,
@@ -145,7 +171,7 @@ export function createNoteEditor({ parent, doc = '', notes = [], ticks = null, r
           (link) => onOpenLink && onOpenLink(link),
           (t) => onTick && onTick(t)
         ),
-        autocompletion({ override: [noteCompletions(() => currentNotes)], icons: false }),
+        autocompletion({ override: [noteCompletions(() => currentNotes, () => currentAssets)], icons: false }),
         keymap.of([
           ...formattingKeymap,
           ...closeBracketsKeymap,
@@ -185,6 +211,10 @@ export function createNoteEditor({ parent, doc = '', notes = [], ticks = null, r
     setNotes(list) {
       currentNotes = list || [];
       view.dispatch({ effects: setNotes.of(currentNotes) });
+    },
+    // What [[ offers from Assets: listAssets' answer ({ assets, folders }), or null for nothing.
+    setAssets(data) {
+      currentAssets = assetOptions(data);
     },
     // Who ticked which item (the Note record's `ticks`), shown in a shared Space. null for none.
     setTicks(map) {
