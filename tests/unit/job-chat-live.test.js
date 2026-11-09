@@ -111,4 +111,49 @@ describe('job-chat', () => {
     await chat.end({ error: 'No runtime' });
     await expect(following).rejects.toThrow('No runtime');
   });
+
+  it('says when someone starts watching, and when the last window following it closes', async () => {
+    const turn = new EventEmitter();
+    const calls = [];
+    const closeable = (id) => {
+      const wc = new EventEmitter();
+      let gone = false;
+      Object.assign(wc, { id, isDestroyed: () => gone });
+      return { id, webContents: wc, close: () => ((gone = true), wc.emit('destroyed')) };
+    };
+    const chat = await jobChat.open({ job: { id: 'j3', title: 'Long' }, prompt: 'Go', emitter: turn, stop: () => {}, onWatch: (on) => calls.push(on) });
+    expect(calls).toEqual([]);
+    expect(jobChat.progress('j3').watched).toBe(false);
+    const a = closeable(21);
+    const b = closeable(22);
+    await jobChat.view('j3', a);
+    await jobChat.view('j3', b);
+    // One call for the first window; the second watches too.
+    expect(calls).toEqual([true]);
+    expect(jobChat.progress('j3').watched).toBe(true);
+    a.close();
+    expect(calls).toEqual([true]);
+    b.close();
+    expect(calls).toEqual([true, false]);
+    expect(jobChat.progress('j3').watched).toBe(false);
+    // Watching again after everyone left holds the limit off again.
+    await jobChat.view('j3', closeable(23));
+    expect(calls).toEqual([true, false, true]);
+    await chat.end({});
+  });
+
+  it('calls the watch hook at once for Run with me, and not after the run ends', async () => {
+    const turn = new EventEmitter();
+    const calls = [];
+    const wc = new EventEmitter();
+    let gone = false;
+    Object.assign(wc, { id: 31, isDestroyed: () => gone });
+    const chat = await jobChat.open({ job: { id: 'j4', title: 'Mine' }, prompt: 'Go', emitter: turn, stop: () => {}, watchWin: { id: 31, webContents: wc }, onWatch: (on) => calls.push(on) });
+    expect(calls).toEqual([true]);
+    await chat.end({});
+    gone = true;
+    wc.emit('destroyed');
+    expect(calls).toEqual([true]);
+    expect(wc.listenerCount('destroyed')).toBe(0);
+  });
 });

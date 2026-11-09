@@ -44,7 +44,7 @@ rules are in `shared/jobs.mjs`; the desktop side is `app/bg/ai/jobs.js` (store, 
    Reader reads, which making the Job granted (through the `jobsWrite` permission or in My
    Library), and to the Job's own write grants, and no to everything else. A page's text a Job
    reads can talk it into calling only what it was given. It runs on this computer's Runtime only,
-   never another Device's over the Bridge, and stops after 10 minutes.
+   never another Device's over the Bridge, and stops after its time limit (amendment below).
 5. **Notifications.** `notify` on the Job is `always` (each run notifies with the start of its
    answer), `auto` (only when the run calls the `notify` capability, for "tell me if…" Jobs) or
    `never`. A failed run notifies too, once per streak of failures. The run record carries the
@@ -134,3 +134,19 @@ The user wants to see a Job's last result and its errors over time, and to clear
   switch, a search over answers and errors (the shared search rule of Notes and Reader), each run's
   duration and Device, and a failing Job's last error on its row in the list. The phone's search
   sits in a full-screen Modal, so it pads the page by the keyboard's inset (`KeyboardInset`).
+
+## Amendment: time limit (2026-11)
+
+A run used to stop after 10 minutes, which cut off long Jobs (a big site update, many pages) and
+runs the user was watching live.
+
+- **A Job has a time limit**, `timeLimit` in minutes on its record: 1 to 480, default 30
+  (`DEFAULT_TIME_LIMIT`, stored only when it differs, so older Jobs get the default).
+  `normalizeTimeLimit` and `timeLimitOf` in `shared/jobs.mjs` check and read it. My Library's
+  editor offers 10 minutes to 8 hours; the AI's `saveJob` takes `timeLimit` too.
+- **It counts only while nobody watches.** Jobs run one at a time, so a run that never ends would
+  hold up every other Job; a run the user watches is one they can stop. While a window follows the
+  run in its AI Sidebar (Run with me, or Watch on a run going on), `job-chat.js` calls `onWatch(true)`
+  and `jobs.js` holds the limit off. When the last such window closes, the limit starts again from
+  then. The Jobs page's live view says which applies.
+- A run that hits it fails with an error naming the limit and the two ways around it.

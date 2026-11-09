@@ -17,6 +17,10 @@
 //
 // A chat is saved with each watching window's own webContents as the sender, as the sidebar saves
 // its chats, so it lands in that window's Space's hyper://private/.
+//
+// A run is watched while a window that follows it is open. `onWatch(true)` says someone started
+// watching, `onWatch(false)` that the last such window closed: jobs.js holds the Job's time limit
+// off in between, since the user can stop it.
 
 import EventEmitter from 'events';
 import * as logLib from '../logger';
@@ -51,7 +55,7 @@ export function isLive(sessionId) {
 // page (job-page.js), and `watchWin` the user's window for Run with me (its sidebar opens to the
 // chat now). Returns { sessionId, end(result) }; end() is called once with { error, output } when
 // the run is over, and resolves the chat's id when it was saved (someone watched), else null.
-export async function open({ job, prompt, emitter, stop, page = null, watchWin = null }) {
+export async function open({ job, prompt, emitter, stop, page = null, watchWin = null, onWatch = (_watching) => {} }) {
   const sessionId = chatStore.newSessionId();
   const start = jobChatStart(job, prompt);
   const entry = {
@@ -66,6 +70,8 @@ export async function open({ job, prompt, emitter, stop, page = null, watchWin =
     error: null,
     stopped: false,
     stop,
+    onWatch,
+    unwatch: [], // removes each window's close listener when the run ends
     page,
     startedAt: new Date().toISOString(),
     progress: jobProgressStart(),
@@ -99,6 +105,7 @@ export async function open({ job, prompt, emitter, stop, page = null, watchWin =
       if (entry.ended) return null;
       entry.ended = true;
       for (const [type, fn] of listeners) emitter.removeListener(type, fn);
+      for (const fn of entry.unwatch) fn();
       entry.error = error && !entry.stopped ? String(error) : null;
       await saveAll(entry, jobChatEnd(entry.messages, { error, stopped: entry.stopped, output }));
       // Someone watched it, so its chat is saved.
@@ -173,7 +180,7 @@ export function progress(jobId) {
     items: entry.progress.items,
     thinking: entry.progress.thinking,
     stopping: entry.stopped,
-    watched: entry.senders.size > 0,
+    watched: watching(entry),
     page: !!entry.page,
   };
 }
@@ -203,12 +210,38 @@ async function attach(entry, win) {
   const sender = win?.webContents;
   if (!sender || sender.isDestroyed?.()) return false;
   if (!entry.senders.has(sender.id)) {
+    const was = watching(entry);
     entry.senders.set(sender.id, sender);
+    // The window closing ends its watch (the chat it saved stays).
+    const gone = () => {
+      if (entry.ended || watching(entry, sender.id)) return;
+      notifyWatch(entry, false);
+    };
+    sender.once?.('destroyed', gone);
+    entry.unwatch.push(() => sender.removeListener?.('destroyed', gone));
+    if (!was) notifyWatch(entry, true);
     await save(entry, sender, entry.messages);
     emitAiChatsChanged({});
   }
   openAiSidebarChat(win, entry.sessionId);
   return true;
+}
+
+// Whether a window that follows the run is still open (`except`: one closing now).
+function watching(entry, except = null) {
+  for (const [id, sender] of entry.senders) {
+    if (id !== except && !sender.isDestroyed?.()) return true;
+  }
+  return false;
+}
+
+function notifyWatch(entry, on) {
+  progressEvents.emit('progress', entry.job.id);
+  try {
+    entry.onWatch?.(on);
+  } catch (err) {
+    logger.warn('A Job’s watch hook failed', { id: entry.job?.id, error: err?.message });
+  }
 }
 
 async function saveAll(entry, messages) {

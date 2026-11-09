@@ -239,7 +239,7 @@ export async function runVaultTool(name, args, { ctx, space = null, permit, scra
     // stays live, anyone else's is copied. The AI can't take a newer version of a copy: the user
     // does, in My Library.
     case 'saveJob': {
-      const { id, title, prompt, schedule, notify, enabled } = args;
+      const { id, title, prompt, schedule, notify, timeLimit, enabled } = args;
       const prev = id ? jobs.get(id) : null;
       if (id && !prev) throw new Error('No Job with that id. Use listJobs to find it.');
       if (!id && !prompt && !args.source) {
@@ -270,7 +270,7 @@ export async function runVaultTool(name, args, { ctx, space = null, permit, scra
         }
       }
       const space = id ? undefined : await readerSpace().catch(() => null);
-      const rec = await jobs.save({ id, title, prompt, source, writes, schedule, notify, enabled, space });
+      const rec = await jobs.save({ id, title, prompt, source, writes, schedule, notify, timeLimit, enabled, space });
       const row = jobs.list().find((j) => j.id === rec.id) || rec;
       return json({
         ...jobForModel(row, await deviceNamer()),

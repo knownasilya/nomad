@@ -11,7 +11,7 @@
 
 import { noteTitle, noteSnippet, sortNotes, makeResolver, findLinks, driveRoot, feedUrl } from '../../../shared/vault-apps.mjs'
 import { PRESETS, normalizeSite, describeMod } from '../../../shared/mods.mjs'
-import { describeNeed, describeSchedule, describeWrites, writePermissions } from '../../../shared/jobs.mjs'
+import { describeNeed, describeSchedule, describeTimeLimit, describeWrites, timeLimitOf, writePermissions } from '../../../shared/jobs.mjs'
 import { noteLink, jobLink, modLink } from '../../../shared/item-links.mjs'
 import { PART_CHARS, textPart, partFields, isPartial } from './text-part.mjs'
 import { scratchKey } from './scratch.mjs'
@@ -370,6 +370,9 @@ export function jobForModel(j, deviceName = () => 'another device') {
     schedule: j.schedule,
     when: describeSchedule(j.schedule),
     notify: j.notify,
+    // Minutes a run may go on with nobody watching; a run the user watches has no limit.
+    timeLimit: timeLimitOf(j),
+    timeLimitText: describeTimeLimit(timeLimitOf(j)),
     enabled: j.enabled,
     runsOn: j.device ? deviceName(j.device) : 'no device',
     nextRunAt: j.nextRunAt || null,

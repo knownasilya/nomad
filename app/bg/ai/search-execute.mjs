@@ -695,6 +695,12 @@ export const CAPABILITIES = [
             'Optional. "always" (default): every run notifies the user with its answer. "auto": only when the run calls ' +
             'notify, for "tell me if…" Jobs. "never": no notification. A failed run notifies unless "never".',
         },
+        timeLimit: {
+          type: ['integer', 'null'],
+          description:
+            'Optional. Minutes a run may go on with nobody watching before it is stopped: 1 to 480, default 30 (null). ' +
+            'Raise it for long work (a big site update, many pages). A run the user watches (Run with me) has no limit.',
+        },
         enabled: { type: 'boolean', description: 'Optional. On (default) or paused' },
         writes: {
           type: ['object', 'null'],

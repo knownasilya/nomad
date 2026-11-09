@@ -524,7 +524,8 @@ export { routeChat };
 // window, for Run with me) a tab the user watches, where each site the Job reaches asks them and
 // `onGrant` saves their yes on the Job. `needs` gets what a run with nobody watching wanted and
 // wasn't given. `chat.id` gets the id of the run's chat in the AI Sidebar, when someone watched it
-// (job-chat.js). `outcome.stopped` says whether the user stopped it: from the Jobs page (`signal`
+// (job-chat.js), and `onWatch(watching)` is called when someone starts watching it there, or the
+// last one stops. `outcome.stopped` says whether the user stopped it: from the Jobs page (`signal`
 // aborts with 'stopped'), the run's chat in the sidebar, or the Stop bar on its page.
 export async function runJobTurn(
   job,
@@ -539,6 +540,7 @@ export async function runJobTurn(
     onGrant = async (_writes) => {},
     chat: chatOut = { id: null },
     outcome = { stopped: false },
+    onWatch = (_watching: boolean) => {},
   }
 ) {
   const newer =
@@ -574,9 +576,10 @@ export async function runJobTurn(
     needs,
   });
   // The run is a chat the user can watch in the AI Sidebar (job-chat.js): at once with Run with
-  // me, or later from My Library → Jobs. The sidebar's Stop ends the run.
+  // me, or later from My Library → Jobs. The sidebar's Stop ends the run. While someone watches,
+  // the Job's time limit is held off (`onWatch`, jobs.js).
   const chat = await jobChat
-    .open({ job, prompt: work.prompt, emitter, stop: () => stop.abort(), page: jobPage, watchWin })
+    .open({ job, prompt: work.prompt, emitter, stop: () => stop.abort(), page: jobPage, watchWin, onWatch })
     .catch((err) => {
       console.warn('[ai] Could not open a Job’s chat', job.id, err?.message);
       return null;
@@ -596,7 +599,7 @@ export async function runJobTurn(
     failure = err;
     throw err;
   } finally {
-    // Stopped by the user, not by the 10-minute limit (jobs.js aborts that with 'timeout').
+    // Stopped by the user, not by the Job's time limit (jobs.js aborts that with 'timeout').
     outcome.stopped = stop.signal.aborted && signal?.reason !== 'timeout';
     jobPage.end();
     // The chat someone watched, for the run's record.
