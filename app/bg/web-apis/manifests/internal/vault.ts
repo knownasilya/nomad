@@ -144,6 +144,9 @@ export default {
   watchJobProgress: 'readable', // (id) 'progress' { progress }: its run on this Device as it goes, or null
   watchJobs: 'readable', // 'changed' when a Job or a run changes, or a run starts
 
+  // The home page (nomad://desktop, shared/home-dashboard.mjs)
+  homeDashboard: 'promise', // ({ now? wall time }) -> { greeting, notifications, jobs: { running, next, total, paused }, events, notes, assets, unreadMessages, spaceName, linked }
+
   // Open tabs on the user's other Devices (bg/ui/open-tabs.js)
   listDeviceTabs: 'promise', // -> { devices: [{ deviceKey, name, platform, connected, updatedAt, spaces }], linked, sharing, currentSpace }
 };

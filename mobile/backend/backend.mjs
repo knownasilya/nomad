@@ -18,6 +18,8 @@ import hcrypto from 'hypercore-crypto'
 import { decodeInlineJson, WRITERS_PREFIX as DRIVE_WRITERS } from '../../shared/fs-core.mjs'
 import * as spaceLib from './lib/space-library.mjs'
 import * as calendar from './lib/calendar.mjs'
+import * as homeDash from '../../shared/home-dashboard.mjs'
+import { localWallTime, isDateTime } from '../../shared/calendar.mjs'
 import * as householdContacts from './lib/household-contacts.mjs'
 import { createAssets } from './lib/assets.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
@@ -732,6 +734,38 @@ async function dispatchNomad (api, method, url, args) {
   throw new Error(`Unsupported nomad call: ${api}.${method}`)
 }
 
+// --- The home page (shared/home-dashboard.mjs) ---------------------------
+// The newest Notes and Assets, the calendar from `now` (the UI's wall time: it knows the phone's
+// zone), the Jobs that run next, and recent notifications, for the active Space. A source that fails
+// or is slow leaves its section empty rather than holding up the rest.
+const settle = (p, ms = 4000) => Promise.race([
+  Promise.resolve().then(() => p).catch(() => null),
+  new Promise((resolve) => setTimeout(() => resolve(null), ms))
+])
+async function homeDashboard (space, now) {
+  now = isDateTime(now) ? String(now).slice(0, 16) : localWallTime()
+  const today = now.slice(0, 10)
+  const [jobs, notes, files, cal, src, mail] = await Promise.all([
+    settle(vaultApps.listJobs(vault)),
+    settle(vaultApps.listNotes(vault, space)),
+    space ? settle(assets.list(space)) : null,
+    settle(calendar.listCalendar(vault, space, { from: today, to: homeDash.addDays(today, homeDash.EVENT_DAYS) })),
+    settle(vaultApps.homeSources(vault, space)),
+    settle(inbox.handle('summary', {}))
+  ])
+  return homeDash.dashboard({
+    jobs: jobs?.jobs || [],
+    runs: src?.runs || [],
+    notes: notes?.notes || [],
+    assets: files?.assets || [],
+    occurrences: cal?.occurrences || [],
+    notices: src?.notices || [],
+    memberId: src?.memberId || null,
+    spaceName: src?.spaceName || '',
+    conversations: mail?.conversations || []
+  }, { now })
+}
+
 // --- Reader, Notes and Names (ADR-0017, ADR-0018) ------------------------
 // All live in the Vault, so they need this phone to be linked. Reading a Feed doesn't, but the
 // Reader only reads the Feeds the Vault lists. Replies with one RPC_APPS_RESULT keyed by reqId.
@@ -807,6 +841,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'calendar' && action === 'drives') value = await calendar.calendarDrives(vault, manager, space, args.urls)
     else if (app === 'calendar' && action === 'deleteFeed') value = await calendar.deleteFeed(vault, space, args.id)
     else if (app === 'calendar' && action === 'feedFetched') value = await calendar.feedFetched(vault, space, { id: args.id, text: args.text, error: args.error })
+    else if (app === 'home' && action === 'dashboard') value = await homeDashboard(space, args.now)
     else if (app === 'assets' && action === 'list') value = await assets.list(space)
     else if (app === 'assets' && action === 'read') value = await assets.read(space, args.id, { thumb: !!args.thumb })
     else if (app === 'assets' && action === 'readTo') value = await assets.readTo(space, args.id, { to: args.to, thumb: !!args.thumb })

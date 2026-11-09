@@ -5,10 +5,23 @@ body {
   --border-color--focused: #7599ff;
   --text-color--nav--highlight: #445;
   --bg-color--nav-count: #e91e63;
+  --home-card-bg: #fff;
+  --home-accent: #4f46e5;
+  --home-accent-soft: rgba(79, 70, 229, 0.1);
+  --home-row-hover: #f5f5fb;
+  --home-soft: rgba(0, 0, 0, 0.06);
+  --home-err: #dc2626;
+  --home-err-soft: rgba(220, 38, 38, 0.1);
+  --home-green: #15803d;
+  --home-green-soft: rgba(21, 128, 61, 0.11);
+  --home-pink: #be185d;
+  --home-pink-soft: rgba(190, 24, 93, 0.1);
 
+  margin: 0;
   font-size: 13px;
-  background: var(--bg-color--default);
+  background: var(--bg-color--secondary);
   color: var(--text-color--default);
+  color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -16,5 +29,16 @@ body {
     --border-color--focused: #7599ff;
     --text-color--nav--highlight: #bbc;
     --bg-color--nav-count: #e91e63;
+    --home-card-bg: #222;
+    --home-accent: #8b9dff;
+    --home-accent-soft: rgba(110, 135, 255, 0.16);
+    --home-row-hover: #2a2a30;
+    --home-soft: rgba(255, 255, 255, 0.08);
+    --home-err: #f87171;
+    --home-err-soft: rgba(248, 113, 113, 0.15);
+    --home-green: #4ade80;
+    --home-green-soft: rgba(74, 222, 128, 0.13);
+    --home-pink: #f472b6;
+    --home-pink-soft: rgba(244, 114, 182, 0.14);
   }
 }

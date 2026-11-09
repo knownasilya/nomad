@@ -688,6 +688,24 @@ export async function deleteJob (base, id) {
 }
 
 // Runs that finished after `since` with a notification, and the mark to keep (pendingNotifications).
+// What the home page's notifications come from (shared/home-dashboard.mjs): every Job run, and the
+// active Space's notices when it is shared. backend.mjs `home`/`dashboard` adds the rest.
+export async function homeSources (base, space) {
+  await boundedUpdate(base)
+  const runs = await readPrefix(base, jl.RUNS_PREFIX)
+  const out = { runs, notices: [], memberId: null, spaceName: '' }
+  if (!space) return out
+  const sp = (await readPrefix(base, '/.vault/spaces/')).find((r) => r && r.rootDriveKey === space)
+  if (!sp || !sl.isShared(sp) || sp.movedTo || sp.removed) return out
+  const lib = await libraryOf(space).catch(() => null)
+  if (!lib) return out
+  await boundedUpdate(lib.base, 2000)
+  out.notices = await readPrefix(lib.base, sl.NOTICES_PREFIX).catch(() => [])
+  out.memberId = lib.memberId || null
+  out.spaceName = sp.name || ''
+  return out
+}
+
 export async function jobNotifications (base, since, spaceSince = {}) {
   await boundedUpdate(base)
   const { notify, since: next } = jl.pendingNotifications(await readPrefix(base, jl.RUNS_PREFIX), since ?? null)
