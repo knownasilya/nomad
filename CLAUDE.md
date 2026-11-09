@@ -868,6 +868,19 @@ A web tab never hands a web page to another browser.
 - **Google sign-in:** web tabs and popups send `browserUserAgent()`, the WebView's user agent without
   `; wv` and `Version/4.0`, and no `X-Requested-With` header; Google refuses sign-in otherwise.
 
+## Mobile: the home screen search widget
+
+`mobile/modules/nomad-search-widget` is an Android home screen widget: the browser's address bar
+(`NomadSearchWidgetProvider.kt`, layout `res/layout/nomad_search_widget.xml`, light and dark colors in
+`res/values{,-night}/colors.xml`). A tap on the bar opens a new tab ready to type in; the Space chip
+opens the Space switcher; the robot opens the AI panel. Two rows tall, it shows a chip per Space, and
+a tap searches in that Space. Each tap opens the app's own activity, explicitly, with a
+`nomad-widget://` link (`search`, `search?space=<id>`, `spaces`, `ai`; parsed by
+`mobile/lib/widgetLinks.ts`, tests `tests/unit/mobile-widget-links.test.js`), which `app/index.tsx`
+reads with `Linking` and `app/+native-intent.tsx` keeps away from the router. The app hands it the
+Spaces (id, name, color, the active one) with `useSearchWidget`; never give it more than it draws.
+Settings → Add the search widget asks the launcher to place one (`requestPinAppWidget`).
+
 ## Mobile: safe areas on Android
 
 The mobile app (Expo 55) is **edge-to-edge** on Android: it draws behind the status bar and the

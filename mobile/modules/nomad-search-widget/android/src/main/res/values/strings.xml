@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="nomad_widget_label">Nomad search</string>
+  <string name="nomad_widget_description">Search or open an address in a new tab, in the Space you pick.</string>
+  <string name="nomad_widget_hint">Search or enter address</string>
+  <string name="nomad_widget_ai">AI assistant</string>
+  <string name="nomad_widget_switch_space">Switch space</string>
+  <string name="nomad_widget_more">More</string>
+  <string name="nomad_widget_logo">Nomad</string>
+</resources>

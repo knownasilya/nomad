@@ -8,6 +8,7 @@ import type { Backend } from '../lib/useBackend'
 import { useDesktopUpdates } from '../lib/deviceUpdates'
 import { useMessageNotifySetting } from '../lib/useMessageNotifications'
 import { useCalendarRemindSetting } from '../lib/useCalendarReminders'
+import { addSearchWidget, canAddSearchWidget } from '../lib/useSearchWidget'
 import { checkForUpdate, currentVersion, installUpdate, setAutoInstall, setBetaUpdates, updatesSupported, useAutoInstall, useBetaUpdates, useUpdateState } from '../lib/updater'
 
 interface Props {
@@ -34,6 +35,8 @@ export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosti
   const computers = useDesktopUpdates(apps, visible)
   const [notifyMessages, setNotifyMessages] = useMessageNotifySetting()
   const [notifyCalendar, setNotifyCalendar] = useCalendarRemindSetting()
+  // Android's launcher can add the home screen search widget for us (modules/nomad-search-widget).
+  const canPinWidget = useMemo(() => canAddSearchWidget(), [])
 
   return (
     <Modal visible={visible} animationType='slide' onRequestClose={onClose} presentationStyle='fullScreen'>
@@ -53,6 +56,17 @@ export default function Settings ({ visible, onClose, onOpenDevices, onOpenHosti
               onValueChange={onShareTabs}
             />
           </ListSection>
+          {canPinWidget ? (
+            <ListSection title='Home screen'>
+              <ListRow
+                icon='search'
+                title='Add the search widget'
+                subtitle='A search bar on your home screen. It opens a new tab ready to type in, in the Space you pick.'
+                subtitleLines={2}
+                onPress={addSearchWidget}
+              />
+            </ListSection>
+          ) : null}
           <ListSection title='Notifications'>
             <SwitchRow
               icon='comments'
