@@ -46,7 +46,7 @@ import { createEgressGuard, hostsIn, requestPreview, sendPermission, userText } 
 import { runHttpRequest, nodeTransport } from '../../ai/http-request.mjs';
 import { ASSETS_PERM, assetRequest, nameForUrl, sizeCheck } from '../../ai/save-asset.mjs';
 import * as assetsBg from './assets';
-import { MAX_BYTES as assetsMaxBytes } from '../../../../shared/assets.mjs';
+import { MAX_AI_BYTES as assetsMaxBytes } from '../../../../shared/assets.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
 import {
   jobWork,

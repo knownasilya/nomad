@@ -247,10 +247,23 @@ export default class DriveManager {
     return _blobStore.putBlob(this._blobsForBase(base), buf)
   }
 
-  async readFileOf (base, path) {
+  // The same from an (async) iterable of chunks, for a file too big to hold at once (fs-core putBlobFrom).
+  async putBlobFromFor (base, chunks) {
+    return _blobStore.putBlobFrom(this._blobsForBase(base), chunks)
+  }
+
+  // `range` ({ start, length }) reads part of it.
+  async readFileOf (base, path, range) {
     const node = await base.view.get(path)
     if (!node || !node.value) return null
-    return _content.readContent(node.value, { store: this.store })
+    return _content.readContent(node.value, { store: this.store, range })
+  }
+
+  // How many bytes a file of `base` has, without reading it, or -1 when there's no such file.
+  async fileSizeOf (base, path) {
+    const node = await base.view.get(path)
+    if (!node || !node.value) return -1
+    return _content.contentLength(node.value)
   }
 
   // Resolve a parsed hyper URL to renderable content.

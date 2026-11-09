@@ -426,7 +426,7 @@ the AI or a page a way to make or accept one.
 
 ### Assets (ADR-0044)
 
-Every Space has Assets: any file up to 25 MB (photos, video, audio, PDFs, Markdown, code, CSV, …). A
+Every Space has Assets: any file up to 500 MB (photos, video, audio, PDFs, e-books, Markdown, code, CSV, …). A
 shared Space's are in its Space Library (`/assets/items/<id>.json`, `/assets/files/<id>`,
 `/assets/thumbs/<id>.jpg`, blobs in the adder's own blob core); any other Space's are the user's own,
 in the Vault under the Space's prefix (`vaultRoot(space)`), and `space-library.js` `share()` moves them
@@ -435,13 +435,20 @@ into the Space Library (`autobases.copyFiles`). Rules, kinds, paths and sizes ar
 (the same test runs on both, so change both together). Desktop is `nomad://assets`
 (`app/userland/assets/`, internal `nomad.vault.listAssets`/`assetData`/`addAsset`/`updateAsset`/
 `deleteAsset`, `app/bg/web-apis/bg/assets.ts`); its PDF preview is pdf.js, copied into
-`assets/js/pdf.build.js` by `scripts/build.js`. The phone is `mobile/components/Assets.tsx` over
-`RPC_APPS` `assets` (`mobile/backend/lib/assets.mjs`; picking and reading files in
-`mobile/lib/assetFiles.ts`). The family album's photos (ADR-0043, `/photos/`) are Assets: a Device
+`assets/js/pdf.build.js` by `scripts/build.js`. Files move in 4 MB pieces (`CHUNK_BYTES`): the page reads
+with `assetChunk` and adds with `beginAssetUpload`/`assetUploadChunk`/`finishAssetUpload` (staged in a
+temp file, then streamed into the blob core by fs-core `putBlobFrom`). The phone is
+`mobile/components/Assets.tsx` over `RPC_APPS` `assets` (`mobile/backend/lib/assets.mjs`; picking and
+reading files in `mobile/lib/assetFiles.ts`); its backend reads and writes files by path in the app's
+own folders (`assets/readTo`, `add` with `path`), never as base64. EPUB and MOBI open in one reader
+(`app/userland/assets/js/book/`: `parse.js` reads the book, `reader.js` shows it in a sandboxed frame
+with no scripts). The phone shows PDFs and books in a WebView page, `mobile/lib/docViewerHtml.ts`
+(committed), which **`npm run build:doc-viewer`** bundles from `assets/js/phone-viewer.js` with pdf.js:
+rerun it after changing the reader, `pdf-view.js` or pdf.js. The family album's photos (ADR-0043, `/photos/`) are Assets: a Device
 that can write the Space Library moves them the first time it lists them (`legacyMove`), and until
 then they are read where they are. In a shared Space only the adder or the owner removes one. The
 user's AI saves files there with `saveAsset` (personal turns, `assetsWrite`, once a turn; pure parts
-`app/bg/ai/save-asset.mjs`, run in `ai.ts`, written by `assets.ts` `saveForAi`), and links
+`app/bg/ai/save-asset.mjs`, run in `ai.ts`, written by `assets.ts` `saveForAi`; up to `MAX_AI_BYTES`, 100 MB), and links
 `nomad://assets/?id=` (`assetLink`).
 
 ### Always-on Peers (ADR-0038)

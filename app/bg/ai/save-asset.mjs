@@ -6,7 +6,7 @@
 // No Electron imports.
 
 import b4a from 'b4a'
-import { cleanName, extOf, mimeOf, MAX_BYTES } from '../../../shared/assets.mjs'
+import { cleanName, extOf, mimeOf, MAX_AI_BYTES } from '../../../shared/assets.mjs'
 
 export const ASSETS_PERM = 'assetsWrite'
 
@@ -63,7 +63,7 @@ export function assetRequest(args = {}) {
 
 export function sizeCheck(n) {
   if (!n) throw new Error('That file is empty')
-  if (n > MAX_BYTES) throw new Error(`That file is too big for Assets (at most ${MAX_BYTES / 1048576} MB)`)
+  if (n > MAX_AI_BYTES) throw new Error(`That file is too big for Assets (at most ${MAX_AI_BYTES / 1048576} MB)`)
 }
 
 // A name for a file fetched from `url`: the one the model gave, else the URL's last part, with an

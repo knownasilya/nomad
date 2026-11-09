@@ -520,7 +520,7 @@ export const CAPABILITIES = [
     name: 'saveAsset',
     description:
       "Save a file to the user's Assets (nomad://assets), the place for the current Space's files: photos, " +
-      'videos, audio, PDFs, Markdown, code, CSV and anything else up to 25 MB. In a shared Space everyone in it ' +
+      'videos, audio, PDFs, e-books, Markdown, code, CSV and anything else; you can save up to 100 MB. In a shared Space everyone in it ' +
       'sees it; in any other Space it is the user\'s own, on their devices. Pass exactly one of `text` (a file you ' +
       'wrote, such as a Markdown note, a CSV or code, with a `name` like "packing-list.md"), `url` (a picture, ' +
       'PDF or other file on the web, or a hyper:// file, to download and keep; `name` is optional) or `base64` ' +

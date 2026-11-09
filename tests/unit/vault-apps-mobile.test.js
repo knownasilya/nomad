@@ -705,7 +705,9 @@ describe('phone Assets', () => {
     const core = new Hyperblobs(storeB.namespace('assets-test').get({ name: 'blobs' }))
     const blobs = {
       putBlobFor: (_base, buf) => blobStore.putBlob(core, buf),
-      readFileOf: async (base, p) => { const n = await base.view.get(p); return n ? content.readContent(n.value, { store: storeB }) : null },
+      putBlobFromFor: (_base, chunks) => blobStore.putBlobFrom(core, chunks),
+      readFileOf: async (base, p, range) => { const n = await base.view.get(p); return n ? content.readContent(n.value, { store: storeB, range }) : null },
+      fileSizeOf: async (base, p) => { const n = await base.view.get(p); return n ? content.contentLength(n.value) : -1 },
     }
     const close = async () => { await core.close?.(); await libBase.close(); await owner.close() }
     return { owner, libBase, blobs, content, close }
@@ -796,6 +798,61 @@ describe('phone Assets', () => {
       }
     })
   }, 30000)
+
+  it('adds a big file from a path in the app’s cache, and writes one back there in pieces', async () => {
+    const { createAssets } = await import('../../mobile/backend/lib/assets.mjs')
+    const as = await import('../../shared/assets.mjs')
+    const SHARED = 'e'.repeat(64)
+    const memberId = '2'.repeat(32)
+    const cache = fs.mkdtempSync(path.join(os.tmpdir(), 'assets-cache-'))
+    const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'assets-elsewhere-'))
+    await withDevices(async (devices) => {
+      const { owner, blobs, content, close, libBase } = await setup(devices, memberId)
+      const assets = createAssets({ libraryOf: async (space) => (space === SHARED ? { base: libBase, memberId, role: 'editor' } : null), blobs, fs, roots: ['file://' + cache + '/'] })
+      try {
+        // More than one CHUNK_BYTES, so both ways go in pieces.
+        const movie = Buffer.alloc(as.CHUNK_BYTES + 12345)
+        for (let i = 0; i < movie.length; i += 997) movie[i] = i & 255
+        const picked = path.join(cache, 'ImagePicker', 'clip one.mp4')
+        fs.mkdirSync(path.dirname(picked), { recursive: true })
+        fs.writeFileSync(picked, movie)
+        const added = await assets.add(SHARED, { path: 'file://' + encodeURI(picked), name: 'clip one.mp4', mime: 'video/mp4', duration: 12.5 })
+        expect(added).toMatchObject({ kind: 'video', bytes: movie.length, duration: 12.5 })
+
+        // The computer reads the same bytes.
+        const p = as.pathsOf(as.LIB_ASSETS)
+        await until(async () => !!(await readJson(owner, p.item(added.id))))
+        const node = await owner.view.get(p.file(added.id))
+        expect(Buffer.compare(Buffer.from(await content.readContent(node.value, { store: devices.storeA })), movie)).toBe(0)
+
+        // Back into the cache for the player, whole, with nothing left half-written.
+        const to = path.join(cache, 'assets', added.id, 'clip one.mp4')
+        expect(await assets.readTo(SHARED, added.id, { to: 'file://' + encodeURI(to) })).toEqual({ size: movie.length })
+        expect(Buffer.compare(fs.readFileSync(to), movie)).toBe(0)
+        expect(fs.existsSync(to + '.part')).toBe(false)
+        // A whole movie is never one message.
+        const big = Buffer.alloc(as.MAX_DATA_URL_BYTES + 1)
+        const huge = await assets.add(SHARED, { path: (fs.writeFileSync(path.join(cache, 'big.bin'), big), 'file://' + path.join(cache, 'big.bin')), name: 'big.bin' })
+        await expect(assets.read(SHARED, huge.id)).rejects.toThrow(/too big to read at once/)
+
+        // Only the app's own folders.
+        fs.writeFileSync(path.join(elsewhere, 'secret.txt'), 'no')
+        await expect(assets.add(SHARED, { path: 'file://' + path.join(elsewhere, 'secret.txt'), name: 'secret.txt' })).rejects.toThrow(/own folders/)
+        await expect(assets.add(SHARED, { path: 'file://' + cache + '/../' + path.basename(elsewhere) + '/secret.txt', name: 'secret.txt' })).rejects.toThrow(/own folders/)
+        await expect(assets.readTo(SHARED, added.id, { to: 'file://' + path.join(elsewhere, 'out.mp4') })).rejects.toThrow(/own folders/)
+        expect(fs.existsSync(path.join(elsewhere, 'out.mp4'))).toBe(false)
+        // Too big for Assets, refused before anything is written.
+        const tooBig = path.join(cache, 'too-big.bin')
+        fs.writeFileSync(tooBig, '')
+        fs.truncateSync(tooBig, as.MAX_BYTES + 1)
+        await expect(assets.add(SHARED, { path: 'file://' + tooBig, name: 'too-big.bin' })).rejects.toThrow(/too big/)
+      } finally {
+        await close()
+        fs.rmSync(cache, { recursive: true, force: true })
+        fs.rmSync(elsewhere, { recursive: true, force: true })
+      }
+    })
+  }, 60000)
 
   it('keeps a Space’s files in the Vault until it is shared', async () => {
     const { createAssets } = await import('../../mobile/backend/lib/assets.mjs')

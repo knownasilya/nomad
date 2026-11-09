@@ -409,7 +409,8 @@ export function useBackend (handlers: BackendHandlers): Backend {
       }
     })
     // Pass the document directory so the backend has somewhere to store cores.
-    worklet.start('/app.bundle', bundle, [Paths.document.uri])
+    // The app's documents (the backend's storage) and its cache: Assets' files move through both.
+    worklet.start('/app.bundle', bundle, [Paths.document.uri, Paths.cache.uri])
 
     const { IPC } = worklet
     const rpc = new RPC(IPC, (req: any) => {

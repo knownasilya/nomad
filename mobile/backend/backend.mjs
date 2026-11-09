@@ -247,7 +247,19 @@ async function libraryOf (space) {
 }
 vaultApps.useSpaceLibraries(libraryOf)
 // A Space's Assets (ADR-0044): in its Library once shared, else the Vault.
-const assets = createAssets({ libraryOf, vaultOf: () => vault, blobs: { putBlobFor: (base, buf) => manager.putBlobFor(base, buf), readFileOf: (base, path) => manager.readFileOf(base, path) } })
+// Files move to and from the app as files in its own folders (Bare.argv: its documents, then its cache).
+const assets = createAssets({
+  libraryOf,
+  vaultOf: () => vault,
+  blobs: {
+    putBlobFor: (base, buf) => manager.putBlobFor(base, buf),
+    putBlobFromFor: (base, chunks) => manager.putBlobFromFor(base, chunks),
+    readFileOf: (base, path, range) => manager.readFileOf(base, path, range),
+    fileSizeOf: (base, path) => manager.fileSizeOf(base, path)
+  },
+  fs,
+  roots: Bare.argv.slice(0, 2).filter(Boolean).map((u) => URL.fileURLToPath(u))
+})
 
 // Open every shared Space's Library in the background, so a Space switch or a name lookup finds it
 // warm instead of waiting on the swarm.
@@ -796,6 +808,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'calendar' && action === 'feedFetched') value = await calendar.feedFetched(vault, space, { id: args.id, text: args.text, error: args.error })
     else if (app === 'assets' && action === 'list') value = await assets.list(space)
     else if (app === 'assets' && action === 'read') value = await assets.read(space, args.id, { thumb: !!args.thumb })
+    else if (app === 'assets' && action === 'readTo') value = await assets.readTo(space, args.id, { to: args.to, thumb: !!args.thumb })
     else if (app === 'assets' && action === 'add') value = await assets.add(space, args.asset || {})
     else if (app === 'assets' && action === 'update') value = await assets.update(space, { id: args.id, name: args.name, caption: args.caption })
     else if (app === 'assets' && action === 'delete') value = await assets.remove(space, args.id)
