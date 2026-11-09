@@ -448,11 +448,23 @@ export function listPendingRequests(bootstrapKey) {
   return pendingRequests[bootstrapKey] || [];
 }
 
+// Every drive's waiting requests that this Device can answer (it writes the drive), for the home
+// page: [{ drive, writerKey, profileUrl, requestedAt }].
+export function allPendingRequests() {
+  const out = [];
+  for (const [drive, list] of Object.entries(pendingRequests)) {
+    if (!list?.length || !sessions[drive]?.writable) continue;
+    for (const r of list) out.push({ drive, ...r });
+  }
+  return out;
+}
+
 export function removePendingRequest(bootstrapKey, writerKey) {
   if (!pendingRequests[bootstrapKey]) return;
   pendingRequests[bootstrapKey] = pendingRequests[bootstrapKey].filter(
     (r) => r.writerKey !== writerKey
   );
+  events.emit('request-resolved', { key: bootstrapKey, writerKey });
 }
 
 // Send a writer-access request to the drive's peers (owner + existing writers) over the

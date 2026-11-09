@@ -30,6 +30,12 @@ import * as drives from '../../hyper/drives';
 import * as home from '../../../../shared/home-setup.mjs';
 import * as peerRules from '../../../../shared/peers.mjs';
 import { isShared } from '../../../../shared/space-library.mjs';
+import * as homeDash from '../../../../shared/home-dashboard.mjs';
+import { localWallTime, isDateTime } from '../../../../shared/calendar.mjs';
+import * as inbox from '../../hyper/inbox';
+import * as autobases from '../../hyper/autobases';
+import * as permissions from '../../ui/permissions';
+import * as personas from '../../ui/personas';
 
 // The Vault's Spaces a Peer can keep: not moved, not removed.
 function liveSpaces(spaces) {
@@ -59,6 +65,27 @@ async function sharedSpacesExcept(exceptId) {
 
 // The caller's Space key, or null.
 const callerSpace = (ctx) => vaultApps.spaceKey(ctx).catch(() => null);
+// A promise's value, or null when it fails or takes longer than `ms`.
+// Requests to write to the user's drives (autobases.allPendingRequests), with each drive's title and
+// the name on the asker's profile, when it can be read in time.
+async function waitingDriveRequests() {
+  return Promise.all(
+    autobases.allPendingRequests().map(async (r) => {
+      const sess = autobases.getCollaborativeDrive(r.drive);
+      const [meta, profile]: any[] = await Promise.all([
+        sess ? autobases.readJson(sess, '/index.json').catch(() => null) : null,
+        r.profileUrl ? settle(personas.readProfileManifest(r.profileUrl), 2000) : null,
+      ]);
+      return { ...r, title: meta?.title || '', name: typeof profile?.title === 'string' ? profile.title : '' };
+    })
+  );
+}
+
+const settle = <T>(p: Promise<T>, ms = 4000): Promise<T | null> =>
+  Promise.race([
+    Promise.resolve(p).catch(() => null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
 import * as mods from '../../ui/mods';
 import * as openTabs from '../../ui/open-tabs';
 import * as jobs from '../../ai/jobs';
@@ -965,6 +992,82 @@ export default {
   },
 
   // Open tabs on the user's other Devices, the calling page's Space first (nomad://history).
+  // The home page's dashboard (nomad://desktop; the rules are shared/home-dashboard.mjs): the
+  // caller's Space's newest Notes and Assets, its calendar from now on, the Jobs running and up next,
+  // and recent notifications. `now` is the page's wall time. A source that fails or is slow (a shared
+  // Space's Library still opening) leaves its section empty rather than holding up the rest.
+  async homeDashboard(opts: any = {}) {
+    const now = isDateTime(opts?.now) ? String(opts.now).slice(0, 16) : localWallTime();
+    const today = now.slice(0, 10);
+    const space = await callerSpace(this);
+    const [notes, assetList, cal, notices, share, mail, devices, driveRequests]: any[] = await Promise.all([
+      settle(vaultApps.listNotes(this)),
+      settle(assets.listAssets(this)),
+      settle(calendar.listCalendar(this, { from: today, to: homeDash.addDays(today, homeDash.EVENT_DAYS) })),
+      space ? settle(spaceLibrary.notices(space)) : null,
+      space ? settle(spaceLibrary.status(space)) : null,
+      settle(inbox.summary()),
+      settle(vault.listDevices()),
+      settle(waitingDriveRequests()),
+    ]);
+    const names = new Map((devices || []).map((d) => [d.key, d.name]));
+    const own = await jobs.ownKey().catch(() => null);
+    return {
+      ...homeDash.dashboard(
+        {
+          jobs: jobs.list().map((j) => ({
+            ...j,
+            when: describeSchedule(j.schedule),
+            deviceName: j.device && j.device !== own ? names.get(j.device) || 'another Device' : '',
+          })),
+          runs: jobs.allRuns(),
+          notes: notes?.notes || [],
+          assets: assetList?.assets || [],
+          occurrences: cal?.occurrences || [],
+          notices: notices?.list || [],
+          memberId: notices?.memberId || null,
+          spaceName: notices?.name || '',
+          conversations: mail?.conversations || [],
+          prompts: permissions.waitingPrompts(),
+          driveRequests: driveRequests || [],
+          spaceRequests: share?.shared ? share.requests || [] : [],
+          joins: share?.shared ? share.joins || [] : [],
+          devices: pairing.listPendingRequests(),
+        },
+        { now }
+      ),
+      spaceName: vaultApps.spaceNameOf(space),
+      linked: !!(await vault.getVault().catch(() => null)),
+    };
+  },
+
+  // Bring a prompt the home page lists under Needs you to the front (its window and tab).
+  async showWaitingPrompt(id) {
+    return permissions.showPrompt(id);
+  },
+
+  // 'changed' when something the home page shows under Needs you comes or goes and no Vault record
+  // says so: a prompt, a request to write to a drive, a new Device, a shared Space's asks.
+  watchHome() {
+    const emitter: any = new EventEmitter();
+    const changed = () => emitter.emit('changed', {});
+    const subs: [any, string][] = [
+      [permissions.events, 'changed'],
+      [autobases.events, 'request'],
+      [autobases.events, 'request-resolved'],
+      [pairing.events, 'request'],
+      [pairing.events, 'request-resolved'],
+      [spaceLibrary.events, 'changed'],
+      [spaceLibrary.events, 'join-request'],
+      [spaceLibrary.events, 'join-resolved'],
+    ];
+    for (const [ev, name] of subs) ev.on(name, changed);
+    emitter.close = () => {
+      for (const [ev, name] of subs) ev.removeListener(name, changed);
+    };
+    return emitter;
+  },
+
   async listDeviceTabs() {
     let currentSpace = null;
     try {

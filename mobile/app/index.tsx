@@ -35,6 +35,7 @@ import DesktopUpdateBanner from '../components/DesktopUpdateBanner'
 import DevTools from '../components/DevTools'
 import AiPanel from '../components/AiPanel'
 import Shortcuts from '../components/Shortcuts'
+import HomeDashboard, { type HomeDashboardProps } from '../components/HomeDashboard'
 import FileExplorer, { type ExplorerDrive } from '../components/FileExplorer'
 import type { HyperRender } from '../components/HyperView'
 import { useBackend, type SpaceJoin, type AiPromptRequest, type AiPromptAnswer } from '../lib/useBackend'
@@ -1304,7 +1305,22 @@ export default function Browser () {
             suggest: persist.suggest,
             onAddPin: (url, title) => persist.setPinned(url, title, true),
             onRemovePin: (url) => persist.setPinned(url, '', false),
-            onRefresh: persist.refreshSynced
+            onRefresh: persist.refreshSynced,
+            dashboard: {
+              apps: backend.apps,
+              onVaultChange: backend.onVaultChange,
+              space: spacesApi.activeSpace.rootDriveKey || undefined,
+              onOpenJob: (jobId) => openScreen({ name: 'jobs', jobId }),
+              onOpenMessages: (personaId, other) => openScreen({ name: 'messages', personaId, with: other }),
+              onOpenCalendar: (day) => openScreen({ name: 'calendar', day }),
+              onOpenNote: (noteId) => openScreen({ name: 'notes', noteId }),
+              onOpenAsset: (assetId) => openScreen({ name: 'assets', assetId }),
+              // Someone asks to join a shared Space: its invite sheet, where they're let in.
+              onOpenJoin: (key) => {
+                const sp = spacesApi.spaces.find((x) => x.rootDriveKey === key)
+                setInviteSpace({ rootDriveKey: key, name: sp?.name || 'Space' })
+              }
+            }
           }}
           onNavigate={(url) => navigate(active.id, url)}
           onWebNav={(nav) => onWebNav(active.id, nav)}
@@ -1616,6 +1632,8 @@ interface HomeData {
   onAddPin: (url: string, title: string) => void
   onRemovePin: (url: string) => void
   onRefresh: () => void
+  // The dashboard under the shortcuts (components/HomeDashboard.tsx).
+  dashboard: Omit<HomeDashboardProps, 'onGreeting'>
 }
 
 function TabPane ({
@@ -1689,9 +1707,12 @@ function Home ({
 }) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
-  const { pins, history, iconFor, suggest, onAddPin, onRemovePin, onRefresh } = home
+  const { pins, history, iconFor, suggest, onAddPin, onRemovePin, onRefresh, dashboard } = home
   // Pages from one site back to back show as one row, the newest (lib/recents.ts).
   const recents = useMemo(() => collapseRecents(history).slice(0, 30), [history])
+  // Once the dashboard has loaded (the phone is linked), a greeting stands in for the how-to line.
+  const [greeting, setGreeting] = useState<string | null>(null)
+  const today = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
   // Pins can change on another device, so pick up the latest whenever home opens.
   useEffect(() => { onRefresh() }, [onRefresh])
   return (
@@ -1706,7 +1727,9 @@ function Home ({
           <Text style={s.libBtnText}>My Library</Text>
         </Pressable>
       </View>
-      <Text style={s.hint}>Enter a web address, a search, or a hyper:// drive key. Open My Library to manage drives, bookmarks, and history.</Text>
+      {greeting
+        ? <Text style={s.greeting}>{greeting}<Text style={s.greetingDate}> · {today}</Text></Text>
+        : <Text style={s.hint}>Enter a web address, a search, or a hyper:// drive key. Open My Library to manage drives, bookmarks, and history.</Text>}
 
       <Shortcuts
         pins={pins}
@@ -1716,6 +1739,8 @@ function Home ({
         onAdd={onAddPin}
         onRemove={onRemovePin}
       />
+
+      <HomeDashboard {...dashboard} onGreeting={setGreeting} />
 
       <ListSection title='Recent' style={s.section} action={history.length ? { label: 'Clear', onPress: onClearHistory } : undefined}>
         {history.length === 0 ? (
@@ -1754,6 +1779,8 @@ function makeStyles (t: Theme) {
     logo: { fontSize: 22, fontWeight: '700', color: t.text },
     tagline: { color: t.textDim, fontSize: 14, marginTop: 1 },
     hint: { color: t.textMuted, fontSize: 13, marginTop: 18, lineHeight: 19 },
+    greeting: { color: t.text, fontSize: 17, fontWeight: '600', marginTop: 18 },
+    greetingDate: { color: t.textMuted, fontSize: 14, fontWeight: '400' },
     section: { marginTop: 22 }
   })
 }
