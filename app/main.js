@@ -51,6 +51,7 @@ import * as remoteUpdate from './bg/remote-update';
 import * as inbox from './bg/hyper/inbox';
 import * as vouches from './bg/ui/vouches';
 import * as desktopNotifications from './bg/ui/desktop-notifications';
+import * as deviceActivity from './bg/ui/device-activity';
 import * as trayIcon from './bg/ui/tray-icon';
 import * as downloads from './bg/ui/downloads';
 import * as permissions from './bg/ui/permissions';
@@ -218,6 +219,9 @@ app.on('ready', async function () {
   openTabs.setup();
   // The user's phone can ask this computer to update and restart (Settings → Auto Updater).
   remoteUpdate.setup();
+  // When the user last used this computer, told to their other Devices, so a notification shows
+  // only on the one they're using (shared/device-activity.mjs).
+  deviceActivity.setup();
   // Direct messages to the user's Personas (ADR-0036): this Device's mailboxes and outbox. A click on
   // a notification opens the Conversation.
   inbox.setup({
