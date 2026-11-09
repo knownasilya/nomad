@@ -145,7 +145,9 @@ export default {
   watchJobs: 'readable', // 'changed' when a Job or a run changes, or a run starts
 
   // The home page (nomad://desktop, shared/home-dashboard.mjs)
-  homeDashboard: 'promise', // ({ now? wall time }) -> { greeting, notifications, jobs: { running, next, total, paused }, events, notes, assets, unreadMessages, spaceName, linked }
+  homeDashboard: 'promise', // ({ now? wall time }) -> { greeting, waiting, notifications, jobs: { running, next, total, paused }, events, notes, assets, unreadMessages, spaceName, linked }
+  showWaitingPrompt: 'promise', // (id) bring a prompt open on a tab to the front; false once answered
+  watchHome: 'readable', // 'changed' when a prompt, a drive or Device request, or a shared Space's ask comes or goes
 
   // Open tabs on the user's other Devices (bg/ui/open-tabs.js)
   listDeviceTabs: 'promise', // -> { devices: [{ deviceKey, name, platform, connected, updatedAt, spaces }], linked, sharing, currentSpace }

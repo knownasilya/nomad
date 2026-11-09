@@ -1314,7 +1314,12 @@ export default function Browser () {
               onOpenMessages: (personaId, other) => openScreen({ name: 'messages', personaId, with: other }),
               onOpenCalendar: (day) => openScreen({ name: 'calendar', day }),
               onOpenNote: (noteId) => openScreen({ name: 'notes', noteId }),
-              onOpenAsset: (assetId) => openScreen({ name: 'assets', assetId })
+              onOpenAsset: (assetId) => openScreen({ name: 'assets', assetId }),
+              // Someone asks to join a shared Space: its invite sheet, where they're let in.
+              onOpenJoin: (key) => {
+                const sp = spacesApi.spaces.find((x) => x.rootDriveKey === key)
+                setInviteSpace({ rootDriveKey: key, name: sp?.name || 'Space' })
+              }
             }
           }}
           onNavigate={(url) => navigate(active.id, url)}

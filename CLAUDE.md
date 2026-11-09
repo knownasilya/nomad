@@ -656,10 +656,14 @@ The desktop shows OS notifications for three things, each with a switch in Setti
 
 The toolbar's Home button and the new tab page (`nomad://desktop`, `app/userland/desktop/`) and the
 phone's home tab (`mobile/components/HomeDashboard.tsx`, under the shortcuts) show the same dashboard:
-notifications (Job results and failures, other members' notices in a shared Space, unread Messages),
+**Needs you** (what waits on the user's answer: a prompt open on a tab, from `bg/ui/permissions.js`
+`waitingPrompts`, which **Answer** brings forward with `nomad.vault.showWaitingPrompt`; someone asking to
+write to a drive, from `autobases.allPendingRequests`; a shared Space's edit asks and joins; a new Device;
+a stranger's first Message; a Job whose newest run recorded `needs`), notifications (Job results and failures, other members' notices in a shared Space, unread Messages),
 the Jobs running and up next, the calendar from now on, and the newest Notes and Assets. What shows
 is `shared/home-dashboard.mjs` (`dashboard()`, tests `tests/unit/home-dashboard.test.js`); desktop
-gathers the records in `nomad.vault.homeDashboard` (`bg/web-apis/bg/vault.ts`), the phone in its
+gathers the records in `nomad.vault.homeDashboard` (`bg/web-apis/bg/vault.ts`; `watchHome` says when a
+Needs you item that no Vault record carries comes or goes), the phone in its
 backend (`RPC_APPS` `home`/`dashboard`, `backend.mjs` `homeDashboard`). Each page passes its own wall
 time (`now`), because the calendar has no zone. A new kind of item for the home page goes in that
 shared module first, then in both gatherers and both pages.

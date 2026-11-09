@@ -3,6 +3,10 @@
 // it. Each runtime gathers its own records (desktop: bg/web-apis/bg/vault.ts `homeDashboard`; phone:
 // mobile/backend/lib/home.mjs, RPC_APPS `home`/`dashboard`) and this file decides what shows:
 //
+// - Needs you: what waits for the user's answer: a prompt open on a tab (the AI or a site asking),
+//   someone asking to write to one of their drives, to edit a drive or join their shared Space, a
+//   new Device asking to join, a stranger's first Message, and a Job that wanted sites it wasn't
+//   given. Oldest first: it has waited longest.
 // - Notifications: Job results with a notification, Jobs that failed, other members' notices in a
 //   shared Space, and Conversations with unread Messages, from the last NOTIFY_DAYS, newest first.
 // - Jobs: the ones running now (or waiting to), and the ones that run next.
@@ -11,13 +15,13 @@
 //
 // No I/O, no Electron, no globals the phone's Bare worklet lacks. Tests: tests/unit/home-dashboard.test.js.
 
-import { isRun } from './jobs.mjs';
+import { isRun, describeNeed } from './jobs.mjs';
 import { noteTitle, noteSnippet } from './vault-apps.mjs';
 import { noteLink, jobLink, assetLink, calendarLink } from './item-links.mjs';
 import { KIND_ICONS } from './assets.mjs';
 
 export const NOTIFY_DAYS = 7;
-export const LIMITS = { notifications: 6, running: 4, next: 4, events: 6, notes: 5, assets: 8 };
+export const LIMITS = { waiting: 8, notifications: 6, running: 4, next: 4, events: 6, notes: 5, assets: 8 };
 // How far ahead "Coming up" looks.
 export const EVENT_DAYS = 14;
 
@@ -69,6 +73,137 @@ export function greeting(wallOrHour) {
   if (h >= 5 && h < 12) return 'Good morning';
   if (h >= 12 && h < 18) return 'Good afternoon';
   return 'Good evening';
+}
+
+// Needs you
+// =
+
+// What waits on the user, oldest first, at most `max`:
+// [{ kind, id, title, body, at, url?, ...what answering it needs }]. Kinds:
+// - 'prompt': a permission prompt open on a tab ({ id, title, body, ai, at, tabTitle } from desktop's
+//   bg/ui/permissions.js `waitingPrompts`). `promptId` brings it forward.
+// - 'drive': someone asks to write to a drive this Device owns ({ drive, title, writerKey, profileUrl,
+//   name?, requestedAt }), answered with nomad.fs approveRequest/denyRequest.
+// - 'edit': a member asks to edit a drive in the shared Space (space-library status `requests`).
+// - 'join': someone asks to join the shared Space (status `joins`, or the phone's invites `pending`).
+// - 'device': a new Device asks to join the user's Devices (device-pairing `listPendingRequests`).
+// - 'message-request': a first Message from someone the Persona doesn't know yet.
+// - 'job-needs': a Job's newest run wanted sites or clicks it wasn't given (shared/jobs.mjs `needs`).
+export function waiting(
+  {
+    prompts = [],
+    driveRequests = [],
+    spaceRequests = [],
+    joins = [],
+    devices = [],
+    conversations = [],
+    runs = [],
+    jobs = null,
+    spaceName = '',
+  } = {},
+  { max = LIMITS.waiting } = {}
+) {
+  const out = [];
+  const space = clip(spaceName, 40) || 'your Space';
+  for (const p of prompts || []) {
+    if (!p || p.id == null) continue;
+    out.push({
+      kind: 'prompt',
+      id: 'prompt:' + p.id,
+      promptId: p.id,
+      ai: !!p.ai,
+      title: clip(p.title, 80) || (p.ai ? 'The AI is waiting for your answer' : 'A site is asking for permission'),
+      body: clip(p.body, 160),
+      tabTitle: clip(p.tabTitle, 60),
+      at: p.at || '',
+    });
+  }
+  for (const r of driveRequests || []) {
+    if (!r || typeof r.drive !== 'string' || typeof r.writerKey !== 'string') continue;
+    out.push({
+      kind: 'drive',
+      id: 'drive:' + r.drive + ':' + r.writerKey,
+      title: `${clip(r.name, 60) || 'Someone'} asks to write to ${clip(r.title, 60) || 'your drive'}`,
+      body: 'They could add, change and delete its files.',
+      at: r.requestedAt || '',
+      drive: r.drive,
+      writerKey: r.writerKey,
+      url: `hyper://${r.drive}/`,
+    });
+  }
+  for (const r of spaceRequests || []) {
+    if (!r || typeof r.drive !== 'string' || typeof r.writerKey !== 'string') continue;
+    out.push({
+      kind: 'edit',
+      id: 'edit:' + r.drive + ':' + r.writerKey,
+      title: `${clip(r.name, 60) || 'Someone'} asks to edit ${clip(r.title, 60) || 'a drive'}`,
+      body: r.note ? `“${clip(r.note, 140)}”` : `Only that drive, only in ${space}.`,
+      at: r.requestedAt || '',
+      drive: r.drive,
+      writerKey: r.writerKey,
+      canApprove: !!r.canApprove,
+      url: 'nomad://library/sharing',
+    });
+  }
+  for (const j of joins || []) {
+    if (!j || typeof j.memberId !== 'string') continue;
+    out.push({
+      kind: 'join',
+      id: 'join:' + (j.space || '') + ':' + j.memberId,
+      title: `${clip(j.name, 60) || 'Someone'} asks to join ${clip(j.spaceName, 40) || space}`,
+      body: j.role === 'editor' ? 'As someone who can edit.' : 'As someone who can view.',
+      at: j.requestedAt || '',
+      memberId: j.memberId,
+      space: j.space || null,
+      url: 'nomad://library/sharing',
+    });
+  }
+  for (const d of devices || []) {
+    if (!d || typeof d.deviceKey !== 'string') continue;
+    out.push({
+      kind: 'device',
+      id: 'device:' + d.deviceKey,
+      title: `${clip(d.name, 60) || 'A new device'} asks to join your devices`,
+      body: d.platform === 'peer' ? 'An always-on Peer.' : 'It would see and change everything in your Vault.',
+      at: d.requestedAt || '',
+      url: 'nomad://settings/?view=devices',
+    });
+  }
+  for (const c of conversations || []) {
+    if (!c || !c.request || !c.unread) continue;
+    const name = clip(c.title || c.last?.fromTitle, 60) || 'Someone';
+    out.push({
+      kind: 'message-request',
+      id: 'request:' + c.personaId + ':' + c.other,
+      title: `${name} wants to message you`,
+      body: clip(c.last?.message?.text, 160),
+      at: c.last?.message?.createdAt || '',
+      personaId: c.personaId,
+      with: c.other,
+      url: `nomad://messages/?persona=${encodeURIComponent(c.personaId)}&with=${encodeURIComponent(c.other)}`,
+    });
+  }
+  // A Job whose newest run was refused something. A later run that wasn't means it's settled.
+  const known = Array.isArray(jobs) ? new Set(jobs.map((j) => j?.id)) : null;
+  const seen = new Set();
+  for (const r of (runs || []).filter(isRun).sort(newestFirst('finishedAt'))) {
+    if (seen.has(r.jobId)) continue;
+    seen.add(r.jobId);
+    if (!Array.isArray(r.needs) || !r.needs.length || (known && !known.has(r.jobId))) continue;
+    const first = describeNeed(r.needs[0]);
+    const more = r.needs.length - 1;
+    out.push({
+      kind: 'job-needs',
+      id: 'needs:' + r.id,
+      title: `${clip(r.title, 60) || 'A Job'} wants to ${first}${more ? ` and ${more} more` : ''}`,
+      body: 'Run it with you watching to allow it.',
+      at: r.finishedAt || '',
+      jobId: r.jobId,
+      url: jobLink(r.jobId),
+    });
+  }
+  out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+  return out.slice(0, max);
 }
 
 // Notifications
@@ -295,12 +430,18 @@ export function dashboard(
     memberId = null,
     spaceName = '',
     conversations = [],
+    prompts = [],
+    driveRequests = [],
+    spaceRequests = [],
+    joins = [],
+    devices = [],
   } = {},
   { now, at = Date.now() } = {}
 ) {
   return {
     now: now || null,
     greeting: greeting(now),
+    waiting: waiting({ prompts, driveRequests, spaceRequests, joins, devices, conversations, runs, jobs, spaceName }),
     notifications: notifications({ runs, notices, memberId, spaceName, conversations }, { now: at }),
     jobs: jobsOverview(jobs),
     events: upcomingEvents(occurrences, now),

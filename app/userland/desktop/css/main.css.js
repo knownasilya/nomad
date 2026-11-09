@@ -353,6 +353,92 @@ ${spinnerCSS}
     color: var(--home-pink);
   }
 
+  /* Needs you: what waits on the user, across the top. */
+  .card.needs {
+    border-color: var(--home-warn-border);
+  }
+
+  .card.needs > header {
+    background: var(--home-warn-soft);
+  }
+
+  .card.needs > header .icon {
+    color: var(--home-warn);
+  }
+
+  .card.needs .count {
+    background: var(--home-warn-soft);
+    color: var(--home-warn);
+  }
+
+  .lead.waiting {
+    background: var(--home-warn-soft);
+    color: var(--home-warn);
+  }
+
+  .lead.waiting.ai {
+    background: var(--home-accent-soft);
+    color: var(--home-accent);
+  }
+
+  .needs .row .title,
+  .needs .row .snippet {
+    white-space: normal;
+  }
+
+  .actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .actions .btn {
+    display: inline-flex;
+    align-items: center;
+    height: 28px;
+    padding: 0 12px;
+    border: 1px solid var(--border-color--default);
+    border-radius: 6px;
+    background: var(--home-card-bg);
+    box-shadow: none;
+    color: var(--text-color--default);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .actions .btn:hover {
+    background: var(--home-row-hover);
+    text-decoration: none;
+  }
+
+  .actions .btn.primary {
+    border-color: var(--home-accent);
+    background: var(--home-accent);
+    color: var(--home-on-accent);
+  }
+
+  .actions .btn.primary:hover {
+    filter: brightness(1.08);
+  }
+
+  .actions .btn[disabled] {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  @media (max-width: 700px) {
+    .needs .row {
+      flex-wrap: wrap;
+    }
+
+    .needs .actions {
+      margin-left: 38px;
+    }
+  }
+
   .lead .spinner.small {
     width: 10px;
     height: 10px;

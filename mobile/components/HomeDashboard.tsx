@@ -6,18 +6,21 @@ import type { AppName, AppsResult } from '../lib/useBackend'
 import { ListSection, ListRow } from './List'
 import Icon, { type IconName } from './Icon'
 
-// The home tab as a dashboard, like desktop's nomad://desktop: notifications, what's coming up on the
+// The home tab as a dashboard, like desktop's nomad://desktop: what needs the user (someone asking to
+// join a shared Space, a stranger's first Message, a Job that wanted sites), notifications, what's coming up on the
 // calendar, the Jobs that run next, and the newest Notes and files. The backend works it all out
 // (RPC_APPS `home`/`dashboard`, rules in shared/home-dashboard.mjs); this draws it. A section with
 // nothing in it isn't shown, and nothing is shown while this phone isn't linked.
 
 export interface DashNotification { kind: 'job' | 'failed' | 'space' | 'message'; id: string; title: string; body: string; from?: string; at: string; jobId?: string; personaId?: string; with?: string }
+export interface DashWaiting { kind: 'prompt' | 'drive' | 'edit' | 'join' | 'device' | 'message-request' | 'job-needs'; id: string; title: string; body: string; at: string; jobId?: string; personaId?: string; with?: string; space?: string | null; memberId?: string }
 export interface DashJob { id: string; title: string; at: string; when: string; deviceName: string; requested: boolean }
 export interface DashEvent { id: string; title: string; day: string; dayLabel: string; allDay: boolean; start: string; end: string | null; ongoing: boolean; location: string; feed: string; color: string | null }
 export interface DashNote { id: string; title: string; snippet: string; updatedAt: string }
 export interface DashAsset { id: string; name: string; kind: string; icon: string; mime: string; thumb: boolean; addedAt: string; by: string }
 export interface Dashboard {
   greeting: string
+  waiting: DashWaiting[]
   notifications: DashNotification[]
   jobs: { running: { id: string; title: string; queued: boolean }[]; next: DashJob[]; total: number; paused: number }
   events: DashEvent[]
@@ -38,6 +41,7 @@ export interface HomeDashboardProps {
   onOpenCalendar: (day?: string) => void
   onOpenNote: (id?: string) => void
   onOpenAsset: (id?: string) => void
+  onOpenJoin: (space: string) => void
 }
 
 const NOTIFY_ICONS: Record<DashNotification['kind'], IconName> = {
@@ -45,6 +49,16 @@ const NOTIFY_ICONS: Record<DashNotification['kind'], IconName> = {
   failed: 'exclamation-triangle',
   space: 'users',
   message: 'comment'
+}
+
+const WAITING_ICONS: Record<DashWaiting['kind'], IconName> = {
+  prompt: 'question',
+  drive: 'pen',
+  edit: 'pen',
+  join: 'user-plus',
+  device: 'laptop',
+  'message-request': 'comment-dots',
+  'job-needs': 'globe'
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -86,7 +100,7 @@ export function until (iso: string, now = Date.now()): string {
   return `${d.getDate()} ${MONTHS[d.getMonth()]}`
 }
 
-export default function HomeDashboard ({ apps, onVaultChange, space: spaceKey, onGreeting, onOpenJob, onOpenMessages, onOpenCalendar, onOpenNote, onOpenAsset }: HomeDashboardProps) {
+export default function HomeDashboard ({ apps, onVaultChange, space: spaceKey, onGreeting, onOpenJob, onOpenMessages, onOpenCalendar, onOpenNote, onOpenAsset, onOpenJoin }: HomeDashboardProps) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const [dash, setDash] = useState<Dashboard | null>(null)
@@ -131,6 +145,7 @@ export default function HomeDashboard ({ apps, onVaultChange, space: spaceKey, o
 
   if (!dash) return null
   const { notifications, events, notes, assets } = dash
+  const waiting = dash.waiting || []
   const next = dash.jobs.next
 
   const openNotification = (n: DashNotification) => {
@@ -138,9 +153,35 @@ export default function HomeDashboard ({ apps, onVaultChange, space: spaceKey, o
     else if (n.kind === 'job' || n.kind === 'failed') onOpenJob(n.jobId)
   }
 
+  // What answers it: the join's invite sheet, the conversation, the Job (Run with me is there).
+  const openWaiting = (w: DashWaiting) => {
+    if (w.kind === 'join' && w.space) onOpenJoin(w.space)
+    else if (w.kind === 'message-request') onOpenMessages(w.personaId, w.with)
+    else if (w.kind === 'job-needs') onOpenJob(w.jobId)
+  }
+  const canOpen = (w: DashWaiting) => (w.kind === 'join' && !!w.space) || w.kind === 'message-request' || w.kind === 'job-needs'
+
   let lastDay = ''
   return (
     <View style={s.wrap}>
+      {waiting.length > 0 && (
+        <ListSection title='Needs you'>
+          {waiting.map((w, i) => (
+            <ListRow
+              key={w.id}
+              divider={i > 0}
+              left={<Lead icon={WAITING_ICONS[w.kind] || 'bell'} tone='waiting' />}
+              title={w.title}
+              titleLines={2}
+              subtitle={w.body || undefined}
+              subtitleLines={2}
+              right={w.at ? <Text style={s.meta}>{ago(w.at)}</Text> : undefined}
+              onPress={canOpen(w) ? () => openWaiting(w) : undefined}
+            />
+          ))}
+        </ListSection>
+      )}
+
       {notifications.length > 0 && (
         <ListSection
           title='Notifications'
@@ -251,9 +292,9 @@ export default function HomeDashboard ({ apps, onVaultChange, space: spaceKey, o
 }
 
 // A round tinted icon at the start of a row.
-function Lead ({ icon, tone }: { icon: IconName; tone: DashNotification['kind'] }) {
+function Lead ({ icon, tone }: { icon: IconName; tone: DashNotification['kind'] | 'waiting' }) {
   const t = useTheme()
-  const color = tone === 'failed' ? t.danger : tone === 'space' ? t.secure : tone === 'message' ? '#d6336c' : t.accent
+  const color = tone === 'waiting' ? t.warn : tone === 'failed' ? t.danger : tone === 'space' ? t.secure : tone === 'message' ? '#d6336c' : t.accent
   return (
     <View style={{ width: 32, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: color + '1f' }}>
       <Icon name={icon} size={13} color={color} />

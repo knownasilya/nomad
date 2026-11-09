@@ -1,6 +1,9 @@
 // nomad://desktop — the new tab page and the toolbar's Home button: a dashboard of the user's things.
 //
 // - A greeting, then the pinned pages (bookmarks marked pinned).
+// - Needs you, only when something waits on the user: a prompt open on a tab (Show brings it
+//   forward), someone asking to write to a drive, edit a drive or join the shared Space (Allow,
+//   Deny), a new Device or a stranger's first Message (a link), a Job that wanted sites (Run with me).
 // - Notifications: Job results, Jobs that failed, other members' notices in a shared Space, unread
 //   Messages.
 // - Jobs: the ones running here now (Watch, Stop), and the ones that run next (Run now).
@@ -26,6 +29,16 @@ import { releaseNotesUrl, shouldShowNotice, versionId } from './lib/release.js';
 import { ago, until, wallNow, longDate } from './lib/when.js';
 import css from '../css/main.css.js';
 import 'nomad://app-stdlib/js/com/img-fallbacks.js';
+
+const WAITING_ICONS = {
+  prompt: 'fas fa-question',
+  drive: 'fas fa-pen',
+  edit: 'fas fa-pen',
+  join: 'fas fa-user-plus',
+  device: 'fas fa-laptop',
+  'message-request': 'fas fa-comment-dots',
+  'job-needs': 'fas fa-globe',
+};
 
 const NOTIFY_ICONS = {
   job: 'fas fa-robot',
@@ -58,6 +71,7 @@ class DesktopApp extends LitElement {
     this.thumbs = {}; // asset id -> data: URL
     this.tick = 0;
     this.reloadTimer = null;
+    this.answering = null; // the Needs you row being answered
 
     this.load();
     this.loadVersion();
@@ -119,6 +133,7 @@ class DesktopApp extends LitElement {
     on(() => nomad.vault.watchAppData());
     on(() => nomad.vault.watchJobs());
     on(() => nomad.inbox.watch());
+    on(() => nomad.vault.watchHome());
   }
 
   // The notice names the version this app runs, and shows once per new version.
@@ -161,6 +176,7 @@ class DesktopApp extends LitElement {
         ${this.renderReleaseNotice()} ${this.renderPins()}
         ${d && !d.failed
           ? html`
+              ${this.renderWaiting(d)}
               <div class="board">
                 ${this.renderNotifications(d)} ${this.renderJobs(d)} ${this.renderEvents(d)}
                 ${this.renderNotes(d)} ${this.renderFiles(d)}
@@ -238,6 +254,82 @@ class DesktopApp extends LitElement {
         ${body}
       </section>
     `;
+  }
+
+  // What waits on the user, with the answer right there where it can be.
+  renderWaiting(d) {
+    const list = d.waiting || [];
+    if (!list.length) return '';
+    return html`
+      <section class="card needs" id="needs" aria-labelledby="needs-title">
+        <header>
+          <span class="icon fas fa-hand-paper" aria-hidden="true"></span>
+          <h2 id="needs-title">Needs you</h2>
+          <span class="count">${list.length}</span>
+        </header>
+        <ul class="rows">
+          ${repeat(
+            list,
+            (w) => w.id,
+            (w) => html`<li>
+              <div class="row">
+                <span class="lead waiting ${w.ai ? 'ai' : ''}">
+                  <span class=${w.ai ? 'fas fa-robot' : WAITING_ICONS[w.kind] || 'fas fa-bell'}></span>
+                </span>
+                ${w.url && w.kind !== 'drive'
+                  ? html`<a class="main" href=${w.url}>${this.waitingText(w)}</a>`
+                  : html`<span class="main">${this.waitingText(w)}</span>`}
+                ${w.at
+                  ? html`<span class="meta" title=${new Date(w.at).toLocaleString()}>${ago(w.at)}</span>`
+                  : ''}
+                <span class="actions">${this.waitingActions(w)}</span>
+              </div>
+            </li>`
+          )}
+        </ul>
+      </section>
+    `;
+  }
+
+  waitingText(w) {
+    const sub = [w.body, w.kind === 'prompt' && w.tabTitle ? `In “${w.tabTitle}”` : ''].filter(Boolean).join(' · ');
+    return html`
+      <span class="title">${w.title}</span>
+      ${sub ? html`<span class="snippet">${sub}</span>` : ''}
+    `;
+  }
+
+  waitingActions(w) {
+    const busy = this.answering === w.id;
+    switch (w.kind) {
+      case 'prompt':
+        return html`<button class="btn primary" @click=${() => this.onShowPrompt(w)}>Answer</button>`;
+      case 'drive':
+        return html`
+          <button class="btn" ?disabled=${busy} @click=${() => this.onAnswer(w, false)}>Deny</button>
+          <button class="btn primary" ?disabled=${busy} @click=${() => this.onAnswer(w, true)}>Allow</button>
+        `;
+      case 'edit':
+        return w.canApprove
+          ? html`
+              <button class="btn" ?disabled=${busy} @click=${() => this.onAnswer(w, false)}>Deny</button>
+              <button class="btn primary" ?disabled=${busy} @click=${() => this.onAnswer(w, true)}>Approve</button>
+            `
+          : html`<a class="btn" href=${w.url}>Open</a>`;
+      case 'join':
+        return html`
+          <button class="btn" ?disabled=${busy} @click=${() => this.onAnswer(w, false)}>Deny</button>
+          <button class="btn primary" ?disabled=${busy} @click=${() => this.onAnswer(w, true)}>Let in</button>
+        `;
+      case 'job-needs':
+        return html`<button class="btn primary" @click=${() => this.onRunJob({ id: w.jobId, title: 'the Job' }, true)}>
+          Run with me
+        </button>`;
+      case 'device':
+        return html`<a class="btn primary" href=${w.url}>Review</a>`;
+      default:
+        return w.url ? html`<a class="btn" href=${w.url}>Open</a>` : '';
+    }
   }
 
   renderNotifications(d) {
@@ -459,10 +551,42 @@ class DesktopApp extends LitElement {
     this.loadDashboard();
   }
 
-  async onRunJob(j) {
+  async onShowPrompt(w) {
     try {
-      await nomad.vault.runJob(j.id);
-      toast.create(`Running ${j.title}`);
+      if (!(await nomad.vault.showWaitingPrompt(w.promptId))) toast.create('That was answered already');
+    } catch (e) {
+      toast.create(e.message || String(e), 'error');
+    }
+    this.loadDashboard();
+  }
+
+  // Allow or deny someone asking to write to a drive, edit a drive in the Space, or join it.
+  async onAnswer(w, yes) {
+    this.answering = w.id;
+    this.requestUpdate();
+    try {
+      if (w.kind === 'drive') {
+        const url = `hyper://${w.drive}/`;
+        if (yes) await nomad.fs.approveRequest(url, w.writerKey);
+        else await nomad.fs.denyRequest(url, w.writerKey);
+      } else if (w.kind === 'edit') {
+        await nomad.vault.answerSpaceRequest({ drive: w.drive, writerKey: w.writerKey, approve: yes });
+      } else if (w.kind === 'join') {
+        if (yes) await nomad.vault.approveSpaceJoin(w.memberId);
+        else await nomad.vault.denySpaceJoin(w.memberId);
+      }
+      toast.create(yes ? 'Allowed' : 'Denied');
+    } catch (e) {
+      toast.create(e.message || String(e), 'error');
+    }
+    this.answering = null;
+    this.loadDashboard();
+  }
+
+  async onRunJob(j, watch = false) {
+    try {
+      await nomad.vault.runJob(j.id, watch ? { watch: true } : undefined);
+      toast.create(watch ? 'Running it with you in the AI Sidebar' : `Running ${j.title}`);
     } catch (e) {
       toast.create(e.message || String(e), 'error');
     }

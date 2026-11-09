@@ -762,7 +762,9 @@ async function homeDashboard (space, now) {
     notices: src?.notices || [],
     memberId: src?.memberId || null,
     spaceName: src?.spaceName || '',
-    conversations: mail?.conversations || []
+    conversations: mail?.conversations || [],
+    // Someone asking to join a shared Space this phone can let them into (any Space, named).
+    joins: invites.pending().map((j) => ({ memberId: j.memberId, name: j.name, role: j.role, space: j.space, spaceName: j.spaceName }))
   }, { now })
 }
 

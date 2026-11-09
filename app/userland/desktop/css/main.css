@@ -16,6 +16,10 @@ body {
   --home-green-soft: rgba(21, 128, 61, 0.11);
   --home-pink: #be185d;
   --home-pink-soft: rgba(190, 24, 93, 0.1);
+  --home-warn: #b45309;
+  --home-warn-soft: rgba(217, 119, 6, 0.1);
+  --home-warn-border: rgba(217, 119, 6, 0.45);
+  --home-on-accent: #fff;
 
   margin: 0;
   font-size: 13px;
@@ -40,5 +44,9 @@ body {
     --home-green-soft: rgba(74, 222, 128, 0.13);
     --home-pink: #f472b6;
     --home-pink-soft: rgba(244, 114, 182, 0.14);
+    --home-warn: #fbbf24;
+    --home-warn-soft: rgba(251, 191, 36, 0.12);
+    --home-warn-border: rgba(251, 191, 36, 0.4);
+    --home-on-accent: #11131c;
   }
 }

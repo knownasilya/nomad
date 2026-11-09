@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   dashboard,
   notifications,
+  waiting,
   jobsOverview,
   upcomingEvents,
   latestNotes,
@@ -109,6 +110,50 @@ describe('notifications', () => {
   });
 });
 
+describe('waiting', () => {
+  it('lists what waits on the person, oldest first', () => {
+    const list = waiting({
+      prompts: [{ id: 7, title: 'The AI is waiting for your answer', body: 'Read your notes?', ai: true, at: hoursAgo(0.1), tabTitle: 'Inbox' }],
+      driveRequests: [{ drive: 'ab'.repeat(32), title: 'Recipes', writerKey: 'w1', requestedAt: hoursAgo(3) }],
+      spaceRequests: [{ drive: 'cd'.repeat(32), writerKey: 'w2', name: 'Sam', title: 'Budget', note: 'to fix a typo', canApprove: true, requestedAt: hoursAgo(2) }],
+      joins: [{ memberId: 'm1', name: 'Kim', role: 'editor', requestedAt: hoursAgo(1) }],
+      devices: [{ deviceKey: 'dk', name: 'Pixel', platform: 'android', requestedAt: hoursAgo(0.5) }],
+      conversations: [
+        { personaId: 'p1', other: 'hyper://c/', unread: 1, request: true, title: 'Cy', last: { message: { createdAt: hoursAgo(0.2), text: 'hi' } } },
+        { personaId: 'p1', other: 'hyper://a/', unread: 2, request: false, title: 'Ana', last: { message: { createdAt: hoursAgo(0.3), text: 'x' } } },
+      ],
+      spaceName: 'Home',
+    });
+    expect(list.map((w) => [w.kind, w.title])).toEqual([
+      ['drive', 'Someone asks to write to Recipes'],
+      ['edit', 'Sam asks to edit Budget'],
+      ['join', 'Kim asks to join Home'],
+      ['device', 'Pixel asks to join your devices'],
+      ['message-request', 'Cy wants to message you'],
+      ['prompt', 'The AI is waiting for your answer'],
+    ]);
+    expect(list[0]).toMatchObject({ drive: 'ab'.repeat(32), writerKey: 'w1', url: 'hyper://' + 'ab'.repeat(32) + '/' });
+    expect(list[1]).toMatchObject({ body: '“to fix a typo”', canApprove: true, url: 'nomad://library/sharing' });
+    expect(list[2]).toMatchObject({ memberId: 'm1', body: 'As someone who can edit.' });
+    expect(list[3].url).toBe('nomad://settings/?view=devices');
+    expect(list[5]).toMatchObject({ promptId: 7, ai: true, tabTitle: 'Inbox' });
+  });
+
+  it('shows a Job whose newest run wanted sites, until a later run doesn’t', () => {
+    const runs = [
+      run('a1', 'ja', hoursAgo(2), { needs: [{ site: 'example.com' }, { site: 'shop.com', control: true }] }),
+      run('b1', 'jb', hoursAgo(3), { needs: [{ site: 'old.com' }] }),
+      run('b2', 'jb', hoursAgo(1)),
+      run('c1', 'gone', hoursAgo(1), { needs: [{ site: 'x.com' }] }),
+    ];
+    const jobs = [{ id: 'job-ja' }, { id: 'job-jb' }];
+    const list = waiting({ runs, jobs });
+    expect(list).toEqual([
+      expect.objectContaining({ kind: 'job-needs', title: 'Job ja wants to open example.com and 1 more', jobId: 'job-ja', url: 'nomad://library/jobs?id=job-ja' }),
+    ]);
+  });
+});
+
 describe('jobsOverview', () => {
   const jobs = [
     { id: 'j1', title: 'Digest', enabled: true, nextRunAt: '2026-11-10T08:00:00.000Z' },
@@ -193,6 +238,7 @@ describe('dashboard', () => {
     const empty = dashboard({}, { now: '2026-11-09T16:00', at: NOW });
     expect(empty).toMatchObject({
       greeting: 'Good afternoon',
+      waiting: [],
       notifications: [],
       jobs: { running: [], next: [], total: 0, paused: 0 },
       events: [],
@@ -211,5 +257,6 @@ describe('dashboard', () => {
     );
     expect(d.unreadMessages).toBe(3);
     expect(d.notifications).toHaveLength(1);
+    expect(d.waiting.map((w) => w.kind)).toEqual(['message-request']);
   });
 });

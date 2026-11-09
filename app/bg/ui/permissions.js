@@ -10,7 +10,8 @@ import { PermissionsError, UserDeniedError } from 'beaker-error-constants';
 import * as wcTrust from '../wc-trust';
 import * as personas from './personas';
 import * as filesystem from '../filesystem/index';
-import { textTag } from './notify-rules.mjs';
+import { textTag, promptAlert } from './notify-rules.mjs';
+import { EventEmitter } from 'events';
 
 // globals
 // =
@@ -20,6 +21,8 @@ var activeRequests = [];
 // Told when a prompt opens, so the OS can say so when nobody sees it (bg/ui/desktop-notifications.js).
 // Returns { done() } for when it's answered.
 var promptHook = null;
+// 'changed' when a prompt opens or is answered (the home page's Needs you, vault.ts `watchHome`).
+export const events = new EventEmitter();
 
 // exported api
 // =
@@ -65,6 +68,39 @@ export function queryPermission(permission, webContents) {
   return sitedata.getPermission(webContents.getURL(), permission);
 }
 
+// The prompts open now, for the home page: { id, title, body, ai, at, tabTitle }, in plain text.
+export function waitingPrompts() {
+  return activeRequests
+    .filter((req) => req.win && !req.win.isDestroyed())
+    .map((req) => ({
+      id: req.id,
+      title: req.text?.title || '',
+      body: req.text?.body || '',
+      ai: !!req.text?.ai,
+      at: req.at,
+      tabTitle: tabTitleOf(req.tab),
+    }));
+}
+
+// Bring a waiting prompt's window and tab to the front. False when it was answered already.
+export function showPrompt(id) {
+  const req = activeRequests.find((r) => r.id === Number(id));
+  if (!req || !req.win || req.win.isDestroyed()) return false;
+  if (req.win.isMinimized()) req.win.restore();
+  req.win.show();
+  req.win.focus();
+  if (req.tab && !req.tab.isActive) tabManager.setActive(req.win, req.tab);
+  return true;
+}
+
+function tabTitleOf(tab) {
+  try {
+    return String(tab?.activePane?.title || tab?.title || '').slice(0, 200);
+  } catch {
+    return '';
+  }
+}
+
 export function denyAllRequests(win) {
   // remove all requests in the window, denying as we go
   activeRequests = activeRequests.filter((req) => {
@@ -76,6 +112,7 @@ export function denyAllRequests(win) {
     }
     return true;
   });
+  events.emit('changed');
 }
 
 export async function checkLabsPerm({ perm, labApi, apiDocsUrl, sender }) {
@@ -167,8 +204,10 @@ async function onPermissionRequestHandler(webContents, permission, cb, opts) {
   await waitForPendingTabRequests(tab);
 
   // track the new cb
-  req = { id: ++idCounter, webContents, tab, win, url, permission, cbs: [cb] };
+  req = { id: ++idCounter, webContents, tab, win, url, permission, cbs: [cb], at: new Date().toISOString() };
+  req.text = promptAlert({ url, desc: describe({ url, permission, opts }), ai: !!PERM?.promptTrusted });
   activeRequests.push(req);
+  events.emit('changed');
 
   // run the UI flow
   tab.setActivePane(tab.findPane(webContents));
@@ -197,6 +236,7 @@ async function onPermissionRequestHandler(webContents, permission, cb, opts) {
 
   // untrack
   activeRequests.splice(activeRequests.indexOf(req), 1);
+  events.emit('changed');
 
   // hand down the decision
   for (let cb of req.cbs) {
@@ -210,20 +250,26 @@ async function openPromptAlert({ win, tab, url, permission, opts, PERM }) {
   const none = { done() {} };
   if (!promptHook) return none;
   try {
-    let desc = '';
-    try {
-      desc = renderPermDesc({
-        html: textTag,
-        bg: null,
-        url,
-        permId: getPermId(permission),
-        permParam: getPermParam(permission),
-        permOpts: opts || {},
-      });
-    } catch {}
+    const desc = describe({ url, permission, opts });
     return (await promptHook({ win, tab, url, desc, ai: !!PERM?.promptTrusted })) || none;
   } catch {
     return none;
+  }
+}
+
+// What a prompt asks, as plain text.
+function describe({ url, permission, opts }) {
+  try {
+    return renderPermDesc({
+      html: textTag,
+      bg: null,
+      url,
+      permId: getPermId(permission),
+      permParam: getPermParam(permission),
+      permOpts: opts || {},
+    });
+  } catch {
+    return '';
   }
 }
 
