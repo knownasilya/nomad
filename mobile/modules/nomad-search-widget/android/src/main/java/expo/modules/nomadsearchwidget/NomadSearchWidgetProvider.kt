@@ -32,11 +32,15 @@ class NomadSearchWidgetProvider : AppWidgetProvider() {
     private const val SCHEME = "nomad-widget"
     // Taller than this (dp), the widget has room for the row of Space chips.
     private const val TALL_DP = 100f
+    // Each chip: the chip, its dot, its name, and its name as the active Space's (a second view
+    // with the active color in its layout, so no color is set from here: one set from here would
+    // stay the old theme's after the phone switches between light and dark).
+    private data class Chip(val chip: Int, val dot: Int, val name: Int, val activeName: Int)
     private val CHIPS = listOf(
-      Triple(R.id.nomad_widget_chip0, R.id.nomad_widget_chip0_dot, R.id.nomad_widget_chip0_name),
-      Triple(R.id.nomad_widget_chip1, R.id.nomad_widget_chip1_dot, R.id.nomad_widget_chip1_name),
-      Triple(R.id.nomad_widget_chip2, R.id.nomad_widget_chip2_dot, R.id.nomad_widget_chip2_name),
-      Triple(R.id.nomad_widget_chip3, R.id.nomad_widget_chip3_dot, R.id.nomad_widget_chip3_name)
+      Chip(R.id.nomad_widget_chip0, R.id.nomad_widget_chip0_dot, R.id.nomad_widget_chip0_name, R.id.nomad_widget_chip0_name_active),
+      Chip(R.id.nomad_widget_chip1, R.id.nomad_widget_chip1_dot, R.id.nomad_widget_chip1_name, R.id.nomad_widget_chip1_name_active),
+      Chip(R.id.nomad_widget_chip2, R.id.nomad_widget_chip2_dot, R.id.nomad_widget_chip2_name, R.id.nomad_widget_chip2_name_active),
+      Chip(R.id.nomad_widget_chip3, R.id.nomad_widget_chip3_dot, R.id.nomad_widget_chip3_name, R.id.nomad_widget_chip3_name_active)
     )
 
     fun updateAll(context: Context) {
@@ -85,30 +89,34 @@ class NomadSearchWidgetProvider : AppWidgetProvider() {
       // Four chips fit; with more Spaces the last one opens the switcher.
       val overflow = state.spaces.size > CHIPS.size
       val shown = if (overflow) state.spaces.take(CHIPS.size - 1) else state.spaces
-      CHIPS.forEachIndexed { i, (chip, dot, name) ->
+      CHIPS.forEachIndexed { i, c ->
         val sp = shown.getOrNull(i)
         when {
           sp != null -> {
             val isActive = sp.id == active?.id
-            views.setViewVisibility(chip, View.VISIBLE)
-            views.setViewVisibility(dot, View.VISIBLE)
-            views.setInt(dot, "setColorFilter", sp.color)
-            views.setTextViewText(name, sp.name)
-            views.setInt(chip, "setBackgroundResource", if (isActive) R.drawable.nomad_widget_chip_active else R.drawable.nomad_widget_chip)
-            views.setTextColor(name, context.getColor(if (isActive) R.color.nomad_widget_chip_active_text else R.color.nomad_widget_text_dim))
-            views.setContentDescription(chip, "Search in ${sp.name}")
-            views.setOnClickPendingIntent(chip, link(context, "search", sp.id))
+            views.setViewVisibility(c.chip, View.VISIBLE)
+            views.setViewVisibility(c.dot, View.VISIBLE)
+            views.setInt(c.dot, "setColorFilter", sp.color)
+            views.setTextViewText(c.name, sp.name)
+            views.setTextViewText(c.activeName, sp.name)
+            views.setViewVisibility(c.name, if (isActive) View.GONE else View.VISIBLE)
+            views.setViewVisibility(c.activeName, if (isActive) View.VISIBLE else View.GONE)
+            views.setInt(c.chip, "setBackgroundResource", if (isActive) R.drawable.nomad_widget_chip_active else R.drawable.nomad_widget_chip)
+            views.setContentDescription(c.chip, "Search in ${sp.name}")
+            views.setOnClickPendingIntent(c.chip, link(context, "search", sp.id))
           }
           overflow && i == CHIPS.size - 1 -> {
-            views.setViewVisibility(chip, View.VISIBLE)
-            views.setViewVisibility(dot, View.GONE)
-            views.setTextViewText(name, context.getString(R.string.nomad_widget_more))
-            views.setInt(chip, "setBackgroundResource", R.drawable.nomad_widget_chip)
-            views.setTextColor(name, context.getColor(R.color.nomad_widget_text_dim))
-            views.setContentDescription(chip, context.getString(R.string.nomad_widget_switch_space))
-            views.setOnClickPendingIntent(chip, link(context, "spaces"))
+            views.setViewVisibility(c.chip, View.VISIBLE)
+            views.setViewVisibility(c.dot, View.GONE)
+            views.setTextViewText(c.name, context.getString(R.string.nomad_widget_more))
+            views.setViewVisibility(c.name, View.VISIBLE)
+            views.setViewVisibility(c.activeName, View.GONE)
+            views.setInt(c.chip, "setBackgroundResource", R.drawable.nomad_widget_chip)
+            views.setContentDescription(c.chip, context.getString(R.string.nomad_widget_switch_space))
+            views.setOnClickPendingIntent(c.chip, link(context, "spaces"))
           }
-          else -> views.setViewVisibility(chip, View.INVISIBLE)
+          // An unused chip takes no room, so the others can show their whole names.
+          else -> views.setViewVisibility(c.chip, View.GONE)
         }
       }
       return views

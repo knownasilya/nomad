@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 4x1 by default; drag it to two rows to get a chip for each Space. -->
+<!-- 5x1 by default (4 columns wide where the grid has only 4); drag it to two rows to get a chip for each Space. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
   android:minWidth="250dp"
   android:minHeight="40dp"
   android:minResizeWidth="180dp"
   android:minResizeHeight="40dp"
   android:maxResizeHeight="180dp"
-  android:targetCellWidth="4"
+  android:targetCellWidth="5"
   android:targetCellHeight="1"
   android:resizeMode="horizontal|vertical"
   android:updatePeriodMillis="0"

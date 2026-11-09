@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The home screen search widget (NomadSearchWidgetProvider). Row one is the app's address bar:
      tap it for a new tab ready to type in; the chip names the Space it opens in and switches it;
-     the robot opens the AI. Two rows tall, a chip for each Space searches in that Space. -->
+     the robot opens the AI. Two rows tall, a chip for each Space searches in that Space.
+     Colors come only from resources (never a color the provider sets), so the launcher redraws
+     them right when the phone switches between light and dark. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
   android:layout_width="match_parent"
   android:layout_height="match_parent"
@@ -88,7 +90,7 @@
     android:visibility="gone">
     <LinearLayout
       android:id="@+id/nomad_widget_chip0"
-      android:layout_width="0dp"
+      android:layout_width="wrap_content"
       android:layout_height="36dp"
       android:layout_weight="1"
       android:layout_marginEnd="6dp"
@@ -113,10 +115,20 @@
         android:singleLine="true"
         android:textColor="@color/nomad_widget_text_dim"
         android:textSize="13sp" />
+      <TextView
+        android:id="@+id/nomad_widget_chip0_name_active"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:ellipsize="end"
+        android:singleLine="true"
+        android:textColor="@color/nomad_widget_chip_active_text"
+        android:textSize="13sp"
+        android:visibility="gone" />
     </LinearLayout>
     <LinearLayout
       android:id="@+id/nomad_widget_chip1"
-      android:layout_width="0dp"
+      android:layout_width="wrap_content"
       android:layout_height="36dp"
       android:layout_weight="1"
       android:layout_marginEnd="6dp"
@@ -141,10 +153,20 @@
         android:singleLine="true"
         android:textColor="@color/nomad_widget_text_dim"
         android:textSize="13sp" />
+      <TextView
+        android:id="@+id/nomad_widget_chip1_name_active"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:ellipsize="end"
+        android:singleLine="true"
+        android:textColor="@color/nomad_widget_chip_active_text"
+        android:textSize="13sp"
+        android:visibility="gone" />
     </LinearLayout>
     <LinearLayout
       android:id="@+id/nomad_widget_chip2"
-      android:layout_width="0dp"
+      android:layout_width="wrap_content"
       android:layout_height="36dp"
       android:layout_weight="1"
       android:layout_marginEnd="6dp"
@@ -169,10 +191,20 @@
         android:singleLine="true"
         android:textColor="@color/nomad_widget_text_dim"
         android:textSize="13sp" />
+      <TextView
+        android:id="@+id/nomad_widget_chip2_name_active"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:ellipsize="end"
+        android:singleLine="true"
+        android:textColor="@color/nomad_widget_chip_active_text"
+        android:textSize="13sp"
+        android:visibility="gone" />
     </LinearLayout>
     <LinearLayout
       android:id="@+id/nomad_widget_chip3"
-      android:layout_width="0dp"
+      android:layout_width="wrap_content"
       android:layout_height="36dp"
       android:layout_weight="1"
       android:layout_marginEnd="0dp"
@@ -197,6 +229,16 @@
         android:singleLine="true"
         android:textColor="@color/nomad_widget_text_dim"
         android:textSize="13sp" />
+      <TextView
+        android:id="@+id/nomad_widget_chip3_name_active"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:ellipsize="end"
+        android:singleLine="true"
+        android:textColor="@color/nomad_widget_chip_active_text"
+        android:textSize="13sp"
+        android:visibility="gone" />
     </LinearLayout>
   </LinearLayout>
 </LinearLayout>
