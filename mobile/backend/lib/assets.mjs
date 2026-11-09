@@ -139,24 +139,61 @@ export function createAssets ({ libraryOf, vaultOf = () => null, blobs, fs = nul
   }
 
   // Write an Asset's file to `to` (a file: URI in the app's cache), CHUNK_BYTES at a time, through
-  // `to`.part so a half-written file is never taken for the whole one. -> { size }, or null until it
-  // has replicated here.
-  async function readTo (space, id, { to, thumb = false } = {}) {
-    const place = await placeOf(space)
-    if (!place || !as.isAssetId(id)) return null
+  // `to`.part so a half-written file is never taken for the whole one. A big file, or one still
+  // coming from another Device, takes longer than one call may wait, so the copy goes on by itself:
+  // each call waits up to `wait` ms for it and says how far it got, and a call for the same `to`
+  // joins the copy already going. -> { size, written, done }, or null until it has replicated here.
+  const copies = new Map() // `to` path -> { size, written, done, missing, error, promise }
+  async function readTo (space, id, { to, thumb = false, wait = Infinity } = {}) {
     const out = localPath(to)
-    const at = await fileOf(place, id, thumb)
-    const size = await blobs.fileSizeOf(place.base, at)
-    if (size < 0) return null
+    let job = copies.get(out)
+    if (job && (job.error || job.missing)) {
+      copies.delete(out)
+      if (job.missing) return null
+      throw job.error
+    }
+    if (!job) {
+      const place = await placeOf(space)
+      if (!place || !as.isAssetId(id)) return null
+      const at = await fileOf(place, id, thumb)
+      const size = await blobs.fileSizeOf(place.base, at)
+      if (size < 0) return null
+      const have = await fs.promises.stat(out).catch(() => null)
+      if (have && have.size === size) return { size, written: size, done: true }
+      job = copies.get(out) // another call may have started it meanwhile
+      if (!job) {
+        job = { size, written: 0, done: false, missing: false, error: null }
+        job.promise = copyOut(place, at, out, job).then(
+          (ok) => { if (ok) { job.done = true; copies.delete(out) } else job.missing = true },
+          (err) => { job.error = err }
+        )
+        copies.set(out, job)
+      }
+    }
+    let timer = null
+    await Promise.race([job.promise, wait === Infinity ? new Promise(() => {}) : new Promise((resolve) => { timer = setTimeout(resolve, wait) })])
+      .finally(() => clearTimeout(timer))
+    if (job.done) return { size: job.size, written: job.size, done: true }
+    if (job.missing || job.error) {
+      copies.delete(out)
+      if (job.missing) return null
+      throw job.error
+    }
+    return { size: job.size, written: job.written, done: false }
+  }
+
+  // -> true once `out` holds the whole file, false when a piece of it isn't here.
+  async function copyOut (place, at, out, job) {
     await fs.promises.mkdir(out.slice(0, out.lastIndexOf('/')), { recursive: true })
     const part = out + '.part'
     const fh = await fs.promises.open(part, 'w')
     let ok = false
     try {
-      for (let start = 0; start < size; start += as.CHUNK_BYTES) {
-        const buf = await blobs.readFileOf(place.base, at, { start, length: Math.min(as.CHUNK_BYTES, size - start) })
-        if (!buf) return null
+      for (let start = 0; start < job.size; start += as.CHUNK_BYTES) {
+        const buf = await blobs.readFileOf(place.base, at, { start, length: Math.min(as.CHUNK_BYTES, job.size - start) })
+        if (!buf) return false
         await fh.write(buf, 0, buf.length, start)
+        job.written = start + buf.length
       }
       ok = true
     } finally {
@@ -164,7 +201,7 @@ export function createAssets ({ libraryOf, vaultOf = () => null, blobs, fs = nul
       if (!ok) await fs.promises.unlink(part).catch(() => {})
     }
     await fs.promises.rename(part, out)
-    return { size }
+    return true
   }
 
   // Add a file the app picked: `path` (a file: URI in its own folders) or, for a small one, base64

@@ -491,7 +491,8 @@ export function useBackend (handlers: BackendHandlers): Backend {
   }
 
   // A Reader, Notes or Names call. Always resolves, so screens can show `message` instead of catching.
-  // Opening a Feed may wait on the swarm (both drive types, ~15 s each), so it gets longer.
+  // Opening a Feed may wait on the swarm (both drive types, ~15 s each), so it gets longer, and adding
+  // a file to Assets copies all of it (up to 500 MB) into the drive, so that gets longer still.
   function appsCall<T> (app: AppName, action: string, args: Record<string, unknown> = {}): Promise<AppsResult<T>> {
     return new Promise<AppsResult<T>>((resolve) => {
       const rpc = rpcRef.current
@@ -499,7 +500,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
       const reqId = `ap_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
       const timer = setTimeout(() => {
         if (pending.current[reqId]) { delete pending.current[reqId]; resolve({ ok: false, message: 'backend did not respond' }) }
-      }, action === 'feed' ? 45000 : 15000)
+      }, action === 'feed' ? 45000 : app === 'assets' && action === 'add' ? 600000 : 15000)
       pending.current[reqId] = (msg: AppsResult<T>) => { clearTimeout(timer); resolve(msg) }
       const req = rpc.request(RPC_APPS)
       req.send(b4a.from(JSON.stringify({ reqId, app, action, ...args })))
