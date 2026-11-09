@@ -140,3 +140,26 @@ behind the existing `start`/`stop` surface — deliberately a seam, not built he
 
 Beyond that, the durable answer is decision 3's deferred half: a user-designated preferred Provider,
 pointed at a Device that is always on.
+
+## Amendment — a phone's yes can last as long as desktop's
+
+§6 relayed each prompt as a yes or a no, and the Provider kept nothing, so the phone asked on every
+turn what desktop asks once: desktop's Allow on a permission with `persist: 'allow'` (Notes, Reader,
+Mods, Jobs, memory, the calendar, contacts, drive edits) is kept for the tab's site, and its
+`aiSendData` prompt has an **Allow for 3 months** box (ADR-0037).
+
+The `PROMPT` frame now carries `similar`, the label of the box that makes the yes last longer, and
+`PROMPT_RESULT.allow` may be `'similar'` when the user ticked it. The Provider takes `'similar'` only
+from a prompt that offered the box (`promptAnswer`). Both choices are kept where desktop keeps them, on
+the Provider:
+
+- `aiSendData`: the 3-month box, kept in `send-grants.js` and listed on nomad://ai/sites.
+- A permission desktop keeps for the site: "Don't ask again on <site>", the site being the phone's tab
+  (or a page turn's drive). `app/bg/ai/keep-grants.mjs` wraps the relay: it answers from sitedata
+  first (a kept yes, or a Deny set in site-info), and keeps a ticked yes there, where desktop's
+  site-info lists and removes it.
+
+The box starts unticked, so a plain Allow still covers one answer. Permissions desktop never keeps
+(`aiSecretUse`, `aiCreateDrive`, `assetsWrite`) offer no box. An older Client never sends `'similar'`;
+an older Provider sends no `similar` and the phone shows no box. The phone's prompt is a sheet
+(`AiPromptSheet`) rather than a native alert, so it can show the box and the request.

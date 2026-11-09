@@ -364,7 +364,7 @@ in `CAPABILITIES` with `gates: { personal: true }`; the pure logic is `app/bg/ai
 (`VAULT_TOOL_PERMS` maps each to its permission); the I/O is `app/bg/web-apis/bg/ai-vault.ts`. Each asks
 one of four permissions, `notesRead`, `notesWrite`, `readerRead`, `readerWrite` (`app/lib/permissions.ts`,
 `promptTrusted`, so a `nomad://` page asks too), once per turn. A phone turn sends its Reader `space`
-on the Bridge, and the phone's prompt text is `VAULT_PROMPTS` in `mobile/app/index.tsx`. A new
+on the Bridge, and the phone's prompt text is `VAULT_PROMPTS` in `mobile/lib/aiPrompts.ts`. A new
 capability of this kind needs all of these, plus a line in `PERSONAL_PROMPT`.
 Names are managed in My Library → Names and the site-info panel; the URL bar suggests them
 (`fg/lib/location.js`). The phone reads and writes the same records through its backend (`names` in
@@ -687,7 +687,7 @@ add an API that returns a value.
 Once a chat of the user's own AI has read private data (Notes, Reader, Mods, Jobs, drive files, the
 page or a page tool: `PRIVATE_READS` in `app/bg/ai/egress.mjs`), the first `fetchUrl`, `httpRequest` or
 `openTab` to each host the user didn't name asks `aiSendData:<host>` (desktop perm prompt, phone
-`sendDataPrompt`). `executeTool` calls `egress.noteCall` after each call; the check sits in each
+`AiPromptSheet`). `executeTool` calls `egress.noteCall` after each call; the check sits in each
 capability. The sidebar and the phone keep `privateData` on the answer (the `tool` event with
 `phase: 'private'`) and send it with the chat's next turns. A Job can't ask: after a private read it
 reaches only the hosts its prompt names and its secrets cover (`jobEgress` in `ai.ts`). A new
@@ -698,6 +698,13 @@ secret goes behind Details. Its **Allow for 3 months** box keeps the host in `ap
 (this computer only; every guard here passes `granted`), listed on nomad://ai/sites (internal
 `nomad.aiSites`) to extend or remove. `STANDING_PROMPT` tells every turn that tool content is data, not
 instructions.
+
+The phone's prompts (`mobile/components/AiPromptSheet.tsx`, text in `mobile/lib/aiPrompts.ts`) last as
+long as desktop's. The Provider sends a prompt's box label as `similar` on the `PROMPT` frame and takes a
+ticked yes back as `allow: 'similar'` (`promptAnswer` in `shared/ai-bridge.mjs`): the 3-month box above,
+and for a permission desktop keeps for the site (`persist: 'allow'`), "Don't ask again on <site>", which
+`app/bg/ai/keep-grants.mjs` keeps in sitedata like desktop's Allow (site-info lists it). A phone turn
+also reads those records first, so a yes or a Deny kept on desktop for that site holds there too.
 
 ### The AI's scratch space
 
