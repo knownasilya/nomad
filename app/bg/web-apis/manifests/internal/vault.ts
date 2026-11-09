@@ -85,11 +85,16 @@ export default {
   refreshCalendarFeeds: 'promise', // ({ force? }) -> listCalendar(), after fetching the feeds that are due
   listCalendarDrives: 'promise', // () -> [{ url, name, color }]: calendar drives in the caller's Space not followed yet
   // Assets (bg/web-apis/bg/assets.ts, shared/assets.mjs), for the caller's Space
-  listAssets: 'promise', // () -> { space, spaceName, shared, canAdd, role, maxBytes, assets }
+  listAssets: 'promise', // () -> { space, spaceName, shared, canAdd, role, maxBytes, assets, folders }
   assetData: 'promise', // (id, { thumb? }) -> data: URL, or null until it replicates
-  addAsset: 'promise', // ({ data (base64), name, mime?, thumb? (base64 JPEG), width?, height?, duration?, takenAt?, caption? }) -> asset
-  updateAsset: 'promise', // ({ id, name?, caption? }) -> asset
+  addAsset: 'promise', // ({ data (base64), name, mime?, thumb? (base64 JPEG), width?, height?, duration?, takenAt?, caption?, tags?, folder? }) -> asset
+  updateAsset: 'promise', // ({ id, name?, caption?, tags?, folder? }) -> asset
+  updateAssets: 'promise', // ({ ids, folder?, addTags?, removeTags? }) -> { changed }
   deleteAsset: 'promise', // (id) -> boolean
+  deleteAssets: 'promise', // (ids) -> { removed, refused }
+  addAssetFolder: 'promise', // (path) -> path
+  moveAssetFolder: 'promise', // ({ from, to }) -> { path, moved }
+  deleteAssetFolder: 'promise', // (path) -> { removed }
   suggestNoteTopics: 'promise', // (ids?) -> how many notes the AI will sort into topics
   watchAppData: 'readable', // 'changed' when the Vault changes
   openLiveNote: 'readable', // (id, conn) -> 'message' { data } (y-protocols, base64), 'status', 'failed' (ADR-0041)

@@ -212,8 +212,9 @@ export interface CalendarOccurrence { id: string; title: string; start: string; 
 export interface CalendarList { space: string | null; shared: boolean; canWriteSpace: boolean; writable: boolean; from: string; to: string; events: CalendarEvent[]; feeds: CalendarFeed[]; occurrences: CalendarOccurrence[] }
 // A Space's Assets (shared/assets.mjs, ADR-0044, backend/lib/assets.mjs): any file it keeps. by: who
 // added it in a shared Space. canDelete: this person added it, owns the Space, or it isn't shared.
-export interface AssetRecord { type: 'nomad/asset'; id: string; name: string; mime: string; kind: string; bytes: number; addedAt: string; takenAt: string; width?: number; height?: number; duration?: number; by: string; memberId: string | null; caption?: string; thumb?: boolean; source?: 'ai'; sourceUrl?: string; updatedAt: string; canDelete: boolean }
-export interface AssetsList { shared: boolean; canAdd: boolean; role: string | null; maxBytes: number; assets: AssetRecord[] }
+export interface AssetRecord { type: 'nomad/asset'; id: string; name: string; mime: string; kind: string; bytes: number; addedAt: string; takenAt: string; width?: number; height?: number; duration?: number; by: string; memberId: string | null; caption?: string; thumb?: boolean; source?: 'ai'; sourceUrl?: string; tags?: string[]; folder?: string; updatedAt: string; canDelete: boolean }
+// `folders`: every folder path there is (shared/assets.mjs allFolders), kept ones with no files too.
+export interface AssetsList { shared: boolean; canAdd: boolean; role: string | null; maxBytes: number; assets: AssetRecord[]; folders: string[] }
 // The user's AI Jobs (shared/jobs.mjs, ADR-0030). A desktop runs them; the phone lists them, pauses
 // them, asks for a run, and notifies on a run that has a notification.
 // What the phone shows is `when` (the schedule in words), so the shapes are loose here.

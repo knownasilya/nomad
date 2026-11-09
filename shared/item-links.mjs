@@ -14,6 +14,8 @@
 //
 // No Electron imports.
 
+import { cleanFolder, cleanTag } from './assets.mjs';
+
 // Note, Job, Mod and memory ids (shared/vault-apps.mjs isNoteId, shared/jobs.mjs, shared/mods.mjs,
 // shared/ai-memory.mjs): all are lowercase letters, digits and dashes.
 const ID = /^[a-z0-9-]{1,40}$/;
@@ -28,6 +30,8 @@ export const calendarLink = (day) => `${CALENDAR_LINK}?day=${day}`;
 export const CONTACTS_LINK = 'nomad://library/contacts';
 export const ASSETS_LINK = 'nomad://assets/';
 export const assetLink = (id) => `${ASSETS_LINK}?id=${id}`;
+export const assetFolderLink = (path) => `${ASSETS_LINK}?folder=${encodeURIComponent(path)}`;
+export const assetTagLink = (tag) => `${ASSETS_LINK}?tag=${encodeURIComponent(tag)}`;
 // shared/assets.mjs isAssetId
 const ASSET_ID = /^[ap][a-z0-9]{6,14}-[a-z0-9]{4,10}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -45,6 +49,17 @@ const LIBRARY_VIEWS = {
   sharing: 'Sharing',
 };
 
+// One query value, decoded ('' when it isn't there or doesn't decode).
+function queryValue(query, key) {
+  const m = new RegExp(`[?&]${key}=([^&]*)`).exec(query || '');
+  if (!m) return '';
+  try {
+    return decodeURIComponent(m[1].replace(/\+/g, ' '));
+  } catch {
+    return '';
+  }
+}
+
 /**
  * What a link in an AI answer opens, or null when it isn't one to open.
  *   { kind: 'page', url }                         a web or hyper:// page
@@ -55,7 +70,7 @@ const LIBRARY_VIEWS = {
  *   { kind: 'ai', view, url, place }              the AI page: chats, memory, skills, setup
  *   { kind: 'reader', url, place }                nomad://reader
  *   { kind: 'calendar', day?, url, place }        nomad://calendar, or one day of it
- *   { kind: 'asset', id?, url, place }            nomad://assets, or one file there
+ *   { kind: 'asset', id?, folder?, tag?, url, place }  nomad://assets, or one file, folder or tag there
  * `url` is the one to open. `place` says where it is, e.g. "My Library → Mods".
  * @param {string} href
  * @returns {null | { kind: string, url: string, id?: string, view?: string, day?: string, place?: string }}
@@ -103,6 +118,10 @@ export function parseItemLink(href) {
   if (host === 'assets') {
     if (seg.length) return null;
     if (id && ASSET_ID.test(id)) return { kind: 'asset', id, url: assetLink(id), place: 'Assets' };
+    const folder = cleanFolder(queryValue(m[4], 'folder'));
+    if (folder) return { kind: 'asset', folder, url: assetFolderLink(folder), place: `Assets → ${folder.split('/').join(' → ')}` };
+    const tag = cleanTag(queryValue(m[4], 'tag'));
+    if (tag) return { kind: 'asset', tag, url: assetTagLink(tag), place: `Assets → #${tag}` };
     return { kind: 'asset', url: ASSETS_LINK, place: 'Assets' };
   }
   if (host === 'ai') {

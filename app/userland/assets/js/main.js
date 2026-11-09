@@ -11,9 +11,15 @@
 //   with pdf.js (js/pdf.build.js, copied in by scripts/build.js); Markdown renders with markdown-it
 //   (raw HTML off); CSV is a table, JSON is pretty-printed, code and text are shown as text. An HTML
 //   file is shown as its source, never run.
-// - `?id=` opens one file. The tab title is `<file name> · Assets` while one is open, else "Assets".
+// - Folders and tags (ADR-0044 amendment): the grid shows the open folder's own folders, then its
+//   files. A kind, a tag or a search looks in the folder and every folder in it. Select files (the
+//   tick on a tile, or Shift-click for a run) to move, tag or remove many at once, or drag them onto
+//   a folder. Copy link puts a Markdown link to a file, folder or tag on the clipboard for a Note.
+// - `?id=` opens one file, `?folder=` a folder and `?tag=` a tag. The tab title is
+//   `<file name> · Assets` while one is open, else `<folder> · Assets`, `#<tag> · Assets` or "Assets".
 
 import * as as from '../../../../shared/assets.mjs'
+import { assetLink, assetFolderLink, assetTagLink } from '../../../../shared/item-links.mjs'
 
 const MD_URL = 'nomad://app-stdlib/vendor/markdown-it.js'
 const PDF_URL = '/js/pdf.build.js'
@@ -22,16 +28,23 @@ const PDF_WORKER_URL = '/js/pdf.worker.build.js'
 const SMALL_PICTURE = 3 * 1024 * 1024
 const CSV_ROWS = 500
 
+const params = () => new URLSearchParams(location.search)
 const state = {
   data: null, // nomad.vault.listAssets()
   error: '',
-  open: new URLSearchParams(location.search).get('id'), // the id of the file in the viewer
+  open: params().get('id'), // the id of the file in the viewer
+  folder: as.cleanFolder(params().get('folder') || ''), // the folder shown, '' for the top
+  tag: as.cleanTag(params().get('tag') || ''), // the tag shown, '' for none
   filter: 'all',
   query: '',
+  selected: new Set(), // ids picked for a change to many at once
+  lastPicked: null, // the id picked last, for Shift-click
   adding: null, // { done, total } while files are being added
   status: '',
   statusErr: false,
 }
+// Dragging tiles onto a folder moves them.
+const DRAG_TYPE = 'application/x-nomad-assets'
 const thumbs = new Map() // id -> URL ('' while loading, null when not here yet)
 const files = new Map() // id -> { url, blob } of the whole file, the newest few
 const KEEP_FILES = 6
@@ -46,7 +59,10 @@ async function start() {
   } catch {}
   window.addEventListener('keydown', onKey)
   window.addEventListener('popstate', () => {
-    state.open = new URLSearchParams(location.search).get('id')
+    state.open = params().get('id')
+    state.folder = as.cleanFolder(params().get('folder') || '')
+    state.tag = as.cleanTag(params().get('tag') || '')
+    state.selected.clear()
     render()
   })
   const main = () => document.querySelector('main')
@@ -69,8 +85,15 @@ async function start() {
 const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files')
 const canAdd = () => !!state.data?.canAdd
 const assets = () => state.data?.assets || []
-const shown = () => as.filterAssets(assets(), { filter: state.filter, query: state.query })
+const folders = () => state.data?.folders || []
+// Just looking around: no kind, tag or search, so the grid is the folder's own folders and files.
+const browsing = () => state.filter === 'all' && !state.query && !state.tag
+// The files in the open folder and every folder in it.
+const scoped = () => assets().filter((a) => as.inFolder(a.folder || '', state.folder))
+const shown = () =>
+  browsing() ? as.filterAssets(assets(), { folder: state.folder }) : as.filterAssets(scoped(), { filter: state.filter, query: state.query, tag: state.tag })
 const maxBytes = () => state.data?.maxBytes || as.MAX_BYTES
+const knownTags = () => as.tagCounts(assets()).map((t) => t.tag)
 
 async function load() {
   try {
@@ -80,6 +103,7 @@ async function load() {
     state.error = err?.message || String(err)
   }
   if (state.open && state.data && !assets().some((a) => a.id === state.open)) setOpen(null, true)
+  for (const id of [...state.selected]) if (!assets().some((a) => a.id === id)) state.selected.delete(id)
   render()
   if (state.open) loadFile(state.open)
 }
@@ -95,11 +119,31 @@ function describe(a) {
     .join(' · ')
 }
 
+function urlNow() {
+  const q = new URLSearchParams()
+  if (state.folder) q.set('folder', state.folder)
+  if (state.tag) q.set('tag', state.tag)
+  if (state.open) q.set('id', state.open)
+  const s = q.toString()
+  return s ? `?${s}` : location.pathname
+}
+
 function setOpen(id, replace = false) {
   state.open = id
-  const url = id ? `?id=${encodeURIComponent(id)}` : location.pathname
-  if (replace) history.replaceState(null, '', url)
-  else history.pushState(null, '', url)
+  if (replace) history.replaceState(null, '', urlNow())
+  else history.pushState(null, '', urlNow())
+}
+
+// Show a folder or a tag. Selection and the search start over.
+function go({ folder = state.folder, tag = state.tag } = {}, replace = false) {
+  state.folder = as.cleanFolder(folder)
+  state.tag = as.cleanTag(tag)
+  state.open = null
+  state.query = ''
+  state.selected.clear()
+  if (replace) history.replaceState(null, '', urlNow())
+  else history.pushState(null, '', urlNow())
+  render()
 }
 
 // Rendering
@@ -108,12 +152,13 @@ function setOpen(id, replace = false) {
 function render() {
   const data = state.data || {}
   const open = state.open ? assets().find((a) => a.id === state.open) : null
-  document.title = open ? `${open.name} · Assets` : 'Assets'
+  document.title = open ? `${open.name} · Assets` : state.tag ? `#${state.tag} · Assets` : state.folder ? `${as.folderName(state.folder)} · Assets` : 'Assets'
   const app = document.getElementById('app')
   const focused = document.activeElement?.id
   const input = el('input', { type: 'file', multiple: true, hidden: true, onchange: (e) => addFiles([...e.target.files]) })
   const count = assets().length
-  app.replaceChildren(
+  replaceKids(
+    app,
     el('header', {}, [
       el('div', { class: 'brand' }, [
         el('img', { src: 'asset:favicon:nomad://assets/', alt: '' }),
@@ -125,7 +170,7 @@ function render() {
       state.adding
         ? el('span', { class: 'status' }, [`Adding ${state.adding.done + 1} of ${state.adding.total}…`])
         : state.status
-          ? el('span', { class: `status${state.statusErr ? ' err' : ''}` }, [state.status])
+          ? el('span', { class: `status${state.statusErr ? ' err' : ''}`, role: 'status' }, [state.status])
           : null,
       count
         ? el('label', { class: 'search' }, [
@@ -134,7 +179,7 @@ function render() {
               id: 'search',
               type: 'search',
               value: state.query,
-              placeholder: 'Search files',
+              placeholder: state.folder ? `Search ${as.folderName(state.folder)}` : 'Search files',
               'aria-label': 'Search files',
               oninput: (e) => {
                 state.query = e.target.value
@@ -143,43 +188,110 @@ function render() {
             }),
           ])
         : null,
+      canAdd() ? el('button', { class: 'btn', onclick: newFolder }, [icon('folder-plus'), 'New folder']) : null,
       canAdd()
         ? el('button', { class: 'btn primary', disabled: !!state.adding, onclick: () => input.click() }, [icon('plus'), 'Add files'])
         : null,
       input,
     ]),
+    count || folders().length || state.folder || state.tag ? renderWhere() : null,
     count ? renderFilters() : null,
     el('main', {}, [renderBody()]),
-    ...(open ? [renderViewer(open)] : [])
+    state.selected.size ? renderSelection() : null,
+    open ? renderViewer(open) : null
   )
   if (focused === 'search') {
     const s = document.getElementById('search')
     s?.focus()
     s?.setSelectionRange(s.value.length, s.value.length)
-  }
+  } else if (focused === 'tag-add') document.getElementById('tag-add')?.focus()
   observeThumbs()
 }
 
-function renderFilters() {
-  const counts = new Map(as.FILTERS.map((f) => [f.id, as.filterAssets(assets(), { filter: f.id }).length]))
-  return el(
-    'nav',
-    { class: 'filters', 'aria-label': 'Kinds of files' },
-    as.FILTERS.filter((f) => f.id === 'all' || f.id === state.filter || counts.get(f.id)).map((f) =>
-      el(
-        'button',
-        {
-          class: `chip${state.filter === f.id ? ' on' : ''}`,
-          'aria-pressed': state.filter === f.id ? 'true' : 'false',
-          onclick: () => {
-            state.filter = f.id
-            render()
-          },
-        },
-        [f.label, el('span', { class: 'n' }, [String(counts.get(f.id))])]
-      )
+// Where you are: Assets › Recipes › Desserts (each a place to go, and to drop files on), or a tag,
+// with what can be done to it.
+function renderWhere() {
+  const parts = state.folder ? state.folder.split('/') : []
+  const atTop = !state.folder && !state.tag
+  const crumbs = [
+    atTop
+      ? el('span', { class: 'crumb here', 'aria-current': 'page', ...dropOn('') }, [icon('home'), 'Assets'])
+      : el('button', { class: 'crumb', onclick: () => go({ folder: '', tag: '' }), ...dropOn('') }, [icon('home'), 'Assets']),
+  ]
+  parts.forEach((name, i) => {
+    const path = parts.slice(0, i + 1).join('/')
+    crumbs.push(el('span', { class: 'sep', 'aria-hidden': 'true' }, ['›']))
+    crumbs.push(
+      i === parts.length - 1 && !state.tag
+        ? el('span', { class: 'crumb here', 'aria-current': 'page' }, [icon('folder-open'), name])
+        : el('button', { class: 'crumb', onclick: () => go({ folder: path, tag: '' }), ...dropOn(path) }, [icon('folder'), name])
     )
-  )
+  })
+  if (state.tag) {
+    crumbs.push(el('span', { class: 'sep', 'aria-hidden': 'true' }, ['›']))
+    crumbs.push(el('span', { class: 'crumb here', 'aria-current': 'page' }, [icon('tag'), state.tag]))
+  }
+  const edit = canAdd()
+  let actions = []
+  if (state.tag) {
+    actions = [
+      el('button', { class: 'btn small', onclick: () => copyLink(`#${state.tag}`, assetTagLink(state.tag)) }, [icon('link'), 'Copy link']),
+      el('button', { class: 'btn small', onclick: () => go({ tag: '' }) }, [icon('times'), 'Clear tag']),
+    ]
+  } else if (state.folder) {
+    actions = [
+      el('button', { class: 'btn small', onclick: () => copyLink(as.folderName(state.folder), assetFolderLink(state.folder)) }, [icon('link'), 'Copy link']),
+      edit ? el('button', { class: 'btn small', onclick: () => renameFolder(state.folder) }, [icon('pen'), 'Rename']) : null,
+      edit ? el('button', { class: 'btn small', onclick: () => moveFolder(state.folder) }, [icon('arrow-right'), 'Move']) : null,
+      edit ? el('button', { class: 'btn small danger', onclick: () => removeFolder(state.folder) }, [icon('trash'), 'Remove']) : null,
+    ]
+  }
+  return el('nav', { class: 'where', 'aria-label': 'Folders' }, [el('div', { class: 'crumbs' }, crumbs), el('div', { class: 'spacer' }), ...actions])
+}
+
+function renderFilters() {
+  const pool = scoped()
+  const counts = new Map(as.FILTERS.map((f) => [f.id, as.filterAssets(pool, { filter: f.id }).length]))
+  const tags = as.tagCounts(pool)
+  if (state.tag && !tags.some((t) => t.tag === state.tag)) tags.unshift({ tag: state.tag, count: 0 })
+  return el('div', { class: 'filters' }, [
+    el(
+      'nav',
+      { class: 'chips', 'aria-label': 'Kinds of files' },
+      as.FILTERS.filter((f) => f.id === 'all' || f.id === state.filter || counts.get(f.id)).map((f) =>
+        el(
+          'button',
+          {
+            class: `chip${state.filter === f.id ? ' on' : ''}`,
+            'aria-pressed': state.filter === f.id ? 'true' : 'false',
+            onclick: () => {
+              state.filter = f.id
+              render()
+            },
+          },
+          [f.label, el('span', { class: 'n' }, [String(counts.get(f.id))])]
+        )
+      )
+    ),
+    tags.length
+      ? el(
+          'nav',
+          { class: 'chips tags', 'aria-label': 'Tags' },
+          tags.map((t) =>
+            el(
+              'button',
+              {
+                class: `chip tag${state.tag === t.tag ? ' on' : ''}`,
+                'aria-pressed': state.tag === t.tag ? 'true' : 'false',
+                title: state.tag === t.tag ? 'Show every file again' : `Show the files tagged ${t.tag}`,
+                onclick: () => go({ tag: state.tag === t.tag ? '' : t.tag }),
+              },
+              [`#${t.tag}`, el('span', { class: 'n' }, [String(t.count)])]
+            )
+          )
+        )
+      : null,
+  ])
 }
 
 function renderBody() {
@@ -187,7 +299,7 @@ function renderBody() {
   if (state.error) return el('div', { class: 'notice' }, [state.error])
   if (!data) return el('div', { class: 'notice' }, ['Loading…'])
   const place = data.spaceName || 'this Space'
-  if (!assets().length) {
+  if (!assets().length && !folders().length) {
     return el('div', { class: 'notice' }, [
       el('div', {}, [icon('folder-open')]),
       el('h2', {}, ['No files yet']),
@@ -201,17 +313,49 @@ function renderBody() {
       data.canAdd ? el('button', { class: 'btn primary', onclick: () => document.querySelector('header input[type=file]')?.click() }, [icon('plus'), 'Add files']) : null,
     ])
   }
+  if (state.folder && !folders().includes(state.folder)) {
+    return el('div', { class: 'notice' }, [
+      el('div', {}, [icon('folder')]),
+      el('h2', {}, ['This folder isn’t here']),
+      el('div', {}, ['Someone may have renamed, moved or removed it.']),
+      el('button', { class: 'btn', onclick: () => go({ folder: '', tag: '' }) }, ['Go to all files']),
+    ])
+  }
+  const subs = browsing() ? as.childFolders(folders(), state.folder, assets()) : []
   const list = shown()
-  const body = list.length
-    ? as.byMonth(list).map((g) =>
+  const body = []
+  if (subs.length) {
+    body.push(
+      el('section', { class: 'month folders' }, [
+        el('h2', {}, ['Folders', el('span', { class: 'n' }, [String(subs.length)])]),
+        el('div', { class: 'grid folder-grid' }, subs.map(renderFolderTile)),
+      ])
+    )
+  }
+  if (list.length) {
+    for (const g of as.byMonth(list)) {
+      body.push(
         el('section', { class: 'month' }, [
           el('h2', {}, [g.label, el('span', { class: 'n' }, [String(g.assets.length)])]),
           el('div', { class: 'grid' }, g.assets.map(renderTile)),
         ])
       )
-    : [el('div', { class: 'notice' }, [state.query ? `Nothing matches “${state.query}”.` : 'No files of this kind.'])]
+    }
+  } else if (state.query) body.push(el('div', { class: 'notice' }, [`Nothing matches “${state.query}”.`]))
+  else if (state.tag) body.push(el('div', { class: 'notice' }, [`No files are tagged ${state.tag}${state.folder ? ' in this folder' : ''}.`]))
+  else if (!browsing()) body.push(el('div', { class: 'notice' }, ['No files of this kind.']))
+  else if (!subs.length) {
+    body.push(
+      el('div', { class: 'notice' }, [
+        el('div', {}, [icon('folder-open')]),
+        el('h2', {}, ['This folder is empty']),
+        el('div', {}, [data.canAdd ? 'Add files here, drop them on this page, or move files in from another folder.' : 'Nothing’s been put here yet.']),
+        data.canAdd ? el('button', { class: 'btn primary', onclick: () => document.querySelector('header input[type=file]')?.click() }, [icon('plus'), 'Add files']) : null,
+      ])
+    )
+  }
   return el('div', {}, [
-    !data.shared
+    !data.shared && !state.folder && !state.tag
       ? el('p', { class: 'hint' }, [
           icon('lock'),
           `Only you see these files, on your own devices. Share ${place} to keep them with the people in it, in `,
@@ -225,22 +369,140 @@ function renderBody() {
 
 const hasPicture = (a) => a.thumb || (a.kind === 'image' && a.bytes <= SMALL_PICTURE)
 
+function renderFolderTile(f) {
+  return el(
+    'button',
+    {
+      class: 'folder-tile',
+      title: f.path,
+      'aria-label': `Folder ${f.name}, ${f.count} file${f.count === 1 ? '' : 's'}`,
+      onclick: () => go({ folder: f.path, tag: '' }),
+      ...dropOn(f.path),
+    },
+    [icon('folder'), el('span', { class: 'name' }, [f.name]), el('span', { class: 'n' }, [f.count ? `${f.count} file${f.count === 1 ? '' : 's'}` : 'Empty'])]
+  )
+}
+
 function renderTile(a) {
   const media = hasPicture(a)
-  const label = `${a.name}, ${as.KIND_LABELS[a.kind] || 'File'}, ${whenText(a.takenAt)}${a.by ? `, added by ${a.by}` : ''}${a.source === 'ai' ? ', saved by your AI' : ''}`
-  return el('button', { class: `tile${media ? ' media' : ' doc'}`, 'data-id': a.id, 'data-picture': media ? '1' : '', title: a.caption || a.name, 'aria-label': label, onclick: () => openAsset(a.id) }, [
-    media && thumbs.get(a.id) ? el('img', { src: thumbs.get(a.id), alt: '' }) : null,
-    !media
-      ? el('div', { class: `doc-face kind-${a.kind}` }, [
-          icon(as.KIND_ICONS[a.kind] || 'file'),
-          el('span', { class: 'ext' }, [as.extOf(a.name).toUpperCase() || as.KIND_LABELS[a.kind]]),
-        ])
-      : null,
-    a.kind === 'video' ? el('span', { class: 'play' }, [icon('play'), a.duration ? as.formatDuration(a.duration) : '']) : null,
-    a.source === 'ai' ? el('span', { class: 'ai', title: 'Saved by your AI' }, [icon('magic')]) : null,
-    !media ? el('span', { class: 'name' }, [a.name]) : null,
-    a.by && media ? el('span', { class: 'by' }, [a.by]) : null,
+  const picked = state.selected.has(a.id)
+  const label = `${a.name}, ${as.KIND_LABELS[a.kind] || 'File'}, ${whenText(a.takenAt)}${a.by ? `, added by ${a.by}` : ''}${a.source === 'ai' ? ', saved by your AI' : ''}${a.folder && !browsing() ? `, in ${a.folder}` : ''}`
+  const tile = el(
+    'button',
+    {
+      class: `tile${media ? ' media' : ' doc'}`,
+      'data-id': a.id,
+      'data-picture': media ? '1' : '',
+      title: [a.caption || a.name, a.folder && !browsing() ? `In ${a.folder}` : '', (a.tags || []).map((t) => `#${t}`).join(' ')].filter(Boolean).join('\n'),
+      'aria-label': label,
+      draggable: canAdd() ? 'true' : null,
+      onclick: (e) => {
+        if (e.shiftKey || state.selected.size) return pick(a.id, e.shiftKey)
+        openAsset(a.id)
+      },
+      ondragstart: (e) => {
+        const ids = state.selected.has(a.id) ? [...state.selected] : [a.id]
+        e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(ids))
+        e.dataTransfer.effectAllowed = 'move'
+      },
+    },
+    [
+      media && thumbs.get(a.id) ? el('img', { src: thumbs.get(a.id), alt: '' }) : null,
+      !media
+        ? el('div', { class: `doc-face kind-${a.kind}` }, [
+            icon(as.KIND_ICONS[a.kind] || 'file'),
+            el('span', { class: 'ext' }, [as.extOf(a.name).toUpperCase() || as.KIND_LABELS[a.kind]]),
+          ])
+        : null,
+      a.kind === 'video' ? el('span', { class: 'play' }, [icon('play'), a.duration ? as.formatDuration(a.duration) : '']) : null,
+      a.source === 'ai' ? el('span', { class: 'ai', title: 'Saved by your AI' }, [icon('magic')]) : null,
+      !media ? el('span', { class: 'name' }, [a.name]) : null,
+      a.by && media ? el('span', { class: 'by' }, [a.by]) : null,
+    ]
+  )
+  return el('div', { class: `cell${picked ? ' picked' : ''}${state.selected.size ? ' picking' : ''}` }, [
+    tile,
+    el(
+      'button',
+      {
+        class: 'pick',
+        'aria-pressed': picked ? 'true' : 'false',
+        'aria-label': `${picked ? 'Unselect' : 'Select'} ${a.name}`,
+        title: picked ? 'Unselect' : 'Select',
+        onclick: (e) => pick(a.id, e.shiftKey),
+      },
+      [icon('check')]
+    ),
   ])
+}
+
+// Drag files onto a folder (a tile or a crumb) to move them there.
+function dropOn(path) {
+  if (!canAdd()) return {}
+  const over = (e) => [...(e.dataTransfer?.types || [])].includes(DRAG_TYPE)
+  return {
+    ondragover: (e) => {
+      if (!over(e)) return
+      e.preventDefault()
+      e.currentTarget.classList.add('drop')
+    },
+    ondragleave: (e) => e.currentTarget.classList.remove('drop'),
+    ondrop: (e) => {
+      if (!over(e)) return
+      e.preventDefault()
+      e.stopPropagation()
+      e.currentTarget.classList.remove('drop')
+      let ids = []
+      try {
+        ids = JSON.parse(e.dataTransfer.getData(DRAG_TYPE))
+      } catch {}
+      if (Array.isArray(ids) && ids.length) moveTo(ids, path)
+    },
+  }
+}
+
+// Select or unselect a file; Shift picks every file between it and the one picked last.
+function pick(id, range = false) {
+  const list = shown()
+  if (range && state.lastPicked && state.lastPicked !== id) {
+    const a = list.findIndex((x) => x.id === state.lastPicked)
+    const b = list.findIndex((x) => x.id === id)
+    if (a >= 0 && b >= 0) {
+      for (const x of list.slice(Math.min(a, b), Math.max(a, b) + 1)) state.selected.add(x.id)
+      state.lastPicked = id
+      render()
+      return
+    }
+  }
+  if (state.selected.has(id)) state.selected.delete(id)
+  else state.selected.add(id)
+  state.lastPicked = id
+  render()
+}
+
+// The bar at the bottom while files are selected.
+function renderSelection() {
+  const ids = [...state.selected]
+  const picked = assets().filter((a) => state.selected.has(a.id))
+  const removable = picked.filter((a) => a.canDelete).length
+  const all = shown()
+  return el('div', { class: 'selection', role: 'toolbar', 'aria-label': 'Selected files' }, [
+    el('button', { class: 'icon-btn', title: 'Clear selection', 'aria-label': 'Clear selection', onclick: clearSelection }, [icon('times')]),
+    el('span', { class: 'n' }, [`${ids.length} selected`]),
+    all.some((a) => !state.selected.has(a.id))
+      ? el('button', { class: 'btn small', onclick: () => (all.forEach((a) => state.selected.add(a.id)), render()) }, ['Select all'])
+      : null,
+    el('div', { class: 'spacer' }),
+    canAdd() ? el('button', { class: 'btn small', onclick: () => moveAssets(ids) }, [icon('arrow-right'), 'Move to…']) : null,
+    canAdd() ? el('button', { class: 'btn small', onclick: () => tagAssets(ids) }, [icon('tag'), 'Tags…']) : null,
+    removable ? el('button', { class: 'btn small danger', onclick: () => removeAssets(picked) }, [icon('trash'), 'Remove']) : null,
+  ])
+}
+
+function clearSelection() {
+  state.selected.clear()
+  state.lastPicked = null
+  render()
 }
 
 // Thumbnails load as their tiles come into view.
@@ -321,7 +583,11 @@ function step(n) {
 }
 
 function onKey(e) {
-  if (!state.open || ['INPUT', 'TEXTAREA'].includes(e.target?.tagName)) return
+  if (document.querySelector('dialog[open]') || ['INPUT', 'TEXTAREA'].includes(e.target?.tagName)) return
+  if (!state.open) {
+    if (e.key === 'Escape' && state.selected.size) clearSelection()
+    return
+  }
   if (e.key === 'Escape') close()
   else if (e.key === 'ArrowRight') step(1)
   else if (e.key === 'ArrowLeft') step(-1)
@@ -349,9 +615,11 @@ function renderViewer(a) {
             })
           : el('div', { class: 'name' }, [a.name]),
         el('div', { class: 'meta' }, [
-          [describe(a), whenText(a.takenAt), a.by ? `Added by ${a.by}` : '', a.source === 'ai' ? 'Saved by your AI' : ''].filter(Boolean).join(' · '),
+          [describe(a), whenText(a.takenAt), a.by ? `Added by ${a.by}` : '', a.source === 'ai' ? 'Saved by your AI' : '', a.folder ? `In ${a.folder.split('/').join(' › ')}` : ''].filter(Boolean).join(' · '),
         ]),
       ]),
+      el('button', { class: 'icon-btn', title: 'Copy link for a note', 'aria-label': 'Copy link for a note', onclick: () => copyLink(a.name, assetLink(a.id)) }, [icon('link')]),
+      editable ? el('button', { class: 'icon-btn', title: 'Move to a folder', 'aria-label': 'Move to a folder', onclick: () => moveAssets([a.id]) }, [icon('folder')]) : null,
       a.sourceUrl ? el('a', { class: 'icon-btn', href: a.sourceUrl, target: '_blank', rel: 'noopener', title: 'Open where it came from', 'aria-label': 'Open where it came from' }, [icon('external-link-alt')]) : null,
       el('a', { class: 'icon-btn', href: f?.url || '#', download: a.name, title: 'Download', 'aria-label': 'Download', 'aria-disabled': f ? 'false' : 'true' }, [icon('download')]),
       a.canDelete ? el('button', { class: 'icon-btn', title: 'Remove from Assets', 'aria-label': 'Remove from Assets', onclick: () => remove(a) }, [icon('trash')]) : null,
@@ -363,6 +631,7 @@ function renderViewer(a) {
       many ? el('button', { class: 'icon-btn side', title: 'Next file', 'aria-label': 'Next file', onclick: () => step(1) }, [icon('chevron-right')]) : null,
     ]),
     el('div', { class: 'caption' }, [
+      renderTags(a, editable),
       editable
         ? el('input', {
             type: 'text',
@@ -379,6 +648,47 @@ function renderViewer(a) {
           ? el('p', {}, [a.caption])
           : null,
     ]),
+  ])
+}
+
+// The file's tags in the viewer: each goes to its tag; × takes it off; the box adds one.
+function renderTags(a, editable) {
+  const tags = a.tags || []
+  if (!tags.length && !editable) return null
+  const listId = 'known-tags'
+  return el('div', { class: 'tags-row' }, [
+    ...tags.map((t) =>
+      el('span', { class: 'tag-chip' }, [
+        el('button', { class: 'tag-go', title: `Show the files tagged ${t}`, onclick: () => go({ folder: '', tag: t }) }, [`#${t}`]),
+        editable
+          ? el('button', { class: 'tag-x', title: `Remove the tag ${t}`, 'aria-label': `Remove the tag ${t}`, onclick: () => save(a, { tags: tags.filter((x) => x !== t) }) }, [icon('times')])
+          : null,
+      ])
+    ),
+    editable
+      ? el('input', {
+          id: 'tag-add',
+          class: 'tag-add',
+          type: 'text',
+          placeholder: tags.length ? 'Add a tag' : 'Add tags',
+          'aria-label': 'Add a tag',
+          list: listId,
+          maxlength: String(as.MAX_TAG * 4),
+          onkeydown: (e) => {
+            if (e.key === 'Enter' || e.key === ',') {
+              e.preventDefault()
+              const add = as.normalizeTags(e.target.value)
+              if (add.length) save(a, { tags: [...tags, ...add] })
+              e.target.value = ''
+            }
+          },
+          onchange: (e) => {
+            const add = as.normalizeTags(e.target.value)
+            if (add.length) save(a, { tags: [...tags, ...add] })
+          },
+        })
+      : null,
+    editable ? el('datalist', { id: listId }, knownTags().filter((t) => !tags.includes(t)).map((t) => el('option', { value: t }))) : null,
   ])
 }
 
@@ -564,6 +874,250 @@ async function remove(a) {
   }
 }
 
+// A Markdown link, ready to paste in a Note: `[name](nomad://assets/?…)`.
+async function copyLink(name, url) {
+  const text = `[${String(name).replace(/[[\]]/g, '')}](${url})`
+  try {
+    await navigator.clipboard.writeText(text)
+    say('Link copied. Paste it in a note.')
+  } catch {
+    say('Couldn’t copy the link', true)
+  }
+}
+
+// Run a change, reload, and say how it went.
+async function act(fn, done) {
+  try {
+    const res = await fn()
+    await load()
+    if (done) say(typeof done === 'function' ? done(res) : done)
+    return res
+  } catch (err) {
+    say(err?.message || String(err), true)
+    return undefined
+  }
+}
+
+async function newFolder() {
+  const name = await askText({ title: 'New folder', label: state.folder ? `In ${state.folder.split('/').join(' › ')}` : 'In Assets', ok: 'Create' })
+  const clean = as.cleanFolderName(name)
+  if (!clean) return
+  const path = as.joinFolder(state.folder, clean)
+  if (await act(() => nomad.vault.addAssetFolder(path), `Made the folder ${clean}`)) render()
+}
+
+// Where the open folder is after `from` moved to `to`.
+const movedFolder = (path, from, to) => (as.inFolder(path, from) ? as.cleanFolder(to + path.slice(from.length)) : path)
+
+async function renameFolder(path) {
+  const name = await askText({ title: 'Rename folder', label: 'Name', value: as.folderName(path), ok: 'Rename' })
+  const clean = as.cleanFolderName(name)
+  if (!clean || clean === as.folderName(path)) return
+  const to = as.joinFolder(as.parentFolder(path), clean)
+  if (folders().includes(to)) return say(`There’s already a folder called ${clean} here`, true)
+  if (await act(() => nomad.vault.moveAssetFolder({ from: path, to }), `Renamed it ${clean}`)) go({ folder: movedFolder(state.folder, path, to) }, true)
+}
+
+async function moveFolder(path) {
+  const dest = await pickFolder({ title: `Move “${as.folderName(path)}” to…`, not: path })
+  if (dest == null) return
+  const to = as.joinFolder(dest, as.folderName(path))
+  if (to === path) return
+  if (folders().includes(to)) return say(`There’s already a folder called ${as.folderName(path)} there`, true)
+  if (await act(() => nomad.vault.moveAssetFolder({ from: path, to }), `Moved it to ${dest || 'Assets'}`)) go({ folder: movedFolder(state.folder, path, to) }, true)
+}
+
+async function removeFolder(path) {
+  const n = assets().filter((a) => a.folder && as.inFolder(a.folder, path)).length
+  const where = state.data?.shared && n ? ` They go for everyone in ${state.data?.spaceName || 'the Space'}.` : ''
+  if (!confirm(`Remove the folder “${as.folderName(path)}”${n ? ` and the ${n} file${n === 1 ? '' : 's'} in it` : ''}?${where}`)) return
+  if (await act(() => nomad.vault.deleteAssetFolder(path), 'Removed the folder')) go({ folder: as.parentFolder(path) }, true)
+}
+
+async function moveAssets(ids) {
+  const here = ids.length === 1 ? assets().find((a) => a.id === ids[0])?.folder || '' : null
+  const dest = await pickFolder({ title: ids.length === 1 ? 'Move to…' : `Move ${ids.length} files to…`, current: here })
+  if (dest == null) return
+  moveTo(ids, dest)
+}
+
+async function moveTo(ids, folder) {
+  const res = await act(() => nomad.vault.updateAssets({ ids, folder }), (r) => `Moved ${r.changed} file${r.changed === 1 ? '' : 's'} to ${folder ? as.folderName(folder) : 'Assets'}`)
+  if (res) {
+    state.selected.clear()
+    render()
+  }
+}
+
+async function tagAssets(ids) {
+  const picked = assets().filter((a) => ids.includes(a.id))
+  const change = await editTags(picked)
+  if (!change) return
+  const res = await act(() => nomad.vault.updateAssets({ ids, addTags: change.add, removeTags: change.remove }), (r) => `Changed the tags on ${r.changed} file${r.changed === 1 ? '' : 's'}`)
+  if (res) {
+    state.selected.clear()
+    render()
+  }
+}
+
+async function removeAssets(picked) {
+  const mine = picked.filter((a) => a.canDelete)
+  const theirs = picked.length - mine.length
+  const where = state.data?.shared ? ` They go for everyone in ${state.data?.spaceName || 'the Space'}.` : ''
+  const skip = theirs ? ` ${theirs} added by someone else will stay.` : ''
+  if (!confirm(`Remove ${mine.length} file${mine.length === 1 ? '' : 's'} from Assets?${where}${skip}`)) return
+  const res = await act(() => nomad.vault.deleteAssets(mine.map((a) => a.id)), (r) => `Removed ${r.removed} file${r.removed === 1 ? '' : 's'}`)
+  if (res) {
+    state.selected.clear()
+    render()
+  }
+}
+
+// Dialogs
+// =
+
+// A <dialog> outside #app, so a render doesn't wipe what's typed in it. Resolves with what `body`
+// gives `done`, or null when it's closed.
+function dialog(title, build) {
+  return new Promise((resolve) => {
+    let result = null
+    const d = el('dialog', { class: 'dlg', 'aria-label': title })
+    const done = (value) => {
+      result = value
+      d.close()
+    }
+    const { body, ok, onOk } = build(done)
+    d.append(
+      el('form', { method: 'dialog', onsubmit: (e) => (e.preventDefault(), onOk()) }, [
+        el('h2', {}, [title]),
+        body,
+        el('div', { class: 'dlg-actions' }, [
+          el('button', { type: 'button', class: 'btn', onclick: () => done(null) }, ['Cancel']),
+          el('button', { type: 'submit', class: 'btn primary' }, [ok]),
+        ]),
+      ])
+    )
+    d.addEventListener('close', () => {
+      d.remove()
+      resolve(result)
+    })
+    document.body.append(d)
+    d.showModal()
+    d.querySelector('input:not([type=hidden])')?.focus()
+  })
+}
+
+function askText({ title, label, value = '', ok = 'OK' }) {
+  return dialog(title, (done) => {
+    const input = el('input', { type: 'text', class: 'text', value, 'aria-label': label, maxlength: String(as.MAX_FOLDER_PART) })
+    setTimeout(() => input.select(), 0)
+    return { body: el('label', { class: 'field' }, [el('span', {}, [label]), input]), ok, onOk: () => done(input.value) }
+  })
+}
+
+// Pick a folder: '' is the top. `not` leaves a folder (and what's in it) out, for moving it.
+function pickFolder({ title, current = null, not = null }) {
+  return dialog(title, (done) => {
+    let chosen = current ?? state.folder
+    const extra = [] // folders made here, kept until the move writes them
+    const list = el('div', { class: 'folder-list', role: 'listbox', 'aria-label': 'Folders' })
+    const draw = () => {
+      const all = [...new Set([...folders(), ...extra])].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
+      const rows = ['', ...all.filter((f) => !not || !as.inFolder(f, not))]
+      list.replaceChildren(
+        ...rows.map((f) =>
+          el(
+            'button',
+            {
+              type: 'button',
+              class: `folder-row${f === chosen ? ' on' : ''}`,
+              role: 'option',
+              'aria-selected': f === chosen ? 'true' : 'false',
+              style: `padding-left: ${12 + (f ? f.split('/').length : 0) * 18}px`,
+              onclick: () => {
+                chosen = f
+                draw()
+              },
+              ondblclick: () => done(f),
+            },
+            [icon(f ? 'folder' : 'home'), f ? as.folderName(f) : 'Assets', f === current ? el('span', { class: 'here' }, ['now']) : null]
+          )
+        )
+      )
+    }
+    draw()
+    const name = el('input', { type: 'text', class: 'text', placeholder: 'New folder', 'aria-label': 'New folder name', maxlength: String(as.MAX_FOLDER_PART) })
+    const make = () => {
+      const clean = as.cleanFolderName(name.value)
+      if (!clean) return
+      const path = as.joinFolder(chosen, clean)
+      extra.push(path)
+      chosen = path
+      name.value = ''
+      draw()
+    }
+    name.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        make()
+      }
+    })
+    return {
+      body: el('div', {}, [
+        list,
+        el('div', { class: 'new-folder' }, [
+          name,
+          el('button', { type: 'button', class: 'btn', onclick: make }, [icon('folder-plus'), 'Make']),
+        ]),
+      ]),
+      ok: 'Move here',
+      onOk: () => done(chosen),
+    }
+  })
+}
+
+// Add tags to some files, or take tags off them: { add, remove }.
+function editTags(picked) {
+  return dialog(picked.length === 1 ? 'Tags' : `Tags for ${picked.length} files`, (done) => {
+    const counts = as.tagCounts(picked)
+    const remove = new Set()
+    const chips = el('div', { class: 'tags-row' })
+    const draw = () =>
+      chips.replaceChildren(
+        ...(counts.length
+          ? counts.map(({ tag, count }) =>
+              el(
+                'button',
+                {
+                  type: 'button',
+                  class: `tag-chip toggle${remove.has(tag) ? ' off' : ''}`,
+                  'aria-pressed': remove.has(tag) ? 'false' : 'true',
+                  title: remove.has(tag) ? `Keep ${tag}` : `Take ${tag} off`,
+                  onclick: () => {
+                    if (remove.has(tag)) remove.delete(tag)
+                    else remove.add(tag)
+                    draw()
+                  },
+                },
+                [`#${tag}`, picked.length > 1 ? el('span', { class: 'n' }, [`${count}`]) : null, icon(remove.has(tag) ? 'undo' : 'times')]
+              )
+            )
+          : [el('span', { class: 'muted' }, ['No tags yet.'])])
+      )
+    draw()
+    const input = el('input', { type: 'text', class: 'text', placeholder: 'family, recipes, taxes 2026', 'aria-label': 'Tags to add', list: 'dlg-known-tags' })
+    return {
+      body: el('div', {}, [
+        chips,
+        el('label', { class: 'field' }, [el('span', {}, ['Add tags, with commas between them']), input]),
+        el('datalist', { id: 'dlg-known-tags' }, knownTags().map((t) => el('option', { value: t }))),
+      ]),
+      ok: 'Save',
+      onOk: () => done({ add: as.normalizeTags(input.value), remove: [...remove] }),
+    }
+  })
+}
+
 function say(text, err = false) {
   state.status = text
   state.statusErr = err
@@ -586,9 +1140,11 @@ async function addFiles(list) {
   let lastError = ''
   state.adding = { done: 0, total: list.length }
   render()
+  // A file added in a folder goes in it, and one added while a tag is shown gets the tag.
+  const where = { folder: state.folder || undefined, tags: state.tag ? [state.tag] : undefined }
   for (const file of list) {
     try {
-      await nomad.vault.addAsset(await prepare(file))
+      await nomad.vault.addAsset({ ...(await prepare(file)), ...where })
     } catch (err) {
       failed++
       lastError = err?.message || String(err)
@@ -783,6 +1339,11 @@ function el(tag, attrs, children) {
   }
   for (const c of children || []) if (c != null && c !== false && c !== '') node.append(c)
   return node
+}
+
+// replaceChildren, leaving out the parts that aren't there.
+function replaceKids(node, ...kids) {
+  node.replaceChildren(...kids.filter((k) => k != null && k !== false))
 }
 
 function icon(name) {

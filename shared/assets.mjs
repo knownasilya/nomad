@@ -9,6 +9,10 @@
 // into the Space Library when the Space is shared. Files are blobs in the adding writer's own blob
 // core, so the oplog carries only pointers.
 //
+// A file can have tags and sit in a folder (ADR-0044 amendment): `tags` and `folder` on its record.
+// A folder is a path ('Recipes/Desserts'); one that holds no files is kept by a folder record,
+// `<root>folders/<folderKey(path)>.json`, so a new folder stays until it is removed.
+//
 // The family album's photos (`/photos/items|files|thumbs/`) are Assets now: `legacyPaths` and
 // `fromPhoto` read them, and a Device that can write the Space Library moves them (same blobs, new
 // paths) the first time it lists the Space's Assets.
@@ -72,6 +76,8 @@ export function pathsOf(root = LIB_ASSETS) {
     item: (id) => root + 'items/' + check(id) + '.json',
     file: (id) => root + 'files/' + check(id),
     thumb: (id) => root + 'thumbs/' + check(id) + '.jpg',
+    folders: root + 'folders/',
+    folder: (path) => root + 'folders/' + folderKey(path) + '.json',
   }
 }
 
@@ -242,13 +248,16 @@ const clean = (s, max) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, m
  * An Asset's record. `by` and `memberId` say who added it, `source` 'ai' that the user's AI did
  * (with the page it came from as `sourceUrl`). An edit (a name, a caption) keeps the rest.
  * `takenAt` is when a photo or video was taken, else when the file was added.
- * @param {{ id: string, name?: string, mime?: string, bytes?: number, width?: number, height?: number, duration?: number, takenAt?: string | null, by?: string, memberId?: string | null, caption?: string, thumb?: boolean, source?: string, sourceUrl?: string }} f
+ * `tags` and `folder` are the user's to change, like the name and caption.
+ * @param {{ id: string, name?: string, mime?: string, bytes?: number, width?: number, height?: number, duration?: number, takenAt?: string | null, by?: string, memberId?: string | null, caption?: string, thumb?: boolean, source?: string, sourceUrl?: string, tags?: string[] | string, folder?: string }} f
  */
 export function makeAsset(f, prev = null, now = new Date().toISOString()) {
   const id = check(String(f.id || ''))
   const name = cleanName(f.name ?? prev?.name ?? '', prev?.name || 'Untitled')
   const mime = prev ? prev.mime : mimeOf(name, f.mime)
   const caption = clean(f.caption ?? prev?.caption ?? '', MAX_CAPTION)
+  const tags = normalizeTags(f.tags ?? prev?.tags ?? [])
+  const folder = cleanFolder(f.folder ?? prev?.folder ?? '')
   const from = prev || f
   const rec = {
     type: ASSET_TYPE,
@@ -273,6 +282,8 @@ export function makeAsset(f, prev = null, now = new Date().toISOString()) {
   const sourceUrl = clean(from.sourceUrl, 2000)
   if (sourceUrl && /^(https?|hyper):\/\//.test(sourceUrl)) rec.sourceUrl = sourceUrl
   if (caption) rec.caption = caption
+  if (tags.length) rec.tags = tags
+  if (folder) rec.folder = folder
   return rec
 }
 
@@ -355,14 +366,18 @@ const fold = (s) =>
     .toLowerCase()
 
 // The Assets a filter and a search show: every word typed, in any order, ignoring case and accents
-// (Notes' and Reader's rule), in the name, caption, who added it, or the kind.
-export function filterAssets(list, { filter = 'all', query = '' } = {}) {
+// (Notes' and Reader's rule), in the name, caption, who added it, the kind, the tags or the folder.
+// `tag` keeps those with that tag; `folder` (when given, '' for the top) those right in that folder.
+export function filterAssets(list, { filter = 'all', query = '', tag = '', folder = null } = {}) {
   const kinds = new Set((FILTERS.find((f) => f.id === filter) || FILTERS[0]).kinds)
   const words = fold(query).split(/\s+/).filter(Boolean)
+  const want = tag ? cleanTag(tag) : ''
   return list.filter((a) => {
     if (!kinds.has(a.kind || kindOf(a.mime, a.name))) return false
+    if (want && !(a.tags || []).includes(want)) return false
+    if (folder != null && (a.folder || '') !== folder) return false
     if (!words.length) return true
-    const hay = fold([a.name, a.caption, a.by, KIND_LABELS[a.kind] || '', a.source === 'ai' ? 'ai' : ''].join(' '))
+    const hay = fold([a.name, a.caption, a.by, KIND_LABELS[a.kind] || '', a.source === 'ai' ? 'ai' : '', ...(a.tags || []), a.folder || ''].join(' '))
     return words.every((w) => hay.includes(w))
   })
 }
@@ -393,4 +408,146 @@ export function canDelete(asset, { shared = true, memberId = null, role = null, 
   if (!writable) return false
   if (!shared || role === 'owner') return true
   return !!memberId && asset?.memberId === memberId
+}
+
+// Tags
+// =
+
+export const MAX_TAGS = 20
+export const MAX_TAG = 40
+
+// A tag as it is kept: lowercase, no '#' or commas, spaces collapsed, at most MAX_TAG. '' for none.
+export function cleanTag(s) {
+  return String(s || '')
+    .normalize('NFC')
+    // oxlint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f,#]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .slice(0, MAX_TAG)
+    .trim()
+}
+
+// Tags from a list or a comma-separated string: cleaned, each once, at most MAX_TAGS.
+export function normalizeTags(list) {
+  const parts = Array.isArray(list) ? list : String(list || '').split(',')
+  const out = []
+  for (const p of parts) {
+    const t = cleanTag(p)
+    if (t && !out.includes(t)) out.push(t)
+    if (out.length >= MAX_TAGS) break
+  }
+  return out
+}
+
+// Every tag the Assets use, most used first, then by name: [{ tag, count }].
+export function tagCounts(list) {
+  const counts = new Map()
+  for (const a of list) for (const t of a.tags || []) counts.set(t, (counts.get(t) || 0) + 1)
+  return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+}
+
+// A record's tags after adding `add` and taking away `remove` (bulk edit).
+export function changeTags(tags, { add = [], remove = [] } = {}) {
+  const gone = new Set(normalizeTags(remove))
+  return normalizeTags([...(tags || []), ...normalizeTags(add)]).filter((t) => !gone.has(t))
+}
+
+// Folders
+// =
+
+export const FOLDER_TYPE = 'nomad/asset-folder'
+export const MAX_FOLDER_PART = 80
+export const MAX_FOLDER_DEPTH = 8
+
+// A folder path as it is kept: parts split on '/', each with no control characters and spaces
+// collapsed, at most MAX_FOLDER_PART, no '.' or '..', at most MAX_FOLDER_DEPTH deep. '' is the top.
+export function cleanFolder(path) {
+  return String(path || '')
+    .split(/[\\/]/)
+    // oxlint-disable-next-line no-control-regex
+    .map((p) => p.normalize('NFC').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_FOLDER_PART).trim())
+    .filter((p) => p && p !== '.' && p !== '..')
+    .slice(0, MAX_FOLDER_DEPTH)
+    .join('/')
+}
+
+// One folder name, for New folder and Rename: no '/'. '' when there's nothing left.
+export function cleanFolderName(name) {
+  return cleanFolder(String(name || '').replace(/[\\/]/g, ' '))
+}
+
+export const folderName = (path) => String(path || '').split('/').pop() || ''
+export const parentFolder = (path) => String(path || '').split('/').slice(0, -1).join('/')
+export const joinFolder = (parent, name) => cleanFolder(parent ? `${parent}/${name}` : name)
+// `path` is `folder` or inside it.
+export const inFolder = (path, folder) => !folder || path === folder || String(path || '').startsWith(folder + '/')
+
+// The key a folder's record is kept under: two FNV-1a hashes of the path, 16 hex digits.
+export function folderKey(path) {
+  const s = cleanFolder(path)
+  let a = 0x811c9dc5
+  let b = 0x01000193 ^ s.length
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i)
+    a = Math.imul(a ^ c, 0x01000193) >>> 0
+    b = Math.imul(b ^ c, 0x5bd1e995) >>> 0
+  }
+  return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0')
+}
+
+export function makeFolder(path, prev = null, now = new Date().toISOString()) {
+  const p = cleanFolder(path)
+  if (!p) throw new Error('A folder needs a name')
+  return { type: FOLDER_TYPE, path: p, createdAt: prev?.createdAt || now, updatedAt: now }
+}
+
+export const isFolder = (rec) => !!rec && rec.type === FOLDER_TYPE && typeof rec.path === 'string' && !!cleanFolder(rec.path)
+
+const byName = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+
+// Every folder there is: the kept ones, the ones files are in, and each of their parents, by path.
+export function allFolders(list, kept = []) {
+  const out = new Set()
+  const addWithParents = (p) => {
+    for (let f = cleanFolder(p); f; f = parentFolder(f)) out.add(f)
+  }
+  for (const k of kept) addWithParents(typeof k === 'string' ? k : k?.path)
+  for (const a of list) if (a.folder) addWithParents(a.folder)
+  return [...out].sort(byName)
+}
+
+// The folders right inside `parent` ('' for the top), by name, each with how many files are in it
+// and its own folders: [{ path, name, count }].
+export function childFolders(folders, parent = '', list = []) {
+  const depth = parent ? parent.split('/').length + 1 : 1
+  return folders
+    .filter((f) => f.split('/').length === depth && inFolder(f, parent) && f !== parent)
+    .map((path) => ({ path, name: folderName(path), count: list.filter((a) => a.folder && inFolder(a.folder, path)).length }))
+    .sort((a, b) => byName(a.name, b.name))
+}
+
+// What moving (or renaming) folder `from` to `to` changes: each file's new folder, and the folder
+// records to remove and to keep. Moving a folder into itself is refused.
+export function moveFolderPlan(list, kept, from, to) {
+  const src = cleanFolder(from)
+  const dst = cleanFolder(to)
+  if (!src) throw new Error('Pick a folder to move')
+  if (!dst) throw new Error('A folder needs a name')
+  if (dst !== src && inFolder(dst, src)) throw new Error('A folder can’t go inside itself')
+  const swap = (p) => cleanFolder(dst + p.slice(src.length))
+  const assets = list.filter((a) => a.folder && inFolder(a.folder, src)).map((a) => ({ id: a.id, folder: swap(a.folder) }))
+  const paths = kept.map((k) => (typeof k === 'string' ? k : k?.path)).filter((p) => p && inFolder(p, src))
+  return { assets, remove: paths, keep: [...new Set([dst, ...paths.map(swap)])] }
+}
+
+// What removing folder `path` removes: the files in it and its folders, and the folder records.
+export function deleteFolderPlan(list, kept, path) {
+  const p = cleanFolder(path)
+  if (!p) throw new Error('Pick a folder to remove')
+  return {
+    assets: list.filter((a) => a.folder && inFolder(a.folder, p)).map((a) => a.id),
+    remove: kept.map((k) => (typeof k === 'string' ? k : k?.path)).filter((f) => f && inFolder(f, p)),
+  }
 }

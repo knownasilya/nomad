@@ -112,8 +112,99 @@ for (const [name, m] of [['shared', as], ['phone', phone]]) {
       expect(m.filterAssets(list, { query: 'ai' }).map((a) => a.name)).toEqual(['Plan.md'])
       expect(m.filterAssets(list, { filter: 'audio', query: 'sam' })).toEqual([])
     })
+
+    it('cleans tags and folders the same way', () => {
+      expect(m.cleanTag('  #Road   Trip ')).toBe('road trip')
+      expect(m.cleanTag('a,b')).toBe('a b')
+      expect(m.cleanTag('x'.repeat(100)).length).toBe(m.MAX_TAG)
+      expect(m.normalizeTags('Taxes, taxes,#2026,, ')).toEqual(['taxes', '2026'])
+      expect(m.normalizeTags(Array.from({ length: 30 }, (_, i) => 't' + i)).length).toBe(m.MAX_TAGS)
+      expect(m.cleanFolder(' Recipes //  Desserts / ')).toBe('Recipes/Desserts')
+      expect(m.cleanFolder('../a/./b\\c')).toBe('a/b/c')
+      expect(m.cleanFolder('')).toBe('')
+      expect(m.cleanFolder(Array.from({ length: 12 }, (_, i) => 'f' + i).join('/')).split('/').length).toBe(m.MAX_FOLDER_DEPTH)
+      expect(m.cleanFolderName('a/b')).toBe('a b')
+      expect(m.folderName('Recipes/Desserts')).toBe('Desserts')
+      expect(m.parentFolder('Recipes/Desserts')).toBe('Recipes')
+      expect(m.joinFolder('', 'Recipes')).toBe('Recipes')
+      expect(m.joinFolder('Recipes', 'Pies')).toBe('Recipes/Pies')
+      expect(m.inFolder('Recipes/Pies', 'Recipes')).toBe(true)
+      expect(m.inFolder('Recipes2', 'Recipes')).toBe(false)
+      expect(m.inFolder('anything', '')).toBe(true)
+    })
+
+    it('lists folders and tags, and filters by them', () => {
+      const list = [
+        { name: 'Pie.md', kind: 'markdown', mime: 'text/markdown', folder: 'Recipes/Desserts', tags: ['baking', 'family'] },
+        { name: 'Soup.md', kind: 'markdown', mime: 'text/markdown', folder: 'Recipes', tags: ['family'] },
+        { name: 'Beach.jpg', kind: 'image', mime: 'image/jpeg' },
+      ]
+      const folders = m.allFolders(list, [{ path: 'Taxes/2026' }, 'Empty'])
+      expect(folders).toEqual(['Empty', 'Recipes', 'Recipes/Desserts', 'Taxes', 'Taxes/2026'])
+      expect(m.childFolders(folders, '', list)).toEqual([
+        { path: 'Empty', name: 'Empty', count: 0 },
+        { path: 'Recipes', name: 'Recipes', count: 2 },
+        { path: 'Taxes', name: 'Taxes', count: 0 },
+      ])
+      expect(m.childFolders(folders, 'Recipes', list)).toEqual([{ path: 'Recipes/Desserts', name: 'Desserts', count: 1 }])
+      expect(m.tagCounts(list)).toEqual([{ tag: 'family', count: 2 }, { tag: 'baking', count: 1 }])
+      expect(m.filterAssets(list, { folder: '' }).map((a) => a.name)).toEqual(['Beach.jpg'])
+      expect(m.filterAssets(list, { folder: 'Recipes' }).map((a) => a.name)).toEqual(['Soup.md'])
+      expect(m.filterAssets(list, { tag: '#Family' }).map((a) => a.name)).toEqual(['Pie.md', 'Soup.md'])
+      expect(m.filterAssets(list, { query: 'desserts' }).map((a) => a.name)).toEqual(['Pie.md'])
+      expect(m.filterAssets(list, { query: 'baking' }).map((a) => a.name)).toEqual(['Pie.md'])
+    })
   })
 }
+
+describe('tags and folders on records', () => {
+  const rec = as.makeAsset({ id: 'a1234567-abcd', name: 'pie.md', bytes: 3, tags: 'Baking, #family', folder: ' Recipes / Desserts ' }, null, T)
+
+  it('keeps them through an edit, and drops them when cleared', () => {
+    expect(rec).toMatchObject({ tags: ['baking', 'family'], folder: 'Recipes/Desserts' })
+    const renamed = as.makeAsset({ id: rec.id, name: 'Pie.md' }, rec, T)
+    expect(renamed).toMatchObject({ tags: ['baking', 'family'], folder: 'Recipes/Desserts' })
+    const cleared = as.makeAsset({ id: rec.id, tags: [], folder: '' }, rec, T)
+    expect(cleared.tags).toBeUndefined()
+    expect(cleared.folder).toBeUndefined()
+  })
+
+  it('adds and takes away tags in bulk', () => {
+    expect(as.changeTags(['a', 'b'], { add: ['C', 'a'], remove: ['b'] })).toEqual(['a', 'c'])
+    expect(as.changeTags(undefined, { add: 'x, y' })).toEqual(['x', 'y'])
+  })
+
+  it('keeps a folder record under a key of its path', () => {
+    expect(as.folderKey('Recipes/Desserts')).toMatch(/^[0-9a-f]{16}$/)
+    expect(as.folderKey(' Recipes / Desserts')).toBe(as.folderKey('Recipes/Desserts'))
+    expect(as.folderKey('Recipes')).not.toBe(as.folderKey('Recipes/Desserts'))
+    expect(as.pathsOf().folder('Recipes')).toBe('/assets/folders/' + as.folderKey('Recipes') + '.json')
+    const f = as.makeFolder(' Taxes/2026 ', null, T)
+    expect(f).toEqual({ type: as.FOLDER_TYPE, path: 'Taxes/2026', createdAt: T, updatedAt: T })
+    expect(as.isFolder(f)).toBe(true)
+    expect(() => as.makeFolder(' / ')).toThrow()
+  })
+
+  it('plans moving and renaming a folder with what is in it', () => {
+    const list = [
+      { id: 'a1111111-aaaa', folder: 'Recipes' },
+      { id: 'a2222222-bbbb', folder: 'Recipes/Desserts' },
+      { id: 'a3333333-cccc', folder: 'Recipes2' },
+      { id: 'a4444444-dddd' },
+    ]
+    const kept = [{ path: 'Recipes/Desserts' }, { path: 'Recipes/Empty' }, { path: 'Other' }]
+    const plan = as.moveFolderPlan(list, kept, 'Recipes', 'Food/Recipes')
+    expect(plan.assets).toEqual([
+      { id: 'a1111111-aaaa', folder: 'Food/Recipes' },
+      { id: 'a2222222-bbbb', folder: 'Food/Recipes/Desserts' },
+    ])
+    expect(plan.remove).toEqual(['Recipes/Desserts', 'Recipes/Empty'])
+    expect(plan.keep).toEqual(['Food/Recipes', 'Food/Recipes/Desserts', 'Food/Recipes/Empty'])
+    expect(() => as.moveFolderPlan(list, kept, 'Recipes', 'Recipes/Inside')).toThrow(/itself/)
+    expect(() => as.moveFolderPlan(list, kept, 'Recipes', '')).toThrow()
+    expect(as.deleteFolderPlan(list, kept, 'Recipes')).toEqual({ assets: ['a1111111-aaaa', 'a2222222-bbbb'], remove: ['Recipes/Desserts', 'Recipes/Empty'] })
+  })
+})
 
 describe('asset records', () => {
   it('makes a record from what was added, and an edit keeps the rest', () => {

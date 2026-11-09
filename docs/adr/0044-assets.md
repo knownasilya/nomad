@@ -60,3 +60,36 @@ list the AI wrote. And a Space that isn't shared wants the same place for the us
   doesn't get `saveAsset`.
 - Text previews read the whole file (at most 25 MB) and show the first 512 KB.
 - Office documents and archives have no preview beyond their card.
+
+## Amendment: folders, tags, changes to many, and links from Notes (2026-11)
+
+1. **Tags.** An Asset can have `tags`: at most `MAX_TAGS` (20), each lowercased, without a leading
+   `#`, at most `MAX_TAG` (40) characters (`cleanTag`, `normalizeTags`). `makeAsset` keeps them on
+   every change. A tag is shown as a chip in the grid; picking one shows every file with it in the
+   open folder and the folders in it.
+
+2. **Folders.** An Asset can have a `folder`: a path like `Recipes/Desserts` (`cleanFolder`: no
+   `.` or `..`, no control characters, at most `MAX_FOLDER_PART` per part and `MAX_FOLDER_DEPTH`
+   deep; `''` is the top). A folder exists while a file is in it or while its own record keeps it
+   (`<root>folders/<folderKey(path)>.json`, `nomad/asset-folder`, `makeFolder`), so a new, empty
+   folder stays. `allFolders` lists both. Renaming or moving a folder rewrites the `folder` of every
+   file in it and its folder records (`moveFolderPlan`); removing it removes its files and records
+   (`deleteFolderPlan`). In a shared Space, removing a folder that holds a file someone else added
+   is refused with nothing removed, as removing that file would be.
+
+3. **Changes to many at once.** Both apps select files (desktop: a tick on a tile, Shift for a run,
+   or drag tiles onto a folder; the phone: touch and hold) and then move, tag or remove them. The
+   APIs are desktop's internal `nomad.vault.updateAssets({ ids, folder?, addTags?, removeTags? })`,
+   `deleteAssets(ids)` (`{ removed, refused }`: files someone else added stay),
+   `addAssetFolder`, `moveAssetFolder({ from, to })` and `deleteAssetFolder`, and the phone's
+   `assets` actions `updateMany`, `deleteMany`, `addFolder`, `moveFolder` and `deleteFolder`. A
+   single file's `update` also takes `name`, `tags` and `folder`.
+
+4. **Links.** `nomad://assets/?folder=<path>` and `?tag=<tag>` open a folder or a tag, beside
+   `?id=` (`assetFolderLink`, `assetTagLink`; `parseItemLink` rebuilds them from the cleaned value
+   and drops every other query). In a Note, `[[` offers Assets files and folders after the notes,
+   and `[[#` offers tags (`app/userland/notes/js/editor/asset-links.js`); picking one writes a
+   Markdown link such as `[Recipe.pdf](nomad://assets/?id=…)`. Desktop opens it in nomad://assets;
+   the phone opens its Assets screen there. Both apps' **Copy link** gives the same Markdown link.
+
+The AI still only adds Assets; it can't tag, move or remove them.

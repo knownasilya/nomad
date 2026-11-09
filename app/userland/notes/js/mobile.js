@@ -32,13 +32,14 @@ import { createNoteEditor } from './editor/index.js';
 import { connectLiveNote, colorFor, setYText } from './live.js';
 import { noteTitle, noteSnippet, makeResolver, linkedIds } from '../../../../shared/vault-apps.mjs';
 
-const HINT = 'Start typing. The first line is the title. Type [[ to link a note.';
+const HINT = 'Start typing. The first line is the title. Type [[ to link a note or a file in Assets.';
 // The phone's backend may wait for a computer that has the note open before it answers.
 const LIVE_TIMEOUT_MS = 10000;
 
 let editor = null;
 let current = { id: null, body: '' };
 let notes = [];
+let assets = null; // the Space's files, folders and tags in Assets ({ assets, folders })
 let mentionsOpen = false; // the user opened Linked mentions; it stays open from note to note
 let readOnly = false;
 let ticks = null; // who ticked which item, in a shared Space
@@ -138,6 +139,7 @@ function makeEditor(doc, collab = null) {
     parent: document.getElementById('editor'),
     doc,
     notes,
+    assets,
     ticks,
     readOnly,
     placeholder: HINT,
@@ -322,6 +324,10 @@ window.__noteEditor = (msg) => {
     notes = msg.notes || [];
     editor?.setNotes(notes);
     renderMentions();
+  } else if (msg.type === 'assets') {
+    // The Space's files, folders and tags, which [[ offers to link (editor/asset-links.js).
+    assets = msg.assets || null;
+    editor?.setAssets(assets);
   } else if (msg.type === 'setText') {
     if (live && live.synced) return; // the session has the text
     current.body = msg.body || '';
