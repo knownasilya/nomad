@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.47.0](https://github.com/knownasilya/nomad/compare/v1.46.0...v1.47.0) (2026-11-09)
+
+
+### Features
+
+* **ai:** phone AI prompts can last longer than one answer, as on desktop ([f8606f7](https://github.com/knownasilya/nomad/commit/f8606f711e2431bd3d631bac0e0fa391d97c1395))
+* **assets:** 500 MB files, movies, PDFs and e-books, and pinch zoom on the phone ([00d3426](https://github.com/knownasilya/nomad/commit/00d34268db7bf91d31efe29cf6694506771ee748))
+* **assets:** folders, tags, changes to many, and links from Notes ([36b8778](https://github.com/knownasilya/nomad/commit/36b8778c1a58d977156af72db0a51a18d52d1632))
+* **home:** a Needs you section for what waits on the user's answer ([46a7ca7](https://github.com/knownasilya/nomad/commit/46a7ca7609b04ac80e2f7e0e726bc0822fc3b980))
+* **home:** turn the home page into a dashboard on desktop and phone ([9972685](https://github.com/knownasilya/nomad/commit/9972685a3972ab14c569513e0c55156fd7b376cc))
+* **mobile:** Android home screen search widget ([946dfab](https://github.com/knownasilya/nomad/commit/946dfaba3849daff0203d3c95d409c81b015fd3b))
+
+
+### Bug Fixes
+
+* **mobile:** widget chips follow light/dark and show whole names ([a0484d9](https://github.com/knownasilya/nomad/commit/a0484d92d3fedd2d96ed29a190f07ce7ee71119e))
+
 ## [1.46.0](https://github.com/knownasilya/nomad/compare/v1.45.0...v1.46.0) (2026-11-08)
 
 
