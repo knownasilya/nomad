@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app's light theme (mobile/lib/theme.ts); values-night has the dark one. -->
+<resources>
+  <color name="nomad_widget_surface">#ffffff</color>
+  <color name="nomad_widget_border">#e0e0e0</color>
+  <color name="nomad_widget_chip">#f0f0f6</color>
+  <color name="nomad_widget_chip_active">#e6ebff</color>
+  <color name="nomad_widget_chip_active_text">#0a52d6</color>
+  <color name="nomad_widget_text_dim">#555555</color>
+  <color name="nomad_widget_text_muted">#888891</color>
+  <color name="nomad_widget_ripple">#14000000</color>
+</resources>

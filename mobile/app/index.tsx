@@ -61,6 +61,8 @@ import { parseColor, tintTheme, PAGE_CANVAS } from '../lib/siteTheme'
 import webViewInsets from '../modules/nomad-webview-insets'
 import webViewWindows from '../modules/nomad-webview-windows'
 import { routeLink, FEED_JS } from '../lib/webLinks'
+import { isWidgetLink, parseWidgetLink, type WidgetLink } from '../lib/widgetLinks'
+import { useSearchWidget } from '../lib/useSearchWidget'
 import type { ItemLink } from '../lib/itemLinks'
 import { pushScreen, closeScreen, loadEntry, pageLoaded, planStep, backAction, type NavEntry as StackEntry, type TabHistory } from '../lib/navStack'
 
@@ -443,9 +445,20 @@ export default function Browser () {
     setOpenedInvite(url)
     setSpacesOpen(true)
   }, [])
-  // Invite links from other apps (app.json intentFilters; app/+native-intent.tsx keeps the router out).
+  // A tap on the home screen search widget (lib/widgetLinks.ts), run once the Spaces are loaded.
+  const [widgetLink, setWidgetLink] = useState<{ link: WidgetLink } | null>(null)
+  // Invite links from other apps (app.json intentFilters; app/+native-intent.tsx keeps the router out),
+  // and the search widget's links, which only it can send.
   useEffect(() => {
-    const take = (url: string | null) => { if (url && routeLink(url).to === 'invite') openInvite(url) }
+    const take = (url: string | null) => {
+      if (!url) return
+      if (isWidgetLink(url)) {
+        const link = parseWidgetLink(url)
+        if (link) setWidgetLink({ link })
+        return
+      }
+      if (routeLink(url).to === 'invite') openInvite(url)
+    }
     Linking.getInitialURL().then(take).catch(() => {})
     const sub = Linking.addEventListener('url', ({ url }) => take(url))
     return () => sub.remove()
@@ -1083,6 +1096,55 @@ export default function Browser () {
     openTab()
     focusAddressSoon(100)
   }, [openTab, focusAddressSoon])
+
+  // The home screen search widget (modules/nomad-search-widget). Its search bar opens a new tab
+  // ready to type in, in the Space whose chip was tapped (the active one otherwise); its Space chip
+  // opens the Space switcher; its robot, the AI. Whatever was open over the browser closes first.
+  const [widgetTyping, setWidgetTyping] = useState(0)
+  useEffect(() => {
+    if (!widgetLink || !spacesApi.ready) return
+    const { link } = widgetLink
+    setWidgetLink(null)
+    setScreens([])
+    setMenuOpen(false)
+    setRecentsOpen(false)
+    setNameSheetOpen(false)
+    if (link.action === 'spaces') {
+      leaveAddress()
+      setAiOpen(false)
+      spacesApi.syncFromVault()
+      setSpacesOpen(true)
+      return
+    }
+    setSpacesOpen(false)
+    if (link.action === 'ai') {
+      leaveAddress()
+      setAiOpen(true)
+      return
+    }
+    setAiOpen(false)
+    if (link.space && spacesApi.spaces.some((sp) => sp.id === link.space)) switchSpace(link.space)
+    // After the switch renders, so the tab check below sees that Space's tabs.
+    setWidgetTyping((n) => n + 1)
+  }, [widgetLink, spacesApi, switchSpace, leaveAddress])
+  useEffect(() => {
+    if (!widgetTyping) return
+    // A new tab nobody has used yet is reused, so each tap on the widget doesn't add another.
+    const cur = tabsRef.current.find((tb) => tb.id === activeIdRef.current)
+    if (!cur || cur.kind !== 'home' || cur.stack.length > 1) openTab()
+    // The link can arrive just before the app comes to the front; the keyboard opens only once it has.
+    if (AppState.currentState === 'active') {
+      focusAddressSoon(300)
+      return cancelFocusAddress
+    }
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return
+      sub.remove()
+      focusAddressSoon(300)
+    })
+    return () => { sub.remove(); cancelFocusAddress() }
+  }, [widgetTyping, openTab, focusAddressSoon, cancelFocusAddress])
+  useSearchWidget(spacesApi.spaces, spacesApi.activeSpaceId, spacesApi.ready)
 
   useFocusEffect(
     useCallback(() => {

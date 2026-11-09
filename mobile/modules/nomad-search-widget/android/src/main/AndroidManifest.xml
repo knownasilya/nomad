@@ -1,0 +1,17 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- The home screen search widget. The launcher binds it, so it is exported; it only answers
+         the system's APPWIDGET_UPDATE broadcast. -->
+    <receiver
+      android:name="expo.modules.nomadsearchwidget.NomadSearchWidgetProvider"
+      android:label="@string/nomad_widget_label"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/nomad_search_widget_info" />
+    </receiver>
+  </application>
+</manifest>

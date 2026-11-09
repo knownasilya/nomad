@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="nomad_widget_surface">#2b2b2b</color>
+  <color name="nomad_widget_border">#3a3a3a</color>
+  <color name="nomad_widget_chip">#3a3a3a</color>
+  <color name="nomad_widget_chip_active">#2a3152</color>
+  <color name="nomad_widget_chip_active_text">#d2d8fd</color>
+  <color name="nomad_widget_text_dim">#bbbbbb</color>
+  <color name="nomad_widget_text_muted">#8f8f8f</color>
+  <color name="nomad_widget_ripple">#1fffffff</color>
+</resources>
