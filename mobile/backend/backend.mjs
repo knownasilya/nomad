@@ -762,6 +762,7 @@ async function homeDashboard (space, now) {
     notices: src?.notices || [],
     memberId: src?.memberId || null,
     spaceName: src?.spaceName || '',
+    dismissed: src?.dismissed || null,
     conversations: mail?.conversations || [],
     // Someone asking to join a shared Space this phone can let them into (any Space, named).
     joins: invites.pending().map((j) => ({ memberId: j.memberId, name: j.name, role: j.role, space: j.space, spaceName: j.spaceName }))
@@ -844,6 +845,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'calendar' && action === 'deleteFeed') value = await calendar.deleteFeed(vault, space, args.id)
     else if (app === 'calendar' && action === 'feedFetched') value = await calendar.feedFetched(vault, space, { id: args.id, text: args.text, error: args.error })
     else if (app === 'home' && action === 'dashboard') value = await homeDashboard(space, args.now)
+    else if (app === 'home' && action === 'dismiss') { value = await vaultApps.dismissHomeNotifications(vault, args.items); vaultChanged() }
     else if (app === 'assets' && action === 'list') value = await assets.list(space)
     else if (app === 'assets' && action === 'read') value = await assets.read(space, args.id, { thumb: !!args.thumb })
     else if (app === 'assets' && action === 'readTo') value = await assets.readTo(space, args.id, { to: args.to, thumb: !!args.thumb })

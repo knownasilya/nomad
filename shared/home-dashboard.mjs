@@ -8,7 +8,8 @@
 //   new Device asking to join, a stranger's first Message, and a Job that wanted sites it wasn't
 //   given. Oldest first: it has waited longest.
 // - Notifications: Job results with a notification, Jobs that failed, other members' notices in a
-//   shared Space, and Conversations with unread Messages, from the last NOTIFY_DAYS, newest first.
+//   shared Space, and Conversations with unread Messages, from the last NOTIFY_DAYS, newest first,
+//   leaving out the ones the user cleared (DISMISSED_PATH, `dismiss`).
 // - Jobs: the ones running now (or waiting to), and the ones that run next.
 // - Coming up: the calendar from now on (an event going on now first).
 // - The newest Notes and Assets.
@@ -24,6 +25,10 @@ export const NOTIFY_DAYS = 7;
 export const LIMITS = { waiting: 8, notifications: 6, running: 4, next: 4, events: 6, notes: 5, assets: 8 };
 // How far ahead "Coming up" looks.
 export const EVENT_DAYS = 14;
+// The notifications the user cleared, one Vault record for all their Devices.
+export const DISMISSED_PATH = '/.vault/home/dismissed.json';
+export const DISMISSED_TYPE = 'nomad/home-dismissed';
+const MAX_DISMISSED = 300;
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -216,7 +221,7 @@ export function waiting(
 // (shared/inbox.mjs conversations, with `title`).
 export function notifications(
   { runs = [], notices = [], memberId = null, spaceName = '', conversations = [] } = {},
-  { now = Date.now(), days = NOTIFY_DAYS, max = LIMITS.notifications } = {}
+  { now = Date.now(), days = NOTIFY_DAYS, max = LIMITS.notifications, dismissed = null } = {}
 ) {
   const since = now - days * MS_DAY;
   const out = [];
@@ -279,7 +284,34 @@ export function notifications(
     });
   }
   out.sort(newestFirst('at'));
-  return out.slice(0, max);
+  return out.filter((n) => !isDismissed(n, dismissed)).slice(0, max);
+}
+
+// Clearing notifications
+// =
+
+// The record keeps, per notification id, the time of the item the user cleared (`at`). It stays
+// hidden while it is that item; a Conversation's row comes back with a newer Message.
+// { type, items: { [id]: at }, updatedAt }.
+export function isDismissed(n, record) {
+  const at = record?.items?.[n?.id];
+  return typeof at === 'string' && typeof n.at === 'string' && n.at <= at;
+}
+
+// The record with `items` ([{ id, at }]) added, and entries older than the notifications window
+// (plus a day) dropped, so it never grows past what could still show.
+export function dismiss(record, items = [], { now = Date.now() } = {}) {
+  const keep = new Date(now - (NOTIFY_DAYS + 1) * MS_DAY).toISOString();
+  const next = {};
+  for (const [id, at] of Object.entries(record?.items || {})) {
+    if (typeof at === 'string' && at >= keep) next[id] = at;
+  }
+  for (const it of Array.isArray(items) ? items : []) {
+    if (!it || typeof it.id !== 'string' || typeof it.at !== 'string' || it.id.length > 400) continue;
+    if (!next[it.id] || next[it.id] < it.at) next[it.id] = it.at;
+  }
+  const entries = Object.entries(next).sort((a, b) => (a[1] < b[1] ? 1 : a[1] > b[1] ? -1 : 0)).slice(0, MAX_DISMISSED);
+  return { type: DISMISSED_TYPE, items: Object.fromEntries(entries), updatedAt: new Date(now).toISOString() };
 }
 
 // Jobs
@@ -435,14 +467,19 @@ export function dashboard(
     spaceRequests = [],
     joins = [],
     devices = [],
+    dismissed = null,
   } = {},
   { now, at = Date.now() } = {}
 ) {
+  const sources = { runs, notices, memberId, spaceName, conversations };
+  // Every notification not cleared yet, for Clear all: the list below shows only the newest.
+  const uncleared = notifications(sources, { now: at, max: Infinity, dismissed });
   return {
     now: now || null,
     greeting: greeting(now),
     waiting: waiting({ prompts, driveRequests, spaceRequests, joins, devices, conversations, runs, jobs, spaceName }),
-    notifications: notifications({ runs, notices, memberId, spaceName, conversations }, { now: at }),
+    notifications: uncleared.slice(0, LIMITS.notifications),
+    notificationKeys: uncleared.map((n) => ({ id: n.id, at: n.at })),
     jobs: jobsOverview(jobs),
     events: upcomingEvents(occurrences, now),
     notes: latestNotes(notes),

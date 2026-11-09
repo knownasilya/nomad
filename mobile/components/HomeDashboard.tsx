@@ -5,6 +5,8 @@ import { formatTime } from '../lib/timeOfDay'
 import type { AppName, AppsResult } from '../lib/useBackend'
 import { ListSection, ListRow } from './List'
 import Icon, { type IconName } from './Icon'
+import IconButton from './IconButton'
+import { showLabel } from '../lib/tooltip'
 
 // The home tab as a dashboard, like desktop's nomad://desktop: what needs the user (someone asking to
 // join a shared Space, a stranger's first Message, a Job that wanted sites), notifications, what's coming up on the
@@ -22,6 +24,7 @@ export interface Dashboard {
   greeting: string
   waiting: DashWaiting[]
   notifications: DashNotification[]
+  notificationKeys: { id: string; at: string }[]
   jobs: { running: { id: string; title: string; queued: boolean }[]; next: DashJob[]; total: number; paused: number }
   events: DashEvent[]
   notes: DashNote[]
@@ -148,6 +151,16 @@ export default function HomeDashboard ({ apps, onVaultChange, space: spaceKey, o
   const waiting = dash.waiting || []
   const next = dash.jobs.next
 
+  // Clear notifications on every Device (a Vault record): gone here at once, then load again.
+  const dismissNotifications = (items: { id: string; at: string }[]) => {
+    const ids = new Set(items.map((i) => i.id))
+    setDash((d) => d && { ...d, notifications: d.notifications.filter((n) => !ids.has(n.id)), notificationKeys: (d.notificationKeys || []).filter((n) => !ids.has(n.id)) })
+    apps('home', 'dismiss', { items: items.map(({ id, at }) => ({ id, at })) })
+      .then((res) => { if (!res.ok) showLabel(res.message || 'Couldn’t clear that') })
+      .catch(() => {})
+      .finally(load)
+  }
+
   const openNotification = (n: DashNotification) => {
     if (n.kind === 'message') onOpenMessages(n.personaId, n.with)
     else if (n.kind === 'job' || n.kind === 'failed') onOpenJob(n.jobId)
@@ -185,7 +198,7 @@ export default function HomeDashboard ({ apps, onVaultChange, space: spaceKey, o
       {notifications.length > 0 && (
         <ListSection
           title='Notifications'
-          action={dash.unreadMessages ? { label: 'Messages', onPress: () => onOpenMessages() } : undefined}
+          action={{ label: 'Clear all', onPress: () => dismissNotifications(dash.notificationKeys || notifications) }}
         >
           {notifications.map((n, i) => (
             <ListRow
@@ -195,7 +208,12 @@ export default function HomeDashboard ({ apps, onVaultChange, space: spaceKey, o
               title={n.title}
               subtitle={(n.from ? `${n.from}: ` : '') + n.body}
               subtitleLines={2}
-              right={<Text style={s.meta}>{ago(n.at)}</Text>}
+              right={
+                <View style={s.notifyRight}>
+                  <Text style={s.meta}>{ago(n.at)}</Text>
+                  <IconButton icon='times' size={14} label='Dismiss' onPress={() => dismissNotifications([n])} />
+                </View>
+              }
               onPress={n.kind === 'space' ? undefined : () => openNotification(n)}
             />
           ))}
@@ -306,6 +324,7 @@ function makeStyles (t: Theme) {
   return StyleSheet.create({
     wrap: { marginTop: 22 },
     meta: { color: t.textMuted, fontSize: 12 },
+    notifyRight: { flexDirection: 'row', alignItems: 'center', marginRight: -12 },
     day: { color: t.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase', paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: 2 },
     dayDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border, marginTop: space.xs },
     event: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 52, paddingHorizontal: space.lg, paddingVertical: 6 },
