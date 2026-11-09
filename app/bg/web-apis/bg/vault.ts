@@ -572,6 +572,21 @@ export default {
   async addAsset(fields: any = {}) {
     return assets.addAsset(this, fields || {});
   },
+  async assetChunk(id, opts: any = {}) {
+    return assets.assetChunk(this, id, { start: opts?.start, length: opts?.length, thumb: !!opts?.thumb });
+  },
+  async beginAssetUpload(opts: any = {}) {
+    return assets.beginAssetUpload(this, opts || {});
+  },
+  async assetUploadChunk(id, piece: any = {}) {
+    return assets.assetUploadChunk(this, id, piece || {});
+  },
+  async finishAssetUpload(id, fields: any = {}) {
+    return assets.finishAssetUpload(this, id, fields || {});
+  },
+  async abortAssetUpload(id) {
+    return assets.abortAssetUpload(this, id);
+  },
   async updateAsset(change: any = {}) {
     return assets.updateAsset(this, change || {});
   },

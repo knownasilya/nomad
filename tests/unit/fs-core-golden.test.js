@@ -135,6 +135,40 @@ describe('shared fs-core blob store round-trip', () => {
     })
   })
 
+  it('putBlobFrom writes chunks of any size as one blob, the same as putBlob', async () => {
+    await withDrive(async ({ store, ns }) => {
+      const { putBlob, putBlobFrom } = createBlobStore({ Hyperblobs, b4a })
+      const { readContent } = createContentReader({ Hyperblobs, b4a })
+      const blobsCore = ns.get({ name: BLOBS_CORE_NAME })
+      await blobsCore.ready()
+
+      const bytes = b4a.alloc(300001)
+      for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 13) & 255
+      async function * pieces () {
+        for (let i = 0, n = 1; i < bytes.length; i += n, n = n * 3 + 7) yield bytes.subarray(i, i + n)
+      }
+      const ptr = await putBlobFrom(blobsCore, pieces())
+      expect(ptr.byteLength).toBe(bytes.length)
+      // Full 64 KB blocks, as putBlob makes them.
+      expect(ptr.blockLength).toBe(Math.ceil(bytes.length / 65536))
+      const rec = makeRecord({ metadata: makeMetadata(), blob: ptr })
+      expect(b4a.compare(await readContent(rec, { store }), bytes)).toBe(0)
+      const range = await readContent(rec, { store, range: { start: 70000, length: 100000 } })
+      expect(b4a.compare(range, bytes.subarray(70000, 170000))).toBe(0)
+
+      // A write after it lands after it, and an empty source makes no blob.
+      const next = await putBlob(blobsCore, b4a.from('after'))
+      expect(next.blockOffset).toBe(ptr.blockOffset + ptr.blockLength)
+      expect(await putBlobFrom(blobsCore, [])).toBe(null)
+
+      // A source that fails lets go of the core, so the next write still goes through.
+      async function * broken () { yield b4a.alloc(10); throw new Error('read failed') }
+      await expect(putBlobFrom(blobsCore, broken())).rejects.toThrow(/read failed/)
+      const again = await putBlob(blobsCore, b4a.from('still writes'))
+      expect(b4a.toString(await readContent(makeRecord({ metadata: makeMetadata(), blob: again }), { store }))).toBe('still writes')
+    })
+  })
+
   it('readContent returns empty buffer for an empty record', async () => {
     const { readContent } = createContentReader({ Hyperblobs, b4a })
     const empty = await readContent(makeRecord({ metadata: makeMetadata() }), {})

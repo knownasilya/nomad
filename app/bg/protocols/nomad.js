@@ -28,8 +28,11 @@ const NOMAD_APP_CSP = `
   child-src 'self' hyper:;
 `.replace(/\n/g, '');
 // nomad://assets shows any file a Space keeps: a video, a song or a PDF plays from a blob: URL the
-// page makes from the file's bytes, and pdf.js renders a PDF in a worker. No frames: an HTML file is
-// shown as source, never run.
+// page makes from the file's bytes, and pdf.js renders a PDF in a worker. An HTML file is shown as
+// source, never run. The only frames are an e-book's pages: blob: documents the page builds with
+// every script dropped, in `sandbox="allow-same-origin"` frames, under this same policy (a blob:
+// document inherits it), so the book's pictures, styles and fonts are blob: URLs and nothing reaches
+// the network.
 const ASSETS_CSP = `
   default-src 'self' nomad:;
   connect-src 'self' nomad: data: blob:;
@@ -38,8 +41,8 @@ const ASSETS_CSP = `
   worker-src 'self' nomad: blob:;
   media-src 'self' nomad: data: blob:;
   style-src 'self' 'unsafe-inline' nomad:;
-  font-src 'self' nomad: data:;
-  frame-src 'none';
+  font-src 'self' nomad: data: blob:;
+  frame-src blob:;
   object-src 'none';
 `.replace(/\n/g, '');
 // nomad://search reaches a configurable, external index endpoint (a crawler's HTTP/JSON API,

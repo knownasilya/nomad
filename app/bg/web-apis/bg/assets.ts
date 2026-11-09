@@ -9,7 +9,10 @@
 // it lists them, and until then they are read where they are.
 
 import b4a from 'b4a';
-import { nativeImage } from 'electron';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import { app, nativeImage } from 'electron';
 import * as autobases from '../../hyper/autobases';
 import * as spaceLibrary from '../../hyper/space-library';
 import * as vault from '../../hyper/vault';
@@ -115,7 +118,8 @@ async function items(place: Place) {
 const who = (place: Place) => ({ shared: place.shared, memberId: place.memberId, role: place.role, writable: place.writable });
 const forPage = (place: Place) => (a) => {
   const { legacy, ...rest } = a;
-  return { ...rest, canDelete: as.canDelete(a, who(place)) };
+  // The kind as the rules read it now (an EPUB added before books were a kind is a book).
+  return { ...rest, kind: as.kindOf(a.mime, a.name), canDelete: as.canDelete(a, who(place)) };
 };
 
 // The folder records (shared/assets.mjs makeFolder): folders kept while nothing is in them.
@@ -140,18 +144,33 @@ export async function listAssets(ctx) {
   };
 }
 
-async function readBytes(place: Place, id, thumb) {
+// Where an Asset's file (or thumbnail) is: its path, or an album photo's not moved yet.
+async function fileNode(place: Place, id, thumb) {
   if (!place.sess || !as.isAssetId(id)) return null;
   const p = as.pathsOf(place.root);
-  const buf = await autobases.readContent(place.sess, thumb ? p.thumb(id) : p.file(id)).catch(() => null);
-  if (buf || !place.shared) return buf;
+  const at = thumb ? p.thumb(id) : p.file(id);
+  const node = await autobases.readRecord(place.sess, at).catch(() => null);
+  if (node || !place.shared) return node ? { path: at, node } : null;
   const old = as.legacyPaths(id);
-  return autobases.readContent(place.sess, thumb ? old.thumb : old.file).catch(() => null);
+  const legacy = thumb ? old.thumb : old.file;
+  const oldNode = await autobases.readRecord(place.sess, legacy).catch(() => null);
+  return oldNode ? { path: legacy, node: oldNode } : null;
 }
 
-// An Asset's file (or its thumbnail) as a data: URL, or null while it hasn't replicated yet.
+async function readBytes(place: Place, id, thumb, range = undefined) {
+  const at = await fileNode(place, id, thumb);
+  if (!at) return null;
+  return autobases.readContent(place.sess, at.path, range).catch(() => null);
+}
+
+// An Asset's thumbnail (or a small file) as a data: URL, or null while it hasn't replicated yet.
+// A whole file comes in pieces, assetChunk: a data: URL of a movie would never fit.
 export async function assetData(ctx, id, { thumb = false } = {}) {
   const place = await placeOf(ctx);
+  if (!thumb) {
+    const at = await fileNode(place, id, false);
+    if (at && autobases.recordByteLength(at.node) > as.MAX_DATA_URL_BYTES) throw new Error('That file is too big to read at once');
+  }
   const buf = await readBytes(place, id, thumb);
   if (!buf) return null;
   let mime = 'image/jpeg';
@@ -163,12 +182,117 @@ export async function assetData(ctx, id, { thumb = false } = {}) {
   return `data:${mime};base64,` + b4a.toString(buf, 'base64');
 }
 
+// One piece of an Asset's file: { size, data } with `data` the bytes from `start`, at most
+// CHUNK_BYTES, or null while the file hasn't replicated here yet. The page asks for the next piece
+// until it has `size` bytes.
+export async function assetChunk(ctx, id, { start = 0, length = as.CHUNK_BYTES, thumb = false } = {}) {
+  const place = await placeOf(ctx);
+  const at = await fileNode(place, id, thumb);
+  if (!at) return null;
+  const size = autobases.recordByteLength(at.node);
+  const from = Math.max(0, Math.floor(Number(start) || 0));
+  const len = Math.min(as.CHUNK_BYTES, Math.max(0, Math.floor(Number(length) || 0)), size - from);
+  if (len <= 0) return { size, data: b4a.alloc(0) };
+  const data = await autobases.readContent(place.sess, at.path, { start: from, length: len }).catch(() => null);
+  return data ? { size, data } : null;
+}
+
+// Adding a big file in pieces
+// =
+// The page sends a file in CHUNK_BYTES pieces, which land in a temporary file on this computer;
+// the last one moves it into the Space's blob core in one go (so the core is never held while
+// pieces cross over IPC). An upload belongs to the page that began it and is dropped after
+// UPLOAD_IDLE_MS without a piece.
+
+type Upload = { owner: number | null; space: string; file: string; handle: fs.promises.FileHandle; got: number; size: number; timer: any };
+const uploads = new Map<string, Upload>();
+const UPLOAD_IDLE_MS = 10 * 60 * 1000;
+let _uploadsDir: string | null = null;
+
+async function uploadsDir() {
+  if (!_uploadsDir) {
+    const dir = path.join(app.getPath('temp'), 'nomad-asset-uploads');
+    // Anything here is left from an earlier run.
+    await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {});
+    await fs.promises.mkdir(dir, { recursive: true });
+    _uploadsDir = dir;
+  }
+  return _uploadsDir;
+}
+
+async function dropUpload(id) {
+  const u = uploads.get(id);
+  if (!u) return;
+  uploads.delete(id);
+  clearTimeout(u.timer);
+  await u.handle.close().catch(() => {});
+  await fs.promises.rm(u.file, { force: true }).catch(() => {});
+}
+
+function uploadOf(ctx, id) {
+  const u = typeof id === 'string' ? uploads.get(id) : null;
+  if (!u || u.owner !== (ctx?.sender?.id ?? null)) throw new Error('That upload was stopped. Add the file again.');
+  clearTimeout(u.timer);
+  u.timer = setTimeout(() => dropUpload(id), UPLOAD_IDLE_MS);
+  return u;
+}
+
+// -> an upload id, once the file's size is one Assets keeps and the caller's Space can take it.
+export async function beginAssetUpload(ctx, { size }: any = {}) {
+  const place = await placeOf(ctx);
+  if (!place.writable) throw new Error('You can view this Space, but not add to it');
+  const err = as.sizeError({ bytes: Number(size) || 0 });
+  if (err) throw new Error(err);
+  const id = crypto.randomBytes(12).toString('hex');
+  const file = path.join(await uploadsDir(), id);
+  const handle = await fs.promises.open(file, 'w');
+  uploads.set(id, { owner: ctx?.sender?.id ?? null, space: place.space, file, handle, got: 0, size: Number(size), timer: null });
+  uploadOf(ctx, id);
+  return id;
+}
+
+// The next piece, from `start` (the bytes so far). -> the bytes so far.
+export async function assetUploadChunk(ctx, id, { start, data }: any = {}) {
+  const u = uploadOf(ctx, id);
+  const buf = b4a.isBuffer(data) ? data : b4a.from(data || []);
+  if (Number(start) !== u.got) throw new Error('A piece of the file went missing. Add it again.');
+  if (buf.length > as.CHUNK_BYTES || u.got + buf.length > u.size) {
+    await dropUpload(id);
+    throw new Error('That file changed while it was being added');
+  }
+  await u.handle.write(buf, 0, buf.length, u.got);
+  u.got += buf.length;
+  return u.got;
+}
+
+// The last step: the record, with the file from the upload (`fields` as addAsset's, without `data`).
+export async function finishAssetUpload(ctx, id, fields: any = {}) {
+  const u = uploadOf(ctx, id);
+  try {
+    await u.handle.close();
+    if (u.got !== u.size) throw new Error('Part of the file didn’t arrive. Add it again.');
+    const place = await placeFor(u.space, { write: true });
+    const { data, file, thumbFile, source, sourceUrl, ...rest } = fields || {};
+    return await addTo(place, { ...rest, stored: { file: u.file, bytes: u.got } });
+  } finally {
+    await dropUpload(id);
+  }
+}
+
+export async function abortAssetUpload(ctx, id) {
+  if (uploads.get(id)?.owner === (ctx?.sender?.id ?? null)) await dropUpload(id);
+  return true;
+}
+
 // Put a file (and a thumbnail) in, then its record, in one update.
 export async function addTo(place: Place, f: any) {
   if (!place.writable) throw new Error('You can view this Space, but not add to it');
-  const file = b4a.isBuffer(f.file) ? f.file : b4a.from(String(f.data || ''), 'base64');
+  // `stored`: a file on this computer (an upload in pieces), moved in without being read whole.
+  const stored = f.stored || null;
+  const file = stored ? null : b4a.isBuffer(f.file) ? f.file : b4a.from(String(f.data || ''), 'base64');
+  const bytes = stored ? stored.bytes : file.length;
   const small = f.thumbFile ? f.thumbFile : f.thumb ? b4a.from(String(f.thumb), 'base64') : null;
-  const err = as.sizeError({ bytes: file.length, thumbBytes: small ? small.length : 0 });
+  const err = as.sizeError({ bytes, thumbBytes: small ? small.length : 0 });
   if (err) throw new Error(err);
   if (!place.sess) place = await placeFor(place.space, { write: true });
   if (!place.sess?.writable) throw new Error('This device can’t write to your Vault yet. Keep your other device online until it syncs, then try again.');
@@ -179,7 +303,7 @@ export async function addTo(place: Place, f: any) {
     id,
     name: f.name,
     mime: f.mime,
-    bytes: file.length,
+    bytes,
     width: f.width,
     height: f.height,
     duration: f.duration,
@@ -193,7 +317,11 @@ export async function addTo(place: Place, f: any) {
     tags: f.tags,
     folder: f.folder,
   });
-  const ops: any[] = [await autobases.buildPutBlobOp(place.sess, p.file(id), file)];
+  const ops: any[] = [
+    stored
+      ? await autobases.buildPutBlobOpFrom(place.sess, p.file(id), fs.createReadStream(stored.file, { highWaterMark: 1024 * 1024 }))
+      : await autobases.buildPutBlobOp(place.sess, p.file(id), file),
+  ];
   if (small?.length) ops.push(await autobases.buildPutBlobOp(place.sess, p.thumb(id), small));
   ops.push(await autobases.buildPutInlineOp(place.sess, p.item(id), rec));
   for (const op of ops) await place.sess.base.append(op);

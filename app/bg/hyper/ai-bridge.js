@@ -38,6 +38,7 @@ import {
   makeChallenge,
   signChallenge,
   steerFrame,
+  promptAnswer,
   verifyChallenge,
 } from '../../../shared/ai-bridge.mjs';
 
@@ -396,11 +397,21 @@ async function onRequest(peer, f) {
   // the Provider's requestPermission relays a PROMPT frame and awaits the PROMPT_RESULT.
   // An `aiSendData` prompt also sends the request that asks (`request`, egress.mjs requestPreview),
   // so the phone can show its URL. An older Client ignores the extra field.
+  // `similar` is the label of the box that makes a yes last longer, as desktop's prompt shows it
+  // (the 3-month send grant, a yes kept for the site): a Client that ticks it answers 'similar'.
+  // An older Client never does, and only a prompt that offered the box can get 'similar' back.
   const requestPermission = (permission, _sender, opts) =>
     new Promise((resolve) => {
       entry.promptResolve = resolve;
+      entry.promptSimilar = typeof opts?.similar === 'string' && !!opts.similar;
       const request = opts?.request && typeof opts.request === 'object' ? opts.request : null;
-      sendFrame(peer, { t: FRAME.PROMPT, id, permission, ...(request ? { request } : {}) });
+      sendFrame(peer, {
+        t: FRAME.PROMPT,
+        id,
+        permission,
+        ...(request ? { request } : {}),
+        ...(entry.promptSimilar ? { similar: opts.similar } : {}),
+      });
     });
 
   // Keepalive: remote inference can take a while to load the model / produce the first token, during
@@ -456,7 +467,7 @@ function onPromptResult(peer, f) {
   if (entry?.promptResolve) {
     const resolve = entry.promptResolve;
     entry.promptResolve = null;
-    resolve(!!f.allow);
+    resolve(promptAnswer(f.allow, entry.promptSimilar));
   }
 }
 

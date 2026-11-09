@@ -32,7 +32,13 @@ export function vaultRoot(space) {
 // A file is kept as it is, up to MAX_BYTES. A photo from a camera is scaled to MAX_SIDE first, as
 // the album did, and every picture and video gets a THUMB_SIDE JPEG thumbnail where the Device can
 // make one.
-export const MAX_BYTES = 25 * 1024 * 1024
+export const MAX_BYTES = 500 * 1024 * 1024
+// What the user's AI saves (saveAsset): it fetches or writes the whole file in memory.
+export const MAX_AI_BYTES = 100 * 1024 * 1024
+// Big files move in pieces this size, between a page and the backend, never whole.
+export const CHUNK_BYTES = 4 * 1024 * 1024
+// The most nomad.vault.assetData sends as one data: URL (thumbnails, small pictures).
+export const MAX_DATA_URL_BYTES = 32 * 1024 * 1024
 export const MAX_SIDE = 2560
 export const THUMB_SIDE = 480
 export const QUALITY = 0.85
@@ -111,13 +117,15 @@ const EXT_MIME = {
   xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   odt: 'application/vnd.oasis.opendocument.text', ods: 'application/vnd.oasis.opendocument.spreadsheet', rtf: 'application/rtf',
-  epub: 'application/epub+zip',
+  epub: 'application/epub+zip', mobi: 'application/x-mobipocket-ebook', prc: 'application/x-mobipocket-ebook',
+  azw: 'application/vnd.amazon.ebook', azw3: 'application/vnd.amazon.mobi8-ebook',
 }
 
 const CODE_EXT = new Set(['html', 'htm', 'css', 'js', 'mjs', 'ts', 'tsx', 'jsx', 'py', 'rb', 'go', 'rs', 'java', 'kt', 'swift', 'c', 'h', 'cpp', 'sh', 'sql', 'toml', 'xml', 'yaml', 'yml', 'ini'])
 const DATA_EXT = new Set(['json', 'csv', 'tsv', 'ics', 'vcf'])
 const ARCHIVE_EXT = new Set(['zip', 'gz', 'tgz', 'tar', '7z', 'rar'])
-const DOCUMENT_EXT = new Set(['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'rtf', 'epub'])
+const DOCUMENT_EXT = new Set(['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'rtf'])
+const BOOK_EXT = new Set(['epub', 'mobi', 'prc', 'azw', 'azw3'])
 
 export function extOf(name) {
   const m = /\.([a-z0-9]{1,8})$/i.exec(String(name || ''))
@@ -139,9 +147,9 @@ export function mimeOf(name, given = '') {
   return fromExt || 'application/octet-stream'
 }
 
-// What a file is, for the icon, the filter and the preview: image, video, audio, pdf, markdown,
-// code, data, text, document, archive, other.
-export const KINDS = ['image', 'video', 'audio', 'pdf', 'markdown', 'code', 'data', 'text', 'document', 'archive', 'other']
+// What a file is, for the icon, the filter and the preview: image, video, audio, pdf, book (an
+// e-book: EPUB or MOBI), markdown, code, data, text, document, archive, other.
+export const KINDS = ['image', 'video', 'audio', 'pdf', 'book', 'markdown', 'code', 'data', 'text', 'document', 'archive', 'other']
 export function kindOf(mime, name = '') {
   const m = String(mime || '').toLowerCase()
   const ext = extOf(name)
@@ -149,6 +157,7 @@ export function kindOf(mime, name = '') {
   if (m.startsWith('video/')) return 'video'
   if (m.startsWith('audio/')) return 'audio'
   if (m === 'application/pdf') return 'pdf'
+  if (BOOK_EXT.has(ext) || m === 'application/epub+zip' || m === 'application/x-mobipocket-ebook' || m.startsWith('application/vnd.amazon.')) return 'book'
   if (m === 'text/markdown' || ext === 'md' || ext === 'markdown') return 'markdown'
   if (DATA_EXT.has(ext) || m === 'application/json' || m === 'text/csv') return 'data'
   if (CODE_EXT.has(ext)) return 'code'
@@ -169,6 +178,7 @@ export const KIND_ICONS = {
   video: 'film',
   audio: 'music',
   pdf: 'file-pdf',
+  book: 'book',
   markdown: 'file-alt',
   code: 'file-code',
   data: 'table',
@@ -183,6 +193,7 @@ export const KIND_LABELS = {
   video: 'Video',
   audio: 'Audio',
   pdf: 'PDF',
+  book: 'Book',
   markdown: 'Markdown',
   code: 'Code',
   data: 'Data',
@@ -196,7 +207,7 @@ export const KIND_LABELS = {
 export const FILTERS = [
   { id: 'all', label: 'All', kinds: KINDS },
   { id: 'media', label: 'Photos & videos', kinds: ['image', 'video'] },
-  { id: 'docs', label: 'Documents', kinds: ['pdf', 'markdown', 'code', 'data', 'text', 'document'] },
+  { id: 'docs', label: 'Documents', kinds: ['pdf', 'book', 'markdown', 'code', 'data', 'text', 'document'] },
   { id: 'audio', label: 'Audio', kinds: ['audio'] },
   { id: 'other', label: 'Other', kinds: ['archive', 'other'] },
 ]
@@ -343,7 +354,9 @@ export function formatBytes(n) {
   if (b < 1024) return `${b} B`
   if (b < 1024 * 1024) return `${Math.round(b / 1024)} KB`
   const mb = b / 1048576
-  return `${mb < 10 ? mb.toFixed(1).replace(/\.0$/, '') : Math.round(mb)} MB`
+  if (mb < 1000) return `${mb < 10 ? mb.toFixed(1).replace(/\.0$/, '') : Math.round(mb)} MB`
+  const gb = b / 1073741824
+  return `${gb < 10 ? gb.toFixed(1).replace(/\.0$/, '') : Math.round(gb)} GB`
 }
 
 export function formatDuration(s) {

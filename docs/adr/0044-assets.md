@@ -19,7 +19,7 @@ list the AI wrote. And a Space that isn't shared wants the same place for the us
    the rest of its library (`autobases.copyFiles`) and removes them from the Vault. Rules and paths
    are `shared/assets.mjs` (tests `tests/unit/assets.test.js`).
 
-2. **Any file, up to 25 MB.** Its type comes from what it came with, or from its extension
+2. **Any file, up to 25 MB** (500 MB since the amendment below). Its type comes from what it came with, or from its extension
    (`mimeOf`), and its **kind** (`kindOf`: image, video, audio, pdf, markdown, code, data, text,
    document, archive, other) picks the icon, the filter and the preview. A camera or gallery photo
    is scaled to 2560 px and a 480 px thumbnail, as before; any other file is kept as it is. A file
@@ -58,8 +58,37 @@ list the AI wrote. And a Space that isn't shared wants the same place for the us
   need; `tests/unit/assets.test.js` runs the same cases on both.
 - No page API reads Assets, and the AI only adds: it can't list, read or remove them yet. A Job
   doesn't get `saveAsset`.
-- Text previews read the whole file (at most 25 MB) and show the first 512 KB.
+- Text previews show the first 512 KB.
 - Office documents and archives have no preview beyond their card.
+
+## Amendment — big files, movies, PDFs and books (2026-11-09)
+
+People keep whole movies there, and e-books.
+
+1. **Up to 500 MB a file** (`MAX_BYTES`). The AI's `saveAsset` stays at 100 MB (`MAX_AI_BYTES`):
+   it carries the bytes in memory.
+2. **Files move in pieces.** A file never crosses IPC or the phone's RPC whole. Desktop's page reads
+   with `nomad.vault.assetChunk` (4 MB, `CHUNK_BYTES`) and adds with `beginAssetUpload`,
+   `assetUploadChunk` and `finishAssetUpload`: bg stages the pieces in a temp file and streams it into
+   the adder's blob core with fs-core's `putBlobFrom`, which writes the same full 64 KB blocks
+   `putBlob` does (no wire-format change; `FS_FORMAT_VERSION` stays 1). `assetData` keeps answering
+   for thumbnails and files up to 32 MB. The phone's backend reads and writes files by path in the
+   app's own document and cache folders (`assets/readTo`, `add` with `path`), streaming each piece,
+   and refuses a path outside them.
+3. **Movies, PDFs and books open on the phone too.** Video and audio play from the file in the
+   cache. A PDF or an EPUB/MOBI opens in one WebView page, `mobile/lib/docViewerHtml.ts`
+   (pdf.js and the reader, bundled by `scripts/build-doc-viewer.mjs`), with a strict CSP and no
+   network.
+4. **Books are their own kind** (`book`: epub, mobi, prc, azw, azw3), under Documents. One reader
+   (`app/userland/assets/js/book/`) serves desktop and the phone: it reads EPUB (the spine, nav or
+   NCX) and MOBI (PalmDOC and HUFF/CDIC, with its pictures; KF8 as well as it can) itself, and shows
+   one chapter at a time in a frame sandboxed without scripts. Every picture, style and font is a
+   blob: URL of the book's own bytes; scripts, frames, forms and anything outside the book are
+   removed. It has the contents, text size and the place the reader left off (per book, in that
+   browser's storage). A book locked with DRM says so and offers the file instead.
+5. **The phone's grid zooms with a pinch**, from a list to one tile across (6, 5, 4, 3, 2, 1
+   columns), remembered on the phone; at one across a picture shows from the file, not its
+   thumbnail. TalkBack gets the same as Bigger tiles / Smaller tiles actions on each file.
 
 ## Amendment: folders, tags, changes to many, and links from Notes (2026-11)
 

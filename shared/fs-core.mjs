@@ -218,6 +218,52 @@ export function createBlobStore({ Hyperblobs, b4a }) {
     };
   }
 
+  // The same, from an (async) iterable of byte chunks, for a file too big to hold at once (a
+  // movie in Assets). The blob's blocks are contiguous: the write stream holds the core's lock
+  // until it ends, so a caller should feed it from local storage, not the network. Returns the
+  // same canonical pointer as putBlob, or null for no bytes.
+  async function putBlobFrom(blobs, chunks) {
+    const store = blobs instanceof Hyperblobs ? blobs : new Hyperblobs(blobs);
+    const ws = store.createWriteStream();
+    const done = new Promise((resolve, reject) => {
+      ws.on('close', resolve);
+      ws.on('error', reject);
+    });
+    // Whole blocks, as put() writes them, whatever size the chunks come in.
+    const size = store.blockSize;
+    let carry = null;
+    const write = async (block) => {
+      if (!ws.write(block)) await new Promise((resolve) => ws.once('drain', resolve));
+    };
+    try {
+      for await (const chunk of chunks) {
+        let buf = b4a.isBuffer(chunk) ? chunk : b4a.from(chunk);
+        if (carry) {
+          buf = b4a.concat([carry, buf]);
+          carry = null;
+        }
+        let i = 0;
+        for (; i + size <= buf.byteLength; i += size) await write(buf.subarray(i, i + size));
+        if (i < buf.byteLength) carry = b4a.from(buf.subarray(i));
+      }
+      if (carry) await write(carry);
+      ws.end();
+    } catch (err) {
+      ws.destroy(err);
+      await done.catch(() => {});
+      throw err;
+    }
+    await done;
+    if (!ws.id.byteLength) return null;
+    return {
+      core: b4a.toString(store.core.key, 'hex'),
+      blockOffset: ws.id.blockOffset,
+      blockLength: ws.id.blockLength,
+      byteOffset: ws.id.byteOffset,
+      byteLength: ws.id.byteLength,
+    };
+  }
+
   // Resolve a blob pointer to bytes through a corestore (opens the owning writer's core by
   // key; it replicates over the shared swarm). `range` is an optional { start, length }.
   async function resolveBlob(store, pointer, range) {
@@ -233,7 +279,7 @@ export function createBlobStore({ Hyperblobs, b4a }) {
     return range ? blobs.get(id, range) : blobs.get(id);
   }
 
-  return { putBlob, resolveBlob };
+  return { putBlob, putBlobFrom, resolveBlob };
 }
 
 // --- Reading a record's content (inline value OR blob), backend-agnostic -----------------

@@ -22,9 +22,12 @@
 //   Provider → CHUNK { id, text } | TOOL { id, event } | REASONING { id, text }
 //                                             (an older Client drops REASONING, like any frame it
 //                                             doesn't know; an older Provider never sends it)
-//   Provider → PROMPT { id, permission, request? } ↔ Client → PROMPT_RESULT { id, allow }   (reverse consent;
-//                                             `request` is the URL, method and body an
-//                                             aiSendData prompt names, egress.mjs requestPreview)
+//   Provider → PROMPT { id, permission, request?, similar? } ↔ Client → PROMPT_RESULT { id, allow }
+//                                             (reverse consent; `request` is the URL, method and
+//                                             body an aiSendData prompt names, egress.mjs
+//                                             requestPreview; `similar` labels a box that makes
+//                                             the yes last longer, and a yes with it ticked is
+//                                             allow: 'similar'. See promptAnswer.)
 //   Provider → DONE { id } | ERROR { id, message }   (terminal for that id)
 //   Client → CANCEL { id }                      (abort an in-flight turn)
 //   Client → STEER { id, steerId, text }        (a message the user sent while the turn runs; the
@@ -70,6 +73,14 @@ export function steerFrame(id, m) {
   if (m.type === 'steer') return { t: FRAME.STEER, id, steerId: m.id, text: m.text };
   if (m.type === 'now') return { t: FRAME.STEER_NOW, id, steerId: m.id };
   return { t: FRAME.UNSTEER, id, steerId: m.id };
+}
+
+// A PROMPT_RESULT's `allow` as the Provider takes it: 'similar' (the user ticked the prompt's
+// longer-yes box) only when the PROMPT offered one (`offered`), else true or false. An older
+// Client sends a plain boolean.
+export function promptAnswer(allow, offered) {
+  if (allow === 'similar') return offered ? 'similar' : true;
+  return allow === true;
 }
 
 // The single Protomux message slot carries these frames as JSON bytes. Encode/decode are the

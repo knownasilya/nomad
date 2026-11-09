@@ -247,7 +247,19 @@ async function libraryOf (space) {
 }
 vaultApps.useSpaceLibraries(libraryOf)
 // A Space's Assets (ADR-0044): in its Library once shared, else the Vault.
-const assets = createAssets({ libraryOf, vaultOf: () => vault, blobs: { putBlobFor: (base, buf) => manager.putBlobFor(base, buf), readFileOf: (base, path) => manager.readFileOf(base, path) } })
+// Files move to and from the app as files in its own folders (Bare.argv: its documents, then its cache).
+const assets = createAssets({
+  libraryOf,
+  vaultOf: () => vault,
+  blobs: {
+    putBlobFor: (base, buf) => manager.putBlobFor(base, buf),
+    putBlobFromFor: (base, chunks) => manager.putBlobFromFor(base, chunks),
+    readFileOf: (base, path, range) => manager.readFileOf(base, path, range),
+    fileSizeOf: (base, path) => manager.fileSizeOf(base, path)
+  },
+  fs,
+  roots: Bare.argv.slice(0, 2).filter(Boolean).map((u) => URL.fileURLToPath(u))
+})
 
 // Open every shared Space's Library in the background, so a Space switch or a name lookup finds it
 // warm instead of waiting on the swarm.
@@ -571,9 +583,10 @@ async function handleAiChat ({ reqId, messages, opts = {} }) {
       // Provider keepalive during model load / slow first token — resets the UI idle timeout.
       onHeartbeat: () => send(RPC_AI_EVENT, { reqId, kind: 'heartbeat' }),
       // Relayed modifyDrive consent — the human is on THIS phone. Surface it to the RN UI and wait.
-      onPrompt: (permission, request) => new Promise((resolve) => {
+      // `similar` labels the box that keeps the yes longer; ticked, the answer is 'similar'.
+      onPrompt: (permission, request, similar) => new Promise((resolve) => {
         entry.promptResolve = resolve
-        send(RPC_AI_EVENT, { reqId, kind: 'prompt', permission, request: request || null })
+        send(RPC_AI_EVENT, { reqId, kind: 'prompt', permission, request: request || null, similar: similar || null })
       })
     })
     send(RPC_AI_EVENT, { reqId, kind: 'done' })
@@ -608,7 +621,7 @@ function handleAiPromptResult ({ reqId, allow }) {
   if (entry && entry.promptResolve) {
     const resolve = entry.promptResolve
     entry.promptResolve = null
-    resolve(!!allow)
+    resolve(allow === 'similar' ? 'similar' : allow === true)
   }
 }
 
@@ -796,6 +809,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'calendar' && action === 'feedFetched') value = await calendar.feedFetched(vault, space, { id: args.id, text: args.text, error: args.error })
     else if (app === 'assets' && action === 'list') value = await assets.list(space)
     else if (app === 'assets' && action === 'read') value = await assets.read(space, args.id, { thumb: !!args.thumb })
+    else if (app === 'assets' && action === 'readTo') value = await assets.readTo(space, args.id, { to: args.to, thumb: !!args.thumb })
     else if (app === 'assets' && action === 'add') value = await assets.add(space, args.asset || {})
     else if (app === 'assets' && action === 'update') value = await assets.update(space, { id: args.id, name: args.name, caption: args.caption, tags: args.tags, folder: args.folder })
     else if (app === 'assets' && action === 'updateMany') value = await assets.updateMany(space, { ids: args.ids, folder: args.folder, addTags: args.addTags, removeTags: args.removeTags })
