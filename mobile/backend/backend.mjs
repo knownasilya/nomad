@@ -583,9 +583,10 @@ async function handleAiChat ({ reqId, messages, opts = {} }) {
       // Provider keepalive during model load / slow first token — resets the UI idle timeout.
       onHeartbeat: () => send(RPC_AI_EVENT, { reqId, kind: 'heartbeat' }),
       // Relayed modifyDrive consent — the human is on THIS phone. Surface it to the RN UI and wait.
-      onPrompt: (permission, request) => new Promise((resolve) => {
+      // `similar` labels the box that keeps the yes longer; ticked, the answer is 'similar'.
+      onPrompt: (permission, request, similar) => new Promise((resolve) => {
         entry.promptResolve = resolve
-        send(RPC_AI_EVENT, { reqId, kind: 'prompt', permission, request: request || null })
+        send(RPC_AI_EVENT, { reqId, kind: 'prompt', permission, request: request || null, similar: similar || null })
       })
     })
     send(RPC_AI_EVENT, { reqId, kind: 'done' })
@@ -620,7 +621,7 @@ function handleAiPromptResult ({ reqId, allow }) {
   if (entry && entry.promptResolve) {
     const resolve = entry.promptResolve
     entry.promptResolve = null
-    resolve(!!allow)
+    resolve(allow === 'similar' ? 'similar' : allow === true)
   }
 }
 

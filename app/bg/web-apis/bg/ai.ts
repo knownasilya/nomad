@@ -90,6 +90,8 @@ import { pickToolDrive, remoteStage, stageRules, tabSnapshot } from '../../ai/st
 import { openTabGroup, openTabUrl } from '../../ai/open-tab.mjs';
 import { CREATE_DRIVE_PERM, createdDrive, newDriveOptions } from '../../ai/create-drive.mjs';
 import { DRIVE_TEMPLATES } from '../../../lib/drive-templates';
+import { PERMS, getPermId } from '../../../lib/permissions';
+import { keepSite, keepingPermit, siteLabel } from '../../ai/keep-grants.mjs';
 import { isPageAction } from '../../ai/page-control.mjs';
 import * as pageControl from '../../ui/page-control';
 import { createJobPage } from '../../ai/job-page';
@@ -353,6 +355,8 @@ aiBridge.setServeChat(
     const stage = remoteStage(opts?.personal);
     const tab = stageRules(stage).tab ? tabSnapshot(opts?.tab) : null;
     const sender = makeRemoteSender(driveUrl || tab?.url);
+    // The site a yes the phone keeps is for, as desktop keeps one for its tab's site.
+    const keptFor = keepSite(sender.getURL());
 
     // Draft actions delegated from the Client (the phone often can't write a Provider-owned Drive, so
     // publish runs HERE where the Drive is writable — ADR-0010/0012). These reuse the request path with
@@ -392,7 +396,15 @@ aiBridge.setServeChat(
         : null,
       space: isSpaceKey(opts?.space) ? opts.space : null,
       signal,
-      requestPermission,
+      // A yes kept for the site (sitedata, as desktop's Allow keeps one) answers without asking,
+      // and the phone's prompt offers to keep its yes the same way (keep-grants.mjs).
+      requestPermission: keepingPermit(requestPermission, {
+        site: keptFor,
+        label: keptFor ? siteLabel(keptFor, tab?.title) : '',
+        persists: (permission) => PERMS[getPermId(permission)]?.persist === 'allow',
+        get: (site, permission) => sitedata.getPermission(site, permission),
+        set: (site, permission) => sitedata.setPermission(site, permission, 1),
+      }),
       draft: true,
       remote: true, // no reachable renderer here — disables WebMCP page tools
       // The Client's user steers this turn (STEER frames); never anything from opts.
@@ -1250,7 +1262,8 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
     const answer = await permit(sendPermission(host), sender, {
       host,
       request: requestPreview(request),
-      similar: `Allow ${host} for 3 months, in every chat (AI page → Sites)`,
+      // On the phone the AI page is the computer's.
+      similar: `Allow ${host} for 3 months, in every chat (AI page → Sites${remote ? ' on your computer' : ''})`,
     });
     if (answer === 'similar') await sendGrants.grant(host).catch(() => {});
     return !!answer;

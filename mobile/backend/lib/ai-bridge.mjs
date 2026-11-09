@@ -21,7 +21,8 @@ import {
   encodeFrame,
   decodeFrame,
   signChallenge,
-  steerFrame
+  steerFrame,
+  promptAnswer
 } from '../../../shared/ai-bridge.mjs'
 
 const PAIRED_FLAG = '_nomadAiBridgePaired'
@@ -123,8 +124,9 @@ export function createAiBridge ({ swarm, getVault }) {
   }
 
   // Client entry point. Forwards one turn to an available Provider; resolves on done, rejects on a
-  // remote error / no Provider / abort. onChunk/onTool stream results; onPrompt(permission) shows
-  // the relayed modifyDrive consent HERE (this Device is where the human is) and returns Promise<bool>.
+  // remote error / no Provider / abort. onChunk/onTool stream results; onPrompt(permission, request,
+  // similar) shows the relayed consent HERE (this Device is where the human is) and returns
+  // Promise<bool | 'similar'>: 'similar' when the user ticked the `similar` box.
   // `steer` is how the user steers this turn while it runs: { queue: [], send: null }. Messages
   // queue up until the REQUEST is out, then `send` takes each one as a STEER/UNSTEER frame.
   // onSteered({ ids, texts }) says the Provider's loop read them.
@@ -241,10 +243,13 @@ export function createAiBridge ({ swarm, getVault }) {
           ids: Array.isArray(f.ids) ? f.ids : [],
           texts: Array.isArray(f.texts) ? f.texts : []
         })
-      case FRAME.PROMPT:
-        return Promise.resolve(req.onPrompt ? req.onPrompt(f.permission, f.request || null) : false)
-          .then((allow) => sendFrame(peer, { t: FRAME.PROMPT_RESULT, id: f.id, allow: !!allow }))
+      case FRAME.PROMPT: {
+        // `similar`: the label of the box that keeps the yes longer (shared/ai-bridge.mjs).
+        const similar = typeof f.similar === 'string' && f.similar ? f.similar.slice(0, 300) : null
+        return Promise.resolve(req.onPrompt ? req.onPrompt(f.permission, f.request || null, similar) : false)
+          .then((allow) => sendFrame(peer, { t: FRAME.PROMPT_RESULT, id: f.id, allow: promptAnswer(allow, !!similar) }))
           .catch(() => sendFrame(peer, { t: FRAME.PROMPT_RESULT, id: f.id, allow: false }))
+      }
       case FRAME.HEARTBEAT:
         return req.onHeartbeat && req.onHeartbeat()
       case FRAME.DONE:

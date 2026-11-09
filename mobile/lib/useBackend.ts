@@ -320,12 +320,18 @@ export interface AiPromptRequest {
   secretDetails?: { name: string; hosts: string[]; sentAs: string }[]
 }
 
+// A relayed prompt's answer: 'similar' is a yes with the prompt's longer-yes box ticked.
+export type AiPromptAnswer = boolean | 'similar'
+export type AiPromptHandler = (permission: string, request?: AiPromptRequest | null, similar?: string | null) => AiPromptAnswer | Promise<AiPromptAnswer>
+
 export interface AiChatHandlers {
   onChunk?: (text: string) => void
   onTool?: (event: unknown) => void
   onReasoning?: (text: string) => void // the model's reasoning, streamed (desktop Providers since this release)
   // Relayed consent. `request` is the request an aiSendData prompt names (its URL, method, body).
-  onPrompt?: (permission: string, request?: AiPromptRequest | null) => boolean | Promise<boolean>
+  // `similar` labels a box that makes the yes last longer (the 3-month send grant, a yes kept for
+  // the site): answer 'similar' when the user ticked it.
+  onPrompt?: AiPromptHandler
   // The Provider's loop read these messages the user sent mid-turn (handle.steer).
   onSteer?: (event: { ids: string[]; texts: string[] }) => void
   onDone?: () => void
@@ -567,9 +573,13 @@ export function useBackend (handlers: BackendHandlers): Backend {
       else if (msg.kind === 'reasoning') h.onReasoning?.(msg.text)
       else if (msg.kind === 'steer') h.onSteer?.({ ids: msg.ids || [], texts: msg.texts || [] })
       else if (msg.kind === 'prompt') {
-        Promise.resolve(h.onPrompt ? h.onPrompt(msg.permission, msg.request || null) : false).then((allow) => {
+        const similar = typeof msg.similar === 'string' && msg.similar ? msg.similar : null
+        Promise.resolve(h.onPrompt ? h.onPrompt(msg.permission, msg.request || null, similar) : false).then((allow) => {
           const r = rpc.request(RPC_AI_PROMPT_RESULT)
-          r.send(b4a.from(JSON.stringify({ reqId, allow: !!allow })))
+          r.send(b4a.from(JSON.stringify({ reqId, allow: allow === 'similar' && similar ? 'similar' : allow === true })))
+        }, () => {
+          const r = rpc.request(RPC_AI_PROMPT_RESULT)
+          r.send(b4a.from(JSON.stringify({ reqId, allow: false })))
         })
       }
       else if (msg.kind === 'done') { cleanup(); h.onDone?.() }

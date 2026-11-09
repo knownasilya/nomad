@@ -37,7 +37,9 @@ import AiPanel from '../components/AiPanel'
 import Shortcuts from '../components/Shortcuts'
 import FileExplorer, { type ExplorerDrive } from '../components/FileExplorer'
 import type { HyperRender } from '../components/HyperView'
-import { useBackend, type SpaceJoin, type AiPromptRequest } from '../lib/useBackend'
+import { useBackend, type SpaceJoin, type AiPromptRequest, type AiPromptAnswer } from '../lib/useBackend'
+import { aiPromptText } from '../lib/aiPrompts'
+import AiPromptSheet, { type AiPrompt } from '../components/AiPromptSheet'
 import { useJobNotifications } from '../lib/useJobNotifications'
 import { useMessageNotifications } from '../lib/useMessageNotifications'
 import { useInviteJoins } from '../lib/useInviteJoins'
@@ -185,94 +187,6 @@ function decodeContent (msg: ContentMsg): HyperRender {
   return { type: 'text', text: `Binary file (${mime})`, mime }
 }
 
-// Native consent for a relayed AI permission (ADR-0013 §6): the agentic turn runs on the desktop
-// Provider, but the human is here on the phone, so the prompt is shown natively. A modifyDrive prompt
-// names the target drive (title + URL) so the user knows exactly what's being edited; the caller
-// resolves that from the `modifyDrive:<hexDriveKey>` permission (see describeDrive). The Notes and
-// Reader permissions (ADR-0019) each say what the AI wants; the Provider asks each once per turn.
-// NOT cancelable: the user must explicitly tap Allow or Deny. (An `onDismiss`/cancelable dialog on
-// Android can fire onDismiss alongside a button press and race it to resolve false — which denied
-// writes even after the user tapped Allow.) The `settled` guard keeps the first choice
-// authoritative regardless of any duplicate callback.
-const VAULT_PROMPTS: Record<string, { title: string; message: string }> = {
-  notesRead: { title: 'Allow AI to read your Notes?', message: 'The AI running on your other device wants to read your Notes.' },
-  notesWrite: { title: 'Allow AI to edit your Notes?', message: 'The AI running on your other device wants to create or change your Notes.' },
-  readerRead: { title: 'Allow AI to read your Reader?', message: 'The AI running on your other device wants to read the feeds you follow and their posts.' },
-  readerWrite: { title: 'Allow AI to change your Reader?', message: 'The AI running on your other device wants to follow or unfollow feeds, or mark posts read.' },
-  modsRead: { title: 'Allow AI to read your Mods?', message: 'The AI running on your other device wants to read your Mods: your own styles and scripts for sites.' },
-  modsWrite: { title: 'Allow AI to change your Mods?', message: 'The AI running on your other device wants to create or change your Mods. A Mod can run a script on every page of its site.' },
-  assetsWrite: { title: 'Allow AI to save to Assets?', message: 'The AI running on your other device wants to save a file to your Assets. In a shared Space, everyone in it sees the file.' },
-  calendarRead: { title: 'Allow AI to read your calendar?', message: 'The AI running on your other device wants to read your calendar, your household’s, and the calendars you follow.' },
-  contactsRead: { title: 'Allow AI to read your contacts?', message: 'The AI running on your other device wants to read this Space’s contacts: names, phone numbers, emails and addresses.' },
-  jobsRead: { title: 'Allow AI to see your Jobs?', message: 'The AI running on your other device wants to see your AI Jobs and their results.' },
-  jobsWrite: { title: 'Allow AI to change your Jobs?', message: 'The AI running on your other device wants to create, change or run your AI Jobs. A Job runs a prompt by itself, reads your Notes and Reader, and notifies this phone.' },
-  aiCreateDrive: { title: 'Allow AI to make a drive?', message: 'The AI running on your other device wants to make a new drive in your library on that computer.' },
-  memoryWrite: { title: 'Allow AI to remember things?', message: 'The AI running on your other device wants to remember something about you for later chats, or forget something. You can see and change what it remembers on the AI page on your computer.' }
-}
-
-// The AI using one of the user's secrets (ADR-0033): `aiSecretUse:<NAME>`. The secret stays on the
-// computer; the phone only says yes or no.
-function secretPrompt (permission: string, request?: AiPromptRequest | null): { title: string; message: string } | null {
-  const m = /^aiSecretUse:([A-Z][A-Z0-9_]{1,63})$/.exec(permission)
-  if (!m) return null
-  return {
-    title: `Allow AI to use ${m[1]}?`,
-    message: `The AI running on your other device wants to send requests with your secret ${m[1]}, to the sites you allowed for it.${requestLines(request)}It never sees the secret itself.`
-  }
-}
-
-// The AI sending a request to a site after it read the user's private data in this chat (ADR-0037):
-// `aiSendData:<host>`. The request could carry that data there. A newer Provider also sends the
-// request that asks (`request`), so the prompt names its URL and what it sends.
-function sendDataPrompt (permission: string, request?: AiPromptRequest | null): { title: string; message: string } | null {
-  const m = /^aiSendData:([^\s]{1,300})$/.exec(permission)
-  if (!m) return null
-  return {
-    title: `Allow AI to contact ${m[1]}?`,
-    message: `The AI running on your other device wants to send a request to ${m[1]}.${requestLines(request)}It has read your private data in this chat (your Notes, Reader, files or a page), and the request could carry some of it there. Allow only if you asked it to use this site.`
-  }
-}
-
-// The request in a phone prompt: method and URL, then what else it sends, in a few lines.
-function requestLines (r?: AiPromptRequest | null): string {
-  if (!r || typeof r.url !== 'string' || (!r.url && !r.secrets?.length)) return ' '
-  const url = !r.url ? '(the URL is your secret)' : r.url.length > 300 ? r.url.slice(0, 300) + '…' : r.url
-  const lines = [r.kind === 'tab' ? `Open ${url}` : `${r.method || 'GET'} ${url}`]
-  const bodyLength = r.bodyLength || (r.body ? r.body.length : 0)
-  if (bodyLength) lines.push(`With a body of ${bodyLength.toLocaleString()} characters`)
-  if (Array.isArray(r.headers) && r.headers.length) lines.push(`Headers: ${r.headers.map((h) => h.name).join(', ')}`)
-  if (Array.isArray(r.secrets) && r.secrets.length) {
-    lines.push(`⚠ Sends your ${r.secrets.length > 1 ? 'secrets' : 'secret'} ${r.secrets.join(', ')}`)
-    for (const d of r.secretDetails || []) {
-      if (d.sentAs) lines.push(`  ${d.name} goes in ${d.sentAs}${d.hosts?.length ? `, only to ${d.hosts.join(', ')}` : ''}`)
-    }
-  }
-  return `\n\n${lines.join('\n')}\n\n`
-}
-
-function confirmAiPermission (permission: string, drive?: { name: string; url: string }, request?: AiPromptRequest | null): Promise<boolean> {
-  const vaultPrompt = VAULT_PROMPTS[permission] || secretPrompt(permission, request) || sendDataPrompt(permission, request)
-  const name = drive?.name || 'this drive'
-  const url = drive?.url || ''
-  const title = vaultPrompt ? vaultPrompt.title : 'Allow AI to edit?'
-  const message = vaultPrompt
-    ? vaultPrompt.message
-    : `The AI running on your other device wants to make changes to this drive:\n\n${name}${url ? `\n${url}` : ''}`
-  return new Promise((resolve) => {
-    let settled = false
-    const settle = (v: boolean) => { if (!settled) { settled = true; resolve(v) } }
-    Alert.alert(
-      title,
-      message,
-      [
-        { text: 'Deny', style: 'cancel', onPress: () => settle(false) },
-        { text: 'Allow', onPress: () => settle(true) }
-      ],
-      { cancelable: false }
-    )
-  })
-}
-
 export default function Browser () {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
@@ -301,6 +215,25 @@ export default function Browser () {
     const url = tab?.url ? `hyper://${hyperKeyOf(tab.url)}` : (key ? `hyper://${key}` : '')
     return { name, url }
   }, [])
+  // Consent for a relayed AI permission (ADR-0013 §6): the turn runs on the desktop Provider, but
+  // the human is here, so the prompt is a sheet on the phone (AiPromptSheet). Prompts from a page's
+  // turn and the AI panel's can overlap, so they wait in line and show one at a time. `similar` is
+  // the Provider's longer-yes box. The first answer to a prompt wins.
+  const [aiPrompt, setAiPrompt] = useState<AiPrompt | null>(null)
+  const aiPromptQueue = useRef<{ prompt: AiPrompt; resolve: (a: AiPromptAnswer) => void }[]>([])
+  const answerAiPrompt = useCallback((answer: AiPromptAnswer) => {
+    const done = aiPromptQueue.current.shift()
+    done?.resolve(answer)
+    setAiPrompt(aiPromptQueue.current[0]?.prompt ?? null)
+  }, [])
+  const confirmAiPermission = useCallback((permission: string, request?: AiPromptRequest | null, similar?: string | null): Promise<AiPromptAnswer> => {
+    const drive = permission.startsWith('modifyDrive:') ? describeDrive(permission) : null
+    const prompt: AiPrompt = { ...aiPromptText(permission, drive, request), similar: similar || null }
+    return new Promise((resolve) => {
+      aiPromptQueue.current.push({ prompt, resolve })
+      if (aiPromptQueue.current.length === 1) setAiPrompt(prompt)
+    })
+  }, [describeDrive])
   // persist is space-scoped, but it depends on the active space id (from useSpaces, which needs
   // backend, which uses persist in its callbacks) — so we late-bind persist via a ref to break the
   // cycle. The actual `persist` is created below, after backend + useSpaces.
@@ -757,7 +690,7 @@ export default function Browser () {
           onReasoning: (text) => inject({ kind: 'reasoning', text }),
           onDone: () => { delete aiHandles.current[id]; inject({ kind: 'done' }) },
           onError: (message) => { delete aiHandles.current[id]; inject({ kind: 'error', message }) },
-          onPrompt: (permission, request) => confirmAiPermission(permission, describeDrive(permission), request)
+          onPrompt: confirmAiPermission
         })
       }
       else if (msg.type === 'nomad-ai-cancel' && msg.payload && msg.payload.id) {
@@ -765,7 +698,7 @@ export default function Browser () {
         delete aiHandles.current[msg.payload.id]
       }
     },
-    [navigate, describeDrive, favicons.remember, patch, openFeed]
+    [navigate, confirmAiPermission, favicons.remember, patch, openFeed]
   )
 
   const viewSource = useCallback(() => {
@@ -1600,10 +1533,11 @@ export default function Browser () {
       title={active.title}
       space={spacesApi.activeSpace.rootDriveKey}
       aiChat={backend.aiChat}
-      onPrompt={(permission, request) => confirmAiPermission(permission, describeDrive(permission), request)}
+      onPrompt={confirmAiPermission}
       onPreviewDraft={onPreviewDraft}
       onOpenLink={openAiLink}
     />
+    <AiPromptSheet prompt={aiPrompt} onAnswer={answerAiPrompt} />
     </>
   )
 }
