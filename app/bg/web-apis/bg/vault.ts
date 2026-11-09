@@ -111,6 +111,7 @@ import {
   runDuration,
   runPreview,
   runSearchText,
+  timeLimitOf,
 } from '../../../../shared/jobs.mjs';
 
 // The Drive key of a hyper://<key>/ URL, or null.
@@ -826,6 +827,7 @@ export default {
             }
           : {}),
         when: describeSchedule(j.schedule),
+        timeLimit: timeLimitOf(j),
         here: !!own && j.device === own,
         deviceName: j.device === own ? 'This computer' : names.get(j.device) || 'Another device',
       })),
@@ -854,7 +856,8 @@ export default {
     return jobs.clearRuns(id);
   },
 
-  // ({ id?, title?, prompt?, source?, writes?, schedule?, notify?, enabled?, runHere? }) -> record. A
+  // ({ id?, title?, prompt?, source?, writes?, schedule?, notify?, timeLimit?, enabled?, runHere? }) -> record.
+  // `timeLimit` is the minutes a run may go on with nobody watching (null for the default). A
   // new Job runs on this Device and reads the Reader of the calling page's Space. `source` is a drive
   // URL to read now (the user's own drive stays live, anyone else's is copied), { url, module, prompt }
   // for a newer version the user looked at (from checkJobSource) and took, or null to drop it.
@@ -866,7 +869,7 @@ export default {
     try {
       space = await vaultApps.spaceKey(this);
     } catch {}
-    const { id, title, prompt, schedule, notify, enabled, runHere } = f;
+    const { id, title, prompt, schedule, notify, timeLimit, enabled, runHere } = f;
     // Notifying the Space is for a Job in a shared Space the user can edit.
     const audience = f.audience === undefined ? undefined : f.audience === 'space' ? 'space' : 'me';
     if (audience === 'space') {
@@ -893,6 +896,7 @@ export default {
       schedule,
       notify,
       audience,
+      timeLimit,
       enabled,
       runHere: !!runHere,
       space: f.id ? undefined : space,

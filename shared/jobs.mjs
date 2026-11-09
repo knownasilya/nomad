@@ -73,6 +73,13 @@ export const NOTIFY = ['always', 'auto', 'never'];
 // Whose phones a Job's notifications go to: the user's, or everyone's in the Job's shared Space
 // (shared/space-library.mjs notices). Only the user sets 'space', in My Library; the AI can't.
 export const AUDIENCES = ['me', 'space'];
+// How long a run may go on with nobody watching it, in minutes (`timeLimit` on the Job), before it is
+// stopped: Jobs run one at a time, so a run that never ends would hold up every other Job. A run
+// someone watches in the AI Sidebar (Run with me, or Watch on a run going on) has no limit while
+// they watch: they stop it. TIME_LIMITS are the choices the Jobs editor offers.
+export const DEFAULT_TIME_LIMIT = 30;
+export const MAX_TIME_LIMIT = 8 * 60;
+export const TIME_LIMITS = [10, 30, 60, 120, 240, 480];
 export const MIN_INTERVAL = 15; // minutes
 export const MAX_INTERVAL = 7 * 24 * 60;
 export const KEEP_RUNS = 10; // per Job, with their whole answer; older runs are trimmed
@@ -730,6 +737,8 @@ export function makeJob(fields, prev = null, now = new Date()) {
   const audience = f.audience !== undefined ? f.audience || 'me' : prev?.audience || 'me';
   if (!AUDIENCES.includes(audience)) throw new Error('audience is "me" or "space"');
   const enabled = f.enabled !== undefined ? !!f.enabled : prev ? prev.enabled : true;
+  const timeLimit =
+    f.timeLimit !== undefined ? normalizeTimeLimit(f.timeLimit) : timeLimitOf(prev);
   const writes = f.writes !== undefined ? normalizeWrites(f.writes) : prev?.writes || null;
 
   const device = f.device !== undefined ? f.device : prev?.device || null;
@@ -754,6 +763,7 @@ export function makeJob(fields, prev = null, now = new Date()) {
     schedule,
     notify,
     ...(audience === 'space' ? { audience } : {}),
+    ...(timeLimit !== DEFAULT_TIME_LIMIT ? { timeLimit } : {}),
     enabled,
     device,
     space,
@@ -762,6 +772,34 @@ export function makeJob(fields, prev = null, now = new Date()) {
     scheduleFrom: restart ? iso : prev.scheduleFrom || prev.createdAt || iso,
     ...(prev?.cleared ? { cleared: prev.cleared } : {}),
   };
+}
+
+// A Job's time limit: whole minutes from 1 to MAX_TIME_LIMIT. null or '' is the default. Throws
+// for anything else.
+export function normalizeTimeLimit(input) {
+  if (input == null || input === '') return DEFAULT_TIME_LIMIT;
+  const n = Number(input);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_TIME_LIMIT) {
+    throw new Error(`timeLimit is a whole number of minutes from 1 to ${MAX_TIME_LIMIT} (${MAX_TIME_LIMIT / 60} hours)`);
+  }
+  return n;
+}
+
+// The minutes a Job's run may go on with nobody watching: its own `timeLimit`, or the default (a
+// Job saved before there was one, or with a bad value).
+export function timeLimitOf(job) {
+  const n = job?.timeLimit;
+  return Number.isInteger(n) && n >= 1 && n <= MAX_TIME_LIMIT ? n : DEFAULT_TIME_LIMIT;
+}
+
+// A time limit in words: "10 minutes", "1 hour", "1 hour 30 minutes", "8 hours".
+export function describeTimeLimit(minutes) {
+  const n = Math.max(1, Math.round(Number(minutes) || DEFAULT_TIME_LIMIT));
+  const h = Math.floor(n / 60);
+  const m = n % 60;
+  const part = (v, unit) => `${v} ${unit}${v === 1 ? '' : 's'}`;
+  if (!h) return part(m, 'minute');
+  return m ? `${part(h, 'hour')} ${part(m, 'minute')}` : part(h, 'hour');
 }
 
 // Drive sources

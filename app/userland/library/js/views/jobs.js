@@ -43,6 +43,29 @@ const NOTIFY = [
   { id: 'never', label: 'Never' },
 ];
 
+// How long a run may go on with nobody watching (shared/jobs.mjs TIME_LIMITS, in minutes). A run
+// someone watches has no limit.
+const DEFAULT_TIME_LIMIT = 30;
+const TIME_LIMITS = [
+  { minutes: 10, label: '10 minutes' },
+  { minutes: 30, label: '30 minutes' },
+  { minutes: 60, label: '1 hour' },
+  { minutes: 120, label: '2 hours' },
+  { minutes: 240, label: '4 hours' },
+  { minutes: 480, label: '8 hours' },
+];
+
+// A time limit in words, for one the AI set that isn't among the choices too.
+function limitText(minutes) {
+  const known = TIME_LIMITS.find((t) => t.minutes === minutes);
+  if (known) return known.label;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const part = (v, unit) => `${v} ${unit}${v === 1 ? '' : 's'}`;
+  if (!h) return part(m, 'minute');
+  return m ? `${part(h, 'hour')} ${part(m, 'minute')}` : part(h, 'hour');
+}
+
 const blank = () => ({
   id: null,
   title: '',
@@ -72,6 +95,7 @@ const blank = () => ({
   notify: 'always',
   audience: 'me', // 'space': everyone in the Job's shared Space gets its notifications too
   sharedSpaceName: null, // that Space's name, when the Job's Space is shared
+  timeLimit: DEFAULT_TIME_LIMIT, // minutes a run may go on with nobody watching
   enabled: true,
   error: '',
 });
@@ -351,7 +375,11 @@ export class JobsView extends LitElement {
           <span class="live-title">${stopping ? 'Stopping…' : 'Running now'}</span>
           ${p?.startedAt ? html`<span class="muted">· started ${ago(p.startedAt)}</span>` : ''}
           <span class="spacer"></span>
-          <span class="muted">Watch follows it in the AI sidebar${p?.page ? ', with its page' : ''}</span>
+          <span class="muted"
+            >${p?.watched
+              ? 'You’re watching it, so it has no time limit'
+              : `Stops after ${limitText(j.timeLimit || DEFAULT_TIME_LIMIT)} unless you watch it. Watch follows it in the AI sidebar${p?.page ? ', with its page' : ''}`}</span
+          >
         </div>
         <div class="live-steps" @scroll=${(ev) => this.onLiveScroll(ev)}>
           ${items.map((it) =>
@@ -755,6 +783,22 @@ export class JobsView extends LitElement {
             : ''}
         </div>
 
+        <div class="block">
+          <div class="label">
+            Time limit
+            <span class="hint">How long a run may go on with nobody watching before it’s stopped. A run you watch (Run with me, or Watch while it runs) has no limit: stop it when you like.</span>
+          </div>
+          <select
+            aria-label="Time limit"
+            @change=${(ev) => set({ timeLimit: Number(ev.target.value) })}
+          >
+            ${(TIME_LIMITS.some((t) => t.minutes === e.timeLimit)
+              ? TIME_LIMITS
+              : [...TIME_LIMITS, { minutes: e.timeLimit, label: limitText(e.timeLimit) }].sort((a, b) => a.minutes - b.minutes)
+            ).map((t) => html`<option value=${t.minutes} ?selected=${e.timeLimit === t.minutes}>${t.label}</option>`)}
+          </select>
+        </div>
+
         ${e.error ? html`<div class="error">${e.error}</div>` : ''}
         <div class="buttons">
           <button type="submit" class="primary">${e.id ? 'Save' : 'Create Job'}</button>
@@ -932,6 +976,7 @@ export class JobsView extends LitElement {
       notify: j.notify,
       audience: j.audience === 'space' ? 'space' : 'me',
       sharedSpaceName: j.sharedSpaceName || null,
+      timeLimit: j.timeLimit || DEFAULT_TIME_LIMIT,
       enabled: j.enabled,
     };
     if (s?.kind === 'interval') {
@@ -1054,6 +1099,7 @@ export class JobsView extends LitElement {
         schedule: this.schedule(e),
         notify: e.notify,
         ...(e.sharedSpaceName ? { audience: e.audience } : {}),
+        timeLimit: e.timeLimit,
       });
       this.editing = null;
       this.openId = rec.id;

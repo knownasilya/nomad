@@ -45,6 +45,11 @@ import {
   MAX_WRITE_DRIVES,
   promptWithResult,
   MAX_MODULE,
+  DEFAULT_TIME_LIMIT,
+  MAX_TIME_LIMIT,
+  normalizeTimeLimit,
+  timeLimitOf,
+  describeTimeLimit,
 } from '../../shared/jobs.mjs';
 
 const DEV = 'd'.repeat(64);
@@ -317,6 +322,46 @@ describe('makeJob', () => {
     expect(() => makeJob({ id: 'job-abc-123', prompt: 'x', notify: 'loud' })).toThrow(/notify/);
     expect(() => makeJob({ id: 'job-abc-123', prompt: 'x', device: 'nope' })).toThrow(/Device/);
     expect(() => makeJob({ id: '../x', prompt: 'x' })).toThrow();
+  });
+});
+
+describe('time limit', () => {
+  it('defaults to 30 minutes and is stored only when it differs', () => {
+    const j = makeJob({ id: 'job-abc-123', prompt: 'x' }, null, at(1, 9));
+    expect(DEFAULT_TIME_LIMIT).toBe(30);
+    expect('timeLimit' in j).toBe(false);
+    expect(timeLimitOf(j)).toBe(30);
+    // A Job saved before there was a limit gets the default.
+    expect(timeLimitOf({ id: 'job-abc-123' })).toBe(30);
+    expect(timeLimitOf(null)).toBe(30);
+  });
+
+  it('keeps a Job’s own limit across edits, and null goes back to the default', () => {
+    const j = makeJob({ id: 'job-abc-123', prompt: 'x', timeLimit: 120 }, null, at(1, 9));
+    expect(j.timeLimit).toBe(120);
+    const renamed = makeJob({ title: 'Long one' }, j, at(2, 9));
+    expect(timeLimitOf(renamed)).toBe(120);
+    expect('timeLimit' in makeJob({ timeLimit: null }, j, at(2, 9))).toBe(false);
+    expect(makeJob({ timeLimit: '60' }, j, at(2, 9)).timeLimit).toBe(60);
+  });
+
+  it('refuses a limit that isn’t whole minutes up to 8 hours', () => {
+    expect(MAX_TIME_LIMIT).toBe(480);
+    for (const bad of [0, -5, 1.5, 481, 'soon', Infinity]) {
+      expect(() => normalizeTimeLimit(bad)).toThrow(/timeLimit/);
+    }
+    expect(normalizeTimeLimit(480)).toBe(480);
+    expect(normalizeTimeLimit('')).toBe(30);
+    // A bad value on a record reads as the default.
+    expect(timeLimitOf({ timeLimit: 9999 })).toBe(30);
+  });
+
+  it('says a limit in words', () => {
+    expect(describeTimeLimit(1)).toBe('1 minute');
+    expect(describeTimeLimit(10)).toBe('10 minutes');
+    expect(describeTimeLimit(60)).toBe('1 hour');
+    expect(describeTimeLimit(90)).toBe('1 hour 30 minutes');
+    expect(describeTimeLimit(480)).toBe('8 hours');
   });
 });
 

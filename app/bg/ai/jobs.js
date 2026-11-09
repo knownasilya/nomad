@@ -7,7 +7,10 @@
 //   run it. Any Device with an AI Runtime runs one by hand (runNow: My Library, the AI, or the
 //   phone over the AI Bridge).
 // - One run at a time. A run is a turn on the `job` stage (ai.ts runJobTurn): the user's own AI,
-//   reading only, with nobody to ask. It times out after RUN_TIMEOUT_MS.
+//   reading only, with nobody to ask. With nobody watching it, it is stopped after the Job's time
+//   limit (shared/jobs.mjs timeLimitOf, 30 minutes unless the Job says otherwise). While someone
+//   watches it in the AI Sidebar (job-chat.js), it has no limit: they stop it. When the last one
+//   stops watching, the limit starts again from then.
 // - A run can open web pages on the sites the Job was given (ADR-0038). Run with me (`watch`) runs
 //   it in a tab the user watches, asks them for the sites it needs, and saves each yes on the Job.
 // - A Job from someone else's drive runs its copy. When a run sees a newer version in the drive,
@@ -32,7 +35,6 @@ import * as secretStore from './secret-store';
 const logger = logLib.get().child({ category: 'ai', subcategory: 'jobs' });
 
 const TICK_MS = 30_000;
-const RUN_TIMEOUT_MS = 10 * 60_000;
 
 // Emits 'changed' when a Job or a run changes, here or on another Device, and when a run starts.
 export const events = new EventEmitter();
@@ -51,7 +53,7 @@ const running = new Map(); // jobId -> AbortController
 const attempted = new Map(); // jobId -> ISO time
 let draining = false;
 
-/** @param {{ runTurn: (job: any, opts: { signal: AbortSignal, notify: (n: any) => void, trigger: string, lastRun: any, changes: any[], needs: any[], watch: any, onGrant: (writes: any) => Promise<any>, chat: { id: string | null }, outcome: { stopped: boolean } }) => Promise<{ output: string, sourceHash?: string | null }> }} opts */
+/** @param {{ runTurn: (job: any, opts: { signal: AbortSignal, notify: (n: any) => void, trigger: string, lastRun: any, changes: any[], needs: any[], watch: any, onGrant: (writes: any) => Promise<any>, chat: { id: string | null }, outcome: { stopped: boolean }, onWatch: (watching: boolean) => void }) => Promise<{ output: string, sourceHash?: string | null }> }} opts */
 export function setup(opts) {
   runTurn = opts.runTurn;
   refresh();
@@ -165,7 +167,7 @@ export { ownKey };
 // Device.
 // `source` is what job-source.ts read from a drive (shared/jobs.mjs makeSource), null to drop it.
 // `writes` is what the Job may change (shared/jobs.mjs normalizeWrites), null for nothing.
-/** @param {{ id?: string, title?: string, prompt?: string, source?: any, writes?: any, schedule?: any, notify?: string, audience?: string, enabled?: boolean, space?: string, runHere?: boolean }} fields */
+/** @param {{ id?: string, title?: string, prompt?: string, source?: any, writes?: any, schedule?: any, notify?: string, audience?: string, timeLimit?: number | null, enabled?: boolean, space?: string, runHere?: boolean }} fields */
 export function save(fields) {
   const run = writes.then(async () => {
     const { runHere, ...rest } = fields;
@@ -319,7 +321,23 @@ async function drain() {
 
 async function runOne(job, trigger, watch = null) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort('timeout'), RUN_TIMEOUT_MS);
+  // The time limit runs while nobody watches. Someone watching (Run with me opens its chat at once)
+  // holds it off; when the last one goes, it counts from then.
+  const limitMs = jl.timeLimitOf(job) * 60_000;
+  let timer = null;
+  let ended = false;
+  const arm = () => {
+    clearTimeout(timer);
+    timer = ended || controller.signal.aborted ? null : setTimeout(() => controller.abort('timeout'), limitMs);
+  };
+  const onWatch = (watching) => {
+    if (ended) return;
+    if (watching) {
+      clearTimeout(timer);
+      timer = null;
+    } else if (!timer) arm();
+  };
+  arm();
   running.set(job.id, controller);
   events.emit('changed');
   const startedAt = new Date();
@@ -349,12 +367,14 @@ async function runOne(job, trigger, watch = null) {
       onGrant: (w) => grantPages(job.id, w),
       chat,
       outcome,
+      onWatch,
     });
     output = res?.output || '';
     if (res?.sourceHash) noteSourceChange(job.id, res.sourceHash);
   } catch (err) {
     error = err?.message || String(err);
   } finally {
+    ended = true;
     clearTimeout(timer);
     running.delete(job.id);
   }
@@ -363,7 +383,9 @@ async function runOne(job, trigger, watch = null) {
   // ended.
   const stopped = reason === 'stopped' || (outcome.stopped && reason !== 'timeout');
   if (stopped) error = null;
-  else if (reason === 'timeout') error = 'The Job took longer than 10 minutes and was stopped';
+  else if (reason === 'timeout') {
+    error = `The Job ran longer than its time limit (${jl.describeTimeLimit(jl.timeLimitOf(job))}) with nobody watching, so it was stopped. Give it more time in My Library → Jobs, or watch it run (Run with me), which has no limit.`;
+  }
   // Deleted while it ran: nothing to save.
   if (!jobs.has(job.id)) return;
   const status = error ? 'error' : 'ok';
