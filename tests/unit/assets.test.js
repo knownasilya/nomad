@@ -62,6 +62,7 @@ for (const [name, m] of [['shared', as], ['phone', phone]]) {
         ['photo.jpg', 'image'], ['clip.mov', 'video'], ['song.mp3', 'audio'], ['form.pdf', 'pdf'], ['plan.md', 'markdown'],
         ['app.js', 'code'], ['page.html', 'code'], ['list.csv', 'data'], ['data.json', 'data'], ['readme.txt', 'text'],
         ['letter.docx', 'document'], ['backup.zip', 'archive'], ['thing.bin', 'other'],
+        ['novel.epub', 'book'], ['novel.mobi', 'book'], ['novel.azw3', 'book'],
       ]
       for (const [file, kind] of cases) expect(m.kindOf(m.mimeOf(file), file), file).toBe(kind)
       expect(m.isTextKind('code')).toBe(true)
@@ -94,6 +95,8 @@ for (const [name, m] of [['shared', as], ['phone', phone]]) {
       expect(m.formatBytes(2048)).toBe('2 KB')
       expect(m.formatBytes(1.5 * 1048576)).toBe('1.5 MB')
       expect(m.formatBytes(25 * 1048576)).toBe('25 MB')
+      expect(m.formatBytes(1.5 * 1073741824)).toBe('1.5 GB')
+      expect(m.formatBytes(m.MAX_BYTES)).toBe('500 MB')
       expect(m.formatDuration(65)).toBe('1:05')
       expect(m.formatDuration(3725)).toBe('1:02:05')
     })
@@ -218,7 +221,7 @@ describe('the AI’s saveAsset', () => {
   it('refuses empty and oversized files', () => {
     expect(() => assetRequest({ text: '', name: 'a.txt' })).toThrow(/exactly one/)
     expect(() => sizeCheck(0)).toThrow(/empty/)
-    expect(() => sizeCheck(as.MAX_BYTES + 1)).toThrow(/too big/)
+    expect(() => sizeCheck(as.MAX_AI_BYTES + 1)).toThrow(/too big/)
   })
 
   it('names a fetched file from the URL and its type', () => {

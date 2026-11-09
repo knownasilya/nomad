@@ -7,11 +7,13 @@ import * as as from './assetRules'
 // Files for a Space's Assets (ADR-0044, shared/assets.mjs). A photo from the camera or the gallery
 // is scaled to MAX_SIDE on its long side, as desktop's nomad://assets does, with a THUMB_SIDE
 // thumbnail, both JPEG. A video from the gallery, and any file from the file picker, is kept as it
-// is (a picture gets a thumbnail). Everything goes to the backend as base64, at most MAX_BYTES.
+// is (a picture gets a thumbnail). A file goes to the backend as its path in the app's cache, which
+// the backend reads itself, a piece at a time: a movie never crosses as one message. At most
+// MAX_BYTES.
 
 // What `assets`/`add` takes (backend/lib/assets.mjs add).
 export interface AssetUpload {
-  data: string
+  path: string // a file: URI in the app's cache
   name: string
   mime: string
   thumb?: string
@@ -79,9 +81,22 @@ export async function pickFiles (): Promise<PickedFile[]> {
 const tooBig = (p: PickedFile, bytes: number) =>
   new Error(`${p.name} is too big (${as.formatBytes(bytes)}, at most ${as.formatBytes(as.MAX_BYTES)})`)
 
-// Read one picked file for the backend: a photo scaled, a picture's thumbnail made.
+// A picked file as a file: URI in the app's own cache, where the backend can read it. The pickers
+// copy there already; anything else (a content:// URI) is copied first.
+function inCache (uri: string, name: string): string {
+  if (uri.startsWith(Paths.cache.uri)) return uri
+  const dir = new Directory(Paths.cache, 'asset-uploads')
+  if (!dir.exists) dir.create({ intermediates: true })
+  const dest = new File(dir, `${Date.now().toString(36)}-${safeName(name)}`)
+  new File(uri).copy(dest)
+  return dest.uri
+}
+
+const safeName = (name: string) => as.cleanName(name).replace(/[^\w.\- ]+/g, '_')
+
+// Get one picked file ready for the backend: a photo scaled, a picture's thumbnail made.
 export async function prepare (p: PickedFile): Promise<AssetUpload> {
-  const out: AssetUpload = { data: '', name: p.name, mime: p.mime }
+  const out: AssetUpload = { path: '', name: p.name, mime: p.mime }
   if (p.takenAt) out.takenAt = p.takenAt
   if (p.kind === 'image' && p.mime !== 'image/svg+xml') {
     const source = await ImageManipulator.manipulate(p.uri).renderAsync()
@@ -90,9 +105,8 @@ export async function prepare (p: PickedFile): Promise<AssetUpload> {
     out.height = source.height
     if (p.photo) {
       const big = await ImageManipulator.manipulate(source).resize(fit(as.MAX_SIDE)).renderAsync()
-      const saved = await big.saveAsync({ format: SaveFormat.JPEG, compress: as.QUALITY, base64: true })
-      if (!saved.base64) throw new Error('Could not read the photo')
-      out.data = saved.base64
+      const saved = await big.saveAsync({ format: SaveFormat.JPEG, compress: as.QUALITY })
+      out.path = saved.uri
       out.width = saved.width
       out.height = saved.height
       out.mime = 'image/jpeg'
@@ -106,28 +120,23 @@ export async function prepare (p: PickedFile): Promise<AssetUpload> {
     if (p.width && p.height) Object.assign(out, { width: p.width, height: p.height })
     if (p.duration) out.duration = p.duration
   }
-  if (!out.data) {
-    const file = new File(p.uri)
-    const size = p.size || file.size || 0
+  if (!out.path) {
+    const size = p.size || new File(p.uri).size || 0
     if (size > as.MAX_BYTES) throw tooBig(p, size)
-    out.data = await file.base64()
+    out.path = inCache(p.uri, p.name)
   }
-  const bytes = Math.floor((out.data.length * 3) / 4)
+  const bytes = new File(out.path).size || 0
   if (bytes > as.MAX_BYTES) throw tooBig(p, bytes)
   return out
 }
 
-// A file of the Asset (base64) in this phone's cache, for a player or another app to open. The
-// cache is the app's own, so nothing else sees it until the user shares it.
-export function cacheFile (id: string, name: string, base64: string): string {
+// Where an Asset's file goes in this phone's cache, for a viewer or another app to open (the
+// backend writes it there, `assets`/`readTo`). The cache is the app's own, so nothing else sees it
+// until the user shares it.
+export function cachedFile (id: string, name: string): File {
   const dir = new Directory(Paths.cache, 'assets', id)
   if (!dir.exists) dir.create({ intermediates: true })
-  const file = new File(dir, as.cleanName(name).replace(/[^\w.\- ]+/g, '_'))
-  if (!file.exists) {
-    file.create()
-    file.write(base64, { encoding: 'base64' })
-  }
-  return file.uri
+  return new File(dir, safeName(name))
 }
 
 function exifTime (exif: Record<string, unknown> | null | undefined): string | null {

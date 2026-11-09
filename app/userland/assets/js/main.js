@@ -7,13 +7,20 @@
 // - Everything comes from nomad.vault (bg/web-apis/bg/assets.ts; the rules are shared/assets.mjs).
 // - A camera photo bigger than MAX_SIDE is scaled here before it is sent, as the phone does; any
 //   other file is kept as it is. Pictures and videos get a THUMB_SIDE thumbnail.
+// - Files move in pieces of CHUNK_BYTES both ways (nomad.vault.assetChunk to read; beginAssetUpload/
+//   assetUploadChunk/finishAssetUpload to add), so a 500 MB movie never crosses IPC whole. The viewer
+//   shows how much has arrived while a big file comes in.
 // - Previews: pictures, video and audio play from a blob: URL of the file's bytes; a PDF renders
-//   with pdf.js (js/pdf.build.js, copied in by scripts/build.js); Markdown renders with markdown-it
-//   (raw HTML off); CSV is a table, JSON is pretty-printed, code and text are shown as text. An HTML
-//   file is shown as its source, never run.
+//   with pdf.js (js/pdf.build.js, copied in by scripts/build.js; pages drawn as they scroll in,
+//   js/pdf-view.js); an EPUB or MOBI opens in the book reader (js/book/, shared with the phone's
+//   viewer page); Markdown renders with markdown-it (raw HTML off); CSV is a table, JSON is
+//   pretty-printed, code and text are shown as text. An HTML file is shown as its source, never run.
 // - `?id=` opens one file. The tab title is `<file name> · Assets` while one is open, else "Assets".
 
 import * as as from '../../../../shared/assets.mjs'
+import { showPdf } from './pdf-view.js'
+import { openBook, BookError } from './book/parse.js'
+import { createReader } from './book/reader.js'
 
 const MD_URL = 'nomad://app-stdlib/vendor/markdown-it.js'
 const PDF_URL = '/js/pdf.build.js'
@@ -28,7 +35,7 @@ const state = {
   open: new URLSearchParams(location.search).get('id'), // the id of the file in the viewer
   filter: 'all',
   query: '',
-  adding: null, // { done, total } while files are being added
+  adding: null, // { done, total, sent, size } while files are being added
   status: '',
   statusErr: false,
 }
@@ -123,7 +130,7 @@ function render() {
       count ? el('span', { class: 'count' }, [`${count} file${count === 1 ? '' : 's'}`]) : null,
       el('div', { class: 'spacer' }),
       state.adding
-        ? el('span', { class: 'status' }, [`Adding ${state.adding.done + 1} of ${state.adding.total}…`])
+        ? el('span', { class: 'status', id: 'adding' }, [addingText()])
         : state.status
           ? el('span', { class: `status${state.statusErr ? ' err' : ''}` }, [state.status])
           : null,
@@ -269,17 +276,41 @@ async function loadThumb(id) {
   } else setTimeout(() => thumbs.delete(id), 5000) // not replicated yet: try again on the next render
 }
 
-// The whole file as a blob: URL, kept for the last few opened.
+// The whole file as a blob: URL, kept for the last few opened. It comes in CHUNK_BYTES pieces (a
+// movie is far too big for one message), folded into the Blob as it goes so Chromium can keep the
+// bytes on disk, and the viewer shows how far along it is.
+const progress = new Map() // id -> { got, size } while a file is coming in
 async function loadFile(id) {
   if (files.has(id)) return files.get(id)
   const pending = (async () => {
-    const dataUrl = await nomad.vault.assetData(id).catch(() => null)
-    if (!dataUrl) return null
-    const blob = await (await fetch(dataUrl)).blob()
+    const a = assets().find((x) => x.id === id)
+    let blob = new Blob([])
+    let parts = []
+    let partBytes = 0
+    let got = 0
+    let size = Infinity
+    while (got < size) {
+      const piece = await nomad.vault.assetChunk(id, { start: got }).catch(() => null)
+      if (!piece) return null
+      size = piece.size
+      const n = piece.data?.byteLength || 0
+      if (!n && got < size) return null
+      parts.push(piece.data)
+      partBytes += n
+      got += n
+      if (partBytes >= 64 * 1024 * 1024) {
+        blob = new Blob([blob, ...parts])
+        parts = []
+        partBytes = 0
+      }
+      progress.set(id, { got, size })
+      showProgress(id)
+    }
+    blob = new Blob([blob, ...parts], { type: a?.mime || '' })
     return { blob, url: URL.createObjectURL(blob) }
   })()
   files.set(id, pending)
-  const got = await pending
+  const got = await pending.finally(() => progress.delete(id))
   if (!got) files.delete(id)
   else {
     files.set(id, got)
@@ -292,6 +323,23 @@ async function loadFile(id) {
   }
   if (state.open === id) render()
   return got
+}
+
+// "12 MB of 840 MB" under the viewer's spinner, updated in place (a render per piece would restart
+// the whole page).
+function showProgress(id) {
+  const p = progress.get(id)
+  const node = document.querySelector(`.viewer .loading[data-id="${id}"]`)
+  if (!node || !p) return
+  let bar = node.querySelector('.progress')
+  if (!bar) {
+    bar = el('div', { class: 'progress', role: 'progressbar', 'aria-label': 'Loading the file', 'aria-valuemin': '0', 'aria-valuemax': '100' }, [el('div', { class: 'fill' }), el('div', { class: 'what' })])
+    node.append(bar)
+  }
+  const pct = p.size ? Math.round((p.got / p.size) * 100) : 0
+  bar.setAttribute('aria-valuenow', String(pct))
+  bar.querySelector('.fill').style.width = `${pct}%`
+  bar.querySelector('.what').textContent = `${as.formatBytes(p.got)} of ${as.formatBytes(p.size)}`
 }
 
 function fileOf(id) {
@@ -359,7 +407,7 @@ function renderViewer(a) {
     ]),
     el('div', { class: 'stage' }, [
       many ? el('button', { class: 'icon-btn side', title: 'Previous file', 'aria-label': 'Previous file', onclick: () => step(-1) }, [icon('chevron-left')]) : null,
-      el('div', { class: 'preview' }, [f ? renderPreview(a, f) : el('div', { class: 'loading' }, [thumbs.get(a.id) ? el('img', { src: thumbs.get(a.id), alt: '' }) : 'Loading…'])]),
+      el('div', { class: 'preview' }, [f ? renderPreview(a, f) : renderLoading(a)]),
       many ? el('button', { class: 'icon-btn side', title: 'Next file', 'aria-label': 'Next file', onclick: () => step(1) }, [icon('chevron-right')]) : null,
     ]),
     el('div', { class: 'caption' }, [
@@ -380,6 +428,13 @@ function renderViewer(a) {
           : null,
     ]),
   ])
+}
+
+// While the file comes in: its thumbnail, or a spinner, and how far along it is.
+function renderLoading(a) {
+  const node = el('div', { class: 'loading', 'data-id': a.id }, [thumbs.get(a.id) ? el('img', { src: thumbs.get(a.id), alt: '' }) : el('div', {}, ['Loading…'])])
+  queueMicrotask(() => showProgress(a.id))
+  return node
 }
 
 // Previews
@@ -406,6 +461,9 @@ function renderPreview(a, f) {
   } else if (a.kind === 'pdf') {
     node = el('div', { class: 'doc pdf' }, [el('div', { class: 'loading' }, ['Opening the PDF…'])])
     renderPdf(node, f.blob).catch((err) => node.replaceChildren(noPreview(a, f, `This PDF can’t be shown here (${err?.message || err})`)))
+  } else if (a.kind === 'book') {
+    node = el('div', { class: 'doc book' }, [el('div', { class: 'loading' }, ['Opening the book…'])])
+    renderBook(node, a, f.blob).catch((err) => node.replaceChildren(noPreview(a, f, err instanceof BookError ? err.message : `This book can’t be shown here (${err?.message || err})`)))
   } else if (as.isTextKind(a.kind)) {
     node = el('div', { class: `doc text kind-${a.kind}` }, [el('div', { class: 'loading' }, ['Loading…'])])
     renderText(node, a, f.blob).catch(() => node.replaceChildren(noPreview(a, f, 'This file can’t be read as text')))
@@ -413,7 +471,13 @@ function renderPreview(a, f) {
     node = noPreview(a, f, 'There’s no preview for this kind of file')
   }
   previewCache.set(key, node)
-  if (previewCache.size > KEEP_FILES) previewCache.delete(previewCache.keys().next().value)
+  if (previewCache.size > KEEP_FILES) {
+    const oldKey = previewCache.keys().next().value
+    const oldNode = previewCache.get(oldKey)
+    readers.get(oldNode)?.destroy()
+    readers.delete(oldNode)
+    previewCache.delete(oldKey)
+  }
   return node
 }
 
@@ -500,44 +564,24 @@ function parseCsv(text, sep) {
   return rows
 }
 
+// An EPUB or MOBI in the reader (js/book/), in the page's colors. It stays open (previewCache) while
+// the viewer re-renders, and the book's blob: URLs go when the viewer moves on.
+const readers = new Map() // node -> reader
+async function renderBook(node, a, blob) {
+  const book = openBook(new Uint8Array(await blob.arrayBuffer()))
+  const style = getComputedStyle(document.body)
+  const scheme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  const theme = { scheme, bg: style.getPropertyValue('--as-paper').trim(), text: style.getPropertyValue('--as-paper-text').trim(), link: style.getPropertyValue('--as-accent').trim() }
+  readers.set(node, createReader(node, book, { key: a.id, theme, onLink: (url) => window.open(url, '_blank', 'noopener') }))
+}
+
 let pdfjs = null
 async function renderPdf(node, blob) {
   if (!pdfjs) {
     pdfjs = await import(/* @vite-ignore */ PDF_URL)
     pdfjs.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL
   }
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()), isEvalSupported: false }).promise
-  const pages = el('div', { class: 'pages' })
-  node.replaceChildren(el('div', { class: 'pdf-meta' }, [`${doc.numPages} page${doc.numPages === 1 ? '' : 's'}`]), pages)
-  // Each page draws as it scrolls into view.
-  const io = new IntersectionObserver(
-    async (entries) => {
-      for (const e of entries) {
-        if (!e.isIntersecting || e.target.dataset.done) continue
-        e.target.dataset.done = '1'
-        io.unobserve(e.target)
-        const page = await doc.getPage(+e.target.dataset.n)
-        const width = Math.min(900, pages.clientWidth || 800)
-        const base = page.getViewport({ scale: 1 })
-        const scale = width / base.width
-        const vp = page.getViewport({ scale: scale * (window.devicePixelRatio || 1) })
-        const canvas = el('canvas', { width: String(Math.floor(vp.width)), height: String(Math.floor(vp.height)), 'aria-label': `Page ${e.target.dataset.n}` })
-        canvas.style.width = `${Math.floor(base.width * scale)}px`
-        e.target.replaceChildren(canvas)
-        await page.render({ canvas, viewport: vp }).promise
-      }
-    },
-    { root: node.closest('.preview') || null, rootMargin: '600px' }
-  )
-  // Every page holds the first page's shape until it draws.
-  const first = (await doc.getPage(1)).getViewport({ scale: 1 })
-  const ratio = first.height / first.width
-  for (let n = 1; n <= doc.numPages; n++) {
-    const holder = el('div', { class: 'page', 'data-n': String(n) })
-    holder.style.aspectRatio = String(1 / ratio)
-    pages.append(holder)
-    io.observe(holder)
-  }
+  await showPdf(node, new Uint8Array(await blob.arrayBuffer()), pdfjs)
 }
 
 // Changes
@@ -584,11 +628,12 @@ async function addFiles(list) {
   list = list.slice(0, as.MAX_BATCH)
   let failed = 0
   let lastError = ''
-  state.adding = { done: 0, total: list.length }
+  state.adding = { done: 0, total: list.length, sent: 0, size: 0 }
   render()
   for (const file of list) {
     try {
-      await nomad.vault.addAsset(await prepare(file))
+      const { blob, fields } = await prepare(file)
+      await upload(blob, fields)
     } catch (err) {
       failed++
       lastError = err?.message || String(err)
@@ -602,7 +647,34 @@ async function addFiles(list) {
   else say(`Added ${list.length} file${list.length === 1 ? '' : 's'}`)
 }
 
-// What addAsset takes for one dropped or picked file.
+function addingText() {
+  const { done, total, sent, size } = state.adding
+  const of = total > 1 ? ` ${done + 1} of ${total}` : ''
+  return size > as.CHUNK_BYTES ? `Adding${of}… ${Math.round((sent / size) * 100)}%` : `Adding${of}…`
+}
+
+// One file, in CHUNK_BYTES pieces (beginAssetUpload, assetUploadChunk, finishAssetUpload).
+async function upload(blob, fields) {
+  const id = await nomad.vault.beginAssetUpload({ size: blob.size })
+  try {
+    state.adding.size = blob.size
+    for (let start = 0; start < blob.size; start += as.CHUNK_BYTES) {
+      const data = new Uint8Array(await blob.slice(start, start + as.CHUNK_BYTES).arrayBuffer())
+      state.adding.sent = await nomad.vault.assetUploadChunk(id, { start, data })
+      const status = document.getElementById('adding')
+      if (status) status.textContent = addingText()
+    }
+    return await nomad.vault.finishAssetUpload(id, fields)
+  } catch (err) {
+    nomad.vault.abortAssetUpload(id).catch(() => {})
+    throw err
+  } finally {
+    state.adding.sent = state.adding.size = 0
+  }
+}
+
+// What finishAssetUpload takes for one dropped or picked file, and the file itself (a camera
+// photo scaled).
 async function prepare(file) {
   const mime = as.mimeOf(file.name, file.type)
   const kind = as.kindOf(mime, file.name)
@@ -636,8 +708,7 @@ async function prepare(file) {
   }
   if (blob.size > maxBytes()) throw new Error(`${file.name} is too big (${as.formatBytes(blob.size)}, at most ${as.formatBytes(maxBytes())})`)
   if (!blob.size) throw new Error(`${file.name} is empty`)
-  out.data = await base64(blob)
-  return out
+  return { blob, fields: out }
 }
 
 // A picture, turned upright, as something a canvas can draw: an ImageBitmap, or an <img> for SVG.

@@ -2,6 +2,7 @@
    tokens, the 50px header with the favicon. Light and dark follow the OS. */
 @import 'nomad://app-stdlib/css/common.css';
 @import 'nomad://app-stdlib/css/fontawesome.css';
+@import 'book.css';
 
 body {
   --as-header-bg: #fff;
@@ -23,6 +24,7 @@ body {
   --as-kind-video: #d9480f;
   --as-kind-audio: #9c36b5;
   --as-kind-pdf: #d6336c;
+  --as-kind-book: #a0612a;
   --as-kind-doc: #4263eb;
   --as-kind-data: #2b8a3e;
   --as-kind-code: #5f3dc4;
@@ -56,6 +58,7 @@ body {
     --as-kind-video: #ff8a4c;
     --as-kind-audio: #d38cf0;
     --as-kind-pdf: #ff7aa2;
+    --as-kind-book: #e3a66b;
     --as-kind-doc: #8ea5ff;
     --as-kind-data: #69db7c;
     --as-kind-code: #b197fc;
@@ -349,6 +352,7 @@ main.dropping {
 .doc-face.kind-video { color: var(--as-kind-video); }
 .doc-face.kind-audio { color: var(--as-kind-audio); }
 .doc-face.kind-pdf { color: var(--as-kind-pdf); }
+.doc-face.kind-book { color: var(--as-kind-book); }
 .doc-face.kind-markdown,
 .doc-face.kind-text,
 .doc-face.kind-document { color: var(--as-kind-doc); }
@@ -733,6 +737,53 @@ main.dropping {
 
 .viewer .doc.pdf {
   padding: 4px 0 24px;
+}
+
+/* an e-book: the reader (book.css) fills the stage and scrolls inside */
+
+.viewer .doc.book {
+  align-self: stretch;
+  height: 100%;
+  min-height: 0;
+}
+
+/* how far along a big file is */
+
+.viewer .preview > .loading {
+  flex-direction: column;
+  gap: 16px;
+}
+
+.viewer .preview > .loading img {
+  max-height: calc(100% - 60px);
+}
+
+.viewer .progress {
+  width: min(320px, 80%);
+  text-align: center;
+}
+
+.viewer .progress .fill {
+  height: 4px;
+  width: 0;
+  border-radius: 2px;
+  background: var(--as-accent);
+  transition: width 0.2s;
+}
+
+.viewer .progress::before {
+  content: '';
+  display: block;
+  height: 4px;
+  margin-bottom: -4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.viewer .progress .what {
+  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 12px;
 }
 
 .viewer .pdf-meta {

@@ -8,7 +8,12 @@
 // Space Library moves them (same blobs, new paths), and until then they are read where they are.
 //
 // `libraryOf(space)` is backend.mjs's (lib/space-library.mjs libraryFor), `vaultOf()` the Vault's
-// Autobase, `blobs` the drive manager's putBlobFor / readFileOf.
+// Autobase, `blobs` the drive manager's putBlobFor / putBlobFromFor / readFileOf / fileSizeOf.
+//
+// A file moves between the app and here as a file on disk, never as one big message: the app
+// hands `add` the path of the file it picked (or the photo it scaled), and `readTo` writes an
+// Asset's file into the app's cache, a piece at a time. Paths must be in the app's own folders
+// (`roots`: its documents and cache), and `fs` is bare-fs (node:fs in the tests).
 
 import b4a from 'b4a'
 import * as as from '../../../shared/assets.mjs'
@@ -16,7 +21,20 @@ import { inlineOp, boundedUpdate } from './vault.mjs'
 import { memberRecords } from './space-library.mjs'
 import { decodeInlineJson, makeMetadata } from '../../../shared/fs-core.mjs'
 
-export function createAssets ({ libraryOf, vaultOf = () => null, blobs }) {
+export function createAssets ({ libraryOf, vaultOf = () => null, blobs, fs = null, roots = [] }) {
+  // A file: URI or path the app gave, as a path in one of its own folders.
+  function localPath (uri) {
+    let p = String(uri || '')
+    if (p.startsWith('file://')) p = p.slice(7)
+    try { p = decodeURIComponent(p) } catch {}
+    const inside = roots.some((r) => {
+      const root = r.replace(/^file:\/\//, '').replace(/\/+$/, '')
+      return root && p.startsWith(root + '/')
+    })
+    if (!fs || !p.startsWith('/') || p.split('/').includes('..') || !inside) throw new Error('That file isn’t in Nomad’s own folders')
+    return p
+  }
+
   // { base, root, shared, writable, role, memberId } for Space `space`, or null with no Vault.
   async function placeOf (space) {
     const lib = space ? await libraryOf(space).catch(() => null) : null
@@ -83,39 +101,80 @@ export function createAssets ({ libraryOf, vaultOf = () => null, blobs }) {
     const place = await placeOf(space)
     if (!place) return { shared: false, canAdd: false, role: null, maxBytes: as.MAX_BYTES, assets: [] }
     const w = who(place)
-    return { shared: place.shared, canAdd: place.writable, role: place.role, maxBytes: as.MAX_BYTES, assets: (await items(place)).map((a) => ({ ...a, canDelete: as.canDelete(a, w) })) }
+    // The kind as the rules read it now (an EPUB added before books were a kind is a book).
+    return { shared: place.shared, canAdd: place.writable, role: place.role, maxBytes: as.MAX_BYTES, assets: (await items(place)).map((a) => ({ ...a, kind: as.kindOf(a.mime, a.name), canDelete: as.canDelete(a, w) })) }
   }
 
-  // A file or its thumbnail as base64, or null until it has replicated here.
+  // Where an Asset's file (or thumbnail) is: its path, or an album photo's not moved yet.
+  async function fileOf (place, id, thumb) {
+    const p = as.pathsOf(place.root)
+    const at = thumb ? p.thumb(id) : p.file(id)
+    if ((await blobs.fileSizeOf(place.base, at)) >= 0 || !place.shared) return at
+    const old = as.legacyPaths(id)
+    return thumb ? old.thumb : old.file
+  }
+
+  // A thumbnail (or a small file) as base64, or null until it has replicated here. A whole file goes
+  // to the app's cache with readTo.
   async function read (space, id, { thumb = false } = {}) {
     const place = await placeOf(space)
     if (!place || !as.isAssetId(id)) return null
-    const p = as.pathsOf(place.root)
-    const buf = await blobs.readFileOf(place.base, thumb ? p.thumb(id) : p.file(id)).catch(() => null)
-    if (buf) return b4a.toString(buf, 'base64')
-    if (!place.shared) return null
-    const old = as.legacyPaths(id)
-    const legacy = await blobs.readFileOf(place.base, thumb ? old.thumb : old.file).catch(() => null)
-    return legacy ? b4a.toString(legacy, 'base64') : null
+    const at = await fileOf(place, id, thumb)
+    if (!thumb && (await blobs.fileSizeOf(place.base, at)) > as.MAX_DATA_URL_BYTES) throw new Error('That file is too big to read at once')
+    const buf = await blobs.readFileOf(place.base, at).catch(() => null)
+    return buf ? b4a.toString(buf, 'base64') : null
   }
 
-  // Add a file the UI read (base64 `data`; a scaled camera photo; a `thumb`, base64 JPEG, for a picture).
+  // Write an Asset's file to `to` (a file: URI in the app's cache), CHUNK_BYTES at a time, through
+  // `to`.part so a half-written file is never taken for the whole one. -> { size }, or null until it
+  // has replicated here.
+  async function readTo (space, id, { to, thumb = false } = {}) {
+    const place = await placeOf(space)
+    if (!place || !as.isAssetId(id)) return null
+    const out = localPath(to)
+    const at = await fileOf(place, id, thumb)
+    const size = await blobs.fileSizeOf(place.base, at)
+    if (size < 0) return null
+    await fs.promises.mkdir(out.slice(0, out.lastIndexOf('/')), { recursive: true })
+    const part = out + '.part'
+    const fh = await fs.promises.open(part, 'w')
+    let ok = false
+    try {
+      for (let start = 0; start < size; start += as.CHUNK_BYTES) {
+        const buf = await blobs.readFileOf(place.base, at, { start, length: Math.min(as.CHUNK_BYTES, size - start) })
+        if (!buf) return null
+        await fh.write(buf, 0, buf.length, start)
+      }
+      ok = true
+    } finally {
+      await fh.close().catch(() => {})
+      if (!ok) await fs.promises.unlink(part).catch(() => {})
+    }
+    await fs.promises.rename(part, out)
+    return { size }
+  }
+
+  // Add a file the app picked: `path` (a file: URI in its own folders) or, for a small one, base64
+  // `data`; a scaled camera photo; a `thumb`, base64 JPEG, for a picture or a video.
   async function add (space, f = {}) {
     const place = await placeOf(space)
     if (!place) throw new Error('Link this phone to your computer to keep files')
     if (!place.writable) throw new Error(place.shared ? 'You can view this Space, but not add to it' : 'This phone can’t write to your Vault yet. Keep your other device online until it syncs, then try again.')
-    const file = b4a.from(String(f.data || ''), 'base64')
+    const from = f.path ? localPath(f.path) : null
+    const file = from ? null : b4a.from(String(f.data || ''), 'base64')
+    const bytes = from ? (await fs.promises.stat(from)).size : file.length
     const small = f.thumb ? b4a.from(String(f.thumb), 'base64') : null
-    const err = as.sizeError({ bytes: file.length, thumbBytes: small ? small.length : 0 })
+    const err = as.sizeError({ bytes, thumbBytes: small ? small.length : 0 })
     if (err) throw new Error(err)
     const m = await me(place)
     const id = as.newAssetId()
     const p = as.pathsOf(place.root)
-    const rec = as.makeAsset({ id, name: f.name, mime: f.mime, bytes: file.length, width: f.width, height: f.height, duration: f.duration, takenAt: f.takenAt, by: m.name, memberId: m.memberId, caption: f.caption, thumb: !!(small && small.length) })
+    const rec = as.makeAsset({ id, name: f.name, mime: f.mime, bytes, width: f.width, height: f.height, duration: f.duration, takenAt: f.takenAt, by: m.name, memberId: m.memberId, caption: f.caption, thumb: !!(small && small.length) })
     const now = Date.now()
-    const blobOp = async (path, buf) => ({ op: 'put', path, metadata: makeMetadata({ mtime: now, ctime: now }), blob: await blobs.putBlobFor(place.base, buf) })
-    await place.base.append(await blobOp(p.file(id), file))
-    if (small && small.length) await place.base.append(await blobOp(p.thumb(id), small))
+    const metadata = makeMetadata({ mtime: now, ctime: now })
+    const blob = from ? await blobs.putBlobFromFor(place.base, fs.createReadStream(from)) : await blobs.putBlobFor(place.base, file)
+    await place.base.append({ op: 'put', path: p.file(id), metadata, blob })
+    if (small && small.length) await place.base.append({ op: 'put', path: p.thumb(id), metadata, blob: await blobs.putBlobFor(place.base, small) })
     await place.base.append(inlineOp(p.item(id), rec))
     await place.base.update()
     return { ...rec, canDelete: true }
@@ -148,5 +207,5 @@ export function createAssets ({ libraryOf, vaultOf = () => null, blobs }) {
     return true
   }
 
-  return { list, read, add, update, remove }
+  return { list, read, readTo, add, update, remove }
 }

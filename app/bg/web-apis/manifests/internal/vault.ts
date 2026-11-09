@@ -86,8 +86,13 @@ export default {
   listCalendarDrives: 'promise', // () -> [{ url, name, color }]: calendar drives in the caller's Space not followed yet
   // Assets (bg/web-apis/bg/assets.ts, shared/assets.mjs), for the caller's Space
   listAssets: 'promise', // () -> { space, spaceName, shared, canAdd, role, maxBytes, assets }
-  assetData: 'promise', // (id, { thumb? }) -> data: URL, or null until it replicates
+  assetData: 'promise', // (id, { thumb? }) -> data: URL, or null until it replicates. A thumbnail or a file up to MAX_DATA_URL_BYTES
+  assetChunk: 'promise', // (id, { start, length?, thumb? }) -> { size, data (Uint8Array, at most CHUNK_BYTES) }, or null until it replicates
   addAsset: 'promise', // ({ data (base64), name, mime?, thumb? (base64 JPEG), width?, height?, duration?, takenAt?, caption? }) -> asset
+  beginAssetUpload: 'promise', // ({ size }) -> upload id: a big file goes in pieces
+  assetUploadChunk: 'promise', // (uploadId, { start, data (Uint8Array, at most CHUNK_BYTES) }) -> bytes so far
+  finishAssetUpload: 'promise', // (uploadId, { name, mime?, thumb?, width?, height?, duration?, takenAt?, caption? }) -> asset
+  abortAssetUpload: 'promise', // (uploadId) -> true
   updateAsset: 'promise', // ({ id, name?, caption? }) -> asset
   deleteAsset: 'promise', // (id) -> boolean
   suggestNoteTopics: 'promise', // (ids?) -> how many notes the AI will sort into topics

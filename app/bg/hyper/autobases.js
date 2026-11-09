@@ -254,6 +254,13 @@ export async function buildPutBlobOp(sess, path, buf, opts = {}) {
   return { op: 'put', path, metadata: await _writeMeta(sess, path, opts), blob };
 }
 
+// The same for a big file, from an (async) iterable of chunks (fs-core putBlobFrom). Feed it from
+// local storage: the writer's blob core is locked until the last chunk is in.
+export async function buildPutBlobOpFrom(sess, path, chunks, opts = {}) {
+  const blob = await _blobStore.putBlobFrom(_blobsFor(sess), chunks);
+  return { op: 'put', path, metadata: await _writeMeta(sess, path, opts), blob };
+}
+
 // Build a put op storing small CONTENT inline (value) — control records (index.json, /.vault/*,
 // bookmarks, drives.json). data may be a string, Buffer, or JSON-serialisable object.
 export async function buildPutInlineOp(sess, path, data, opts = {}) {
