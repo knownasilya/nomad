@@ -1004,7 +1004,7 @@ export default {
     const now = isDateTime(opts?.now) ? String(opts.now).slice(0, 16) : localWallTime();
     const today = now.slice(0, 10);
     const space = await callerSpace(this);
-    const [notes, assetList, cal, notices, share, mail, devices, driveRequests]: any[] = await Promise.all([
+    const [notes, assetList, cal, notices, share, mail, devices, driveRequests, dismissed]: any[] = await Promise.all([
       settle(vaultApps.listNotes(this)),
       settle(assets.listAssets(this)),
       settle(calendar.listCalendar(this, { from: today, to: homeDash.addDays(today, homeDash.EVENT_DAYS) })),
@@ -1013,6 +1013,7 @@ export default {
       settle(inbox.summary()),
       settle(vault.listDevices()),
       settle(waitingDriveRequests()),
+      settle(vault.readAppRecord(homeDash.DISMISSED_PATH)),
     ]);
     const names = new Map((devices || []).map((d) => [d.key, d.name]));
     const own = await jobs.ownKey().catch(() => null);
@@ -1037,12 +1038,20 @@ export default {
           spaceRequests: share?.shared ? share.requests || [] : [],
           joins: share?.shared ? share.joins || [] : [],
           devices: pairing.listPendingRequests(),
+          dismissed,
         },
         { now }
       ),
       spaceName: vaultApps.spaceNameOf(space),
       linked: !!(await vault.getVault().catch(() => null)),
     };
+  },
+
+  // Clear notifications from the home page, on every Device: `items` are [{ id, at }] from the
+  // dashboard's `notifications` (one) or `notificationKeys` (Clear all).
+  async dismissHomeNotifications(items) {
+    const rec = await vault.readAppRecord(homeDash.DISMISSED_PATH);
+    await vault.putAppRecord(homeDash.DISMISSED_PATH, homeDash.dismiss(rec, Array.isArray(items) ? items.slice(0, 200) : []));
   },
 
   // Bring a prompt the home page lists under Needs you to the front (its window and tab).

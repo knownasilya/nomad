@@ -14,6 +14,12 @@ import { createDevicePresence } from '../../../shared/device-presence.mjs';
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'device-presence' });
 
 let presence = null;
+let activitySource = null; // () => this computer's activityFrame (bg/ui/device-activity.js), or null
+
+// What every HELLO says about how long ago the user last used this computer.
+export function setActivitySource(fn) {
+  activitySource = fn || null;
+}
 
 // Idempotent: re-scans live connections, so call it again once a Vault opens or after a resume.
 export function install() {
@@ -30,6 +36,7 @@ export function install() {
         const sess = await vault.getVault();
         return sess?.base?.local?.key ? b4a.toString(sess.base.local.key, 'hex') : null;
       },
+      getActivity: () => (activitySource ? activitySource() : null),
       log: (...args) => logger.info(args.join(' ')),
     });
     // Joined another Vault: channels keyed on the old one go, and live connections get new ones.
@@ -49,6 +56,16 @@ export function connectedDevices() {
 // The status each connected always-on Peer last sent (shared/peers.mjs makeStatus), by key.
 export function peerStatuses() {
   return presence ? Object.fromEntries(presence.statuses()) : {};
+}
+
+// When the user last used each connected Device that says so (this computer's clock), by key.
+export function lastActive() {
+  return presence ? [...presence.lastActive().values()] : [];
+}
+
+// Send this computer's HELLO again on every channel (its activity changed).
+export function announce() {
+  if (presence) presence.announce().catch(() => {});
 }
 
 // This Device left its Vault (or joined another): drop channels keyed on the old one.

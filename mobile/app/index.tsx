@@ -45,6 +45,7 @@ import { useJobNotifications } from '../lib/useJobNotifications'
 import { useMessageNotifications } from '../lib/useMessageNotifications'
 import { useInviteJoins } from '../lib/useInviteJoins'
 import { useCalendarReminders } from '../lib/useCalendarReminders'
+import { useDeviceActivity } from '../lib/deviceActivity'
 import { usePersonaOnboarding } from '../lib/usePersonaOnboarding'
 import { syncHostingService } from '../lib/hostingService'
 import HostingSettings from '../components/HostingSettings'
@@ -359,6 +360,9 @@ export default function Browser () {
     }
   })
 
+  // Tells the user's computers when they're using this phone, so a notification shows on only the
+  // Device in their hands (lib/deviceActivity.ts).
+  useDeviceActivity(backend)
   // A notification from an AI Job for each new run that has one; a tap opens that run.
   useJobNotifications(backend, ({ jobId, runId }) => openScreen({ name: 'jobs', jobId, runId }))
   // A notification for each new Message to a Persona (ADR-0036); a tap opens the Conversation.
