@@ -23,6 +23,7 @@ import {
 } from '../../ai/active-tab.mjs';
 import aiAPI, { routeChat, createChatStream } from './ai';
 import * as chatStore from '../../ai/chat-store';
+import * as vaultApps from './vault-apps';
 import * as jobChat from '../../ai/job-chat';
 import * as settingsDb from '../../dbs/settings';
 import { createSteering } from '../../ai/steering.mjs';
@@ -147,6 +148,11 @@ export default {
         scratchScope: chatId ? `sidebar:${shell.id}:${chatId}` : null,
         // An earlier answer in this chat read the user's private data (ADR-0037).
         privateData: opts.privateData === true,
+        // What the AI makes or changes links back to this chat (ADR-0047). A chat is kept in
+        // hyper://private/ of the window's Space (chat-store.js), so the Space goes with it.
+        origin: chatId
+          ? { chat: chatId, space: await vaultApps.spaceKey({ sender: shell }).catch(() => undefined) }
+          : null,
       });
     }
   },

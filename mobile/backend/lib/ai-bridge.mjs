@@ -166,7 +166,10 @@ export function createAiBridge ({ swarm, getVault }) {
           tab: opts.tab || null,
           // An earlier turn of this chat read the user's private data, so requests to sites the
           // user didn't name ask first from the start (ADR-0037).
-          privateData: opts.privateData === true
+          privateData: opts.privateData === true,
+          // The panel's saved chat (in `space`'s Root Drive), so what the AI makes links back to it
+          // (ADR-0047).
+          chat: typeof opts.chat === 'string' ? opts.chat : null
         }
       })
       if (steer) {

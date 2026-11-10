@@ -1285,3 +1285,17 @@ main.dropping {
 [hidden] {
   display: none !important;
 }
+
+/* The AI chat that saved the file (app-stdlib/js/ai-origin.js), on the viewer's dark backdrop. */
+.viewer .ai-origin-slot .ai-origins {
+  align-items: center;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.viewer .ai-origin-slot .ai-origins button.ai-origin-open {
+  color: #9cc1ff;
+}
+
+.viewer .ai-origin-slot .ai-origins .ai-origin-when {
+  color: rgba(255, 255, 255, 0.45);
+}

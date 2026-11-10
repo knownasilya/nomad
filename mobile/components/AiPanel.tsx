@@ -140,6 +140,8 @@ interface Props {
   // panel (lib/navStack.ts backAction).
   chatsOpen: boolean
   onChatsOpenChange: (open: boolean) => void
+  // Open this chat, from a Note or an Asset it made (ADR-0047); `n` changes on every ask.
+  chatRequest?: { id: string; n: number } | null
 }
 
 // The user's own AI, over whatever tab is open. The turn runs on the user's desktop (the AI
@@ -147,7 +149,7 @@ interface Props {
 // send ships the full history, so the panel keeps `messages` and forwards them. Each chat is saved
 // after every turn in the Space's Root Drive, next to the desktop sidebar's chats (shared/ai-chats.mjs),
 // so the history button opens any of them, from either device, to carry on.
-export default function AiPanel ({ visible, onClose, url, title, space, spaceNs = null, aiChat, onPrompt, onPreviewDraft, onOpenLink, apps, chatsOpen, onChatsOpenChange }: Props) {
+export default function AiPanel ({ visible, onClose, url, title, space, spaceNs = null, aiChat, onPrompt, onPreviewDraft, onOpenLink, apps, chatsOpen, onChatsOpenChange, chatRequest }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const insets = useSafeAreaInsets()
@@ -335,6 +337,8 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
     setShowJump(false)
     // The first send makes the chat, in the Space that is open now.
     if (!chatRef.current && space) setChat({ id: newChatId(), space, ns: spaceNs, title: '', named: false, job: null })
+    // The chat's id goes with the turn, so a Note or an Asset the AI makes links back to it (ADR-0047).
+    const chatId = chatRef.current?.id
     setMessages([...history, { role: 'assistant', content: '' }])
     setBusy(true)
     setSteps([])
@@ -347,7 +351,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
     // An earlier answer read the user's private data: requests to sites they didn't name ask first
     // from the start of this turn (ADR-0037).
     const privateData = history.some((m) => m.privateData === true)
-    handleRef.current = aiChat(fitImages(mergeUserTurns(history.filter((m) => m.role !== 'error'))), { context: describeContext(url, title), personal: true, space, tab, privateData }, {
+    handleRef.current = aiChat(fitImages(mergeUserTurns(history.filter((m) => m.role !== 'error'))), { context: describeContext(url, title), personal: true, space, tab, privateData, chat: chatId }, {
       onChunk: (chunk) => { finishSteps(); appendToLast(chunk) },
       onReasoning: appendReasoning,
       onTool: (event: any) => {
@@ -441,6 +445,10 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
     if (next === 'new') showChat(null, [])
     else loadChat(next)
   }, [pendingOpen, busy])
+
+  useEffect(() => {
+    if (chatRequest) openChat(chatRequest.id)
+  }, [chatRequest?.n]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Deleted from the list: it isn't saved again. The panel empties unless an answer is running.
   const onChatDeleted = (id: string) => {

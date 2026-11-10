@@ -54,7 +54,8 @@ export function isVaultTool(name) {
 // opts: ctx ({ sender }), space (a Space key from another Device's turn, else null: the sender's
 // Space), permit (permission, sender) -> Promise<boolean>, scratch (the chat's scratch store, where a
 // long Note's or post's whole text is saved; scratch.mjs).
-export async function runVaultTool(name, args, { ctx, space = null, permit, scratch = null }) {
+// `origin` is the chat the turn is in (shared/ai-origin.mjs): a Note it writes keeps it (ADR-0047).
+export async function runVaultTool(name, args, { ctx, space = null, permit, scratch = null, origin = null }) {
   const permission = VAULT_TOOL_PERMS[name];
   if (name === 'highlightText') assertCanHighlight(ctx.sender, args);
   if (!(await permit(permission, ctx.sender)))
@@ -115,6 +116,13 @@ export async function runVaultTool(name, args, { ctx, space = null, permit, scra
           space: turnSpace,
         }));
       liveNotes.rememberRead(note); // the base of the AI's next edit
+      // The Note links back to this chat (ADR-0047). A new Note, or the conflict copy that holds
+      // the AI's text, is one the chat made.
+      if (origin) {
+        note = await vaultApps
+          .setNoteOrigin(ctx, { id: note.id, origin, made: !id || note.id !== id, space: turnSpace })
+          .catch(() => note);
+      }
       // Topics the user's AI sets count as the user's (ADR-0035): the background sort leaves them.
       if (Array.isArray(topics)) {
         note = await vaultApps.setNoteTopics(ctx, { id: note.id, topics: topics.filter((t) => typeof t === 'string'), space: turnSpace });

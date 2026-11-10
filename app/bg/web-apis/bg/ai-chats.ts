@@ -9,13 +9,45 @@
 import * as chatStore from '../../ai/chat-store';
 import * as jobChat from '../../ai/job-chat';
 import { findWebContentsParentWindow } from '../../lib/electron';
-import { openAiSidebarChat, emitAiChatsChanged } from '../../ui/tabs/manager';
+import { openAiSidebarChat, emitAiChatsChanged, getWindowActiveSpaceId, setActiveSpace } from '../../ui/tabs/manager';
+import * as spacesDb from '../../dbs/spaces';
+import * as drives from '../../hyper/drives';
+import * as jobs from '../../ai/jobs';
+import * as aiMade from '../../ai/ai-made';
+import * as vaultApps from './vault-apps';
+import { resolveOrigins, originsForPath } from '../../../../shared/ai-origin.mjs';
+import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
 
 const isId = (id) => typeof id === 'string' && /^[a-z0-9]{1,40}$/.test(id);
 
 function checkId(id) {
   if (!isId(id)) throw new Error('Not a chat id');
   return id;
+}
+
+// The Space with this key on this computer, or null.
+function spaceByKey(key) {
+  if (!isSpaceKey(key)) return null;
+  return (
+    spacesDb.getCachedAll().find((sp) => {
+      try {
+        return sp.root_drive_url && drives.fromURLToKey(sp.root_drive_url) === key;
+      } catch {
+        return false;
+      }
+    }) || null
+  );
+}
+
+// What an item shows for the chats that made or changed it (shared/ai-origin.mjs, ADR-0047).
+async function resolveFor(sender, list) {
+  const currentSpace = await vaultApps.spaceKey({ sender }).catch(() => null);
+  return resolveOrigins(Array.isArray(list) ? list : [], {
+    chat: (id, space) => chatStore.findSession(sender, id, isSpaceKey(space) && spaceByKey(space) ? space : null),
+    job: async (id) => jobs.get(id) || null,
+    currentSpace,
+    spaceName: (key) => vaultApps.spaceNameOf(key) || '',
+  });
 }
 
 export default {
@@ -43,10 +75,29 @@ export default {
     emitAiChatsChanged({ deleted: id });
   },
 
-  async open(id) {
+  // Opens it in the AI Sidebar of the caller's window. `space` (a Space key) is the Space the chat
+  // is kept in, from an item the AI made (ADR-0047): the window switches to it first.
+  async open(id, opts: any = {}) {
     const win = findWebContentsParentWindow(this.sender);
     if (!win) throw new Error('No window to open the chat in');
-    openAiSidebarChat(win, checkId(id));
+    checkId(id);
+    const space = opts && isSpaceKey(opts.space) ? spaceByKey(opts.space) : null;
+    if (space && getWindowActiveSpaceId(win) !== space.id) await setActiveSpace(win, space.id);
+    openAiSidebarChat(win, id);
+  },
+
+  // The chats (or Jobs) that made or changed an item, from its `ai` list (a Note's, an Asset's),
+  // as it shows them: [{ kind: 'chat' | 'job' | 'none', text, tip, id?, space?, made, at }].
+  async origins(list) {
+    return resolveFor(this.sender, list);
+  },
+
+  // The same for a drive (ai-made.js), newest first; with `path`, the chats that wrote that file
+  // come first when there are any.
+  async driveOrigins(url, path = '') {
+    const list = await aiMade.driveOrigins(String(url || ''));
+    if (!list.length) return [];
+    return resolveFor(this.sender, path ? originsForPath(list, String(path)) : list);
   },
 
   async openNew() {

@@ -39,6 +39,7 @@ import { noteGraph, noteTexts, noteGraphCounts, topicNodeId } from './graph.js';
 import { noteTitle, noteSnippet, makeResolver, linkedIds } from '../../../../shared/vault-apps.mjs';
 import { queryWords, matchesWords, matchSnippet, markPieces } from '../../app-stdlib/js/search-match.js';
 import { notesPageTitle } from './page-title.js';
+import { showAiOrigins } from '../../app-stdlib/js/ai-origin.js';
 import { isTopicOn, toggleTopic, keepKnownTopics, matchesTopics, topicFilterLabel } from './topic-filter.js';
 
 const SAVE_DELAY = 700;
@@ -851,7 +852,7 @@ function renderEditor() {
         [icon('trash')]
       ),
     ]),
-    el('div', { class: 'page' }, [el('div', { class: 'banner-slot' }), el('div', { class: 'topic-slot' }), host, el('div', { class: 'backlinks-slot' })])
+    el('div', { class: 'page' }, [el('div', { class: 'banner-slot' }), el('div', { class: 'topic-slot' }), host, el('div', { class: 'note-foot' }, [el('div', { class: 'backlinks-slot' }), el('div', { class: 'ai-origin-slot' })])])
   );
   editor = createNoteEditor({
     parent: host,
@@ -1179,6 +1180,20 @@ function renderAround() {
 
   backSlot.replaceChildren(renderBacklinks());
   renderNoteTopics();
+  renderNoteOrigins();
+}
+
+// The AI chats that made or updated the open note (ADR-0047), folded into one quiet "Linked AI chats" line
+// under Linked mentions: opened, each opens in the AI Sidebar while it is still there. Looked up again only when the note's list changes.
+function renderNoteOrigins() {
+  const slot = mainEl.querySelector('.ai-origin-slot');
+  if (!slot) return;
+  const stored = draft?.id ? state.notes.find((n) => n.id === draft.id) : null;
+  const list = stored && Array.isArray(stored.ai) ? stored.ai : [];
+  const key = (stored?.id || '') + JSON.stringify(list);
+  if (slot.dataset.key === key) return;
+  slot.dataset.key = key;
+  showAiOrigins(slot, list, { collapsed: true, onError: (e) => setSaveMsg('error', 'Couldn’t open the chat: ' + (e.message || e)) });
 }
 
 // The open note's topics, above its text: each one shows its notes, × takes it off; type to add

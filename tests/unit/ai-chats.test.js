@@ -62,7 +62,7 @@ describe('shared rules', () => {
 })
 
 // A Space's Root Drive in memory: the reader the drive manager gives, and put/del.
-function memoryDrive (writable = true) {
+function memoryDrive (writable = true, extra = {}) {
   const files = new Map()
   const entry = {
     reader: {
@@ -77,7 +77,8 @@ function memoryDrive (writable = true) {
       return entry
     },
     put: async (e, path, buf) => { files.set(path, buf) },
-    del: async (e, path) => { files.delete(path) }
+    del: async (e, path) => { files.delete(path) },
+    ...extra
   })
   const json = (path) => JSON.parse(files.get(path).toString())
   return { files, chats, entry, json }
@@ -121,6 +122,30 @@ describe('the phone backend', () => {
     expect(files.has('/.ai-chat/sessions/old.json')).toBe(false)
     expect(json(NAMES_PATH)).toEqual({})
     expect(await chats.handle('load', { space: SPACE, id: 'old' })).toBe(null)
+  })
+
+  it('says which saved chat made an item, only from the user\'s own Spaces (ADR-0047)', async () => {
+    const OTHER = 'b'.repeat(64)
+    const { chats } = memoryDrive(true, {
+      spaces: async () => [{ rootDriveKey: SPACE, name: 'Home' }],
+      jobOf: async (id) => (id === 'digest' ? { title: 'Digest' } : null)
+    })
+    await chats.handle('save', { space: SPACE, id: 'abc', messages: [{ role: 'user', content: 'Plan the garden' }] })
+    // In someone else's Space: this drive answers for any key, so only the Space check hides it.
+    await chats.handle('save', { space: SPACE, id: 'xyz', messages: [{ role: 'user', content: 'Theirs' }] })
+    const shown = await chats.handle('origins', {
+      space: SPACE,
+      list: [
+        { stage: 'phone', chat: 'abc', space: SPACE, at: '2026-11-09T10:00:00.000Z', made: true },
+        { stage: 'sidebar', chat: 'xyz', space: OTHER, at: '2026-11-08T10:00:00.000Z' },
+        { stage: 'job', job: 'digest', at: '2026-11-07T10:00:00.000Z' }
+      ]
+    })
+    expect(shown.map((o) => [o.kind, o.text])).toEqual([
+      ['chat', 'Made in the AI chat “Plan the garden”'],
+      ['none', 'Updated with AI'],
+      ['job', 'Updated by the AI Job “Digest”']
+    ])
   })
 
   it('opens the Root Drive with the ns the UI sends', async () => {

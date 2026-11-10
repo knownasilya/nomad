@@ -16,6 +16,7 @@ import * as vaultApps from './lib/vault-apps.mjs'
 import * as pe from '../../shared/personas.mjs'
 import hcrypto from 'hypercore-crypto'
 import { decodeInlineJson, WRITERS_PREFIX as DRIVE_WRITERS } from '../../shared/fs-core.mjs'
+import { jobPath } from '../../shared/jobs.mjs'
 import * as spaceLib from './lib/space-library.mjs'
 import * as calendar from './lib/calendar.mjs'
 import * as homeDash from '../../shared/home-dashboard.mjs'
@@ -1194,7 +1195,13 @@ const aiChats = createAiChats({
   open: openRoot,
   openWritable: writableRoot,
   put: (entry, path, buf) => manager._put(DRIVE_AUTOBASE, entry.drive, path, buf),
-  del: (entry, path) => manager._del(DRIVE_AUTOBASE, entry.drive, path)
+  del: (entry, path) => manager._del(DRIVE_AUTOBASE, entry.drive, path),
+  // For what an item the AI made links back to (ADR-0047).
+  spaces: async () => (vault ? (await readVaultIndex(vault)).spaces : []),
+  jobOf: async (id) => {
+    const node = vault ? await vault.view.get(jobPath(id)).catch(() => null) : null
+    return node ? decodeInlineJson(node.value, b4a) : null
+  }
 })
 
 // Open a Space's Root Drive to read it, and ask for this phone's writer key when it can't write it.

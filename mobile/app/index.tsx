@@ -283,6 +283,23 @@ export default function Browser () {
   const [aiOpen, setAiOpen] = useState(false)
   // The AI panel's past chats are showing (back closes them first).
   const [aiChatsOpen, setAiChatsOpen] = useState(false)
+  // A chat a Note or an Asset links to (ADR-0047), carried on in the AI panel. The panel sits under
+  // the screens, so they close while it is open and come back when it closes: back goes where the
+  // user came from.
+  const [aiChatRequest, setAiChatRequest] = useState<{ id: string; n: number } | null>(null)
+  const aiReturnRef = useRef<Screen[] | null>(null)
+  const openAiChat = useCallback((id: string) => {
+    aiReturnRef.current = screensRef.current
+    setScreens([])
+    setAiChatRequest((r) => ({ id, n: (r?.n || 0) + 1 }))
+    setAiOpen(true)
+  }, [])
+  const closeAi = useCallback(() => {
+    const back = aiReturnRef.current
+    aiReturnRef.current = null
+    setAiOpen(false)
+    if (back?.length) setScreens(back)
+  }, [])
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [source, setSource] = useState('')
   // The address bar has focus (it hides the name tag then). recentsOpen: the recent-sites card that
@@ -910,6 +927,8 @@ export default function Browser () {
   // screen over the AI panel, so back comes to the chat again. A page opens in a new tab, and the
   // panel closes to show it. The rest (Mods, the AI's memory and skills) are only on the computer.
   const openAiLink = useCallback((link: ItemLink) => {
+    // A link followed from the panel goes on from here, not back to where the panel was opened.
+    aiReturnRef.current = null
     switch (link.kind) {
       case 'page':
         setAiOpen(false)
@@ -1146,13 +1165,13 @@ export default function Browser () {
       const sub = BackHandler.addEventListener('hardwareBackPress', () => {
         switch (backAction({ aiOpen, aiChatsOpen, editingAddress: urlFocusedRef.current })) {
           case 'closeAiChats': setAiChatsOpen(false); return true
-          case 'closeAi': setAiOpen(false); return true
+          case 'closeAi': closeAi(); return true
           case 'leaveAddress': leaveAddress(); return true
           default: return goBackActive()
         }
       })
       return () => sub.remove()
-    }, [goBackActive, aiOpen, aiChatsOpen, leaveAddress])
+    }, [goBackActive, aiOpen, aiChatsOpen, leaveAddress, closeAi])
   )
 
   // --- render ------------------------------------------------------------
@@ -1487,6 +1506,8 @@ export default function Browser () {
         onOpenDevices={() => openScreen({ name: 'devices' })}
         onOpenUrl={openFromNotes}
         onOpenAsset={(place) => openScreen({ name: 'assets', assetId: place.id, folder: place.folder, tag: place.tag })}
+        onOpenJob={(jobId) => openScreen({ name: 'jobs', jobId })}
+        onOpenAiChat={openAiChat}
       />
 
       <HouseholdContacts
@@ -1524,6 +1545,8 @@ export default function Browser () {
         spaceName={spacesApi.activeSpace.name}
         onOpenDevices={() => openScreen({ name: 'devices' })}
         onOpenLibrary={() => openScreen({ name: 'library' })}
+        onOpenJob={(jobId) => openScreen({ name: 'jobs', jobId })}
+        onOpenAiChat={openAiChat}
       />
 
       <Jobs
@@ -1616,7 +1639,8 @@ export default function Browser () {
         parent it could not see. Out here it simply fills the window and owns both insets itself. */}
     <AiPanel
       visible={aiOpen}
-      onClose={() => setAiOpen(false)}
+      onClose={closeAi}
+      chatRequest={aiChatRequest}
       url={active.url}
       title={active.title}
       space={spacesApi.activeSpace.rootDriveKey}

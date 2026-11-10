@@ -230,5 +230,17 @@ ${toastCSS}
     color: var(--text-color--link);
     cursor: pointer;
   }
+
+  /* The AI chats that made this drive (app-stdlib/js/ai-origin.js). */
+  .ai-origin-row {
+    margin-top: 10px;
+    /* site-info's own link color is gray in dark mode; these must read as links next to plain lines. */
+    --text-color--link: #2864dc;
+  }
+  @media (prefers-color-scheme: dark) {
+    .ai-origin-row {
+      --text-color--link: #8fb0ff;
+    }
+  }
 `;
 export default cssStr;

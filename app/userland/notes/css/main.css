@@ -905,10 +905,39 @@ main {
   flex: 1;
 }
 
-.backlinks {
+/* Under the note: Linked mentions, then the AI chats that made or changed it. */
+.note-foot {
   margin: 8px var(--note-gutter) 40px;
   padding-top: 14px;
   border-top: 1px solid var(--border-color--very-light);
+}
+
+/* The AI chats (app-stdlib/js/ai-origin.js), folded into a line styled like Linked mentions. */
+.note-foot .ai-origin-slot details.ai-origins-fold > summary {
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-color--pretty-light);
+}
+
+.note-foot .ai-origin-slot details.ai-origins-fold > summary:hover {
+  color: var(--text-color--default);
+}
+
+.note-foot .ai-origin-slot details.ai-origins-fold > summary .fa-robot {
+  display: none;
+}
+
+.note-foot .ai-origin-slot details.ai-origins-fold > summary .chev {
+  order: -1;
+  width: 1.25em; /* as fa-fw on Linked mentions' arrow, so the two lines start together */
+}
+
+.note-foot .ai-origin-slot details.ai-origins-fold > .ai-origins {
+  margin: 0 0 0 10px;
 }
 
 .backlinks summary {
@@ -1149,4 +1178,8 @@ mark {
   background: var(--nts-mark);
   color: inherit;
   border-radius: 2px;
+}
+
+.note-foot:not(:has(details)) {
+  display: none;
 }

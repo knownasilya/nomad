@@ -5,6 +5,8 @@ export default {
   load: 'promise', // (id) -> { id, title, messages, updatedAt } | null
   rename: 'promise', // (id, name) -> the title shown; '' goes back to the first message
   remove: 'promise', // (id)
-  open: 'promise', // (id) opens it in the AI Sidebar of the caller's window
+  open: 'promise', // (id, { space? }) opens it in the AI Sidebar of the caller's window, in that Space
+  origins: 'promise', // (ai list of a Note or Asset) -> what it shows for the chats that made it (ADR-0047)
+  driveOrigins: 'promise', // (driveUrl, path?) -> the same for a drive
   openNew: 'promise', // () opens the AI Sidebar on a new chat
 };

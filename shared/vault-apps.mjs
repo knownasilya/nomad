@@ -276,6 +276,8 @@ export function makeNote({ id, body, conflictOf }, prev = null, now = new Date()
   // So do the ticks of the items it still has ticked.
   const ticks = prev && !conflictOf ? keepTicks(prev.ticks, text) : null;
   if (ticks) note.ticks = ticks;
+  // And the AI chats that made or changed it (shared/ai-origin.mjs, ADR-0047).
+  if (prev && !conflictOf && Array.isArray(prev.ai) && prev.ai.length) note.ai = prev.ai;
   return note;
 }
 

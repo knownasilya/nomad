@@ -345,6 +345,19 @@ them equal): `AiPanel` passes `onLink` to `Markdown`, and `openAiLink` in `mobil
 Notes, Jobs and Reader on their screens and pages in a new tab. A new kind of item needs a link
 builder and a `parseItemLink` case in both files, and its tool result needs the `url`.
 
+### Items link back to the AI chat that made them (ADR-0047)
+
+The other way round: a Note, an Asset or a drive the user's AI made or changed keeps which chat did it
+(`shared/ai-origin.mjs`: ids only, `ai` on Note and Asset records, carried by `makeNote`/`makeAsset`;
+a drive's in the Vault at `/.vault/ai-made/<driveKey>.json`, `app/bg/ai/ai-made.js`). `runChat`'s
+`turnOrigin` gives every tool call the turn's origin (the sidebar's chat from `ai-shell.ts`, a Job,
+the phone panel's saved chat sent as `chat` over the Bridge, `outside`), and `writeNote`, `saveAsset`, `createDrive` and `writeDriveFile` record it. The
+item shows "Made in the AI chat “…”" while the chat exists (`resolveOrigins`; desktop
+`nomad.aiChats.origins`/`driveOrigins` drawn by `app-stdlib/js/ai-origin.js` in Notes, the Assets
+viewer and site-info, opening the chat in the sidebar; the phone's `RPC_APPS` `aiChats` and
+`mobile/components/AiOrigins.tsx`, which shows the chat and carries it on in the AI panel). A new tool that makes the user's
+things should record its origin the same way.
+
 ### Generated UI in the AI Sidebar (ADR-0027)
 
 The sidebar's assistant can answer with charts, maps, tables, stats, buttons and cards for a purpose

@@ -196,7 +196,11 @@ export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boo
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
 // space: the Space's key when the note is kept only in that Space (ADR-0029), else null.
 // topics: the Note's topics (ADR-0035), set by the user or a computer's AI (topicsBy).
-export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string; space?: string | null; topics?: string[]; topicsBy?: 'ai' | 'user'; ticks?: Record<string, { by: string; at: string }> }
+// The AI chats that made or changed a Note or an Asset (shared/ai-origin.mjs, ADR-0047), as stored,
+// and as the item shows them (backend/lib/ai-chats.mjs, RPC_APPS `aiChats`).
+export interface AiOrigin { stage: 'sidebar' | 'job' | 'phone' | 'outside'; chat?: string; job?: string; space?: string; at: string; made?: true }
+export interface AiOriginShown { kind: 'chat' | 'job' | 'none'; id?: string; space?: string | null; here?: boolean; title?: string; made: boolean; at: string; text: string; tip: string }
+export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string; space?: string | null; topics?: string[]; topicsBy?: 'ai' | 'user'; ticks?: Record<string, { by: string; at: string }>; ai?: AiOrigin[] }
 // The calendar (shared/calendar.mjs, ADR-0042, backend/lib/calendar.mjs). Times are wall time:
 // 'YYYY-MM-DD' for an all-day event, 'YYYY-MM-DDTHH:mm' otherwise. space: the Space's key for an
 // event kept in that Space, else null. by: who added it, in a shared Space.
@@ -212,7 +216,7 @@ export interface CalendarOccurrence { id: string; title: string; start: string; 
 export interface CalendarList { space: string | null; shared: boolean; canWriteSpace: boolean; writable: boolean; from: string; to: string; events: CalendarEvent[]; feeds: CalendarFeed[]; occurrences: CalendarOccurrence[] }
 // A Space's Assets (shared/assets.mjs, ADR-0044, backend/lib/assets.mjs): any file it keeps. by: who
 // added it in a shared Space. canDelete: this person added it, owns the Space, or it isn't shared.
-export interface AssetRecord { type: 'nomad/asset'; id: string; name: string; mime: string; kind: string; bytes: number; addedAt: string; takenAt: string; width?: number; height?: number; duration?: number; by: string; memberId: string | null; caption?: string; thumb?: boolean; source?: 'ai'; sourceUrl?: string; tags?: string[]; folder?: string; updatedAt: string; canDelete: boolean }
+export interface AssetRecord { type: 'nomad/asset'; id: string; name: string; mime: string; kind: string; bytes: number; addedAt: string; takenAt: string; width?: number; height?: number; duration?: number; by: string; memberId: string | null; caption?: string; thumb?: boolean; source?: 'ai'; sourceUrl?: string; tags?: string[]; folder?: string; ai?: AiOrigin[]; updatedAt: string; canDelete: boolean }
 // `folders`: every folder path there is (shared/assets.mjs allFolders), kept ones with no files too.
 export interface AssetsList { shared: boolean; canAdd: boolean; role: string | null; maxBytes: number; assets: AssetRecord[]; folders: string[] }
 // The user's AI Jobs (shared/jobs.mjs, ADR-0030). A desktop runs them; the phone lists them, pauses

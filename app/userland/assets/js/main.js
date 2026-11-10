@@ -27,6 +27,7 @@ import { assetLink, assetFolderLink, assetTagLink } from '../../../../shared/ite
 import { showPdf } from './pdf-view.js'
 import { openBook, BookError } from './book/parse.js'
 import { createReader } from './book/reader.js'
+import { showAiOrigins } from '../../app-stdlib/js/ai-origin.js'
 
 const MD_URL = 'nomad://app-stdlib/vendor/markdown-it.js'
 const PDF_URL = '/js/pdf.build.js'
@@ -695,8 +696,17 @@ function renderViewer(a) {
         : a.caption
           ? el('p', {}, [a.caption])
           : null,
+      renderOrigins(a),
     ]),
   ])
+}
+
+// The AI chat that saved the file, while it is still there (ADR-0047).
+function renderOrigins(a) {
+  if (!Array.isArray(a.ai) || !a.ai.length) return null
+  const slot = el('div', { class: 'ai-origin-slot' })
+  showAiOrigins(slot, a.ai, { onError: (e) => say(e?.message || String(e), true) })
+  return slot
 }
 
 // The file's tags in the viewer: each goes to its tag; × takes it off; the box adds one.

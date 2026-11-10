@@ -2,9 +2,13 @@
 // Drive (hyper://private/.ai-chat/, app/bg/ai/chat-store.js), so a chat started on the computer can
 // be carried on from the phone and the other way round. Rules and paths are shared/ai-chats.mjs.
 //
+// They are also what a Note or an Asset links back to when the user's AI made it (ADR-0047):
+// `origins` says what the item shows, with the rules desktop uses (shared/ai-origin.mjs).
+//
 // `open(space, ns)` gives the Space's Root Drive entry to read ({ reader }), `openWritable(space, ns)`
 // one to write ({ drive, reader }) or throws when this phone can't write it yet; `put`/`del` write
-// through the drive manager.
+// through the drive manager. `spaces()` lists the Vault's Space records ({ rootDriveKey, name,
+// deleted? }) and `jobOf(id)` reads a Job, for `origins`.
 
 import b4a from 'b4a'
 import {
@@ -22,6 +26,7 @@ import {
   cleanName,
   namesOf
 } from '../../../shared/ai-chats.mjs'
+import { resolveOrigins } from '../../../shared/ai-origin.mjs'
 
 // What a saved message keeps. `error` is the sidebar's failed turn; `files` its Revert list. The
 // phone keeps both when it saves a chat desktop started.
@@ -54,7 +59,7 @@ export function cleanMessages (messages) {
     })
 }
 
-export function createAiChats ({ open, openWritable, put, del }) {
+export function createAiChats ({ open, openWritable, put, del, spaces = async () => [], jobOf = async () => null }) {
   async function list (at, { query = '' } = {}) {
     const { reader } = await at.open()
     const ids = []
@@ -138,9 +143,27 @@ export function createAiChats ({ open, openWritable, put, del }) {
     return true
   }
 
+  // What a Note or an Asset shows for its `ai` list. A chat is looked up only in the user's own
+  // Spaces: an item in a shared Space can name a chat in someone else's.
+  async function origins (list, currentSpace) {
+    const all = await spaces().catch(() => [])
+    const own = (key) => all.some((s) => s && !s.deleted && s.rootDriveKey === key)
+    return resolveOrigins(Array.isArray(list) ? list : [], {
+      chat: async (id, space) => {
+        if (!isSessionId(id) || !own(space)) return null
+        const found = await load({ open: () => open(space, null) }, id).catch(() => null)
+        return found ? { title: found.title } : null
+      },
+      job: (id) => jobOf(id),
+      currentSpace: /^[0-9a-f]{64}$/.test(String(currentSpace || '')) ? currentSpace : null,
+      spaceName: (key) => all.find((s) => s && s.rootDriveKey === key)?.name || ''
+    })
+  }
+
   return {
     handle (action, args = {}) {
       const { space } = args
+      if (action === 'origins') return origins(args.list, space)
       if (typeof space !== 'string' || !/^[0-9a-f]{64}$/i.test(space)) throw new Error('Open a Space first')
       // `ns`: this phone made the Space, and reopens its Root Drive writable from there.
       const ns = typeof args.ns === 'string' && args.ns ? args.ns : null
