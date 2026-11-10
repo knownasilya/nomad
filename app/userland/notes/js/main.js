@@ -852,7 +852,7 @@ function renderEditor() {
         [icon('trash')]
       ),
     ]),
-    el('div', { class: 'page' }, [el('div', { class: 'banner-slot' }), el('div', { class: 'topic-slot' }), el('div', { class: 'ai-origin-slot' }), host, el('div', { class: 'backlinks-slot' })])
+    el('div', { class: 'page' }, [el('div', { class: 'banner-slot' }), el('div', { class: 'topic-slot' }), host, el('div', { class: 'note-foot' }, [el('div', { class: 'backlinks-slot' }), el('div', { class: 'ai-origin-slot' })])])
   );
   editor = createNoteEditor({
     parent: host,
@@ -1184,7 +1184,7 @@ function renderAround() {
 }
 
 // The AI chats that made or changed the open note (ADR-0047), folded into one quiet "Made with AI"
-// line: opened, each opens in the AI Sidebar while it is still there. Looked up again only when the note's list changes.
+// line under Linked mentions: opened, each opens in the AI Sidebar while it is still there. Looked up again only when the note's list changes.
 function renderNoteOrigins() {
   const slot = mainEl.querySelector('.ai-origin-slot');
   if (!slot) return;

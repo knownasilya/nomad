@@ -19,7 +19,7 @@ interface Props {
   onOpenJob: (id: string) => void
   onOpenUrl?: (url: string) => void // a web or hyper:// link in the chat
   dark?: boolean // on a dark backdrop (the Assets viewer)
-  collapsed?: boolean // one quiet "Made with AI" line that opens the list (Notes)
+  collapsed?: boolean // a small "AI" chip that opens the list in a sheet (Notes' topics bar)
 }
 
 const when = (iso: string) => {
@@ -57,45 +57,55 @@ export default function AiOrigins ({ list, apps, onOpenJob, onOpenUrl, dark = fa
 
   if (!shown.length) return null
   const label = `${shown.some((o) => o.made) ? 'Made with AI' : 'Changed with AI'}${shown.length > 1 ? ` · ${shown.length} chats` : ''}`
-  const lines = !collapsed || open
+  const rows = shown.map((o, i) => {
+    const linked = o.kind === 'chat' || o.kind === 'job'
+    const tip = o.kind === 'chat' ? 'Show this chat' : o.kind === 'job' ? 'Open this Job' : o.tip
+    const at = when(o.at)
+    return (
+      <Pressable
+        key={i}
+        style={[s.row, collapsed && s.sheetRow]}
+        android_ripple={{ color: t.ripple }}
+        onPress={() => {
+          if (o.kind === 'chat') { setOpen(false); openChat(o) } else if (o.kind === 'job' && o.id) { setOpen(false); onOpenJob(o.id) } else showLabel(o.tip)
+        }}
+        onLongPress={() => showLabel(tip)}
+        accessibilityRole={linked ? 'button' : 'text'}
+        accessibilityLabel={o.text}
+        accessibilityHint={tip}
+      >
+        <Icon name={o.kind === 'job' ? 'clock' : 'robot'} size={12} color={s.muted.color as string} />
+        <Text style={[s.text, collapsed && s.sheetText, linked && s.link]} numberOfLines={collapsed ? 2 : 1}>{o.text}</Text>
+        {at ? <Text style={s.muted}>· {at}</Text> : null}
+      </Pressable>
+    )
+  })
   return (
-    <View style={s.root} accessibilityLabel='AI chats that made or changed this'>
+    <View style={collapsed ? s.chipWrap : s.root} accessibilityLabel='AI chats that made or changed this'>
       {collapsed ? (
+        // A small chip, at the end of a row (Notes' topics bar), that opens the list in a sheet.
         <Pressable
-          style={s.row}
-          android_ripple={{ color: t.ripple }}
-          onPress={() => setOpen((v) => !v)}
-          onLongPress={() => showLabel(open ? 'Hide the AI chats' : 'Show the AI chats that made or changed this')}
+          style={s.chip}
+          onPress={() => setOpen(true)}
+          onLongPress={() => showLabel('Show the AI chats that made or changed this')}
+          hitSlop={8}
           accessibilityRole='button'
           accessibilityLabel={label}
-          accessibilityState={{ expanded: open }}
+          accessibilityHint='Shows the AI chats that made or changed this'
         >
           <Icon name='robot' size={11} color={s.muted.color as string} />
-          <Text style={s.muted}>{label}</Text>
-          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={9} color={s.muted.color as string} />
+          <Text style={s.muted}>AI</Text>
         </Pressable>
+      ) : rows}
+      {collapsed ? (
+        <BottomSheet visible={open} onClose={() => setOpen(false)} style={s.sheet}>
+          <View style={s.sheetHead}>
+            <Icon name='robot' size={15} color={t.textDim} />
+            <Text style={s.sheetTitle} numberOfLines={1}>{label}</Text>
+          </View>
+          <View style={{ paddingBottom: space.md }}>{rows}</View>
+        </BottomSheet>
       ) : null}
-      {lines && shown.map((o, i) => {
-        const linked = o.kind === 'chat' || o.kind === 'job'
-        const tip = o.kind === 'chat' ? 'Show this chat' : o.kind === 'job' ? 'Open this Job' : o.tip
-        const at = when(o.at)
-        return (
-          <Pressable
-            key={i}
-            style={[s.row, collapsed && s.indent]}
-            android_ripple={{ color: t.ripple }}
-            onPress={() => (o.kind === 'chat' ? openChat(o) : o.kind === 'job' && o.id ? onOpenJob(o.id) : showLabel(o.tip))}
-            onLongPress={() => showLabel(tip)}
-            accessibilityRole={linked ? 'button' : 'text'}
-            accessibilityLabel={o.text}
-            accessibilityHint={tip}
-          >
-            <Icon name={o.kind === 'job' ? 'clock' : 'robot'} size={12} color={s.muted.color as string} />
-            <Text style={[s.text, linked && s.link]} numberOfLines={1}>{o.text}</Text>
-            {at ? <Text style={s.muted}>· {at}</Text> : null}
-          </Pressable>
-        )
-      })}
       <BottomSheet visible={!!chat} onClose={() => setChat(null)} style={s.sheet}>
         <View style={s.sheetHead}>
           <Icon name='robot' size={15} color={t.textDim} />
@@ -126,7 +136,10 @@ function makeStyles (t: Theme, dark: boolean) {
   return StyleSheet.create({
     root: { gap: 2 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32, paddingHorizontal: space.md },
-    indent: { paddingLeft: space.md + 17 },
+    chipWrap: { flexShrink: 0 },
+    chip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border },
+    sheetRow: { minHeight: 48, paddingHorizontal: space.lg },
+    sheetText: { fontSize: 14 },
     text: { flexShrink: 1, fontSize: 12, color: dark ? 'rgba(255,255,255,0.7)' : t.textDim },
     link: { color: dark ? '#9cc1ff' : t.accent },
     muted: { fontSize: 12, color: dark ? 'rgba(255,255,255,0.45)' : t.textMuted },

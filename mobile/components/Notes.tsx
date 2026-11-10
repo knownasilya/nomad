@@ -641,10 +641,11 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive
                 ) : (
                   <Text style={s.topicAdd}>{editable ? 'Add a topic' : 'No topics'}</Text>
                 )}
+                {/* The AI chats that made or changed the note (ADR-0047): a small chip at the end of the bar. */}
+                {openNote.ai?.length ? (
+                  <AiOrigins collapsed list={openNote.ai} apps={call} onOpenJob={(id) => onOpenJob?.(id)} onOpenUrl={(url) => onOpenUrl(url, openNote.id)} />
+                ) : null}
               </Pressable>
-            ) : null}
-            {openNote?.ai?.length ? (
-              <AiOrigins collapsed list={openNote.ai} apps={call} onOpenJob={(id) => onOpenJob?.(id)} onOpenUrl={(url) => onOpenUrl(url, openNote.id)} />
             ) : null}
             <WebView
               ref={web}
@@ -960,6 +961,6 @@ function makeStyles (t: Theme) {
     topic: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: t.trustBg, maxWidth: 160 },
     topicText: { color: t.trustText, fontSize: 11, fontWeight: '600' },
     topicBar: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 40, paddingHorizontal: 16, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border, backgroundColor: t.surface },
-    topicAdd: { color: t.textMuted, fontSize: 13 }
+    topicAdd: { flex: 1, color: t.textMuted, fontSize: 13 }
   })
 }
