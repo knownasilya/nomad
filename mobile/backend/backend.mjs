@@ -884,7 +884,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'home' && action === 'dismiss') { value = await vaultApps.dismissHomeNotifications(vault, args.items); vaultChanged() }
     else if (app === 'assets' && action === 'list') value = await assets.list(space)
     else if (app === 'assets' && action === 'read') value = await assets.read(space, args.id, { thumb: !!args.thumb })
-    else if (app === 'assets' && action === 'readTo') value = await assets.readTo(space, args.id, { to: args.to, thumb: !!args.thumb })
+    else if (app === 'assets' && action === 'readTo') value = await assets.readTo(space, args.id, { to: args.to, thumb: !!args.thumb, wait: Math.min(Math.max(Number(args.wait) || 8000, 0), 10000) }) // the app asks again until `done`
     else if (app === 'assets' && action === 'add') value = await assets.add(space, args.asset || {})
     else if (app === 'assets' && action === 'update') value = await assets.update(space, { id: args.id, name: args.name, caption: args.caption, tags: args.tags, folder: args.folder })
     else if (app === 'assets' && action === 'updateMany') value = await assets.updateMany(space, { ids: args.ids, folder: args.folder, addTags: args.addTags, removeTags: args.removeTags })

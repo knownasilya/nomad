@@ -827,9 +827,29 @@ describe('phone Assets', () => {
 
         // Back into the cache for the player, whole, with nothing left half-written.
         const to = path.join(cache, 'assets', added.id, 'clip one.mp4')
-        expect(await assets.readTo(SHARED, added.id, { to: 'file://' + encodeURI(to) })).toEqual({ size: movie.length })
+        expect(await assets.readTo(SHARED, added.id, { to: 'file://' + encodeURI(to) })).toEqual({ size: movie.length, written: movie.length, done: true })
         expect(Buffer.compare(fs.readFileSync(to), movie)).toBe(0)
         expect(fs.existsSync(to + '.part')).toBe(false)
+        // Already there: nothing is read again.
+        expect(await assets.readTo(SHARED, added.id, { to: 'file://' + encodeURI(to), wait: 0 })).toEqual({ size: movie.length, written: movie.length, done: true })
+
+        // A slow copy (a file still coming from another Device) outlasts one call: the app asks
+        // again, each call joins the copy going on and says how far it got, until it's done.
+        let reads = 0
+        const slow = createAssets({
+          libraryOf: async (space) => (space === SHARED ? { base: libBase, memberId, role: 'editor' } : null),
+          blobs: { ...blobs, readFileOf: async (...args) => { reads++; await new Promise((resolve) => setTimeout(resolve, 150)); return blobs.readFileOf(...args) } },
+          fs,
+          roots: ['file://' + cache + '/']
+        })
+        const to2 = 'file://' + encodeURI(path.join(cache, 'assets', added.id, 'again.mp4'))
+        const first = await slow.readTo(SHARED, added.id, { to: to2, wait: 10 })
+        expect(first).toMatchObject({ size: movie.length, done: false })
+        const seen = [first.written]
+        for (let r = first; !r.done; seen.push(r.written)) r = await slow.readTo(SHARED, added.id, { to: to2, wait: 100 })
+        expect(seen.every((n, i) => i === 0 || n >= seen[i - 1])).toBe(true)
+        expect(reads).toBe(2) // one copy, two pieces, however many calls asked
+        expect(Buffer.compare(fs.readFileSync(path.join(cache, 'assets', added.id, 'again.mp4')), movie)).toBe(0)
         // A whole movie is never one message.
         const big = Buffer.alloc(as.MAX_DATA_URL_BYTES + 1)
         const huge = await assets.add(SHARED, { path: (fs.writeFileSync(path.join(cache, 'big.bin'), big), 'file://' + path.join(cache, 'big.bin')), name: 'big.bin' })
