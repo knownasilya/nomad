@@ -3,7 +3,8 @@
 // next step; the 'steer' event then puts it in the transcript where the model read it. One the
 // Provider never read is sent as the next turn when this one ends.
 
-export interface SteerMsg { role: 'user' | 'assistant'; content: string; images?: string[]; reasoning?: string }
+// 'error' is a failed turn shown in a saved chat; the panel leaves it out of what it sends.
+export interface SteerMsg { role: 'user' | 'assistant' | 'error'; content: string; images?: string[]; reasoning?: string }
 // now: the person pressed Send now, and the Provider is stopping the AI's current step for it.
 export interface Queued { id: string; text: string; now?: boolean }
 
