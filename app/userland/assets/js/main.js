@@ -764,7 +764,12 @@ const previewCache = new Map() // id -> the element, so a re-render keeps a play
 
 function renderPreview(a, f) {
   const key = a.id + ':' + f.url
-  if (previewCache.has(key)) return previewCache.get(key)
+  if (previewCache.has(key)) {
+    const kept = previewCache.get(key)
+    // A drawn PDF moves into this render's new scroll box: its pages watch that one now.
+    queueMicrotask(() => pdfWatch.get(kept)?.())
+    return kept
+  }
   let node
   if (a.kind === 'image') {
     node = el('img', { class: 'picture', src: f.url, alt: a.caption || a.name })
@@ -896,12 +901,14 @@ async function renderBook(node, a, blob) {
 }
 
 let pdfjs = null
+const pdfWatch = new WeakMap() // a PDF's node -> rewatch(), for when a render moves it
 async function renderPdf(node, blob) {
   if (!pdfjs) {
     pdfjs = await import(/* @vite-ignore */ PDF_URL)
     pdfjs.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL
   }
-  await showPdf(node, new Uint8Array(await blob.arrayBuffer()), pdfjs)
+  const { rewatch } = await showPdf(node, new Uint8Array(await blob.arrayBuffer()), pdfjs)
+  pdfWatch.set(node, rewatch)
 }
 
 // Changes
