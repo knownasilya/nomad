@@ -143,8 +143,8 @@ describe('the phone backend', () => {
     })
     expect(shown.map((o) => [o.kind, o.text])).toEqual([
       ['chat', 'Made in the AI chat “Plan the garden”'],
-      ['none', 'Changed with AI'],
-      ['job', 'Changed by the AI Job “Digest”']
+      ['none', 'Updated with AI'],
+      ['job', 'Updated by the AI Job “Digest”']
     ])
   })
 

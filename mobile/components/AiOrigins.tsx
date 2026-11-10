@@ -13,7 +13,7 @@ import Markdown from './Markdown'
 // as desktop does. A chat is one of the saved AI chats, from desktop's AI Sidebar or this phone's AI
 // panel (the same files): a tap shows its messages in a sheet, which can carry it on in the AI panel
 // when it is in the open Space. A Job opens on the Jobs screen. A chat that was deleted, or one the
-// phone's panel never saved (before its chats were kept), shows as "Made with AI" without a link;
+// phone's panel never saved (before its chats were kept), shows as "Made with AI" (or "Updated with AI") without a link;
 // touch and hold says why.
 interface Props {
   list?: AiOrigin[]
@@ -62,7 +62,8 @@ export default function AiOrigins ({ list, apps, onOpenJob, onOpenUrl, onOpenCha
   }
 
   if (!shown.length) return null
-  const label = `${shown.some((o) => o.made) ? 'Made with AI' : 'Changed with AI'}${shown.length > 1 ? ` · ${shown.length} chats` : ''}`
+  // What the lines are, not what they did: the AI may only have updated it, and each line says which.
+  const label = shown.length > 1 ? `AI chats · ${shown.length}` : 'AI chat'
   const rows = shown.map((o, i) => {
     const linked = o.kind === 'chat' || o.kind === 'job'
     const tip = o.kind === 'chat' ? 'Show this chat' : o.kind === 'job' ? 'Open this Job' : o.tip

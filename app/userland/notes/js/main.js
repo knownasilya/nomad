@@ -1183,8 +1183,8 @@ function renderAround() {
   renderNoteOrigins();
 }
 
-// The AI chats that made or changed the open note (ADR-0047), folded into one quiet "Made with AI"
-// line under Linked mentions: opened, each opens in the AI Sidebar while it is still there. Looked up again only when the note's list changes.
+// The AI chats that made or updated the open note (ADR-0047), folded into one quiet "AI chats" line
+// under Linked mentions: opened, each opens in the AI Sidebar while it is still there. Looked up again only when the note's list changes.
 function renderNoteOrigins() {
   const slot = mainEl.querySelector('.ai-origin-slot');
   if (!slot) return;

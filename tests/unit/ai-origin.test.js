@@ -87,7 +87,7 @@ describe('resolveOrigins', () => {
       lookups
     )
     expect(here).toMatchObject({ kind: 'chat', id: 'live', here: true, text: 'Made in the AI chat “Plan the garden”' })
-    expect(far).toMatchObject({ kind: 'chat', id: 'far', here: false, space: OTHER, text: 'Changed in the AI chat “Trip”' })
+    expect(far).toMatchObject({ kind: 'chat', id: 'far', here: false, space: OTHER, text: 'Updated in the AI chat “Trip”' })
     expect(far.tip).toContain('“Work”')
   })
 
@@ -103,9 +103,9 @@ describe('resolveOrigins', () => {
     )
     expect(out.map((o) => [o.kind, o.text])).toEqual([
       ['job', 'Made by the AI Job “Weekly digest”'],
-      ['none', 'Changed with AI'],
-      ['none', 'Changed with AI'],
-      ['none', 'Changed with AI'],
+      ['none', 'Updated with AI'],
+      ['none', 'Updated with AI'],
+      ['none', 'Updated with AI'],
     ])
     expect(out[1].tip).toMatch(/deleted/)
     expect(out[3].tip).toMatch(/phone/)
@@ -120,7 +120,7 @@ describe('resolveOrigins', () => {
       lookups
     )
     expect(saved).toMatchObject({ kind: 'chat', id: 'live', here: true, text: 'Made in the AI chat “Plan the garden”' })
-    expect(gone).toMatchObject({ kind: 'none', text: 'Changed with AI' })
+    expect(gone).toMatchObject({ kind: 'none', text: 'Updated with AI' })
     expect(gone.tip).toMatch(/deleted/)
   })
 })

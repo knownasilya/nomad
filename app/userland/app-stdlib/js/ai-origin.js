@@ -2,7 +2,7 @@
 // drive. bg works out what each line says (nomad.aiChats.origins / driveOrigins, from the rules in
 // shared/ai-origin.mjs); this draws them and opens the chat in the window's AI Sidebar, or the Job
 // in My Library. A chat that was deleted, or one that was never kept (the phone's AI panel), shows
-// as plain "Made with AI" with no link.
+// as plain "Made with AI" or "Updated with AI" with no link.
 //
 // Plain DOM with no imports, so nomad://notes and nomad://assets (bundled) and site-info (Lit,
 // unbundled) all use it. Colors are app-stdlib's tokens, so it follows light and dark.
@@ -78,8 +78,9 @@ export function aiOriginsElement(origins, { onError = (err) => console.warn(err)
   if (!Array.isArray(origins) || !origins.length) return null;
   const list = linesElement(origins, onError, !collapsed);
   if (!collapsed) return list;
-  // Folded: one quiet line, "Made with AI", that opens the list.
-  const label = `${origins.some((o) => o.made) ? 'Made with AI' : 'Changed with AI'}${origins.length > 1 ? ` · ${origins.length} chats` : ''}`;
+  // Folded: one quiet line, "AI chats · 2", that opens the list. It doesn't say "made": the AI may
+  // only have updated the item, and each line says which.
+  const label = aiOriginsLabel(origins);
   const fold = el('details', { class: 'ai-origins-fold', open: foldOpen }, [
     el('style', {}, [CSS]),
     el('summary', { title: 'Show the AI chats that made or changed this' }, [icon('robot'), label, el('span', { class: 'fas fa-chevron-right chev', 'aria-hidden': 'true' })]),
@@ -87,6 +88,11 @@ export function aiOriginsElement(origins, { onError = (err) => console.warn(err)
   ]);
   fold.addEventListener('toggle', () => (foldOpen = fold.open));
   return fold;
+}
+
+// The folded list's name: what the lines are, not what they did.
+export function aiOriginsLabel(origins) {
+  return origins.length > 1 ? `AI chats · ${origins.length}` : 'AI chat';
 }
 
 function linesElement(origins, onError, withStyle) {

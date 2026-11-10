@@ -16,7 +16,7 @@
 //   made   true when this chat made the item, not only changed it
 //
 // Only ids go on the item, never the chat's title or words: a Note or an Asset in a shared Space is
-// seen by everyone in it, and their Nomad finds no chat by that id, so they read "Made with AI".
+// seen by everyone in it, and their Nomad finds no chat by that id, so they read "Made with AI" or "Updated with AI".
 //
 // Notes and Assets keep the list on their record as `ai` (newest first, at most MAX_ORIGINS; makeNote
 // and makeAsset carry it over). A drive's goes in the Vault, `/.vault/ai-made/<driveKey>.json`, since a
@@ -179,7 +179,8 @@ export function originsForPath(list, path) {
 export async function resolveOrigins(list, { chat = async () => null, job = async () => null, currentSpace = null, spaceName = () => '' } = {}) {
   const out = []
   for (const o of originsOf({ ai: list })) {
-    const verb = o.made ? 'Made' : 'Changed'
+    // "Made" only for the chat that made the item; any other only updated it.
+    const verb = o.made ? 'Made' : 'Updated'
     const base = { made: !!o.made, at: o.at }
     const found = o.chat ? await chat(o.chat, o.space || currentSpace).catch(() => null) : null
     if (found) {
@@ -204,7 +205,7 @@ export async function resolveOrigins(list, { chat = async () => null, job = asyn
       out.push({ ...base, kind: 'job', id: o.job, title, text: `${verb} by the AI Job “${title}”`, tip: 'Open this Job in My Library' })
       continue
     }
-    const by = o.made ? 'Made with AI' : 'Changed with AI'
+    const by = o.made ? 'Made with AI' : 'Updated with AI'
     let tip
     if (o.stage === 'sidebar' || (o.stage === 'phone' && o.chat)) tip = 'The AI chat it came from was deleted, or isn’t one of yours'
     else if (o.stage === 'job') tip = 'The AI Job it came from was deleted, or isn’t one of yours'

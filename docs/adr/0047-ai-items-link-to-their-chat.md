@@ -31,10 +31,12 @@ to it: the user had to remember which chat it was and search nomad://ai/chats.
    (`assets.ts` `saveForAi`), `createDrive` and `writeDriveFile`. A page's own `nomad.ai.chat()` is not
    the user's AI and records nothing.
 4. **Showing it.** `resolveOrigins` turns a list into lines, with the lookups passed in, so both
-   platforms say the same: "Made in the AI chat “…”" while the chat exists (its current name),
-   "Made by the AI Job “…”" when only the Job does, else "Made with AI" with a tooltip saying why
-   there's no link (deleted, someone else's, or a phone panel from before it saved its chats). Someone else in a shared
-   Space finds no chat by that id, so they see "Made with AI".
+   platforms say the same: "Made in the AI chat “…”" (or "Updated in…" when that chat only changed
+   it) while the chat exists (its current name), "Made by the AI Job “…”" when only the Job does,
+   else "Made with AI" or "Updated with AI" with a tooltip saying why there's no link (deleted,
+   someone else's, or a phone panel from before it saved its chats). Someone else in a shared Space
+   finds no chat by that id, so they see "Made with AI". Folded, the list is named for what it is,
+   "AI chat" or "AI chats · 3", never "Made with AI": the AI may only have updated the item.
    - Desktop: internal `nomad.aiChats.origins(list)` and `driveOrigins(url, path)`, drawn by
      `app-stdlib/js/ai-origin.js`: folded into one quiet line under Linked mentions at the foot of a
      note in nomad://notes, under the caption in the
