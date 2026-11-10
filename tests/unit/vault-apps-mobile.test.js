@@ -799,6 +799,56 @@ describe('phone Assets', () => {
     })
   }, 30000)
 
+  it('lists and opens what the computer added to a Space that isn’t shared', async () => {
+    const { createAssets } = await import('../../mobile/backend/lib/assets.mjs')
+    const as = await import('../../shared/assets.mjs')
+    const { createBlobStore, createContentReader } = await import('../../shared/fs-core.mjs')
+    const Hyperblobs = await loadAppDep('hyperblobs')
+    const cache = fs.mkdtempSync(path.join(os.tmpdir(), 'assets-cache-'))
+    await withDevices(async ({ computer, phone: base, storeA, storeB }) => {
+      // The computer's own blob core, as desktop's assets.ts writes a file and its thumbnail.
+      const blobStore = createBlobStore({ Hyperblobs, b4a })
+      const content = createContentReader({ Hyperblobs, b4a })
+      const core = new Hyperblobs(storeA.namespace(b4a.toString(computer.local.key, 'hex')).get({ name: 'blobs' }))
+      const blobOp = async (p, buf) => ({ op: 'put', path: p, metadata: makeMetadata({ mtime: 1, ctime: 1 }), blob: await blobStore.putBlob(core, buf) })
+      const blobs = {
+        readFileOf: async (b, p, range) => { const n = await b.view.get(p); return n && n.value ? content.readContent(n.value, { store: storeB, range }) : null },
+        fileSizeOf: async (b, p) => { const n = await b.view.get(p); return n && n.value ? content.contentLength(n.value) : -1 },
+      }
+      const assets = createAssets({ libraryOf: async () => null, vaultOf: () => base, blobs, fs, roots: ['file://' + cache + '/'] })
+      try {
+        const video = Buffer.alloc(2 * as.CHUNK_BYTES)
+        for (let i = 0; i < video.length; i += 991) video[i] = i & 255
+        const thumb = Buffer.alloc(400, 9)
+        const id = as.newAssetId()
+        const p = as.pathsOf(as.vaultRoot(SPACE))
+        await computer.append(await blobOp(p.file(id), video))
+        await computer.append(await blobOp(p.thumb(id), thumb))
+        await computer.append(putJson(p.item(id), as.makeAsset({ id, name: 'Halloween.mp4', mime: 'video/mp4', bytes: video.length, duration: 20, thumb: true, by: '' })))
+        await computer.update()
+
+        // Once the computer's writes have reached the phone, one list shows the file: the phone
+        // catches its Vault up first and doesn't wait for the view to move on by itself.
+        const theirs = storeB.get({ key: computer.local.key })
+        await theirs.ready()
+        await until(async () => theirs.length >= computer.local.length)
+        const listed = await assets.list(SPACE)
+        expect(listed).toMatchObject({ shared: false, canAdd: true })
+        expect(listed.assets.map((a) => [a.id, a.kind, a.bytes])).toEqual([[id, 'video', video.length]])
+
+        expect(await assets.read(SPACE, id, { thumb: true })).toBe(thumb.toString('base64'))
+        const to = 'file://' + encodeURI(path.join(cache, 'assets', id, 'Halloween.mp4'))
+        let r = await assets.readTo(SPACE, id, { to, wait: 2000 })
+        for (let n = 0; r && !r.done && n < 20; n++) r = await assets.readTo(SPACE, id, { to, wait: 2000 })
+        expect(r).toEqual({ size: video.length, written: video.length, done: true })
+        expect(Buffer.compare(fs.readFileSync(path.join(cache, 'assets', id, 'Halloween.mp4')), video)).toBe(0)
+      } finally {
+        await core.close?.()
+        fs.rmSync(cache, { recursive: true, force: true })
+      }
+    })
+  }, 30000)
+
   it('adds a big file from a path in the app’s cache, and writes one back there in pieces', async () => {
     const { createAssets } = await import('../../mobile/backend/lib/assets.mjs')
     const as = await import('../../shared/assets.mjs')

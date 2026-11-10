@@ -44,6 +44,9 @@ export function createAssets ({ libraryOf, vaultOf = () => null, blobs, fs = nul
     }
     const base = vaultOf()
     if (!base || !space) return null
+    // Catch up on what the user's other Devices added, as Notes and desktop's placeFor do. Without
+    // it the list and the file reads see the view as it was, and miss a computer's new files.
+    await boundedUpdate(base)
     return { base, root: as.vaultRoot(space), shared: false, writable: !!base.writable, role: null, memberId: null }
   }
 
