@@ -63,7 +63,7 @@ export default function AiOrigins ({ list, apps, onOpenJob, onOpenUrl, onOpenCha
 
   if (!shown.length) return null
   // What the lines are, not what they did: the AI may only have updated it, and each line says which.
-  const label = shown.length > 1 ? `AI chats · ${shown.length}` : 'AI chat'
+  const label = `Linked AI chats · ${shown.length}`
   const rows = shown.map((o, i) => {
     const linked = o.kind === 'chat' || o.kind === 'job'
     const tip = o.kind === 'chat' ? 'Show this chat' : o.kind === 'job' ? 'Open this Job' : o.tip

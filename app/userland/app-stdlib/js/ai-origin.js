@@ -78,7 +78,7 @@ export function aiOriginsElement(origins, { onError = (err) => console.warn(err)
   if (!Array.isArray(origins) || !origins.length) return null;
   const list = linesElement(origins, onError, !collapsed);
   if (!collapsed) return list;
-  // Folded: one quiet line, "AI chats · 2", that opens the list. It doesn't say "made": the AI may
+  // Folded: one quiet line, "Linked AI chats · 2", that opens the list. It doesn't say "made": the AI may
   // only have updated the item, and each line says which.
   const label = aiOriginsLabel(origins);
   const fold = el('details', { class: 'ai-origins-fold', open: foldOpen }, [
@@ -92,7 +92,7 @@ export function aiOriginsElement(origins, { onError = (err) => console.warn(err)
 
 // The folded list's name: what the lines are, not what they did.
 export function aiOriginsLabel(origins) {
-  return origins.length > 1 ? `AI chats · ${origins.length}` : 'AI chat';
+  return `Linked AI chats · ${origins.length}`;
 }
 
 function linesElement(origins, onError, withStyle) {
