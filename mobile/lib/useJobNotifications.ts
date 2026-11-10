@@ -3,6 +3,7 @@ import { AppState, PermissionsAndroid, Platform } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Notifications from 'expo-notifications'
 import type { Backend, JobNotifications } from './useBackend'
+import { notifyHere } from './deviceActivity'
 
 // Notifications from the user's AI Jobs (ADR-0030). A desktop runs a Job and saves its run in the
 // Vault with the notification it should send; this phone shows one for each new run that has one,
@@ -18,6 +19,9 @@ import type { Backend, JobNotifications } from './useBackend'
 // A Job someone else made in a shared Space this person is in can notify everyone in it ("bins go
 // out tonight"): those come as the Space's notices (shared/space-library.mjs), each Space with its
 // own mark. A tap just opens the app: the Job isn't this person's.
+//
+// While the user is on one of their computers, that one shows them and this phone doesn't
+// (deviceActivity.ts); the marks still move, so they don't show here later either.
 
 const SINCE_KEY = 'nomad:job-notifications:since'
 const SPACE_SINCE_KEY = 'nomad:space-notices:since'
@@ -91,15 +95,18 @@ export function useJobNotifications (backend: Pick<Backend, 'apps' | 'onVaultCha
         asked = true
         await ensurePermission()
       }
-      if (notify.length > MAX_AT_ONCE) {
-        await show(`${notify.length} Job results`, notify.map((n) => n.title).join(', '), {})
-      } else {
-        for (const n of notify) await show(n.title, n.body, { jobId: n.jobId, runId: n.id })
-      }
-      if (fromSpaces.length > MAX_AT_ONCE) {
-        await show(`${fromSpaces.length} notifications from your shared Spaces`, fromSpaces.map((n) => n.title).join(', '), { kind: 'space-notice' })
-      } else {
-        for (const n of fromSpaces) await show(n.title, [n.body, n.from && `from ${n.from}`].filter(Boolean).join(' · '), { kind: 'space-notice' })
+      // Not while the user is on one of their computers, which shows them.
+      if ((notify.length || fromSpaces.length) && (await notifyHere(appsRef.current))) {
+        if (notify.length > MAX_AT_ONCE) {
+          await show(`${notify.length} Job results`, notify.map((n) => n.title).join(', '), {})
+        } else {
+          for (const n of notify) await show(n.title, n.body, { jobId: n.jobId, runId: n.id })
+        }
+        if (fromSpaces.length > MAX_AT_ONCE) {
+          await show(`${fromSpaces.length} notifications from your shared Spaces`, fromSpaces.map((n) => n.title).join(', '), { kind: 'space-notice' })
+        } else {
+          for (const n of fromSpaces) await show(n.title, [n.body, n.from && `from ${n.from}`].filter(Boolean).join(' · '), { kind: 'space-notice' })
+        }
       }
       if (since !== stored) await AsyncStorage.setItem(SINCE_KEY, since).catch(() => {})
       const nextSpaces = JSON.stringify(res.value.spaceSince || {})

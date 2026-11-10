@@ -50,6 +50,9 @@ const spaceEvents = new EventEmitter();
 vi.mock('../../app/bg/hyper/space-library', () => ({ events: spaceEvents, notices: async () => notices }));
 vi.mock('../../app/bg/ui/permissions', () => ({ setPromptHook: (fn) => (hook = fn) }));
 vi.mock('../../app/bg/ui/tabs/manager', () => ({ setActive: (win, tab) => activated.push([win.id, tab.id]) }));
+// Whether the user is on another of their Devices right now (bg/ui/device-activity.js).
+let here = true;
+vi.mock('../../app/bg/ui/device-activity', () => ({ notifyHere: () => here }));
 
 const dn = await import('../../app/bg/ui/desktop-notifications.js');
 const opened = [];
@@ -120,6 +123,19 @@ describe('desktop notifications', () => {
     expect(shown).toEqual([]);
     expect(settings.get('job_notify_since')).toBe('2026-11-03T08:00:00.000Z');
     settings.delete('notify_jobs');
+  });
+
+  it('keeps the mark but shows nothing while the user is on another Device', async () => {
+    here = false;
+    runs = [...runs, run('run-0004', '2026-11-04T08:00:00.000Z', 'On the phone')];
+    jobEvents.emit('changed');
+    await settle();
+    expect(shown).toEqual([]);
+    expect(settings.get('job_notify_since')).toBe('2026-11-04T08:00:00.000Z');
+    here = true;
+    jobEvents.emit('changed');
+    await settle();
+    expect(shown).toEqual([]); // it isn't shown later either
   });
 
   it('shows another member’s Space notice', async () => {

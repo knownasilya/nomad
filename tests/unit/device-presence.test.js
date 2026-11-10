@@ -61,6 +61,13 @@ describe('device-presence codec', () => {
     expect(decodeHello(b4a, encodeHello(b4a, PHONE))).toEqual({ t: 'hello', deviceKey: PHONE })
   })
 
+  it('round-trips activity, and drops a bad one without dropping the hello', () => {
+    const { b4a } = app
+    expect(decodeHello(b4a, encodeHello(b4a, PHONE, null, { idleMs: 1500 }))).toEqual({ t: 'hello', deviceKey: PHONE, activity: { idleMs: 1500 } })
+    expect(decodeHello(b4a, Buffer.from(JSON.stringify({ t: 'hello', deviceKey: PHONE, activity: { idleMs: -1 } })))).toEqual({ t: 'hello', deviceKey: PHONE })
+    expect(decodeHello(b4a, Buffer.from(JSON.stringify({ t: 'hello', deviceKey: PHONE, activity: 'now' })))).toEqual({ t: 'hello', deviceKey: PHONE })
+  })
+
   it('rejects malformed frames', () => {
     expect(decodeHello(Buffer, Buffer.from('nope'))).toBeNull()
     expect(decodeHello(Buffer, Buffer.from(JSON.stringify({ t: 'hello', deviceKey: 'short' })))).toBeNull()
@@ -114,6 +121,26 @@ describe('device-presence channel', () => {
     await until(() => desktop.statuses().get(PHONE)?.synced === 4)
     expect([...desktop.connectedDevices()]).toEqual([PHONE])
     a.destroy()
+  })
+
+  it('carries when the user last used each side, on the receiver’s clock', async () => {
+    const s1 = fakeSwarm()
+    const s2 = fakeSwarm()
+    let phoneIdle = 0
+    const desktop = createDevicePresence({ swarm: s1, ...app, getVaultKey: () => VAULT, getDeviceKey: () => DESKTOP, now: () => 1_000_000 })
+    const phone = createDevicePresence({ swarm: s2, ...mobile, getVaultKey: () => VAULT, getDeviceKey: () => PHONE, getActivity: () => ({ idleMs: phoneIdle }) })
+    desktop.install()
+    phone.install()
+    const [a, b] = pipePair()
+    s1.connect(a)
+    s2.connect(b)
+    await until(() => desktop.lastActive().get(PHONE) === 1_000_000)
+    expect(phone.lastActive().size).toBe(0) // the desktop here says nothing
+    phoneIdle = 90_000
+    await phone.announce()
+    await until(() => desktop.lastActive().get(PHONE) === 910_000)
+    a.destroy()
+    await until(() => desktop.lastActive().size === 0)
   })
 
   it('does not pair with a peer in another Vault', async () => {

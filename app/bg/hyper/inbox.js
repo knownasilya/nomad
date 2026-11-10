@@ -16,6 +16,7 @@ import sodium from 'sodium-universal';
 import * as vault from './vault';
 import * as daemon from './daemon';
 import * as personas from '../ui/personas';
+import * as deviceActivity from '../ui/device-activity';
 import * as settingsDb from '../dbs/settings';
 import * as logLib from '../logger';
 import * as I from '../../../shared/inbox.mjs';
@@ -44,6 +45,8 @@ function store() {
 async function notify({ personaId, personaLabel, from, title, text }) {
   if (!Number(await settingsDb.get('inbox_notify'))) return;
   if (!Notification.isSupported()) return;
+  // The user is on another of their Devices, which shows it (bg/ui/device-activity.js).
+  if (!deviceActivity.notifyHere()) return;
   const many = personas.inboxPersonas().length > 1;
   const n = new Notification({
     title: many ? `${title} · to ${personaLabel}` : title,

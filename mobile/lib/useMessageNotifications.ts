@@ -3,6 +3,7 @@ import { AppState, PermissionsAndroid, Platform } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Notifications from 'expo-notifications'
 import type { Backend, MessageNotifications } from './useBackend'
+import { notifyHere } from './deviceActivity'
 
 // Notifications for Messages to the user's Personas (ADR-0036 §9). Whichever Device received a
 // Message saved it in the Vault; this phone shows one notification for each new unread Message from
@@ -13,7 +14,9 @@ import type { Backend, MessageNotifications } from './useBackend'
 // or the next time it starts. The mark of what's been shown is the newest receivedAt
 // (shared/inbox.mjs pendingNotifications). The first time, nothing older shows.
 //
-// The setting is this phone's own: Settings → Notifications → Messages (MESSAGE_NOTIFY_KEY).
+// The setting is this phone's own: Settings → Notifications → Messages (MESSAGE_NOTIFY_KEY). While
+// the user is on one of their computers, that one shows the Message and this phone doesn't
+// (deviceActivity.ts).
 
 const SINCE_KEY = 'nomad:message-notifications:since'
 export const MESSAGE_NOTIFY_KEY = 'nomad:message-notifications:on'
@@ -67,7 +70,7 @@ export function useMessageNotifications (backend: Pick<Backend, 'apps' | 'onVaul
       if (!res.ok || !res.value) return
       const { notify, since } = res.value
       const on = (await AsyncStorage.getItem(MESSAGE_NOTIFY_KEY).catch(() => null)) !== '0'
-      if (on && notify.length) {
+      if (on && notify.length && (await notifyHere(appsRef.current))) {
         if (!asked) {
           asked = true
           await ensurePermission()

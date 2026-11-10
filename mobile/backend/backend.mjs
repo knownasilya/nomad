@@ -29,6 +29,7 @@ import { createInvites } from './lib/invites.mjs'
 import Protomux from 'protomux'
 import c from 'compact-encoding'
 import { createDevicePresence } from '../../shared/device-presence.mjs'
+import * as deviceActivity from '../../shared/device-activity.mjs'
 import { createLogStore } from './lib/log-store.mjs'
 import { createPhoneLiveNotes } from './lib/live-notes.mjs'
 import {
@@ -283,8 +284,31 @@ const presence = createDevicePresence({
   c,
   b4a,
   getVaultKey: () => (vault && vault.key ? b4a.toString(vault.key, 'hex') : null),
-  getDeviceKey: () => (vault && vault.local?.key ? b4a.toString(vault.local.key, 'hex') : null)
+  getDeviceKey: () => (vault && vault.local?.key ? b4a.toString(vault.local.key, 'hex') : null),
+  getActivity: () => deviceActivity.activityFrame(phoneLastActive(), Date.now())
 })
+// When the user last used this phone, for the HELLO above, so a notification shows only on the
+// Device they're using (shared/device-activity.mjs). The UI says (mobile/lib/deviceActivity.ts): every
+// PING while the app is on screen, and once when it leaves. A ping more than ACTIVE_PING_MS old
+// means the UI went away without saying so.
+const ACTIVE_PING_MS = 30e3
+let phoneActive = false
+let phonePingAt = null
+let sentActiveAt = null
+function phoneLastActive () {
+  const now = Date.now()
+  return phoneActive && phonePingAt !== null && now - phonePingAt < ACTIVE_PING_MS ? now : phonePingAt
+}
+function setPhoneActive (active) {
+  const was = phoneActive
+  phoneActive = !!active
+  if (active || was) phonePingAt = Date.now()
+  const at = phoneLastActive()
+  if ((was && !active) || deviceActivity.needsResend(at, sentActiveAt)) {
+    sentActiveAt = at
+    presence.announce().catch(() => {})
+  }
+}
 // Live Notes (ADR-0041, lib/live-notes.mjs): the Note open in the editor is a session joined to the
 // same Note open on the user's computers, and on the other members' Devices in a shared Space.
 // Late-bound to the Vault like the two above.
@@ -775,6 +799,18 @@ async function handleApps ({ reqId, app, action, ...args }) {
   try {
     if (app === 'reader' && action === 'feed') {
       send(RPC_APPS_RESULT, { reqId, ok: true, value: await vaultApps.loadFeed(manager, args.url) })
+      return
+    }
+    // Whether the user is using this phone (the UI's pings), and whether a notification shows here
+    // or on the Device they're using instead. Linked or not: with no Vault, nothing is connected.
+    if (app === 'activity' && action === 'set') {
+      setPhoneActive(!!args.active)
+      send(RPC_APPS_RESULT, { reqId, ok: true, value: true })
+      return
+    }
+    if (app === 'activity' && action === 'notifyHere') {
+      const value = deviceActivity.notifyHere({ self: phoneLastActive(), others: [...presence.lastActive().values()], now: Date.now() })
+      send(RPC_APPS_RESULT, { reqId, ok: true, value })
       return
     }
     if (!vault) {
