@@ -9,9 +9,16 @@
 import { describe, it, expect } from 'vitest'
 import {
   createPrivateDriveGuard,
+  liveGrants,
   normalizePrivatePath,
   PRIVATE_GRANT_TTL_MS,
 } from '../../app/bg/web-apis/bg/private-drive-guard.js'
+import {
+  PRIVATE_GRANT_DURATIONS,
+  PRIVATE_GRANT_MINUTES,
+  durationLabel,
+  grantedMinutes,
+} from '../../app/lib/private-grant-durations.mjs'
 
 const ROOT = 'a'.repeat(64) // the current Space's Root Drive
 const OTHER_ROOT = 'c'.repeat(64) // another Space's Root Drive
@@ -19,8 +26,8 @@ const PUBLIC = 'b'.repeat(64) // an ordinary drive
 const APP = 'hyper://' + 'd'.repeat(64)
 const OTHER_APP = 'hyper://' + 'e'.repeat(64)
 
-function build({ answer = true, ttlMs } = {}) {
-  const state = { time: 1_000, trusted: false, servedFrom: null, requests: [], answer }
+function build({ answer = true, ttlMs, store } = {}) {
+  const state = { time: 1_000, trusted: false, servedFrom: null, requests: [], answer, ids: 0 }
   const guard = createPrivateDriveGuard({
     isWcTrusted: () => state.trusted,
     isRootKey: (key) => key === ROOT || key === OTHER_ROOT,
@@ -32,6 +39,8 @@ function build({ answer = true, ttlMs } = {}) {
     },
     now: () => state.time,
     ttlMs,
+    store,
+    newId: () => `g${++state.ids}`,
   })
   const ctx = (origin = APP) => ({ sender: { origin } })
   return { guard, state, ctx }
@@ -44,7 +53,10 @@ describe('private-drive guard: closed by default', () => {
       name: 'UserDeniedError',
     })
     expect(state.requests).toEqual([
-      { permId: 'privateRead:/address-book.json', opts: { path: '/address-book.json', minutes: 60 } },
+      {
+        permId: 'privateRead:/address-book.json',
+        opts: { path: '/address-book.json', minutes: 60, durations: PRIVATE_GRANT_MINUTES },
+      },
     ])
   })
 
@@ -209,7 +221,7 @@ describe('private-drive guard: a grant is one path', () => {
     await guard.assert(ctx(), ROOT, '/address-book.json', 'read')
     await guard.assert(ctx(), ROOT, '/address-book.json', 'read')
     expect(state.requests).toHaveLength(1)
-    expect(guard.list()).toHaveLength(1)
+    expect(await guard.list()).toHaveLength(1)
   })
 
   it('normalises the path it grants', async () => {
@@ -235,7 +247,7 @@ describe('private-drive guard: a grant ends', () => {
 
     state.time += 1
     expect(await guard.check(ctx(), ROOT, '/address-book.json', 'read')).toBe(false)
-    expect(guard.list()).toEqual([])
+    expect(await guard.list()).toEqual([])
 
     await guard.assert(ctx(), ROOT, '/address-book.json', 'read')
     expect(state.requests).toHaveLength(2)
@@ -246,9 +258,164 @@ describe('private-drive guard: a grant ends', () => {
     await guard.assert(ctx(), ROOT, '/a.json', 'read')
     state.time += 10_000
     await guard.assert(ctx(), ROOT, '/a.json', 'read')
-    expect(guard.list()).toEqual([
-      { origin: APP, rootKey: ROOT, path: '/a.json', access: 'read', expiresAt: state.time + 10_000 },
+    expect(await guard.list()).toEqual([
+      {
+        id: 'g2',
+        origin: APP,
+        rootKey: ROOT,
+        path: '/a.json',
+        access: 'read',
+        grantedAt: state.time,
+        expiresAt: state.time + 10_000,
+      },
     ])
+  })
+})
+
+describe('private-drive guard: the user picks how long', () => {
+  const DAY = 24 * 60 * 60 * 1000
+
+  it('offers 1 hour, 1 day, 1 week, 1 month and 3 months', () => {
+    expect(PRIVATE_GRANT_DURATIONS.map((d) => d.label)).toEqual([
+      '1 hour',
+      '1 day',
+      '1 week',
+      '1 month',
+      '3 months',
+    ])
+    expect(PRIVATE_GRANT_MINUTES).toEqual([60, 1440, 10080, 43200, 129600])
+  })
+
+  it('a grant lasts the length the prompt answers', async () => {
+    const { guard, state, ctx } = build({ answer: 7 * 24 * 60 })
+    await guard.assert(ctx(), ROOT, '/address-book.json', 'read')
+    state.time += 7 * DAY - 1
+    expect(await guard.check(ctx(), ROOT, '/address-book.json', 'read')).toBe(true)
+    state.time += 1
+    expect(await guard.check(ctx(), ROOT, '/address-book.json', 'read')).toBe(false)
+  })
+
+  it('a length that was not offered counts as a plain yes', async () => {
+    const { guard, state, ctx } = build({ answer: 10 * 365 * 24 * 60 })
+    await guard.assert(ctx(), ROOT, '/a.json', 'read')
+    const [g] = await guard.list()
+    expect(g.expiresAt - state.time).toBe(PRIVATE_GRANT_TTL_MS)
+  })
+
+  it('a "similar" answer or any other yes is the default hour', async () => {
+    const { guard, state, ctx } = build({ answer: 'similar' })
+    await guard.assert(ctx(), ROOT, '/a.json', 'read')
+    const [g] = await guard.list()
+    expect(g.expiresAt - state.time).toBe(PRIVATE_GRANT_TTL_MS)
+  })
+
+  it('remove() ends a grant now, and the next call asks again', async () => {
+    const { guard, state, ctx } = build({ answer: 1440 })
+    await guard.assert(ctx(), ROOT, '/a.json', 'read')
+    const [g] = await guard.list()
+    expect(await guard.remove(g.id)).toBe(true)
+    expect(await guard.remove(g.id)).toBe(false)
+    expect(await guard.check(ctx(), ROOT, '/a.json', 'read')).toBe(false)
+    await guard.assert(ctx(), ROOT, '/a.json', 'read')
+    expect(state.requests).toHaveLength(2)
+  })
+
+  it('list(origin) is one site\'s grants, soonest to end first', async () => {
+    const { guard, state, ctx } = build()
+    state.answer = 1440
+    await guard.assert(ctx(APP), ROOT, '/a.json', 'read')
+    state.answer = 60
+    await guard.assert(ctx(APP), ROOT, '/b.json', 'read')
+    await guard.assert(ctx(OTHER_APP), ROOT, '/a.json', 'read')
+    expect((await guard.list(APP)).map((g) => g.path)).toEqual(['/b.json', '/a.json'])
+    expect((await guard.list(OTHER_APP)).map((g) => g.path)).toEqual(['/a.json'])
+  })
+})
+
+describe('private-drive guard: grants are kept until they end', () => {
+  function memoryStore(initial) {
+    const store = {
+      saved: initial,
+      async load() {
+        return store.saved
+      },
+      save(grants) {
+        store.saved = grants
+      },
+    }
+    return store
+  }
+
+  it('saves a new grant, and a guard made later (a restart) still has it', async () => {
+    const store = memoryStore(undefined)
+    const first = build({ answer: 1440, store })
+    await first.guard.assert(first.ctx(), ROOT, '/a.json', 'read')
+    expect(store.saved).toHaveLength(1)
+
+    const second = build({ answer: false, store })
+    second.state.time = first.state.time + 60_000
+    expect(await second.guard.check(second.ctx(), ROOT, '/a.json', 'read')).toBe(true)
+    expect(second.state.requests).toEqual([])
+  })
+
+  it('saves when a grant is removed', async () => {
+    const store = memoryStore(undefined)
+    const { guard, ctx } = build({ store })
+    await guard.assert(ctx(), ROOT, '/a.json', 'read')
+    const [g] = await guard.list()
+    await guard.remove(g.id)
+    expect(store.saved).toEqual([])
+  })
+
+  it('a store that fails to load leaves the guard closed, not broken', async () => {
+    const store = { load: async () => Promise.reject(new Error('no file')), save() {} }
+    const { guard, ctx } = build({ store })
+    expect(await guard.check(ctx(), ROOT, '/a.json', 'read')).toBe(false)
+    await guard.assert(ctx(), ROOT, '/a.json', 'read')
+    expect(await guard.check(ctx(), ROOT, '/a.json', 'read')).toBe(true)
+  })
+
+  it('liveGrants drops ended, odd and widened grants, and caps the length', () => {
+    const t = 1_000_000
+    const good = { id: 'x', origin: APP, rootKey: ROOT, path: '/a.json', access: 'read', grantedAt: t, expiresAt: t + 5 }
+    const longest = Math.max(...PRIVATE_GRANT_MINUTES) * 60 * 1000
+    expect(
+      liveGrants(
+        [
+          good,
+          { ...good, expiresAt: t }, // ended
+          { ...good, path: '/' }, // the whole drive
+          { ...good, path: '/notes/../drives.json' }, // a trick
+          { ...good, path: 'a.json' }, // not in its normal form
+          { ...good, access: 'drive' },
+          { ...good, rootKey: 'nope' },
+          { ...good, origin: '' },
+          null,
+          'x',
+        ],
+        t
+      )
+    ).toEqual([good])
+    expect(liveGrants([{ ...good, expiresAt: t + 10 * longest }], t)[0].expiresAt).toBe(t + longest)
+    expect(liveGrants({ grants: [] }, t)).toEqual([])
+  })
+})
+
+describe('private-grant-durations', () => {
+  it('labels each length', () => {
+    expect(durationLabel(60)).toBe('1 hour')
+    expect(durationLabel(129600)).toBe('3 months')
+    expect(durationLabel(120)).toBe('2 hours')
+    expect(durationLabel(5)).toBe('5 minutes')
+  })
+
+  it('reads a prompt answer', () => {
+    expect(grantedMinutes(false)).toBe(0)
+    expect(grantedMinutes(undefined)).toBe(0)
+    expect(grantedMinutes(true)).toBe(60)
+    expect(grantedMinutes(1440)).toBe(1440)
+    expect(grantedMinutes(1441)).toBe(60)
+    expect(grantedMinutes('1440')).toBe(60)
   })
 })
 

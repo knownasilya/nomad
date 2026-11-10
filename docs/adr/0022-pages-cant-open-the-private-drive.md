@@ -1,6 +1,6 @@
-# Pages can't open the private drive, except one path the user allows, for one hour
+# Pages can't open the private drive, except one path the user allows, for a time
 
-**Status: Accepted.** 2026-10-12. Built.
+**Status: Accepted.** 2026-10-12. Built. Amended 2026-11-09: the user picks how long (below).
 
 The Root Drive of every Space (`hyper://private/` in that Space) holds the user's address book, AI
 chat sessions and drive list. Before this decision a page could read all of it: the Hyperdrive
@@ -47,3 +47,23 @@ check at all, and the serve path and that check knew only the default Space's ro
 - The Vault, which holds Notes, Names, Highlights and Drafts, is a separate drive and is not covered
   by this guard. A page can't learn its key today, but nothing stops a page that knows it.
 - The phone's backend has its own `nomad.fs` dispatcher and is not covered by this change.
+
+## Amendment: the user picks how long (2026-11-09)
+
+An hour was too short for an app the user means to keep using, so the prompt now has an **Allow
+for** select: 1 hour (the default), 1 day, 1 week, 1 month or 3 months
+(`PRIVATE_GRANT_DURATIONS` in `app/lib/private-grant-durations.mjs`). This replaces point 3.
+
+- **The user picks, never the page.** The guard sends the lengths it offers as `durations`; the prompt
+  answers with the minutes picked, and the guard takes only a length it offered (`grantedMinutes`).
+  A plain yes is an hour.
+- **Grants are kept until they end.** A week that a restart cut short would not be the week the user
+  picked, so the guard keeps its grants in `<userData>/private-drive-grants.json` on this computer
+  (`store` in `private-drive-access.ts`). They are never synced or put in `sitedata`. On load, a
+  grant that is odd, has ended, or runs longer than the longest choice is dropped or cut
+  (`liveGrants`).
+- **The user can see and end them.** Site-info's Permissions lists the site's grants under **Your
+  private drive**, with the Space and when each ends; the × ends one now (internal
+  `nomad.sharedFiles.listPrivate`/`removePrivate`, site-info only). This closes the "can't yet see or
+  end a grant" consequence above.
+- The phone still has no private-drive prompt: its pages can't reach `hyper://private/`.

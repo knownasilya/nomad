@@ -3,6 +3,7 @@ import { LitElement, html, css } from 'lit';
 import prettyHash from 'pretty-hash';
 import * as bg from './bg-process-rpc';
 import buttonsCSS from './buttons.css';
+import { PRIVATE_GRANT_DURATIONS } from '../../lib/private-grant-durations.mjs';
 
 const IS_DRIVE_KEY_REGEX = /^[0-9a-f]{64}$/i;
 
@@ -143,6 +144,13 @@ function renderRequest(r, { permId, permParam, onToggle }) {
   </div>`;
 }
 
+// The lengths a prompt offers in its "Allow for" select: the ones the asker listed in `durations`
+// (minutes) that we have a label for, in our order. Only the private-drive guard offers them today.
+function durationsOf(opts) {
+  const want = Array.isArray(opts?.durations) ? opts.durations : [];
+  return PRIVATE_GRANT_DURATIONS.filter((d) => want.includes(d.minutes));
+}
+
 // A Job's own click asks under aiPageAction with `job` set: it reads as the Job's, like jobPage.
 function aiAsk(permId, opts) {
   return AI_ASKS[permId] || (permId === 'aiPageAction' && opts?.job ? AI_ASKS.jobAction : null);
@@ -158,6 +166,8 @@ class PermPrompt extends LitElement {
     this.permOpts = null;
     this.isPermExperimental = false;
     this.allowSimilar = false;
+    this.durations = [];
+    this.duration = 0;
 
     // export interface
     window.isPromptActive = false;
@@ -189,6 +199,8 @@ class PermPrompt extends LitElement {
     this.permParam = getPermParam(permission);
     this.permOpts = opts || {};
     this.allowSimilar = false;
+    this.durations = durationsOf(this.permOpts);
+    this.duration = this.durations[0]?.minutes || 0;
     const PERM = PERMS[this.permId];
     if (!PERM) return false;
     this.isPermExperimental = PERM.experimental;
@@ -255,6 +267,25 @@ class PermPrompt extends LitElement {
               <span>${this.permOpts.similar}</span>
             </label>`
           : ''}
+        ${this.durations.length
+          ? html`<label class="duration">
+              <span>Allow for</span>
+              <select
+                .value=${String(this.duration)}
+                @change=${(e) => {
+                  this.duration = Number(e.target.value);
+                }}
+              >
+                ${this.durations.map(
+                  (d) =>
+                    html`<option value=${String(d.minutes)} ?selected=${d.minutes === this.duration}>
+                      ${d.label}
+                    </option>`
+                )}
+              </select>
+            </label>
+            <p class="duration-note">You can end it sooner in this site's Permissions.</p>`
+          : ''}
 
         <div class="prompt-btns">
           <button class="btn prompt-reject" @click=${this.onClickDecision(false)}>Block</button>
@@ -294,9 +325,13 @@ class PermPrompt extends LitElement {
     e.preventDefault(); // disable context menu
   }
 
-  // Allow with "allow similar" checked answers 'similar' (page control, ADR-0028).
+  // Allow with "allow similar" checked answers 'similar' (page control, ADR-0028). Allow on a prompt
+  // with an "Allow for" select answers the minutes picked (private-drive-guard.ts).
   onClickDecision(v) {
-    return (e) => this.resolve(v && this.allowSimilar ? 'similar' : v);
+    return (e) => {
+      if (v && this.durations.length) return this.resolve(this.duration || true);
+      this.resolve(v && this.allowSimilar ? 'similar' : v);
+    };
   }
 }
 PermPrompt.styles = [
@@ -363,6 +398,36 @@ PermPrompt.styles = [
 
     .similar input {
       margin: 1px 0 0;
+    }
+
+    .duration {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: -4px 0 12px;
+      font-size: 12px;
+    }
+
+    .duration-note {
+      margin: -6px 0 12px;
+      font-weight: 400;
+      font-size: 11.5px;
+      color: #777;
+    }
+
+    .duration select {
+      font: inherit;
+      font-size: 12px;
+      padding: 3px 6px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      background: #fff;
+      color: inherit;
+    }
+
+    .duration select:focus-visible {
+      outline: 2px solid #2864dc;
+      outline-offset: 1px;
     }
 
     .plan-steps {
@@ -520,6 +585,7 @@ PermPrompt.styles = [
       }
 
       p.perm i,
+      .duration-note,
       .plan-what,
       .plan-note,
       summary,
@@ -536,8 +602,16 @@ PermPrompt.styles = [
         border-color: #4a4a4e;
       }
 
-      summary:focus-visible {
+      summary:focus-visible,
+      .duration select:focus-visible {
         outline-color: #8ab4f8;
+      }
+
+      .duration select {
+        background: #232325;
+        border-color: #4a4a4e;
+        color: #ddd;
+        color-scheme: dark;
       }
 
       .request-line .url.none {

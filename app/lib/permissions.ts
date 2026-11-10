@@ -1,3 +1,5 @@
+import { durationLabel } from './private-grant-durations.mjs';
+
 const isDriveRegex = /^[a-z0-9]{64}/i;
 
 export const PERMS = {
@@ -612,13 +614,11 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
     case 'privateWrite': {
       const verb = permId === 'privateWrite' ? 'Read and change' : 'Read';
       const what = permParam.endsWith('/') ? `${verb} the folder` : verb;
+      // The prompt shows a select for how long when the guard offers `durations`; the text leaves
+      // the length out then, since it's the user's pick (lib/private-grant-durations.mjs).
       const m = permOpts?.minutes || 0;
-      const hours = m / 60;
-      const span =
-        Number.isInteger(hours) && hours >= 1
-          ? `${hours} hour${hours > 1 ? 's' : ''}`
-          : `${m} minutes`;
-      const time = m ? ` for ${span}` : '';
+      const picks = Array.isArray(permOpts?.durations) && permOpts.durations.length;
+      const time = m && !picks ? ` for ${durationLabel(m)}` : '';
       return html`<span
         >${what} <code>hyper://private${permParam}</code> in your private drive${time}</span
       >`;
