@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.48.0](https://github.com/knownasilya/nomad/compare/v1.47.0...v1.48.0) (2026-11-10)
+
+
+### Features
+
+* **ai:** Notes, Assets and drives link back to the AI chat that made them (ADR-0047) ([096fdae](https://github.com/knownasilya/nomad/commit/096fdae9a8ce79f0c22b16c15146917057383fda))
+* **home:** dismiss a notification or clear them all ([a62268d](https://github.com/knownasilya/nomad/commit/a62268d866e56c0488a4d58f287d709e43ad7883))
+* **jobs:** a time limit per Job, lifted while someone watches the run ([2c38389](https://github.com/knownasilya/nomad/commit/2c383897a0b56daca59ce431232f83e3f948a2c5))
+* **mobile:** past chats in the phone's AI panel, and a roomier panel ([a6403c7](https://github.com/knownasilya/nomad/commit/a6403c71c0c95c13fead18e0f4d85606fd01cf97))
+* **notes:** fold the AI chat lines into one quiet "Made with AI" line ([74cbbf7](https://github.com/knownasilya/nomad/commit/74cbbf71442eeb8785a28797b014d820c2378c74))
+* **notes:** the AI chats sit under Linked mentions on desktop, a chip in the topics bar on the phone ([ac09bb1](https://github.com/knownasilya/nomad/commit/ac09bb1f542c461328a32305a79264da1ac236fd))
+* **notifications:** show a notification only on the Device the user is using ([4ad9f6b](https://github.com/knownasilya/nomad/commit/4ad9f6b13f902bb67844dd20b0b0aac3c4357ed8))
+* **private-drive:** let the user pick how long a page keeps a path ([369f05b](https://github.com/knownasilya/nomad/commit/369f05b5d4bc2704928e52018f5844618aef9794))
+
+
+### Bug Fixes
+
+* **ai:** say "Updated" when the AI only changed an item, and name the folded list "AI chats" ([329bcf4](https://github.com/knownasilya/nomad/commit/329bcf4ae54ceb87ecd02e5b7f5c55ec74ff6d6b))
+* **assets:** videos and PDFs open on the phone again ([b04ddde](https://github.com/knownasilya/nomad/commit/b04dddedec0b2a3278d06851e204288969b0adfc))
+* **notes:** name the folded AI list "Linked AI chats", like Linked mentions ([be86808](https://github.com/knownasilya/nomad/commit/be86808b03521d404c378eb109d461fa3360a56b))
+* **site-info:** AI chat links stand out from plain lines in dark mode ([74c6a49](https://github.com/knownasilya/nomad/commit/74c6a49a5f2ab9388de5890f1846541b19f07e19))
+
 ## [1.47.0](https://github.com/knownasilya/nomad/compare/v1.46.0...v1.47.0) (2026-11-09)
 
 
