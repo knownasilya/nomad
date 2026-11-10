@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
-import { View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, ActivityIndicator, Image, Alert, Keyboard, Platform, StyleSheet } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, ActivityIndicator, Image, Alert, Keyboard, Platform, StyleSheet, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme, radius, type Theme } from '../lib/theme'
-import type { AiChatHandlers, AiChatHandle, AiPromptHandler } from '../lib/useBackend'
+import type { AiChatHandlers, AiChatHandle, AiPromptHandler, AppsResult } from '../lib/useBackend'
 import { pickImages } from '../lib/pickImages'
 import { showLabel } from '../lib/tooltip'
 import { applyToolEvent, finishSteps as finishedSteps, type Step } from '../lib/aiSteps'
@@ -14,12 +14,20 @@ import ScreenHeader from './ScreenHeader'
 import IconButton from './IconButton'
 import Icon from './Icon'
 import ActionSheet from './ActionSheet'
+import AiChats from './AiChats'
+import { newChatId, chatSuggestions, retryHistory, type AiChatData } from '../lib/aiChats'
 
 // `images` are data:image URLs — nomad.ai.chat's short form, which the Provider expands into
 // image_url parts (app/bg/ai/chat-messages.mjs).
 // `reasoning` is what the model thought before it answered (shown as Thoughts, never sent back).
 // `privateData`: the turn that wrote this answer read the user's private data (ADR-0037).
-interface ChatMsg { role: 'user' | 'assistant'; content: string; images?: string[]; reasoning?: string; privateData?: boolean }
+// `error` is a failed turn in a chat the desktop sidebar saved: shown, never sent. `files` is the
+// sidebar's list of a turn's writes, kept when the phone saves that chat again.
+interface ChatMsg { role: 'user' | 'assistant' | 'error'; content: string; images?: string[]; reasoning?: string; privateData?: boolean; files?: unknown[] }
+
+// The chat open in the panel: its id, and the Space whose Root Drive keeps it (shared/ai-chats.mjs).
+// `title` is the user's name for it, when they gave one.
+interface OpenChat { id: string; space: string; ns: string | null; title: string; named: boolean; job: { id: string; title: string } | null }
 
 const MAX_IMAGES = 4
 // The Bridge sends the whole transcript every turn, as one frame. Past this many data-URL
@@ -49,6 +57,12 @@ function describeContext (url: string, title?: string): string {
 function driveOf (url: string | null): string | null {
   const m = /^hyper:\/\/[^/?#]+/i.exec(url || '')
   return m ? m[0].toLowerCase() : null
+}
+
+// The host of a URL, for the page chip when the tab has no title.
+function hostOf (url: string): string {
+  const m = /^[a-z]+:\/\/([^/?#]+)/i.exec(url)
+  return m ? m[1] : url
 }
 
 // If a reply still arrives as one wrapper object — {"reply": "…"}, maybe in a ```json fence — show
@@ -118,13 +132,24 @@ interface Props {
   // A link in an answer: a Note, a Job, Reader, a page (lib/itemLinks.ts). Links that aren't one
   // of these do nothing.
   onOpenLink?: (link: ItemLink) => void
+  // Where the active Space's Root Drive opens writable on this phone, when this phone made the Space.
+  spaceNs?: string | null
+  // backend.apps: the AI's saved chats, in the Space's Root Drive (mobile/backend/lib/ai-chats.mjs).
+  apps: <T = unknown>(app: 'aiChats', action: string, args?: Record<string, unknown>) => Promise<AppsResult<T>>
+  // The past-chats list is showing. The screen keeps it, so Android's back closes it before the
+  // panel (lib/navStack.ts backAction).
+  chatsOpen: boolean
+  onChatsOpenChange: (open: boolean) => void
+  // Open this chat, from a Note or an Asset it made (ADR-0047); `n` changes on every ask.
+  chatRequest?: { id: string; n: number } | null
 }
 
-// A toggleable AI chat for the CURRENTLY OPEN tab. The turn runs on the user's desktop (the AI
-// Provider) — this phone has no local runtime — and is scoped to the tab's Drive so the Provider
-// resolves that Drive's AI Config. The Client owns the transcript (ADR-0013 §5): each send ships
-// the full history, so the panel keeps `messages` and forwards them.
-export default function AiPanel ({ visible, onClose, url, title, space, aiChat, onPrompt, onPreviewDraft, onOpenLink }: Props) {
+// The user's own AI, over whatever tab is open. The turn runs on the user's desktop (the AI
+// Provider) — this phone has no local runtime. The Client owns the transcript (ADR-0013 §5): each
+// send ships the full history, so the panel keeps `messages` and forwards them. Each chat is saved
+// after every turn in the Space's Root Drive, next to the desktop sidebar's chats (shared/ai-chats.mjs),
+// so the history button opens any of them, from either device, to carry on.
+export default function AiPanel ({ visible, onClose, url, title, space, spaceNs = null, aiChat, onPrompt, onPreviewDraft, onOpenLink, apps, chatsOpen, onChatsOpenChange, chatRequest }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const insets = useSafeAreaInsets()
@@ -175,6 +200,24 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
   useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current) }, [])
   const handleRef = useRef<AiChatHandle | null>(null)
   const scrollRef = useRef<ScrollView | null>(null)
+  // The saved chat these messages are (null until the first send). The ref is what a turn's end
+  // saves to, whatever the screen shows by then.
+  const [chat, setChatState] = useState<OpenChat | null>(null)
+  const chatRef = useRef<OpenChat | null>(null)
+  const setChat = (next: OpenChat | null) => { chatRef.current = next; setChatState(next) }
+  const messagesRef = useRef<ChatMsg[]>([])
+  useEffect(() => { messagesRef.current = messages }, [messages])
+  // Why the last save failed (e.g. this phone can't write the Space yet), shown in the chats list.
+  const [saveError, setSaveError] = useState<string | null>(null)
+  // Bumped after each save, so the empty panel's recent chats reload.
+  const [savedCount, setSavedCount] = useState(0)
+  // A chat to open (an id) or 'new', once the turn that was running has stopped and been saved.
+  const [pendingOpen, setPendingOpen] = useState<string | null>(null)
+  // Follow the answer down only while the person is at the bottom; scrolled up to read, they stay
+  // put and get a button back to the newest message.
+  const atBottom = useRef(true)
+  const dragging = useRef(false)
+  const [showJump, setShowJump] = useState(false)
   const driveUrl = url && url.startsWith('hyper://') ? url : null
   const tabDrive = driveOf(driveUrl)
 
@@ -183,7 +226,22 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
   // the explicit Stop button cancels.
   const draftPaths = (tabDrive && drafts[tabDrive]) || []
 
-  useEffect(() => { scrollRef.current?.scrollToEnd({ animated: true }) }, [messages, steps])
+  useEffect(() => {
+    if (atBottom.current) scrollRef.current?.scrollToEnd({ animated: true })
+  }, [messages, steps, queued])
+
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
+    const near = contentSize.height - contentOffset.y - layoutMeasurement.height < 80
+    if (near) atBottom.current = true
+    else if (dragging.current) atBottom.current = false
+    setShowJump((prev) => (prev === !atBottom.current ? prev : !atBottom.current))
+  }
+  const jumpToEnd = () => {
+    atBottom.current = true
+    setShowJump(false)
+    scrollRef.current?.scrollToEnd({ animated: true })
+  }
 
   // Append streamed text to the trailing (assistant) message.
   const appendToLast = (chunk: string) =>
@@ -243,6 +301,18 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
     startTurn([...messages, userMsg])
   }
 
+  // A suggestion on the empty panel goes as it is.
+  const sendText = (text: string) => {
+    if (busy || attaching) return
+    startTurn([...messages, { role: 'user', content: text }])
+  }
+
+  // After an error: ask again, from the last thing the person said.
+  const retry = () => {
+    const history = retryHistory(messages)
+    if (history && !busy) startTurn(history)
+  }
+
   // Send now: the Provider stops the AI's current step, and it reads this message at once.
   const sendNow = (id: string) => {
     setQueued(queuedRef.current.map((q) => (q.id === id ? { ...q, now: true } : q)))
@@ -263,6 +333,12 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
 
   const startTurn = (history: ChatMsg[]) => {
     setError(null)
+    atBottom.current = true
+    setShowJump(false)
+    // The first send makes the chat, in the Space that is open now.
+    if (!chatRef.current && space) setChat({ id: newChatId(), space, ns: spaceNs, title: '', named: false, job: null })
+    // The chat's id goes with the turn, so a Note or an Asset the AI makes links back to it (ADR-0047).
+    const chatId = chatRef.current?.id
     setMessages([...history, { role: 'assistant', content: '' }])
     setBusy(true)
     setSteps([])
@@ -275,7 +351,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
     // An earlier answer read the user's private data: requests to sites they didn't name ask first
     // from the start of this turn (ADR-0037).
     const privateData = history.some((m) => m.privateData === true)
-    handleRef.current = aiChat(fitImages(mergeUserTurns(history)), { context: describeContext(url, title), personal: true, space, tab, privateData }, {
+    handleRef.current = aiChat(fitImages(mergeUserTurns(history.filter((m) => m.role !== 'error'))), { context: describeContext(url, title), personal: true, space, tab, privateData, chat: chatId }, {
       onChunk: (chunk) => { finishSteps(); appendToLast(chunk) },
       onReasoning: appendReasoning,
       onTool: (event: any) => {
@@ -311,6 +387,79 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
   }
 
   const stop = () => { handleRef.current?.cancel(); endTurn(); returnQueued() }
+
+  // Save the chat once a turn ends (answered, failed or stopped), the way the sidebar does. An empty
+  // answer slot isn't kept.
+  const wasBusy = useRef(false)
+  useEffect(() => {
+    const ended = wasBusy.current && !busy
+    wasBusy.current = busy
+    const c = chatRef.current
+    if (!ended || !c) return
+    const msgs = messagesRef.current.filter((m) => !(m.role === 'assistant' && !m.content && !(m.reasoning || '').trim()))
+    if (!msgs.some((m) => m.role === 'user')) return
+    apps('aiChats', 'save', { space: c.space, ns: c.ns, id: c.id, messages: msgs, job: c.job })
+      .then((r) => {
+        setSaveError(r.ok ? null : r.message || 'Couldn’t save the chat')
+        if (r.ok) setSavedCount((n) => n + 1)
+      })
+      .catch((err) => setSaveError(err?.message || String(err)))
+  }, [busy])
+
+  const showChat = (next: OpenChat | null, msgs: ChatMsg[]) => {
+    setChat(next)
+    setMessages(msgs)
+    setOpenThoughts({})
+    setError(null)
+    setSteps([])
+    atBottom.current = true
+    setShowJump(false)
+    onChatsOpenChange(false)
+  }
+
+  const loadChat = async (id: string) => {
+    if (!space) return
+    const res = await apps<AiChatData>('aiChats', 'load', { space, ns: spaceNs, id })
+    if (!res.ok || !res.value) {
+      Alert.alert('Couldn’t open the chat', res.message || 'It may have been deleted on another device.')
+      return
+    }
+    const d = res.value
+    showChat({ id: d.id, space, ns: spaceNs, title: d.named ? d.title : '', named: d.named, job: d.job }, d.messages)
+  }
+
+  // A running answer is stopped (and saved) first; the switch happens once it has.
+  const openChat = (id: string) => {
+    if (id === chatRef.current?.id) { onChatsOpenChange(false); return }
+    if (busy) { stop(); setPendingOpen(id); return }
+    loadChat(id)
+  }
+  const newChat = () => {
+    if (busy) { stop(); setPendingOpen('new'); return }
+    showChat(null, [])
+  }
+  useEffect(() => {
+    if (!pendingOpen || busy) return
+    const next = pendingOpen
+    setPendingOpen(null)
+    if (next === 'new') showChat(null, [])
+    else loadChat(next)
+  }, [pendingOpen, busy])
+
+  useEffect(() => {
+    if (chatRequest) openChat(chatRequest.id)
+  }, [chatRequest?.n]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Deleted from the list: it isn't saved again. The panel empties unless an answer is running.
+  const onChatDeleted = (id: string) => {
+    if (chatRef.current?.id !== id) return
+    setChat(null)
+    if (!busy) { setMessages([]); setOpenThoughts({}); setError(null) }
+  }
+  const onChatRenamed = (id: string, newTitle: string, named: boolean) => {
+    const c = chatRef.current
+    if (c && c.id === id) setChat({ ...c, title: named ? newTitle : '', named })
+  }
 
   const openLink = useCallback((href: string) => {
     const link = parseItemLink(href)
@@ -425,38 +574,108 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
   // page WebView, which ignores zIndex. Because nothing above it pads anything, it applies the
   // safe-area insets by hand (above).
   if (!visible) return null
+  const firstAsk = messages.find((m) => m.role === 'user' && m.content.trim())?.content.replace(/\s+/g, ' ').trim()
+  const chatTitle = chat?.named ? chat.title : chat?.job?.title || firstAsk || ''
+  const suggestions = chatSuggestions(url)
+  const canRetry = !!error && !busy && !!retryHistory(messages)
   return (
     <View style={[s.overlay, { paddingTop: insets.top }]}>
-      <ScreenHeader
-        title='AI'
-        onBack={onClose}
-        backLabel='Close the AI'
-        actions={messages.length > 0 ? [{ icon: 'broom', label: 'Clear the conversation', onPress: () => { stop(); setMessages([]); setOpenThoughts({}); setError(null) } }] : undefined}
-      />
-      {url ? (
-        // The page the AI sees as the current tab. The mark is green for a Drive.
-        <View style={s.pageBadge}>
-          <Icon name={driveUrl ? 'share-alt' : 'globe'} size={12} color={driveUrl ? t.secure : t.textMuted} style={s.pageDot} />
-          <View style={s.pageBadgeText}>
-            <Text numberOfLines={1} style={s.pageTitle}>{title || 'Untitled page'}</Text>
-            <Text numberOfLines={1} style={s.pageUrl}>{url}</Text>
-          </View>
-        </View>
+      {chatsOpen ? (
+        <ScreenHeader
+          title='Chats'
+          subtitle='In this Space, on all your devices'
+          onBack={() => onChatsOpenChange(false)}
+          backLabel='Back to the chat'
+          actions={[{ icon: 'plus', label: 'New chat', onPress: newChat }]}
+        />
       ) : (
-        <Text numberOfLines={1} style={s.url}>No page open</Text>
+        <ScreenHeader
+          title='AI'
+          subtitle={chatTitle || undefined}
+          onBack={onClose}
+          backLabel='Close the AI'
+          actions={[
+            { icon: 'history', label: 'Past chats', onPress: () => onChatsOpenChange(true) },
+            ...(messages.length > 0 ? [{ icon: 'plus' as const, label: 'New chat', onPress: newChat }] : [])
+          ]}
+        />
       )}
 
+      {chatsOpen ? (
+        <View style={[s.flex, { paddingBottom: bottomPad }]}>
+          <AiChats
+            apps={apps}
+            space={space}
+            ns={spaceNs}
+            currentId={chat?.id ?? null}
+            onOpen={openChat}
+            onDeleted={onChatDeleted}
+            onRenamed={onChatRenamed}
+            saveError={saveError}
+          />
+        </View>
+      ) : (
       <View style={[s.flex, bottomPad > 0 ? { paddingBottom: bottomPad } : null]}>
-        <ScrollView ref={scrollRef} style={s.body} contentContainerStyle={s.bodyPad}>
+        <View style={s.flex}>
+        <ScrollView
+          ref={scrollRef}
+          style={s.body}
+          contentContainerStyle={s.bodyPad}
+          onScroll={onScroll}
+          scrollEventThrottle={64}
+          onScrollBeginDrag={() => { dragging.current = true }}
+          onScrollEndDrag={() => { dragging.current = false }}
+          onMomentumScrollBegin={() => { dragging.current = true }}
+          onMomentumScrollEnd={() => { dragging.current = false }}
+          // A tap on a link, a copy button or a suggestion works with the keyboard up.
+          keyboardShouldPersistTaps='handled'
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        >
           {messages.length === 0 ? (
             <View style={s.emptyWrap}>
               <View style={s.emptyIcon}><Icon name='robot' size={22} color={t.trustText} /></View>
+              <Text style={s.emptyTitle}>How can I help?</Text>
               <Text style={s.empty}>
-                Ask anything. The AI runs on your desktop device and streams answers here. It can see the tab you're on, and it can read your drives and, with your approval, edit them. Long-press a message to copy it.
+                The AI runs on your computer and answers here. It can see the tab you’re on, and it can read your drives and, with your OK, edit them.
               </Text>
+              <View style={s.suggestions}>
+                {suggestions.map((sg) => (
+                  <Pressable
+                    key={sg.label}
+                    style={({ pressed }) => [s.suggestion, pressed && s.suggestionPressed]}
+                    android_ripple={{ color: t.ripple }}
+                    onPress={() => sendText(sg.prompt)}
+                    accessibilityRole='button'
+                  >
+                    <Icon name={sg.icon} size={13} color={t.textDim} style={s.suggestionIcon} />
+                    <Text style={s.suggestionText}>{sg.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <AiChats
+                key={`${space || ''}:${savedCount}`}
+                apps={apps}
+                space={space}
+                ns={spaceNs}
+                currentId={null}
+                onOpen={openChat}
+                onDeleted={onChatDeleted}
+                onRenamed={onChatRenamed}
+                limit={3}
+                onSeeAll={() => onChatsOpenChange(true)}
+              />
             </View>
           ) : (
             messages.map((m, i) => {
+              if (m.role === 'error') {
+                // A failed turn in a chat the desktop sidebar saved.
+                return (
+                  <View key={i} style={s.errorRow}>
+                    <Icon name='exclamation-circle' size={13} color={t.danger} style={s.errorIcon} />
+                    <Text style={[s.error, s.flex]}>{m.content.replace(/^Error:\s*/, '')}</Text>
+                  </View>
+                )
+              }
               const streaming = busy && i === messages.length - 1
               const shown = m.role === 'assistant' ? unwrapReply(m.content, streaming) : m.content
               // The trailing empty assistant message is the response slot. renderSteps() below
@@ -483,8 +702,9 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
                         {thoughtsOpen && <Text style={s.thoughtsBody} selectable>{thoughts}</Text>}
                       </View>
                     )}
+                    {/* An answer runs the width of the panel, as on desktop: room for lists and code. */}
                     {!!shown && <Pressable
-                      style={[s.bubble, s.aiBubble, s.fullBubble]}
+                      style={s.answer}
                       onLongPress={() => openCopy(shown, 'assistant')}
                       accessibilityHint='Long-press to copy the answer'
                     >
@@ -559,10 +779,30 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
           {error && (
             <View style={s.errorRow}>
               <Icon name='exclamation-triangle' size={13} color={t.danger} style={s.errorIcon} />
-              <Text style={s.error}>{error}</Text>
+              <View style={s.errorBody}>
+                <Text style={s.error}>{error}</Text>
+                {canRetry && (
+                  <Pressable style={({ pressed }) => [s.retryBtn, pressed && s.sendNowPressed]} onPress={retry} hitSlop={6} accessibilityRole='button'>
+                    <Icon name='redo' size={11} color={t.accent} />
+                    <Text style={s.retryText}>Try again</Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
           )}
         </ScrollView>
+
+        {showJump && (
+          <IconButton
+            icon='arrow-down'
+            label='Jump to the newest message'
+            size={16}
+            color={t.text}
+            onPress={jumpToEnd}
+            style={s.jumpBtn}
+          />
+        )}
+        </View>
 
         {driveUrl && draftPaths.length > 0 && !busy && (
           <View style={s.draftBanner}>
@@ -590,70 +830,86 @@ export default function AiPanel ({ visible, onClose, url, title, space, aiChat, 
           </View>
         )}
 
+        {/* One box, as on desktop: the text runs the full width, the tools sit under it. */}
         <View style={s.composer}>
-          {(attachments.length > 0 || attaching) && (
-            <ScrollView horizontal style={s.attachRow} contentContainerStyle={s.attachRowPad} keyboardShouldPersistTaps='handled'>
-              {attachments.map((uri, i) => (
-                <View key={i} style={s.attachItem}>
-                  <Image source={{ uri }} style={s.attachImage} />
-                  <TouchableOpacity
-                    style={s.attachRemove}
-                    hitSlop={8}
-                    onPress={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
-                    onLongPress={() => showLabel('Remove photo')}
-                    accessibilityRole='button'
-                    accessibilityLabel='Remove photo'
-                  >
-                    <Icon name='times' size={10} color='#fff' />
-                  </TouchableOpacity>
-                </View>
-              ))}
-              {attaching && (
-                <View style={[s.attachImage, s.attachLoading]}>
-                  <ActivityIndicator size='small' color={t.accent} />
-                </View>
-              )}
-            </ScrollView>
-          )}
-
-          <View style={s.inputRow}>
-            <IconButton
-              icon='image'
-              label='Add a photo'
-              onPress={chooseAttach}
-              disabled={busy || attaching || attachments.length >= MAX_IMAGES}
-              color={t.accent}
-              style={s.attachBtn}
-            />
+          <View style={s.box}>
+            {(attachments.length > 0 || attaching) && (
+              <ScrollView horizontal style={s.attachRow} contentContainerStyle={s.attachRowPad} keyboardShouldPersistTaps='handled'>
+                {attachments.map((uri, i) => (
+                  <View key={i} style={s.attachItem}>
+                    <Image source={{ uri }} style={s.attachImage} />
+                    <TouchableOpacity
+                      style={s.attachRemove}
+                      hitSlop={8}
+                      onPress={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+                      onLongPress={() => showLabel('Remove photo')}
+                      accessibilityRole='button'
+                      accessibilityLabel='Remove photo'
+                    >
+                      <Icon name='times' size={10} color='#fff' />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                {attaching && (
+                  <View style={[s.attachImage, s.attachLoading]}>
+                    <ActivityIndicator size='small' color={t.accent} />
+                  </View>
+                )}
+              </ScrollView>
+            )}
             <TextInput
               style={s.input}
               value={input}
               onChangeText={setInput}
-              placeholder={busy ? 'Steer the AI while it works…' : 'Message the AI…'}
+              placeholder={busy ? 'Steer the AI while it works…' : url ? 'Ask about this page, or anything…' : 'Ask anything…'}
               placeholderTextColor={t.textMuted}
               multiline
-              onSubmitEditing={send}
+              accessibilityLabel='Message the AI'
             />
-            {busy && (
-              <TouchableOpacity style={[s.sendBtn, s.stopBtn]} onPress={stop} onLongPress={() => showLabel('Stop')} accessibilityRole='button' accessibilityLabel='Stop'>
-                <Icon name='stop' size={14} color={t.onAccent} />
-              </TouchableOpacity>
-            )}
-            {(!busy || canSend) && (
-              <TouchableOpacity
-                style={[s.sendBtn, !canSend && s.sendDisabled]}
-                onPress={send}
-                onLongPress={() => showLabel(busy ? 'Send now' : 'Send')}
-                disabled={!canSend}
-                accessibilityRole='button'
-                accessibilityLabel={busy ? 'Send now; the AI reads it at its next step' : 'Send'}
-              >
-                <Icon name='paper-plane' size={15} color={t.onAccent} />
-              </TouchableOpacity>
-            )}
+            <View style={s.boxRow}>
+              <IconButton
+                icon='image'
+                label='Add a photo'
+                onPress={chooseAttach}
+                disabled={busy || attaching || attachments.length >= MAX_IMAGES}
+                color={t.textDim}
+                size={18}
+                style={s.toolBtn}
+              />
+              {url ? (
+                // The tab the AI sees as the current one. The mark is green for a Drive.
+                <Pressable
+                  style={s.pageChip}
+                  onPress={() => showLabel(`The AI can see ${url}`)}
+                  accessibilityRole='text'
+                  accessibilityLabel={`The AI can see ${title || url}`}
+                >
+                  <Icon name={driveUrl ? 'share-alt' : 'globe'} size={11} color={driveUrl ? t.secure : t.textMuted} />
+                  <Text style={s.pageChipText} numberOfLines={1}>{title || hostOf(url)}</Text>
+                </Pressable>
+              ) : <View style={s.flex} />}
+              {busy && (
+                <TouchableOpacity style={[s.sendBtn, s.stopBtn]} onPress={stop} onLongPress={() => showLabel('Stop')} accessibilityRole='button' accessibilityLabel='Stop'>
+                  <Icon name='stop' size={13} color={t.onAccent} />
+                </TouchableOpacity>
+              )}
+              {(!busy || canSend) && (
+                <TouchableOpacity
+                  style={[s.sendBtn, !canSend && s.sendDisabled]}
+                  onPress={send}
+                  onLongPress={() => showLabel(busy ? 'Send now' : 'Send')}
+                  disabled={!canSend}
+                  accessibilityRole='button'
+                  accessibilityLabel={busy ? 'Send now; the AI reads it at its next step' : 'Send'}
+                >
+                  <Icon name='arrow-up' size={15} color={t.onAccent} />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
       </View>
+      )}
 
       <ActionSheet
         visible={copyOpen}
@@ -674,50 +930,40 @@ function makeStyles (t: Theme) {
     // out from its parent's padding box), so the panel never sits under the status or nav bar.
     overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: t.bg, zIndex: 50, elevation: 50 },
     flex: { flex: 1 },
-    url: { color: t.textMuted, fontSize: 12, paddingHorizontal: 16, paddingBottom: 8, fontFamily: 'monospace' },
-    pageBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      alignSelf: 'flex-start',
-      maxWidth: '100%',
-      marginHorizontal: 16,
-      marginBottom: 10,
-      paddingVertical: 7,
-      paddingHorizontal: 12,
-      backgroundColor: t.surface,
-      borderRadius: radius.pill,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: t.border
-    },
-    pageDot: { marginRight: 8 },
-    pageBadgeText: { flexShrink: 1 },
-    pageTitle: { color: t.text, fontSize: 13, fontWeight: '600' },
-    pageUrl: { color: t.textMuted, fontSize: 11, fontFamily: 'monospace', marginTop: 1 },
     body: { flex: 1 },
     bodyPad: { padding: 14, gap: 10 },
-    emptyWrap: { alignItems: 'center', gap: 14, paddingTop: 40, paddingHorizontal: 16 },
+    emptyWrap: { alignItems: 'center', gap: 12, paddingTop: 32, paddingHorizontal: 4 },
     emptyIcon: { width: 56, height: 56, borderRadius: radius.pill, backgroundColor: t.trustBg, alignItems: 'center', justifyContent: 'center' },
+    emptyTitle: { color: t.text, fontSize: 18, fontWeight: '600' },
     empty: { color: t.textMuted, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+    suggestions: { alignSelf: 'stretch', gap: 8, marginTop: 4 },
+    suggestion: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: 16, borderRadius: radius.md, borderWidth: 1, borderColor: t.border, backgroundColor: t.surface, overflow: 'hidden' },
+    suggestionPressed: { backgroundColor: t.surfaceAlt },
+    suggestionIcon: { width: 22 },
+    suggestionText: { color: t.text, fontSize: 15 },
     bubble: { maxWidth: '88%', paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.lg + 4 },
     userBubble: { alignSelf: 'flex-end', backgroundColor: t.trustBg },
     userMsg: { alignSelf: 'flex-end', alignItems: 'flex-end', maxWidth: '88%', gap: 6 },
     // An answer and its copy button, under it on the left.
-    aiMsg: { alignSelf: 'flex-start', alignItems: 'flex-start', maxWidth: '88%' },
+    aiMsg: { alignSelf: 'stretch', alignItems: 'flex-start' },
+    answer: { alignSelf: 'stretch', paddingHorizontal: 2 },
     thoughts: { marginBottom: 6 },
     thoughtsHead: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 28 },
     thoughtsLabel: { color: t.textMuted, fontSize: 13 },
     thoughtsBody: { color: t.textMuted, fontSize: 13, lineHeight: 19, marginTop: 4, marginLeft: 4, paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: t.border },
-    // A bubble inside a message column takes the column's width limit, not 88% of it again.
-    fullBubble: { maxWidth: '100%' },
     copyBtn: { width: 40, height: 40, marginLeft: 2, marginBottom: -6 },
     userImages: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 },
     userImage: { width: 120, height: 120, borderRadius: radius.md, backgroundColor: t.surfaceAlt },
     aiBubble: { alignSelf: 'flex-start', backgroundColor: t.surface },
     userText: { color: t.trustText, fontSize: 15, lineHeight: 21 },
     aiText: { color: t.text, fontSize: 15, lineHeight: 21 },
-    errorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 6 },
+    errorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 8, paddingHorizontal: 12, borderRadius: radius.md, borderWidth: 1, borderColor: t.danger },
+    errorBody: { flex: 1, gap: 8, alignItems: 'flex-start' },
+    retryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: t.accent },
+    retryText: { color: t.accent, fontSize: 13, fontWeight: '600' },
+    jumpBtn: { position: 'absolute', right: 14, bottom: 12, width: 40, height: 40, borderRadius: radius.pill, backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, elevation: 3, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
     errorIcon: { marginTop: 2 },
-    error: { flex: 1, color: t.danger, fontSize: 13, lineHeight: 18 },
+    error: { color: t.danger, fontSize: 13, lineHeight: 18 },
     steps: { gap: 6, paddingVertical: 8 },
     stepRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     stepIcon: { width: 20, alignItems: 'center' },
@@ -733,17 +979,21 @@ function makeStyles (t: Theme) {
     draftLink: { color: t.accent, fontSize: 14, fontWeight: '600' },
     draftDanger: { color: t.danger, fontSize: 14, fontWeight: '600' },
     draftPrimary: { color: t.onAccent, fontSize: 14, fontWeight: '700' },
-    composer: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
+    composer: { paddingHorizontal: 10, paddingTop: 6, paddingBottom: 8 },
+    box: { borderRadius: 22, borderWidth: 1, borderColor: t.border, backgroundColor: t.inputBg, overflow: 'hidden' },
     attachRow: { flexGrow: 0 },
     attachRowPad: { paddingHorizontal: 10, paddingTop: 10, gap: 8 },
     attachItem: { position: 'relative' },
     attachImage: { width: 64, height: 64, borderRadius: radius.sm, backgroundColor: t.surfaceAlt },
     attachLoading: { alignItems: 'center', justifyContent: 'center' },
     attachRemove: { position: 'absolute', top: 3, right: 3, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
-    attachBtn: { width: 44, height: 44 },
-    inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, paddingVertical: 8, paddingHorizontal: 8 },
-    input: { flex: 1, minHeight: 44, maxHeight: 120, color: t.text, fontSize: 15, backgroundColor: t.inputBg, borderRadius: 22, borderWidth: 1, borderColor: t.border, paddingHorizontal: 16, paddingTop: 11, paddingBottom: 11 },
-    sendBtn: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center' },
+    input: { minHeight: 44, maxHeight: 160, color: t.text, fontSize: 16, lineHeight: 22, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, textAlignVertical: 'top' },
+    boxRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 2, paddingRight: 6, paddingBottom: 6 },
+    toolBtn: { width: 44, height: 44 },
+    // The tab the AI sees, between the tools and Send.
+    pageChip: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32, paddingHorizontal: 4 },
+    pageChipText: { flexShrink: 1, color: t.textMuted, fontSize: 13 },
+    sendBtn: { width: 38, height: 38, borderRadius: radius.pill, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center' },
     stopBtn: { backgroundColor: t.danger },
     // A message waiting for the AI's next step: the user's bubble, dimmed, with a dashed edge.
     queuedBubble: { opacity: 0.7, borderWidth: 1, borderStyle: 'dashed', borderColor: t.trustText },

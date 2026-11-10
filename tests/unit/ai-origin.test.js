@@ -110,6 +110,19 @@ describe('resolveOrigins', () => {
     expect(out[1].tip).toMatch(/deleted/)
     expect(out[3].tip).toMatch(/phone/)
   })
+
+  it('links a phone panel’s saved chat like a sidebar one', async () => {
+    const [saved, gone] = await ao.resolveOrigins(
+      [
+        { stage: 'phone', chat: 'live', space: SPACE, at: T2, made: true },
+        { stage: 'phone', chat: 'nope', space: SPACE, at: T1 },
+      ],
+      lookups
+    )
+    expect(saved).toMatchObject({ kind: 'chat', id: 'live', here: true, text: 'Made in the AI chat “Plan the garden”' })
+    expect(gone).toMatchObject({ kind: 'none', text: 'Changed with AI' })
+    expect(gone.tip).toMatch(/deleted/)
+  })
 })
 
 describe('Notes and Assets keep it', () => {

@@ -5,11 +5,15 @@ import sitePermsCSS from '../../css/com/site-perms.css.js';
 // (nomad.shell.selectFileDialog, always capabilities for a web page) or shared read-only from the
 // drive dialog (selectDriveDialog's "Share read-only instead"). The site can read each one until the user
 // removes it here. Data: the internal nomad.sharedFiles API (bg/web-apis/bg/shared-files.ts).
+//
+// Below them, the paths of the user's private drive the site may use until a time the user picked
+// in the prompt (private-drive-guard.ts, ADR-0022): listPrivate/removePrivate.
 class SharedFiles extends LitElement {
   static get properties() {
     return {
       origin: { type: String },
       files: { type: Array },
+      grants: { type: Array },
     };
   }
 
@@ -32,6 +36,19 @@ class SharedFiles extends LitElement {
         .shared-file .where {
           color: var(--text-color--light);
         }
+        .shared-file .grant {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 1px;
+        }
+        .shared-file .grant .name {
+          font-size: 11px;
+        }
+        .shared-file .grant .where {
+          font-size: 11px;
+        }
         .remove-btn {
           border: 0;
           background: none;
@@ -52,6 +69,7 @@ class SharedFiles extends LitElement {
     super();
     this.origin = '';
     this.files = [];
+    this.grants = [];
   }
 
   updated(changed) {
@@ -65,17 +83,70 @@ class SharedFiles extends LitElement {
     } catch {
       this.files = [];
     }
+    try {
+      this.grants = (await nomad.sharedFiles.listPrivate?.(this.origin)) || [];
+    } catch {
+      this.grants = [];
+    }
   }
 
   render() {
-    if (!this.files.length) return html``;
+    if (!this.files.length && !this.grants.length) return html``;
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
-      <div class="field-group">
-        <div class="field-group-title">Shared with this site (read-only)</div>
-        ${this.files.map((f) => this.renderFile(f))}
+      ${this.files.length
+        ? html`<div class="field-group">
+            <div class="field-group-title">Shared with this site (read-only)</div>
+            ${this.files.map((f) => this.renderFile(f))}
+          </div>`
+        : ''}
+      ${this.grants.length
+        ? html`<div class="field-group">
+            <div class="field-group-title">Your private drive</div>
+            ${this.grants.map((g) => this.renderGrant(g))}
+          </div>`
+        : ''}
+    `;
+  }
+
+  renderGrant(g) {
+    const isFolder = g.path.endsWith('/');
+    const what = g.access === 'write' ? 'Read and change' : 'Read';
+    const until = new Date(g.expiresAt).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+    return html`
+      <div class="shared-file">
+        <span class="fa-fw ${isFolder ? 'far fa-folder' : 'far fa-file'}" aria-hidden="true"></span>
+        <span class="grant" title="${what} hyper://private${g.path} until ${until}">
+          <code class="name">${g.path}</code>
+          <span class="where"
+            >${what}${g.spaceName ? html` in ${g.spaceName}` : ''}, until ${until}</span
+          >
+        </span>
+        <button
+          class="remove-btn"
+          title="End access to ${g.path}"
+          aria-label="End access to ${g.path}"
+          @click=${(e) => this.onRemoveGrant(e, g)}
+        >
+          <span class="fas fa-fw fa-times" aria-hidden="true"></span>
+        </button>
       </div>
     `;
+  }
+
+  async onRemoveGrant(e, g) {
+    e.preventDefault();
+    try {
+      await nomad.sharedFiles.removePrivate(g.id);
+    } catch {
+      /* already ended */
+    }
+    this.grants = this.grants.filter((x) => x.id !== g.id);
   }
 
   renderFile(f) {

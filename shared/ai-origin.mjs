@@ -1,16 +1,17 @@
 // Which AI chat made an item (ADR-0047). When the user's AI makes or changes a Note, an Asset or a
-// drive, the item keeps where that happened: the AI Sidebar chat (a session in chat-store.js), the
-// AI Job, or that it was the phone's AI panel or another program on this computer (the loopback
-// MCP), whose chats aren't saved anywhere. The item then shows a link back to the chat, while the
-// chat is still there.
+// drive, the item keeps where that happened: the AI Sidebar's or the phone AI panel's chat (a
+// session in shared/ai-chats.mjs, the same files on both), the AI Job, or that it was another program
+// on this computer (the loopback MCP), whose chats aren't saved anywhere. The item then shows a link
+// back to the chat, while the chat is still there.
 //
 // An origin is { stage, chat?, job?, space?, at, made? }:
 //   stage  'sidebar' | 'job' | 'phone' | 'outside' (app/bg/ai/stages.mjs)
-//   chat   the sidebar session's id (chat-store.js newSessionId); for a Job, the run's chat when
+//   chat   the session's id (shared/ai-chats.mjs newSessionId): the sidebar's, or the phone
+//          panel's (a phone older than its saved chats sends none); for a Job, the run's chat when
 //          someone watched it (job-chat.js)
 //   job    the Job's id (shared/jobs.mjs)
 //   space  the Space key the chat is kept in: a sidebar chat lives in hyper://private/ of the
-//          window's Space, that Space's Root Drive
+//          window's Space, that Space's Root Drive; a phone chat in the phone's active Space's
 //   at     when, ISO time
 //   made   true when this chat made the item, not only changed it
 //
@@ -205,9 +206,9 @@ export async function resolveOrigins(list, { chat = async () => null, job = asyn
     }
     const by = o.made ? 'Made with AI' : 'Changed with AI'
     let tip
-    if (o.stage === 'sidebar') tip = 'The AI chat it came from was deleted, or isn’t one of yours'
+    if (o.stage === 'sidebar' || (o.stage === 'phone' && o.chat)) tip = 'The AI chat it came from was deleted, or isn’t one of yours'
     else if (o.stage === 'job') tip = 'The AI Job it came from was deleted, or isn’t one of yours'
-    else if (o.stage === 'phone') tip = 'In the AI panel on a phone. Its chats aren’t saved'
+    else if (o.stage === 'phone') tip = 'In the AI panel on a phone, before it saved its chats'
     else tip = 'By another program on a computer, through Nomad’s AI tools. Its chats aren’t saved here'
     out.push({ ...base, kind: 'none', text: by, tip })
   }

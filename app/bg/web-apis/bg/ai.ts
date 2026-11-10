@@ -79,6 +79,7 @@ import { closeTurn, openTurn } from '../../ai/localhost-mcp.mjs';
 import { startLocalhostMcp } from '../../ai/localhost-mcp-host.mjs';
 import * as aiMade from '../../ai/ai-made';
 import { cleanOrigin } from '../../../../shared/ai-origin.mjs';
+import { isSessionId } from '../../../../shared/ai-chats.mjs';
 import { streamAgent } from '../../ai/agent-cli.mjs';
 import { newToolCallId, trackToolCall } from '../../ai/tool-events.mjs';
 import {
@@ -414,6 +415,12 @@ aiBridge.setServeChat(
       // The Provider makes the turn's egress guard; a frame can only say the chat read private data.
       egress: null,
       privateData: opts?.privateData === true,
+      // The phone panel's saved chat, in its Space's Root Drive (the sidebar's files): what the AI
+      // makes links back to it (ADR-0047). Never an origin from the frame itself.
+      origin:
+        stage === 'phone' && isSessionId(opts?.chat)
+          ? { chat: opts.chat, space: isSpaceKey(opts?.space) ? opts.space : undefined }
+          : null,
     });
   }
 );
@@ -849,7 +856,9 @@ function turnOrigin(opts: any, personal: boolean) {
   if (opts.stage === 'sidebar' || opts.stage === 'job') {
     return cleanOrigin({ ...(opts.origin || {}), stage: opts.stage, at: undefined });
   }
-  if (opts.stage === 'phone' || opts.stage === 'outside') return cleanOrigin({ stage: opts.stage });
+  // The phone's panel names its chat when it saves one (ADR-0047); an older phone doesn't.
+  if (opts.stage === 'phone') return cleanOrigin({ ...(opts.origin || {}), stage: 'phone', job: undefined, at: undefined });
+  if (opts.stage === 'outside') return cleanOrigin({ stage: 'outside' });
   return null;
 }
 

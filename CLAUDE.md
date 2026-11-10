@@ -308,7 +308,10 @@ the tab's drive; a write must name its drive (`pickToolDrive`). The Drive's own 
 (`/ai/system.md`) is skipped for these turns. A `write` tool event names its `drive`, so the sidebar's
 Revert and the phone's Draft banner work per drive. The sidebar's sessions live in
 `hyper://private/.ai-chat/sessions/`; its model choice is the `ai_sidebar_prefs` setting, with vision
-per model.
+per model. The phone's AI panel saves its chats in the same files, in the active Space's Root Drive
+(`mobile/backend/lib/ai-chats.mjs`, `RPC_APPS` `aiChats`; its history button lists, searches, opens,
+renames and deletes them in `mobile/components/AiChats.tsx`). The format and the list's rules are
+`shared/ai-chats.mjs`, used by desktop's `chat-store.js` too, so keep a saved chat's shape there.
 
 ### Steering a running turn
 
@@ -348,11 +351,11 @@ The other way round: a Note, an Asset or a drive the user's AI made or changed k
 (`shared/ai-origin.mjs`: ids only, `ai` on Note and Asset records, carried by `makeNote`/`makeAsset`;
 a drive's in the Vault at `/.vault/ai-made/<driveKey>.json`, `app/bg/ai/ai-made.js`). `runChat`'s
 `turnOrigin` gives every tool call the turn's origin (the sidebar's chat from `ai-shell.ts`, a Job,
-`phone`, `outside`), and `writeNote`, `saveAsset`, `createDrive` and `writeDriveFile` record it. The
+the phone panel's saved chat sent as `chat` over the Bridge, `outside`), and `writeNote`, `saveAsset`, `createDrive` and `writeDriveFile` record it. The
 item shows "Made in the AI chat “…”" while the chat exists (`resolveOrigins`; desktop
 `nomad.aiChats.origins`/`driveOrigins` drawn by `app-stdlib/js/ai-origin.js` in Notes, the Assets
 viewer and site-info, opening the chat in the sidebar; the phone's `RPC_APPS` `aiChats` and
-`mobile/components/AiOrigins.tsx`, which shows the chat read-only). A new tool that makes the user's
+`mobile/components/AiOrigins.tsx`, which shows the chat and carries it on in the AI panel). A new tool that makes the user's
 things should record its origin the same way.
 
 ### Generated UI in the AI Sidebar (ADR-0027)

@@ -190,7 +190,7 @@ export interface NoteLiveEvent { id: string; conn: string; kind: 'message' | 'st
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'activity' | 'aiChats' | 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages' | 'vouches' | 'calendar' | 'assets' | 'peers' | 'invites' | 'contacts' | 'home'
+export type AppName = 'aiChats' | 'activity' | 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages' | 'vouches' | 'calendar' | 'assets' | 'peers' | 'invites' | 'contacts' | 'home'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
@@ -200,7 +200,6 @@ export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boo
 // and as the item shows them (backend/lib/ai-chats.mjs, RPC_APPS `aiChats`).
 export interface AiOrigin { stage: 'sidebar' | 'job' | 'phone' | 'outside'; chat?: string; job?: string; space?: string; at: string; made?: true }
 export interface AiOriginShown { kind: 'chat' | 'job' | 'none'; id?: string; space?: string | null; here?: boolean; title?: string; made: boolean; at: string; text: string; tip: string }
-export interface AiChatTranscript { id: string; title: string; updatedAt: number; messages: { role: 'user' | 'assistant'; content: string }[] }
 export interface Note { type: 'nomad/note'; id: string; body: string; createdAt: string; updatedAt: string; title: string; snippet: string; conflictOf?: string; space?: string | null; topics?: string[]; topicsBy?: 'ai' | 'user'; ticks?: Record<string, { by: string; at: string }>; ai?: AiOrigin[] }
 // The calendar (shared/calendar.mjs, ADR-0042, backend/lib/calendar.mjs). Times are wall time:
 // 'YYYY-MM-DD' for an all-day event, 'YYYY-MM-DDTHH:mm' otherwise. space: the Space's key for an
@@ -496,7 +495,8 @@ export function useBackend (handlers: BackendHandlers): Backend {
   }
 
   // A Reader, Notes or Names call. Always resolves, so screens can show `message` instead of catching.
-  // Opening a Feed may wait on the swarm (both drive types, ~15 s each), so it gets longer.
+  // Opening a Feed may wait on the swarm (both drive types, ~15 s each), so it gets longer, and adding
+  // a file to Assets copies all of it (up to 500 MB) into the drive, so that gets longer still.
   function appsCall<T> (app: AppName, action: string, args: Record<string, unknown> = {}): Promise<AppsResult<T>> {
     return new Promise<AppsResult<T>>((resolve) => {
       const rpc = rpcRef.current
@@ -504,7 +504,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
       const reqId = `ap_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
       const timer = setTimeout(() => {
         if (pending.current[reqId]) { delete pending.current[reqId]; resolve({ ok: false, message: 'backend did not respond' }) }
-      }, action === 'feed' ? 45000 : 15000)
+      }, action === 'feed' ? 45000 : app === 'assets' && action === 'add' ? 600000 : 15000)
       pending.current[reqId] = (msg: AppsResult<T>) => { clearTimeout(timer); resolve(msg) }
       const req = rpc.request(RPC_APPS)
       req.send(b4a.from(JSON.stringify({ reqId, app, action, ...args })))

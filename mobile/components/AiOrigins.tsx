@@ -2,22 +2,25 @@ import { useEffect, useMemo, useState } from 'react'
 import { View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
 import { showLabel } from '../lib/tooltip'
-import type { AiOrigin, AiOriginShown, AiChatTranscript, Backend } from '../lib/useBackend'
+import type { AiOrigin, AiOriginShown, Backend } from '../lib/useBackend'
+import type { AiChatData } from '../lib/aiChats'
 import BottomSheet from './BottomSheet'
 import Icon from './Icon'
 import Markdown from './Markdown'
 
 // "Made in the AI chat …" under a Note or an Asset the user's AI made or changed (ADR-0047). The
 // backend says what each line reads (backend/lib/ai-chats.mjs, the rules in shared/ai-origin.mjs),
-// as desktop does. A chat is a desktop AI Sidebar chat: the phone has no sidebar, so a tap shows the
-// chat's messages in a sheet. A Job opens on the Jobs screen. A chat that was deleted, or one that
-// was never saved (the phone's own AI panel), shows as "Made with AI" without a link; touch and hold
-// says why.
+// as desktop does. A chat is one of the saved AI chats, from desktop's AI Sidebar or this phone's AI
+// panel (the same files): a tap shows its messages in a sheet, which can carry it on in the AI panel
+// when it is in the open Space. A Job opens on the Jobs screen. A chat that was deleted, or one the
+// phone's panel never saved (before its chats were kept), shows as "Made with AI" without a link;
+// touch and hold says why.
 interface Props {
   list?: AiOrigin[]
   apps: Backend['apps'] // with the active Space bound in
   onOpenJob: (id: string) => void
   onOpenUrl?: (url: string) => void // a web or hyper:// link in the chat
+  onOpenChat?: (id: string) => void // carry the chat on in the AI panel (a chat in the open Space)
   dark?: boolean // on a dark backdrop (the Assets viewer)
   collapsed?: boolean // a small "AI" chip that opens the list in a sheet (Notes' topics bar)
 }
@@ -32,13 +35,13 @@ const when = (iso: string) => {
   return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-export default function AiOrigins ({ list, apps, onOpenJob, onOpenUrl, dark = false, collapsed = false }: Props) {
+export default function AiOrigins ({ list, apps, onOpenJob, onOpenUrl, onOpenChat, dark = false, collapsed = false }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t, dark), [t, dark])
   const key = JSON.stringify(list || [])
   const [shown, setShown] = useState<AiOriginShown[]>([])
   const [open, setOpen] = useState(false)
-  const [chat, setChat] = useState<{ origin: AiOriginShown; data: AiChatTranscript | null; error: string } | null>(null)
+  const [chat, setChat] = useState<{ origin: AiOriginShown; data: AiChatData | null; error: string } | null>(null)
 
   useEffect(() => {
     let live = true
@@ -51,8 +54,11 @@ export default function AiOrigins ({ list, apps, onOpenJob, onOpenUrl, dark = fa
 
   const openChat = async (o: AiOriginShown) => {
     setChat({ origin: o, data: null, error: '' })
-    const res = await apps<AiChatTranscript>('aiChats', 'load', { id: o.id, chatSpace: o.space || undefined })
-    setChat((c) => (c && c.origin === o ? { origin: o, data: res.ok ? res.value || null : null, error: res.ok ? '' : res.message || 'Couldn’t open the chat' } : c))
+    // A chat in another of the user's Spaces is read from there; `apps` has the open one bound in.
+    const res = await apps<AiChatData | null>('aiChats', 'load', o.space ? { id: o.id, space: o.space } : { id: o.id })
+    const data = res.ok && res.value ? res.value : null
+    const error = !res.ok ? res.message || 'Couldn’t open the chat' : data ? '' : 'That chat isn’t saved anymore'
+    setChat((c) => (c && c.origin === o ? { origin: o, data, error } : c))
   }
 
   if (!shown.length) return null
@@ -111,12 +117,25 @@ export default function AiOrigins ({ list, apps, onOpenJob, onOpenUrl, dark = fa
           <Icon name='robot' size={15} color={t.textDim} />
           <Text style={s.sheetTitle} numberOfLines={2}>{chat?.data?.title || chat?.origin.title || 'AI chat'}</Text>
         </View>
-        <Text style={s.sheetHint}>A chat with the AI on your computer. Open it in the AI sidebar there to carry on.</Text>
+        {chat?.origin.here && onOpenChat ? (
+          <Pressable
+            style={s.carryOn}
+            android_ripple={{ color: t.ripple }}
+            onPress={() => { const id = chat.origin.id; setChat(null); if (id) onOpenChat(id) }}
+            accessibilityRole='button'
+            accessibilityHint='Opens this chat in the AI panel, to carry it on'
+          >
+            <Icon name='comment-dots' size={13} color={t.accent} />
+            <Text style={s.carryOnText}>Carry on in the AI panel</Text>
+          </Pressable>
+        ) : (
+          <Text style={s.sheetHint}>It is in another Space. Switch to it to carry it on in the AI panel, or open it in the AI sidebar on your computer.</Text>
+        )}
         {chat && !chat.data && !chat.error ? <ActivityIndicator style={{ marginVertical: space.lg }} color={t.accent} /> : null}
         {chat?.error ? <Text style={s.error}>{chat.error}</Text> : null}
         {chat?.data ? (
           <ScrollView style={s.transcript} contentContainerStyle={{ gap: space.sm, paddingBottom: space.md }}>
-            {chat.data.messages.map((m, i) => (
+            {chat.data.messages.filter((m) => m.role === 'user' || m.role === 'assistant').map((m, i) => (
               <View key={i} style={[s.bubble, m.role === 'user' ? s.mine : s.theirs]}>
                 <Markdown
                   text={m.content}
@@ -146,6 +165,8 @@ function makeStyles (t: Theme, dark: boolean) {
     sheet: { maxHeight: '85%' },
     sheetHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingTop: space.sm },
     sheetTitle: { flex: 1, fontSize: 16, fontWeight: '600', color: t.text },
+    carryOn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 44, paddingHorizontal: space.lg },
+    carryOnText: { fontSize: 14, fontWeight: '600', color: t.accent },
     sheetHint: { fontSize: 12, color: t.textMuted, paddingHorizontal: space.lg, paddingTop: 4, paddingBottom: space.sm },
     error: { color: t.danger, paddingHorizontal: space.lg, paddingVertical: space.md },
     transcript: { paddingHorizontal: space.lg },

@@ -16,13 +16,13 @@ import * as vaultApps from './lib/vault-apps.mjs'
 import * as pe from '../../shared/personas.mjs'
 import hcrypto from 'hypercore-crypto'
 import { decodeInlineJson, WRITERS_PREFIX as DRIVE_WRITERS } from '../../shared/fs-core.mjs'
+import { jobPath } from '../../shared/jobs.mjs'
 import * as spaceLib from './lib/space-library.mjs'
 import * as calendar from './lib/calendar.mjs'
 import * as homeDash from '../../shared/home-dashboard.mjs'
 import { localWallTime, isDateTime } from '../../shared/calendar.mjs'
 import * as householdContacts from './lib/household-contacts.mjs'
 import { createAssets } from './lib/assets.mjs'
-import { createAiChats } from './lib/ai-chats.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
 import { createPhoneInbox } from './lib/inbox.mjs'
 import { createPhoneVouches } from './lib/vouches.mjs'
@@ -32,6 +32,7 @@ import c from 'compact-encoding'
 import { createDevicePresence } from '../../shared/device-presence.mjs'
 import * as deviceActivity from '../../shared/device-activity.mjs'
 import { createLogStore } from './lib/log-store.mjs'
+import { createAiChats } from './lib/ai-chats.mjs'
 import { createPhoneLiveNotes } from './lib/live-notes.mjs'
 import {
   RPC_OPEN,
@@ -250,12 +251,6 @@ async function libraryOf (space) {
   return lib
 }
 vaultApps.useSpaceLibraries(libraryOf)
-// The desktop AI chats that made a Note or an Asset (ADR-0047), read from the Spaces' Root Drives.
-const aiChats = createAiChats({
-  manager,
-  vault: () => vault,
-  spaces: async () => (vault ? (await readVaultIndex(vault)).spaces : [])
-})
 // A Space's Assets (ADR-0044): in its Library once shared, else the Vault.
 // Files move to and from the app as files in its own folders (Bare.argv: its documents, then its cache).
 const assets = createAssets({
@@ -809,6 +804,12 @@ async function handleApps ({ reqId, app, action, ...args }) {
       send(RPC_APPS_RESULT, { reqId, ok: true, value: await vaultApps.loadFeed(manager, args.url) })
       return
     }
+    // The AI panel's saved chats live in the Space's Root Drive, as desktop's sidebar's do, so they
+    // need no Vault (lib/ai-chats.mjs).
+    if (app === 'aiChats') {
+      send(RPC_APPS_RESULT, { reqId, ok: true, value: await aiChats.handle(action, args) })
+      return
+    }
     // Whether the user is using this phone (the UI's pings), and whether a notification shows here
     // or on the Device they're using instead. Linked or not: with no Vault, nothing is connected.
     if (app === 'activity' && action === 'set') {
@@ -891,7 +892,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'home' && action === 'dismiss') { value = await vaultApps.dismissHomeNotifications(vault, args.items); vaultChanged() }
     else if (app === 'assets' && action === 'list') value = await assets.list(space)
     else if (app === 'assets' && action === 'read') value = await assets.read(space, args.id, { thumb: !!args.thumb })
-    else if (app === 'assets' && action === 'readTo') value = await assets.readTo(space, args.id, { to: args.to, thumb: !!args.thumb })
+    else if (app === 'assets' && action === 'readTo') value = await assets.readTo(space, args.id, { to: args.to, thumb: !!args.thumb, wait: Math.min(Math.max(Number(args.wait) || 8000, 0), 10000) }) // the app asks again until `done`
     else if (app === 'assets' && action === 'add') value = await assets.add(space, args.asset || {})
     else if (app === 'assets' && action === 'update') value = await assets.update(space, { id: args.id, name: args.name, caption: args.caption, tags: args.tags, folder: args.folder })
     else if (app === 'assets' && action === 'updateMany') value = await assets.updateMany(space, { ids: args.ids, folder: args.folder, addTags: args.addTags, removeTags: args.removeTags })
@@ -906,8 +907,6 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'names' && action === 'match') value = await vaultApps.matchNames(vault, args.query, args.limit, space)
     else if (app === 'names' && action === 'set') value = await vaultApps.setName(vault, { name: args.name, url: args.url, title: args.title, previous: args.previous, inSpace: !!args.inSpace, previousInSpace: !!args.previousInSpace, space })
     else if (app === 'names' && action === 'remove') value = await vaultApps.removeName(vault, args.name, { inSpace: !!args.inSpace, space })
-    else if (app === 'aiChats' && action === 'origins') value = await aiChats.origins(args.list, space)
-    else if (app === 'aiChats' && action === 'load') value = await aiChats.load(args.id, args.chatSpace || space)
     else if (app === 'jobs' && action === 'list') value = await vaultApps.listJobs(vault)
     else if (app === 'jobs' && action === 'runs') value = await vaultApps.jobRuns(vault, args.id)
     else if (app === 'jobs' && action === 'setEnabled') value = await vaultApps.setJobEnabled(vault, args.id, args.enabled)
@@ -1190,6 +1189,20 @@ function askForRoot (rootDriveKey, base) {
   return spaceLib.askToEdit({ vault }, rootDriveKey, base)
     .catch((err) => { console.log('[drive-writers] ask failed', err && err.message); return false })
 }
+
+// The AI panel's chats, in the active Space's Root Drive (`ns` when this phone made the Space).
+const aiChats = createAiChats({
+  open: openRoot,
+  openWritable: writableRoot,
+  put: (entry, path, buf) => manager._put(DRIVE_AUTOBASE, entry.drive, path, buf),
+  del: (entry, path) => manager._del(DRIVE_AUTOBASE, entry.drive, path),
+  // For what an item the AI made links back to (ADR-0047).
+  spaces: async () => (vault ? (await readVaultIndex(vault)).spaces : []),
+  jobOf: async (id) => {
+    const node = vault ? await vault.view.get(jobPath(id)).catch(() => null) : null
+    return node ? decodeInlineJson(node.value, b4a) : null
+  }
+})
 
 // Open a Space's Root Drive to read it, and ask for this phone's writer key when it can't write it.
 async function openRoot (rootDriveKey, ns) {
