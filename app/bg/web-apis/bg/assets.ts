@@ -18,6 +18,7 @@ import * as spaceLibrary from '../../hyper/space-library';
 import * as vault from '../../hyper/vault';
 import * as vaultApps from './vault-apps';
 import * as as from '../../../../shared/assets.mjs';
+import { addOrigin } from '../../../../shared/ai-origin.mjs';
 import { assetLink } from '../../../../shared/item-links.mjs';
 import * as logLib from '../../logger';
 
@@ -316,6 +317,7 @@ export async function addTo(place: Place, f: any) {
     sourceUrl: f.sourceUrl,
     tags: f.tags,
     folder: f.folder,
+    ai: f.ai,
   });
   const ops: any[] = [
     stored
@@ -456,7 +458,8 @@ export async function deleteFolder(ctx, path) {
 
 // The AI's saveAsset (ai.ts): bytes it wrote, fetched or read, into Space `space`'s Assets. A
 // picture gets a thumbnail here (nativeImage reads PNG and JPEG). Returns what the model is told.
-export async function saveForAi(space, { name, mime, bytes, caption, sourceUrl }) {
+// `origin`: the chat that saved it (shared/ai-origin.mjs); the file links back to it (ADR-0047).
+export async function saveForAi(space, { name, mime, bytes, caption, sourceUrl, origin = null }) {
   const place = await placeFor(space, { write: true });
   const type = as.mimeOf(name, mime);
   let thumbFile = null;
@@ -472,7 +475,8 @@ export async function saveForAi(space, { name, mime, bytes, caption, sourceUrl }
       }
     } catch {}
   }
-  const rec = await addTo(place, { file: bytes, thumbFile, name, mime: type, width, height, caption, source: 'ai', sourceUrl });
+  const ai = origin ? addOrigin([], origin, { made: true }) : [];
+  const rec = await addTo(place, { file: bytes, thumbFile, name, mime: type, width, height, caption, source: 'ai', sourceUrl, ai });
   return {
     id: rec.id,
     name: rec.name,

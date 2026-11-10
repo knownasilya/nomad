@@ -230,5 +230,10 @@ ${toastCSS}
     color: var(--text-color--link);
     cursor: pointer;
   }
+
+  /* The AI chats that made this drive (app-stdlib/js/ai-origin.js). */
+  .ai-origin-row {
+    margin-top: 10px;
+  }
 `;
 export default cssStr;

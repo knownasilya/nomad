@@ -19,6 +19,7 @@ import fsAPI from './fs';
 import * as apps from '../../../../shared/vault-apps.mjs';
 import * as nt from '../../../../shared/note-topics.mjs';
 import * as nl from '../../../../shared/note-lists.mjs';
+import * as aiOrigin from '../../../../shared/ai-origin.mjs';
 import { findWebContentsParentWindow } from '../../lib/electron';
 import * as tabManager from '../../ui/tabs/manager';
 import * as spaceLibrary from '../../hyper/space-library';
@@ -440,6 +441,23 @@ export async function setNoteTopics(
   if (!found.prev) throw new Error('No note with that id');
   if (found.space && !(await canWriteNotesIn(found.space))) throw new Error('You can only view this Space’s notes');
   const note = nt.withNoteTopics(found.prev, topics, 'user', nt.knownNoteTopics(await allNotes(space)));
+  await putNote(found.space, note);
+  return withSpace(found.space)(note);
+}
+
+// The user's AI made (`made`) or changed a Note: keep which chat did it (shared/ai-origin.mjs,
+// ADR-0047), so the Note links back to it. Doesn't change updatedAt, like topics. Returns the Note.
+export async function setNoteOrigin(
+  ctx,
+  { id, origin, made = false, space: given = undefined }: { id?: string; origin?: any; made?: boolean; space?: string | null } = {}
+) {
+  const space = given === undefined ? await spaceOrNull(ctx) : apps.isSpaceKey(given) ? given : null;
+  const found = await findStored(id, space); // notePath validates the id
+  if (!found.prev) throw new Error('No note with that id');
+  if (found.space && !(await canWriteNotesIn(found.space))) return withSpace(found.space)(found.prev);
+  const ai = aiOrigin.addOrigin(found.prev.ai, origin, { made });
+  if (aiOrigin.sameOrigins(ai, found.prev.ai)) return withSpace(found.space)(found.prev);
+  const note = { ...found.prev, ai };
   await putNote(found.space, note);
   return withSpace(found.space)(note);
 }

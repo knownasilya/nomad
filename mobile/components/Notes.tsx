@@ -14,6 +14,7 @@ import Icon from './Icon'
 import { ListSection } from './List'
 import Canvas, { type CanvasHandle, type CanvasSnapshot } from './Canvas'
 import NoteTopicsSheet from './NoteTopicsSheet'
+import AiOrigins from './AiOrigins'
 import TopicFilterSheet from './TopicFilterSheet'
 import SearchField, { Marked } from './SearchField'
 import KeyboardInset from './KeyboardInset'
@@ -37,6 +38,7 @@ interface Props {
   onOpenUrl: (url: string, noteId?: string) => void
   onOpenAsset: (place: { id?: string; folder?: string; tag?: string }) => void // a link to a file, folder or tag in Assets
   openNoteId?: string // a note to open as Notes shows
+  onOpenJob?: (id: string) => void // the AI Job that made a note (ADR-0047)
 }
 
 // The note in the editor. One object per open note, changed in place, so a save that finishes after
@@ -77,7 +79,7 @@ const TOOLS: [string, string][] = [['heading', 'H'], ['bold', 'B'], ['italic', '
 // The search box finds notes with every word typed, in their text or topics, in any order and
 // ignoring accents (lib/search.ts, desktop's rules): the list shows the line that matched with the
 // words marked, and the canvas lights up the notes that match.
-export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive, onNoteLive, space, spaceName, onOpenDevices, onOpenUrl, onOpenAsset, openNoteId }: Props) {
+export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive, onNoteLive, space, spaceName, onOpenDevices, onOpenUrl, onOpenAsset, openNoteId, onOpenJob }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const insets = useSafeAreaInsets()
@@ -640,6 +642,9 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive
                   <Text style={s.topicAdd}>{editable ? 'Add a topic' : 'No topics'}</Text>
                 )}
               </Pressable>
+            ) : null}
+            {openNote?.ai?.length ? (
+              <AiOrigins list={openNote.ai} apps={call} onOpenJob={(id) => onOpenJob?.(id)} onOpenUrl={(url) => onOpenUrl(url, openNote.id)} />
             ) : null}
             <WebView
               ref={web}

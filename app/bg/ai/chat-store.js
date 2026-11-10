@@ -150,6 +150,19 @@ export async function renameSession(sender, sessionId, name) {
   return clean || data.title || '';
 }
 
+// A saved chat's title, or null when it is gone (ADR-0047): what an item the AI made links to. A
+// chat is kept in the Root Drive of the Space it was in, `space` (a Space key); without one, the
+// sender's own Space (hyper://private/).
+export async function findSession(sender, sessionId, space = null) {
+  const ctx = { sender };
+  const root = space ? `hyper://${space}/.ai-chat` : ROOT;
+  const data = await readJson(ctx, `${root}/sessions/${sessionId}.json`);
+  if (!data) return null;
+  const names = await readJson(ctx, `${root}/names.json`);
+  const named = names && typeof names[sessionId] === 'string' ? names[sessionId] : '';
+  return { id: sessionId, title: named || data.title || '' };
+}
+
 export async function getLastSessionId(sender) {
   const rec = await readJson({ sender }, LAST_SESSION);
   return rec?.sessionId || null;

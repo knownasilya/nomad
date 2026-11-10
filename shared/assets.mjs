@@ -20,6 +20,7 @@
 // No Electron imports, and nothing touched as the module loads that Bare lacks.
 
 import { spaceLibPrefix } from './vault-apps.mjs'
+import { originsOf } from './ai-origin.mjs'
 
 export const ASSET_TYPE = 'nomad/asset'
 export const LIB_ASSETS = '/assets/'
@@ -260,7 +261,7 @@ const clean = (s, max) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, m
  * (with the page it came from as `sourceUrl`). An edit (a name, a caption) keeps the rest.
  * `takenAt` is when a photo or video was taken, else when the file was added.
  * `tags` and `folder` are the user's to change, like the name and caption.
- * @param {{ id: string, name?: string, mime?: string, bytes?: number, width?: number, height?: number, duration?: number, takenAt?: string | null, by?: string, memberId?: string | null, caption?: string, thumb?: boolean, source?: string, sourceUrl?: string, tags?: string[] | string, folder?: string }} f
+ * @param {{ id: string, name?: string, mime?: string, bytes?: number, width?: number, height?: number, duration?: number, takenAt?: string | null, by?: string, memberId?: string | null, caption?: string, thumb?: boolean, source?: string, sourceUrl?: string, tags?: string[] | string, folder?: string, ai?: any[] }} f
  */
 export function makeAsset(f, prev = null, now = new Date().toISOString()) {
   const id = check(String(f.id || ''))
@@ -295,6 +296,9 @@ export function makeAsset(f, prev = null, now = new Date().toISOString()) {
   if (caption) rec.caption = caption
   if (tags.length) rec.tags = tags
   if (folder) rec.folder = folder
+  // The AI chats that made or changed it (shared/ai-origin.mjs, ADR-0047).
+  const ai = originsOf(from)
+  if (ai.length) rec.ai = ai
   return rec
 }
 

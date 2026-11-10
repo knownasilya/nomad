@@ -1480,6 +1480,7 @@ export default function Browser () {
         onOpenDevices={() => openScreen({ name: 'devices' })}
         onOpenUrl={openFromNotes}
         onOpenAsset={(place) => openScreen({ name: 'assets', assetId: place.id, folder: place.folder, tag: place.tag })}
+        onOpenJob={(jobId) => openScreen({ name: 'jobs', jobId })}
       />
 
       <HouseholdContacts
@@ -1517,6 +1518,7 @@ export default function Browser () {
         spaceName={spacesApi.activeSpace.name}
         onOpenDevices={() => openScreen({ name: 'devices' })}
         onOpenLibrary={() => openScreen({ name: 'library' })}
+        onOpenJob={(jobId) => openScreen({ name: 'jobs', jobId })}
       />
 
       <Jobs

@@ -14,6 +14,7 @@ import './com/site-perms.js';
 import './com/shared-files.js';
 import './com/identity.js';
 import './com/drive-forks.js';
+import { aiOriginsElement } from '../../app-stdlib/js/ai-origin.js';
 
 const isHyperHashRegex = /^[a-z0-9]{64}/i;
 
@@ -33,6 +34,7 @@ class SiteInfoApp extends LitElement {
       edit: { type: Object }, // nomad.vault.driveEditStatus for a Drive this Device can't write
       askingEdit: { type: Boolean }, // a viewer of a shared Space is typing a note to ask to edit
       session: { type: Object }, // this site's Session in the window's Space (ADR-0031), or null
+      aiOrigins: { type: Array }, // the AI chats that made or wrote this drive (ADR-0047)
     };
   }
 
@@ -142,6 +144,7 @@ class SiteInfoApp extends LitElement {
     this.naming = null;
     this.askingEdit = false;
     this.session = null;
+    this.aiOrigins = [];
     contextMenu.destroy();
   }
 
@@ -173,6 +176,9 @@ class SiteInfoApp extends LitElement {
       // Who the user is on this site (ADR-0031): its Session in the window's Space.
       this.session = await nomad.personas.getSiteSession(this.url).catch(() => null);
       if (this.view === 'session' && !this.session) this.view = 'identity';
+
+      // The AI chats that made this drive or wrote this page of it (ADR-0047).
+      this.aiOrigins = this.isDrive ? await nomad.aiChats.driveOrigins(this.url, this.pathname).catch(() => []) : [];
 
       // The user's names for this page (bg/hyper/names.js). nomad:// pages can be named too.
       this.names = await nomad.vault.namesForUrl(this.url).catch(() => []);
@@ -292,7 +298,7 @@ class SiteInfoApp extends LitElement {
                 `
               : ''}
           </p>
-          ${this.renderName()} ${this.renderEdit()}
+          ${this.renderName()} ${this.renderEdit()} ${this.renderAiOrigins()}
         </div>
       </div>
     `;
@@ -345,6 +351,16 @@ class SiteInfoApp extends LitElement {
 
   // Editing a Drive one of the user's other Devices can write: ask them to add this Device's key.
   // In a shared Space (ADR-0029), a viewer asks the people who can edit the drive instead.
+  // "Made in the AI chat …": each opens the chat in the AI Sidebar (app-stdlib/js/ai-origin.js).
+  renderAiOrigins() {
+    const node = aiOriginsElement(this.aiOrigins, { onError: (e) => toast.create(e.message || String(e), 'error') });
+    if (!node) return '';
+    node.addEventListener('click', (e) => {
+      if (e.target.closest?.('button')) nomad.browser.toggleSiteInfo(false);
+    });
+    return html`<div class="ai-origin-row">${node}</div>`;
+  }
+
   renderEdit() {
     const st = this.edit;
     if (!st || st.writable || this.info?.writable) return '';

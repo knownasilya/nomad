@@ -22,6 +22,7 @@ import * as homeDash from '../../shared/home-dashboard.mjs'
 import { localWallTime, isDateTime } from '../../shared/calendar.mjs'
 import * as householdContacts from './lib/household-contacts.mjs'
 import { createAssets } from './lib/assets.mjs'
+import { createAiChats } from './lib/ai-chats.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
 import { createPhoneInbox } from './lib/inbox.mjs'
 import { createPhoneVouches } from './lib/vouches.mjs'
@@ -248,6 +249,12 @@ async function libraryOf (space) {
   return lib
 }
 vaultApps.useSpaceLibraries(libraryOf)
+// The desktop AI chats that made a Note or an Asset (ADR-0047), read from the Spaces' Root Drives.
+const aiChats = createAiChats({
+  manager,
+  vault: () => vault,
+  spaces: async () => (vault ? (await readVaultIndex(vault)).spaces : [])
+})
 // A Space's Assets (ADR-0044): in its Library once shared, else the Vault.
 // Files move to and from the app as files in its own folders (Bare.argv: its documents, then its cache).
 const assets = createAssets({
@@ -861,6 +868,8 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'names' && action === 'match') value = await vaultApps.matchNames(vault, args.query, args.limit, space)
     else if (app === 'names' && action === 'set') value = await vaultApps.setName(vault, { name: args.name, url: args.url, title: args.title, previous: args.previous, inSpace: !!args.inSpace, previousInSpace: !!args.previousInSpace, space })
     else if (app === 'names' && action === 'remove') value = await vaultApps.removeName(vault, args.name, { inSpace: !!args.inSpace, space })
+    else if (app === 'aiChats' && action === 'origins') value = await aiChats.origins(args.list, space)
+    else if (app === 'aiChats' && action === 'load') value = await aiChats.load(args.id, args.chatSpace || space)
     else if (app === 'jobs' && action === 'list') value = await vaultApps.listJobs(vault)
     else if (app === 'jobs' && action === 'runs') value = await vaultApps.jobRuns(vault, args.id)
     else if (app === 'jobs' && action === 'setEnabled') value = await vaultApps.setJobEnabled(vault, args.id, args.enabled)

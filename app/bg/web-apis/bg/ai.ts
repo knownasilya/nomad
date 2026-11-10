@@ -77,6 +77,8 @@ import {
 } from '../../ai/active-tab.mjs';
 import { closeTurn, openTurn } from '../../ai/localhost-mcp.mjs';
 import { startLocalhostMcp } from '../../ai/localhost-mcp-host.mjs';
+import * as aiMade from '../../ai/ai-made';
+import { cleanOrigin } from '../../../../shared/ai-origin.mjs';
 import { streamAgent } from '../../ai/agent-cli.mjs';
 import { newToolCallId, trackToolCall } from '../../ai/tool-events.mjs';
 import {
@@ -593,7 +595,9 @@ export async function runJobTurn(
   let result = null;
   let failure = null;
   try {
-    result = await runJobWork(job, { work, trigger, lastRun, notify, signal: stop.signal, space, grants, emitter, changes, egress, jobPage, newer });
+    // What the run makes links back to the Job, and to its chat when someone watched (ADR-0047).
+    const origin = cleanOrigin({ stage: 'job', job: job.id, chat: chat?.sessionId, space: space || undefined });
+    result = await runJobWork(job, { work, trigger, lastRun, notify, signal: stop.signal, space, grants, emitter, changes, egress, jobPage, newer, origin });
     return result;
   } catch (err) {
     failure = err;
@@ -610,7 +614,7 @@ export async function runJobTurn(
   }
 }
 
-async function runJobWork(job, { work, trigger, lastRun, notify, signal, space, grants, emitter, changes, egress, jobPage, newer }) {
+async function runJobWork(job, { work, trigger, lastRun, notify, signal, space, grants, emitter, changes, egress, jobPage, newer, origin = null }) {
   let result = null;
   // One scratch space for the run: what job.js saves, the turn after it can read (scratch.mjs).
   const scratch = createScratch();
@@ -632,6 +636,7 @@ async function runJobWork(job, { work, trigger, lastRun, notify, signal, space, 
       egress,
       jobPage,
       scratch,
+      origin,
     });
     if (!work.prompt) return { output: moduleOutput(result), sourceHash: await newer, changes };
   }
@@ -661,6 +666,7 @@ async function runJobWork(job, { work, trigger, lastRun, notify, signal, space, 
     egress,
     scratch,
     signal,
+    origin,
   });
   return { output: answer.trim() || all.trim(), sourceHash: await newer, changes };
 }
@@ -722,7 +728,7 @@ function jobEmitter(changes = []) {
 // A Job's job.js, run like the AI's execute code with the job turn's capabilities: no tab, no page
 // tools, notify, and the writes the Job was given. Resolves what main() returned (text, or JSON for
 // anything else).
-async function runJobModule(code, { jobId, params, space, notify, signal, grants, emitter, egress, jobPage, scratch }) {
+async function runJobModule(code, { jobId, params, space, notify, signal, grants, emitter, egress, jobPage, scratch, origin = null }) {
   const sender = makeRemoteSender('nomad://jobs/');
   const catalog = buildCatalog({
     allowWrite: grants.allowWrite,
@@ -749,6 +755,8 @@ async function runJobModule(code, { jobId, params, space, notify, signal, grants
     jobPage,
     egress,
     scratch,
+    // What job.js makes links back to the Job (ADR-0047).
+    origin,
   };
   return executeInUtilityProcess({
     code,
@@ -831,6 +839,18 @@ export async function completeText(messages, { maxTokens = 400, timeoutMs = 60e3
 async function turnSpaceKey(sender, opts: any = {}) {
   if (opts.remote) return isSpaceKey(opts.space) ? opts.space : null;
   return vaultApps.spaceKey({ sender }).catch(() => null);
+}
+
+// The chat a turn is in, for what it makes or changes (shared/ai-origin.mjs, ADR-0047): the AI
+// Sidebar's session (ai-shell.ts passes it as `origin`), a Job (runJobWork), or just that it was the
+// phone's AI panel, whose chats aren't saved. A page's own nomad.ai.chat() is not the user's AI.
+function turnOrigin(opts: any, personal: boolean) {
+  if (!personal) return null;
+  if (opts.stage === 'sidebar' || opts.stage === 'job') {
+    return cleanOrigin({ ...(opts.origin || {}), stage: opts.stage, at: undefined });
+  }
+  if (opts.stage === 'phone' || opts.stage === 'outside') return cleanOrigin({ stage: opts.stage });
+  return null;
 }
 
 async function runChat(messages, sender, emitter, opts: any = {}) {
@@ -1002,6 +1022,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     egress,
     // The chat's scratch space (scratch.mjs).
     scratch,
+    // The chat this turn is in: what it makes or changes links back to it (ADR-0047).
+    origin: turnOrigin(opts, personal),
     // Messages the user sends while this turn runs (steering.mjs). A CLI's loopback MCP calls
     // carry them on their results.
     steering: opts.steering || null,
@@ -1211,6 +1233,7 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
     egress = null,
     jobPage = null,
     scratch = null,
+    origin = null,
   } = opts;
   // WebMCP page tool — round-trip to the renderer that registered it. Access was already
   // consented per-origin in resolvePageTools(); running it can only do what page JS can do.
@@ -1278,7 +1301,7 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
   // The user's Notes and Reader (ai-vault.ts): a personal turn only, each after its permission.
   if (isVaultTool(name)) {
     if (!catalog?.personal) throw new Error(`${name} is not available here`);
-    return runVaultTool(name, args || {}, { ctx, space, permit, scratch });
+    return runVaultTool(name, args || {}, { ctx, space, permit, scratch, origin });
   }
 
   // The chat's scratch space (scratch.mjs): what the AI saved to use again later in this chat.
@@ -1503,6 +1526,8 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
           draft: staged,
         });
       }
+      // The drive keeps which chat wrote the file (ADR-0047).
+      if (origin) aiMade.noteDrive(drive.url, origin, { path: cleanPath });
       const where = drive.current ? cleanPath : target;
       // The full URL too, so the answer can link the file (shared/item-links.mjs).
       if (staged) {
@@ -1530,6 +1555,8 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
         driveOpts.collaborative ??
         !!DRIVE_TEMPLATES.find((t) => t.id === driveOpts.template)?.collaborative;
       const made = createdDrive(url, driveOpts, { collaborative, draft: draftFor(base) });
+      // The new drive links back to the chat that made it (ADR-0047).
+      if (origin) aiMade.noteDrive(url, origin, { made: true });
       // A Job keeps the drive it made with the run (jobEmitter).
       emitter?.emit('tool', { phase: 'drive', name: 'createDrive', drive: made.url, title: made.title });
       return JSON.stringify(made, null, 2);
@@ -1576,7 +1603,7 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
         }
         sizeCheck(bytes.length);
       }
-      const saved = await assetsBg.saveForAi(assetSpace, { name, mime, bytes, caption: req.caption, sourceUrl });
+      const saved = await assetsBg.saveForAi(assetSpace, { name, mime, bytes, caption: req.caption, sourceUrl, origin });
       return JSON.stringify(saved, null, 2);
     }
     case 'notify': {
@@ -2166,6 +2193,8 @@ export async function callLocalTool(name, args, turn = null) {
     emitter,
     pageToolsWcId: sender.id,
     catalog,
+    // What it makes says another program did it (ADR-0047).
+    origin: { stage: 'outside' },
   });
 }
 

@@ -20,6 +20,7 @@ import Icon, { type IconName } from './Icon'
 import LinkPhone from './LinkPhone'
 import Markdown from './Markdown'
 import ScreenHeader, { type HeaderAction } from './ScreenHeader'
+import AiOrigins from './AiOrigins'
 
 interface Props {
   visible: boolean
@@ -33,6 +34,7 @@ interface Props {
   spaceName?: string
   onOpenDevices: () => void
   onOpenLibrary: () => void // My Library, where a Space is shared or a home set up
+  onOpenJob?: (id: string) => void // the AI Job that saved a file (ADR-0047)
 }
 
 // A Space's Assets (ADR-0044): every file it keeps, newest first by month, filtered by kind, and
@@ -99,7 +101,7 @@ const crumbs = (path: string) => path.split('/').join(' › ')
 // A Markdown link to paste in a Note (desktop's Copy link writes the same).
 const mdLink = (name: string, url: string) => `[${name.replace(/[[\]]/g, '')}](${url})`
 
-export default function Assets ({ visible, onClose, openAssetId, openFolder, openTag, apps, onVaultChange, space, spaceName, onOpenDevices, onOpenLibrary }: Props) {
+export default function Assets ({ visible, onClose, openAssetId, openFolder, openTag, apps, onVaultChange, space, spaceName, onOpenDevices, onOpenLibrary, onOpenJob }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const { width } = useWindowDimensions()
@@ -677,6 +679,7 @@ export default function Assets ({ visible, onClose, openAssetId, openFolder, ope
           onSaved={refresh}
           onMenu={setFileMenu}
           onTag={(x) => { setOpen(null); go({ folder: '', tag: x }) }}
+          onOpenJob={(id) => { setOpen(null); onOpenJob?.(id) }}
         >
           <ActionSheet
             visible={!!fileMenu}
@@ -886,7 +889,7 @@ function TagsSheet ({ files, known, onClose, onSave }: { files: AssetRecord[] | 
   )
 }
 
-function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove, onSaved, onMenu, onTag, children }: {
+function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove, onSaved, onMenu, onTag, onOpenJob, children }: {
   asset: AssetRecord | null
   many: boolean
   canEdit: boolean
@@ -898,6 +901,7 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
   onSaved: () => void
   onMenu: (a: AssetRecord) => void // rename, move, tags, copy link
   onTag: (tag: string) => void // show every file with this tag
+  onOpenJob: (id: string) => void // the AI Job that saved it
   children?: ReactNode // sheets opened from the viewer, drawn over it
 }) {
   const t = useTheme()
@@ -1021,6 +1025,7 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
               ))}
             </ScrollView>
           ) : null}
+          {a.ai?.length ? <View style={s.viewerOrigins}><AiOrigins list={a.ai} apps={call} onOpenJob={onOpenJob} dark /></View> : null}
         </SafeAreaView>
       )}
       {children}
@@ -1251,6 +1256,7 @@ function makeStyles (t: Theme) {
     side: { position: 'absolute', top: 0, bottom: 0, width: '30%' },
     sideLeft: { left: 0 },
     sideRight: { right: 0 },
+    viewerOrigins: { alignItems: 'center', paddingBottom: sp.sm },
     caption: { color: '#fff', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: radius.md, marginHorizontal: sp.lg, marginVertical: sp.md, paddingHorizontal: sp.md, minHeight: 44, fontSize: 15, textAlign: 'center' },
     captionText: { color: 'rgba(255,255,255,0.9)', fontSize: 15, textAlign: 'center', margin: sp.lg },
     viewerTags: { gap: 6, paddingHorizontal: sp.lg, paddingBottom: sp.md, alignItems: 'center' },
