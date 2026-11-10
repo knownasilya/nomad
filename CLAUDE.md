@@ -308,7 +308,10 @@ the tab's drive; a write must name its drive (`pickToolDrive`). The Drive's own 
 (`/ai/system.md`) is skipped for these turns. A `write` tool event names its `drive`, so the sidebar's
 Revert and the phone's Draft banner work per drive. The sidebar's sessions live in
 `hyper://private/.ai-chat/sessions/`; its model choice is the `ai_sidebar_prefs` setting, with vision
-per model.
+per model. The phone's AI panel saves its chats in the same files, in the active Space's Root Drive
+(`mobile/backend/lib/ai-chats.mjs`, `RPC_APPS` `aiChats`; its history button lists, searches, opens,
+renames and deletes them in `mobile/components/AiChats.tsx`). The format and the list's rules are
+`shared/ai-chats.mjs`, used by desktop's `chat-store.js` too, so keep a saved chat's shape there.
 
 ### Steering a running turn
 

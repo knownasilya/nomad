@@ -25,14 +25,21 @@
 // permitted the same way it is for any other privileged nomad:// UI.
 
 import fsAPI from '../web-apis/bg/fs';
-import { searchWords, previewOf, matchSession } from './chat-search.mjs';
+import {
+  searchWords,
+  sessionIdOf,
+  sessionRow,
+  sortRows,
+  cleanName,
+  namesOf,
+  newSessionId as newId,
+} from '../../../shared/ai-chats.mjs';
 import { jobOf } from './job-chat-messages.mjs';
 
 const ROOT = 'hyper://private/.ai-chat';
 const SESSIONS = `${ROOT}/sessions`;
 const LAST_SESSION = `${ROOT}/last-session.json`;
 const NAMES = `${ROOT}/names.json`;
-const MAX_NAME = 80;
 const sessionUrl = (id) => `${SESSIONS}/${id}.json`;
 
 async function readJson(ctx, url) {
@@ -50,7 +57,7 @@ async function writeJson(ctx, url, data) {
 }
 
 export function newSessionId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  return newId();
 }
 
 // Every session, newest first: { id, title, named, updatedAt, messageCount, preview, job }. `title` is
@@ -67,10 +74,8 @@ export async function listSessions(sender, { query = '' } = {}) {
   }
   const ids = [];
   for (const e of entries || []) {
-    const name = (e && (e.name ?? e.key ?? e)) || '';
-    const base = String(name).split('/').pop() || '';
-    if (!base.endsWith('.json')) continue;
-    ids.push(base.slice(0, -'.json'.length));
+    const id = sessionIdOf((e && (e.name ?? e.key ?? e)) || '');
+    if (id) ids.push(id);
   }
   // Independent reads — fire them concurrently rather than one Drive round trip at a time, so
   // opening the history panel doesn't cost O(sessions) sequential latency.
@@ -79,31 +84,9 @@ export async function listSessions(sender, { query = '' } = {}) {
     readNames(ctx),
   ]);
   const words = searchWords(query);
-  const out = [];
-  sessions.forEach((data, i) => {
-    if (!data) return;
-    const id = ids[i];
-    const messages = Array.isArray(data.messages) ? data.messages : [];
-    const named = typeof names[id] === 'string' && names[id] ? names[id] : '';
-    const row = {
-      id,
-      title: named || data.title || '',
-      named: !!named,
-      updatedAt: data.updatedAt || 0,
-      messageCount: messages.filter((m) => m && (m.role === 'user' || m.role === 'assistant'))
-        .length,
-      preview: previewOf(messages),
-      job: jobOf(data),
-    };
-    if (words.length) {
-      const snippet = matchSession(row.title, messages, words);
-      if (snippet === null) return;
-      row.snippet = snippet;
-    }
-    out.push(row);
-  });
-  out.sort((a, b) => b.updatedAt - a.updatedAt);
-  return out;
+  return sortRows(
+    sessions.map((data, i) => sessionRow(ids[i], data, names, words)),
+  );
 }
 
 export async function loadSession(sender, sessionId) {
@@ -115,7 +98,12 @@ export async function saveSession(sender, sessionId, data) {
   const { job: _job, ...rest } = data || {};
   const job = jobOf(data);
   await Promise.all([
-    writeJson(ctx, sessionUrl(sessionId), { ...rest, ...(job ? { job } : {}), id: sessionId, updatedAt: Date.now() }),
+    writeJson(ctx, sessionUrl(sessionId), {
+      ...rest,
+      ...(job ? { job } : {}),
+      id: sessionId,
+      updatedAt: Date.now(),
+    }),
     writeJson(ctx, LAST_SESSION, { sessionId }),
   ]);
 }
@@ -139,10 +127,7 @@ export async function renameSession(sender, sessionId, name) {
   const ctx = { sender };
   const data = await readJson(ctx, sessionUrl(sessionId));
   if (!data) throw new Error('No chat with that id');
-  const clean = String(name ?? '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, MAX_NAME);
+  const clean = cleanName(name);
   const names = await readNames(ctx);
   if (clean) names[sessionId] = clean;
   else delete names[sessionId];
@@ -157,6 +142,5 @@ export async function getLastSessionId(sender) {
 
 // The user's names for sessions, { [id]: name }.
 async function readNames(ctx) {
-  const v = await readJson(ctx, NAMES);
-  return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  return namesOf(await readJson(ctx, NAMES));
 }

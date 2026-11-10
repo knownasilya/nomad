@@ -281,6 +281,8 @@ export default function Browser () {
   const [menuOpen, setMenuOpen] = useState(false)
   const [nameSheetOpen, setNameSheetOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
+  // The AI panel's past chats are showing (back closes them first).
+  const [aiChatsOpen, setAiChatsOpen] = useState(false)
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [source, setSource] = useState('')
   // The address bar has focus (it hides the name tag then). recentsOpen: the recent-sites card that
@@ -1142,14 +1144,15 @@ export default function Browser () {
     useCallback(() => {
       if (Platform.OS !== 'android') return
       const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-        switch (backAction({ aiOpen, editingAddress: urlFocusedRef.current })) {
+        switch (backAction({ aiOpen, aiChatsOpen, editingAddress: urlFocusedRef.current })) {
+          case 'closeAiChats': setAiChatsOpen(false); return true
           case 'closeAi': setAiOpen(false); return true
           case 'leaveAddress': leaveAddress(); return true
           default: return goBackActive()
         }
       })
       return () => sub.remove()
-    }, [goBackActive, aiOpen, leaveAddress])
+    }, [goBackActive, aiOpen, aiChatsOpen, leaveAddress])
   )
 
   // --- render ------------------------------------------------------------
@@ -1617,6 +1620,10 @@ export default function Browser () {
       url={active.url}
       title={active.title}
       space={spacesApi.activeSpace.rootDriveKey}
+      spaceNs={spacesApi.activeSpace.ns ?? null}
+      apps={backend.apps}
+      chatsOpen={aiChatsOpen}
+      onChatsOpenChange={setAiChatsOpen}
       aiChat={backend.aiChat}
       onPrompt={confirmAiPermission}
       onPreviewDraft={onPreviewDraft}

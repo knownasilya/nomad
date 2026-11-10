@@ -31,6 +31,7 @@ import c from 'compact-encoding'
 import { createDevicePresence } from '../../shared/device-presence.mjs'
 import * as deviceActivity from '../../shared/device-activity.mjs'
 import { createLogStore } from './lib/log-store.mjs'
+import { createAiChats } from './lib/ai-chats.mjs'
 import { createPhoneLiveNotes } from './lib/live-notes.mjs'
 import {
   RPC_OPEN,
@@ -802,6 +803,12 @@ async function handleApps ({ reqId, app, action, ...args }) {
       send(RPC_APPS_RESULT, { reqId, ok: true, value: await vaultApps.loadFeed(manager, args.url) })
       return
     }
+    // The AI panel's saved chats live in the Space's Root Drive, as desktop's sidebar's do, so they
+    // need no Vault (lib/ai-chats.mjs).
+    if (app === 'aiChats') {
+      send(RPC_APPS_RESULT, { reqId, ok: true, value: await aiChats.handle(action, args) })
+      return
+    }
     // Whether the user is using this phone (the UI's pings), and whether a notification shows here
     // or on the Device they're using instead. Linked or not: with no Vault, nothing is connected.
     if (app === 'activity' && action === 'set') {
@@ -1181,6 +1188,14 @@ function askForRoot (rootDriveKey, base) {
   return spaceLib.askToEdit({ vault }, rootDriveKey, base)
     .catch((err) => { console.log('[drive-writers] ask failed', err && err.message); return false })
 }
+
+// The AI panel's chats, in the active Space's Root Drive (`ns` when this phone made the Space).
+const aiChats = createAiChats({
+  open: openRoot,
+  openWritable: writableRoot,
+  put: (entry, path, buf) => manager._put(DRIVE_AUTOBASE, entry.drive, path, buf),
+  del: (entry, path) => manager._del(DRIVE_AUTOBASE, entry.drive, path)
+})
 
 // Open a Space's Root Drive to read it, and ask for this phone's writer key when it can't write it.
 async function openRoot (rootDriveKey, ns) {

@@ -155,6 +155,12 @@ describe("Android's back on the browser screen", () => {
     expect(backAction({ aiOpen: true, editingAddress: true })).toBe('closeAi')
   })
 
+  it("goes from the AI panel's past chats back to the chat before closing the panel", () => {
+    expect(backAction({ aiOpen: true, aiChatsOpen: true, editingAddress: false })).toBe('closeAiChats')
+    expect(backAction({ aiOpen: true, aiChatsOpen: false, editingAddress: false })).toBe('closeAi')
+    expect(backAction({ aiOpen: false, aiChatsOpen: true, editingAddress: false })).toBe('history')
+  })
+
   it('leaves an address bar left editing with no keyboard, instead of stepping the tab', () => {
     expect(backAction({ aiOpen: false, editingAddress: true })).toBe('leaveAddress')
   })
