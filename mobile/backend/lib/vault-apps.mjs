@@ -13,6 +13,7 @@ import * as du from '../../../shared/device-updates.mjs'
 import * as pe from '../../../shared/personas.mjs'
 import * as cal from '../../../shared/calendar.mjs'
 import * as hc from '../../../shared/household-contacts.mjs'
+import { DISMISSED_PATH, dismiss } from '../../../shared/home-dashboard.mjs'
 import { inlineOp, boundedUpdate } from './vault.mjs'
 import { parseHyperUrl } from './hyper-url.mjs'
 import { DRIVE_AUTOBASE, DRIVE_HYPERDRIVE } from '../../rpc-commands.mjs'
@@ -693,7 +694,8 @@ export async function deleteJob (base, id) {
 export async function homeSources (base, space) {
   await boundedUpdate(base)
   const runs = await readPrefix(base, jl.RUNS_PREFIX)
-  const out = { runs, notices: [], memberId: null, spaceName: '' }
+  const dismissed = await readRecord(base, DISMISSED_PATH).catch(() => null)
+  const out = { runs, notices: [], memberId: null, spaceName: '', dismissed }
   if (!space) return out
   const sp = (await readPrefix(base, '/.vault/spaces/')).find((r) => r && r.rootDriveKey === space)
   if (!sp || !sl.isShared(sp) || sp.movedTo || sp.removed) return out
@@ -704,6 +706,14 @@ export async function homeSources (base, space) {
   out.memberId = lib.memberId || null
   out.spaceName = sp.name || ''
   return out
+}
+
+// Clear home page notifications on every Device (shared/home-dashboard.mjs `dismiss`).
+export async function dismissHomeNotifications (base, items) {
+  await boundedUpdate(base)
+  const rec = await readRecord(base, DISMISSED_PATH)
+  await putRecord(base, DISMISSED_PATH, dismiss(rec, Array.isArray(items) ? items.slice(0, 200) : []))
+  return true
 }
 
 export async function jobNotifications (base, since, spaceSince = {}) {

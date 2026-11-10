@@ -905,15 +905,16 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
   const [file, setFile] = useState<{ id: string; uri: string } | null>(null)
   const [text, setText] = useState<string | null>(null)
   const [failed, setFailed] = useState('')
+  const [got, setGot] = useState(0) // bytes of the file in this phone's cache so far
   const [caption, setCaption] = useState('')
   const id = asset?.id
 
   useEffect(() => {
-    setFile(null); setText(null); setFailed('')
+    setFile(null); setText(null); setFailed(''); setGot(0)
     setCaption(asset?.caption || '')
     if (!asset) return
     let gone = false
-    fetchFile(call, asset).then(async (uri) => {
+    fetchFile(call, asset, { onProgress: (n) => { if (!gone) setGot(n) }, gone: () => gone }).then(async (uri) => {
       if (gone) return
       if (!uri) { setFailed('This file hasn’t reached this phone yet. Try again in a moment.'); return }
       setFile({ id: asset.id, uri })
@@ -950,12 +951,14 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
           {thumb ? <Image source={{ uri: thumb }} style={s.full} resizeMode='contain' /> : null}
           <View style={s.fetchingNote}>
             <ActivityIndicator color='#fff' />
-            {a.bytes > 8 * 1024 * 1024 && <Text style={s.fetchingText}>Getting {as.formatBytes(a.bytes)}…</Text>}
+            {a.bytes > 8 * 1024 * 1024 && (
+              <Text style={s.fetchingText}>{got ? `Getting ${as.formatBytes(got)} of ${as.formatBytes(a.bytes)}…` : `Getting ${as.formatBytes(a.bytes)}…`}</Text>
+            )}
           </View>
         </View>
       )
     } else if (a.kind === 'image') body = <Image source={{ uri: file!.uri }} style={s.full} resizeMode='contain' />
-    else if (a.kind === 'video' || a.kind === 'audio') body = <Player a={a} uri={file!.uri} />
+    else if (a.kind === 'video' || a.kind === 'audio') body = <Player a={a} uri={file!.uri} onFailed={setFailed} />
     else if (a.kind === 'pdf' || a.kind === 'book') body = <DocView a={a} uri={file!.uri} onFailed={setFailed} />
     else if (as.isTextKind(a.kind)) {
       body = text == null
@@ -1028,18 +1031,22 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
   )
 }
 
-// Video and audio play in a WebView from the file in this phone's cache.
-function Player ({ a, uri }: { a: AssetRecord; uri: string }) {
+// Video and audio play in a WebView from the file in this phone's cache. `uri` is already a URL
+// (expo-file-system escapes the name), so it goes in as it is: escaping it again would ask for a
+// file that isn't there. One the WebView can't play says so, with the file to open elsewhere.
+function Player ({ a, uri, onFailed }: { a: AssetRecord; uri: string; onFailed: (why: string) => void }) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const name = uri.split('/').pop() || ''
   const html = useMemo(() => {
-    const src = encodeURI(name).replace(/"/g, '%22')
+    const src = uri.replace(/"/g, '%22').replace(/</g, '%3C')
     const media = a.kind === 'video'
       ? `<video src="${src}" controls playsinline preload="metadata"></video>`
       : `<div class="icon">♪</div><audio src="${src}" controls preload="metadata"></audio>`
-    return `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;background:#000;color:#fff;font-family:sans-serif}body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}video{max-width:100%;max-height:100%}audio{width:90%}.icon{font-size:56px;opacity:.7}</style>${media}`
-  }, [a.kind, name])
+    const fail = `<script>document.querySelector('video,audio').addEventListener('error',function(){window.ReactNativeWebView.postMessage(JSON.stringify({type:'failed'}))})</script>`
+    return `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;background:#000;color:#fff;font-family:sans-serif}body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}video{max-width:100%;max-height:100%}audio{width:90%}.icon{font-size:56px;opacity:.7}</style>${media}${fail}`
+  }, [a.kind, uri])
+  const cantPlay = `This phone can’t play this ${a.kind === 'video' ? 'video' : 'recording'} here. Open it in another app.`
   const page = useMemo(() => {
     const dir = uri.slice(0, uri.length - name.length)
     const f = new File(dir + 'player.html')
@@ -1058,18 +1065,30 @@ function Player ({ a, uri }: { a: AssetRecord; uri: string }) {
       allowsInlineMediaPlayback
       mediaPlaybackRequiresUserAction
       setSupportMultipleWindows={false}
+      onError={() => onFailed(cantPlay)}
+      onMessage={(e) => {
+        try { if (JSON.parse(e.nativeEvent.data).type === 'failed') onFailed(cantPlay) } catch {}
+      }}
     />
   )
 }
 
 // The file in this phone's cache (written by the backend a piece at a time), reused while it's
-// there and whole. -> its file: URI, or null until it has replicated here.
-async function fetchFile (call: Backend['apps'], a: AssetRecord): Promise<string | null> {
+// there and whole. A big file, or one still coming from another Device, takes longer than one call
+// may wait, so this asks again until it's all there, passing on how far it got.
+// -> its file: URI, or null until it has replicated here.
+interface ReadTo { size: number; written: number; done: boolean }
+async function fetchFile (call: Backend['apps'], a: AssetRecord, { onProgress, gone }: { onProgress?: (bytes: number) => void; gone?: () => boolean } = {}): Promise<string | null> {
   const target = cachedFile(a.id, a.name)
   if (target.exists && target.size === a.bytes) return target.uri
-  const res = await call<{ size: number } | null>('assets', 'readTo', { id: a.id, to: target.uri })
-  if (!res.ok) throw new Error(res.message || 'Couldn’t get the file')
-  return res.value ? target.uri : null
+  for (;;) {
+    const res = await call<ReadTo | null>('assets', 'readTo', { id: a.id, to: target.uri, wait: 8000 })
+    if (!res.ok) throw new Error(res.message || 'Couldn’t get the file')
+    if (!res.value) return null
+    if (res.value.done) return target.uri
+    if (gone?.()) return null // the copy goes on in the backend, for next time
+    onProgress?.(res.value.written)
+  }
 }
 
 // A text file bigger than this opens in another app.
@@ -1101,6 +1120,7 @@ function DocView ({ a, uri, onFailed }: { a: AssetRecord; uri: string; onFailed:
       setSupportMultipleWindows={false}
       setBuiltInZoomControls={a.kind === 'pdf'}
       setDisplayZoomControls={false}
+      onError={(e) => onFailed(`This ${a.kind === 'pdf' ? 'PDF' : 'book'} couldn’t open here (${e.nativeEvent.description || 'the viewer didn’t load'}). Open it in another app.`)}
       onMessage={(e) => {
         try {
           const msg = JSON.parse(e.nativeEvent.data)

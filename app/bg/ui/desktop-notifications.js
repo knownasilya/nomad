@@ -15,6 +15,10 @@
 //   while the computer slept still shows if it's under REMIND_LATE_MS old. A click opens its day.
 //
 // Settings → Notifications turns each kind off (SETTINGS in notify-rules.mjs).
+//
+// Jobs, Space notices and calendar reminders don't show while the user is on another of their
+// Devices (bg/ui/device-activity.js, shared/device-activity.mjs): that one shows them. The mark still
+// moves, so they don't show later either. Prompts and join asks always show: they wait on an answer.
 
 import { app, BrowserWindow, Notification } from 'electron';
 import * as settingsDb from '../dbs/settings';
@@ -23,6 +27,7 @@ import * as jobs from '../ai/jobs';
 import * as spaceLibrary from '../hyper/space-library';
 import * as permissions from './permissions';
 import * as tabManager from './tabs/manager';
+import * as deviceActivity from './device-activity';
 import * as nr from './notify-rules.mjs';
 import * as cal from '../../../shared/calendar.mjs';
 
@@ -123,7 +128,7 @@ async function checkJobsOnce() {
   const since = (await settingsDb.get(nr.JOB_SINCE).catch(() => null)) || null;
   const { alerts, since: next } = nr.jobAlerts(runs, since, { appFocused: appFocused() });
   if (next && next !== since) await settingsDb.set(nr.JOB_SINCE, next).catch(() => {});
-  if (!alerts.length || !(await enabled('jobs'))) return;
+  if (!alerts.length || !(await enabled('jobs')) || !deviceActivity.notifyHere()) return;
   for (const a of alerts) {
     const url = a.jobId
       ? `nomad://library/jobs?id=${encodeURIComponent(a.jobId)}`
@@ -162,7 +167,7 @@ async function checkSpaceOnce(space) {
       .set(nr.SPACE_SINCE, JSON.stringify({ ...marks, [got.library]: since }))
       .catch(() => {});
   }
-  if (!alerts.length || !(await enabled('spaces'))) return;
+  if (!alerts.length || !(await enabled('spaces')) || !deviceActivity.notifyHere()) return;
   for (const a of alerts) show({ title: a.title, body: a.body, onClick: () => openUrl?.(null) });
 }
 
@@ -199,7 +204,7 @@ async function checkRemindersOnce(source) {
   if (since >= to) return;
   const due = await source(since, to);
   await settingsDb.set(nr.CALENDAR_SINCE, to).catch(() => {});
-  if (!due.length || !(await enabled('calendar'))) return;
+  if (!due.length || !(await enabled('calendar')) || !deviceActivity.notifyHere()) return;
   const shown = due.slice(-nr.MAX_AT_ONCE);
   for (const r of shown) {
     const { title, body } = cal.reminderText(r);

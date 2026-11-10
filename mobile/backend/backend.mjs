@@ -29,6 +29,7 @@ import { createInvites } from './lib/invites.mjs'
 import Protomux from 'protomux'
 import c from 'compact-encoding'
 import { createDevicePresence } from '../../shared/device-presence.mjs'
+import * as deviceActivity from '../../shared/device-activity.mjs'
 import { createLogStore } from './lib/log-store.mjs'
 import { createAiChats } from './lib/ai-chats.mjs'
 import { createPhoneLiveNotes } from './lib/live-notes.mjs'
@@ -284,8 +285,31 @@ const presence = createDevicePresence({
   c,
   b4a,
   getVaultKey: () => (vault && vault.key ? b4a.toString(vault.key, 'hex') : null),
-  getDeviceKey: () => (vault && vault.local?.key ? b4a.toString(vault.local.key, 'hex') : null)
+  getDeviceKey: () => (vault && vault.local?.key ? b4a.toString(vault.local.key, 'hex') : null),
+  getActivity: () => deviceActivity.activityFrame(phoneLastActive(), Date.now())
 })
+// When the user last used this phone, for the HELLO above, so a notification shows only on the
+// Device they're using (shared/device-activity.mjs). The UI says (mobile/lib/deviceActivity.ts): every
+// PING while the app is on screen, and once when it leaves. A ping more than ACTIVE_PING_MS old
+// means the UI went away without saying so.
+const ACTIVE_PING_MS = 30e3
+let phoneActive = false
+let phonePingAt = null
+let sentActiveAt = null
+function phoneLastActive () {
+  const now = Date.now()
+  return phoneActive && phonePingAt !== null && now - phonePingAt < ACTIVE_PING_MS ? now : phonePingAt
+}
+function setPhoneActive (active) {
+  const was = phoneActive
+  phoneActive = !!active
+  if (active || was) phonePingAt = Date.now()
+  const at = phoneLastActive()
+  if ((was && !active) || deviceActivity.needsResend(at, sentActiveAt)) {
+    sentActiveAt = at
+    presence.announce().catch(() => {})
+  }
+}
 // Live Notes (ADR-0041, lib/live-notes.mjs): the Note open in the editor is a session joined to the
 // same Note open on the user's computers, and on the other members' Devices in a shared Space.
 // Late-bound to the Vault like the two above.
@@ -763,6 +787,7 @@ async function homeDashboard (space, now) {
     notices: src?.notices || [],
     memberId: src?.memberId || null,
     spaceName: src?.spaceName || '',
+    dismissed: src?.dismissed || null,
     conversations: mail?.conversations || [],
     // Someone asking to join a shared Space this phone can let them into (any Space, named).
     joins: invites.pending().map((j) => ({ memberId: j.memberId, name: j.name, role: j.role, space: j.space, spaceName: j.spaceName }))
@@ -782,6 +807,18 @@ async function handleApps ({ reqId, app, action, ...args }) {
     // need no Vault (lib/ai-chats.mjs).
     if (app === 'aiChats') {
       send(RPC_APPS_RESULT, { reqId, ok: true, value: await aiChats.handle(action, args) })
+      return
+    }
+    // Whether the user is using this phone (the UI's pings), and whether a notification shows here
+    // or on the Device they're using instead. Linked or not: with no Vault, nothing is connected.
+    if (app === 'activity' && action === 'set') {
+      setPhoneActive(!!args.active)
+      send(RPC_APPS_RESULT, { reqId, ok: true, value: true })
+      return
+    }
+    if (app === 'activity' && action === 'notifyHere') {
+      const value = deviceActivity.notifyHere({ self: phoneLastActive(), others: [...presence.lastActive().values()], now: Date.now() })
+      send(RPC_APPS_RESULT, { reqId, ok: true, value })
       return
     }
     if (!vault) {
@@ -851,9 +888,10 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'calendar' && action === 'deleteFeed') value = await calendar.deleteFeed(vault, space, args.id)
     else if (app === 'calendar' && action === 'feedFetched') value = await calendar.feedFetched(vault, space, { id: args.id, text: args.text, error: args.error })
     else if (app === 'home' && action === 'dashboard') value = await homeDashboard(space, args.now)
+    else if (app === 'home' && action === 'dismiss') { value = await vaultApps.dismissHomeNotifications(vault, args.items); vaultChanged() }
     else if (app === 'assets' && action === 'list') value = await assets.list(space)
     else if (app === 'assets' && action === 'read') value = await assets.read(space, args.id, { thumb: !!args.thumb })
-    else if (app === 'assets' && action === 'readTo') value = await assets.readTo(space, args.id, { to: args.to, thumb: !!args.thumb })
+    else if (app === 'assets' && action === 'readTo') value = await assets.readTo(space, args.id, { to: args.to, thumb: !!args.thumb, wait: Math.min(Math.max(Number(args.wait) || 8000, 0), 10000) }) // the app asks again until `done`
     else if (app === 'assets' && action === 'add') value = await assets.add(space, args.asset || {})
     else if (app === 'assets' && action === 'update') value = await assets.update(space, { id: args.id, name: args.name, caption: args.caption, tags: args.tags, folder: args.folder })
     else if (app === 'assets' && action === 'updateMany') value = await assets.updateMany(space, { ids: args.ids, folder: args.folder, addTags: args.addTags, removeTags: args.removeTags })

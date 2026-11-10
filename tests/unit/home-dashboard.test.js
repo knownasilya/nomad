@@ -3,6 +3,9 @@ import {
   dashboard,
   notifications,
   waiting,
+  dismiss,
+  isDismissed,
+  DISMISSED_TYPE,
   jobsOverview,
   upcomingEvents,
   latestNotes,
@@ -107,6 +110,44 @@ describe('notifications', () => {
       run('r' + i, 'j' + i, hoursAgo(i + 1), { notification: { title: 'N' + i, body: '' } })
     );
     expect(notifications({ runs }, { now: NOW, max: 3 }).map((n) => n.title)).toEqual(['N0', 'N1', 'N2']);
+  });
+});
+
+describe('clearing notifications', () => {
+  const runs = [
+    run('r1', 'ja', hoursAgo(1), { notification: { title: 'Weather', body: '' } }),
+    run('r2', 'jb', hoursAgo(2), { notification: { title: 'Digest', body: '' } }),
+    run('r0', 'jb', hoursAgo(5), { notification: { title: 'Older digest', body: '' } }),
+  ];
+  const convo = (at) => ({ personaId: 'p1', other: 'hyper://a/', unread: 1, request: false, title: 'Ana', last: { message: { createdAt: at, text: 'hi' } } });
+
+  it('hides a cleared one, and doesn’t bring back an older result of the same Job', () => {
+    const rec = dismiss(null, [{ id: 'run:run-r2', at: hoursAgo(2) }], { now: NOW });
+    expect(rec.type).toBe(DISMISSED_TYPE);
+    const list = notifications({ runs }, { now: NOW, dismissed: rec });
+    expect(list.map((n) => n.title)).toEqual(['Weather']);
+  });
+
+  it('shows a Conversation again when a newer Message comes', () => {
+    const rec = dismiss(null, [{ id: 'message:p1:hyper://a/', at: hoursAgo(3) }], { now: NOW });
+    expect(notifications({ conversations: [convo(hoursAgo(3))] }, { now: NOW, dismissed: rec })).toEqual([]);
+    expect(notifications({ conversations: [convo(hoursAgo(1))] }, { now: NOW, dismissed: rec })).toHaveLength(1);
+    expect(isDismissed({ id: 'x', at: hoursAgo(1) }, null)).toBe(false);
+  });
+
+  it('drops entries too old to show and ignores junk', () => {
+    const old = { items: { 'run:old': hoursAgo(24 * 9), 'run:new': hoursAgo(1) } };
+    const rec = dismiss(old, [{ id: 'run:x', at: hoursAgo(2) }, { id: 5 }, null], { now: NOW });
+    expect(Object.keys(rec.items).sort()).toEqual(['run:new', 'run:x']);
+  });
+
+  it('Clear all uses every uncleared key, not only the ones shown', () => {
+    const many = Array.from({ length: 9 }, (_, i) => run('m' + i, 'k' + i, hoursAgo(i + 1), { notification: { title: 'N' + i, body: '' } }));
+    const d = dashboard({ runs: many }, { now: '2026-11-09T16:00', at: NOW });
+    expect(d.notifications).toHaveLength(6);
+    expect(d.notificationKeys).toHaveLength(9);
+    const after = dashboard({ runs: many, dismissed: dismiss(null, d.notificationKeys, { now: NOW }) }, { now: '2026-11-09T16:00', at: NOW });
+    expect(after.notifications).toEqual([]);
   });
 });
 
@@ -240,6 +281,7 @@ describe('dashboard', () => {
       greeting: 'Good afternoon',
       waiting: [],
       notifications: [],
+      notificationKeys: [],
       jobs: { running: [], next: [], total: 0, paused: 0 },
       events: [],
       notes: [],

@@ -455,6 +455,7 @@ ${spinnerCSS}
     border: 0;
     border-radius: 6px;
     background: transparent;
+    box-shadow: none;
     color: var(--text-color--light);
     cursor: pointer;
     font-size: 11px;
@@ -463,6 +464,34 @@ ${spinnerCSS}
   .icon-btn:hover {
     background: var(--home-soft);
     color: var(--text-color--default);
+  }
+
+  /* A notification's dismiss button shows on hover or keyboard focus. */
+  .row.notice .dismiss {
+    opacity: 0;
+    margin-right: -6px;
+  }
+
+  .row.notice:hover .dismiss,
+  .row.notice .dismiss:focus-visible {
+    opacity: 1;
+  }
+
+  .link-btn {
+    border: 0;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+    color: var(--text-color--light);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .link-btn:hover {
+    background: none;
+    color: var(--text-color--default);
+    text-decoration: underline;
   }
 
   .icon-btn.danger:hover {

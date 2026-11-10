@@ -12,6 +12,11 @@
 //
 // This is a display hint, not an auth step: a peer that knows the Vault key could name another
 // Device. Anything that grants access (the AI Bridge, Autobase writers) proves its key itself.
+//
+// A HELLO can also say how long ago the user last used the sender (`activity: { idleMs }`,
+// shared/device-activity.mjs), so a notification shows only on the Device they're using.
+
+import { readActivity, lastActiveFrom } from './device-activity.mjs';
 
 export const PRESENCE_PROTOCOL = 'nomad/device-presence';
 
@@ -21,8 +26,12 @@ const KEY_RE = /^[0-9a-f]{64}$/;
 function noop(..._args) {}
 
 // `status` is an always-on Peer's (shared/peers.mjs makeStatus, ADR-0038): a small object, or none.
-export function encodeHello(b4a, deviceKey, status = null) {
-  return b4a.from(JSON.stringify(status ? { t: 'hello', deviceKey, status } : { t: 'hello', deviceKey }));
+// `activity` is shared/device-activity.mjs activityFrame's { idleMs }, or none.
+export function encodeHello(b4a, deviceKey, status = null, activity = null) {
+  const hello = { t: 'hello', deviceKey };
+  if (status) hello.status = status;
+  if (activity) hello.activity = activity;
+  return b4a.from(JSON.stringify(hello));
 }
 
 // The HELLO frame, or null on anything malformed. A peer must never break the channel on bad bytes.
@@ -37,7 +46,11 @@ export function decodeHello(b4a, buf) {
       KEY_RE.test(obj.deviceKey)
     ) {
       const status = obj.status && typeof obj.status === 'object' && !Array.isArray(obj.status) ? obj.status : null;
-      return status ? { t: 'hello', deviceKey: obj.deviceKey, status } : { t: 'hello', deviceKey: obj.deviceKey };
+      const activity = readActivity(obj.activity);
+      const hello = { t: 'hello', deviceKey: obj.deviceKey };
+      if (status) hello.status = status;
+      if (activity) hello.activity = activity;
+      return hello;
     }
   } catch {}
   return null;
@@ -47,6 +60,8 @@ export function decodeHello(b4a, buf) {
 // be async. install() is idempotent: call it again once a Vault opens to cover live connections.
 // getStatus (a Peer's, optional) is sent with every HELLO; announce() sends it again on every
 // channel, so a Peer's status stays current. A HELLO may come more than once: the last one counts.
+// getActivity (optional) returns this Device's activityFrame, sent the same way; call announce()
+// when device-activity.mjs needsResend says so.
 export function createDevicePresence({
   swarm,
   Protomux,
@@ -55,6 +70,8 @@ export function createDevicePresence({
   getVaultKey,
   getDeviceKey,
   getStatus = null,
+  getActivity = null,
+  now = () => Date.now(),
   log = noop,
 }) {
   const peers = new Set(); // { channel, deviceKey }, one per open channel
@@ -93,7 +110,7 @@ export function createDevicePresence({
 
   // createChannel returns null when this mux already has the channel open, so a re-scan is a no-op.
   function openChannel(mux, id, deviceKey) {
-    const peer = { channel: null, deviceKey: null, status: null };
+    const peer = { channel: null, deviceKey: null, status: null, lastActiveAt: null };
     const channel = mux.createChannel({
       protocol: PRESENCE_PROTOCOL,
       id,
@@ -106,6 +123,7 @@ export function createDevicePresence({
             if (peer.deviceKey !== hello.deviceKey) log('device connected', hello.deviceKey.slice(0, 8));
             peer.deviceKey = hello.deviceKey;
             peer.status = hello.status || null;
+            if (hello.activity) peer.lastActiveAt = lastActiveFrom(hello.activity, now());
           },
         },
       ],
@@ -125,11 +143,15 @@ export function createDevicePresence({
 
   async function sendHello(channel, deviceKey) {
     let status = null;
+    let activity = null;
     try {
       status = getStatus ? await getStatus() : null;
     } catch {}
     try {
-      channel.messages[0].send(encodeHello(b4a, deviceKey, status));
+      activity = getActivity ? await getActivity() : null;
+    } catch {}
+    try {
+      channel.messages[0].send(encodeHello(b4a, deviceKey, status, activity));
     } catch {}
   }
 
@@ -144,6 +166,19 @@ export function createDevicePresence({
   function statuses() {
     const out = new Map();
     for (const peer of peers) if (peer.deviceKey && peer.status) out.set(peer.deviceKey, peer.status);
+    return out;
+  }
+
+  // When the user last used each connected Device that says (this Device's clock), by key.
+  function lastActive() {
+    const out = new Map();
+    for (const peer of peers) {
+      if (!peer.deviceKey || peer.lastActiveAt === null) continue;
+      const prev = out.get(peer.deviceKey);
+      if (prev === undefined || peer.lastActiveAt > prev) {
+        out.set(peer.deviceKey, peer.lastActiveAt);
+      }
+    }
     return out;
   }
 
@@ -164,5 +199,5 @@ export function createDevicePresence({
     peers.clear();
   }
 
-  return { install, connectedDevices, statuses, announce, reset };
+  return { install, connectedDevices, statuses, lastActive, announce, reset };
 }

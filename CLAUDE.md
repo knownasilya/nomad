@@ -655,6 +655,17 @@ The desktop shows OS notifications for three things, each with a switch in Setti
   (`setPromptHook`) with the prompt's text (`renderPermDesc` with `textTag`), and the dock bounces
   (macOS) or the taskbar flashes until it's answered. A click brings the window and tab forward.
 
+A notification shows only on the Device the user is using (`shared/device-activity.mjs`, tests
+`tests/unit/device-activity.test.js`). Each Device sends how long ago it was last used (`activity:
+{ idleMs }`) in its `nomad/device-presence` HELLO: a computer from the OS idle time
+(`bg/ui/device-activity.js`, frozen while the screen is locked), the phone from the app being on
+screen (`mobile/lib/deviceActivity.ts` pings the backend's `activity`/`set`). `notifyHere` skips a
+notification when another connected Device was used in the last 2 minutes (`ACTIVE_WINDOW_MS`) and
+more recently than this one; otherwise it shows as before. Desktop checks it for Jobs, Space notices,
+calendar reminders and Messages (`bg/hyper/inbox.js`), the phone for Jobs, Space notices and
+Messages (`activity`/`notifyHere`); the mark still moves. Prompts and join asks always show. The
+phone's calendar reminders are scheduled with the OS ahead of time, so they always fire.
+
 ### The home page dashboard
 
 The toolbar's Home button and the new tab page (`nomad://desktop`, `app/userland/desktop/`) and the
