@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.48.1](https://github.com/knownasilya/nomad/compare/v1.48.0...v1.48.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **assets:** PDFs keep drawing after the viewer redraws around them ([38bf746](https://github.com/knownasilya/nomad/commit/38bf746684f7f3ddb2ee03a0978b5dbde6a74404))
+
 ## [1.48.0](https://github.com/knownasilya/nomad/compare/v1.47.0...v1.48.0) (2026-11-10)
 
 
