@@ -19,7 +19,21 @@ const CSS = `
 .ai-origins button.ai-origin-open:focus-visible { outline: 2px solid var(--text-color--link, #2864dc); outline-offset: 1px; }
 .ai-origins .ai-origin-gone { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
 .ai-origins .ai-origin-when { flex: none; color: var(--text-color--very-light, #999); }
+details.ai-origins-fold { font-size: 12px; color: var(--text-color--very-light, #999); }
+details.ai-origins-fold > summary {
+  display: inline-flex; align-items: center; gap: 6px; list-style: none; cursor: pointer;
+  border-radius: 3px; user-select: none;
+}
+details.ai-origins-fold > summary::-webkit-details-marker { display: none; }
+details.ai-origins-fold > summary:hover { color: var(--text-color--light, #666); }
+details.ai-origins-fold > summary:focus-visible { outline: 2px solid var(--text-color--link, #2864dc); outline-offset: 1px; }
+details.ai-origins-fold > summary .fas { width: 14px; text-align: center; }
+details.ai-origins-fold > summary .chev { font-size: 9px; transition: transform .12s; }
+details.ai-origins-fold[open] > summary .chev { transform: rotate(90deg); }
+details.ai-origins-fold > .ai-origins { margin: 4px 0 0 20px; }
 `;
+
+let foldOpen = false; // a folded list stays open across redraws once the user opened it
 
 function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
@@ -60,10 +74,24 @@ export async function openAiOrigin(o) {
  * @param {Array<{ kind: string, text: string, tip: string, at?: string }>} origins
  * @param {{ onError?: (err: Error) => void }} [opts]
  */
-export function aiOriginsElement(origins, { onError = (err) => console.warn(err) } = {}) {
+export function aiOriginsElement(origins, { onError = (err) => console.warn(err), collapsed = false } = {}) {
   if (!Array.isArray(origins) || !origins.length) return null;
-  return el('div', { class: 'ai-origins', role: 'list', 'aria-label': 'AI chats that made or changed this' }, [
+  const list = linesElement(origins, onError, !collapsed);
+  if (!collapsed) return list;
+  // Folded: one quiet line, "Made with AI", that opens the list.
+  const label = `${origins.some((o) => o.made) ? 'Made with AI' : 'Changed with AI'}${origins.length > 1 ? ` · ${origins.length} chats` : ''}`;
+  const fold = el('details', { class: 'ai-origins-fold', open: foldOpen }, [
     el('style', {}, [CSS]),
+    el('summary', { title: 'Show the AI chats that made or changed this' }, [icon('robot'), label, el('span', { class: 'fas fa-chevron-right chev', 'aria-hidden': 'true' })]),
+    list,
+  ]);
+  fold.addEventListener('toggle', () => (foldOpen = fold.open));
+  return fold;
+}
+
+function linesElement(origins, onError, withStyle) {
+  return el('div', { class: 'ai-origins', role: 'list', 'aria-label': 'AI chats that made or changed this' }, [
+    withStyle ? el('style', {}, [CSS]) : null,
     ...origins.map((o) => {
       const linked = o.kind === 'chat' || o.kind === 'job';
       const at = when(o.at);

@@ -19,6 +19,7 @@ interface Props {
   onOpenJob: (id: string) => void
   onOpenUrl?: (url: string) => void // a web or hyper:// link in the chat
   dark?: boolean // on a dark backdrop (the Assets viewer)
+  collapsed?: boolean // one quiet "Made with AI" line that opens the list (Notes)
 }
 
 const when = (iso: string) => {
@@ -31,11 +32,12 @@ const when = (iso: string) => {
   return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-export default function AiOrigins ({ list, apps, onOpenJob, onOpenUrl, dark = false }: Props) {
+export default function AiOrigins ({ list, apps, onOpenJob, onOpenUrl, dark = false, collapsed = false }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t, dark), [t, dark])
   const key = JSON.stringify(list || [])
   const [shown, setShown] = useState<AiOriginShown[]>([])
+  const [open, setOpen] = useState(false)
   const [chat, setChat] = useState<{ origin: AiOriginShown; data: AiChatTranscript | null; error: string } | null>(null)
 
   useEffect(() => {
@@ -54,16 +56,33 @@ export default function AiOrigins ({ list, apps, onOpenJob, onOpenUrl, dark = fa
   }
 
   if (!shown.length) return null
+  const label = `${shown.some((o) => o.made) ? 'Made with AI' : 'Changed with AI'}${shown.length > 1 ? ` · ${shown.length} chats` : ''}`
+  const lines = !collapsed || open
   return (
     <View style={s.root} accessibilityLabel='AI chats that made or changed this'>
-      {shown.map((o, i) => {
+      {collapsed ? (
+        <Pressable
+          style={s.row}
+          android_ripple={{ color: t.ripple }}
+          onPress={() => setOpen((v) => !v)}
+          onLongPress={() => showLabel(open ? 'Hide the AI chats' : 'Show the AI chats that made or changed this')}
+          accessibilityRole='button'
+          accessibilityLabel={label}
+          accessibilityState={{ expanded: open }}
+        >
+          <Icon name='robot' size={11} color={s.muted.color as string} />
+          <Text style={s.muted}>{label}</Text>
+          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={9} color={s.muted.color as string} />
+        </Pressable>
+      ) : null}
+      {lines && shown.map((o, i) => {
         const linked = o.kind === 'chat' || o.kind === 'job'
         const tip = o.kind === 'chat' ? 'Show this chat' : o.kind === 'job' ? 'Open this Job' : o.tip
         const at = when(o.at)
         return (
           <Pressable
             key={i}
-            style={s.row}
+            style={[s.row, collapsed && s.indent]}
             android_ripple={{ color: t.ripple }}
             onPress={() => (o.kind === 'chat' ? openChat(o) : o.kind === 'job' && o.id ? onOpenJob(o.id) : showLabel(o.tip))}
             onLongPress={() => showLabel(tip)}
@@ -107,6 +126,7 @@ function makeStyles (t: Theme, dark: boolean) {
   return StyleSheet.create({
     root: { gap: 2 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32, paddingHorizontal: space.md },
+    indent: { paddingLeft: space.md + 17 },
     text: { flexShrink: 1, fontSize: 12, color: dark ? 'rgba(255,255,255,0.7)' : t.textDim },
     link: { color: dark ? '#9cc1ff' : t.accent },
     muted: { fontSize: 12, color: dark ? 'rgba(255,255,255,0.45)' : t.textMuted },

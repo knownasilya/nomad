@@ -1183,8 +1183,8 @@ function renderAround() {
   renderNoteOrigins();
 }
 
-// The AI chats that made or changed the open note (ADR-0047): each opens in the AI Sidebar, while
-// it is still there. Looked up again only when the note's list changes.
+// The AI chats that made or changed the open note (ADR-0047), folded into one quiet "Made with AI"
+// line: opened, each opens in the AI Sidebar while it is still there. Looked up again only when the note's list changes.
 function renderNoteOrigins() {
   const slot = mainEl.querySelector('.ai-origin-slot');
   if (!slot) return;
@@ -1193,7 +1193,7 @@ function renderNoteOrigins() {
   const key = (stored?.id || '') + JSON.stringify(list);
   if (slot.dataset.key === key) return;
   slot.dataset.key = key;
-  showAiOrigins(slot, list, { onError: (e) => setSaveMsg('error', 'Couldn’t open the chat: ' + (e.message || e)) });
+  showAiOrigins(slot, list, { collapsed: true, onError: (e) => setSaveMsg('error', 'Couldn’t open the chat: ' + (e.message || e)) });
 }
 
 // The open note's topics, above its text: each one shows its notes, × takes it off; type to add

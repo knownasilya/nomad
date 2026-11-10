@@ -630,7 +630,7 @@ nav footer {
 
 /* The AI chats that made or changed the open note (app-stdlib/js/ai-origin.js). */
 .ai-origin-slot:not(:empty) {
-  margin: 8px var(--note-gutter) 0;
+  margin: 6px var(--note-gutter) 0;
 }
 
 /* The open note's topics, above its text. */

@@ -644,7 +644,7 @@ export default function Notes ({ visible, onClose, apps, onVaultChange, noteLive
               </Pressable>
             ) : null}
             {openNote?.ai?.length ? (
-              <AiOrigins list={openNote.ai} apps={call} onOpenJob={(id) => onOpenJob?.(id)} onOpenUrl={(url) => onOpenUrl(url, openNote.id)} />
+              <AiOrigins collapsed list={openNote.ai} apps={call} onOpenJob={(id) => onOpenJob?.(id)} onOpenUrl={(url) => onOpenUrl(url, openNote.id)} />
             ) : null}
             <WebView
               ref={web}
