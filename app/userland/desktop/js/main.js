@@ -5,7 +5,7 @@
 //   forward), someone asking to write to a drive, edit a drive or join the shared Space (Allow,
 //   Deny), a new Device or a stranger's first Message (a link), a Job that wanted sites (Run with me).
 // - Notifications: Job results, Jobs that failed, other members' notices in a shared Space, unread
-//   Messages.
+//   Messages. Each can be dismissed, or Clear all; that is a Vault record, so it holds on every Device.
 // - Jobs: the ones running here now (Watch, Stop), and the ones that run next (Run now).
 // - Coming up: the calendar from now on.
 // - The newest Notes and files (Assets).
@@ -241,7 +241,7 @@ class DesktopApp extends LitElement {
   }
 
   // One card: an icon and title, a link to the whole list, and its rows.
-  card({ id, icon, title, count, href, linkLabel, wide = false }, body) {
+  card({ id, icon, title, count, href, linkLabel, extra = '', wide = false }, body) {
     return html`
       <section class="card ${wide ? 'wide' : ''}" id=${id} aria-labelledby=${id + '-title'}>
         <header>
@@ -249,6 +249,7 @@ class DesktopApp extends LitElement {
           <h2 id=${id + '-title'}>${title}</h2>
           ${count ? html`<span class="count">${count}</span>` : ''}
           <span class="spacer"></span>
+          ${extra}
           ${href ? html`<a class="see-all" href=${href}>${linkLabel || 'See all'}</a>` : ''}
         </header>
         ${body}
@@ -334,34 +335,50 @@ class DesktopApp extends LitElement {
 
   renderNotifications(d) {
     const list = d.notifications || [];
+    const keys = d.notificationKeys || [];
     return this.card(
       {
         id: 'notifications',
         icon: 'fas fa-bell',
         title: 'Notifications',
-        count: d.unreadMessages ? `${d.unreadMessages} unread` : '',
+        count: keys.length ? String(keys.length) : '',
         href: d.unreadMessages ? 'nomad://messages/' : '',
-        linkLabel: 'Messages',
+        linkLabel: d.unreadMessages ? `Messages (${d.unreadMessages})` : 'Messages',
+        extra: keys.length
+          ? html`<button class="link-btn" title="Clear every notification, on all your devices" @click=${() => this.onClearAll(keys)}>
+              Clear all
+            </button>`
+          : '',
       },
       list.length
         ? html`<ul class="rows">
-            ${list.map((n) => {
-              const inner = html`
-                <span class="lead ${n.kind}"><span class=${NOTIFY_ICONS[n.kind] || 'fas fa-bell'}></span></span>
-                <span class="main">
+            ${repeat(
+              list,
+              (n) => n.id,
+              (n) => {
+                const text = html`
                   <span class="title">${n.title}</span>
                   ${n.body || n.from
                     ? html`<span class="snippet">${n.from ? `${n.from}: ` : ''}${n.body}</span>`
                     : ''}
-                </span>
-                <span class="meta" title=${new Date(n.at).toLocaleString()}>${ago(n.at)}</span>
-              `;
-              return html`<li>
-                ${n.url
-                  ? html`<a class="row" href=${n.url}>${inner}</a>`
-                  : html`<div class="row">${inner}</div>`}
-              </li>`;
-            })}
+                `;
+                return html`<li>
+                  <div class="row notice">
+                    <span class="lead ${n.kind}"><span class=${NOTIFY_ICONS[n.kind] || 'fas fa-bell'}></span></span>
+                    ${n.url ? html`<a class="main" href=${n.url}>${text}</a>` : html`<span class="main">${text}</span>`}
+                    <span class="meta" title=${new Date(n.at).toLocaleString()}>${ago(n.at)}</span>
+                    <button
+                      class="icon-btn dismiss"
+                      title="Dismiss"
+                      aria-label="Dismiss ${n.title}"
+                      @click=${() => this.onDismiss([{ id: n.id, at: n.at }])}
+                    >
+                      <span class="fas fa-times"></span>
+                    </button>
+                  </div>
+                </li>`;
+              }
+            )}
           </ul>`
         : html`<p class="empty">You’re all caught up. Job results and new messages show up here.</p>`
     );
@@ -549,6 +566,27 @@ class DesktopApp extends LitElement {
       toast.create(e.message || String(e), 'error');
     }
     this.loadDashboard();
+  }
+
+  // Clear notifications here and on the user's other Devices (a Vault record).
+  async onDismiss(items) {
+    const ids = new Set(items.map((i) => i.id));
+    // Gone at once; the reload confirms it.
+    this.dash = {
+      ...this.dash,
+      notifications: (this.dash.notifications || []).filter((n) => !ids.has(n.id)),
+      notificationKeys: (this.dash.notificationKeys || []).filter((n) => !ids.has(n.id)),
+    };
+    try {
+      await nomad.vault.dismissHomeNotifications(items);
+    } catch (e) {
+      toast.create(e.message || String(e), 'error');
+    }
+    this.loadDashboard();
+  }
+
+  onClearAll(keys) {
+    this.onDismiss(keys);
   }
 
   async onShowPrompt(w) {
