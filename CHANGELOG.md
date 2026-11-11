@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.49.0](https://github.com/knownasilya/nomad/compare/v1.48.1...v1.49.0) (2026-11-11)
+
+
+### Features
+
+* **assets:** sandboxed HTML previews, Preview / Source, and pages the AI draws ([20e9df9](https://github.com/knownasilya/nomad/commit/20e9df99569a90149b97c2c7abfa79b6df481b71))
+
+
+### Bug Fixes
+
+* **mobile:** a picture in a folder fills the Assets viewer like one at the top ([ccbc9e3](https://github.com/knownasilya/nomad/commit/ccbc9e3905e12cd76e4b5d20969d950126b439ff))
+* **personas:** check a Profile Drive again when it opens after the time limit ([d2e562e](https://github.com/knownasilya/nomad/commit/d2e562e5415ac8edae876f6b58f03fe2c490e719))
+
 ### [1.48.1](https://github.com/knownasilya/nomad/compare/v1.48.0...v1.48.1) (2026-11-10)
 
 
