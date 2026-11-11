@@ -109,7 +109,7 @@ const EXT_MIME = {
   txt: 'text/plain', log: 'text/plain', text: 'text/plain',
   csv: 'text/csv', tsv: 'text/tab-separated-values', json: 'application/json', yaml: 'application/yaml', yml: 'application/yaml',
   xml: 'application/xml', ics: 'text/calendar', vcf: 'text/vcard', srt: 'text/plain', vtt: 'text/vtt',
-  html: 'text/html', htm: 'text/html', css: 'text/css', js: 'text/javascript', mjs: 'text/javascript', ts: 'text/x-typescript',
+  html: 'text/html', htm: 'text/html', xhtml: 'application/xhtml+xml', css: 'text/css', js: 'text/javascript', mjs: 'text/javascript', ts: 'text/x-typescript',
   tsx: 'text/x-typescript', jsx: 'text/javascript', py: 'text/x-python', rb: 'text/x-ruby', go: 'text/x-go', rs: 'text/x-rust',
   java: 'text/x-java', kt: 'text/x-kotlin', swift: 'text/x-swift', c: 'text/x-c', h: 'text/x-c', cpp: 'text/x-c++', sh: 'text/x-shellscript',
   sql: 'application/sql', toml: 'application/toml', ini: 'text/plain',
@@ -122,7 +122,8 @@ const EXT_MIME = {
   azw: 'application/vnd.amazon.ebook', azw3: 'application/vnd.amazon.mobi8-ebook',
 }
 
-const CODE_EXT = new Set(['html', 'htm', 'css', 'js', 'mjs', 'ts', 'tsx', 'jsx', 'py', 'rb', 'go', 'rs', 'java', 'kt', 'swift', 'c', 'h', 'cpp', 'sh', 'sql', 'toml', 'xml', 'yaml', 'yml', 'ini'])
+const HTML_EXT = new Set(['html', 'htm', 'xhtml'])
+const CODE_EXT = new Set(['css', 'js', 'mjs', 'ts', 'tsx', 'jsx', 'py', 'rb', 'go', 'rs', 'java', 'kt', 'swift', 'c', 'h', 'cpp', 'sh', 'sql', 'toml', 'xml', 'yaml', 'yml', 'ini'])
 const DATA_EXT = new Set(['json', 'csv', 'tsv', 'ics', 'vcf'])
 const ARCHIVE_EXT = new Set(['zip', 'gz', 'tgz', 'tar', '7z', 'rar'])
 const DOCUMENT_EXT = new Set(['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'rtf'])
@@ -149,8 +150,9 @@ export function mimeOf(name, given = '') {
 }
 
 // What a file is, for the icon, the filter and the preview: image, video, audio, pdf, book (an
-// e-book: EPUB or MOBI), markdown, code, data, text, document, archive, other.
-export const KINDS = ['image', 'video', 'audio', 'pdf', 'book', 'markdown', 'code', 'data', 'text', 'document', 'archive', 'other']
+// e-book: EPUB or MOBI), markdown, html (a web page, shown in a sandbox), code, data, text,
+// document, archive, other.
+export const KINDS = ['image', 'video', 'audio', 'pdf', 'book', 'markdown', 'html', 'code', 'data', 'text', 'document', 'archive', 'other']
 export function kindOf(mime, name = '') {
   const m = String(mime || '').toLowerCase()
   const ext = extOf(name)
@@ -160,6 +162,7 @@ export function kindOf(mime, name = '') {
   if (m === 'application/pdf') return 'pdf'
   if (BOOK_EXT.has(ext) || m === 'application/epub+zip' || m === 'application/x-mobipocket-ebook' || m.startsWith('application/vnd.amazon.')) return 'book'
   if (m === 'text/markdown' || ext === 'md' || ext === 'markdown') return 'markdown'
+  if (HTML_EXT.has(ext) || m === 'text/html' || m === 'application/xhtml+xml') return 'html'
   if (DATA_EXT.has(ext) || m === 'application/json' || m === 'text/csv') return 'data'
   if (CODE_EXT.has(ext)) return 'code'
   if (m.startsWith('text/')) return 'text'
@@ -173,6 +176,43 @@ export function isTextKind(kind) {
   return kind === 'markdown' || kind === 'code' || kind === 'data' || kind === 'text'
 }
 
+// Kinds the viewer draws from their text and can also show as source (Preview / Source).
+export function hasSource(kind) {
+  return kind === 'markdown' || kind === 'html'
+}
+
+// An HTML file's preview runs in a sandbox: its own origin (none), no forms, popups or top
+// navigation, and this policy, so it reaches nothing outside the file. Its scripts run, so a page
+// the AI drew from components (app/lib/genui/page.mjs) works, as do its inline styles, fonts and
+// pictures as data: or blob: URLs. The one host it may load from is OpenStreetMap's tiles, for a
+// Map. Desktop serves it as the header of nomad://assets/html-frame (bg/protocols/nomad.js); the
+// phone puts it first in the page (withPreviewCsp).
+export const HTML_PREVIEW_CSP = [
+  "default-src 'none'",
+  "script-src 'unsafe-inline' 'unsafe-eval' blob: data:",
+  "style-src 'unsafe-inline' blob: data:",
+  'img-src data: blob: https://tile.openstreetmap.org',
+  'font-src data: blob:',
+  'media-src data: blob:',
+  'worker-src blob:',
+  "connect-src 'none'",
+  "frame-src 'none'",
+  "form-action 'none'",
+  "base-uri 'none'",
+].join('; ')
+
+// The most of an HTML file the preview draws (an AI page with a map is about half a megabyte).
+export const MAX_HTML_PREVIEW = 16 * 1024 * 1024
+
+// An HTML file with HTML_PREVIEW_CSP as the first thing in it, after its doctype, so the policy
+// covers everything the page does. For a WebView that loads the page as a string (the phone).
+export function withPreviewCsp(html) {
+  const text = String(html || '')
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${HTML_PREVIEW_CSP}">`
+  const m = /^\uFEFF?\s*<!doctype[^>]*>/i.exec(text)
+  return m ? m[0] + meta + text.slice(m[0].length) : '<!doctype html>' + meta + text
+}
+
 // A Font Awesome 5 (solid) icon for each kind, the same on desktop and the phone.
 export const KIND_ICONS = {
   image: 'image',
@@ -181,6 +221,7 @@ export const KIND_ICONS = {
   pdf: 'file-pdf',
   book: 'book',
   markdown: 'file-alt',
+  html: 'globe',
   code: 'file-code',
   data: 'table',
   text: 'file-alt',
@@ -196,6 +237,7 @@ export const KIND_LABELS = {
   pdf: 'PDF',
   book: 'Book',
   markdown: 'Markdown',
+  html: 'Web page',
   code: 'Code',
   data: 'Data',
   text: 'Text',
@@ -208,7 +250,7 @@ export const KIND_LABELS = {
 export const FILTERS = [
   { id: 'all', label: 'All', kinds: KINDS },
   { id: 'media', label: 'Photos & videos', kinds: ['image', 'video'] },
-  { id: 'docs', label: 'Documents', kinds: ['pdf', 'book', 'markdown', 'code', 'data', 'text', 'document'] },
+  { id: 'docs', label: 'Documents', kinds: ['pdf', 'book', 'markdown', 'html', 'code', 'data', 'text', 'document'] },
   { id: 'audio', label: 'Audio', kinds: ['audio'] },
   { id: 'other', label: 'Other', kinds: ['archive', 'other'] },
 ]

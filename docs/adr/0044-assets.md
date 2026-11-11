@@ -122,3 +122,33 @@ People keep whole movies there, and e-books.
    the phone opens its Assets screen there. Both apps' **Copy link** gives the same Markdown link.
 
 The AI still only adds Assets; it can't tag, move or remove them.
+
+## Amendment: web pages, Preview / Source, and pages the AI draws (2026-11-11)
+
+1. **HTML is its own kind.** `.html`, `.htm`, `.xhtml` and `text/html` are kind `html` ("Web page",
+   a globe), not `code`. Records keep their stored `kind`, but both listings read it again from
+   `kindOf`, so a page saved earlier shows as one.
+
+2. **A page runs, sandboxed.** Desktop shows it in a frame from `nomad://assets/html-frame`
+   (`app/userland/assets/html-frame.html`), served with `HTML_PREVIEW_CSP` (`shared/assets.mjs`)
+   and `sandbox allow-scripts`. The frame tells the Assets page it is ready and writes the page it
+   is sent over itself, so the page's own scripts and styles run under the frame's policy: no origin
+   (no storage, no cookies), no network (`connect-src 'none'`, pictures only as `data:`/`blob:`, the
+   one host is OpenStreetMap's tiles for a Map), no forms, popups or top navigation, and the Assets
+   page's `frame-src` holds any navigation away. The phone runs it in a WebView from a string
+   (`withPreviewCsp` puts the policy first in it), with no file access, and lets nothing but the page
+   itself load. Up to `MAX_HTML_PREVIEW` (16 MB) is drawn.
+
+3. **Preview / Source.** Markdown and HTML (`hasSource`) switch between the rendered file and its
+   text, on desktop (a switch in the viewer's bar) and the phone (a code / eye button).
+
+4. **A page can become a drive** (desktop): "Make a drive from this page" opens the create-drive
+   dialog named for the file and writes the page as the new drive's `/index.html`.
+
+5. **The AI draws pages.** saveAsset takes `openui`: an OpenUI Lang program, the AI Sidebar's
+   component language (ADR-0027), with a `title`. `app/bg/ai/genui-page.js` checks that it draws
+   something and `app/lib/genui/page.mjs` builds one self-contained `.html` file: the program, the
+   sidebar's `<nomad-genui>` in `standalone` mode as one inline script (`app/fg/genui-page/`,
+   bundled by `scripts/build.js`), the colors in light and dark, and Font Awesome's solid font with
+   only the icons the page can show. A Button that only talks to the assistant is left out. The
+   model learns the language from `guide:genui-pages` (made from `genuiPrompt()`).

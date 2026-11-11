@@ -476,6 +476,14 @@ tag or remove at once: desktop's internal `nomad.vault.updateAssets`/`deleteAsse
 (`assetFolderLink`, `assetTagLink`). A Note links one with `[[` (files and folders) or `[[#` (tags),
 from `notes/js/editor/asset-links.js`: rerun `npm run build:note-editor` after changing it.
 
+An HTML file is kind `html` and runs sandboxed (ADR-0044 amendment, 2026-11-11): desktop in a frame
+from `nomad://assets/html-frame` (served with `HTML_PREVIEW_CSP` and `sandbox allow-scripts`; the
+page is posted in and written over the frame), the phone in a WebView from a string
+(`withPreviewCsp`). Keep the policy in `shared/assets.mjs` and its phone copy the same. Markdown and
+HTML have Preview / Source, and desktop makes a drive from a page. The AI's saveAsset `openui` saves
+a page drawn with the sidebar's components (`app/lib/genui/page.mjs`, `app/bg/ai/genui-page.js`,
+the inline script `app/fg/genui-page/`, `guide:genui-pages`).
+
 ### Always-on Peers (ADR-0038)
 
 A Peer is a Nomad with no windows that the user runs on a machine that stays on (`peer/`, the

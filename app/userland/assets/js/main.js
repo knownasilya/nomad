@@ -14,7 +14,10 @@
 //   with pdf.js (js/pdf.build.js, copied in by scripts/build.js; pages drawn as they scroll in,
 //   js/pdf-view.js); an EPUB or MOBI opens in the book reader (js/book/, shared with the phone's
 //   viewer page); Markdown renders with markdown-it (raw HTML off); CSV is a table, JSON is
-//   pretty-printed, code and text are shown as text. An HTML file is shown as its source, never run.
+//   pretty-printed, code and text are shown as text. An HTML file runs in a sandboxed frame
+//   (renderHtml): nomad://assets/html-frame, served with shared/assets.mjs HTML_PREVIEW_CSP and
+//   `sandbox allow-scripts`, so it has no origin, no network and no way out of the frame. Markdown
+//   and HTML have a Preview / Source switch, and an HTML file can become a new drive (makeDrive).
 // - Folders and tags (ADR-0044 amendment): the grid shows the open folder's own folders, then its
 //   files. A kind, a tag or a search looks in the folder and every folder in it. Select files (the
 //   tick on a tile, or Shift-click for a run) to move, tag or remove many at once, or drag them onto
@@ -50,6 +53,7 @@ const state = {
   adding: null, // { done, total, sent, size } while files are being added
   status: '',
   statusErr: false,
+  source: false, // the open Markdown or HTML file is shown as its source
 }
 // Dragging tiles onto a folder moves them.
 const DRAG_TYPE = 'application/x-nomad-assets'
@@ -137,6 +141,7 @@ function urlNow() {
 }
 
 function setOpen(id, replace = false) {
+  if (id !== state.open) state.source = false
   state.open = id
   if (replace) history.replaceState(null, '', urlNow())
   else history.pushState(null, '', urlNow())
@@ -667,6 +672,8 @@ function renderViewer(a) {
           [describe(a), whenText(a.takenAt), a.by ? `Added by ${a.by}` : '', a.source === 'ai' ? 'Saved by your AI' : '', a.folder ? `In ${a.folder.split('/').join(' › ')}` : ''].filter(Boolean).join(' · '),
         ]),
       ]),
+      as.hasSource(a.kind) ? renderSourceSwitch() : null,
+      a.kind === 'html' ? el('button', { class: 'icon-btn', title: 'Make a drive from this page', 'aria-label': 'Make a drive from this page', 'aria-disabled': f ? 'false' : 'true', onclick: () => makeDrive(a) }, [icon('hdd')]) : null,
       el('button', { class: 'icon-btn', title: 'Copy link for a note', 'aria-label': 'Copy link for a note', onclick: () => copyLink(a.name, assetLink(a.id)) }, [icon('link')]),
       editable ? el('button', { class: 'icon-btn', title: 'Move to a folder', 'aria-label': 'Move to a folder', onclick: () => moveAssets([a.id]) }, [icon('folder')]) : null,
       a.sourceUrl ? el('a', { class: 'icon-btn', href: a.sourceUrl, target: '_blank', rel: 'noopener', title: 'Open where it came from', 'aria-label': 'Open where it came from' }, [icon('external-link-alt')]) : null,
@@ -699,6 +706,35 @@ function renderViewer(a) {
       renderOrigins(a),
     ]),
   ])
+}
+
+// Preview / Source for Markdown and HTML.
+function renderSourceSwitch() {
+  const opt = (source, label) =>
+    el('button', { type: 'button', class: state.source === source ? 'on' : '', 'aria-pressed': String(state.source === source), onclick: () => ((state.source = source), render()) }, [label])
+  return el('div', { class: 'seg', role: 'group', 'aria-label': 'Show as' }, [opt(false, 'Preview'), opt(true, 'Source')])
+}
+
+// A new drive whose /index.html is this page: the user names it in the create-drive dialog, and
+// it opens in a new tab.
+async function makeDrive(a) {
+  const f = fileOf(a.id)
+  if (!f) return
+  let drive
+  try {
+    drive = await nomad.fs.createDrive({ title: a.name.replace(/\.x?html?$/i, '') })
+  } catch (e) {
+    if (e?.name !== 'UserDeniedError' && !/denied|cancel/i.test(e?.message || '')) say(e?.message || String(e), true)
+    return
+  }
+  try {
+    const url = typeof drive === 'string' ? drive : drive.url
+    await nomad.fs.writeFile(url.replace(/\/?$/, '/') + 'index.html', await f.blob.text())
+    say('Made a drive from ' + a.name)
+    nomad.browser.openUrl(url, { setActive: true })
+  } catch (e) {
+    say(`Couldn’t write the page into the new drive (${e?.message || e})`, true)
+  }
 }
 
 // The AI chat that saved the file, while it is still there (ADR-0047).
@@ -763,7 +799,8 @@ function renderLoading(a) {
 const previewCache = new Map() // id -> the element, so a re-render keeps a playing video and a rendered PDF
 
 function renderPreview(a, f) {
-  const key = a.id + ':' + f.url
+  const asSource = state.source && as.hasSource(a.kind)
+  const key = a.id + ':' + f.url + (asSource ? ':source' : '')
   if (previewCache.has(key)) {
     const kept = previewCache.get(key)
     // A drawn PDF moves into this render's new scroll box: its pages watch that one now.
@@ -789,9 +826,12 @@ function renderPreview(a, f) {
   } else if (a.kind === 'book') {
     node = el('div', { class: 'doc book' }, [el('div', { class: 'loading' }, ['Opening the book…'])])
     renderBook(node, a, f.blob).catch((err) => node.replaceChildren(noPreview(a, f, err instanceof BookError ? err.message : `This book can’t be shown here (${err?.message || err})`)))
-  } else if (as.isTextKind(a.kind)) {
+  } else if (a.kind === 'html' && !asSource) {
+    node = el('div', { class: 'doc html' }, [el('div', { class: 'loading' }, ['Opening the page…'])])
+    renderHtml(node, a, f.blob).catch(() => node.replaceChildren(noPreview(a, f, 'This page can’t be shown here')))
+  } else if (as.isTextKind(a.kind) || asSource) {
     node = el('div', { class: `doc text kind-${a.kind}` }, [el('div', { class: 'loading' }, ['Loading…'])])
-    renderText(node, a, f.blob).catch(() => node.replaceChildren(noPreview(a, f, 'This file can’t be read as text')))
+    renderText(node, a, f.blob, { source: asSource }).catch(() => node.replaceChildren(noPreview(a, f, 'This file can’t be read as text')))
   } else {
     node = noPreview(a, f, 'There’s no preview for this kind of file')
   }
@@ -801,6 +841,8 @@ function renderPreview(a, f) {
     const oldNode = previewCache.get(oldKey)
     readers.get(oldNode)?.destroy()
     readers.delete(oldNode)
+    frames.get(oldNode)?.()
+    frames.delete(oldNode)
     previewCache.delete(oldKey)
   }
   return node
@@ -815,12 +857,29 @@ function noPreview(a, f, why) {
   ])
 }
 
-async function renderText(node, a, blob) {
+// An HTML file in a frame with no origin (bg/protocols/nomad.js serves nomad://assets/html-frame
+// with HTML_PREVIEW_CSP and `sandbox allow-scripts`). The frame says when it is ready, and gets the
+// page's text to write in; it says so again each time it loads (the viewer moves it on a render).
+const frames = new Map() // node -> stop listening
+async function renderHtml(node, a, blob) {
+  const text = await blob.slice(0, as.MAX_HTML_PREVIEW).text()
+  const frame = el('iframe', { class: 'html-page', src: 'nomad://assets/html-frame', sandbox: 'allow-scripts', referrerpolicy: 'no-referrer', title: a.name })
+  const onMessage = (e) => {
+    if (e.source !== frame.contentWindow || e.data?.type !== 'nomad-html-ready') return
+    frame.contentWindow.postMessage({ type: 'nomad-html', html: text }, '*')
+  }
+  window.addEventListener('message', onMessage)
+  frames.set(node, () => window.removeEventListener('message', onMessage))
+  const cut = blob.size > as.MAX_HTML_PREVIEW
+  node.replaceChildren(frame, cut ? el('p', { class: 'cut' }, [`Showing the first ${as.formatBytes(as.MAX_HTML_PREVIEW)}. Download the file for all of it.`]) : '')
+}
+
+async function renderText(node, a, blob, { source = false } = {}) {
   const text = await blob.slice(0, as.MAX_TEXT_PREVIEW).text()
   const cut = blob.size > as.MAX_TEXT_PREVIEW
   const ext = as.extOf(a.name)
   let body
-  if (a.kind === 'markdown') {
+  if (a.kind === 'markdown' && !source) {
     const markdownit = (await import(/* @vite-ignore */ MD_URL)).default
     const md = markdownit({ html: false, linkify: true, breaks: false })
     body = el('article', { class: 'markdown' })
@@ -829,11 +888,11 @@ async function renderText(node, a, blob) {
       link.target = '_blank'
       link.rel = 'noopener'
     }
-  } else if (ext === 'csv' || ext === 'tsv' || a.mime === 'text/csv') {
+  } else if (!source && (ext === 'csv' || ext === 'tsv' || a.mime === 'text/csv')) {
     body = csvTable(text, ext === 'tsv' ? '\t' : ',')
   } else {
     let shownText = text
-    if (ext === 'json' || a.mime === 'application/json') {
+    if (!source && (ext === 'json' || a.mime === 'application/json')) {
       try {
         shownText = JSON.stringify(JSON.parse(text), null, 2)
       } catch {}

@@ -45,6 +45,7 @@ import { describeInject, hostAllowed, permissionFor, redact, redactResult, secre
 import { createEgressGuard, hostsIn, requestPreview, sendPermission, userText } from '../../ai/egress.mjs';
 import { runHttpRequest, nodeTransport } from '../../ai/http-request.mjs';
 import { ASSETS_PERM, assetRequest, nameForUrl, sizeCheck } from '../../ai/save-asset.mjs';
+import { programError, buildPage as buildGenUiPage } from '../../ai/genui-page.js';
 import * as assetsBg from './assets';
 import { MAX_AI_BYTES as assetsMaxBytes } from '../../../../shared/assets.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
@@ -1577,6 +1578,11 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
         throw new Error('saveAsset is not available here');
       }
       const req = assetRequest(args || {});
+      // A page from components: a program that draws nothing is sent back before anyone is asked.
+      if (req.from === 'openui') {
+        const err = programError(req.source);
+        if (err) throw new Error(err);
+      }
       const assetSpace = isSpaceKey(space) ? space : await vaultApps.spaceKey(ctx);
       const place = await assetsBg.placeFor(assetSpace);
       if (!place.writable) throw new Error('The user can only view this Space, so its Assets can’t be added to');
@@ -1584,7 +1590,10 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
       if (!allowed) throw new Error("The user didn't allow saving to Assets");
       let { name, mime, bytes } = req as any;
       let sourceUrl = '';
-      if (req.from === 'url') {
+      if (req.from === 'openui') {
+        bytes = b4a.from(await buildGenUiPage({ title: req.title, source: req.source }));
+        sizeCheck(bytes.length);
+      } else if (req.from === 'url') {
         const urlp = new URL(req.url);
         if (urlp.protocol === 'hyper:') {
           const v = await fsAPI.readFile.call(ctx, urlp.href, { encoding: 'binary' });

@@ -183,7 +183,8 @@ module.exports = function (src, dest, opts) {
         build: {
           outDir: destDir,
           emptyOutDir: false,
-          minify: false,
+          // A script a page carries inline (the AI's component pages) is minified.
+          minify: !!(opts && opts.minify),
           cssCodeSplit: false,
           rollupOptions: {
             input: src,
@@ -195,7 +196,8 @@ module.exports = function (src, dest, opts) {
               warn(warning);
             },
             output: {
-              format: 'cjs',
+              // `iife` for a script that runs in a plain page, not a preload.
+              format: (opts && opts.format) || 'cjs',
               entryFileNames: destFile,
               dir: destDir,
               // One file per window: a dynamic import (lang-core's telemetry pulls in ci-info that

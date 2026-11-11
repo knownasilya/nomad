@@ -6,6 +6,11 @@
 // A click on a Button, or on a link (the map's attribution), fires `genui-action` with
 // { steps: [{ type: 'continue_conversation', message } | { type: 'open_url', url }] }. The sidebar
 // decides what to do with it; this element never sends or navigates itself.
+//
+// `standalone` draws it in a page of its own (an HTML Asset the AI saved, app/lib/genui/page.mjs,
+// run by app/fg/genui-page/): there is no conversation, so a Button that only talks to the
+// assistant is left out, and the icons come from `iconCss` (the page carries the font) instead of
+// nomad://assets.
 
 import { LitElement, html, nothing } from 'lit';
 import { parseGenUi } from '../../../lib/genui/parse.mjs';
@@ -54,6 +59,8 @@ class GenUi extends LitElement {
     source: { type: String },
     streaming: { type: Boolean },
     disabled: { type: Boolean },
+    standalone: { type: Boolean },
+    iconCss: { attribute: false },
     _tabs: { state: true },
     _showSource: { state: true },
   };
@@ -63,12 +70,21 @@ class GenUi extends LitElement {
     this.source = '';
     this.streaming = false;
     this.disabled = false;
+    this.standalone = false;
+    this.iconCss = '';
     this._tabs = {};
     this._showSource = false;
   }
 
   willUpdate(changed) {
     if (changed.has('source')) this._program = parseGenUi(this.source);
+  }
+
+  firstUpdated() {
+    if (!this.iconCss || !this.shadowRoot) return;
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(this.iconCss);
+    this.shadowRoot.adoptedStyleSheets = [...this.shadowRoot.adoptedStyleSheets, sheet];
   }
 
   render() {
@@ -80,7 +96,9 @@ class GenUi extends LitElement {
             <span class="fas fa-fw fa-spinner fa-spin"></span> Drawing…
           </div>`
         : html`<pre class="genui-source">${this.source}</pre>`;
-    return html`<link rel="stylesheet" href="nomad://assets/font-awesome.css" />
+    return html`${this.standalone
+        ? nothing
+        : html`<link rel="stylesheet" href="nomad://assets/font-awesome.css" />`}
       <div class="stack" @click=${this._onClick}>${body}</div>`;
   }
 
@@ -306,6 +324,8 @@ class GenUi extends LitElement {
     // A Button with no action sends its label (OpenUI's rule).
     const run = steps.length ? steps : [{ type: 'continue_conversation', message: label }];
     const opens = run.some((s) => s.type === 'open_url');
+    // A page of its own has no assistant to ask.
+    if (this.standalone && !opens) return nothing;
     const variant = oneOf(p.variant, ['primary', 'secondary', 'tertiary'], 'secondary');
     return html`<button
       class="btn ${variant}"
