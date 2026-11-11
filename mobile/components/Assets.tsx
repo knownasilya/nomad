@@ -1017,7 +1017,7 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
             />
           ) : a.caption ? <Text style={s.captionText}>{a.caption}</Text> : null}
           {a.folder || a.tags?.length ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.viewerTags}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.viewerTagsRow} contentContainerStyle={s.viewerTags}>
               {a.folder ? (
                 <View style={s.viewerFolder}>
                   <Icon name='folder' size={11} color='rgba(255,255,255,0.7)' />
@@ -1282,6 +1282,8 @@ function makeStyles (t: Theme) {
     viewerOrigins: { alignItems: 'center', paddingBottom: sp.sm },
     caption: { color: '#fff', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: radius.md, marginHorizontal: sp.lg, marginVertical: sp.md, paddingHorizontal: sp.md, minHeight: 44, fontSize: 15, textAlign: 'center' },
     captionText: { color: 'rgba(255,255,255,0.9)', fontSize: 15, textAlign: 'center', margin: sp.lg },
+    // A ScrollView grows by default: this row keeps its own height, so the picture keeps the rest.
+    viewerTagsRow: { flexGrow: 0 },
     viewerTags: { gap: 6, paddingHorizontal: sp.lg, paddingBottom: sp.md, alignItems: 'center' },
     viewerFolder: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingRight: 4 },
     viewerFolderText: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
