@@ -28,6 +28,7 @@ body {
   --as-kind-doc: #4263eb;
   --as-kind-data: #2b8a3e;
   --as-kind-code: #5f3dc4;
+  --as-kind-web: #0b7285;
   --as-kind-other: #6b6f80;
   --as-hint-bg: rgba(64, 64, 231, 0.06);
   --as-folder: #e0a526;
@@ -63,6 +64,7 @@ body {
     --as-kind-doc: #8ea5ff;
     --as-kind-data: #69db7c;
     --as-kind-code: #b197fc;
+    --as-kind-web: #3bc9db;
     --as-kind-other: #a3a7b7;
     --as-hint-bg: rgba(123, 159, 255, 0.08);
     --as-folder: #f2c45a;
@@ -730,6 +732,7 @@ main.dropping {
 .doc-face.kind-document { color: var(--as-kind-doc); }
 .doc-face.kind-data { color: var(--as-kind-data); }
 .doc-face.kind-code { color: var(--as-kind-code); }
+.doc-face.kind-html { color: var(--as-kind-web); }
 
 .tile .name {
   padding: 7px 9px;
@@ -995,6 +998,61 @@ main.dropping {
 .viewer .doc .loading {
   color: inherit;
   opacity: 0.6;
+}
+
+/* a web page, in its sandboxed frame: it draws its own background */
+
+.viewer .doc.html {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  width: min(1100px, 100%);
+  height: 100%;
+}
+
+.viewer .doc.html .html-page {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  background: #fff;
+}
+
+.viewer .doc.html .cut {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Preview / Source */
+
+.viewer .seg {
+  display: inline-flex;
+  flex: none;
+  margin-right: 6px;
+  padding: 2px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.viewer .seg button {
+  height: 26px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.viewer .seg button:hover {
+  color: #fff;
+}
+
+.viewer .seg button.on {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
 }
 
 .viewer .doc .cut {

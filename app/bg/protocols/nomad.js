@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import jetpack from 'fs-jetpack';
 import ICO from 'icojs';
+import { HTML_PREVIEW_CSP } from '../../../shared/assets.mjs';
 
 // constants
 // =
@@ -28,11 +29,11 @@ const NOMAD_APP_CSP = `
   child-src 'self' hyper:;
 `.replace(/\n/g, '');
 // nomad://assets shows any file a Space keeps: a video, a song or a PDF plays from a blob: URL the
-// page makes from the file's bytes, and pdf.js renders a PDF in a worker. An HTML file is shown as
-// source, never run. The only frames are an e-book's pages: blob: documents the page builds with
-// every script dropped, in `sandbox="allow-same-origin"` frames, under this same policy (a blob:
-// document inherits it), so the book's pictures, styles and fonts are blob: URLs and nothing reaches
-// the network.
+// page makes from the file's bytes, and pdf.js renders a PDF in a worker. Its frames are an e-book's
+// pages, blob: documents the page builds with every script dropped, in `sandbox="allow-same-origin"`
+// frames, under this same policy (a blob: document inherits it), so the book's pictures, styles and
+// fonts are blob: URLs and nothing reaches the network; and an HTML file's frame, below. frame-src
+// also holds any frame that tries to navigate somewhere else.
 const ASSETS_CSP = `
   default-src 'self' nomad:;
   connect-src 'self' nomad: data: blob:;
@@ -42,9 +43,12 @@ const ASSETS_CSP = `
   media-src 'self' nomad: data: blob:;
   style-src 'self' 'unsafe-inline' nomad:;
   font-src 'self' nomad: data: blob:;
-  frame-src blob:;
+  frame-src blob: nomad://assets/html-frame;
   object-src 'none';
 `.replace(/\n/g, '');
+// The frame an HTML file in Assets runs in (userland/assets/html-frame.html): no origin (the
+// sandbox), no network, no forms or popups; its own scripts and inline styles run.
+const HTML_FRAME_CSP = `${HTML_PREVIEW_CSP}; sandbox allow-scripts`;
 // nomad://search reaches a configurable, external index endpoint (a crawler's HTTP/JSON API,
 // ADR-0014 §6) over fetch(), so it needs connect-src for http/https. The endpoint is the user's own
 // choice (default localhost), matching the "no privileged indexer" stance — the page talks only to
@@ -620,6 +624,15 @@ async function nomadProtocol(request) {
       return cb(200, 'OK', 'font/ttf', path.join(__dirname, `assets/js/editor/vs/${filePath}`));
     }
 
+    if (requestUrl === 'nomad://assets/html-frame') {
+      return cb(
+        200,
+        'OK',
+        'text/html; charset=utf-8',
+        path.join(__dirname, 'userland', 'assets', 'html-frame.html'),
+        HTML_FRAME_CSP
+      );
+    }
     // Assets (ADR-0044): a Space's files. It shares its host with the static assets above, which are
     // matched first; the page is the root (`?id=` opens one file) and its own css/ and js/.
     if (

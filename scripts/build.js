@@ -56,6 +56,13 @@ function bundleApplication() {
     bundle(p(fgDir, 'json-renderer/index.js'), p(fgDir, 'json-renderer/index.build.js'), {
       browserify: true,
     }),
+    // The script inside an HTML Asset the AI draws from components (app/lib/genui/page.mjs reads it
+    // from disk when the AI saves one): the sidebar's <nomad-genui>, for a page of its own.
+    bundle(p(fgDir, 'genui-page/index.js'), p(fgDir, 'genui-page/index.build.js'), {
+      browserify: true,
+      format: 'iife',
+      minify: true,
+    }),
     bundle(p(userlandDir, 'site-info/js/main.js'), p(userlandDir, 'site-info/js/main.build.js'), {
       browserify: true,
     }),

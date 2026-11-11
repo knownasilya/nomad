@@ -912,12 +912,13 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
   const [file, setFile] = useState<{ id: string; uri: string } | null>(null)
   const [text, setText] = useState<string | null>(null)
   const [failed, setFailed] = useState('')
+  const [source, setSource] = useState(false) // a Markdown or HTML file shown as its source
   const [got, setGot] = useState(0) // bytes of the file in this phone's cache so far
   const [caption, setCaption] = useState('')
   const id = asset?.id
 
   useEffect(() => {
-    setFile(null); setText(null); setFailed(''); setGot(0)
+    setFile(null); setText(null); setFailed(''); setGot(0); setSource(false)
     setCaption(asset?.caption || '')
     if (!asset) return
     let gone = false
@@ -925,10 +926,12 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
       if (gone) return
       if (!uri) { setFailed('This file hasn’t reached this phone yet. Try again in a moment.'); return }
       setFile({ id: asset.id, uri })
-      if (as.isTextKind(asset.kind)) {
+      if (as.isTextKind(asset.kind) || asset.kind === 'html') {
         if (asset.bytes > MAX_TEXT_FILE) { setText(null); setFailed('It’s too long to show here. Open it in another app.'); return }
         const body = await new File(uri).text()
-        if (!gone) setText(body.length > as.MAX_TEXT_PREVIEW ? body.slice(0, as.MAX_TEXT_PREVIEW) : body)
+        // A page keeps all of it to run; its source shows the first MAX_TEXT_PREVIEW like any text.
+        const keep = asset.kind === 'html' ? as.MAX_HTML_PREVIEW : as.MAX_TEXT_PREVIEW
+        if (!gone) setText(body.length > keep ? body.slice(0, keep) : body)
       }
     }).catch((err) => { if (!gone) setFailed((err as Error)?.message || String(err)) })
     return () => { gone = true }
@@ -967,14 +970,16 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
     } else if (a.kind === 'image') body = <Image source={{ uri: file!.uri }} style={s.full} resizeMode='contain' />
     else if (a.kind === 'video' || a.kind === 'audio') body = <Player a={a} uri={file!.uri} onFailed={setFailed} />
     else if (a.kind === 'pdf' || a.kind === 'book') body = <DocView a={a} uri={file!.uri} onFailed={setFailed} />
-    else if (as.isTextKind(a.kind)) {
+    else if (a.kind === 'html' && !source) {
+      body = text == null ? <ActivityIndicator color='#fff' /> : <PageView html={text} />
+    } else if (as.isTextKind(a.kind) || a.kind === 'html') {
       body = text == null
         ? <ActivityIndicator color='#fff' />
         : (
           <ScrollView style={s.paper} contentContainerStyle={s.paperBody}>
-            {a.kind === 'markdown'
+            {a.kind === 'markdown' && !source
               ? <Markdown text={text} color={t.text} />
-              : <Text style={s.code} selectable>{text}</Text>}
+              : <Text style={s.code} selectable>{text.length > as.MAX_TEXT_PREVIEW ? text.slice(0, as.MAX_TEXT_PREVIEW) : text}</Text>}
           </ScrollView>
           )
     } else body = <Card a={a} why='There’s no preview for this kind of file here. Open it in another app.' onOpen={share} />
@@ -990,6 +995,16 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
               <Text style={s.viewerTitle} numberOfLines={1}>{a.name}</Text>
               <Text style={s.viewerSub} numberOfLines={1}>{[describe(a), whenText(a.takenAt), a.by ? `Added by ${a.by}` : '', a.source === 'ai' ? 'Saved by your AI' : ''].filter(Boolean).join(' · ')}</Text>
             </View>
+            {as.hasSource(a.kind) && (
+              <IconButton
+                icon={source ? 'eye' : 'code'}
+                label={source ? 'Show the preview' : 'Show the source'}
+                onPress={() => setSource(!source)}
+                disabled={!ready}
+                color='#fff'
+                ripple='rgba(255,255,255,0.2)'
+              />
+            )}
             <IconButton icon='share-alt' label='Share or open in another app' onPress={share} disabled={!ready} color='#fff' ripple='rgba(255,255,255,0.2)' />
             {a.canDelete && <IconButton icon='trash' label='Remove from Assets' onPress={() => onRemove(a)} color='#fff' ripple='rgba(255,255,255,0.2)' />}
             <IconButton icon='ellipsis-v' label='More options' onPress={() => onMenu(a)} color='#fff' ripple='rgba(255,255,255,0.2)' />
@@ -1099,6 +1114,37 @@ async function fetchFile (call: Backend['apps'], a: AssetRecord, { onProgress, g
   }
 }
 
+// An HTML file runs in a WebView as a string, never as a file: it gets no file access and no
+// origin of its own, the preview policy (as.withPreviewCsp: no network but OpenStreetMap's tiles,
+// no forms) is the first thing in it, and it can't navigate anywhere or open windows.
+function PageView ({ html }: { html: string }) {
+  const t = useTheme()
+  const s = useMemo(() => makeStyles(t), [t])
+  const page = useMemo(() => as.withPreviewCsp(html), [html])
+  return (
+    <WebView
+      style={[s.player, { backgroundColor: '#fff' }]}
+      source={{ html: page, baseUrl: 'about:blank' }}
+      // Every URL comes to the check below (one off the list would go to another app), which lets
+      // nothing but the page itself load.
+      originWhitelist={['*']}
+      onShouldStartLoadWithRequest={(req) => /^(about:|data:)/.test(req.url)}
+      javaScriptEnabled
+      domStorageEnabled={false}
+      allowFileAccess={false}
+      allowFileAccessFromFileURLs={false}
+      allowUniversalAccessFromFileURLs={false}
+      javaScriptCanOpenWindowsAutomatically={false}
+      setSupportMultipleWindows={false}
+      mixedContentMode='never'
+      cacheEnabled={false}
+      incognito
+      geolocationEnabled={false}
+      mediaPlaybackRequiresUserAction
+    />
+  )
+}
+
 // A text file bigger than this opens in another app.
 const MAX_TEXT_FILE = 8 * 1024 * 1024
 
@@ -1195,7 +1241,8 @@ function kindColor (t: Theme, kind: string) {
     text: ['#4263eb', '#8ea5ff'],
     document: ['#4263eb', '#8ea5ff'],
     data: ['#2b8a3e', '#69db7c'],
-    code: ['#5f3dc4', '#b197fc']
+    code: ['#5f3dc4', '#b197fc'],
+    html: ['#0b7285', '#3bc9db']
   }
   const pair = c[kind] || ['#6b6f80', '#a3a7b7']
   return dark ? pair[1] : pair[0]

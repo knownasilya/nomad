@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8" />
+<!--
+  nomad://assets/html-frame: the frame an HTML file in Assets is shown in (js/main.js renderHtml).
+  bg/protocols/nomad.js serves it with shared/assets.mjs HTML_PREVIEW_CSP and `sandbox allow-scripts`,
+  so it has no origin and reaches nothing outside itself. It tells the Assets page it is ready, and
+  writes the page it gets back over itself; the page's scripts then run under this frame's policy.
+-->
+<script>
+  addEventListener('message', function onPage(e) {
+    if (e.source !== parent || !e.data || e.data.type !== 'nomad-html' || typeof e.data.html !== 'string') return
+    removeEventListener('message', onPage)
+    document.open()
+    document.write(e.data.html)
+    document.close()
+  })
+  parent.postMessage({ type: 'nomad-html-ready' }, '*')
+</script>

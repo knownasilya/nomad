@@ -7,6 +7,7 @@
 import vm from 'node:vm'
 import { API_REFERENCE } from './api-reference.mjs'
 import { TEMPLATE_IDS } from './create-drive.mjs'
+import { genuiPrompt } from '../../lib/genui/library.mjs'
 
 export const DOMAINS = ['capability', 'guide', 'page', 'drive', 'name', 'skill']
 
@@ -523,8 +524,10 @@ export const CAPABILITIES = [
       'videos, audio, PDFs, e-books, Markdown, code, CSV and anything else; you can save up to 100 MB. In a shared Space everyone in it ' +
       'sees it; in any other Space it is the user\'s own, on their devices. Pass exactly one of `text` (a file you ' +
       'wrote, such as a Markdown note, a CSV or code, with a `name` like "packing-list.md"), `url` (a picture, ' +
-      'PDF or other file on the web, or a hyper:// file, to download and keep; `name` is optional) or `base64` ' +
-      '(bytes your code made, with a `name`). Returns { id, name, kind, url }: link `url` in your answer. Save ' +
+      'PDF or other file on the web, or a hyper:// file, to download and keep; `name` is optional), `base64` ' +
+      '(bytes your code made, with a `name`) or `openui` (a page drawn with the AI Sidebar\'s components: charts, ' +
+      'tables, cards, maps, stats, as an openui-lang program, with a `title`; it is saved as an .html file. Read ' +
+      'guide:genui-pages first). Returns { id, name, kind, url }: link `url` in your answer. Save ' +
       'only what the user asks you to keep. Asks permission to save to Assets.',
     inputSchema: {
       type: 'object',
@@ -533,6 +536,8 @@ export const CAPABILITIES = [
         text: { type: 'string', description: 'Or the file\'s text' },
         url: { type: 'string', description: 'Or an http(s) or hyper:// URL to download' },
         base64: { type: 'string', description: 'Or the file\'s bytes as base64' },
+        openui: { type: 'string', description: 'Or an openui-lang program (no ``` fence) to save as an HTML page; see guide:genui-pages' },
+        title: { type: 'string', description: 'With `openui`: the page\'s title, shown at its top' },
         mime: { type: 'string', description: 'Optional. Its type, e.g. "text/csv". From the name when left out' },
         caption: { type: 'string', description: 'Optional. A line about it, shown under it' },
       },
@@ -1055,7 +1060,22 @@ function guideRecord(id, title, markdown) {
   }
 }
 
-const GUIDES = splitGuides(API_REFERENCE)
+// How to draw a page for Assets (saveAsset `openui`): the AI Sidebar's component language, whose
+// text is made from the library (app/lib/genui/library.mjs), so it is added here, not written in
+// API_REFERENCE. Its headings move down a level under this one.
+export function genuiPagesGuide() {
+  const intro =
+    'When the user asks for a page, a report, a dashboard, a chart or a plan to keep, save it to Assets as an HTML page ' +
+    'drawn with the AI Sidebar\'s components: call saveAsset with `openui` (an openui-lang program, the program itself ' +
+    'with no ``` fence, starting `root = Stack([...])`), a `title` shown at the top, and a `name` like "trip-plan.html". ' +
+    'The page carries everything it needs, so it opens the same in Assets, on the phone and in any browser, in light and dark. ' +
+    'In a saved page a Button that asks the assistant (@ToAssistant) is left out: there is nobody to ask. Use @OpenUrl for ' +
+    'links. A Map loads OpenStreetMap tiles; nothing else loads, so use only data you have. The language follows.'
+  const lang = genuiPrompt().replace(/^(#{2,5}) /gm, '#$1 ')
+  return guideRecord('genui-pages', 'Pages built from components', `## Pages built from components — saveAsset's openui\n\n${intro}\n\n${lang}`)
+}
+
+const GUIDES = [...splitGuides(API_REFERENCE), genuiPagesGuide()]
 
 export function buildCatalog(opts) {
   const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, tab, job, secrets, memory, scratch, names, skills, ownerId } =

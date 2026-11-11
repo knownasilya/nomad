@@ -38,7 +38,7 @@ describe('asset ids and paths', () => {
 for (const [name, m] of [['shared', as], ['phone', phone]]) {
   describe(`asset rules (${name})`, () => {
     it('has the same limits', () => {
-      for (const k of ['MAX_BYTES', 'MAX_SIDE', 'THUMB_SIDE', 'QUALITY', 'THUMB_QUALITY', 'MAX_THUMB_BYTES', 'MAX_CAPTION', 'MAX_NAME', 'MAX_BATCH', 'MAX_TEXT_PREVIEW']) {
+      for (const k of ['MAX_BYTES', 'MAX_SIDE', 'THUMB_SIDE', 'QUALITY', 'THUMB_QUALITY', 'MAX_THUMB_BYTES', 'MAX_CAPTION', 'MAX_NAME', 'MAX_BATCH', 'MAX_TEXT_PREVIEW', 'MAX_HTML_PREVIEW', 'HTML_PREVIEW_CSP']) {
         expect(m[k], k).toBe(as[k])
       }
       expect(m.KINDS).toEqual(as.KINDS)
@@ -60,17 +60,31 @@ for (const [name, m] of [['shared', as], ['phone', phone]]) {
     it('sorts files into kinds', () => {
       const cases = [
         ['photo.jpg', 'image'], ['clip.mov', 'video'], ['song.mp3', 'audio'], ['form.pdf', 'pdf'], ['plan.md', 'markdown'],
-        ['app.js', 'code'], ['page.html', 'code'], ['list.csv', 'data'], ['data.json', 'data'], ['readme.txt', 'text'],
+        ['app.js', 'code'], ['page.html', 'html'], ['old.htm', 'html'], ['doc.xhtml', 'html'], ['style.css', 'code'], ['list.csv', 'data'], ['data.json', 'data'], ['readme.txt', 'text'],
         ['letter.docx', 'document'], ['backup.zip', 'archive'], ['thing.bin', 'other'],
         ['novel.epub', 'book'], ['novel.mobi', 'book'], ['novel.azw3', 'book'],
       ]
       for (const [file, kind] of cases) expect(m.kindOf(m.mimeOf(file), file), file).toBe(kind)
       expect(m.isTextKind('code')).toBe(true)
       expect(m.isTextKind('pdf')).toBe(false)
+      expect(m.isTextKind('html')).toBe(false)
+      expect(m.hasSource('html')).toBe(true)
+      expect(m.hasSource('markdown')).toBe(true)
+      expect(m.hasSource('code')).toBe(false)
+      expect(m.kindOf('text/html', 'download')).toBe('html')
       for (const k of m.KINDS) {
         expect(m.KIND_ICONS[k], k).toBeTruthy()
         expect(m.KIND_LABELS[k], k).toBeTruthy()
       }
+    })
+
+    it('puts the preview policy first in an HTML file, after its doctype', () => {
+      const meta = `<meta http-equiv="Content-Security-Policy" content="${m.HTML_PREVIEW_CSP}">`
+      expect(m.withPreviewCsp('<!DOCTYPE html>\n<html><script>x()</script>')).toBe('<!DOCTYPE html>' + meta + '\n<html><script>x()</script>')
+      expect(m.withPreviewCsp('<p>hi</p>')).toBe('<!doctype html>' + meta + '<p>hi</p>')
+      expect(m.HTML_PREVIEW_CSP).toContain("connect-src 'none'")
+      expect(m.HTML_PREVIEW_CSP).toContain("form-action 'none'")
+      expect(m.HTML_PREVIEW_CSP).not.toMatch(/https?:\/\/(?!tile\.openstreetmap\.org)/)
     })
 
     it('cleans names, keeping the extension', () => {
@@ -236,6 +250,15 @@ describe('asset records', () => {
     expect(rec.kind).toBe('video')
     expect(as.makeAsset({ id: 'a1234567-abcd', name: 'x', bytes: as.MAX_BYTES * 2 }, null, T).bytes).toBe(0)
     expect(() => as.makeAsset({ id: '../x' })).toThrow()
+  })
+
+  it('takes an openui-lang program as a page, always an .html file', () => {
+    expect(assetRequest({ openui: 'root = Stack([])', title: 'Trip plan' })).toMatchObject({ from: 'openui', name: 'Trip plan.html', mime: 'text/html', title: 'Trip plan', source: 'root = Stack([])' })
+    expect(assetRequest({ openui: 'x', name: 'visits.md', title: 'Visits' })).toMatchObject({ name: 'visits.html', title: 'Visits' })
+    expect(assetRequest({ openui: 'x', name: 'report.htm' })).toMatchObject({ name: 'report.htm', title: 'report' })
+    expect(() => assetRequest({ openui: 'x' })).toThrow(/name|title/)
+    expect(() => assetRequest({ openui: 'x', text: 'y', name: 'a.html' })).toThrow(/exactly one/)
+    expect(() => assetRequest({ openui: 'x'.repeat(300 * 1024), name: 'a.html' })).toThrow(/too long/)
   })
 
   it('refuses empty and oversized files', () => {
