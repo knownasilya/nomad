@@ -10,7 +10,7 @@ export type ItemLink =
   | { kind: 'page'; url: string } // a web or hyper:// page
   | { kind: 'note' | 'job' | 'mod'; id?: string; url: string; place: string }
   | { kind: 'library' | 'ai'; view: string; url: string; place: string }
-  | { kind: 'reader'; url: string; place: string }
+  | { kind: 'reader' | 'home'; url: string; place: string }
   | { kind: 'calendar'; day?: string; url: string; place: string }
   | { kind: 'asset'; id?: string; folder?: string; tag?: string; url: string; place: string }
 
@@ -27,6 +27,8 @@ export const CALENDAR_LINK = 'nomad://calendar/'
 export const calendarLink = (day: string) => `${CALENDAR_LINK}?day=${day}`
 const DAY = /^\d{4}-\d{2}-\d{2}$/
 export const CONTACTS_LINK = 'nomad://library/contacts'
+// The home page (ADR-0048): where a card the AI pinned, or a layout it made, shows.
+export const HOME_LINK = 'nomad://desktop/'
 export const ASSETS_LINK = 'nomad://assets/'
 export const assetLink = (id: string) => `${ASSETS_LINK}?id=${id}`
 export const assetFolderLink = (path: string) => `${ASSETS_LINK}?folder=${encodeURIComponent(path)}`
@@ -86,6 +88,9 @@ export function parseItemLink (href: string): ItemLink | null {
   }
   if (host === 'reader') {
     return seg.length ? null : { kind: 'reader', url: READER_LINK, place: 'Reader' }
+  }
+  if (host === 'desktop') {
+    return seg.length ? null : { kind: 'home', url: HOME_LINK, place: 'the home page' }
   }
   if (host === 'calendar') {
     if (seg.length) return null

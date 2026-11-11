@@ -371,6 +371,19 @@ library, run `node scripts/gen-genui-schema.mjs` (`tests/unit/genui.test.js` fai
 Keep it to components that load nothing by themselves (no Image), draw model text only as text,
 and run actions (`@ToAssistant`, `@OpenUrl`) only on a click.
 
+The library has two tiers (ADR-0048). `CORE_COMPONENTS` are taught every sidebar turn
+(`genuiPrompt()`, kept under 13,500 characters by `tests/unit/genui.test.js`); `MORE_COMPONENTS`
+(Grid, Columns, Accordion, List, Avatar, Calendar, Form and its fields, …) are only named there,
+with their arguments in `guide:genui-components` (`genuiMoreSignatures()`, made in
+`search-execute.mjs`). A new component goes in one of the two lists in `GROUPS`, gets a renderer
+(`genui/index.js`, or `more.js` and `forms.js` for the second set, styles in `styles-more.js`) and a
+case in the tests. Components share `color` (neutral, primary, info, success, warning, error),
+`style` (soft, outline, solid), `size`, and slots (an argument that takes a component: `footer`,
+`trailing`, `leading`, `actions`). An `icon` is a name in `app/lib/genui/icons.mjs`; add one there
+only if `app/assets/css/fa-all.min.css` has it. An existing component may only gain arguments at
+its end: a saved chat is parsed again when it opens. A Form sends its answers as one message on
+Submit and has no password field.
+
 ### The AI and the user's Notes and Reader (ADR-0019)
 
 A personal turn also gets capabilities for Notes (`listNotes`, `readNote`, `writeNote`), Highlights
@@ -702,6 +715,31 @@ Needs you item that no Vault record carries comes or goes), the phone in its
 backend (`RPC_APPS` `home`/`dashboard`, `backend.mjs` `homeDashboard`). Each page passes its own wall
 time (`now`), because the calendar has no zone. A new kind of item for the home page goes in that
 shared module first, then in both gatherers and both pages.
+
+**The page is a document (ADR-0048).** On desktop, where each part goes is a **layout**: an
+openui-lang program that places the page's live parts with the Home* widgets (HomeGreeting,
+HomePins, HomeNeedsYou, HomeNotifications, HomeJobs, HomeEvents, HomeNotes, HomeFiles, HomeCards)
+and can use any other component around them. `DEFAULT_LAYOUT` in `shared/home-layout.mjs` is the
+dashboard as it always was. `<nomad-genui host>` (the bundle `nomad://app-stdlib/js/genui.build.js`,
+from `app/fg/genui-page/element.js`) draws it, leaves a `<slot>` per widget and names them in
+`genui-widgets`; `app/userland/desktop/js/main.js` puts its own element in each slot, so the parts
+keep their own code and CSS. Pinned **cards** are programs too, one Vault record each, drawn by
+their own `<nomad-genui framed>` where the layout places HomeCards(). Both are the user's own, per
+Space, in the Vault (`/.vault/home/spaces/<space>/layout.json` and `cards/<id>.json`), never in a
+shared Space's Library; the layout keeps the one it replaced. Rules: `shared/home-layout.mjs`
+(tests `tests/unit/home-layout.test.js`); I/O: `app/bg/ui/home-layout.js`, which parses every
+program before keeping it. `nomad.vault.homeDashboard` returns `layout` and `cards` and takes
+`limits` (a layout's `HomeNotes(10)`).
+
+Who changes it: the AI Sidebar's **Pin to Home** under a finished drawing (`aiShell.pinToHome`);
+the user's AI with `getDashboard`, `pinDashboardCard`, `removeDashboardCard` and `setDashboard`
+(personal turns, never Jobs; permissions `dashboardRead` and `dashboardWrite`; `guide:dashboard`,
+made in `search-execute.mjs` `dashboardGuide`); and the page, only for what needs no drawing
+(`nomad.vault.updateHomeCard`, `removeHomeCard`, `resetHomeLayout`, `restoreHomeLayout`). For the
+rest, Customize and a card's menu open the AI Sidebar with a **draft** in its input
+(`nomad.aiChats.openNew({ draft })`): the page never sends a message for the user. A new live part
+needs a widget in the library (`HOME_WIDGETS` there and in `shared/home-layout.mjs`), a case in the
+page's `renderPage`, and a line in the guide. The phone's home tab doesn't draw layouts or cards yet.
 
 ### The AI page, chats and memory (ADR-0032)
 

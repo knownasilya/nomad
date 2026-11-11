@@ -12,6 +12,7 @@ import * as vaultApps from './vault-apps';
 import * as liveNotes from '../../notes/live-notes';
 import { highlightForAi, assertCanHighlight } from '../../ui/highlights';
 import * as mods from '../../ui/mods';
+import * as homeLayout from '../../ui/home-layout';
 import * as jobs from '../../ai/jobs';
 import * as memory from '../../ai/memory';
 import * as calendar from './calendar';
@@ -21,7 +22,7 @@ import * as vault from '../../hyper/vault';
 import { readOffset, textPart, partFields, isPartial } from '../../ai/text-part.mjs';
 import { saveWhole, scratchKey } from '../../ai/scratch.mjs';
 import { addedWrites, describeSchedule, describeWrites, keepPageActions } from '../../../../shared/jobs.mjs';
-import { noteLink, jobLink, MEMORY_LINK, READER_LINK, CALENDAR_LINK, CONTACTS_LINK } from '../../../../shared/item-links.mjs';
+import { noteLink, jobLink, MEMORY_LINK, READER_LINK, CALENDAR_LINK, CONTACTS_LINK, HOME_LINK } from '../../../../shared/item-links.mjs';
 import fsAPI from './fs';
 import * as webFeeds from './web-feeds';
 import {
@@ -62,6 +63,7 @@ export async function runVaultTool(name, args, { ctx, space = null, permit, scra
     throw new Error(`The user didn't allow ${permission}`);
   const readerSpace = async () => (apps.isSpaceKey(space) ? space : vaultApps.spaceKey(ctx));
   const json = (v) => JSON.stringify(v, null, 2);
+  const homeSpace = () => readerSpace().catch(() => null);
   const notes = async () => vaultApps.allNotes(await readerSpace().catch(() => null));
 
   switch (name) {
@@ -215,6 +217,37 @@ export async function runVaultTool(name, args, { ctx, space = null, permit, scra
       const space = await readerSpace().catch(() => null);
       const text = await householdContacts.contactsText(space, typeof args.query === 'string' ? args.query.trim() : '');
       return `${text}\n\nLink: ${CONTACTS_LINK}`;
+    }
+
+    // The home page (ADR-0048). It is the user's own, per Space, so a Space with none (a window
+    // between Spaces) has one too.
+    case 'getDashboard':
+      return json({ ...(await homeLayout.forModel(await homeSpace())), url: HOME_LINK });
+
+    // A new card (no id; `openui` required) or changes to one. Fields left out keep their values.
+    case 'pinDashboardCard': {
+      const { id, title, openui, wide } = args;
+      if (!id && typeof openui !== 'string') throw new Error('A new card needs `openui`: an openui-lang program');
+      const card = await homeLayout.pinCard(await homeSpace(), { id, title, source: openui, wide }, origin);
+      return json({ id: card.id, title: card.title, ...(card.wide ? { wide: true } : {}), pinned: !id, url: HOME_LINK });
+    }
+
+    case 'removeDashboardCard': {
+      const card = await homeLayout.removeCard(await homeSpace(), args.id);
+      return `Removed the card “${card.title}” from the home page\n\nLink: ${HOME_LINK}`;
+    }
+
+    // A whole new layout, or the default one back. The layout it replaces is kept, one step back.
+    case 'setDashboard': {
+      if (args.reset !== true && typeof args.openui !== 'string') {
+        throw new Error('setDashboard needs `openui` (the whole layout), or `reset: true` for the default one');
+      }
+      const view = await homeLayout.setLayout(await homeSpace(), args.reset === true ? null : args.openui, origin);
+      return json({
+        layout: view.custom ? 'custom' : 'default',
+        note: 'The user can go back to the layout before this one from Customize on the home page.',
+        url: HOME_LINK,
+      });
     }
 
     case 'listMods':

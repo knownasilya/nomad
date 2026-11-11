@@ -7,7 +7,8 @@
 import vm from 'node:vm'
 import { API_REFERENCE } from './api-reference.mjs'
 import { TEMPLATE_IDS } from './create-drive.mjs'
-import { genuiPrompt } from '../../lib/genui/library.mjs'
+import { genuiFullPrompt, genuiMoreSignatures, genuiHomeSignatures } from '../../lib/genui/library.mjs'
+import { DEFAULT_LAYOUT, MAX_CARDS } from '../../../shared/home-layout.mjs'
 
 export const DOMAINS = ['capability', 'guide', 'page', 'drive', 'name', 'skill']
 
@@ -580,6 +581,66 @@ export const CAPABILITIES = [
     },
     gates: { personal: true },
   },
+  // The home page (nomad://desktop, ADR-0048): a layout and the cards pinned to it, each an
+  // openui-lang program (shared/home-layout.mjs). The user's own, so a personal turn only, and
+  // never a Job's.
+  {
+    name: 'getDashboard',
+    description:
+      "Read the user's home page (nomad://desktop): its layout as an openui-lang program (`openui`; `layout` says " +
+      'whether it is the default or one made for the user), and the cards pinned to it, each with its id, title and ' +
+      'program. Call it before setDashboard, or to find a card to change or remove. Asks permission to read the home page.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    gates: { personal: true },
+  },
+  {
+    name: 'pinDashboardCard',
+    description:
+      'Pin a card to the home page (no `id`; `openui` required), or change one (`id`, from getDashboard; fields you ' +
+      'leave out stay as they are). `openui` is an openui-lang program with no ``` fence, starting `root = Stack([...])`, ' +
+      'drawn with the AI Sidebar\'s components: see guide:dashboard first. The page draws the card in a frame of its own, ' +
+      'so start with a CardHeader and don\'t wrap it in a Card. Returns { id, title, url }: link `url` in your answer. ' +
+      'Asks permission to change the home page.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Optional. The card to change, from getDashboard' },
+        title: { type: 'string', description: 'A short name for the card, e.g. "Reading list". Shown in its menu, not on the card' },
+        openui: { type: 'string', description: 'The card as an openui-lang program (no ``` fence). Required for a new card' },
+        wide: { type: 'boolean', description: 'Optional. true makes the card as wide as the page: a table, a chart, a map' },
+      },
+      required: [],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'removeDashboardCard',
+    description: 'Remove a card from the home page. Asks permission to change the home page.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'The card id, from getDashboard' } },
+      required: ['id'],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'setDashboard',
+    description:
+      'Replace the layout of the home page with `openui` (the whole layout as an openui-lang program, no ``` fence), ' +
+      'or pass `reset: true` for the default one. A layout places the page\'s live parts (HomeGreeting(), HomeNotes(), ' +
+      'HomeCards(), …) and can add any component around them: see guide:dashboard and call getDashboard first. The ' +
+      'layout it replaces is kept, and the user can restore it from Customize on the home page. Returns { layout, url }. ' +
+      'Asks permission to change the home page.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        openui: { type: 'string', description: 'The whole new layout as an openui-lang program' },
+        reset: { type: 'boolean', description: 'true puts the default layout back' },
+      },
+      required: [],
+    },
+    gates: { personal: true },
+  },
   // The user's Mods (ADR-0023): their own styles and scripts for sites, like Arc's. Reading and
   // changing them are two more permissions (vault-tools.mjs).
   {
@@ -1071,11 +1132,64 @@ export function genuiPagesGuide() {
     'The page carries everything it needs, so it opens the same in Assets, on the phone and in any browser, in light and dark. ' +
     'In a saved page a Button that asks the assistant (@ToAssistant) is left out: there is nobody to ask. Use @OpenUrl for ' +
     'links. A Map loads OpenStreetMap tiles; nothing else loads, so use only data you have. The language follows.'
-  const lang = genuiPrompt().replace(/^(#{2,5}) /gm, '#$1 ')
+  const lang = genuiFullPrompt().replace(/^(#{2,5}) /gm, '#$1 ')
   return guideRecord('genui-pages', 'Pages built from components', `## Pages built from components — saveAsset's openui\n\n${intro}\n\n${lang}`)
 }
 
-const GUIDES = [...splitGuides(API_REFERENCE), genuiPagesGuide()]
+// The components the AI Sidebar's every-turn prompt only names (library.mjs MORE_COMPONENTS): their
+// arguments, read when the model wants one.
+export function genuiComponentsGuide() {
+  const intro =
+    'The arguments of the components the AI Sidebar can draw beyond the ones it is taught every turn. Use them in an ' +
+    '```openui-lang fence, in a page (saveAsset `openui`), in a card (pinDashboardCard) and in a home page layout ' +
+    '(setDashboard), exactly like the others: positional arguments, in this order.'
+  const lang = genuiMoreSignatures().replace(/^(#{2,5}) /gm, '#$1 ')
+  return guideRecord('genui-components', 'More components to draw with', `## More components to draw with — slots, variants and forms\n\n${intro}\n\n${lang}`)
+}
+
+// The home page as a document (ADR-0048): cards and layouts. The widgets come from the library.
+export function dashboardGuide() {
+  const text = [
+    'The user\'s home page (nomad://desktop, the new tab page) is drawn from two kinds of openui-lang program, the ' +
+      'language of the AI Sidebar\'s drawings: its **layout**, and the **cards** pinned to it. It is the user\'s own, ' +
+      'one per Space, and syncs to their other computers. If you don\'t have the language in this turn, open ' +
+      'guide:genui-pages for it and for every component; guide:genui-components has the newer ones.',
+    '### Cards — pinDashboardCard',
+    'A card is a small program of its own: `pinDashboardCard({ title, openui })`. The page draws it in a frame like its ' +
+      'own cards, so:\n' +
+      '- Start with `CardHeader(title, subtitle?, icon?)` and put the content under it. Don\'t wrap the card in a Card.\n' +
+      '- Keep it small: a card sits in a column about 320px wide. A table, chart or map that needs room gets `wide: true`.\n' +
+      '- It holds the data you write into it and never updates by itself. Say so when it will go stale, and offer a Job ' +
+      'for something that should stay current only if the user asks.\n' +
+      '- A Button with @ToAssistant puts its message in the AI Sidebar\'s input for the user to send, so a card can ask ' +
+      'for its own refresh: `Button("Refresh", @ToAssistant("Update my Reading list card"))`. @OpenUrl opens a page.\n' +
+      '- To change a card, call getDashboard for its id and program, then pinDashboardCard with `id` and the whole new program.\n' +
+      `- The page holds ${MAX_CARDS} cards. The user moves, widens and removes them from each card's menu.`,
+    'Example:\n```\nroot = Stack([head, list], "column", "s")\nhead = CardHeader("Reading list", "3 to go", "book")\n' +
+      'list = List([a, b, c], "divided")\na = ListItem("The Dispossessed", "Ursula K. Le Guin", Icon("bookmark", "primary"))\n' +
+      'b = ListItem("Braiding Sweetgrass", "Robin Wall Kimmerer")\nc = ListItem("The Overstory", "Richard Powers")\n```',
+    '### The layout — setDashboard',
+    'The layout says what the page shows and where. It places the page\'s **live parts**, widgets that fill themselves ' +
+      'with the user\'s own things, and can put any other component around them (a Header, Stats, a Callout, Tabs). ' +
+      'Call getDashboard first and change the program it gives you; send the whole layout back with setDashboard.',
+    genuiHomeSignatures().replace(/^(#{2,5}) /gm, '#$1 '),
+    'The default layout, which every Space starts with:\n```\n' + DEFAULT_LAYOUT + '\n```',
+    '- Columns packs cards of different heights like a board; Grid gives equal columns, and GridItem([HomeEvents()], 2) ' +
+      'makes one wider. Tabs can hold parts too.\n' +
+      '- Each part shows once: place it once. Leave one out to hide it.\n' +
+      '- Keep HomeCards() somewhere, or the pinned cards show after the layout. HomeNeedsYou() is always shown: at the ' +
+      'top when the layout leaves it out.\n' +
+      '- The layout\'s own components hold only what you write: for something of the user\'s that changes, place its ' +
+      'widget instead of copying its data in.\n' +
+      '- `setDashboard({ reset: true })` puts the default back. Either way the layout before is kept, and the user ' +
+      'restores it from Customize on the page; tell them that after a big change.',
+    'Example, the calendar first and wide, no pinned pages:\n```\nroot = Stack([HomeGreeting(), HomeNeedsYou(), board], "column", "m")\n' +
+      'board = Grid([GridItem([HomeEvents(10)], 2), HomeJobs(), HomeNotes(8), HomeNotifications(), HomeFiles(), HomeCards()], 3)\n```',
+  ].join('\n\n')
+  return guideRecord('dashboard', 'The home page', `## The home page — cards and layouts (pinDashboardCard, setDashboard)\n\n${text}`)
+}
+
+const GUIDES = [...splitGuides(API_REFERENCE), genuiPagesGuide(), genuiComponentsGuide(), dashboardGuide()]
 
 export function buildCatalog(opts) {
   const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, tab, job, secrets, memory, scratch, names, skills, ownerId } =

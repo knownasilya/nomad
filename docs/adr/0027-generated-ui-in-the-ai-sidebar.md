@@ -53,3 +53,9 @@ we use only the parser and prompt generator and draw the components ourselves.
 - A model that writes bad openui-lang gets its source shown as code once the answer ends, and any
   component it misnames is dropped.
 - The phone's AI panel shows the fence as a code block until it gets a renderer of its own.
+
+## Amendment (2026-11-11): more components, and the home page
+
+ADR-0048 adds a second set of components with slots and variants, taught through
+`guide:genui-components` instead of the every-turn prompt, lets the user pin a drawing to their home
+page, and makes the home page's own layout a program in this language.

@@ -4,6 +4,7 @@
 
 import { css, unsafeCSS } from 'lit';
 import leafletCss from 'leaflet/dist/leaflet.css?raw';
+import more from './styles-more.js';
 
 export default [
   unsafeCSS(leafletCss),
@@ -1047,4 +1048,5 @@ export default [
       }
     }
   `,
+  more,
 ];

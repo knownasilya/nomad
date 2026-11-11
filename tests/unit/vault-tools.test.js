@@ -54,6 +54,8 @@ describe('vault tools: permissions', () => {
     expect(VAULT_TOOL_PERMS.listMods).toBe('modsRead');
     expect(VAULT_TOOL_PERMS.saveMod).toBe('modsWrite');
     expect(VAULT_TOOL_PERMS.deleteMod).toBe('modsWrite');
+    expect(VAULT_TOOL_PERMS.getDashboard).toBe('dashboardRead');
+    expect(VAULT_TOOL_PERMS.setDashboard).toBe('dashboardWrite');
   });
 
   it('asks once per turn for a Vault permission, and every time for any other', async () => {

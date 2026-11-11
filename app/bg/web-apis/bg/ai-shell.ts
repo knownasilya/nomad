@@ -25,6 +25,7 @@ import aiAPI, { routeChat, createChatStream } from './ai';
 import * as chatStore from '../../ai/chat-store';
 import * as vaultApps from './vault-apps';
 import * as jobChat from '../../ai/job-chat';
+import * as homeLayout from '../../ui/home-layout';
 import * as settingsDb from '../../dbs/settings';
 import { createSteering } from '../../ai/steering.mjs';
 
@@ -241,6 +242,19 @@ export default {
 
   async getLastSessionId() {
     return chatStore.getLastSessionId(this.sender);
+  },
+
+  // Pin to Home under a drawing (ADR-0048): the program becomes a card on the home page of the
+  // window's Space, linked back to the chat it was drawn in. Returns { id, title }.
+  async pinToHome(opts: any = {}) {
+    const space = await vaultApps.spaceKey({ sender: this.sender }).catch(() => null);
+    const chatId = typeof opts.chatId === 'string' && opts.chatId ? opts.chatId : null;
+    const card = await homeLayout.pinCard(
+      space,
+      { source: opts.source, title: typeof opts.title === 'string' ? opts.title : undefined },
+      chatId ? { stage: 'sidebar', chat: chatId, space: space || undefined } : null
+    );
+    return { id: card.id, title: card.title };
   },
 
   async getPrefs() {

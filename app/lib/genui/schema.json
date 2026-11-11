@@ -5,6 +5,15 @@
     "Stack": {
       "$ref": "#/$defs/Stack"
     },
+    "Grid": {
+      "$ref": "#/$defs/Grid"
+    },
+    "GridItem": {
+      "$ref": "#/$defs/GridItem"
+    },
+    "Columns": {
+      "$ref": "#/$defs/Columns"
+    },
     "Card": {
       "$ref": "#/$defs/Card"
     },
@@ -17,8 +26,23 @@
     "TabItem": {
       "$ref": "#/$defs/TabItem"
     },
+    "Accordion": {
+      "$ref": "#/$defs/Accordion"
+    },
+    "AccordionItem": {
+      "$ref": "#/$defs/AccordionItem"
+    },
+    "Collapsible": {
+      "$ref": "#/$defs/Collapsible"
+    },
+    "Carousel": {
+      "$ref": "#/$defs/Carousel"
+    },
     "Separator": {
       "$ref": "#/$defs/Separator"
+    },
+    "Header": {
+      "$ref": "#/$defs/Header"
     },
     "TextContent": {
       "$ref": "#/$defs/TextContent"
@@ -32,17 +56,71 @@
     "TagBlock": {
       "$ref": "#/$defs/TagBlock"
     },
+    "Icon": {
+      "$ref": "#/$defs/Icon"
+    },
+    "Avatar": {
+      "$ref": "#/$defs/Avatar"
+    },
+    "AvatarGroup": {
+      "$ref": "#/$defs/AvatarGroup"
+    },
+    "User": {
+      "$ref": "#/$defs/User"
+    },
+    "Kbd": {
+      "$ref": "#/$defs/Kbd"
+    },
+    "Link": {
+      "$ref": "#/$defs/Link"
+    },
+    "Breadcrumb": {
+      "$ref": "#/$defs/Breadcrumb"
+    },
+    "CodeBlock": {
+      "$ref": "#/$defs/CodeBlock"
+    },
+    "Empty": {
+      "$ref": "#/$defs/Empty"
+    },
+    "Feature": {
+      "$ref": "#/$defs/Feature"
+    },
     "Steps": {
       "$ref": "#/$defs/Steps"
     },
     "StepsItem": {
       "$ref": "#/$defs/StepsItem"
     },
+    "List": {
+      "$ref": "#/$defs/List"
+    },
+    "ListItem": {
+      "$ref": "#/$defs/ListItem"
+    },
+    "DataList": {
+      "$ref": "#/$defs/DataList"
+    },
+    "Tree": {
+      "$ref": "#/$defs/Tree"
+    },
+    "TreeItem": {
+      "$ref": "#/$defs/TreeItem"
+    },
     "Stat": {
       "$ref": "#/$defs/Stat"
     },
     "Progress": {
       "$ref": "#/$defs/Progress"
+    },
+    "Sparkline": {
+      "$ref": "#/$defs/Sparkline"
+    },
+    "Calendar": {
+      "$ref": "#/$defs/Calendar"
+    },
+    "CalendarMark": {
+      "$ref": "#/$defs/CalendarMark"
     },
     "Table": {
       "$ref": "#/$defs/Table"
@@ -113,28 +191,105 @@
     "CardGrid": {
       "$ref": "#/$defs/CardGrid"
     },
+    "Form": {
+      "$ref": "#/$defs/Form"
+    },
+    "Input": {
+      "$ref": "#/$defs/Input"
+    },
+    "Textarea": {
+      "$ref": "#/$defs/Textarea"
+    },
+    "Select": {
+      "$ref": "#/$defs/Select"
+    },
+    "RadioGroup": {
+      "$ref": "#/$defs/RadioGroup"
+    },
+    "CheckboxGroup": {
+      "$ref": "#/$defs/CheckboxGroup"
+    },
+    "Switch": {
+      "$ref": "#/$defs/Switch"
+    },
+    "Slider": {
+      "$ref": "#/$defs/Slider"
+    },
     "Button": {
       "$ref": "#/$defs/Button"
     },
     "Buttons": {
       "$ref": "#/$defs/Buttons"
+    },
+    "HomeGreeting": {
+      "$ref": "#/$defs/HomeGreeting"
+    },
+    "HomePins": {
+      "$ref": "#/$defs/HomePins"
+    },
+    "HomeNeedsYou": {
+      "$ref": "#/$defs/HomeNeedsYou"
+    },
+    "HomeNotifications": {
+      "$ref": "#/$defs/HomeNotifications"
+    },
+    "HomeJobs": {
+      "$ref": "#/$defs/HomeJobs"
+    },
+    "HomeEvents": {
+      "$ref": "#/$defs/HomeEvents"
+    },
+    "HomeNotes": {
+      "$ref": "#/$defs/HomeNotes"
+    },
+    "HomeFiles": {
+      "$ref": "#/$defs/HomeFiles"
+    },
+    "HomeCards": {
+      "$ref": "#/$defs/HomeCards"
     }
   },
   "required": [
     "Stack",
+    "Grid",
+    "GridItem",
+    "Columns",
     "Card",
     "CardHeader",
     "Tabs",
     "TabItem",
+    "Accordion",
+    "AccordionItem",
+    "Collapsible",
+    "Carousel",
     "Separator",
+    "Header",
     "TextContent",
     "Callout",
     "Tag",
     "TagBlock",
+    "Icon",
+    "Avatar",
+    "AvatarGroup",
+    "User",
+    "Kbd",
+    "Link",
+    "Breadcrumb",
+    "CodeBlock",
+    "Empty",
+    "Feature",
     "Steps",
     "StepsItem",
+    "List",
+    "ListItem",
+    "DataList",
+    "Tree",
+    "TreeItem",
     "Stat",
     "Progress",
+    "Sparkline",
+    "Calendar",
+    "CalendarMark",
     "Table",
     "Col",
     "BarChart",
@@ -158,8 +313,25 @@
     "Timeline",
     "TimelineItem",
     "CardGrid",
+    "Form",
+    "Input",
+    "Textarea",
+    "Select",
+    "RadioGroup",
+    "CheckboxGroup",
+    "Switch",
+    "Slider",
     "Button",
-    "Buttons"
+    "Buttons",
+    "HomeGreeting",
+    "HomePins",
+    "HomeNeedsYou",
+    "HomeNotifications",
+    "HomeJobs",
+    "HomeEvents",
+    "HomeNotes",
+    "HomeFiles",
+    "HomeCards"
   ],
   "additionalProperties": false,
   "$defs": {
@@ -172,23 +344,122 @@
         },
         "direction": {
           "type": "string",
-          "enum": ["row", "column"]
+          "enum": [
+            "row",
+            "column"
+          ]
         },
         "gap": {
           "type": "string",
-          "enum": ["none", "xs", "s", "m", "l", "xl"]
+          "enum": [
+            "none",
+            "xs",
+            "s",
+            "m",
+            "l",
+            "xl"
+          ]
         },
         "align": {
           "type": "string",
-          "enum": ["start", "center", "end", "stretch"]
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
         },
         "wrap": {
           "type": "boolean"
+        },
+        "justify": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "between"
+          ]
         }
       },
-      "required": ["children"],
+      "required": [
+        "children"
+      ],
       "additionalProperties": false,
       "description": "Lays out children in a column (default) or a row"
+    },
+    "Grid": {
+      "type": "object",
+      "properties": {
+        "children": {
+          "type": "array",
+          "items": {}
+        },
+        "columns": {
+          "type": "number"
+        },
+        "gap": {
+          "type": "string",
+          "enum": [
+            "none",
+            "xs",
+            "s",
+            "m",
+            "l",
+            "xl"
+          ]
+        }
+      },
+      "required": [
+        "children"
+      ],
+      "additionalProperties": false,
+      "description": "Children in equal columns (2 by default, up to 4), fewer when there is no room"
+    },
+    "GridItem": {
+      "type": "object",
+      "properties": {
+        "children": {
+          "type": "array",
+          "items": {}
+        },
+        "span": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "children"
+      ],
+      "additionalProperties": false,
+      "description": "A Grid child that is span columns wide"
+    },
+    "Columns": {
+      "type": "object",
+      "properties": {
+        "children": {
+          "type": "array",
+          "items": {}
+        },
+        "count": {
+          "type": "number"
+        },
+        "gap": {
+          "type": "string",
+          "enum": [
+            "none",
+            "xs",
+            "s",
+            "m",
+            "l",
+            "xl"
+          ]
+        }
+      },
+      "required": [
+        "children"
+      ],
+      "additionalProperties": false,
+      "description": "Children of different heights packed into columns top to bottom (3 by default), like a board of cards"
     },
     "Card": {
       "type": "object",
@@ -199,12 +470,34 @@
         },
         "variant": {
           "type": "string",
-          "enum": ["card", "sunk", "clear"]
+          "enum": [
+            "card",
+            "sunk",
+            "clear",
+            "soft"
+          ]
+        },
+        "footer": {
+          "type": "array",
+          "items": {}
+        },
+        "color": {
+          "type": "string",
+          "enum": [
+            "neutral",
+            "primary",
+            "info",
+            "success",
+            "warning",
+            "error"
+          ]
         }
       },
-      "required": ["children"],
+      "required": [
+        "children"
+      ],
       "additionalProperties": false,
-      "description": "A bordered box that groups related content"
+      "description": "A bordered box that groups related content. footer is a slot under a rule; color tints a \"soft\" card and marks the others with a stripe"
     },
     "CardHeader": {
       "type": "object",
@@ -214,10 +507,14 @@
         },
         "subtitle": {
           "type": "string"
-        }
+        },
+        "icon": {
+          "type": "string"
+        },
+        "trailing": {}
       },
       "additionalProperties": false,
-      "description": "Title and optional subtitle at the top of a Card"
+      "description": "Title and optional subtitle at the top of a Card. trailing is a slot at its right: a Tag, a Button, an Avatar"
     },
     "Tabs": {
       "type": "object",
@@ -227,9 +524,18 @@
           "items": {
             "$ref": "#/$defs/TabItem"
           }
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "underline",
+            "pill"
+          ]
         }
       },
-      "required": ["items"],
+      "required": [
+        "items"
+      ],
       "additionalProperties": false,
       "description": "Alternative views of the same subject, one visible at a time"
     },
@@ -245,17 +551,132 @@
         "content": {
           "type": "array",
           "items": {}
+        },
+        "icon": {
+          "type": "string"
         }
       },
-      "required": ["value", "trigger", "content"],
+      "required": [
+        "value",
+        "trigger",
+        "content"
+      ],
       "additionalProperties": false,
       "description": "value is a unique id, trigger is the tab label"
     },
+    "Accordion": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AccordionItem"
+          }
+        },
+        "multiple": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false,
+      "description": "Sections that open on a click, one at a time unless multiple is true: FAQs, details on demand"
+    },
+    "AccordionItem": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "content": {
+          "type": "array",
+          "items": {}
+        },
+        "icon": {
+          "type": "string"
+        },
+        "open": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "label",
+        "content"
+      ],
+      "additionalProperties": false,
+      "description": "One section of an Accordion; open: true starts it open"
+    },
+    "Collapsible": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "children": {
+          "type": "array",
+          "items": {}
+        },
+        "open": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "label",
+        "children"
+      ],
+      "additionalProperties": false,
+      "description": "Content behind a \"show more\" line"
+    },
+    "Carousel": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {}
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false,
+      "description": "One item at a time with previous and next: a few cards to flip through"
+    },
     "Separator": {
       "type": "object",
-      "properties": {},
+      "properties": {
+        "label": {
+          "type": "string"
+        }
+      },
       "additionalProperties": false,
-      "description": "A horizontal rule between sections"
+      "description": "A horizontal rule between sections, with an optional label in it"
+    },
+    "Header": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "eyebrow": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "actions": {
+          "type": "array",
+          "items": {}
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false,
+      "description": "The heading of a page or a section: a small eyebrow line, the title, a description. actions is a slot of Buttons at its right"
     },
     "TextContent": {
       "type": "object",
@@ -265,10 +686,29 @@
         },
         "size": {
           "type": "string",
-          "enum": ["small", "default", "large", "small-heavy", "large-heavy"]
+          "enum": [
+            "small",
+            "default",
+            "large",
+            "small-heavy",
+            "large-heavy"
+          ]
+        },
+        "color": {
+          "type": "string",
+          "enum": [
+            "default",
+            "muted",
+            "primary",
+            "success",
+            "warning",
+            "error"
+          ]
         }
       },
-      "required": ["text"],
+      "required": [
+        "text"
+      ],
       "additionalProperties": false,
       "description": "A paragraph or a heading of plain text"
     },
@@ -277,18 +717,136 @@
       "properties": {
         "variant": {
           "type": "string",
-          "enum": ["info", "warning", "error", "success", "neutral"]
+          "enum": [
+            "info",
+            "warning",
+            "error",
+            "success",
+            "neutral"
+          ]
         },
         "title": {
           "type": "string"
         },
         "description": {
           "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Button"
+          }
+        },
+        "style": {
+          "type": "string",
+          "enum": [
+            "soft",
+            "outline",
+            "solid"
+          ]
         }
       },
-      "required": ["variant", "title", "description"],
+      "required": [
+        "variant",
+        "title",
+        "description"
+      ],
       "additionalProperties": false,
-      "description": "A colored notice with a title and a description"
+      "description": "A colored notice with a title and a description. actions is a slot of Buttons under it"
+    },
+    "Button": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "action": {
+          "$ref": "#/$defs/ActionExpression"
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "primary",
+            "secondary",
+            "tertiary"
+          ]
+        },
+        "icon": {
+          "type": "string"
+        },
+        "size": {
+          "type": "string",
+          "enum": [
+            "s",
+            "m",
+            "l"
+          ]
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "additionalProperties": false,
+      "description": "A button. Without an action it sends its label to you"
+    },
+    "ActionExpression": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "open_url"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "url"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "continue_conversation"
+            },
+            "context": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "params": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        }
+      ]
     },
     "Tag": {
       "type": "object",
@@ -298,10 +856,29 @@
         },
         "variant": {
           "type": "string",
-          "enum": ["neutral", "info", "success", "warning", "danger"]
+          "enum": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ]
+        },
+        "icon": {
+          "type": "string"
+        },
+        "style": {
+          "type": "string",
+          "enum": [
+            "soft",
+            "outline",
+            "solid"
+          ]
         }
       },
-      "required": ["text"],
+      "required": [
+        "text"
+      ],
       "additionalProperties": false,
       "description": "A small colored badge"
     },
@@ -315,9 +892,256 @@
           }
         }
       },
-      "required": ["tags"],
+      "required": [
+        "tags"
+      ],
       "additionalProperties": false,
       "description": "A row of neutral tags"
+    },
+    "Icon": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string",
+          "enum": [
+            "neutral",
+            "primary",
+            "info",
+            "success",
+            "warning",
+            "error"
+          ]
+        },
+        "size": {
+          "type": "string",
+          "enum": [
+            "s",
+            "m",
+            "l"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "description": "One icon, for a slot or a row"
+    },
+    "Avatar": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string",
+          "enum": [
+            "neutral",
+            "primary",
+            "info",
+            "success",
+            "warning",
+            "error"
+          ]
+        },
+        "size": {
+          "type": "string",
+          "enum": [
+            "s",
+            "m",
+            "l"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "online",
+            "away",
+            "busy",
+            "offline"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "description": "A round badge with the initials of name, or an icon. status adds a dot"
+    },
+    "AvatarGroup": {
+      "type": "object",
+      "properties": {
+        "avatars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Avatar"
+          }
+        },
+        "max": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "avatars"
+      ],
+      "additionalProperties": false,
+      "description": "Overlapping Avatars; past max they show as \"+N\""
+    },
+    "User": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "avatar": {},
+        "trailing": {},
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "description": "A person in one line: an avatar, the name, a description. trailing is a slot at the right"
+    },
+    "Kbd": {
+      "type": "object",
+      "properties": {
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "keys"
+      ],
+      "additionalProperties": false,
+      "description": "Keys of a keyboard shortcut"
+    },
+    "Link": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "url"
+      ],
+      "additionalProperties": false,
+      "description": "A text link that opens url on a click"
+    },
+    "Breadcrumb": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false,
+      "description": "A path of places, the last one the current"
+    },
+    "CodeBlock": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "additionalProperties": false,
+      "description": "Code or a command in monospace, with a Copy button"
+    },
+    "Empty": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Button"
+          }
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false,
+      "description": "What to show when there is nothing: an icon, a title, a line, and what to do next"
+    },
+    "Feature": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string",
+          "enum": [
+            "neutral",
+            "primary",
+            "info",
+            "success",
+            "warning",
+            "error"
+          ]
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false,
+      "description": "An icon with a title and a line under it: a point, a benefit, a shortcut. url makes it a link"
     },
     "Steps": {
       "type": "object",
@@ -327,11 +1151,16 @@
           "items": {
             "$ref": "#/$defs/StepsItem"
           }
+        },
+        "current": {
+          "type": "number"
         }
       },
-      "required": ["items"],
+      "required": [
+        "items"
+      ],
       "additionalProperties": false,
-      "description": "A numbered step-by-step guide"
+      "description": "A numbered step-by-step guide. With current (from 1), earlier steps show done and later ones to do"
     },
     "StepsItem": {
       "type": "object",
@@ -341,11 +1170,141 @@
         },
         "details": {
           "type": "string"
+        },
+        "icon": {
+          "type": "string"
         }
       },
-      "required": ["title", "details"],
+      "required": [
+        "title",
+        "details"
+      ],
       "additionalProperties": false,
       "description": "One numbered step"
+    },
+    "List": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ListItem"
+          }
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "plain",
+            "divided",
+            "cards"
+          ]
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false,
+      "description": "Rows of things: tasks, files, people, results"
+    },
+    "ListItem": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "leading": {},
+        "trailing": {},
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false,
+      "description": "One row of a List. leading is a slot at its left (an Icon, an Avatar), trailing one at its right (a Tag, a Button, a Sparkline, text). url makes the row a link"
+    },
+    "DataList": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Field"
+          }
+        },
+        "layout": {
+          "type": "string",
+          "enum": [
+            "rows",
+            "columns"
+          ]
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false,
+      "description": "Labels and values: the facts of one thing"
+    },
+    "Field": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "value"
+      ],
+      "additionalProperties": false,
+      "description": "One label and value, on an EntityCard or in a DataList"
+    },
+    "Tree": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TreeItem"
+          }
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false,
+      "description": "Nested things that open on a click: folders, an outline, an org chart"
+    },
+    "TreeItem": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "children": {
+          "type": "array",
+          "items": {}
+        },
+        "icon": {
+          "type": "string"
+        },
+        "open": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "additionalProperties": false,
+      "description": "One node of a Tree; children are TreeItems"
     },
     "Stat": {
       "type": "object",
@@ -361,15 +1320,42 @@
         },
         "trend": {
           "type": "string",
-          "enum": ["up", "down", "flat"]
+          "enum": [
+            "up",
+            "down",
+            "flat"
+          ]
         },
         "caption": {
           "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string",
+          "enum": [
+            "neutral",
+            "primary",
+            "info",
+            "success",
+            "warning",
+            "error"
+          ]
+        },
+        "spark": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
         }
       },
-      "required": ["label", "value"],
+      "required": [
+        "label",
+        "value"
+      ],
       "additionalProperties": false,
-      "description": "A headline number (KPI). change is a short delta like \"+12%\"; trend colors it"
+      "description": "A headline number (KPI). change is a short delta like \"+12%\"; trend colors it. spark draws a small line of the numbers behind it"
     },
     "Progress": {
       "type": "object",
@@ -382,11 +1368,113 @@
         },
         "max": {
           "type": "number"
+        },
+        "color": {
+          "type": "string",
+          "enum": [
+            "neutral",
+            "primary",
+            "info",
+            "success",
+            "warning",
+            "error"
+          ]
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "bar",
+            "ring"
+          ]
+        },
+        "caption": {
+          "type": "string"
         }
       },
-      "required": ["label", "value"],
+      "required": [
+        "label",
+        "value"
+      ],
       "additionalProperties": false,
-      "description": "A labelled bar showing value out of max (default 100)"
+      "description": "A labelled bar, or a ring, showing value out of max (default 100)"
+    },
+    "Sparkline": {
+      "type": "object",
+      "properties": {
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "color": {
+          "type": "string",
+          "enum": [
+            "neutral",
+            "primary",
+            "info",
+            "success",
+            "warning",
+            "error"
+          ]
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "line",
+            "area",
+            "bar"
+          ]
+        }
+      },
+      "required": [
+        "values"
+      ],
+      "additionalProperties": false,
+      "description": "A tiny chart with no axes, for a slot or beside a number"
+    },
+    "Calendar": {
+      "type": "object",
+      "properties": {
+        "month": {
+          "type": "string"
+        },
+        "marks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CalendarMark"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "description": "One month as a grid of days, with marked days. month is YYYY-MM (this month when left out)"
+    },
+    "CalendarMark": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string",
+          "enum": [
+            "neutral",
+            "primary",
+            "info",
+            "success",
+            "warning",
+            "error"
+          ]
+        }
+      },
+      "required": [
+        "date"
+      ],
+      "additionalProperties": false,
+      "description": "A day to mark on a Calendar, YYYY-MM-DD"
     },
     "Table": {
       "type": "object",
@@ -396,11 +1484,26 @@
           "items": {
             "$ref": "#/$defs/Col"
           }
+        },
+        "pageSize": {
+          "type": "number"
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "plain",
+            "striped"
+          ]
+        },
+        "caption": {
+          "type": "string"
         }
       },
-      "required": ["columns"],
+      "required": [
+        "columns"
+      ],
       "additionalProperties": false,
-      "description": "A table, column by column. Every Col has one value per row"
+      "description": "A table, column by column. Every Col has one value per row. pageSize pages a long one; a click on a header sorts"
     },
     "Col": {
       "type": "object",
@@ -414,10 +1517,16 @@
         },
         "type": {
           "type": "string",
-          "enum": ["string", "number"]
+          "enum": [
+            "string",
+            "number"
+          ]
         }
       },
-      "required": ["label", "data"],
+      "required": [
+        "label",
+        "data"
+      ],
       "additionalProperties": false,
       "description": "One table column: a header and one value per row"
     },
@@ -438,7 +1547,10 @@
         },
         "variant": {
           "type": "string",
-          "enum": ["grouped", "stacked"]
+          "enum": [
+            "grouped",
+            "stacked"
+          ]
         },
         "xLabel": {
           "type": "string"
@@ -447,7 +1559,10 @@
           "type": "string"
         }
       },
-      "required": ["labels", "series"],
+      "required": [
+        "labels",
+        "series"
+      ],
       "additionalProperties": false,
       "description": "Vertical bars: compare values across a few categories, one or more series"
     },
@@ -464,7 +1579,10 @@
           }
         }
       },
-      "required": ["category", "values"],
+      "required": [
+        "category",
+        "values"
+      ],
       "additionalProperties": false,
       "description": "One named series of numbers, one per label"
     },
@@ -485,7 +1603,10 @@
         },
         "variant": {
           "type": "string",
-          "enum": ["grouped", "stacked"]
+          "enum": [
+            "grouped",
+            "stacked"
+          ]
         },
         "xLabel": {
           "type": "string"
@@ -494,7 +1615,10 @@
           "type": "string"
         }
       },
-      "required": ["labels", "series"],
+      "required": [
+        "labels",
+        "series"
+      ],
       "additionalProperties": false,
       "description": "Horizontal bars: rankings, or categories with long names"
     },
@@ -515,7 +1639,10 @@
         },
         "variant": {
           "type": "string",
-          "enum": ["linear", "step"]
+          "enum": [
+            "linear",
+            "step"
+          ]
         },
         "xLabel": {
           "type": "string"
@@ -524,7 +1651,10 @@
           "type": "string"
         }
       },
-      "required": ["labels", "series"],
+      "required": [
+        "labels",
+        "series"
+      ],
       "additionalProperties": false,
       "description": "Lines over ordered labels (time): trends, one or more series"
     },
@@ -545,7 +1675,10 @@
         },
         "variant": {
           "type": "string",
-          "enum": ["overlap", "stacked"]
+          "enum": [
+            "overlap",
+            "stacked"
+          ]
         },
         "xLabel": {
           "type": "string"
@@ -554,7 +1687,10 @@
           "type": "string"
         }
       },
-      "required": ["labels", "series"],
+      "required": [
+        "labels",
+        "series"
+      ],
       "additionalProperties": false,
       "description": "Filled lines over time; \"stacked\" shows parts of a total"
     },
@@ -575,10 +1711,16 @@
         },
         "variant": {
           "type": "string",
-          "enum": ["pie", "donut"]
+          "enum": [
+            "pie",
+            "donut"
+          ]
         }
       },
-      "required": ["labels", "values"],
+      "required": [
+        "labels",
+        "values"
+      ],
       "additionalProperties": false,
       "description": "Shares of one whole, at most 6 slices"
     },
@@ -598,7 +1740,9 @@
           "type": "string"
         }
       },
-      "required": ["datasets"],
+      "required": [
+        "datasets"
+      ],
       "additionalProperties": false,
       "description": "X/Y points: correlation and clusters"
     },
@@ -615,7 +1759,10 @@
           }
         }
       },
-      "required": ["name", "points"],
+      "required": [
+        "name",
+        "points"
+      ],
       "additionalProperties": false,
       "description": "A named set of points"
     },
@@ -632,7 +1779,10 @@
           "type": "string"
         }
       },
-      "required": ["x", "y"],
+      "required": [
+        "x",
+        "y"
+      ],
       "additionalProperties": false,
       "description": "One x/y point; label names it in the tooltip"
     },
@@ -652,7 +1802,9 @@
           "type": "number"
         }
       },
-      "required": ["markers"],
+      "required": [
+        "markers"
+      ],
       "additionalProperties": false,
       "description": "An OpenStreetMap map that fits its markers. route: true joins them in order (an itinerary)"
     },
@@ -672,7 +1824,11 @@
           "type": "string"
         }
       },
-      "required": ["lat", "lng", "label"],
+      "required": [
+        "lat",
+        "lng",
+        "label"
+      ],
       "additionalProperties": false,
       "description": "A place on a Map, in decimal degrees"
     },
@@ -701,47 +1857,17 @@
           }
         },
         "icon": {
-          "type": "string",
-          "enum": [
-            "user",
-            "users",
-            "building",
-            "map-marker-alt",
-            "box",
-            "book",
-            "code",
-            "file-alt",
-            "folder",
-            "globe",
-            "calendar-alt",
-            "music",
-            "film",
-            "utensils",
-            "plane",
-            "star"
-          ]
+          "type": "string"
         },
         "url": {
           "type": "string"
         }
       },
-      "required": ["title"],
+      "required": [
+        "title"
+      ],
       "additionalProperties": false,
       "description": "A person, place, project, package or other thing: its name, facts and tags"
-    },
-    "Field": {
-      "type": "object",
-      "properties": {
-        "label": {
-          "type": "string"
-        },
-        "value": {
-          "type": "string"
-        }
-      },
-      "required": ["label", "value"],
-      "additionalProperties": false,
-      "description": "One label and value on an EntityCard"
     },
     "LinkCard": {
       "type": "object",
@@ -759,7 +1885,10 @@
           "type": "string"
         }
       },
-      "required": ["title", "url"],
+      "required": [
+        "title",
+        "url"
+      ],
       "additionalProperties": false,
       "description": "A page to open: a search result, a source, a file in a drive (hyper://). The whole card is the link"
     },
@@ -791,58 +1920,11 @@
           "$ref": "#/$defs/ActionExpression"
         }
       },
-      "required": ["title"],
+      "required": [
+        "title"
+      ],
       "additionalProperties": false,
       "description": "Something to buy or choose: price, a 0-5 rating, tags, a badge like \"Best value\""
-    },
-    "ActionExpression": {
-      "anyOf": [
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "open_url"
-            },
-            "url": {
-              "type": "string"
-            }
-          },
-          "required": ["type", "url"],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "continue_conversation"
-            },
-            "context": {
-              "type": "string"
-            }
-          },
-          "required": ["type"],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string"
-            },
-            "params": {
-              "type": "object",
-              "propertyNames": {
-                "type": "string"
-              },
-              "additionalProperties": {}
-            }
-          },
-          "required": ["type"],
-          "additionalProperties": false
-        }
-      ]
     },
     "EventCard": {
       "type": "object",
@@ -866,7 +1948,10 @@
           "type": "string"
         }
       },
-      "required": ["title", "date"],
+      "required": [
+        "title",
+        "date"
+      ],
       "additionalProperties": false,
       "description": "Something that happens on a date. date is YYYY-MM-DD when you know it"
     },
@@ -883,7 +1968,9 @@
           "type": "string"
         }
       },
-      "required": ["text"],
+      "required": [
+        "text"
+      ],
       "additionalProperties": false,
       "description": "A quotation, with who said it or where it is from"
     },
@@ -906,7 +1993,10 @@
           "type": "string"
         }
       },
-      "required": ["pros", "cons"],
+      "required": [
+        "pros",
+        "cons"
+      ],
       "additionalProperties": false,
       "description": "Two lists side by side, for and against"
     },
@@ -920,7 +2010,9 @@
           }
         }
       },
-      "required": ["items"],
+      "required": [
+        "items"
+      ],
       "additionalProperties": false,
       "description": "Dated events in order: history, a changelog, a schedule"
     },
@@ -938,10 +2030,22 @@
         },
         "variant": {
           "type": "string",
-          "enum": ["neutral", "info", "success", "warning", "danger"]
+          "enum": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ]
+        },
+        "icon": {
+          "type": "string"
         }
       },
-      "required": ["date", "title"],
+      "required": [
+        "date",
+        "title"
+      ],
       "additionalProperties": false,
       "description": "One dated entry on a Timeline"
     },
@@ -953,27 +2057,232 @@
           "items": {}
         }
       },
-      "required": ["cards"],
+      "required": [
+        "cards"
+      ],
       "additionalProperties": false,
       "description": "Cards in as many columns as fit (one in a narrow sidebar)"
     },
-    "Button": {
+    "Form": {
       "type": "object",
       "properties": {
+        "fields": {
+          "type": "array",
+          "items": {}
+        },
+        "submit": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "fields"
+      ],
+      "additionalProperties": false,
+      "description": "Fields the user fills in, and a button that sends you what they entered as their next message"
+    },
+    "Input": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
         "label": {
           "type": "string"
         },
-        "action": {
-          "$ref": "#/$defs/ActionExpression"
+        "placeholder": {
+          "type": "string"
         },
-        "variant": {
+        "type": {
           "type": "string",
-          "enum": ["primary", "secondary", "tertiary"]
+          "enum": [
+            "text",
+            "number",
+            "date",
+            "time",
+            "email",
+            "url"
+          ]
+        },
+        "value": {
+          "type": "string"
+        },
+        "hint": {
+          "type": "string"
         }
       },
-      "required": ["label"],
+      "required": [
+        "name",
+        "label"
+      ],
       "additionalProperties": false,
-      "description": "A button. Without an action it sends its label to you"
+      "description": "A one-line field of a Form"
+    },
+    "Textarea": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "placeholder": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "label"
+      ],
+      "additionalProperties": false,
+      "description": "A field for several lines"
+    },
+    "Select": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "label",
+        "options"
+      ],
+      "additionalProperties": false,
+      "description": "Pick one from a menu"
+    },
+    "RadioGroup": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "label",
+        "options"
+      ],
+      "additionalProperties": false,
+      "description": "Pick one of a few, all visible"
+    },
+    "CheckboxGroup": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "label",
+        "options"
+      ],
+      "additionalProperties": false,
+      "description": "Pick any of a few"
+    },
+    "Switch": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "boolean"
+        },
+        "hint": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "label"
+      ],
+      "additionalProperties": false,
+      "description": "One yes or no"
+    },
+    "Slider": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "value": {
+          "type": "number"
+        },
+        "step": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "label",
+        "min",
+        "max"
+      ],
+      "additionalProperties": false,
+      "description": "A number between min and max"
     },
     "Buttons": {
       "type": "object",
@@ -986,12 +2295,91 @@
         },
         "direction": {
           "type": "string",
-          "enum": ["row", "column"]
+          "enum": [
+            "row",
+            "column"
+          ]
         }
       },
-      "required": ["buttons"],
+      "required": [
+        "buttons"
+      ],
       "additionalProperties": false,
       "description": "A group of Buttons"
+    },
+    "HomeGreeting": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "description": "The greeting, the date and the Space"
+    },
+    "HomePins": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "description": "The Space's pinned pages as thumbnails, and the button that adds one"
+    },
+    "HomeNeedsYou": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "description": "What waits on the user's answer, with its buttons. Shows only when something does; the page adds it at the top when a layout leaves it out"
+    },
+    "HomeNotifications": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Job results, notices and unread Messages"
+    },
+    "HomeJobs": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false,
+      "description": "The Jobs running now and the ones up next"
+    },
+    "HomeEvents": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false,
+      "description": "The calendar from now on"
+    },
+    "HomeNotes": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false,
+      "description": "The newest Notes"
+    },
+    "HomeFiles": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false,
+      "description": "The newest files in Assets"
+    },
+    "HomeCards": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "description": "Every card pinned to the home page, each as its own child of the Grid, Columns or Stack this is in"
     }
   }
 }

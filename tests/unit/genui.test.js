@@ -1,7 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { genuiPrompt, genuiSchema, GENUI_FENCE } from '../../app/lib/genui/library.mjs';
+import {
+  genuiPrompt,
+  genuiFullPrompt,
+  genuiMoreSignatures,
+  genuiHomeSignatures,
+  genuiSchema,
+  GENUI_FENCE,
+  CORE_COMPONENTS,
+  MORE_COMPONENTS,
+  HOME_WIDGETS,
+  CARD_ICONS,
+} from '../../app/lib/genui/library.mjs';
+import { ICONS, iconName } from '../../app/lib/genui/icons.mjs';
+import { iconNames } from '../../app/lib/genui/page.mjs';
+import { FIELDS, initialValue, formMessage } from '../../app/fg/shell-window/genui/forms.js';
 import { splitGenUi, hasGenUi } from '../../app/lib/genui/segments.mjs';
 import { parseGenUi as parse } from '../../app/lib/genui/parse.mjs';
 import schemaJson from '../../app/lib/genui/schema.json';
@@ -13,6 +27,12 @@ import {
   pieSlices,
   labelStride,
   truncate,
+  sparkGeometry,
+  ringDash,
+  initials,
+  parseMonth,
+  monthGrid,
+  sortRows,
 } from '../../app/fg/shell-window/genui/chart-math.js';
 
 describe('genui library', () => {
@@ -20,14 +40,54 @@ describe('genui library', () => {
     expect(JSON.parse(JSON.stringify(genuiSchema()))).toEqual(schemaJson);
   });
 
-  it('teaches the fence and every component, in a prompt of bounded size', () => {
+  it('teaches the fence and the core components every turn, in a prompt of bounded size', () => {
     const prompt = genuiPrompt();
     expect(prompt).toContain('```' + GENUI_FENCE);
-    for (const name of Object.keys(schemaJson.properties)) {
-      expect(prompt).toContain(`${name}(`);
+    for (const name of CORE_COMPONENTS) expect(prompt).toContain(`${name}(`);
+    // The rest are named, with the guide that has their arguments (ADR-0048).
+    // (their parts, like ListItem, come with them).
+    for (const name of MORE_COMPONENTS) {
+      expect(prompt).not.toContain(`\n${name}(`);
+      if (!/(Item|Mark)$/.test(name)) expect(prompt).toMatch(new RegExp(`\\b${name}\\b`));
     }
-    // Every sidebar turn carries it.
-    expect(prompt.length).toBeLessThan(12000);
+    expect(prompt).toContain('guide:genui-components');
+    expect(prompt).toContain('guide:dashboard');
+    // Every sidebar turn carries it. The second set of components is why it isn't all of them.
+    expect(prompt.length).toBeLessThan(13500);
+  });
+
+  it('puts every component in exactly one of the every-turn prompt, the guide, or the home widgets', () => {
+    const all = Object.keys(schemaJson.properties).sort();
+    expect([...CORE_COMPONENTS, ...MORE_COMPONENTS, ...HOME_WIDGETS].sort()).toEqual(all);
+    expect(new Set([...CORE_COMPONENTS, ...MORE_COMPONENTS, ...HOME_WIDGETS]).size).toBe(all.length);
+    const more = genuiMoreSignatures();
+    for (const name of MORE_COMPONENTS) expect(more).toContain(`\n${name}(`);
+    for (const name of CORE_COMPONENTS) expect(more).not.toContain(`\n${name}(`);
+    const home = genuiHomeSignatures();
+    for (const name of HOME_WIDGETS) expect(home).toContain(`${name}(`);
+    // A saved page's guide teaches all of them but the home page's own widgets.
+    const full = genuiFullPrompt();
+    for (const name of [...CORE_COMPONENTS, ...MORE_COMPONENTS]) expect(full).toContain(`\n${name}(`);
+    for (const name of HOME_WIDGETS) expect(full).not.toContain(`${name}(`);
+  });
+
+  it('draws only icons the icon font has', () => {
+    const css = fs.readFileSync(path.join(__dirname, '../../app/assets/css/fa-all.min.css'), 'utf8');
+    expect(new Set(ICONS).size).toBe(ICONS.length);
+    for (const name of ICONS) expect(css, name).toContain(`.fa-${name}:before`);
+    for (const name of CARD_ICONS) expect(ICONS).toContain(name);
+    expect(iconName('rocket')).toBe('rocket');
+    expect(iconName(' Rocket ')).toBe('rocket');
+    expect(iconName('fa-rocket')).toBe('rocket');
+    expect(iconName('rocket fa-spin')).toBe('');
+    expect(iconName('x" onclick="alert(1)')).toBe('');
+    expect(iconName(null)).toBe('');
+    // What the renderer draws by itself in a saved page, which carries only the glyphs it names.
+    const builtIn = iconNames('');
+    for (const name of ['chevron-down', 'chevron-left', 'chevron-right', 'caret-up', 'caret-down', 'copy', 'folder']) {
+      expect(builtIn.has(name), name).toBe(true);
+    }
+    expect(iconNames('root = Stack([Icon("rocket")])').has('rocket')).toBe(true);
   });
 
   it('has no Image: a model-chosen image URL would load as soon as the answer renders', () => {
@@ -215,5 +275,151 @@ describe('genui map', () => {
       const src = fs.readFileSync(path.join(dir, f), 'utf8');
       expect(src, f).not.toMatch(/(from|import\(|require\()\s*['"]leaflet(\/[^'"?]*)?['"]/);
     }
+  });
+});
+
+describe('the second set of components (ADR-0048)', () => {
+  it('parses layout, content and list components with their slots', () => {
+    const { root, meta } = parse(`root = Stack([head, grid, cols, acc, list, data, tree, cal, tbl], "column", "m", "start", false, "between")
+head = Header("Trip", "Lisbon in December", "Plan", "plane", [Button("Share", null, "secondary", "share-alt", "s")])
+grid = Grid([GridItem([Stat("Spent", "€1,240", "+€180", "up", "this week", "wallet", "primary", [1, 2, 3])], 2), Progress("Budget", 62, 100, "success", "ring", "of €2,000")], 3, "l")
+cols = Columns([Card([CardHeader("A", "sub", "book", Tag("New", "info", "star", "solid"))], "soft", [Buttons([Button("Open")])], "primary"), Empty("Nothing yet", "Add one", "inbox")], 2)
+acc = Accordion([AccordionItem("Why", [TextContent("Because", "small", "muted")], "question-circle", true)], true)
+list = List([ListItem("Ana", "Host", Avatar("Ana Costa", null, "primary", "m", "online"), Tag("Paid", "success"), "https://example.com")], "divided")
+data = DataList([Field("Check-in", "Dec 12")], "columns")
+tree = Tree([TreeItem("src", [TreeItem("index.js")], "folder", true)])
+cal = Calendar("2026-12", [CalendarMark("2026-12-12", "Fly out", "primary")])
+tbl = Table([Col("Name", ["a", "b"])], 5, "striped", "Guests")`);
+    expect(meta.errors).toEqual([]);
+    const [head, grid, cols, acc, list, data, tree, cal, tbl] = root.props.children;
+    expect(root.props.justify).toBe('between');
+    expect(head.props).toMatchObject({ title: 'Trip', eyebrow: 'Plan', icon: 'plane' });
+    expect(head.props.actions[0].props).toMatchObject({ label: 'Share', icon: 'share-alt', size: 's' });
+    expect(grid.props.columns).toBe(3);
+    expect(grid.props.children[0].props.span).toBe(2);
+    expect(grid.props.children[0].props.children[0].props).toMatchObject({ icon: 'wallet', color: 'primary', spark: [1, 2, 3] });
+    expect(grid.props.children[1].props).toMatchObject({ variant: 'ring', color: 'success' });
+    const card = cols.props.children[0];
+    expect(card.props).toMatchObject({ variant: 'soft', color: 'primary' });
+    expect(card.props.footer[0].typeName).toBe('Buttons');
+    expect(card.props.children[0].props.trailing.props).toMatchObject({ text: 'New', icon: 'star', style: 'solid' });
+    expect(acc.props.items[0].props).toMatchObject({ label: 'Why', open: true });
+    expect(list.props.items[0].props.leading.typeName).toBe('Avatar');
+    expect(list.props.items[0].props.trailing.typeName).toBe('Tag');
+    expect(data.props.layout).toBe('columns');
+    expect(tree.props.items[0].props.children[0].props.label).toBe('index.js');
+    expect(cal.props.marks[0].props).toMatchObject({ date: '2026-12-12', color: 'primary' });
+    expect(tbl.props).toMatchObject({ pageSize: 5, variant: 'striped', caption: 'Guests' });
+  });
+
+  it('still parses a program written before the new arguments', () => {
+    const { root, meta } = parse(`root = Stack([Card([CardHeader("Old", "card")], "sunk"), Callout("info", "Title", "Text"), Tag("x", "success"), Steps([StepsItem("One", "First")]), Table([Col("A", [1])]), Button("Go")], "row", "s", "center", true)`);
+    expect(meta.errors).toEqual([]);
+    expect(root.props.children.map((c) => c.typeName)).toEqual(['Card', 'Callout', 'Tag', 'Steps', 'Table', 'Button']);
+  });
+
+  it('parses a form and the home page widgets', () => {
+    const { root, meta } = parse(`root = Stack([form, HomeGreeting(), board])
+form = Form([Input("name", "Name", "Ada", "text"), Textarea("note", "Note"), Select("size", "Size", ["S", "M"], "M"), RadioGroup("when", "When", ["Now", "Later"]), CheckboxGroup("extras", "Extras", ["Bag", "Seat"], ["Bag"]), Switch("news", "Newsletter", true), Slider("qty", "Quantity", 1, 10, 3, 1)], "Book", "Booking")
+board = Columns([HomeNotes(10), HomeCards()], 2)`);
+    expect(meta.errors).toEqual([]);
+    const [form, greeting, board] = root.props.children;
+    expect(form.props.fields.map((f) => f.typeName)).toEqual(FIELDS);
+    expect(form.props).toMatchObject({ submit: 'Book', title: 'Booking' });
+    expect(greeting.typeName).toBe('HomeGreeting');
+    expect(board.props.children[0].props.limit).toBe(10);
+  });
+});
+
+describe('forms', () => {
+  it('starts each field from its value, and only from one it offers', () => {
+    expect(initialValue('Input', { value: 'Ada' })).toBe('Ada');
+    expect(initialValue('Input', { value: { a: 1 } })).toBe('');
+    expect(initialValue('Input', { value: 'x'.repeat(5000) })).toHaveLength(2000);
+    expect(initialValue('Select', { options: ['S', 'M'], value: 'M' })).toBe('M');
+    expect(initialValue('Select', { options: ['S', 'M'], value: 'XL' })).toBe('');
+    expect(initialValue('CheckboxGroup', { options: ['a', 'b'], values: ['b', 'z'] })).toEqual(['b']);
+    expect(initialValue('Switch', { value: true })).toBe(true);
+    expect(initialValue('Switch', { value: 'yes' })).toBe(false);
+    expect(initialValue('Slider', { min: 1, max: 10, value: 30 })).toBe(10);
+    expect(initialValue('Slider', { min: 5, max: 1 })).toBe(5);
+  });
+
+  it('sends the answers as a message the user can read', () => {
+    const f = (typeName, props) => ({ type: 'element', typeName, props });
+    const fields = [
+      f('Input', { name: 'name', label: 'Name' }),
+      f('Textarea', { name: 'note', label: 'Note' }),
+      f('CheckboxGroup', { name: 'extras', label: 'Extras' }),
+      f('Switch', { name: 'news', label: 'Newsletter' }),
+      f('Slider', { label: 'Quantity' }),
+    ];
+    const values = { name: ' Ada ', note: '', extras: ['Bag', 'Seat'], news: false, field5: 3 };
+    expect(formMessage('Booking', fields, values)).toBe(
+      'Booking:\n- Name: Ada\n- Extras: Bag, Seat\n- Newsletter: no\n- Quantity: 3'
+    );
+    expect(formMessage('', [], {})).toBe('My answers');
+  });
+});
+
+describe('math for the new components', () => {
+  it('lays a sparkline out in its box', () => {
+    const g = sparkGeometry([1, 3, 2], 100, 28, 2);
+    expect(g.points).toHaveLength(3);
+    expect(g.points[0]).toEqual([0, 26]);
+    expect(g.points[1]).toEqual([50, 2]);
+    expect(g.points[2][0]).toBe(100);
+    expect(g.line).toBe('M0,26L50,2L100,14');
+    expect(g.area).toBe('M0,26L50,2L100,14L100,28L0,28Z');
+    expect(g.bars).toHaveLength(3);
+    expect(g.bars[1]).toMatchObject({ y: 0, h: 28 });
+    // One value, or values that are all the same, is a flat line, not a division by zero.
+    expect(sparkGeometry([5, 5, 5]).points.map((p) => p[1])).toEqual([14, 14, 14]);
+    expect(sparkGeometry([]).points).toEqual([]);
+    expect(sparkGeometry(['a', null, 4]).points).toHaveLength(1);
+  });
+
+  it('draws a ring by its share', () => {
+    const full = 2 * Math.PI * 10;
+    expect(ringDash(50, 10)).toBe(`${(full * 50) / 100} ${full}`);
+    expect(ringDash(150, 10)).toBe(`${(full * 100) / 100} ${full}`);
+    expect(ringDash(-5, 10)).toBe(`0 ${full}`);
+    expect(ringDash('half', 10)).toBe(`0 ${full}`);
+  });
+
+  it('makes initials for an avatar', () => {
+    expect(initials('Ana Costa')).toBe('AC');
+    expect(initials('ada')).toBe('A');
+    expect(initials('Jean-Luc de la Tour Picard')).toBe('JP');
+    expect(initials('Ana María Díaz')).toBe('AD');
+    expect(initials('')).toBe('?');
+  });
+
+  it('lays a month out in weeks', () => {
+    expect(parseMonth('2026-12')).toEqual({ year: 2026, month: 11 });
+    expect(parseMonth('2026-13')).toBeNull();
+    expect(parseMonth('december')).toBeNull();
+    const weeks = monthGrid(2026, 1); // February 2026 starts on a Sunday and has 28 days
+    expect(weeks).toHaveLength(4);
+    expect(weeks[0][0]).toBe(1);
+    expect(weeks[3][6]).toBe(28);
+    const dec = monthGrid(2026, 11); // starts on a Tuesday
+    expect(dec[0].slice(0, 3)).toEqual([null, null, 1]);
+    expect(dec.flat().filter(Boolean)).toHaveLength(31);
+    expect(dec.every((w) => w.length === 7)).toBe(true);
+    expect(monthGrid(2026, 11, 1)[0].slice(0, 2)).toEqual([null, 1]); // Monday first
+  });
+
+  it('sorts a table by a column, numbers as numbers', () => {
+    const cells = ['10', '9', '1,200', 'n/a'];
+    expect(sortRows([0, 1, 2, 3], cells, 'asc')).toEqual([1, 0, 2, 3]);
+    expect(sortRows([0, 1, 2, 3], cells, 'desc')).toEqual([3, 2, 0, 1]);
+    // An empty cell goes last either way, and a component sorts by the text it shows.
+    expect(sortRows([0, 1, 2], ['b', '', 'a'], 'asc')).toEqual([2, 0, 1]);
+    expect(sortRows([0, 1, 2], ['b', null, 'a'], 'desc')).toEqual([0, 2, 1]);
+    const tag = (text) => ({ type: 'element', typeName: 'Tag', props: { text } });
+    expect(sortRows([0, 1], [tag('open'), tag('closed')], 'asc')).toEqual([1, 0]);
+    expect(sortRows([0, 1, 2], ['pear', 'Apple', 'fig'], 'asc')).toEqual([1, 2, 0]);
+
   });
 });

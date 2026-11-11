@@ -56,6 +56,10 @@ describe('a page from components', () => {
     expect(g.markdown).toMatch(/^## Pages built from components/)
     expect(g.markdown).toContain('LineChart')
     expect(g.markdown).toContain('openui')
+    // A page can use every component, the ones the sidebar's every-turn prompt only names too.
+    expect(g.markdown).toContain('\nAccordion(')
+    expect(g.markdown).toContain('\nGrid(')
+    expect(g.markdown).not.toContain('HomeNotes(')
     // One top heading; the language's own sit under it.
     expect(g.markdown.match(/^## /gm).length).toBe(1)
   })

@@ -22,6 +22,7 @@ import * as spacesDb from '../dbs/spaces';
 import * as pdb from '../dbs/profile-data-db';
 import * as peerRules from '../../../shared/peers.mjs';
 import { deletedSpace, isDeletedSpace } from '../../../shared/space-records.mjs';
+import { HOME_SPACES_PREFIX } from '../../../shared/home-layout.mjs';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'vault' });
 
@@ -464,9 +465,9 @@ export async function moveSpaceRoot(fromKey, toKey) {
   }
   await _putRecord(sess, `${SPACES_PREFIX}${toKey}.json`, { ...old, rootDriveKey: toKey });
   await _putRecord(sess, `${SPACES_PREFIX}${fromKey}.json`, { rootDriveKey: fromKey, movedTo: toKey });
-  // The Space's Reader subscriptions (ADR-0017) and its own Notes and Names (ADR-0029) are keyed by
-  // its Root Drive key: move them too.
-  for (const prefix of [READER_PREFIX, SPACE_LIB_PREFIX]) {
+  // The Space's Reader subscriptions (ADR-0017), its own Notes and Names (ADR-0029) and its home
+  // page (ADR-0048) are keyed by its Root Drive key: move them too.
+  for (const prefix of [READER_PREFIX, SPACE_LIB_PREFIX, HOME_SPACES_PREFIX]) {
     const from = `${prefix}${fromKey}/`;
     for (const { path, value } of await _readPrefixEntries(sess, from)) {
       if (_isAssetPath(path)) continue;
