@@ -26,6 +26,7 @@ import * as archivesDb from '../dbs/archives';
 import * as logLib from '../logger';
 import * as P from '../../../shared/personas.mjs';
 import { WRITERS_PREFIX } from '../../../shared/fs-core.mjs';
+import { createProfileLoader } from './profile-loader.mjs';
 
 const logger = logLib.get().child({ category: 'browser', subcategory: 'personas' });
 
@@ -185,14 +186,31 @@ async function openProfile(url) {
   );
 }
 
+// The check's own open: a drive still opening when the time is up is checked again once it opens
+// (see profile-loader.mjs), for every Persona on it.
+const profileLoader = createProfileLoader({
+  load: (key) => autobases.getOrLoadCollaborativeDrive(key),
+  timeoutMs: LOAD_TIMEOUT,
+  onLate: (key) => {
+    for (const p of personas.values())
+      if (P.driveKeyOf(p.profileUrl) === key) checkProfile(p).catch(() => {});
+  },
+});
+
 // Read a Persona's Profile Drive and check its writers. Never throws.
 export async function checkProfile(persona) {
   const prev = profiles.get(persona.id) || {};
   let info;
   try {
-    const sess = await openProfile(persona.profileUrl);
+    const key = P.driveKeyOf(persona.profileUrl);
+    const { sess, pending } = key
+      ? await profileLoader.open(key)
+      : { sess: null, pending: false };
     if (!sess) {
       info = { ...prev, ...P.profileState({ persona, vaultReady, loaded: false }) };
+      // Still opening (a slow launch): say so, not that this Device hasn't got it.
+      if (pending && info.state === 'not-ready' && vaultReady)
+        info.reason = 'Opening the Persona’s profile drive…';
     } else {
       const manifest = await autobases.readJson(sess, '/index.json').catch(() => null);
       let writers = await writerKeys(sess).catch(() => null);
