@@ -1,5 +1,10 @@
 @import 'nomad://explorer/css/font-awesome.css';
 
+/* Scrollbars and form controls follow the light/dark theme (as app-stdlib's colors.css does). */
+:root {
+  color-scheme: light dark;
+}
+
 *,
 *:before,
 *:after {
