@@ -133,8 +133,9 @@ export default function HyperView ({ render, onNavigate, onMessage, registerWebV
     )
   }
 
+  // The image and text viewers below name the app's scheme, so the WebView's scrollbars match it.
   if (render.type === 'image') {
-    const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
+    const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="${t.scheme}">
       <body style="margin:0;background:${t.bg};display:flex;align-items:center;justify-content:center;height:100vh">
       <img src="${render.uri}" style="max-width:100%;max-height:100%"/></body>`
     return <WebView key={`wv${epoch}`} ref={registerWebView} {...webProps} source={{ html }} style={s.web} />
@@ -142,7 +143,7 @@ export default function HyperView ({ render, onNavigate, onMessage, registerWebV
 
   if (render.type === 'text') {
     const escaped = render.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
+    const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="${t.scheme}">
       <body style="margin:0;background:${t.bg};color:${t.textDim};font:13px ui-monospace,Menlo,monospace">
       <pre style="padding:16px;white-space:pre-wrap;word-break:break-word">${escaped}</pre></body>`
     return <WebView key={`wv${epoch}`} ref={registerWebView} {...webProps} source={{ html }} style={s.web} />

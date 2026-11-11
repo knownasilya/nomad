@@ -40,6 +40,7 @@ textarea {
   height: 36px;
   border-radius: 4px;
   color: rgba(51, 51, 51, 0.95);
+  background: #fff;
   border: 1px solid #d9d9d9;
 }
 

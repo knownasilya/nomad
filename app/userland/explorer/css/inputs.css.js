@@ -10,7 +10,8 @@ const cssStr = css`
     height: 30px;
     padding: 0 7px;
     border-radius: 4px;
-    color: rgba(51, 51, 51, 0.95);
+    color: var(--nav-kv-input-color, rgba(51, 51, 51, 0.95));
+    background: var(--nav-kv-input-bg, #fff);
     border: 1px solid #d9d9d9;
   }
   textarea {

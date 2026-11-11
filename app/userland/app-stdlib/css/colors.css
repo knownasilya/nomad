@@ -1,3 +1,10 @@
+/* Native parts (scrollbars, form controls, the page's own canvas) follow the light/dark theme.
+   It has to sit on the root element: the page's scrollbar takes its scheme from <html>, so one on
+   body alone still leaves a light scrollbar on a dark page. */
+:root {
+  color-scheme: light dark;
+}
+
 body {
   --blue: #2864dc; /* this is a leftover that ought to get replaced */
   --border-color--default: #bbc;
