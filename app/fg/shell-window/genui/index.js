@@ -99,6 +99,9 @@ export const HOME_WIDGETS = {
   HomeNotes: 'Latest notes',
   HomeFiles: 'Latest files',
   HomeCards: 'Pinned cards',
+  HomeList: 'A list',
+  HomePhotos: 'Photos',
+  HomeMembers: 'People',
 };
 
 const isEl = (v) => v && typeof v === 'object' && v.type === 'element';
@@ -245,13 +248,19 @@ class GenUi extends LitElement {
       const props = {};
       const limit = Math.round(Number(n.props?.limit));
       if (limit > 0) props.limit = Math.min(limit, 50);
+      // A HomeList names its Note: two lists are two parts.
+      if (n.typeName === 'HomeList' && typeof n.props?.title === 'string') props.title = n.props.title.slice(0, 80);
       this._widgets.push({ slot, name: n.typeName, props });
       return html`<slot name=${slot}></slot>`;
     }
     if (this.standalone) return nothing;
     return html`<div class="home-widget">
       <span class="fas fa-fw fa-home" aria-hidden="true"></span>
-      <span class="hw-name">${HOME_WIDGETS[n.typeName]}</span>
+      <span class="hw-name"
+        >${n.typeName === 'HomeList' && typeof n.props?.title === 'string' && n.props.title
+          ? n.props.title.slice(0, 80)
+          : HOME_WIDGETS[n.typeName]}</span
+      >
       <span class="hw-note">shows live on your home page</span>
     </div>`;
   }

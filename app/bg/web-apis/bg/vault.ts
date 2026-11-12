@@ -364,7 +364,8 @@ export default {
   },
 
   // Set up a home (shared/home-setup.mjs): make a Space for the people the user lives with, share
-  // it, put a Groceries list and House info in it, pin both, and switch the caller's window to it
+  // it, put a Groceries list, House info and Chores in it, pin the first two, give it a household
+  // board for a home page, and switch the caller's window to it
   // with its Sharing page open, to invite them. ({ name?, ownName? }) -> { spaceId, name }.
   async setUpHome(opts: any = {}) {
     const { name, ownName } = home.homeNames(opts || {}, defaultOwnName());
@@ -380,6 +381,8 @@ export default {
       ids[n.key] = note.id;
     }
     await spacePins.pinAll(space.id, home.starterPins(ids)).catch(() => {});
+    // Its home page is a household board, everyone's in it (ADR-0048 amendment).
+    await homeLayout.setLayout(rootKey, hl.householdLayout(home.boardLists())).catch(() => {});
     const win = this?.sender ? findWebContentsParentWindow(this.sender) : null;
     if (win) {
       tabManager.create(win, 'nomad://library/sharing?home=1', { spaceId: space.id, setActive: false } as any);
@@ -554,6 +557,15 @@ export default {
   // Who ticked an item of a shared Space's Note: ({ id, text, checked }) -> note.
   async setNoteTick(change) {
     return vaultApps.setNoteTick(this, change);
+  },
+
+  // A Note's list, ticked or added to from outside the editor (the home page's HomeList): by the
+  // item's words, on the Note as it is now, typed into its live session when it is open.
+  async tickNoteItem(change) {
+    return vaultApps.tickNoteItem(this, change || {}, liveNotes.aiWrite);
+  },
+  async addNoteItem(change) {
+    return vaultApps.addNoteItem(this, change || {}, liveNotes.aiWrite);
   },
 
   // Household contacts (My Library → Contacts, shared/household-contacts.mjs): the caller's Space's.
@@ -1001,7 +1013,8 @@ export default {
   // The home page's dashboard (nomad://desktop; the rules are shared/home-dashboard.mjs): the
   // caller's Space's newest Notes and Assets, its calendar from now on, the Jobs running and up next,
   // and recent notifications. `now` is the page's wall time; `limits` the rows its layout asks for
-  // in a section ({ notes: 10 }). A source that fails or is slow (a shared
+  // in a section ({ notes: 10 }); `lists` the checklist Notes its HomeLists name ([{ title, limit? }],
+  // ADR-0048 amendment). A source that fails or is slow (a shared
   // Space's Library still opening) leaves its section empty rather than holding up the rest.
   async homeDashboard(opts: any = {}) {
     const now = isDateTime(opts?.now) ? String(opts.now).slice(0, 16) : localWallTime();
@@ -1034,7 +1047,7 @@ export default {
           assets: assetList?.assets || [],
           occurrences: cal?.occurrences || [],
           notices: notices?.list || [],
-          memberId: notices?.memberId || null,
+          memberId: notices?.memberId || share?.memberId || null,
           spaceName: notices?.name || '',
           conversations: mail?.conversations || [],
           prompts: permissions.waitingPrompts(),
@@ -1043,6 +1056,8 @@ export default {
           joins: share?.shared ? share.joins || [] : [],
           devices: pairing.listPendingRequests(),
           dismissed,
+          lists: Array.isArray(opts?.lists) ? opts.lists.slice(0, hl.MAX_LISTS) : [],
+          members: share?.shared ? share.members || [] : [],
         },
         { now, limits: opts?.limits }
       ),
@@ -1052,6 +1067,14 @@ export default {
       // cards pinned to it. With no Vault to read, the default layout and no cards.
       layout: page?.layout || hl.layoutView(null),
       cards: page?.cards || [],
+      // Whose home page this is: a shared Space's is everyone's in it, and only its owners and
+      // editors change it (ADR-0048 amendment).
+      home: {
+        shared: !!share?.shared,
+        canChange: page ? page.canChange !== false : !share?.shared,
+        people: share?.shared ? (share.members || []).length : 1,
+        canInvite: !!share?.shared && share.role === 'owner',
+      },
     };
   },
 

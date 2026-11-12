@@ -8,7 +8,7 @@ import vm from 'node:vm'
 import { API_REFERENCE } from './api-reference.mjs'
 import { TEMPLATE_IDS } from './create-drive.mjs'
 import { genuiFullPrompt, genuiMoreSignatures, genuiHomeSignatures } from '../../lib/genui/library.mjs'
-import { DEFAULT_LAYOUT, MAX_CARDS } from '../../../shared/home-layout.mjs'
+import { DEFAULT_LAYOUT, MAX_CARDS, householdLayout } from '../../../shared/home-layout.mjs'
 
 export const DOMAINS = ['capability', 'guide', 'page', 'drive', 'name', 'skill']
 
@@ -587,10 +587,13 @@ export const CAPABILITIES = [
   {
     name: 'getDashboard',
     description:
-      "Read the user's home page (nomad://desktop): its layout as an openui-lang program (`openui`; `layout` says " +
-      'whether it is the default or one made for the user), and the cards pinned to it, each with its id, title and ' +
-      'program. Call it before setDashboard, or to find a card to change or remove. Asks permission to read the home page.',
-    inputSchema: { type: 'object', properties: {}, required: [] },
+      "Read the home page of the user's Space (nomad://desktop): its layout as an openui-lang program (`openui`; " +
+      '`layout` says whether it is the default or one made for it), the cards pinned to it, each with its id, title ' +
+      'and program, and `space`: its name, and whether it is shared (then everyone in it sees the page, and ' +
+      '`canChange` says whether the user may change it). Call it before setDashboard, or to find a card to change or ' +
+      'remove. Each Space has its own home page: `spaces` names them, and `space` picks another. Asks permission to ' +
+      'read the home page.',
+    inputSchema: { type: 'object', properties: { space: { type: 'string', description: "Optional. The Space whose home page this is, by its name (getDashboard lists them). Leave it out for the current tab's Space" } }, required: [] },
     gates: { personal: true },
   },
   {
@@ -599,8 +602,8 @@ export const CAPABILITIES = [
       'Pin a card to the home page (no `id`; `openui` required), or change one (`id`, from getDashboard; fields you ' +
       'leave out stay as they are). `openui` is an openui-lang program with no ``` fence, starting `root = Stack([...])`, ' +
       'drawn with the AI Sidebar\'s components: see guide:dashboard first. The page draws the card in a frame of its own, ' +
-      'so start with a CardHeader and don\'t wrap it in a Card. Returns { id, title, url }: link `url` in your answer. ' +
-      'Asks permission to change the home page.',
+      'so start with a CardHeader and don\'t wrap it in a Card. In a shared Space everyone in it sees the card. ' +
+      'Returns { id, title, url }: link `url` in your answer. Asks permission to change the home page.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -608,6 +611,7 @@ export const CAPABILITIES = [
         title: { type: 'string', description: 'A short name for the card, e.g. "Reading list". Shown in its menu, not on the card' },
         openui: { type: 'string', description: 'The card as an openui-lang program (no ``` fence). Required for a new card' },
         wide: { type: 'boolean', description: 'Optional. true makes the card as wide as the page: a table, a chart, a map' },
+        space: { type: 'string', description: "Optional. The Space whose home page this is, by its name (getDashboard lists them). Leave it out for the current tab's Space" },
       },
       required: [],
     },
@@ -618,7 +622,7 @@ export const CAPABILITIES = [
     description: 'Remove a card from the home page. Asks permission to change the home page.',
     inputSchema: {
       type: 'object',
-      properties: { id: { type: 'string', description: 'The card id, from getDashboard' } },
+      properties: { id: { type: 'string', description: 'The card id, from getDashboard' }, space: { type: 'string', description: "Optional. The Space whose home page this is, by its name (getDashboard lists them). Leave it out for the current tab's Space" } },
       required: ['id'],
     },
     gates: { personal: true },
@@ -629,13 +633,14 @@ export const CAPABILITIES = [
       'Replace the layout of the home page with `openui` (the whole layout as an openui-lang program, no ``` fence), ' +
       'or pass `reset: true` for the default one. A layout places the page\'s live parts (HomeGreeting(), HomeNotes(), ' +
       'HomeCards(), …) and can add any component around them: see guide:dashboard and call getDashboard first. The ' +
-      'layout it replaces is kept, and the user can restore it from Customize on the home page. Returns { layout, url }. ' +
-      'Asks permission to change the home page.',
+      'layout it replaces is kept, and the user can restore it from Customize on the home page. Each Space has its own ' +
+      'home page; a shared Space\'s is everyone\'s in it. Returns { layout, url }. Asks permission to change the home page.',
     inputSchema: {
       type: 'object',
       properties: {
         openui: { type: 'string', description: 'The whole new layout as an openui-lang program' },
         reset: { type: 'boolean', description: 'true puts the default layout back' },
+        space: { type: 'string', description: "Optional. The Space whose home page this is, by its name (getDashboard lists them). Leave it out for the current tab's Space" },
       },
       required: [],
     },
@@ -1151,8 +1156,9 @@ export function genuiComponentsGuide() {
 export function dashboardGuide() {
   const text = [
     'The user\'s home page (nomad://desktop, the new tab page) is drawn from two kinds of openui-lang program, the ' +
-      'language of the AI Sidebar\'s drawings: its **layout**, and the **cards** pinned to it. It is the user\'s own, ' +
-      'one per Space, and syncs to their other computers. If you don\'t have the language in this turn, open ' +
+      'language of the AI Sidebar\'s drawings: its **layout**, and the **cards** pinned to it. Each Space has its own, ' +
+      'and it syncs to the user\'s other computers. A shared Space has one for everyone in it: its owners and editors ' +
+      'change it, and getDashboard\'s `space` says which it is. If you don\'t have the language in this turn, open ' +
       'guide:genui-pages for it and for every component; guide:genui-components has the newer ones.',
     '### Cards — pinDashboardCard',
     'A card is a small program of its own: `pinDashboardCard({ title, openui })`. The page draws it in a frame like its ' +
@@ -1185,6 +1191,21 @@ export function dashboardGuide() {
       'restores it from Customize on the page; tell them that after a big change.',
     'Example, the calendar first and wide, no pinned pages:\n```\nroot = Stack([HomeGreeting(), HomeNeedsYou(), board], "column", "m")\n' +
       'board = Grid([GridItem([HomeEvents(10)], 2), HomeJobs(), HomeNotes(8), HomeNotifications(), HomeFiles(), HomeCards()], 3)\n```',
+    '### A Space\'s own home',
+    'When the user asks for a home page for a Space ("make this a family board", "a home for my work Space"), make the ' +
+      'layout fit what the Space is for. Call getDashboard for its name and whether it is shared, and listNotes for the ' +
+      'lists it keeps. The tools work on the current tab\'s Space; pass `space` (a name getDashboard lists) for another ' +
+      'one. Then:\n' +
+      '- A household or a group: HomeList("Chores") and HomeList("Groceries") (each a checklist Note of the Space, ' +
+      'ticked and added to on the page; the page offers to make one that isn\'t there yet, or make it with writeNote: ' +
+      'its first line `# Chores`, then `- [ ] ` items), HomeEvents for reminders and plans, HomePhotos for the shared ' +
+      'album, HomeMembers for who is in it.\n' +
+      '- Work or a project: HomeEvents, HomeNotes, HomeJobs and a HomeList for its to-do Note.\n' +
+      '- A Header or Callout of your own can name the Space or say what the board is for. Keep HomeNeedsYou() near the top.\n' +
+      '- In a shared Space, everything on the page is seen by everyone in it: place widgets (each person sees what the ' +
+      'Space holds) rather than writing the user\'s private things into a card. A user who can only view the Space ' +
+      'can\'t change its home page; say so instead of trying.',
+    'Example, a household board:\n```\n' + householdLayout() + '\n```',
   ].join('\n\n')
   return guideRecord('dashboard', 'The home page', `## The home page — cards and layouts (pinDashboardCard, setDashboard)\n\n${text}`)
 }

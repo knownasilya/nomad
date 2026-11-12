@@ -247,6 +247,15 @@
     },
     "HomeCards": {
       "$ref": "#/$defs/HomeCards"
+    },
+    "HomeList": {
+      "$ref": "#/$defs/HomeList"
+    },
+    "HomePhotos": {
+      "$ref": "#/$defs/HomePhotos"
+    },
+    "HomeMembers": {
+      "$ref": "#/$defs/HomeMembers"
     }
   },
   "required": [
@@ -331,7 +340,10 @@
     "HomeEvents",
     "HomeNotes",
     "HomeFiles",
-    "HomeCards"
+    "HomeCards",
+    "HomeList",
+    "HomePhotos",
+    "HomeMembers"
   ],
   "additionalProperties": false,
   "$defs": {
@@ -2380,6 +2392,38 @@
       "properties": {},
       "additionalProperties": false,
       "description": "Every card pinned to the home page, each as its own child of the Grid, Columns or Stack this is in"
+    },
+    "HomeList": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false,
+      "description": "A checklist Note of this Space, named by its title (\"Chores\", \"Groceries\"): its items, ticked and added to right on the page. Offers to make the Note when there is none"
+    },
+    "HomePhotos": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false,
+      "description": "The Space's newest photos, as thumbnails"
+    },
+    "HomeMembers": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "description": "Who is in the Space, and how to invite someone. Only the user in a Space that isn't shared"
     }
   }
 }

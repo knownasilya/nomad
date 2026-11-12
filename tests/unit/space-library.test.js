@@ -148,6 +148,18 @@ describe('sharing a Space', () => {
     expect(plan[2].value.drives).toHaveLength(2)
   })
 
+  it('moves the Space’s home page in, so it is everyone’s (ADR-0048 amendment)', () => {
+    const layout = { type: 'nomad/home-layout', source: 'root = Stack([HomeNotes()])', updatedAt: NOW }
+    const card = { type: 'nomad/home-card', id: 'mwcabc1234', title: 'Card', source: 'root = Stack([])', order: 1 }
+    const plan = sl.planShare({ space: { name: 'Home' }, owner: { memberId: id('a'), name: 'Ana' }, items: { home: { layout, cards: [card] } } }, NOW)
+    expect(plan.slice(-2)).toEqual([
+      { path: '/home/layout.json', value: layout },
+      { path: '/home/cards/mwcabc1234.json', value: card },
+    ])
+    expect(sl.shareSummary({ notes: [{}], home: { layout, cards: [] } })).toBe('1 note, its home page')
+    expect(sl.shareSummary({ home: { layout: null, cards: [] } })).toBe('Nothing yet')
+  })
+
   it('says what will be shared', () => {
     expect(sl.shareSummary({ drives: [{ key: key('1') }, { key: key('2'), tags: ['contact'] }], notes: [{}, {}] })).toBe('1 drive, 1 contact, 2 notes')
     expect(sl.shareSummary({})).toBe('Nothing yet')

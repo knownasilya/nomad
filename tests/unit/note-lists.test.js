@@ -122,3 +122,39 @@ describe('ticks on the Note record', () => {
     expect(n.ticks['item ' + (nl.MAX_TICKS + 4)]).toBeDefined();
   });
 });
+
+describe('a list shown outside the editor (the home page)', () => {
+  const doc = '# Chores\n\n- [ ] dishes\n- [ ] bins\n- [x] laundry\n';
+
+  it('lists the items with words, in order', () => {
+    expect(nl.taskItems('# C\n- [ ] a\n- [ ] \n  - [x] b\ntext')).toEqual([
+      { indent: 0, checked: false, text: 'a' },
+      { indent: 2, checked: true, text: 'b' },
+    ]);
+  });
+
+  it('finds an item by its words and state, the way ticks are filed', () => {
+    expect(nl.findTaskLine(doc, 'Bins', false)).toBe(lineFrom(doc, 3));
+    expect(nl.findTaskLine(doc, 'bins', true)).toBe(-1);
+    expect(nl.findTaskLine(doc, '  laundry ')).toBe(lineFrom(doc, 4));
+    expect(nl.findTaskLine(doc, '')).toBe(-1);
+    // Ticking it by its words moves it down, as in the editor.
+    const plan = nl.planTick(doc, nl.findTaskLine(doc, 'dishes', false));
+    expect(nl.applyChanges(doc, plan.changes)).toBe('# Chores\n\n- [ ] bins\n- [x] dishes\n- [x] laundry\n');
+  });
+
+  it('adds an item after the open ones, above the done ones', () => {
+    const add = (d, t) => nl.applyChanges(d, [nl.addItemChange(d, t)]);
+    expect(add(doc, ' hoover  the stairs ')).toBe('# Chores\n\n- [ ] dishes\n- [ ] bins\n- [ ] hoover the stairs\n- [x] laundry\n');
+    // Into the empty item a new list waits with.
+    expect(add('# Chores\n\n- [ ] \n', 'hoover')).toBe('# Chores\n\n- [ ] hoover\n');
+    // Above the done ones when none is open, and a list of its own in a Note with none.
+    expect(add('# C\n\n- [x] a\n', 'b')).toBe('# C\n\n- [ ] b\n- [x] a\n');
+    expect(add('# Chores', 'hoover')).toBe('# Chores\n\n- [ ] hoover\n');
+    expect(add('', 'hoover')).toBe('- [ ] hoover\n');
+    // An item's own lines stay with it.
+    expect(add('# C\n\n- [ ] a\n  - note\n- [x] d', 'b')).toBe('# C\n\n- [ ] a\n  - note\n- [ ] b\n- [x] d');
+    expect(nl.addItemChange(doc, '   ')).toBeNull();
+    expect(nl.addItemChange(doc, 'x'.repeat(300)).insert).toContain('x'.repeat(nl.MAX_ITEM));
+  });
+});

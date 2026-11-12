@@ -322,6 +322,31 @@ export async function knownSpaceKeys(): Promise<string[]> {
   return out;
 }
 
+// The Spaces this Device knows, by name: [{ key, name }], in the Spaces menu's order. For a tool
+// that names a Space instead of using the tab's (the AI's dashboard tools, through the sidebar or
+// the loopback MCP).
+export async function knownSpaces(): Promise<{ key: string; name: string }[]> {
+  const out = [];
+  for (const sp of spacesDb.getCachedAll()) {
+    if (!sp.root_drive_url) continue;
+    const key = await Promise.resolve()
+      .then(() => drives.fromURLToKey(sp.root_drive_url, true))
+      .catch(() => null);
+    if (apps.isSpaceKey(key) && !out.some((s) => s.key === key)) out.push({ key, name: String(sp.name || 'Space') });
+  }
+  return out;
+}
+
+// The Space a tool names: its name (any case, spaces squeezed) or its Root Drive key. Throws, with
+// the names it knows, when none matches.
+export async function spaceNamed(given: string): Promise<string> {
+  const want = String(given ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const list = await knownSpaces();
+  const hit = list.find((s) => s.key === want) || list.find((s) => s.name.replace(/\s+/g, ' ').trim().toLowerCase() === want);
+  if (hit) return hit.key;
+  throw new Error(`No Space called “${given}”. The user's Spaces: ${list.map((s) => `“${s.name}”`).join(', ') || 'none'}`);
+}
+
 // The caller's Space key, or null when it has none (a page outside any tab).
 async function spaceOrNull(ctx) {
   return spaceKey(ctx).catch(() => null);
@@ -479,6 +504,67 @@ export async function setNoteTick(
   const note = nl.withTick(found.prev, { text: String(text || ''), checked: !!checked, by: me?.name || 'Someone' });
   await putNote(found.space, note);
   return withSpace(found.space)(note);
+}
+
+// Change a Note's text from outside the editor (the home page's HomeList, ADR-0048 amendment):
+// `edit` gets the text as it is now and returns the new text, or null to leave it. The change is
+// made on the Note as it is now, so a page that loaded it a while ago never makes a conflict copy.
+// `live` types it into the Note's open session when there is one (bg/notes/live-notes.js aiWrite,
+// passed in by the caller), so it merges with what someone is typing; otherwise the record is
+// written. Returns the Note, unchanged when `edit` left it.
+type LiveWrite = (id: string, base: string, body: string) => Promise<any>;
+async function editNoteText(ctx, id, edit: (body: string) => string | null, live: LiveWrite | null) {
+  const found = await findStored(id, await spaceOrNull(ctx)); // notePath validates the id
+  if (!found.prev) throw new Error('No note with that id');
+  if (found.space && !(await canWriteNotesIn(found.space))) throw new Error('You can only view this Space’s notes');
+  const base = String(found.prev.body || '');
+  const body = edit(base);
+  if (body == null || body === base) return withSpace(found.space)(found.prev);
+  if (live) {
+    const res = await live(found.prev.id, base, body).catch(() => null);
+    if (res?.note) return withSpace(found.space)(res.note);
+  }
+  const note = apps.makeNote({ id: found.prev.id, body }, found.prev);
+  await putNote(found.space, note);
+  return withSpace(found.space)(note);
+}
+
+// Tick or untick an item of a Note's list by its words (shared/note-lists.mjs findTaskLine,
+// planTick): an item already in that state, or gone, is left alone. In a shared Space it notes who
+// ticked it, like the editor. Returns the Note.
+export async function tickNoteItem(
+  ctx,
+  { id, text, checked }: { id?: string; text?: string; checked?: boolean } = {},
+  live: LiveWrite | null = null
+) {
+  let plan = null;
+  await editNoteText(
+    ctx,
+    id,
+    (body) => {
+      const from = nl.findTaskLine(body, String(text || ''), !checked);
+      plan = from === -1 ? null : nl.planTick(body, from);
+      return plan ? nl.applyChanges(body, plan.changes) : null;
+    },
+    live
+  );
+  if (!plan) return (await findStored(id, await spaceOrNull(ctx))).prev;
+  return setNoteTick(ctx, { id, text: plan.text, checked: plan.checked });
+}
+
+// Add an open item to a Note's list: after the last open item of its first list
+// (shared/note-lists.mjs addItemChange). Returns the Note.
+export async function addNoteItem(ctx, { id, text }: { id?: string; text?: string } = {}, live: LiveWrite | null = null) {
+  if (!String(text || '').trim()) throw new Error('Type what to add first');
+  return editNoteText(
+    ctx,
+    id,
+    (body) => {
+      const change = nl.addItemChange(body, String(text || ''));
+      return change ? nl.applyChanges(body, [change]) : null;
+    },
+    live
+  );
 }
 
 // A Note's title changed from `from` to `to` (the editor tells us when the user leaves the Note).

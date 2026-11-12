@@ -21,6 +21,11 @@
 // always was. Cards the user pinned (the AI Sidebar's Pin to Home, or their AI's pinDashboardCard)
 // are programs too, each drawn by itself where the layout places HomeCards(). Customize, and each
 // card's menu, hand the change to the AI Sidebar as a draft the user sends.
+//
+// Each Space has its own home page (ADR-0048 amendment). A shared Space's is everyone's in it:
+// its owners and editors change it, and a viewer's page has no Customize and no card menus. A
+// layout made for a Space can place the Space's checklist Notes (HomeList("Chores"), ticked and
+// added to here), its newest photos (HomePhotos) and the people in it (HomeMembers).
 
 import {
   LitElement,
@@ -55,7 +60,14 @@ const SIZED = {
   HomeEvents: 'events',
   HomeNotes: 'notes',
   HomeFiles: 'assets',
+  HomePhotos: 'photos',
 };
+
+// A part the layout places, as this page tells two apart: two HomeLists are two parts.
+const partKey = (w) => (w.name === 'HomeList' ? `HomeList:${String(w.props?.title ?? w.title ?? '').trim().toLowerCase()}` : w.name);
+
+// The largest photo shown as itself when it has no thumbnail.
+const PHOTO_BYTES = 2 * 1024 * 1024;
 
 const NOTIFY_ICONS = {
   job: 'fas fa-robot',
@@ -73,6 +85,7 @@ class DesktopApp extends LitElement {
       thumbs: { type: Object },
       tick: { type: Number },
       widgets: { type: Array },
+      drafts: { type: Object },
     };
   }
 
@@ -93,6 +106,9 @@ class DesktopApp extends LitElement {
     this.widgets = null; // the parts the layout draws now: [{ slot, name, props }]
     this.placed = []; // every part the layout places, also in a tab that isn't open: [{ name, limit? }]
     this.limits = ''; // the rows the layout asks for, as sent to homeDashboard
+    this.lists = ''; // the checklist Notes its HomeLists name, as sent to homeDashboard
+    this.drafts = {}; // HomeList title (lowercased) -> the item being typed
+    this.busyItems = new Set(); // `${noteId}:${text}` while a tick or an add is saving
 
     this.load();
     this.loadVersion();
@@ -116,7 +132,11 @@ class DesktopApp extends LitElement {
 
   async loadDashboard() {
     try {
-      this.dash = await nomad.vault.homeDashboard({ now: wallNow(), limits: this.limits ? JSON.parse(this.limits) : undefined });
+      this.dash = await nomad.vault.homeDashboard({
+        now: wallNow(),
+        limits: this.limits ? JSON.parse(this.limits) : undefined,
+        lists: this.lists ? JSON.parse(this.lists) : undefined,
+      });
     } catch (e) {
       console.log('Failed to load the dashboard', e);
       if (!this.dash) this.dash = { failed: true };
@@ -126,12 +146,14 @@ class DesktopApp extends LitElement {
   }
 
   // Thumbnails for the files shown, once each.
+  // A photo with no thumbnail (one the AI saved) shows itself, when it is small enough to.
   async loadThumbs() {
-    for (const a of this.dash?.assets || []) {
-      if (!a.thumb || a.id in this.thumbs) continue;
+    const small = (a) => !a.thumb && a.kind === 'image' && a.bytes > 0 && a.bytes <= PHOTO_BYTES;
+    for (const a of [...(this.dash?.assets || []), ...(this.dash?.photos || [])]) {
+      if ((!a.thumb && !small(a)) || a.id in this.thumbs) continue;
       this.thumbs = { ...this.thumbs, [a.id]: null };
       nomad.vault
-        .assetData(a.id, { thumb: true })
+        .assetData(a.id, { thumb: !!a.thumb })
         .then((url) => {
           if (url) this.thumbs = { ...this.thumbs, [a.id]: url };
         })
@@ -182,14 +204,20 @@ class DesktopApp extends LitElement {
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div id="topright">
-        <button
-          class="link-btn customize"
-          title="Change what your home page shows"
-          aria-haspopup="menu"
-          @click=${this.onCustomize}
-        >
-          <span class="fas fa-sliders-h" aria-hidden="true"></span> Customize
-        </button>
+        ${d?.home?.canChange === false
+          ? html`<span class="shared-note" title="Only the people who can edit this Space change its home page">
+              <span class="fas fa-users" aria-hidden="true"></span> Shared home page
+            </span>`
+          : html`<button
+              class="link-btn customize"
+              title=${d?.home?.shared
+                ? 'Change what this Space’s home page shows, for everyone in it'
+                : 'Change what your home page shows'}
+              aria-haspopup="menu"
+              @click=${this.onCustomize}
+            >
+              <span class="fas fa-sliders-h" aria-hidden="true"></span> Customize
+            </button>`}
         <a href="#" @click=${this.onClickNewHyperdrive}>+ New Hyperdrive</a>
         <a href="nomad://library/" title="Library">My Library</a>
         <a href="https://nomad.pages.dev/docs/api/" title="Help">Help</a>
@@ -214,8 +242,9 @@ class DesktopApp extends LitElement {
     const layout = d.layout || {};
     const cards = d.cards || [];
     const drawn = new Map();
-    for (const w of this.widgets || []) if (!drawn.has(w.name)) drawn.set(w.name, w);
+    for (const w of this.widgets || []) if (!drawn.has(partKey(w))) drawn.set(partKey(w), w);
     const part = (name, fn) => (drawn.has(name) ? fn(drawn.get(name)) : '');
+    const lists = [...drawn.values()].filter((w) => w.name === 'HomeList');
     // Before the layout has said what it places, nothing of the page's is added around it. Needs
     // you is added whenever it isn't on screen (the layout left it out, or put it in a tab that
     // isn't open); the cards only when the layout places them nowhere.
@@ -224,8 +253,9 @@ class DesktopApp extends LitElement {
       ${layout.broken
         ? html`<div class="layout-note" role="status">
             <span class="fas fa-fw fa-exclamation-triangle" aria-hidden="true"></span>
-            Your layout can’t be drawn by this version of Nomad, so this is the default one.
-            ${layout.canRestore
+            ${d.home?.shared ? 'This Space’s layout' : 'Your layout'} can’t be drawn by this version of Nomad, so
+            this is the default one.
+            ${layout.canRestore && d.home?.canChange !== false
               ? html`<button class="link-btn" @click=${() => this.onRestoreLayout()}>Restore the layout before it</button>`
               : ''}
           </div>`
@@ -247,6 +277,9 @@ class DesktopApp extends LitElement {
         ${part('HomeNotes', (w) => this.renderNotes(d, w.slot))}
         ${part('HomeFiles', (w) => this.renderFiles(d, w.slot))}
         ${part('HomeCards', (w) => this.renderCards(cards, w.slot))}
+        ${lists.map((w) => this.renderList(d, w))}
+        ${part('HomePhotos', (w) => this.renderPhotos(d, w.slot))}
+        ${part('HomeMembers', (w) => this.renderMembers(d, w.slot))}
       </nomad-genui>
       ${known && !this.placed.some((w) => w.name === 'HomeCards') && cards.length
         ? html`<div class="board extra">${this.renderCards(cards)}</div>`
@@ -271,7 +304,9 @@ class DesktopApp extends LitElement {
   // The cards pinned to the page, each a program of its own drawn in the page's frame. With none,
   // one quiet tile says how they get there.
   renderCards(cards, slot) {
+    const canChange = this.dash?.home?.canChange !== false;
     if (!cards.length) {
+      if (!canChange) return '';
       return html`<button class="card add-card" slot=${slot || ''} @click=${() => this.onAskAi('card')}>
         <span class="fas fa-fw fa-plus" aria-hidden="true"></span>
         <span>Add a card with AI</span>
@@ -282,15 +317,17 @@ class DesktopApp extends LitElement {
       (c) => c.id,
       (c, i) => html`
         <section class="card pinned ${c.wide ? 'wide' : ''}" slot=${slot || ''} aria-label=${c.title}>
-          <button
-            class="icon-btn card-menu"
-            title="Card options"
-            aria-label="Options for the card ${c.title}"
-            aria-haspopup="menu"
-            @click=${() => this.onCardMenu(c, i, cards.length)}
-          >
-            <span class="fas fa-ellipsis-h"></span>
-          </button>
+          ${canChange
+            ? html`<button
+                class="icon-btn card-menu"
+                title="Card options"
+                aria-label="Options for the card ${c.title}"
+                aria-haspopup="menu"
+                @click=${() => this.onCardMenu(c, i, cards.length)}
+              >
+                <span class="fas fa-ellipsis-h"></span>
+              </button>`
+            : ''}
           ${c.broken
             ? html`<p class="empty">
                 <strong>${c.title}</strong> can’t be drawn by this version of Nomad. Remove it from its menu, or
@@ -661,6 +698,174 @@ class DesktopApp extends LitElement {
     );
   }
 
+  // A checklist Note of the Space (HomeList("Chores")): its items, ticked here, and a field that
+  // adds one. With no such Note, a button that makes it.
+  renderList(d, w) {
+    const title = String(w.props?.title || '').trim();
+    const key = title.toLowerCase();
+    const list = (d.lists || []).find((l) => String(l.asked || '').toLowerCase() === key);
+    const id = 'list-' + key.replace(/[^a-z0-9]+/g, '-');
+    if (!title) return '';
+    if (!list || !list.found) {
+      return this.card(
+        { id, slot: w.slot, icon: 'fas fa-tasks', title },
+        html`<p class="empty">
+          No note called “${title}” yet.
+          ${d.home?.canChange === false
+            ? ''
+            : html`<button class="link-btn" @click=${() => this.onMakeList(title)}>Make the list</button>`}
+        </p>`
+      );
+    }
+    const open = list.items.filter((i) => !i.checked).length;
+    const draft = this.drafts[key] || '';
+    return this.card(
+      {
+        id,
+        slot: w.slot,
+        icon: 'fas fa-tasks',
+        title: list.title,
+        count: open ? String(open) : '',
+        href: list.url,
+        linkLabel: 'Open',
+      },
+      html`
+        ${list.items.length
+          ? html`<ul class="rows checklist">
+              ${list.items.map((item) => {
+                const busy = this.busyItems.has(`${list.id}:${item.text}`);
+                return html`<li>
+                  <label class="row check ${item.checked ? 'done' : ''}">
+                    <input
+                      type="checkbox"
+                      .checked=${item.checked}
+                      ?disabled=${busy}
+                      @change=${(e) => this.onTickItem(list, item, e.target.checked)}
+                    />
+                    <span class="main">
+                      <span class="title">${item.text}</span>
+                      ${item.checked && item.by ? html`<span class="snippet">${item.by} · ${ago(item.at)}</span>` : ''}
+                    </span>
+                  </label>
+                </li>`;
+              })}
+            </ul>`
+          : html`<p class="empty">Nothing on the list.</p>`}
+        ${list.more ? html`<a class="more" href=${list.url}>${list.more} more</a>` : ''}
+        <form class="add-item" @submit=${(e) => this.onAddItem(e, list, key)}>
+          <input
+            type="text"
+            placeholder="Add to ${list.title}"
+            aria-label="Add to ${list.title}"
+            maxlength="200"
+            .value=${draft}
+            @input=${(e) => (this.drafts = { ...this.drafts, [key]: e.target.value })}
+          />
+          <button class="icon-btn" type="submit" title="Add" aria-label="Add to ${list.title}" ?disabled=${!draft.trim()}>
+            <span class="fas fa-plus"></span>
+          </button>
+        </form>
+      `
+    );
+  }
+
+  // The Space's newest photos.
+  renderPhotos(d, slot) {
+    const list = d.photos || [];
+    return this.card(
+      { id: 'photos', slot, icon: 'far fa-images', title: 'Photos', href: 'nomad://assets/', linkLabel: 'Assets' },
+      list.length
+        ? html`<div class="photos">
+            ${list.map(
+              (a) => html`<a class="photo" href=${a.url} title=${`${a.name}\nAdded ${ago(a.addedAt)}${a.by ? ` by ${a.by}` : ''}`}>
+                ${this.thumbs[a.id]
+                  ? html`<img src=${this.thumbs[a.id]} alt=${a.name} />`
+                  : html`<span class="fas fa-image" aria-hidden="true"></span>`}
+              </a>`
+            )}
+          </div>`
+        : html`<p class="empty">Photos added to this Space show up here.
+            <a href="nomad://assets/">Add photos</a></p>`
+    );
+  }
+
+  // Who is in the Space. One that isn't shared has only the user, and a way to share it.
+  renderMembers(d, slot) {
+    const list = d.members || [];
+    const shared = !!d.home?.shared;
+    return this.card(
+      {
+        id: 'members',
+        slot,
+        icon: 'fas fa-users',
+        title: 'People',
+        count: shared && list.length ? String(list.length) : '',
+        href: 'nomad://library/sharing',
+        linkLabel: shared && d.home?.canInvite ? 'Invite' : 'Sharing',
+      },
+      shared && list.length
+        ? html`<ul class="rows members">
+            ${list.map(
+              (m) => html`<li>
+                <div class="row">
+                  <span class="lead avatar" aria-hidden="true">${(m.name.trim()[0] || '?').toUpperCase()}</span>
+                  <span class="main">
+                    <span class="title">${m.name}${m.you ? html` <span class="you">(you)</span>` : ''}</span>
+                  </span>
+                  <span class="meta">${m.roleLabel}</span>
+                </div>
+              </li>`
+            )}
+          </ul>`
+        : html`<p class="empty">Only you see this Space.
+            <a href="nomad://library/sharing">Share it</a> with the people you live or work with.</p>`
+    );
+  }
+
+  async onTickItem(list, item, checked) {
+    const busy = `${list.id}:${item.text}`;
+    this.busyItems.add(busy);
+    // Ticked at once; the reload confirms it.
+    this.dash = {
+      ...this.dash,
+      lists: (this.dash.lists || []).map((l) =>
+        l.id === list.id ? { ...l, items: l.items.map((i) => (i === item ? { ...i, checked } : i)) } : l
+      ),
+    };
+    try {
+      await nomad.vault.tickNoteItem({ id: list.id, text: item.text, checked });
+    } catch (e) {
+      toast.create(e.message || String(e), 'error');
+    }
+    this.busyItems.delete(busy);
+    this.loadDashboard();
+  }
+
+  async onAddItem(e, list, key) {
+    e.preventDefault();
+    const text = String(this.drafts[key] || '').trim();
+    if (!text) return;
+    this.drafts = { ...this.drafts, [key]: '' };
+    try {
+      await nomad.vault.addNoteItem({ id: list.id, text });
+    } catch (err) {
+      this.drafts = { ...this.drafts, [key]: text };
+      toast.create(err.message || String(err), 'error');
+    }
+    this.loadDashboard();
+  }
+
+  // A HomeList names a Note the Space doesn't have yet: make it, in the Space.
+  async onMakeList(title) {
+    try {
+      await nomad.vault.saveNote({ body: `# ${title}\n\n- [ ] \n`, inSpace: true });
+      toast.create(`Made the list “${title}”`);
+    } catch (e) {
+      toast.create(e.message || String(e), 'error');
+    }
+    this.loadDashboard();
+  }
+
   // events
   // =
 
@@ -813,8 +1018,17 @@ class DesktopApp extends LitElement {
       if (key && w.limit > 0 && !(key in limits)) limits[key] = w.limit;
     }
     const next = Object.keys(limits).length ? JSON.stringify(limits) : '';
-    if (next === this.limits) return;
+    // The checklist Notes the layout names, also in a tab that isn't open.
+    const lists = [];
+    for (const w of this.placed) {
+      if (w.name === 'HomeList' && w.title && !lists.some((l) => l.title.toLowerCase() === w.title.toLowerCase())) {
+        lists.push(w.limit > 0 ? { title: w.title, limit: w.limit } : { title: w.title });
+      }
+    }
+    const nextLists = lists.length ? JSON.stringify(lists) : '';
+    if (next === this.limits && nextLists === this.lists) return;
     this.limits = next;
+    this.lists = nextLists;
     this.loadDashboard();
   }
 
@@ -842,12 +1056,22 @@ class DesktopApp extends LitElement {
   }
 
   // Changing the page is the AI's work: each of these opens the AI Sidebar with the request begun.
+  // A shared Space's home page is everyone's in it, so the request says whose it is.
   onAskAi(what, card) {
-    if (what === 'card') return this.draftForAi('Add a card to my home page that shows ');
+    const home = this.dash?.home || {};
+    const name = this.dash?.spaceName || '';
+    const page = home.shared ? `the home page of ${name ? `“${name}”` : 'this Space'}` : 'my home page';
+    if (what === 'card') return this.draftForAi(`Add a card to ${page} that shows `);
     if (what === 'change-card') {
-      return this.draftForAi(`On my home page, change the card “${card.title}” (id ${card.id}): `);
+      return this.draftForAi(`On ${page}, change the card “${card.title}” (id ${card.id}): `);
     }
-    return this.draftForAi('Change my home page: ');
+    if (what === 'space') {
+      const who = home.shared ? `${home.people > 1 ? `the ${home.people} of us` : 'the people'} who share it` : 'me';
+      return this.draftForAi(
+        `Make a home page for ${name ? `my Space “${name}”` : 'this Space'} that fits what it’s for. It’s for ${who}, and we use it for `
+      );
+    }
+    return this.draftForAi(`Change ${page}: `);
   }
 
   onCustomize() {
@@ -855,6 +1079,7 @@ class DesktopApp extends LitElement {
     this.menu([
       { label: 'Ask AI to Change This Page…', click: () => this.onAskAi('page') },
       { label: 'Add a Card with AI…', click: () => this.onAskAi('card') },
+      { label: 'Make a Home for This Space with AI…', click: () => this.onAskAi('space') },
       { type: 'separator' },
       { label: 'Restore Previous Layout', enabled: !!layout.canRestore, click: () => this.onRestoreLayout() },
       { label: 'Reset to Default Layout', enabled: !!layout.custom, click: () => this.onResetLayout() },

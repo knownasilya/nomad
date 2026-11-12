@@ -15,6 +15,7 @@
 //   /.space/members/<memberId>.json              a Member
 //   /.space/writers/<driveKey>/<writerKey>.json  a Space Writer grant
 //   /.space/notices/<id>.json                    a Notice: a Job's notification for everyone in the Space
+//   /home/layout.json, /home/cards/<id>.json     the Space's home page (shared/home-layout.mjs)
 //
 // A member's own Vault record for the Space (/.vault/spaces/<rootDriveKey>.json) gains `library`
 // (the Space Library key), `role` and `memberId`. Read marks stay in each person's Vault.
@@ -22,6 +23,7 @@
 import { followName } from './vault-apps.mjs';
 import { shareCalendarPaths } from './calendar.mjs';
 import { shareContactPaths } from './household-contacts.mjs';
+import { shareHomePaths, hasOwnHome } from './home-layout.mjs';
 
 export const SPACE_TYPE = 'nomad/space';
 export const MEMBER_TYPE = 'nomad/space-member';
@@ -282,7 +284,8 @@ export function noticesToPrune(records, memberId, keep = KEEP_NOTICES) {
 
 // The records a Space Library starts with when its owner shares it: its index, the owner's member
 // record, and the Space's library moved in. `items` holds what the Space has today:
-// { drives, bookmarks: [{ name, value }], follows: [rec], notes: [rec], names: [rec], events: [rec], feeds: [rec] }.
+// { drives, bookmarks: [{ name, value }], follows: [rec], notes: [rec], names: [rec], events: [rec], feeds: [rec],
+//   contacts: [rec], home: { layout, cards } }.
 // Returns [{ path, value }]; /drives.json is the one record that isn't from a list.
 export function planShare({ space, owner, items = {} }, now = new Date().toISOString()) {
   const out = [
@@ -307,6 +310,8 @@ export function planShare({ space, owner, items = {} }, now = new Date().toISOSt
   out.push(...shareCalendarPaths(items));
   // Its household contacts (shared/household-contacts.mjs).
   out.push(...shareContactPaths(items));
+  // Its home page, which becomes everyone's (shared/home-layout.mjs).
+  out.push(...shareHomePaths(items));
   return out;
 }
 
@@ -325,6 +330,7 @@ export function shareSummary(items = {}) {
   ]
     .filter(([n]) => n > 0)
     .map(([n, word]) => `${n} ${word}${n === 1 ? '' : 's'}`);
+  if (hasOwnHome(items.home)) parts.push('its home page');
   return parts.length ? parts.join(', ') : 'Nothing yet';
 }
 

@@ -31,6 +31,7 @@ import * as inv from '../../../shared/invites.mjs';
 import * as apps from '../../../shared/vault-apps.mjs';
 import { namesPrefix } from '../../../shared/names.mjs';
 import { vaultRoot as assetsVaultRoot, LIB_ASSETS } from '../../../shared/assets.mjs';
+import * as hl from '../../../shared/home-layout.mjs';
 
 const logger = logLib.get().child({ category: 'hyper', subcategory: 'space-library' });
 
@@ -118,8 +119,9 @@ async function delIn(sess, path) {
 }
 
 // A Space's own records of one kind, wherever they are: its Space Library when shared, else the
-// Vault (ADR-0029 §1). `kind` is 'notes', 'names', 'follows', or a calendar kind ('events', 'feeds',
-// 'feedCache'); each record is a file `<name>` (`<id>.json`, `<word>.json`, `<host>.json`) under one prefix.
+// Vault (ADR-0029 §1). `kind` is 'notes', 'names', 'follows', a calendar kind ('events', 'feeds',
+// 'feedCache'), 'contacts', or the home page's 'home' (its layout.json) and 'homeCards' (ADR-0048
+// amendment); each record is a file `<name>` (`<id>.json`, `<word>.json`, `<host>.json`) under one prefix.
 const LIB_PREFIX = {
   notes: sl.LIB_NOTES,
   names: sl.LIB_NAMES,
@@ -128,6 +130,8 @@ const LIB_PREFIX = {
   feeds: cal.libraryPrefix('feeds'),
   feedCache: cal.libraryPrefix('feedCache'),
   contacts: hc.LIB_CONTACTS,
+  home: hl.LIB_HOME,
+  homeCards: hl.LIB_CARDS,
 };
 const VAULT_PREFIX = {
   notes: apps.notesPrefix,
@@ -137,6 +141,8 @@ const VAULT_PREFIX = {
   feeds: (space) => cal.calendarPrefix('feeds', space),
   feedCache: (space) => cal.calendarPrefix('feedCache', space),
   contacts: (space) => hc.contactsPrefix(space),
+  home: (space) => hl.homePrefix(space),
+  homeCards: (space) => hl.cardsPrefix(space),
 };
 
 export async function records(space, kind) {
@@ -184,6 +190,11 @@ export async function collect(space, root) {
     events: (await vault.listAppRecords(cal.calendarPrefix('events', space))).filter(cal.isEvent),
     feeds: (await vault.listAppRecords(cal.calendarPrefix('feeds', space))).filter(cal.isFeed),
     contacts: (await vault.listAppRecords(hc.contactsPrefix(space))).filter(hc.isContact),
+    // Its home page: one for everyone in it once it is shared (ADR-0048 amendment).
+    home: {
+      layout: await vault.readAppRecord(hl.layoutPath(space)).catch(() => null),
+      cards: (await vault.listAppRecords(hl.cardsPrefix(space))).filter(hl.isCard),
+    },
   };
 }
 
@@ -225,6 +236,7 @@ export async function share({ space, root, meta, name }) {
     cal.calendarPrefix('feeds', space),
     cal.calendarPrefix('feedCache', space),
     hc.contactsPrefix(space),
+    hl.homePrefix(space),
   ]) {
     for (const r of await vault.listAppRecordPaths(prefix)) await vault.delAppRecord(r);
   }

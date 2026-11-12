@@ -10,6 +10,9 @@ import {
   upcomingEvents,
   latestNotes,
   latestAssets,
+  homeLists,
+  latestPhotos,
+  memberRows,
   dayLabel,
   greeting,
   addDays,
@@ -300,5 +303,82 @@ describe('dashboard', () => {
     expect(d.unreadMessages).toBe(3);
     expect(d.notifications).toHaveLength(1);
     expect(d.waiting.map((w) => w.kind)).toEqual(['message-request']);
+  });
+});
+
+describe('a Space’s own home (ADR-0048 amendment)', () => {
+  const note = (id, body, extra = {}) => ({ id, body, updatedAt: hoursAgo(1), ...extra });
+
+  it('shows the checklist Notes a layout names, the Space’s first', () => {
+    const notes = [
+      note('n-mine', '# Chores\n\n- [ ] my own'),
+      note('n-space', '# chores\n\n- [ ] dishes\n- [ ] \n- [x] bins', { space: 'ab'.repeat(32), ticks: { bins: { by: 'Sam', at: hoursAgo(2) } } }),
+      note('n-copy', '# Chores\n\n- [ ] conflict', { space: 'ab'.repeat(32), conflictOf: 'n-space' }),
+    ];
+    const [chores, missing] = homeLists(notes, [{ title: 'Chores' }, { title: 'Garden' }, { title: ' chores ' }]);
+    expect(chores).toEqual({
+      asked: 'Chores',
+      title: 'chores',
+      found: true,
+      id: 'n-space',
+      url: 'nomad://notes/n-space',
+      items: [
+        { text: 'dishes', checked: false },
+        { text: 'bins', checked: true, by: 'Sam', at: hoursAgo(2) },
+      ],
+      more: 0,
+      done: 1,
+    });
+    // A title with no Note says so, and the same title twice is one list.
+    expect(missing).toEqual({ asked: 'Garden', title: 'Garden', found: false, items: [], more: 0, done: 0 });
+    expect(homeLists(notes, [{ title: 'Chores' }, { title: 'CHORES' }])).toHaveLength(1);
+  });
+
+  it('shows as many items as the layout asks for, and how many more there are', () => {
+    const body = '# Big\n' + Array.from({ length: 30 }, (_, i) => `- [ ] item ${i}`).join('\n');
+    const [l] = homeLists([note('n-big', body)], [{ title: 'Big', limit: 3 }]);
+    expect(l.items.map((i) => i.text)).toEqual(['item 0', 'item 1', 'item 2']);
+    expect(l.more).toBe(27);
+    expect(homeLists([note('n-big', body)], [{ title: 'Big' }])[0].items).toHaveLength(8);
+    expect(homeLists([note('n-big', body)], [{ title: 'Big', limit: 99 }])[0].items).toHaveLength(20);
+  });
+
+  it('shows only photos among the newest files, and who is in the Space', () => {
+    const assets = [
+      { id: 'a1', name: 'beach.jpg', kind: 'image', addedAt: hoursAgo(1), thumb: true },
+      { id: 'a2', name: 'tax.pdf', kind: 'pdf', addedAt: hoursAgo(0.5) },
+      { id: 'a3', name: 'cake.png', kind: 'image', addedAt: hoursAgo(3) },
+    ];
+    expect(latestPhotos(assets).map((a) => a.id)).toEqual(['a1', 'a3']);
+    expect(latestPhotos(assets, { max: 1 }).map((a) => a.id)).toEqual(['a1']);
+    const rows = memberRows(
+      [
+        { memberId: 'm1', name: 'Ana', role: 'owner' },
+        { memberId: 'm2', name: 'Sam', role: 'viewer' },
+        { memberId: 'm3', name: 'Who', role: 'boss' },
+      ],
+      'm2'
+    );
+    expect(rows).toEqual([
+      { name: 'Ana', role: 'owner', roleLabel: 'Owner', you: false },
+      { name: 'Sam', role: 'viewer', roleLabel: 'Can view', you: true },
+    ]);
+  });
+
+  it('puts them on the dashboard, sized by the layout', () => {
+    const d = dashboard(
+      {
+        notes: [note('n1', '# Chores\n- [ ] dishes')],
+        assets: [{ id: 'a1', name: 'p.jpg', kind: 'image', addedAt: hoursAgo(1) }],
+        lists: [{ title: 'Chores' }],
+        members: [{ memberId: 'm1', name: 'Ana', role: 'owner' }],
+        memberId: 'm1',
+      },
+      { now: '2026-11-09T16:00', at: NOW, limits: { photos: 2 } }
+    );
+    expect(d.lists[0].items).toEqual([{ text: 'dishes', checked: false }]);
+    expect(d.photos.map((p) => p.id)).toEqual(['a1']);
+    expect(d.members[0].you).toBe(true);
+    expect(dashboard({}, { now: '2026-11-09T16:00', at: NOW })).toMatchObject({ lists: [], photos: [], members: [] });
   });
 });
