@@ -35,6 +35,7 @@ const PURPOSES = {
   runJob: 'run a Job',
   deleteJob: 'delete a Job',
   notify: 'notify your phone',
+  setJobCard: 'draw its card on your home page',
   listSecrets: 'look at your secrets',
   httpRequest: 'send a request',
   remember: 'remember something about you',
@@ -149,6 +150,8 @@ export function toolSummary(name, args) {
       return 'Deleting a Job';
     case 'notify':
       return a.title ? `Notifying your phone: ${quote(a.title)}` : 'Notifying your phone';
+    case 'setJobCard':
+      return a.remove ? 'Taking its card off your home page' : 'Drawing its card on your home page';
     case 'remember':
       return a.text ? `Remembering ${quote(a.text)}` : 'Remembering something about you';
     case 'forget':
