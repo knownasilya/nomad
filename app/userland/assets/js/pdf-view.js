@@ -29,7 +29,11 @@ export async function showPdf(node, data, pdfjs, { root = () => node.closest('.p
       const width = Math.min(maxWidth, pages.clientWidth || 800)
       const base = page.getViewport({ scale: 1 })
       const scale = width / base.width
-      const vp = page.getViewport({ scale: scale * (window.devicePixelRatio || 1) })
+      // Sharp on the screen, but never a canvas bigger than MAX_CANVAS_PIXELS: a phone's WebView
+      // that holds a few dozen full-size canvases stops showing them.
+      const css = base.width * scale * base.height * scale
+      const density = Math.min(window.devicePixelRatio || 1, Math.sqrt(MAX_CANVAS_PIXELS / css))
+      const vp = page.getViewport({ scale: scale * density })
       const canvas = el('canvas', { width: String(Math.floor(vp.width)), height: String(Math.floor(vp.height)), 'aria-label': `Page ${e.target.dataset.n}` })
       canvas.style.width = `${Math.floor(base.width * scale)}px`
       e.target.replaceChildren(canvas)
@@ -57,6 +61,25 @@ export async function showPdf(node, data, pdfjs, { root = () => node.closest('.p
     pages.append(holder)
     holders.push(holder)
   }
+  await hasWidth(pages)
   rewatch()
   return { doc, rewatch }
+}
+
+const MAX_CANVAS_PIXELS = 6_000_000
+
+// Wait until the pages have a width. Android's WebView can lay the page out zero-wide first: then
+// every page is 0 tall, so all of them are "in view" at once, and each was drawn at full size
+// (37 canvases of 2100x2700 for one PDF), which left the phone's screen empty.
+function hasWidth(node) {
+  if (node.clientWidth > 0) return Promise.resolve()
+  return new Promise((resolve) => {
+    const ro = new ResizeObserver(() => {
+      if (node.clientWidth > 0) {
+        ro.disconnect()
+        resolve()
+      }
+    })
+    ro.observe(node)
+  })
 }
