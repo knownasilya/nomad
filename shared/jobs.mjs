@@ -48,7 +48,11 @@
 // and whether it may write Notes and change Reader (follow, unfollow, mark read). Nothing else:
 // the runner offers only those write capabilities, and its permission check grants only those.
 //
-//   writes: { drives: [{ url: 'hyper://<key>/', draft }], notes, reader, pages }
+//   writes: { drives: [{ url: 'hyper://<key>/', draft }], notes, reader, newDrives?, home?, pages }
+//
+// `home` lets the Job keep one card of its own on the home page of its Space (ADR-0048 amendment):
+// each run may draw it again with setJobCard (shared/home-layout.mjs makeJobCard). Taking the grant
+// away, deleting the Job, or the user removing the card takes the card off the page.
 //
 // `pages` (ADR-0038) are the sites the Job may open in a page of its own, signed in as the user:
 // [{ site, control, actions }]. `site` is a web host without "www." (example.com) or hyper://<key>.
@@ -946,13 +950,14 @@ export const WRITE_CAPS = {
   notes: ['writeNote'],
   reader: ['followFeed', 'unfollowFeed', 'markPostsRead'],
   newDrives: ['createDrive'],
+  home: ['setJobCard'],
 };
 
 // A Job's `writes` as a form or the AI gives it, tidied: drives as hyper://<key>/ (names resolved
 // first), each with `draft`. Null when it grants nothing. Throws for a bad drive.
 export function normalizeWrites(input) {
   if (!input) return null;
-  if (typeof input !== 'object') throw new Error('writes is { drives?, notes?, reader?, newDrives?, pages? }');
+  if (typeof input !== 'object') throw new Error('writes is { drives?, notes?, reader?, newDrives?, home?, pages? }');
   const drives = [];
   for (const d of Array.isArray(input.drives) ? input.drives : []) {
     const raw = typeof d === 'string' ? { url: d } : d || {};
@@ -970,8 +975,9 @@ export function normalizeWrites(input) {
   const out = { drives, notes: !!input.notes, reader: !!input.reader };
   // Only when granted, so a Job saved before this grant existed keeps the same record.
   if (input.newDrives) out.newDrives = true;
+  if (input.home) out.home = true;
   if (pages.length) out.pages = pages;
-  return drives.length || out.notes || out.reader || out.newDrives || pages.length ? out : null;
+  return drives.length || out.notes || out.reader || out.newDrives || out.home || pages.length ? out : null;
 }
 
 // The capabilities a Job's writes add to its turn, besides writeDriveFile (which a drive grant
@@ -982,6 +988,7 @@ export function writeCaps(writes) {
     ...(writes.notes ? WRITE_CAPS.notes : []),
     ...(writes.reader ? WRITE_CAPS.reader : []),
     ...(writes.newDrives ? WRITE_CAPS.newDrives : []),
+    ...(writes.home ? WRITE_CAPS.home : []),
   ];
 }
 
@@ -1013,6 +1020,7 @@ export function addedWrites(prev, next) {
     notes: next.notes && !prev?.notes,
     reader: next.reader && !prev?.reader,
     newDrives: next.newDrives && !prev?.newDrives,
+    home: next.home && !prev?.home,
     pages: addedPages(prev?.pages, next.pages),
   });
 }
@@ -1024,6 +1032,7 @@ export function describeWrites(writes, driveName = null) {
     ...(writes.notes ? ['your Notes'] : []),
     ...(writes.reader ? ['your Reader (follow, unfollow, mark read)'] : []),
     ...(writes.newDrives ? ['new drives it makes'] : []),
+    ...(writes.home ? ['a card on your home page'] : []),
     ...(writes.drives || []).map(
       (d) =>
         `${(driveName && driveName(d.url)) || d.url.slice(0, 16) + '…/'}${d.draft ? ' (in a Draft)' : ''}`

@@ -77,6 +77,7 @@ const blank = () => ({
   notes: false,
   reader: false,
   newDrives: false, // make new drives (createDrive), and write the ones it makes
+  home: false, // keep a card of its own on the home page (setJobCard)
   // Sites it may open, and click and type on (`control`), with the clicks it may repeat (`actions`).
   pages: [],
   addSite: '', // the site being typed
@@ -499,7 +500,7 @@ export class JobsView extends LitElement {
   renderGrants(j) {
     const w = j.writes;
     if (!w) return '';
-    const changes = w.notes || w.reader || w.newDrives || w.drives?.length;
+    const changes = w.notes || w.reader || w.newDrives || w.home || w.drives?.length;
     return html`
       ${changes ? this.renderChangeGrants(w) : ''}
       ${w.pages?.length
@@ -526,6 +527,7 @@ export class JobsView extends LitElement {
         ${w.notes ? html`<li><span class="fas fa-fw fa-sticky-note"></span> Your Notes</li>` : ''}
         ${w.reader ? html`<li><span class="fas fa-fw fa-rss"></span> Your Reader (follow, unfollow, mark read)</li>` : ''}
         ${w.newDrives ? html`<li><span class="fas fa-fw fa-plus-square"></span> New drives it makes</li>` : ''}
+        ${w.home ? html`<li><span class="fas fa-fw fa-th-large"></span> Its card on your home page</li>` : ''}
         ${(w.drives || []).map(
           (d) => html`<li>
             <span class="fas fa-fw fa-hdd"></span>
@@ -833,6 +835,10 @@ export class JobsView extends LitElement {
             <input type="checkbox" .checked=${e.newDrives} @change=${(ev) => set({ newDrives: ev.target.checked })} />
             Make new drives
           </label>
+          <label class="check">
+            <input type="checkbox" .checked=${e.home} @change=${(ev) => set({ home: ev.target.checked })} />
+            Keep a card on my home page
+          </label>
         </div>
         ${e.drives.length
           ? html`<ul class="grant-drives">
@@ -972,6 +978,7 @@ export class JobsView extends LitElement {
       notes: !!j.writes?.notes,
       reader: !!j.writes?.reader,
       newDrives: !!j.writes?.newDrives,
+      home: !!j.writes?.home,
       pages: (j.writes?.pages || []).map((p) => ({ site: p.site, control: !!p.control, actions: p.actions || [] })),
       notify: j.notify,
       audience: j.audience === 'space' ? 'space' : 'me',
@@ -1087,11 +1094,12 @@ export class JobsView extends LitElement {
         prompt: e.prompt,
         source,
         writes:
-          e.notes || e.reader || e.newDrives || e.drives.length || e.pages.length
+          e.notes || e.reader || e.newDrives || e.home || e.drives.length || e.pages.length
             ? {
                 notes: e.notes,
                 reader: e.reader,
                 newDrives: e.newDrives,
+                home: e.home,
                 drives: e.drives.map((d) => ({ url: d.url, draft: d.draft })),
                 pages: e.pages,
               }

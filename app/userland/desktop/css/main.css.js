@@ -444,6 +444,54 @@ ${spinnerCSS}
     background: var(--home-row-hover);
   }
 
+  /* Under a Job's card: the Job that keeps it, when it last did, and Run now. */
+  .card-job {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-color--semi-light);
+    color: var(--text-color--light);
+    font-size: 11.5px;
+    min-width: 0;
+  }
+
+  .card-job .job-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: inherit;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .card-job a.job-name:hover {
+    color: var(--text-color--default);
+    text-decoration: underline;
+  }
+
+  .card-job .when {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .card-job .when.err {
+    color: var(--home-err);
+  }
+
+  .card-job .icon-btn,
+  .card-job .spinner {
+    margin-left: auto;
+    flex: none;
+  }
+
+  .card-job .icon-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 11px;
+  }
+
   .card.pinned > .empty {
     padding: 0 28px 0 0;
   }

@@ -589,7 +589,8 @@ export const CAPABILITIES = [
     description:
       "Read the user's home page (nomad://desktop): its layout as an openui-lang program (`openui`; `layout` says " +
       'whether it is the default or one made for the user), and the cards pinned to it, each with its id, title and ' +
-      'program. Call it before setDashboard, or to find a card to change or remove. Asks permission to read the home page.',
+      'program; a card one of the user\'s Jobs draws on each run has `job`. Call it before setDashboard, or to find a ' +
+      'card to change or remove. Asks permission to read the home page.',
     inputSchema: { type: 'object', properties: {}, required: [] },
     gates: { personal: true },
   },
@@ -615,7 +616,9 @@ export const CAPABILITIES = [
   },
   {
     name: 'removeDashboardCard',
-    description: 'Remove a card from the home page. Asks permission to change the home page.',
+    description:
+      'Remove a card from the home page. A Job\'s card (getDashboard marks it with `job`) goes for good: the Job stops ' +
+      'drawing it. Asks permission to change the home page.',
     inputSchema: {
       type: 'object',
       properties: { id: { type: 'string', description: 'The card id, from getDashboard' } },
@@ -772,11 +775,12 @@ export const CAPABILITIES = [
           type: ['object', 'null'],
           description:
             'Optional. What the Job may change; without it a Job only reads. { "drives": [{ "url": "hyper://<key>/" or a ' +
-            'name, "draft": false }], "notes": true, "reader": true, "newDrives": true, ' +
+            'name, "draft": false }], "notes": true, "reader": true, "newDrives": true, "home": true, ' +
             '"pages": [{ "site": "example.com", "control": true }] }. A drive lets it write files there with writeDriveFile ' +
             '(to update a site, say); "draft": true stages its writes in the drive\'s Draft for the user to publish. "notes" ' +
             'lets it write Notes; "reader" lets it follow, unfollow and mark posts read; "newDrives" lets it make drives ' +
-            'with createDrive and write files into the ones it makes. "pages" are sites it may open with ' +
+            'with createDrive and write files into the ones it makes; "home" lets each run draw the Job\'s own card on ' +
+            'the home page with setJobCard (a morning briefing, a price it watches). "pages" are sites it may open with ' +
             'openPage, signed in as the user, and with "control" click and type on; the user can also give them on a run ' +
             'they watch (Run with me in My Library → Jobs), which asks for each site the Job reaches. Give only what the ' +
             'task needs. Adding any of these asks the user. The whole object replaces the old one; null takes them all away.',
@@ -793,6 +797,7 @@ export const CAPABILITIES = [
             notes: { type: 'boolean' },
             reader: { type: 'boolean' },
             newDrives: { type: 'boolean' },
+            home: { type: 'boolean' },
             pages: {
               type: 'array',
               items: {
@@ -952,6 +957,29 @@ export const CAPABILITIES = [
         body: { type: 'string', description: 'The message, at most 300 characters' },
       },
       required: ['body'],
+    },
+    gates: { job: true },
+  },
+  // A Job's own card on the home page (ADR-0048 amendment). Only a Job with the `home` grant
+  // (shared/jobs.mjs WRITE_CAPS) gets it; ai.ts keeps the card in the Job's Space.
+  {
+    name: 'setJobCard',
+    description:
+      "Draw this Job's card on the user's home page: a morning briefing, a price you watch, today's numbers. " +
+      '`openui` is the whole card as an openui-lang program with no ``` fence, starting `root = Stack([...])`, drawn with ' +
+      "the AI Sidebar's components (guide:dashboard). The Job has one card: the first call makes it and each later " +
+      'call, this run or the next, replaces it, so draw all of it every time. The page frames it and shows the Job\'s ' +
+      'name and when it was updated: start with a CardHeader, don\'t wrap it in a Card. `remove: true` takes the card ' +
+      'off the page. Returns { id, title, url }.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        openui: { type: 'string', description: 'The card as an openui-lang program (no ``` fence)' },
+        title: { type: 'string', description: "Optional. A short name for the card; the Job's title when left out" },
+        wide: { type: 'boolean', description: 'Optional. true makes a new card as wide as the page: a table, a chart' },
+        remove: { type: 'boolean', description: 'Optional. true takes the card off the home page' },
+      },
+      required: [],
     },
     gates: { job: true },
   },
@@ -1159,8 +1187,8 @@ export function dashboardGuide() {
       'own cards, so:\n' +
       '- Start with `CardHeader(title, subtitle?, icon?)` and put the content under it. Don\'t wrap the card in a Card.\n' +
       '- Keep it small: a card sits in a column about 320px wide. A table, chart or map that needs room gets `wide: true`.\n' +
-      '- It holds the data you write into it and never updates by itself. Say so when it will go stale, and offer a Job ' +
-      'for something that should stay current only if the user asks.\n' +
+      '- It holds the data you write into it and never updates by itself. Say so when it will go stale. For something ' +
+      'that should stay current, offer a Job that keeps the card (below) only if the user asks.\n' +
       '- A Button with @ToAssistant puts its message in the AI Sidebar\'s input for the user to send, so a card can ask ' +
       'for its own refresh: `Button("Refresh", @ToAssistant("Update my Reading list card"))`. @OpenUrl opens a page.\n' +
       '- To change a card, call getDashboard for its id and program, then pinDashboardCard with `id` and the whole new program.\n' +
@@ -1168,6 +1196,14 @@ export function dashboardGuide() {
     'Example:\n```\nroot = Stack([head, list], "column", "s")\nhead = CardHeader("Reading list", "3 to go", "book")\n' +
       'list = List([a, b, c], "divided")\na = ListItem("The Dispossessed", "Ursula K. Le Guin", Icon("bookmark", "primary"))\n' +
       'b = ListItem("Braiding Sweetgrass", "Robin Wall Kimmerer")\nc = ListItem("The Overstory", "Richard Powers")\n```',
+    '### A Job\'s card — setJobCard',
+    'A Job can keep one card of its own, drawn again on every run: a morning briefing, a price it watches, the day\'s ' +
+      'numbers. Make the Job with saveJob and `writes: { home: true }` (the user is asked), and write its prompt to end ' +
+      'with "draw the card with setJobCard": each run then calls `setJobCard({ openui })` with the whole card. A job.js ' +
+      'can call `nomad.setJobCard(...)` itself. The card shows in the Job\'s Space, with the Job\'s name, when it last ' +
+      'ran and a Run now button under it. Removing the card on the page, deleting the Job or taking the grant away takes ' +
+      'it off. getDashboard marks such a card with `job`; change what it shows by changing the Job, since its next run ' +
+      'replaces anything pinDashboardCard writes there.',
     '### The layout — setDashboard',
     'The layout says what the page shows and where. It places the page\'s **live parts**, widgets that fill themselves ' +
       'with the user\'s own things, and can put any other component around them (a Header, Stats, a Callout, Tabs). ' +

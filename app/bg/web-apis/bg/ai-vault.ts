@@ -229,12 +229,26 @@ export async function runVaultTool(name, args, { ctx, space = null, permit, scra
       const { id, title, openui, wide } = args;
       if (!id && typeof openui !== 'string') throw new Error('A new card needs `openui`: an openui-lang program');
       const card = await homeLayout.pinCard(await homeSpace(), { id, title, source: openui, wide }, origin);
-      return json({ id: card.id, title: card.title, ...(card.wide ? { wide: true } : {}), pinned: !id, url: HOME_LINK });
+      return json({
+        id: card.id,
+        title: card.title,
+        ...(card.wide ? { wide: true } : {}),
+        pinned: !id,
+        // A Job's card (ADR-0048 amendment) is drawn again on the Job's next run.
+        ...(card.job && openui !== undefined
+          ? { note: `The Job “${card.job.title}” draws this card again on its next run. To keep a change, change the Job with saveJob.` }
+          : {}),
+        url: HOME_LINK,
+      });
     }
 
     case 'removeDashboardCard': {
-      const card = await homeLayout.removeCard(await homeSpace(), args.id);
-      return `Removed the card “${card.title}” from the home page\n\nLink: ${HOME_LINK}`;
+      const card: any = await homeLayout.removeCard(await homeSpace(), args.id);
+      // As on the page: a Job's card goes for good, so the Job stops drawing it.
+      const job: any = card.job?.id ? jobs.get(card.job.id) : null;
+      if (job?.writes?.home) await jobs.save({ id: job.id, writes: { ...job.writes, home: false } });
+      const stopped = job ? ` The Job “${job.title}” no longer keeps a card there.` : '';
+      return `Removed the card “${card.title}” from the home page.${stopped}\n\nLink: ${HOME_LINK}`;
     }
 
     // A whole new layout, or the default one back. The layout it replaces is kept, one step back.

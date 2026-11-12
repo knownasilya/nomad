@@ -31,6 +31,7 @@ import * as spaceLibrary from '../hyper/space-library';
 import * as logLib from '../logger';
 import * as jl from '../../../shared/jobs.mjs';
 import * as secretStore from './secret-store';
+import * as homeLayout from '../ui/home-layout';
 
 const logger = logLib.get().child({ category: 'ai', subcategory: 'jobs' });
 
@@ -178,6 +179,8 @@ export function save(fields) {
     const rec = jl.makeJob({ ...rest, id: prev?.id || jl.newJobId(), device }, prev);
     await vault.putAppRecord(jl.jobPath(rec.id), rec);
     jobs.set(rec.id, rec);
+    // A Job that may no longer keep a card on the home page takes it off (ADR-0048 amendment).
+    if (prev?.writes?.home && !rec.writes?.home) await dropCard(prev);
     events.emit('changed');
     return rec;
   });
@@ -196,12 +199,21 @@ export function remove(id) {
     await vault.delAppRecord(jl.jobPath(id));
     // The secrets this Job could use on this computer (ADR-0033) stop being its.
     await secretStore.dropJob(id).catch(() => {});
+    // Its card on the home page too, if it kept one.
+    if (jobs.get(id)) await dropCard(jobs.get(id));
     jobs.delete(id);
     runs.delete(id);
     events.emit('changed');
   });
   writes = run.catch(() => {});
   return run;
+}
+
+// A Job's card on the home page of its Space, taken off. Never fails the edit that asked.
+async function dropCard(job) {
+  await homeLayout.removeJobCard(job.space || null, job.id).catch((err) => {
+    logger.warn('Could not take a Job’s card off the home page', { id: job.id, error: err?.message });
+  });
 }
 
 // Clear a Job's history: delete every saved run, on every Device. The Job notes when its last run

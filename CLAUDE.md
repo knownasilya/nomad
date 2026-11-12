@@ -724,7 +724,10 @@ dashboard as it always was. `<nomad-genui host>` (the bundle `nomad://app-stdlib
 from `app/fg/genui-page/element.js`) draws it, leaves a `<slot>` per widget and names them in
 `genui-widgets`; `app/userland/desktop/js/main.js` puts its own element in each slot, so the parts
 keep their own code and CSS. Pinned **cards** are programs too, one Vault record each, drawn by
-their own `<nomad-genui framed>` where the layout places HomeCards(). Both are the user's own, per
+their own `<nomad-genui framed>` where the layout places HomeCards(). A Job with the `home` grant (`writes.home`)
+keeps one card of its own with `setJobCard` (a Job-only capability; the card's `job: { id, title,
+at }`, `makeJobCard` and `withJobState` in `shared/home-layout.mjs`); removing the card takes the
+grant away, and losing the grant or deleting the Job removes the card (`bg/ai/jobs.js` `dropCard`). Both are the user's own, per
 Space, in the Vault (`/.vault/home/spaces/<space>/layout.json` and `cards/<id>.json`), never in a
 shared Space's Library; the layout keeps the one it replaced. Rules: `shared/home-layout.mjs`
 (tests `tests/unit/home-layout.test.js`); I/O: `app/bg/ui/home-layout.js`, which parses every
