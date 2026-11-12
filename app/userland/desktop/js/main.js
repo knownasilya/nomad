@@ -46,6 +46,9 @@ import * as desktop from './lib/desktop.js';
 import { releaseNotesUrl, shouldShowNotice, versionId } from './lib/release.js';
 import { ago, until, wallNow, longDate } from './lib/when.js';
 import css from '../css/main.css.js';
+
+// A Job in My Library (shared/item-links.mjs jobLink).
+const jobUrl = (id) => `nomad://library/jobs?id=${encodeURIComponent(id)}`;
 import 'nomad://app-stdlib/js/com/img-fallbacks.js';
 
 const WAITING_ICONS = {
@@ -371,9 +374,42 @@ class DesktopApp extends LitElement {
                   @genui-live=${(e) => this.onCardLive(c.id, e)}
                 ></nomad-genui>
                 ${this.renderLiveBar(c)}`}
+          ${c.job ? this.renderJobCardFooter(c) : ''}
         </section>
       `
     );
+  }
+
+  // Under a Job's card (ADR-0048 amendment): which Job keeps it, when it last drew it, and Run now.
+  renderJobCardFooter(c) {
+    const j = c.job;
+    const when = j.running ? 'Updating now…' : j.at ? `Updated ${ago(j.at)}` : '';
+    return html`
+      <footer class="card-job ${j.failed ? 'failed' : ''}">
+        <span class="fas fa-fw fa-robot" aria-hidden="true"></span>
+        ${j.gone
+          ? html`<span class="job-name">From a Job that was deleted</span>`
+          : j.other
+            ? html`<span class="job-name">From “${j.title}”, a Job of someone in this Space</span>`
+            : html`<a class="job-name" href=${jobUrl(j.id)} title="Open the Job in My Library">${j.title}</a>`}
+        ${when ? html`<span class="when">· ${when}</span>` : ''}
+        ${j.failed && !j.running
+          ? html`<span class="when err" title="The Job’s last run failed, so this is from the run before">· Last run failed</span>`
+          : ''}
+        ${j.gone || j.other
+          ? ''
+          : j.running
+            ? html`<span class="spinner small" role="status" aria-label="The Job is running"></span>`
+            : html`<button
+                class="icon-btn"
+                title="Run the Job now to update this card"
+                aria-label="Run the Job ${j.title} now"
+                @click=${() => this.onRunJob(j)}
+              >
+                <span class="fas fa-redo"></span>
+              </button>`}
+      </footer>
+    `;
   }
 
   // Under a live card: when it last read its data, and a button to read it now.
@@ -1136,6 +1172,10 @@ class DesktopApp extends LitElement {
     const page = home.shared ? `the home page of ${name ? `“${name}”` : 'this Space'}` : 'my home page';
     if (what === 'card') return this.draftForAi(`Add a card to ${page} that shows `);
     if (what === 'change-card') {
+      // A Job draws its card again on every run, so the change goes in the Job.
+      if (card.job && !card.job.gone && !card.job.other) {
+        return this.draftForAi(`Change my Job “${card.job.title}” (id ${card.job.id}) so its card on ${page} `);
+      }
       return this.draftForAi(`On ${page}, change the card “${card.title}” (id ${card.id}): `);
     }
     if (what === 'space') {
@@ -1196,9 +1236,12 @@ class DesktopApp extends LitElement {
       }
       this.loadDashboard();
     };
+    const job = card.job && !card.job.gone && !card.job.other ? card.job : null;
     this.menu([
       { label: 'Ask AI to Change This Card…', click: () => this.onAskAi('change-card', card) },
-      chat
+      job ? { label: 'Open the Job', click: () => (location.href = jobUrl(job.id)) } : undefined,
+      job ? { label: 'Run the Job Now', enabled: !job.running, click: () => this.onRunJob(job) } : undefined,
+      chat && !job
         ? { label: 'Open the Chat That Made It', click: () => nomad.aiChats.open(chat.id, { space: chat.space }) }
         : undefined,
       { type: 'separator' },
@@ -1212,8 +1255,9 @@ class DesktopApp extends LitElement {
 
   async onRemoveCard(card) {
     try {
-      await nomad.vault.removeHomeCard(card.id);
-      toast.create(`Removed “${card.title}”`);
+      const res = await nomad.vault.removeHomeCard(card.id);
+      // Taking it off also stops the Job drawing it (vault.ts removeHomeCard).
+      toast.create(res?.job ? `Removed “${card.title}”. “${res.job}” won’t draw it again.` : `Removed “${card.title}”`);
     } catch (e) {
       toast.create(e.message || String(e), 'error');
     }

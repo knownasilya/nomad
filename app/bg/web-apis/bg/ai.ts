@@ -100,6 +100,8 @@ import { isPageAction } from '../../ai/page-control.mjs';
 import * as pageControl from '../../ui/page-control';
 import { createJobPage } from '../../ai/job-page';
 import * as jobChat from '../../ai/job-chat';
+import * as homeLayout from '../../ui/home-layout';
+import { HOME_LINK } from '../../../../shared/item-links.mjs';
 import {
   getActiveRuntime,
   listRuntimeCatalog,
@@ -629,6 +631,7 @@ async function runJobWork(job, { work, trigger, lastRun, notify, signal, space, 
   if (work.module) {
     result = await runJobModule(work.module, {
       jobId: job.id,
+      jobTitle: job.title,
       params: {
         job: { id: job.id, title: job.title, trigger },
         prompt: job.prompt || null,
@@ -669,7 +672,7 @@ async function runJobWork(job, { work, trigger, lastRun, notify, signal, space, 
     space,
     requestPermission: grants.permit,
     context: jobContext(job),
-    job: { id: job.id, notify, extra: grants.extra },
+    job: { id: job.id, title: job.title, notify, extra: grants.extra },
     jobPage,
     egress,
     scratch,
@@ -714,7 +717,7 @@ function jobGrants(job) {
 
 // An emitter for a Job's turn that keeps what it changed: each file written, and each Note or
 // Reader change that finished.
-const RECORDED_WRITES = new Set(['writeNote', 'followFeed', 'unfollowFeed', 'markPostsRead']);
+const RECORDED_WRITES = new Set(['writeNote', 'followFeed', 'unfollowFeed', 'markPostsRead', 'setJobCard']);
 function jobEmitter(changes = []) {
   const emitter = new EventEmitter();
   const started = new Map();
@@ -736,7 +739,7 @@ function jobEmitter(changes = []) {
 // A Job's job.js, run like the AI's execute code with the job turn's capabilities: no tab, no page
 // tools, notify, and the writes the Job was given. Resolves what main() returned (text, or JSON for
 // anything else).
-async function runJobModule(code, { jobId, params, space, notify, signal, grants, emitter, egress, jobPage, scratch, origin = null }) {
+async function runJobModule(code, { jobId, jobTitle = '', params, space, notify, signal, grants, emitter, egress, jobPage, scratch, origin = null }) {
   const sender = makeRemoteSender('nomad://jobs/');
   const catalog = buildCatalog({
     allowWrite: grants.allowWrite,
@@ -759,7 +762,7 @@ async function runJobModule(code, { jobId, params, space, notify, signal, grants
     space,
     signal,
     catalog,
-    job: { id: jobId, notify },
+    job: { id: jobId, title: jobTitle, notify },
     jobPage,
     egress,
     scratch,
@@ -805,6 +808,7 @@ function jobContext(job) {
     ...(w?.notes ? ['the user’s Notes (writeNote)'] : []),
     ...(w?.reader ? ['their Reader (followFeed, unfollowFeed, markPostsRead)'] : []),
     ...(w?.newDrives ? ['new drives (createDrive), and the files in the drives it makes (writeDriveFile, live)'] : []),
+    ...(w?.home ? ['its own card on the user’s home page (setJobCard, the whole card each time; guide:dashboard)'] : []),
     ...(drives.length ? [`these drives with writeDriveFile, naming the drive: ${drives.join(', ')}`] : []),
   ];
   const change = may.length
@@ -1630,6 +1634,23 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
       if (typeof args?.body !== 'string' || !args.body.trim()) throw new Error('notify needs `body`');
       job.notify?.({ title: args.title, body: args.body });
       return 'The user will get this notification when the Job finishes.';
+    }
+    case 'setJobCard': {
+      // A Job with the `home` grant only (ADR-0048 amendment): its one card, in the Job's Space.
+      if (!job?.id || !hasCapability(catalog, name)) throw new Error('setJobCard is only for a Job the user let keep a card on the home page');
+      const cardSpace = isSpaceKey(space) ? space : null;
+      if (args?.remove === true) {
+        const gone = await homeLayout.removeJobCard(cardSpace, job.id);
+        return gone ? `Took the card “${gone.title}” off the home page` : 'This Job has no card on the home page';
+      }
+      if (typeof args?.openui !== 'string' || !args.openui.trim()) throw new Error('setJobCard needs `openui`: the whole card');
+      const card = await homeLayout.setJobCard(
+        cardSpace,
+        { id: job.id, title: job.title },
+        { source: args.openui, title: typeof args.title === 'string' ? args.title : undefined, wide: args.wide === true },
+        origin
+      );
+      return JSON.stringify({ id: card.id, title: card.title, ...(card.wide ? { wide: true } : {}), url: HOME_LINK });
     }
     case 'currentTab': {
       if (!currentTab) throw new Error('currentTab is not available here');

@@ -9,7 +9,7 @@
 //
 //   /.vault/home/spaces/<space>/layout.json      { type, source, previous?, ai?, updatedAt }
 //   /.vault/home/spaces/<space>/cards/<id>.json  { type, id, title, source, wide?, order, ai?,
-//                                                  createdAt, updatedAt }
+//                                                  job?, createdAt, updatedAt }
 //
 // A shared Space (ADR-0029) has one home page for everyone in it, in its Space Library (ADR-0048
 // amendment): /home/layout.json and /home/cards/<id>.json, the same records. Its owners and editors
@@ -22,6 +22,11 @@
 // (app/bg/web-apis/bg/ai-vault.ts: getDashboard, pinDashboardCard, removeDashboardCard,
 // setDashboard), and the user pins a drawing from an answer with the button under it. The layout
 // keeps the one it replaced (`previous`), so one step back is always there.
+//
+// A Job can keep one card of its own (`job: { id, title, at }`), when the user gave it the `home`
+// grant (shared/jobs.mjs writes): each run that calls setJobCard replaces the card's program, in
+// the Job's Space, and `at` says when. The page shows which Job keeps it and when it last did, and
+// removing the card takes the grant away (app/bg/web-apis/bg/vault.ts removeHomeCard).
 //
 // This file holds the rules; whether a program parses is checked where the parser is
 // (app/bg/ai/genui-page.js programError). No I/O, no Electron, no globals the phone's Bare worklet
@@ -95,6 +100,7 @@ export function householdLayout(lists = ['Chores', 'Groceries']) {
 
 const SPACE_KEY = /^[0-9a-f]{64}$/
 const CARD_ID = /^[a-z0-9]{6,24}$/
+const JOB_ID = /^[a-z0-9-]{6,40}$/ // shared/jobs.mjs isJobId
 
 const clip = (s, n) => {
   const t = String(s ?? '').replace(/\s+/g, ' ').trim()
@@ -224,9 +230,10 @@ export function cardTitle(title, source) {
 /**
  * The card record to store. `prev` is the stored card with that id, if any: fields left out keep
  * its values, and it keeps its place and its origins.
- * @param {{ id: string, title?: string, source?: string, wide?: boolean, order?: number }} fields
+ * @param {{ id: string, title?: string, source?: string, wide?: boolean, order?: number, job?: any }} fields
  */
 export function makeCard(fields, prev = null, now = new Date().toISOString()) {
+  // (`job` is set by makeJobCard, and otherwise carried over from `prev`.)
   if (!isCardId(fields?.id)) throw new Error('Not a card id: ' + fields?.id)
   const source = cleanSource(fields.source ?? prev?.source, MAX_CARD_SOURCE, 'The card')
   const createdAt = isIso(prev?.createdAt) ? prev.createdAt : now
@@ -244,7 +251,45 @@ export function makeCard(fields, prev = null, now = new Date().toISOString()) {
   if (wide === true) rec.wide = true
   const ai = originsOf(prev)
   if (ai.length) rec.ai = ai
+  const job = cleanJobRef(fields.job ?? prev?.job)
+  if (job) rec.job = job
   return rec
+}
+
+// Which Job keeps a card: { id, title, at }, or null.
+export function cleanJobRef(job) {
+  if (!job || typeof job !== 'object' || typeof job.id !== 'string' || !JOB_ID.test(job.id)) return null
+  const out = { id: job.id, title: clip(job.title, MAX_TITLE) || 'Job' }
+  if (isIso(job.at)) out.at = job.at
+  return out
+}
+
+// The card a Job keeps, if any.
+export function jobCardOf(list, jobId) {
+  return sortCards(list).find((c) => c.job?.id === jobId) || null
+}
+
+/**
+ * The card a Job's run sets (setJobCard): a new one, or `prev` (jobCardOf) with its program
+ * replaced. The user's own changes stay: its place, and whether it is wide (`wide` counts only on
+ * a new card).
+ * @param {{ id: string, title?: string }} job the Job record (shared/jobs.mjs)
+ * @param {{ id?: string, title?: string, source: string, wide?: boolean }} fields
+ */
+export function makeJobCard(job, fields, prev = null, now = new Date().toISOString()) {
+  const ref = cleanJobRef({ id: job?.id, title: job?.title, at: now })
+  if (!ref) throw new Error('Not a Job')
+  return makeCard(
+    {
+      id: prev ? prev.id : fields.id,
+      title: fields.title || prev?.title || ref.title,
+      source: fields.source,
+      wide: prev ? undefined : fields.wide === true,
+      job: ref,
+    },
+    prev,
+    now
+  )
 }
 
 export function isCard(rec) {
@@ -332,6 +377,25 @@ export function homeOwner(place = {}) {
   }
 }
 
+// The page's view of each Job's card: `job` with the Job as it is now (its title, whether it is
+// running or waiting to, whether its newest run failed, and `gone` once the Job is no more).
+// `jobs` are rows of shared/jobs.mjs jobsWithRuns, with `running` and `queued` (bg/ai/jobs.js list).
+// On a shared Space's page a Job this user doesn't have is another member's (`other`), not gone.
+export function withJobState(cards, jobs = [], { shared = false } = {}) {
+  const byId = new Map((jobs || []).filter((j) => j && typeof j.id === 'string').map((j) => [j.id, j]))
+  return (cards || []).map((c) => {
+    const ref = cleanJobRef(c?.job)
+    if (!ref) return c
+    const j = byId.get(ref.id)
+    if (!j) return { ...c, job: { ...ref, ...(shared ? { other: true } : { gone: true }) } }
+    /** @type {any} */
+    const state = { ...ref, title: clip(j.title, MAX_TITLE) || ref.title }
+    if (j.running || j.queued) state.running = true
+    if (j.lastRun?.status === 'error') state.failed = true
+    return { ...c, job: state }
+  })
+}
+
 // What the AI reads (getDashboard): the layout's program, the cards with theirs, and what it needs
 // to know to change them. `place` is the Space's (homeOwner).
 export function homeForModel(layoutRec, cards, place = null) {
@@ -354,7 +418,14 @@ export function homeForModel(layoutRec, cards, place = null) {
     },
     layout: view.custom ? 'custom' : 'default',
     openui: view.source,
-    cards: list.map((c) => ({ id: c.id, title: c.title, ...(c.wide ? { wide: true } : {}), openui: c.source })),
+    cards: list.map((c) => ({
+      id: c.id,
+      title: c.title,
+      ...(c.wide ? { wide: true } : {}),
+      // A Job's card: its next run replaces the program (saveJob changes what the Job puts there).
+      ...(c.job ? { job: { id: c.job.id, title: c.job.title } } : {}),
+      openui: c.source,
+    })),
     cardsShown: placesWidget(view.source, 'HomeCards') ? 'where the layout places HomeCards()' : 'after the layout, which has no HomeCards()',
     maxCards: MAX_CARDS,
   }

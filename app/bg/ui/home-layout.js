@@ -127,6 +127,40 @@ export function pinCard(space, fields = {}, origin = null) {
   });
 }
 
+// A Job's own card (shared/jobs.mjs `home` grant): its run makes it, or replaces its program, in
+// the Job's Space. { source, title?, wide? }; `wide` counts only on a new card, so the user's
+// choice stays. `origin` is the run (shared/ai-origin.mjs). Returns the record.
+export function setJobCard(space, job, fields = {}, origin = null) {
+  return inTurn(async () => {
+    const p = await writable(space);
+    const list = await cards(space, p);
+    const prev = hl.jobCardOf(list, job?.id);
+    if (!prev && list.length >= hl.MAX_CARDS) {
+      throw new Error(`The home page holds ${hl.MAX_CARDS} cards, so there is no room for this Job's card.`);
+    }
+    const source = hl.cleanSource(fields.source, hl.MAX_CARD_SOURCE, 'The card');
+    check(source);
+    let rec = hl.makeJobCard(job, { id: hl.newCardId(), title: fields.title, source, wide: fields.wide }, prev);
+    rec = hl.withOrigin(rec, origin, { made: !prev });
+    await p.cards.put(hl.cardFile(rec.id), rec);
+    return rec;
+  });
+}
+
+// Take a Job's card off the page: when the Job is deleted, loses its `home` grant, or its run asks.
+// The removed record, or null when it had none.
+export function removeJobCard(space, jobId) {
+  return inTurn(async () => {
+    const p = await place(space);
+    const card = hl.jobCardOf(await cards(space, p), jobId);
+    if (card) {
+      if (!p.writable) throw new Error('You can view this Space, but only the people who can edit it change its home page.');
+      await p.cards.del(hl.cardFile(card.id));
+    }
+    return card;
+  });
+}
+
 // One place earlier (-1) or later (1) on the page.
 export function moveCard(space, id, dir) {
   return inTurn(async () => {

@@ -1035,10 +1035,11 @@ export default {
     ]);
     const names = new Map((devices || []).map((d) => [d.key, d.name]));
     const own = await jobs.ownKey().catch(() => null);
+    const jobRows = jobs.list();
     return {
       ...homeDash.dashboard(
         {
-          jobs: jobs.list().map((j) => ({
+          jobs: jobRows.map((j) => ({
             ...j,
             when: describeSchedule(j.schedule),
             deviceName: j.device && j.device !== own ? names.get(j.device) || 'another Device' : '',
@@ -1067,7 +1068,8 @@ export default {
       // The page as a document (ADR-0048, shared/home-layout.mjs): the layout's program and the
       // cards pinned to it. With no Vault to read, the default layout and no cards.
       layout: page?.layout || hl.layoutView(null),
-      cards: page?.cards || [],
+      // A Job's card shows the Job as it is now (ADR-0048 amendment).
+      cards: hl.withJobState(page?.cards || [], jobRows, { shared: !!(page?.shared ?? share?.shared) }),
       // Whose home page this is: a shared Space's is everyone's in it, and only its owners and
       // editors change it (ADR-0048 amendment).
       home: {
@@ -1095,8 +1097,14 @@ export default {
     return true;
   },
 
+  // Removing a Job's card also takes the Job's `home` grant away, or its next run would put the
+  // card back. Returns { job } (the Job's title) when it did.
   async removeHomeCard(id) {
-    await homeLayout.removeCard(await callerSpace(this), String(id));
+    const card: any = await homeLayout.removeCard(await callerSpace(this), String(id));
+    const job: any = card?.job?.id ? jobs.get(card.job.id) : null;
+    if (!job) return null;
+    if (job.writes?.home) await jobs.save({ id: job.id, writes: { ...job.writes, home: false } });
+    return { job: job.title };
   },
 
   // Back to the dashboard every Space starts with. The layout it replaces is kept, one step back.

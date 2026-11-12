@@ -90,8 +90,9 @@ also small: no grid, no list with parts, no form, and few ways to vary a compone
   from `app/fg/genui-page/element.js`), about 440 KB read from disk, Leaflet included.
 - The phone's home tab still shows the fixed dashboard: it has no renderer for the language. Its AI
   panel can pin a card or change the layout, which shows on the user's computers.
-- A card is a snapshot. Keeping one current (a Job that rewrites its card) is not built; a card can
-  carry a Button that asks for its own refresh.
+- A card holds what was written into it, unless it reads the user's things with a Query or a Job
+  draws it again on every run (amendments below); a card can also carry a Button that asks for its
+  own refresh.
 - ~~A shared Space has no shared home page. Each member has their own.~~ See the amendment below.
 
 ## Amendment: live cards (2026-11-12)
@@ -136,7 +137,36 @@ user's data into a program, which the decision above avoids for the layout.
    phone's panel and the loopback MCP have it, and Jobs don't.
 
 Not built: Mutations (a card that writes), `$state` bindings, and the phone drawing live cards. A
-Job that writes a card of its own can make it live with `Query("jobRuns", {job: …})`.
+Job's own card (the next amendment) can hold a Query too.
+
+## Amendment: a Job keeps a card (2026-11-12)
+
+Live cards (above) read the user's own things. What takes work to make, from the web or by the
+model (a morning briefing, a price it watches, the day's numbers), needs a run. Now a Job can keep
+one card of its own and draw it again on every run.
+
+1. **A grant.** `writes.home` on the Job (shared/jobs.mjs, "Keep a card on my home page" in My
+   Library → Jobs). Like `newDrives`, it is set only when given, so older Jobs keep the same record,
+   and the AI's `saveJob` asks the user for it (`jobWrites`). It needs no permission at run time: it
+   only adds a capability to the Job's turn (`WRITE_CAPS.home`).
+2. **One capability, for Jobs only.** `setJobCard({ openui, title?, wide?, remove? })` (gate
+   `job`, not in `JOB_CAPS`: only the grant turns it on). A Job still never gets `getDashboard`,
+   `pinDashboardCard` or `setDashboard`: it changes its own card and nothing else on the page. A
+   `job.js` can call `nomad.setJobCard(...)` itself, with no model turn.
+3. **One card per Job**, in the Job's Space (`job.space`). The card record gains
+   `job: { id, title, at }` (`makeJobCard`, `jobCardOf`); each call replaces the program and keeps
+   the user's changes (its place, wide or narrow). It is parsed like any card, and records the run's
+   origin (ADR-0047). In a shared Space whose home page is the household's, the card is everyone's.
+4. **The page shows whose it is.** Under a Job's card: the Job's name (a link to it in My Library),
+   when it last drew the card, "Last run failed" when the newest run failed, and a Run now button
+   (a spinner while it runs). `nomad.vault.homeDashboard` adds the Job's state (`withJobState`). The
+   card's menu offers Open the Job and Run the Job Now, and its Ask AI draft asks to change the Job,
+   since the next run would replace a change made to the card.
+5. **It goes when the grant goes.** Removing the card on the page also takes `home` off the Job
+   (`removeHomeCard`), or the next run would put it back. Taking the grant away or deleting the Job
+   removes the card (`bg/ai/jobs.js` `dropCard`).
+
+The run records "Drawing its card on your home page" in its `changes`, like a Note it writes.
 
 ## Amendment: each Space gets a home of its own (2026-11-12)
 
@@ -154,7 +184,9 @@ the chores, what's coming up, the photos and who is in it.
    The widgets still fill themselves with what each person sees: their own Jobs, notifications and
    Needs you, and the Space's Notes, calendar and files. Cards are snapshots, so the AI is told that
    everyone in the Space sees them (`homeForModel` `space.note`), and the permission prompt to
-   change a shared Space's home page names the Space and says so.
+   change a shared Space's home page names the Space and says so. A Job's card in a shared Space
+   (the amendment above) is everyone's too; the others see whose Job keeps it, with no link to it
+   and no Run now, since the Job is in its owner's Vault.
 2. **Three parts for a Space's own board.**
    - `HomeList("Chores", limit?)`: a checklist Note of the Space, named by its title, shown with its
      items. A tick there and an item typed there change the Note (`nomad.vault.tickNoteItem`,

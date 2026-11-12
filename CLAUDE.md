@@ -729,6 +729,10 @@ Vault (`/.vault/home/spaces/<space>/layout.json` and `cards/<id>.json`), or, for
 for everyone in it in its Space Library (`/home/layout.json`, `/home/cards/`), which only its owners
 and editors change (ADR-0048 amendment). Go through `spaceLibrary.records(space, 'home' | 'homeCards')`
 (`bg/ui/home-layout.js` does), never straight to the Vault; the layout keeps the one it replaced.
+A Job with the `home` grant (`writes.home`) keeps one card of its own in its Space's home page with
+`setJobCard` (a Job-only capability; the card's `job: { id, title, at }`, `makeJobCard` and
+`withJobState` in `shared/home-layout.mjs`); removing the card takes the grant away, and losing the
+grant or deleting the Job removes the card (`bg/ai/jobs.js` `dropCard`).
 A Space's own board can place `HomeList("Chores")` (a checklist Note ticked and added to on the page:
 `nomad.vault.tickNoteItem`/`addNoteItem`, by the item's words), `HomePhotos()` and `HomeMembers()`;
 Set up a home gives a household `householdLayout()`. The AI's dashboard tools take an optional
