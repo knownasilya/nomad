@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.50.0](https://github.com/knownasilya/nomad/compare/v1.49.0...v1.50.0) (2026-11-12)
+
+
+### Features
+
+* **ai:** a Job can keep a card on the home page ([008349b](https://github.com/knownasilya/nomad/commit/008349b1236bcfa57f4f256fc2d533402dd648be))
+* **ai:** more GenUI components, and a home page the AI can draw ([e14864d](https://github.com/knownasilya/nomad/commit/e14864dfc1cc9aea912d3584f4eb5df09c0525f7))
+* **ai:** the MCP's search index names the home page and its guides ([2e10b61](https://github.com/knownasilya/nomad/commit/2e10b61c8f584cccfa03e4550dd5080147c790b3))
+* **home:** each Space gets its own home page, and a shared one is everyone's ([496d0d9](https://github.com/knownasilya/nomad/commit/496d0d91b6de833017fcdc8d2abb13cdbaf6591c))
+* **home:** live cards that read the calendar, Jobs, Notes and drives ([dd2ea3c](https://github.com/knownasilya/nomad/commit/dd2ea3c3f89cc5c445eb39fcce3b7b78281c24c5))
+
+
+### Bug Fixes
+
+* **ui:** dark scrollbars on nomad:// pages in dark mode ([cd9c869](https://github.com/knownasilya/nomad/commit/cd9c869d894962ef1d269835cb5f4470d454afeb))
+
 ## [1.49.0](https://github.com/knownasilya/nomad/compare/v1.48.1...v1.49.0) (2026-11-11)
 
 
