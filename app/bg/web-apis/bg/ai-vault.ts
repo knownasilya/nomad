@@ -24,9 +24,12 @@ import { saveWhole, scratchKey } from '../../ai/scratch.mjs';
 import { addedWrites, describeSchedule, describeWrites, keepPageActions } from '../../../../shared/jobs.mjs';
 import { noteLink, jobLink, MEMORY_LINK, READER_LINK, CALENDAR_LINK, CONTACTS_LINK, HOME_LINK } from '../../../../shared/item-links.mjs';
 import fsAPI from './fs';
+import * as homeLive from './home-live';
+import { liveArgs } from '../../../../shared/home-live.mjs';
 import * as webFeeds from './web-feeds';
 import {
   VAULT_TOOL_PERMS,
+  LIVE_SOURCE_PERMS,
   findNotes,
   findNote,
   noteForModel,
@@ -40,6 +43,19 @@ import {
   findJobs,
   jobForModel,
 } from '../../ai/vault-tools.mjs';
+
+// A live source's result for the model: its shape and a few items, not a whole file.
+function previewOf(data: any) {
+  const out: any = { ...data };
+  if (Array.isArray(out.items) && out.items.length > 5) {
+    out.items = out.items.slice(0, 5);
+    out.moreItems = data.items.length - 5;
+  }
+  if (typeof out.text === 'string' && out.text.length > 1500) out.text = out.text.slice(0, 1500) + '…';
+  if (out.data && JSON.stringify(out.data).length > 3000) out.data = '(a large value; its lists are in items)';
+  if (out.last?.text?.length > 600) out.last = { ...out.last, text: out.last.text.slice(0, 600) + '…' };
+  return out;
+}
 
 // A feed that doesn't answer in this time is listed with an error, so one offline peer can't stall
 // the turn.
@@ -240,6 +256,21 @@ export async function runVaultTool(name, args, { ctx, space = null, permit, scra
           : {}),
         url: HOME_LINK,
       });
+    }
+
+    // What a live card's Query would show now (shared/home-live.mjs), for the model to write the
+    // card around. A private drive is the user's; a card may show it, but its files don't go to
+    // the model this way.
+    case 'previewLiveData': {
+      const source = String(args.source || '');
+      const extra = LIVE_SOURCE_PERMS[source];
+      if (extra && !(await permit(extra, ctx.sender))) throw new Error(`The user didn't allow ${extra}`);
+      const clean = liveArgs(source, args.args);
+      if (/^hyper:\/\/private\//i.test(clean.url || '')) {
+        throw new Error('previewLiveData doesn’t read hyper://private/. Write the card from what you know of the file.');
+      }
+      const data = await homeLive.query(ctx, source, clean);
+      return json({ source, args: clean, data: previewOf(data) });
     }
 
     case 'removeDashboardCard': {

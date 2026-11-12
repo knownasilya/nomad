@@ -47,6 +47,9 @@ export const VAULT_TOOL_PERMS = {
   pinDashboardCard: 'dashboardWrite',
   removeDashboardCard: 'dashboardWrite',
   setDashboard: 'dashboardWrite',
+  // What a live card's Query would show (shared/home-live.mjs); ai-vault.ts also asks the
+  // source's own permission (LIVE_SOURCE_PERMS).
+  previewLiveData: 'dashboardRead',
   // Files into the user's Assets (ADR-0044); ai.ts runs it, not runVaultTool.
   saveAsset: 'assetsWrite',
 }
@@ -395,4 +398,13 @@ export function jobForModel(j, deviceName = () => 'another device') {
         }
       : null,
   }
+}
+
+// The permission a live source's data needs on top of dashboardRead, for previewLiveData: the one
+// the AI would ask to read the same things another way.
+export const LIVE_SOURCE_PERMS = {
+  events: 'calendarRead',
+  jobs: 'jobsRead',
+  jobRuns: 'jobsRead',
+  notes: 'notesRead',
 }

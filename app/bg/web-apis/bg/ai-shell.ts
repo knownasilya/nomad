@@ -26,6 +26,7 @@ import * as chatStore from '../../ai/chat-store';
 import * as vaultApps from './vault-apps';
 import * as jobChat from '../../ai/job-chat';
 import * as homeLayout from '../../ui/home-layout';
+import * as homeLive from './home-live';
 import * as settingsDb from '../../dbs/settings';
 import { createSteering } from '../../ai/steering.mjs';
 
@@ -255,6 +256,13 @@ export default {
       chatId ? { stage: 'sidebar', chat: chatId, space: space || undefined } : null
     );
     return { id: card.id, title: card.title };
+  },
+
+  // A Query in a drawing (live cards, shared/home-live.mjs), answered from the window's Space as
+  // the home page would, so a live card shows its data before it is pinned. The data goes to the
+  // sidebar's screen only; the model never sees it.
+  async liveQuery(source, args = {}) {
+    return homeLive.query({ sender: this.sender }, String(source), args);
   },
 
   async getPrefs() {

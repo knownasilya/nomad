@@ -186,7 +186,7 @@ describe('over the loopback MCP', () => {
     const saveJob = await call(searchIn, 'search', { entity: 'capability:saveJob' })
     expect(saveJob.isError).toBe(false)
     expect(saveJob.text).toContain('"home"')
-    const guide = await call(searchIn, 'search', { entity: 'guide:dashboard' })
+    const guide = await call(searchIn, 'search', { entity: 'guide:dashboard#a-job-s-card-setjobcard' })
     expect(guide.isError).toBe(false)
     expect(guide.text).toContain('setJobCard({ openui })')
     const found = await call(searchIn, 'search', { entity: 'capability:setJobCard' })

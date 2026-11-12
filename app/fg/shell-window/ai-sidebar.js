@@ -9,6 +9,9 @@ import { parseItemLink } from '../../../shared/item-links.mjs';
 import { mdToHtml } from './ai-markdown.js';
 import './genui/index.js';
 
+// Live data for a drawing's Queries: read in bg, shown here, never sent to the model.
+const liveQuery = (source, args) => bg.aiShell.liveQuery(source, args);
+
 // Puts text on the clipboard. Falls back to a selected textarea + execCommand('copy') if the
 // async Clipboard API is refused (as app-stdlib/js/clipboard.js does).
 async function writeClipboard(text) {
@@ -1763,7 +1766,8 @@ class ShellWindowAiSidebar extends LitElement {
   }
 
   // An answer is Markdown with OpenUI Lang programs fenced in it (ADR-0027); each program is drawn
-  // by <nomad-genui>.
+  // by <nomad-genui>. A drawing with Query statements (a live card, shared/home-live.mjs) shows
+  // the window's Space's data, as it will on the home page.
   _renderAnswer(text, streaming) {
     const segments = splitGenUi(text);
     if (!segments.some((s) => s.type === 'ui')) return unsafeHTML(mdToHtml(text));
@@ -1775,6 +1779,7 @@ class ShellWindowAiSidebar extends LitElement {
               .source=${s.source}
               .streaming=${streaming && !s.closed}
               .disabled=${this.streaming}
+              .live=${liveQuery}
               @genui-action=${this._onGenUiAction}
             ></nomad-genui>
             ${s.closed && !streaming ? this._renderPin(s.source) : ''}

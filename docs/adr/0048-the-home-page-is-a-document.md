@@ -90,14 +90,60 @@ also small: no grid, no list with parts, no form, and few ways to vary a compone
   from `app/fg/genui-page/element.js`), about 440 KB read from disk, Leaflet included.
 - The phone's home tab still shows the fixed dashboard: it has no renderer for the language. Its AI
   panel can pin a card or change the layout, which shows on the user's computers.
-- A card is a snapshot. A Job can keep one current by drawing it again on every run (amendment
-  below); a card can also carry a Button that asks for its own refresh.
+- A card holds what was written into it, unless it reads the user's things with a Query or a Job
+  draws it again on every run (amendments below); a card can also carry a Button that asks for its
+  own refresh.
 - A shared Space has no shared home page. Each member has their own.
+
+## Amendment: live cards (2026-11-12)
+
+A card was a snapshot: it held what the AI wrote into it. Cards like "today's events" or "my
+briefing Job's last answer" went stale the day they were made, and the way out was to copy the
+user's data into a program, which the decision above avoids for the layout.
+
+1. **A program can read live data with the language's own Query statement.** openui-lang already
+   has `name = Query("tool", {args}, defaults, refreshSeconds)`, with `@Each`, `@Count`, `@Filter`
+   and the other @ functions, dot access and ternaries to use its result. lang-core's QueryManager
+   runs the queries, each on its own interval, and the tree is evaluated again when an answer comes.
+   `<nomad-genui live=…>` (app/fg/shell-window/genui/) runs it; parse.mjs splits parsing from
+   evaluating so the same parse is drawn again with new data.
+2. **The tools are Nomad's read-only live sources** (`shared/home-live.mjs`): `events` (the calendar
+   from now on), `jobs`, `jobRuns` (a Job's runs by id or title, with `last`), `notes` (by topic),
+   `driveFile` (a JSON, CSV or text file up to 512 KB) and `driveFolder`. Every result has `items`
+   and `count`, so one default fits all of them. The rules check arguments, keep a Query's interval
+   between a minute and a day (each source has its own default), and shape each result from records
+   the caller read. A program whose Query names anything else is refused when it is kept
+   (`programError`), so a card never asks for something the page can't answer.
+3. **The page answers, from the viewer's own things.** nomad://desktop answers each Query with
+   `nomad.vault.homeQuery` (app/bg/web-apis/bg/home-live.ts), from the page's Space, as the same
+   person sees it elsewhere. The data is never written into the program, and the model doesn't see
+   it there: in a shared Space each member sees their own. The page reads the Vault and Job sources
+   again when it hears they changed, when the tab shows again, and on each Query's interval; a
+   drive is read on its interval or by hand. A live card says when it last read its data, with a
+   Refresh button, and a Query that fails says so under the drawing while the rest still draws.
+4. **The AI Sidebar answers them too** (`aiShell.liveQuery`), so a live drawing shows the user's
+   data before it is pinned, and Pin to Home keeps it live. A saved page in Assets and the phone
+   have no answerer: they draw the defaults.
+5. **Links.** A drawing with live data opens a link only when the program spells it out, or the
+   data carries it (an item's `url`, built by the sources from an id). A link put together from
+   the data (a site address plus a Note's title) doesn't open, so a card can't send the user's data
+   to a site with a click.
+6. **The model looks before it writes.** `previewLiveData({ source, args })` returns what a Query
+   would show now (a few items), so the model writes the card around the real shape. It asks
+   `dashboardRead` and the permission the same data needs anywhere else (`calendarRead`, `jobsRead`,
+   `notesRead`), counts as a private read (ADR-0037), and doesn't read `hyper://private/`.
+   guide:dashboard teaches Query, the sources and the @ functions (`genuiLivePrompt()`, taken from
+   lang-core's own text). Like the other dashboard capabilities it is personal, so the sidebar, the
+   phone's panel and the loopback MCP have it, and Jobs don't.
+
+Not built: Mutations (a card that writes), `$state` bindings, and the phone drawing live cards. A
+Job's own card (the next amendment) can hold a Query too.
 
 ## Amendment: a Job keeps a card (2026-11-12)
 
-A card was a snapshot, and keeping one current was left for later. Now a Job can keep one card of
-its own: a morning briefing, a price it watches, the day's numbers.
+Live cards (above) read the user's own things. What takes work to make, from the web or by the
+model (a morning briefing, a price it watches, the day's numbers), needs a run. Now a Job can keep
+one card of its own and draw it again on every run.
 
 1. **A grant.** `writes.home` on the Job (shared/jobs.mjs, "Keep a card on my home page" in My
    Library → Jobs). Like `newDrives`, it is set only when given, so older Jobs keep the same record,

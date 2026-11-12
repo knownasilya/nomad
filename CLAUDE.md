@@ -734,9 +734,20 @@ shared Space's Library; the layout keeps the one it replaced. Rules: `shared/hom
 program before keeping it. `nomad.vault.homeDashboard` returns `layout` and `cards` and takes
 `limits` (a layout's `HomeNotes(10)`).
 
+**Live cards (ADR-0048 amendment).** A card or the layout reads the user's things with openui-lang's
+own `Query("source", {args}, defaults, seconds)` and the @ functions. The sources (events, jobs,
+jobRuns, notes, driveFile, driveFolder), their arguments, refresh limits and result shapes are
+`shared/home-live.mjs` (tests `tests/unit/home-live.test.js`); bg reads them in
+`app/bg/web-apis/bg/home-live.ts`, behind `nomad.vault.homeQuery` (the page) and `aiShell.liveQuery`
+(the sidebar). `<nomad-genui>` runs them with lang-core's QueryManager when it is given `live`, and
+`programError` refuses a Query on any other source. A new source needs an entry in `SOURCES`, a
+result shaper, a case in `home-live.ts`, and, if it reads private data, a line in
+`LIVE_SOURCE_PERMS` (vault-tools.mjs) for `previewLiveData`. Never write the user's data into a
+program to make it look live.
+
 Who changes it: the AI Sidebar's **Pin to Home** under a finished drawing (`aiShell.pinToHome`);
-the user's AI with `getDashboard`, `pinDashboardCard`, `removeDashboardCard` and `setDashboard`
-(personal turns, never Jobs; permissions `dashboardRead` and `dashboardWrite`; `guide:dashboard`,
+the user's AI with `getDashboard`, `pinDashboardCard`, `removeDashboardCard`, `setDashboard`
+and `previewLiveData` (personal turns, never Jobs; permissions `dashboardRead` and `dashboardWrite`; `guide:dashboard`,
 made in `search-execute.mjs` `dashboardGuide`); and the page, only for what needs no drawing
 (`nomad.vault.updateHomeCard`, `removeHomeCard`, `resetHomeLayout`, `restoreHomeLayout`). For the
 rest, Customize and a card's menu open the AI Sidebar with a **draft** in its input
