@@ -19,9 +19,19 @@
 // tab that isn't open); the page puts its own element in the slot. Anywhere else
 // a widget is a placeholder that says what shows there. `framed` is a card pinned to that page: the
 // page draws its frame, so a Card that is all the program draws loses its own border.
+//
+// `live` answers the program's Query statements (live cards, shared/home-live.mjs): a function
+// (source, args) -> Promise<data>, set by the home page (nomad.vault.homeQuery) and the AI Sidebar
+// (aiShell.liveQuery). lang-core's QueryManager runs them, each on its own interval, and the tree
+// is evaluated again when an answer comes. `genui-live` tells the page how it went
+// ({ queries, loading, updatedAt, errors }), and refresh() reads again. Without `live` a Query
+// draws its defaults. A drawing with live data opens only links written in the program or carried
+// by the data's own `url`s, never one built from the data.
 
 import { LitElement, html, nothing } from 'lit';
-import { parseGenUi } from '../../../lib/genui/parse.mjs';
+import { createQueryManager } from '@openuidev/lang-core';
+import { parseProgram, evaluateProgram } from '../../../lib/genui/parse.mjs';
+import { isSource, refreshSeconds, urlsIn, VAULT_SOURCES } from '../../../../shared/home-live.mjs';
 import styles from './styles.js';
 import './charts.js';
 import './map.js';
@@ -117,6 +127,7 @@ class GenUi extends LitElement {
     host: { type: Boolean },
     framed: { type: Boolean },
     iconCss: { attribute: false },
+    live: { attribute: false },
     _tabs: { state: true },
     _ui: { state: true },
     _showSource: { state: true },
@@ -131,6 +142,12 @@ class GenUi extends LitElement {
     this.host = false;
     this.framed = false;
     this.iconCss = '';
+    this.live = null;
+    this._parsed = null;
+    this._qm = null; // lang-core's QueryManager, while the program has live Queries and `live` is set
+    this._unsub = null;
+    this._liveSent = '';
+    this._liveAt = 0;
     this._tabs = {};
     this._ui = {}; // what is open, which page, which slide, a form's values, by a path
     this._widgets = [];
@@ -140,9 +157,119 @@ class GenUi extends LitElement {
   }
 
   willUpdate(changed) {
-    if (!changed.has('source')) return;
-    this._program = parseGenUi(this.source);
-    this._placed = this.host ? widgetsIn(this._program?.root) : [];
+    if (changed.has('source') || !this._parsed) this._parsed = parseProgram(this.source);
+    if (changed.has('source') || changed.has('live') || changed.has('streaming')) this._runQueries();
+    const qm = this._qm;
+    this._program = {
+      root: evaluateProgram(this._parsed, qm ? (id) => qm.getResult(id) ?? undefined : null),
+      meta: this._parsed.meta,
+    };
+    if (changed.has('source')) this._placed = this.host ? widgetsIn(this._program.root) : [];
+  }
+
+  // Live data
+  // =
+
+  // The program's Queries the page can answer.
+  _liveQueries() {
+    return (this._parsed?.queries || []).filter((q) => isSource(q.tool));
+  }
+
+  _runQueries() {
+    const queries = this.live ? this._liveQueries() : [];
+    if (!queries.length) return this._stopQueries();
+    if (!this._qm) {
+      const live = (source, args) => (typeof this.live === 'function' ? this.live(source, args) : Promise.reject(new Error('Not live here')));
+      this._qm = createQueryManager({ callTool: live });
+    }
+    if (!this._unsub) this._unsub = this._qm.subscribe(() => this._onLive());
+    this._qm.evaluateQueries(
+      queries.map((q) => ({
+        statementId: q.id,
+        toolName: q.tool,
+        args: q.args,
+        defaults: q.defaults,
+        deps: null,
+        refreshInterval: refreshSeconds(q.tool, q.refresh),
+        complete: q.complete && !this.streaming,
+      }))
+    );
+  }
+
+  _stopQueries() {
+    this._unsub?.();
+    this._unsub = null;
+    this._qm?.dispose();
+    this._qm = null;
+    this._sendLive();
+  }
+
+  _onLive() {
+    const snap = this._qm?.getSnapshot();
+    if (snap && !snap.__openui_loading.length) this._liveAt = Date.now();
+    this.requestUpdate();
+    this._sendLive();
+  }
+
+  // The page's frame shows when a card last read its data, and its errors.
+  _sendLive() {
+    const snap = this._qm?.getSnapshot();
+    const detail = snap
+      ? {
+          queries: this._liveQueries().length,
+          loading: snap.__openui_loading.length > 0,
+          updatedAt: this._liveAt || null,
+          errors: snap.__openui_errors.map((e) => String(e.message || '').replace(/^Query "[^"]*" failed: /, '')),
+        }
+      : { queries: 0, loading: false, updatedAt: null, errors: [] };
+    const sent = JSON.stringify(detail);
+    if (sent === this._liveSent) return;
+    this._liveSent = sent;
+    this.dispatchEvent(new CustomEvent('genui-live', { detail, bubbles: true, composed: true }));
+  }
+
+  // Read the live data again: every Query, or only those on these sources.
+  refresh(sources = null) {
+    if (!this._qm) return false;
+    const ids = this._liveQueries()
+      .filter((q) => !sources || sources.includes(q.tool))
+      .map((q) => q.id);
+    if (ids.length) this._qm.invalidate(ids);
+    return ids.length > 0;
+  }
+
+  // After the Vault or a Job changed: the Queries that read them (a drive waits for its interval).
+  refreshVault() {
+    return this.refresh(VAULT_SOURCES);
+  }
+
+  get isLive() {
+    return this._liveQueries().length > 0;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    // Back on the page after a move: its intervals start again, and it reads once more.
+    if (this._qm || !this._parsed || !this.live) return;
+    this._runQueries();
+    this.refresh();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._stopQueries();
+  }
+
+  // Whether a step may open `url`. A drawing without live data opens what linkOf allows. With
+  // live data, a link must be written in the program, or be one the data carries (a Note's, an
+  // event's): a link put together from the data could carry it to a site.
+  _mayOpen(url) {
+    if (!this._qm) return true;
+    const u = String(url || '');
+    if (/^nomad:/i.test(u)) return true; // rebuilt from an id by linkOf
+    if (this.source.includes(u)) return true;
+    const results = this._liveQueries().map((q) => this._qm.getResult(q.id));
+    return urlsIn(results).has(u);
   }
 
   // The widgets the program places, once they change (the home page fills their slots).
@@ -199,10 +326,17 @@ class GenUi extends LitElement {
             <span class="fas fa-fw fa-spinner fa-spin"></span> Drawing…
           </div>`
         : html`<pre class="genui-source">${this.source}</pre>`;
+    const errors = this._qm ? this._qm.getSnapshot().__openui_errors : [];
     return html`${this.standalone
         ? nothing
         : html`<link rel="stylesheet" href="nomad://assets/font-awesome.css" />`}
-      <div class="stack" @click=${this._onClick}>${body}</div>`;
+      <div class="stack" @click=${this._onClick}>${body}</div>
+      ${errors.length
+        ? html`<div class="live-error" role="status">
+            <span class="fas fa-fw fa-exclamation-triangle" aria-hidden="true"></span>
+            ${String(errors[0].message || '').replace(/^Query "[^"]*" failed: /, '')}
+          </div>`
+        : nothing}`;
   }
 
   // A link anywhere inside (Leaflet's attribution) must not navigate the shell window.
@@ -214,6 +348,11 @@ class GenUi extends LitElement {
   }
 
   _fire(steps) {
+    // A Refresh button: Button("Refresh", Action([@Run(today)])) reads those Queries again.
+    const runs = steps.filter((st) => st.type === 'run' && st.refType === 'query').map((st) => st.statementId);
+    if (runs.length && this._qm) this._qm.invalidate(runs);
+    steps = steps.filter((st) => st.type !== 'run' && (st.type !== 'open_url' || this._mayOpen(st.url)));
+    if (!steps.length) return;
     this.dispatchEvent(
       new CustomEvent('genui-action', { detail: { steps }, bubbles: true, composed: true })
     );
@@ -542,13 +681,17 @@ class GenUi extends LitElement {
     const steps = (Array.isArray(p.action?.steps) ? p.action.steps : []).filter(
       (s) =>
         (s?.type === 'continue_conversation' && typeof s.message === 'string') ||
-        (s?.type === 'open_url' && typeof s.url === 'string')
+        (s?.type === 'open_url' && typeof s.url === 'string') ||
+        (s?.type === 'run' && s.refType === 'query' && typeof s.statementId === 'string')
     );
     // A Button with no action sends its label (OpenUI's rule).
     const run = steps.length ? steps : [{ type: 'continue_conversation', message: label }];
     const opens = run.some((s) => s.type === 'open_url');
-    // A page of its own has no assistant to ask.
+    const reads = run.some((s) => s.type === 'run');
+    // A page of its own has no assistant to ask, and no live data to read again.
     if (this.standalone && !opens) return nothing;
+    // Refresh with nothing live to read draws nothing.
+    if (reads && !opens && !run.some((s) => s.type === 'continue_conversation') && !this._qm) return nothing;
     const variant = oneOf(p.variant, ['primary', 'secondary', 'tertiary'], 'secondary');
     return html`<button
       class="btn ${variant} ${oneOf(p.size, ['s', 'l'], '')}"

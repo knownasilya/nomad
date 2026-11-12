@@ -5,6 +5,7 @@ import path from 'path';
 import { promises as fs } from 'fs';
 import { genuiPage } from '../../lib/genui/page.mjs';
 import { parseGenUi } from '../../lib/genui/parse.mjs';
+import { liveArgs } from '../../../shared/home-live.mjs';
 
 let parts = null;
 
@@ -26,10 +27,19 @@ export function programError(source) {
   const text = String(source || '').trim();
   if (!text) return '`openui` is empty';
   if (/^```/.test(text)) return 'Pass the openui-lang program itself in `openui`, without the ``` fence';
-  const { root, meta } = parseGenUi(text);
+  const { root, meta, queries } = parseGenUi(text);
   if (!root) {
     const err = meta?.errors?.[0]?.message;
     return `That openui-lang program draws nothing${err ? ` (${err})` : ''}. Start it with root = Stack([...])`;
+  }
+  // Live data (shared/home-live.mjs): every Query names a source the page can answer.
+  for (const q of queries || []) {
+    if (typeof q.tool !== 'string') return `Query ${q.id}'s first argument must be a source's name in quotes`;
+    try {
+      liveArgs(q.tool, q.args);
+    } catch (e) {
+      return `Query ${q.id}: ${e.message}`;
+    }
   }
   return '';
 }

@@ -251,7 +251,7 @@ describe('what the AI reads and is taught', () => {
     expect(g.markdown).toContain(hl.DEFAULT_LAYOUT)
     expect(g.markdown).toContain(String(hl.MAX_CARDS))
     const programs = [...g.markdown.matchAll(/```\n([\s\S]*?)\n```/g)].map((m) => m[1])
-    expect(programs.length).toBe(3)
+    expect(programs.length).toBeGreaterThanOrEqual(5)
     for (const p of programs) expect(programError(p), p).toBe('')
   })
 

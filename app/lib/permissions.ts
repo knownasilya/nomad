@@ -549,7 +549,7 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
           >`
         : 'Let the AI assistant save files to your Assets';
     case 'dashboardRead':
-      return 'Let the AI assistant read your home page: its layout and the cards pinned to it';
+      return 'Let the AI assistant read your home page: its layout, the cards pinned to it, and what a live card shows';
     case 'dashboardWrite':
       return 'Let the AI assistant change your home page: pin and remove cards, and change its layout';
     case 'modsRead':

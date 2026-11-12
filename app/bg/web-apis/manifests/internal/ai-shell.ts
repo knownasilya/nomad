@@ -20,6 +20,7 @@ export default {
   deleteSession: 'promise',
   getLastSessionId: 'promise',
   pinToHome: 'promise',
+  liveQuery: 'promise',
   getPrefs: 'promise',
   savePrefs: 'promise',
 };
