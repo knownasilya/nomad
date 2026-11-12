@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.50.2](https://github.com/knownasilya/nomad/compare/v1.50.1...v1.50.2) (2026-11-12)
+
+
+### Bug Fixes
+
+* **mobile:** open a PDF in Assets even when the WebView can't start pdf.js's worker ([e7a7930](https://github.com/knownasilya/nomad/commit/e7a79303cafcfbef593c1f66ed6859af2e6cd5ca))
+
 ### [1.50.1](https://github.com/knownasilya/nomad/compare/v1.50.0...v1.50.1) (2026-11-12)
 
 
