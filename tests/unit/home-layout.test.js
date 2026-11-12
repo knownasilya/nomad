@@ -38,13 +38,64 @@ describe('where the home page is kept', () => {
   })
 })
 
+describe('a Space’s own home (ADR-0048 amendment)', () => {
+  it('keeps a shared Space’s home page in its Space Library, the same records', () => {
+    expect(hl.LIB_LAYOUT).toBe('/home/layout.json')
+    expect(hl.LIB_CARDS).toBe('/home/cards/')
+    expect(hl.cardFile('mwcabc1234')).toBe('mwcabc1234.json')
+    expect(() => hl.cardFile('../x')).toThrow(/Not a card id/)
+  })
+
+  it('moves the home page in when the Space is shared, and only real records', () => {
+    const layout = hl.makeLayout('root = Stack([HomeNotes()])', null, T0)
+    const card = hl.makeCard({ id: 'mwcabc1234', source: CARD }, null, T0)
+    expect(hl.shareHomePaths({ home: { layout, cards: [card, { type: 'other', id: 'mwcabc9999' }] } })).toEqual([
+      { path: '/home/layout.json', value: layout },
+      { path: '/home/cards/mwcabc1234.json', value: card },
+    ])
+    expect(hl.shareHomePaths({})).toEqual([])
+    expect(hl.hasOwnHome({ layout, cards: [] })).toBe(true)
+    expect(hl.hasOwnHome({ layout: hl.makeLayout(null, null, T0), cards: [card] })).toBe(true)
+    // A layout put back to the default is nothing of its own.
+    expect(hl.hasOwnHome({ layout: hl.makeLayout(null, layout, T1), cards: [] })).toBe(false)
+    expect(hl.hasOwnHome()).toBe(false)
+  })
+
+  it('gives a household a board that draws, with its lists, calendar, photos and people', () => {
+    const src = hl.householdLayout()
+    expect(programError(src)).toBe('')
+    const names = hl.widgetsIn(parseGenUi(src).root)
+    expect(names.filter((w) => w.name === 'HomeList').map((w) => w.title)).toEqual(['Chores', 'Groceries'])
+    for (const name of ['HomeGreeting', 'HomeNeedsYou', 'HomeEvents', 'HomePhotos', 'HomeMembers', 'HomeCards', 'HomePins']) {
+      expect(names.some((w) => w.name === name), name).toBe(true)
+    }
+    // Titles are quoted, so one can't break out of its string.
+    const odd = hl.householdLayout(['Say "hi"', '', 'x'.repeat(200)])
+    expect(programError(odd)).toBe('')
+    expect(hl.widgetsIn(parseGenUi(odd).root).filter((w) => w.name === 'HomeList').map((w) => w.title)).toEqual([
+      'Say "hi"',
+      'x'.repeat(hl.MAX_LIST_TITLE - 1) + '…',
+    ])
+  })
+
+  it('says whose home page it is', () => {
+    expect(hl.homeOwner({})).toEqual({ name: '', shared: false, people: 1, canChange: true })
+    expect(hl.homeOwner({ name: 'Home', shared: true, writable: false, members: 4 })).toEqual({
+      name: 'Home',
+      shared: true,
+      people: 4,
+      canChange: false,
+    })
+  })
+})
+
 describe('the default layout', () => {
   it('draws, and places every part of the page once', () => {
     expect(programError(hl.DEFAULT_LAYOUT)).toBe('')
     const { root, meta } = parseGenUi(hl.DEFAULT_LAYOUT)
     expect(meta.errors).toEqual([])
     expect(root.typeName).toBe('Stack')
-    for (const name of hl.HOME_WIDGETS) {
+    for (const name of hl.DEFAULT_WIDGETS) {
       expect(hl.DEFAULT_LAYOUT.split(`${name}(`).length - 1, name).toBe(1)
       expect(hl.placesWidget(hl.DEFAULT_LAYOUT, name)).toBe(true)
     }
@@ -101,7 +152,12 @@ mine = TabItem("cards", "My cards", [Columns([HomeCards()], 2)])`)
       { name: 'HomeJobs' },
       { name: 'HomeCards' },
     ])
-    expect(hl.widgetsIn(parseGenUi(hl.DEFAULT_LAYOUT).root).map((w) => w.name)).toEqual(hl.HOME_WIDGETS)
+    expect(hl.widgetsIn(parseGenUi(hl.DEFAULT_LAYOUT).root).map((w) => w.name)).toEqual(hl.DEFAULT_WIDGETS)
+    // A HomeList names its Note.
+    expect(hl.widgetsIn(parseGenUi('root = Stack([HomeList("Chores", 5), HomeList("  Groceries ")])').root)).toEqual([
+      { name: 'HomeList', limit: 5, title: 'Chores' },
+      { name: 'HomeList', title: 'Groceries' },
+    ])
     // Text that names a widget places nothing, and no program places nothing.
     expect(hl.widgetsIn(parseGenUi('root = Stack([TextContent("HomeCards() go here")])').root)).toEqual([])
     expect(hl.widgetsIn(null)).toEqual([])
@@ -233,6 +289,7 @@ describe('what the AI reads and is taught', () => {
   it('gives the model the layout, the cards and where they show', () => {
     const card = hl.makeCard({ id: 'mwcabc1234', source: CARD, wide: true }, null, T0)
     expect(hl.homeForModel(null, [card])).toEqual({
+      space: { shared: false },
       layout: 'default',
       openui: hl.DEFAULT_LAYOUT,
       cards: [{ id: 'mwcabc1234', title: 'Reading list', wide: true, openui: CARD }],
@@ -251,8 +308,23 @@ describe('what the AI reads and is taught', () => {
     expect(g.markdown).toContain(hl.DEFAULT_LAYOUT)
     expect(g.markdown).toContain(String(hl.MAX_CARDS))
     const programs = [...g.markdown.matchAll(/```\n([\s\S]*?)\n```/g)].map((m) => m[1])
-    expect(programs.length).toBeGreaterThanOrEqual(5)
+    expect(programs.length).toBeGreaterThanOrEqual(6)
     for (const p of programs) expect(programError(p), p).toBe('')
+    // It teaches a Space's own home, and that a shared one is everyone's.
+    expect(g.markdown).toContain(hl.householdLayout())
+    expect(g.markdown).toMatch(/shared Space has one for everyone in it/)
+  })
+
+  it('tells the model whose home page it is, and whether the user may change it', () => {
+    expect(hl.homeForModel(null, [], { name: 'Work', shared: false }).space).toEqual({ name: 'Work', shared: false })
+    const shared = hl.homeForModel(null, [], { name: 'The Flat', shared: true, writable: true, members: 3 }).space
+    expect(shared).toMatchObject({ name: 'The Flat', shared: true, people: 3, canChange: true })
+    expect(shared.note).toMatch(/all 3 people in it see this home page/)
+    const alone = hl.homeForModel(null, [], { shared: true, writable: true, members: 1 }).space
+    expect(alone.note).toMatch(/everyone who joins it sees/)
+    const viewer = hl.homeForModel(null, [], { name: 'The Flat', shared: true, writable: false, members: 3 }).space
+    expect(viewer).toMatchObject({ canChange: false })
+    expect(viewer.note).toMatch(/can only view it/)
   })
 
   it('has a guide with the arguments of the components the every-turn prompt only names', () => {

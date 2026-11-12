@@ -72,6 +72,8 @@ export default {
   renameNoteLinks: 'promise', // ({ id, from, to }) -> number of notes changed
   setNoteTopics: 'promise', // ({ id, topics }) -> note, its topics set by hand (ADR-0035)
   setNoteTick: 'promise', // ({ id, text, checked }) -> note, who ticked an item noted in a shared Space
+  tickNoteItem: 'promise', // ({ id, text, checked }) -> note, an item ticked by its words from outside the editor (the home page)
+  addNoteItem: 'promise', // ({ id, text }) -> note, an open item added to the Note's first list (the home page)
   // Household contacts (bg/web-apis/bg/household-contacts.ts), for the caller's Space
   listHouseholdContacts: 'promise', // () -> { space, spaceName, shared, canWrite, contacts }
   saveHouseholdContact: 'promise', // ({ id?, name, role?, phone?, email?, address?, notes?, profile? }) -> contact
@@ -145,7 +147,7 @@ export default {
   watchJobs: 'readable', // 'changed' when a Job or a run changes, or a run starts
 
   // The home page (nomad://desktop, shared/home-dashboard.mjs)
-  homeDashboard: 'promise', // ({ now? wall time, limits? { notifications, next, events, notes, assets } }) -> { greeting, waiting, notifications, notificationKeys, jobs: { running, next, total, paused }, events, notes, assets, unreadMessages, spaceName, linked, layout: { source, custom, canRestore }, cards }
+  homeDashboard: 'promise', // ({ now? wall time, limits? { notifications, next, events, notes, assets, photos }, lists? [{ title, limit? }] }) -> { greeting, waiting, notifications, notificationKeys, jobs: { running, next, total, paused }, events, notes, assets, photos, lists, members, unreadMessages, spaceName, linked, layout: { source, custom, canRestore }, cards, home: { shared, canChange, people, canInvite } }
   homeQuery: 'promise', // (source, args) -> a live source's data for a Query in a card or layout (shared/home-live.mjs)
   updateHomeCard: 'promise', // (id, { wide } | { move: -1 | 1 }) a card pinned to the home page (ADR-0048)
   removeHomeCard: 'promise', // (id)

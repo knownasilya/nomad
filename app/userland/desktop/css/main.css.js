@@ -783,6 +783,116 @@ ${spinnerCSS}
     color: var(--text-color--link);
   }
 
+  /* A Space's own home (ADR-0048 amendment): a checklist Note, its photos, its people. */
+  #topright .shared-note {
+    font-size: 12px;
+    color: var(--text-color--light);
+  }
+
+  #topright .shared-note .fas {
+    font-size: 11px;
+    opacity: 0.8;
+  }
+
+  .checklist .row.check {
+    min-height: 36px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    cursor: pointer;
+  }
+
+  .checklist .row.check:hover {
+    background: var(--home-row-hover);
+  }
+
+  .checklist input[type='checkbox'] {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    margin: 0 2px 0 0;
+    accent-color: var(--home-accent);
+    cursor: pointer;
+  }
+
+  .checklist .row.done .title {
+    color: var(--text-color--light);
+    text-decoration: line-through;
+  }
+
+  a.more {
+    display: block;
+    padding: 2px 14px 6px 44px;
+    font-size: 12px;
+    color: var(--text-color--link);
+  }
+
+  .add-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px 10px 14px;
+    border-top: 1px solid var(--border-color--very-light);
+  }
+
+  .add-item input {
+    flex: 1;
+    min-width: 0;
+    height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--border-color--default);
+    border-radius: 6px;
+    background: var(--home-card-bg);
+    color: var(--text-color--default);
+    font: inherit;
+    font-size: 12.5px;
+    box-sizing: border-box;
+  }
+
+  .add-item .icon-btn[disabled] {
+    background: transparent;
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .photos {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding: 12px 14px 14px;
+  }
+
+  .photo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--bg-color--semi-light);
+    color: var(--text-color--light);
+    font-size: 18px;
+  }
+
+  .photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.2s;
+  }
+
+  .photo:hover img {
+    transform: scale(1.04);
+  }
+
+  .members .lead.avatar {
+    font-weight: 600;
+  }
+
+  .members .you {
+    color: var(--text-color--light);
+    font-weight: normal;
+  }
+
   @media (max-width: 700px) {
     main {
       padding-top: 48px;

@@ -551,7 +551,13 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
     case 'dashboardRead':
       return 'Let the AI assistant read your home page: its layout, the cards pinned to it, and what a live card shows';
     case 'dashboardWrite':
-      return 'Let the AI assistant change your home page: pin and remove cards, and change its layout';
+      // A shared Space's home page is everyone's in it (ADR-0048 amendment).
+      return permOpts?.shared
+        ? html`<span
+            >Let the AI assistant change the home page of <strong>${permOpts.space || 'this Space'}</strong>, which
+            everyone in it sees: pin and remove cards, and change its layout</span
+          >`
+        : 'Let the AI assistant change your home page: pin and remove cards, and change its layout';
     case 'modsRead':
       return 'Let the AI assistant read your Mods (your styles and scripts for sites)';
     case 'modsWrite':

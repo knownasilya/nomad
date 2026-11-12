@@ -597,6 +597,14 @@ const HomeCards = def(
   'Every card pinned to the home page, each as its own child of the Grid, Columns or Stack this is in',
   {}
 );
+// A Space's own home (ADR-0048 amendment).
+const HomeList = def(
+  'HomeList',
+  'A checklist Note of this Space, named by its title ("Chores", "Groceries"): its items, ticked and added to right on the page. Offers to make the Note when there is none',
+  { title: z.string(), limit: z.number().optional() }
+);
+const HomePhotos = def('HomePhotos', "The Space's newest photos, as thumbnails", limit);
+const HomeMembers = def('HomeMembers', 'Who is in the Space, and how to invite someone. Only the user in a Space that isn\'t shared', {});
 
 export const HOME_WIDGETS = [
   'HomeGreeting',
@@ -608,6 +616,9 @@ export const HOME_WIDGETS = [
   'HomeNotes',
   'HomeFiles',
   'HomeCards',
+  'HomeList',
+  'HomePhotos',
+  'HomeMembers',
 ];
 
 const ICON_NOTE = `- An icon is one of these names; any other draws nothing: ${Object.values(ICON_GROUPS)
@@ -838,6 +849,9 @@ const WIDGETS = [
   HomeNotes,
   HomeFiles,
   HomeCards,
+  HomeList,
+  HomePhotos,
+  HomeMembers,
 ];
 const byName = new Map([...COMPONENTS, ...WIDGETS].map((c) => [c.name, c]));
 const named = (names) => names.map((n) => byName.get(n));

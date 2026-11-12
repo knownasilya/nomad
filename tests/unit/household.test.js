@@ -15,7 +15,7 @@ const T0 = new Date('2026-11-05T18:00:00.000Z');
 describe('set up a home', () => {
   it('starts with a Groceries list and House info, titled by their first line', () => {
     const notes = home.starterNotes();
-    expect(notes.map((n) => n.key)).toEqual(['groceries', 'house']);
+    expect(notes.map((n) => n.key)).toEqual(['groceries', 'house', 'chores']);
     for (const n of notes) expect(noteTitle(n.body)).toBe(n.title);
     // The list starts with an empty item to type into.
     expect(parseTask(notes[0].body.split('\n')[2])).toEqual({ indent: 0, checked: false, text: '' });
@@ -27,7 +27,17 @@ describe('set up a home', () => {
       { url: 'nomad://notes/n-2', title: 'House info' },
     ]);
     expect(home.starterPins({ house: 'n-2' })).toEqual([{ url: 'nomad://notes/n-2', title: 'House info' }]);
+    // Chores is on the home page's board, not pinned.
+    expect(home.starterPins({ groceries: 'n-1', house: 'n-2', chores: 'n-3' })).toHaveLength(2);
     expect(() => home.noteUrl('../x')).toThrow();
+  });
+
+  it('gives the home a board with its lists, which are starter Notes', () => {
+    const titles = home.starterNotes().map((n) => n.title);
+    for (const t of home.boardLists()) expect(titles).toContain(t);
+    for (const n of home.starterNotes().filter((n) => n.key === 'chores')) {
+      expect(parseTask(n.body.split('\n')[2])).toEqual({ indent: 0, checked: false, text: '' });
+    }
   });
 
   it('tidies the names, with Home and the computer’s user as fallbacks', () => {

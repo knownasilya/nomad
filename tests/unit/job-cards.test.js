@@ -160,6 +160,11 @@ describe('what the page shows under a Job’s card', () => {
     expect(hl.withJobState([card], [])[0].job).toEqual({ id: JOB.id, title: 'Morning briefing', at: T0, gone: true })
     expect(hl.withJobState(null, [])).toEqual([])
   })
+
+  it('on a shared Space’s page, a Job this user doesn’t have is another member’s, not gone', () => {
+    expect(hl.withJobState([card], [], { shared: true })[0].job).toEqual({ id: JOB.id, title: 'Morning briefing', at: T0, other: true })
+    expect(hl.withJobState([card], [JOB], { shared: true })[0].job.other).toBeUndefined()
+  })
 })
 
 // The loopback MCP (localhost-mcp.mjs) serves search and execute from the same catalog as a chat

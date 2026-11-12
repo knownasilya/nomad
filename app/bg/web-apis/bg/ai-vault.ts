@@ -75,11 +75,24 @@ export function isVaultTool(name) {
 export async function runVaultTool(name, args, { ctx, space = null, permit, scratch = null, origin = null }) {
   const permission = VAULT_TOOL_PERMS[name];
   if (name === 'highlightText') assertCanHighlight(ctx.sender, args);
-  if (!(await permit(permission, ctx.sender)))
-    throw new Error(`The user didn't allow ${permission}`);
   const readerSpace = async () => (apps.isSpaceKey(space) ? space : vaultApps.spaceKey(ctx));
+  // The home page's Space: the one the call names (`space`, a name or key: the sidebar or another
+  // program over the loopback MCP may work on any of the user's Spaces), else the turn's.
+  const homeSpace = async () =>
+    typeof args?.space === 'string' && args.space.trim()
+      ? vaultApps.spaceNamed(args.space)
+      : readerSpace().catch(() => null);
+  // A shared Space's home page is everyone's in it (ADR-0048 amendment): the prompt to change it
+  // names the Space and says so.
+  let permOpts = undefined;
+  if (permission === 'dashboardWrite') {
+    const where = await homeSpace();
+    const who = await homeLayout.about(where).catch(() => null);
+    if (who?.shared) permOpts = { shared: true, space: vaultApps.spaceNameOf(where) };
+  }
+  if (!(await permit(permission, ctx.sender, permOpts)))
+    throw new Error(`The user didn't allow ${permission}`);
   const json = (v) => JSON.stringify(v, null, 2);
-  const homeSpace = () => readerSpace().catch(() => null);
   const notes = async () => vaultApps.allNotes(await readerSpace().catch(() => null));
 
   switch (name) {
@@ -235,21 +248,31 @@ export async function runVaultTool(name, args, { ctx, space = null, permit, scra
       return `${text}\n\nLink: ${CONTACTS_LINK}`;
     }
 
-    // The home page (ADR-0048). It is the user's own, per Space, so a Space with none (a window
-    // between Spaces) has one too.
-    case 'getDashboard':
-      return json({ ...(await homeLayout.forModel(await homeSpace())), url: HOME_LINK });
+    // The home page (ADR-0048). One per Space, so a Space with none (a window between Spaces) has
+    // one too. A shared Space's is everyone's in it, and only its owners and editors change it.
+    case 'getDashboard': {
+      const where = await homeSpace();
+      const spaces = await vaultApps.knownSpaces().catch(() => []);
+      return json({
+        ...(await homeLayout.forModel(where, vaultApps.spaceNameOf(where) || '')),
+        // Every Space has its own home page: pass `space` to read or change another one.
+        spaces: spaces.map((s) => ({ name: s.name, ...(s.key === where ? { this: true } : {}) })),
+        url: HOME_LINK,
+      });
+    }
 
     // A new card (no id; `openui` required) or changes to one. Fields left out keep their values.
     case 'pinDashboardCard': {
       const { id, title, openui, wide } = args;
       if (!id && typeof openui !== 'string') throw new Error('A new card needs `openui`: an openui-lang program');
-      const card = await homeLayout.pinCard(await homeSpace(), { id, title, source: openui, wide }, origin);
+      const where = await homeSpace();
+      const card = await homeLayout.pinCard(where, { id, title, source: openui, wide }, origin);
       return json({
         id: card.id,
         title: card.title,
         ...(card.wide ? { wide: true } : {}),
         pinned: !id,
+        space: vaultApps.spaceNameOf(where) || undefined,
         // A Job's card (ADR-0048 amendment) is drawn again on the Job's next run.
         ...(card.job && openui !== undefined
           ? { note: `The Job “${card.job.title}” draws this card again on its next run. To keep a change, change the Job with saveJob.` }
@@ -287,9 +310,11 @@ export async function runVaultTool(name, args, { ctx, space = null, permit, scra
       if (args.reset !== true && typeof args.openui !== 'string') {
         throw new Error('setDashboard needs `openui` (the whole layout), or `reset: true` for the default one');
       }
-      const view = await homeLayout.setLayout(await homeSpace(), args.reset === true ? null : args.openui, origin);
+      const where = await homeSpace();
+      const view = await homeLayout.setLayout(where, args.reset === true ? null : args.openui, origin);
       return json({
         layout: view.custom ? 'custom' : 'default',
+        space: vaultApps.spaceNameOf(where) || undefined,
         note: 'The user can go back to the layout before this one from Customize on the home page.',
         url: HOME_LINK,
       });

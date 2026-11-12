@@ -5,12 +5,17 @@
 // user pinned. With no layout of their own the user gets DEFAULT_LAYOUT, the dashboard as it was
 // before any of this.
 //
-// Two kinds of record, the user's own, per Space, in the Vault (never in a shared Space's Library:
-// a home page is one person's):
+// Two kinds of record, per Space. A Space that isn't shared keeps them in the user's Vault:
 //
 //   /.vault/home/spaces/<space>/layout.json      { type, source, previous?, ai?, updatedAt }
 //   /.vault/home/spaces/<space>/cards/<id>.json  { type, id, title, source, wide?, order, ai?,
 //                                                  job?, createdAt, updatedAt }
+//
+// A shared Space (ADR-0029) has one home page for everyone in it, in its Space Library (ADR-0048
+// amendment): /home/layout.json and /home/cards/<id>.json, the same records. Its owners and editors
+// change it; a viewer sees it. Sharing a Space moves its home page in with the rest of its library
+// (shareHomePaths). The widgets still fill themselves with what each person sees: their own Jobs,
+// notifications and Needs you, and the Space's Notes, calendar and files.
 //
 // A card is a program of its own, with its own root: drawn by itself, so one that doesn't parse
 // leaves the rest of the page alone, and removed by itself. The user's AI makes cards and layouts
@@ -49,11 +54,49 @@ export const HOME_WIDGETS = [
   'HomeNotes',
   'HomeFiles',
   'HomeCards',
+  // A Space's own home (ADR-0048 amendment): a checklist Note ticked on the page, the newest
+  // photos, and who is in the Space.
+  'HomeList',
+  'HomePhotos',
+  'HomeMembers',
 ]
+
+// The widgets the default layout places; the others are for a layout made for a Space.
+export const DEFAULT_WIDGETS = HOME_WIDGETS.slice(0, 9)
+
+// The most HomeList widgets one layout fills, and the longest Note title one names.
+export const MAX_LISTS = 6
+export const MAX_LIST_TITLE = 80
 
 // The dashboard every Space starts with.
 export const DEFAULT_LAYOUT = `root = Stack([HomeGreeting(), HomePins(), HomeNeedsYou(), board], "column", "none")
 board = Columns([HomeNotifications(), HomeJobs(), HomeEvents(), HomeNotes(), HomeFiles(), HomeCards()], 3)`
+
+// A household's board, which Set up a home (shared/home-setup.mjs) gives the Space it makes: its
+// lists to tick, what's coming up, its photos and who is in it, packed in three columns like the
+// default board. `lists` are the titles of the
+// checklist Notes it shows, in order.
+export function householdLayout(lists = ['Chores', 'Groceries']) {
+  const names = (lists || [])
+    .map((t) => clip(t, MAX_LIST_TITLE))
+    .filter(Boolean)
+    .slice(0, MAX_LISTS)
+  const str = (t) => JSON.stringify(t)
+  const parts = [
+    ...names.map((t) => `HomeList(${str(t)})`),
+    'HomeEvents(8)',
+    'HomePhotos(6)',
+    'HomeNotifications()',
+    'HomeMembers()',
+    'HomeNotes()',
+    'HomeJobs()',
+    'HomeCards()',
+  ]
+  return [
+    'root = Stack([HomeGreeting(), HomePins(), HomeNeedsYou(), board], "column", "none")',
+    `board = Columns([${parts.join(', ')}], 3)`,
+  ].join('\n')
+}
 
 const SPACE_KEY = /^[0-9a-f]{64}$/
 const CARD_ID = /^[a-z0-9]{6,24}$/
@@ -75,6 +118,31 @@ export function homePrefix(space = null) {
 }
 export const layoutPath = (space = null) => homePrefix(space) + 'layout.json'
 export const cardsPrefix = (space = null) => homePrefix(space) + 'cards/'
+
+// The same records in a shared Space's Library.
+export const LIB_HOME = '/home/'
+export const LIB_LAYOUT = LIB_HOME + 'layout.json'
+export const LIB_CARDS = LIB_HOME + 'cards/'
+export const LAYOUT_FILE = 'layout.json'
+export const cardFile = (id) => {
+  if (!isCardId(id)) throw new Error('Not a card id: ' + id)
+  return id + '.json'
+}
+
+// What sharing a Space moves into its Space Library (shared/space-library.mjs planShare): its
+// layout and its cards. `items.home` is { layout, cards } as the Vault has them.
+export function shareHomePaths(items = {}) {
+  const home = items.home || {}
+  const out = []
+  if (isLayout(home.layout)) out.push({ path: LIB_LAYOUT, value: home.layout })
+  for (const c of home.cards || []) if (isCard(c)) out.push({ path: LIB_CARDS + c.id + '.json', value: c })
+  return out
+}
+
+// Whether a Space's home page has anything of its own to move: a layout of its own or a card.
+export function hasOwnHome(home = {}) {
+  return (isLayout(home.layout) && !!home.layout.source) || (home.cards || []).some(isCard)
+}
 
 export function isCardId(id) {
   return typeof id === 'string' && CARD_ID.test(id)
@@ -119,7 +187,10 @@ export function widgetsIn(root) {
     if (Array.isArray(v)) return v.forEach(walk)
     if (v.type === 'element' && HOME_WIDGETS.includes(v.typeName)) {
       const limit = Math.round(Number(v.props?.limit))
-      out.push(limit > 0 ? { name: v.typeName, limit } : { name: v.typeName })
+      const w = limit > 0 ? { name: v.typeName, limit } : { name: v.typeName }
+      // A HomeList names the Note it shows.
+      if (v.typeName === 'HomeList') w.title = clip(typeof v.props?.title === 'string' ? v.props.title : '', MAX_LIST_TITLE)
+      out.push(w)
       return
     }
     for (const k of Object.keys(v)) walk(v[k])
@@ -294,16 +365,29 @@ export function layoutView(rec) {
   return { source: layoutSource(rec), custom, canRestore: isLayout(rec) && !!rec.previous }
 }
 
+// Whose home page it is, for the page and the AI: { name, shared, people, canChange }. `place` is
+// what the Space says of itself: { name, shared, writable, members } (members a count).
+export function homeOwner(place = {}) {
+  const shared = !!place.shared
+  return {
+    name: clip(place.name, 100) || '',
+    shared,
+    people: shared ? Math.max(1, Math.round(Number(place.members)) || 1) : 1,
+    canChange: shared ? place.writable !== false : true,
+  }
+}
+
 // The page's view of each Job's card: `job` with the Job as it is now (its title, whether it is
 // running or waiting to, whether its newest run failed, and `gone` once the Job is no more).
 // `jobs` are rows of shared/jobs.mjs jobsWithRuns, with `running` and `queued` (bg/ai/jobs.js list).
-export function withJobState(cards, jobs = []) {
+// On a shared Space's page a Job this user doesn't have is another member's (`other`), not gone.
+export function withJobState(cards, jobs = [], { shared = false } = {}) {
   const byId = new Map((jobs || []).filter((j) => j && typeof j.id === 'string').map((j) => [j.id, j]))
   return (cards || []).map((c) => {
     const ref = cleanJobRef(c?.job)
     if (!ref) return c
     const j = byId.get(ref.id)
-    if (!j) return { ...c, job: { ...ref, gone: true } }
+    if (!j) return { ...c, job: { ...ref, ...(shared ? { other: true } : { gone: true }) } }
     /** @type {any} */
     const state = { ...ref, title: clip(j.title, MAX_TITLE) || ref.title }
     if (j.running || j.queued) state.running = true
@@ -313,11 +397,25 @@ export function withJobState(cards, jobs = []) {
 }
 
 // What the AI reads (getDashboard): the layout's program, the cards with theirs, and what it needs
-// to know to change them.
-export function homeForModel(layoutRec, cards) {
+// to know to change them. `place` is the Space's (homeOwner).
+export function homeForModel(layoutRec, cards, place = null) {
   const view = layoutView(layoutRec)
   const list = sortCards(cards)
+  const owner = homeOwner(place || {})
   return {
+    space: {
+      ...(owner.name ? { name: owner.name } : {}),
+      shared: owner.shared,
+      ...(owner.shared
+        ? {
+            people: owner.people,
+            canChange: owner.canChange,
+            note: owner.canChange
+              ? `This Space is shared: ${owner.people > 1 ? `all ${owner.people} people in it see` : 'everyone who joins it sees'} this home page and its cards. Put nothing private on it.`
+              : 'This Space is shared and the user can only view it: they can\'t change its home page.',
+          }
+        : {}),
+    },
     layout: view.custom ? 'custom' : 'default',
     openui: view.source,
     cards: list.map((c) => ({

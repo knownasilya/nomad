@@ -93,7 +93,7 @@ also small: no grid, no list with parts, no form, and few ways to vary a compone
 - A card holds what was written into it, unless it reads the user's things with a Query or a Job
   draws it again on every run (amendments below); a card can also carry a Button that asks for its
   own refresh.
-- A shared Space has no shared home page. Each member has their own.
+- ~~A shared Space has no shared home page. Each member has their own.~~ See the amendment below.
 
 ## Amendment: live cards (2026-11-12)
 
@@ -167,3 +167,44 @@ one card of its own and draw it again on every run.
    removes the card (`bg/ai/jobs.js` `dropCard`).
 
 The run records "Drawing its card on your home page" in its `changes`, like a Note it writes.
+
+## Amendment: each Space gets a home of its own (2026-11-12)
+
+Every Space already had its own layout, but a shared Space's was private to each member, and the
+parts a layout could place were the same for a household as for work. A family wants one board:
+the chores, what's coming up, the photos and who is in it.
+
+1. **A shared Space has one home page, everyone's in it.** Its layout and cards live in its Space
+   Library (`/home/layout.json`, `/home/cards/<id>.json`), the same records as before. Owners and
+   editors change it; a viewer's page has no Customize and no card menus, and the AI's dashboard
+   writes refuse for them. Sharing a Space moves its home page in with the rest of its library
+   (`shareHomePaths`, and the share dialog's summary says "its home page"). A Space that isn't
+   shared keeps it in the Vault as before. `app/bg/ui/home-layout.js` reads and writes through
+   `spaceLibrary.records(space, 'home' | 'homeCards')`, so a Job's card goes to the same place.
+   The widgets still fill themselves with what each person sees: their own Jobs, notifications and
+   Needs you, and the Space's Notes, calendar and files. Cards are snapshots, so the AI is told that
+   everyone in the Space sees them (`homeForModel` `space.note`), and the permission prompt to
+   change a shared Space's home page names the Space and says so. A Job's card in a shared Space
+   (the amendment above) is everyone's too; the others see whose Job keeps it, with no link to it
+   and no Run now, since the Job is in its owner's Vault.
+2. **Three parts for a Space's own board.**
+   - `HomeList("Chores", limit?)`: a checklist Note of the Space, named by its title, shown with its
+     items. A tick there and an item typed there change the Note (`nomad.vault.tickNoteItem`,
+     `addNoteItem`): by the item's words, on the Note as it is now (`shared/note-lists.mjs`
+     `findTaskLine`, `addItemChange`), and typed into its live session when it is open (ADR-0041),
+     so a page loaded an hour ago never makes a conflict copy. In a shared Space a tick says who
+     ticked it, as in Notes. A list the Space doesn't have yet offers to make it.
+   - `HomePhotos(limit?)`: the newest images among the Space's Assets.
+   - `HomeMembers()`: who is in the Space and their role, with a link to invite (an owner) or to
+     share it (a Space that isn't shared).
+3. **Set up a home starts with a household board** (`householdLayout`): Chores and Groceries,
+   Coming up, Photos, then notifications, Notes, People, Jobs, pins and cards. It makes a Chores
+   Note beside Groceries and House info.
+4. **The AI designs for a Space.** `getDashboard` returns `space` (its name, whether it is shared,
+   how many people, whether the user may change it) and `spaces`, the user's Spaces by name; every
+   dashboard tool takes an optional `space` to work on another Space's home page than the tab's.
+   That is what makes a Space's home page reachable from another program over the loopback MCP,
+   which has no tab of its own to pick a Space by. `guide:dashboard` has a section on a Space's own
+   home. Customize gains **Make a Home for This Space with AI…**, a draft like the others.
+
+The phone's home tab still shows the fixed dashboard.

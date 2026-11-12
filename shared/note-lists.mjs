@@ -224,3 +224,65 @@ export function tickFor(ticks, text) {
   const t = ticks && typeof ticks === 'object' ? ticks[tickKey(text)] : null;
   return isTick(t) ? t : null;
 }
+
+// A list shown outside the editor (the home page's HomeList, shared/home-dashboard.mjs)
+// =
+//
+// The home page ticks and adds items by their words, not by where they are, because the Note may
+// have changed since the page loaded it: the change is planned again on the Note as it is now.
+
+export const MAX_ITEM = 200;
+
+// Every task line with words, in order: [{ text, checked, indent }].
+export function taskItems(doc) {
+  const out = [];
+  for (const line of String(doc ?? '').split('\n')) {
+    const p = parseTask(line);
+    if (p && p.text) out.push(p);
+  }
+  return out;
+}
+
+// Where the first task line with these words (and, when `checked` is given, that state) starts, or
+// -1. Words match the way ticks are filed (tickKey).
+export function findTaskLine(doc, text, checked = undefined) {
+  const key = tickKey(text);
+  if (!key) return -1;
+  for (const { from, text: line } of linesOf(doc)) {
+    const p = parseTask(line);
+    if (p && tickKey(p.text) === key && (checked === undefined || p.checked === checked)) return from;
+  }
+  return -1;
+}
+
+// The change that adds an open item with these words: after the last open item of the Note's first
+// list (so it lands among what's left to do, above the done ones), or into an empty item that is
+// waiting for words ("- [ ] "), or at the end of the Note. Null for no words.
+export function addItemChange(doc, text) {
+  const words = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_ITEM);
+  if (!words) return null;
+  const body = String(doc ?? '');
+  const lines = linesOf(body);
+  const first = lines.findIndex((l) => parseTask(l.text));
+  if (first === -1) {
+    const sep = !body ? '' : body.endsWith('\n\n') ? '' : body.endsWith('\n') ? '\n' : '\n\n';
+    return { from: body.length, to: body.length, insert: `${sep}- [ ] ${words}\n` };
+  }
+  const items = listAround(lines, first);
+  const at = items[0].task.indent;
+  const pad = ' '.repeat(at);
+  const empty = items.find((it) => !it.task.checked && !it.task.text);
+  if (empty) {
+    const l = lines[empty.start];
+    return { from: l.from, to: l.from + l.text.length, insert: `${pad}- [ ] ${words}` };
+  }
+  const open = items.filter((it) => !it.task.checked);
+  if (!open.length) {
+    const l = lines[items[0].start];
+    return { from: l.from, to: l.from, insert: `${pad}- [ ] ${words}\n` };
+  }
+  const last = open[open.length - 1];
+  const end = lines[last.end - 1];
+  const to = end.from + end.text.length;
+  return { from: to, to, insert: `\n${pad}- [ ] ${words}` };
+}

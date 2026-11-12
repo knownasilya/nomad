@@ -724,12 +724,20 @@ dashboard as it always was. `<nomad-genui host>` (the bundle `nomad://app-stdlib
 from `app/fg/genui-page/element.js`) draws it, leaves a `<slot>` per widget and names them in
 `genui-widgets`; `app/userland/desktop/js/main.js` puts its own element in each slot, so the parts
 keep their own code and CSS. Pinned **cards** are programs too, one Vault record each, drawn by
-their own `<nomad-genui framed>` where the layout places HomeCards(). A Job with the `home` grant (`writes.home`)
-keeps one card of its own with `setJobCard` (a Job-only capability; the card's `job: { id, title,
-at }`, `makeJobCard` and `withJobState` in `shared/home-layout.mjs`); removing the card takes the
-grant away, and losing the grant or deleting the Job removes the card (`bg/ai/jobs.js` `dropCard`). Both are the user's own, per
-Space, in the Vault (`/.vault/home/spaces/<space>/layout.json` and `cards/<id>.json`), never in a
-shared Space's Library; the layout keeps the one it replaced. Rules: `shared/home-layout.mjs`
+their own `<nomad-genui framed>` where the layout places HomeCards(). Each Space has its own: in the
+Vault (`/.vault/home/spaces/<space>/layout.json` and `cards/<id>.json`), or, for a shared Space, one
+for everyone in it in its Space Library (`/home/layout.json`, `/home/cards/`), which only its owners
+and editors change (ADR-0048 amendment). Go through `spaceLibrary.records(space, 'home' | 'homeCards')`
+(`bg/ui/home-layout.js` does), never straight to the Vault; the layout keeps the one it replaced.
+A Job with the `home` grant (`writes.home`) keeps one card of its own in its Space's home page with
+`setJobCard` (a Job-only capability; the card's `job: { id, title, at }`, `makeJobCard` and
+`withJobState` in `shared/home-layout.mjs`); removing the card takes the grant away, and losing the
+grant or deleting the Job removes the card (`bg/ai/jobs.js` `dropCard`).
+A Space's own board can place `HomeList("Chores")` (a checklist Note ticked and added to on the page:
+`nomad.vault.tickNoteItem`/`addNoteItem`, by the item's words), `HomePhotos()` and `HomeMembers()`;
+Set up a home gives a household `householdLayout()`. The AI's dashboard tools take an optional
+`space` (a Space's name) so the sidebar or another program over the loopback MCP can work on any
+Space's home page. Rules: `shared/home-layout.mjs`
 (tests `tests/unit/home-layout.test.js`); I/O: `app/bg/ui/home-layout.js`, which parses every
 program before keeping it. `nomad.vault.homeDashboard` returns `layout` and `cards` and takes
 `limits` (a layout's `HomeNotes(10)`).

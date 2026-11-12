@@ -13,6 +13,8 @@
 // - Jobs: the ones running now (or waiting to), and the ones that run next.
 // - Coming up: the calendar from now on (an event going on now first).
 // - The newest Notes and Assets.
+// - For a layout made for a Space (ADR-0048 amendment, shared/home-layout.mjs): the checklist Notes
+//   it names (HomeList), the newest photos (HomePhotos) and the people in the Space (HomeMembers).
 //
 // No I/O, no Electron, no globals the phone's Bare worklet lacks. Tests: tests/unit/home-dashboard.test.js.
 
@@ -20,13 +22,15 @@ import { isRun, describeNeed } from './jobs.mjs';
 import { noteTitle, noteSnippet } from './vault-apps.mjs';
 import { noteLink, jobLink, assetLink, calendarLink } from './item-links.mjs';
 import { KIND_ICONS } from './assets.mjs';
+import { taskItems, tickFor } from './note-lists.mjs';
+import { ROLE_LABELS } from './space-library.mjs';
 
 export const NOTIFY_DAYS = 7;
-export const LIMITS = { waiting: 8, notifications: 6, running: 4, next: 4, events: 6, notes: 5, assets: 8 };
+export const LIMITS = { waiting: 8, notifications: 6, running: 4, next: 4, events: 6, notes: 5, assets: 8, photos: 6, list: 8 };
 export const MAX_LIMIT = 20;
 // The sections a home page layout can size, and the row counts to use: LIMITS, with any whole
 // number from 1 to MAX_LIMIT in `limits` taking its place.
-export const SIZED = ['notifications', 'next', 'events', 'notes', 'assets'];
+export const SIZED = ['notifications', 'next', 'events', 'notes', 'assets', 'photos'];
 export function sectionLimits(limits) {
   const out = { ...LIMITS };
   for (const key of SIZED) {
@@ -460,6 +464,66 @@ export function latestAssets(assets = [], { max = LIMITS.assets } = {}) {
     }));
 }
 
+// A Space's own home (ADR-0048 amendment)
+// =
+
+// The checklist Notes a layout's HomeLists name: [{ asked, title, found, id?, url?, items, more,
+// done }], one for each title (`asked`, as the layout names it), in the layout's order. A title matches a Note's title (its first line),
+// ignoring case; the Space's own Note wins over the user's, then the newest, and a conflict copy
+// only when nothing else does. `items` are the first `limit` task lines with words, as the Note has
+// them (open ones first, since ticking moves an item down), each with who ticked it in a shared
+// Space; `more` how many didn't fit, `done` how many are ticked.
+export function homeLists(notes = [], lists = []) {
+  const key = (t) => String(t ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const rank = (n) => (n.conflictOf ? 2 : 0) + (n.space ? 0 : 1);
+  const out = [];
+  const seen = new Set();
+  for (const l of lists || []) {
+    const title = String(l?.title ?? '').replace(/\s+/g, ' ').trim();
+    if (!title || seen.has(key(title))) continue;
+    seen.add(key(title));
+    const note = (notes || [])
+      .filter((n) => n && typeof n.id === 'string' && typeof n.body === 'string' && key(noteTitle(n.body)) === key(title))
+      .sort((a, b) => rank(a) - rank(b) || String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0];
+    if (!note) {
+      out.push({ asked: title, title, found: false, items: [], more: 0, done: 0 });
+      continue;
+    }
+    const max = Math.min(Math.max(Math.round(Number(l.limit)) || LIMITS.list, 1), MAX_LIMIT);
+    const all = taskItems(note.body);
+    out.push({
+      asked: title,
+      title: noteTitle(note.body),
+      found: true,
+      id: note.id,
+      url: noteLink(note.id),
+      items: all.slice(0, max).map((t) => {
+        const tick = t.checked ? tickFor(note.ticks, t.text) : null;
+        return { text: t.text, checked: t.checked, ...(tick ? { by: tick.by, at: tick.at } : {}) };
+      }),
+      more: Math.max(0, all.length - max),
+      done: all.filter((t) => t.checked).length,
+    });
+  }
+  return out;
+}
+
+// The Space's newest photos: the Assets that are images (latestAssets), newest first.
+export function latestPhotos(assets = [], { max = LIMITS.photos } = {}) {
+  return latestAssets(
+    (assets || []).filter((a) => a && a.kind === 'image'),
+    { max }
+  );
+}
+
+// The people in a shared Space, owners first (as the Space Library sorts them): [{ name, role,
+// roleLabel, you }]. `memberId` is this person's.
+export function memberRows(members = [], memberId = null) {
+  return (members || [])
+    .filter((m) => m && typeof m.name === 'string' && ROLE_LABELS[m.role])
+    .map((m) => ({ name: m.name, role: m.role, roleLabel: ROLE_LABELS[m.role], you: !!memberId && m.memberId === memberId }));
+}
+
 // The whole dashboard. `now` is a wall time ('YYYY-MM-DDTHH:MM', the user's clock) for the calendar;
 // `at` the real time (ms) for "the last 7 days". Each input may be missing: its section is empty.
 // `limits` asks for more or fewer rows in a section than LIMITS gives (a home page layout's
@@ -482,6 +546,8 @@ export function dashboard(
     joins = [],
     devices = [],
     dismissed = null,
+    lists = [],
+    members = [],
   } = {},
   { now, at = Date.now(), limits = null } = {}
 ) {
@@ -499,6 +565,9 @@ export function dashboard(
     events: upcomingEvents(occurrences, now, { max: max.events }),
     notes: latestNotes(notes, { max: max.notes }),
     assets: latestAssets(assets, { max: max.assets }),
+    photos: latestPhotos(assets, { max: max.photos }),
+    lists: homeLists(notes, lists),
+    members: memberRows(members, memberId),
     unreadMessages: (conversations || []).reduce((n, c) => n + (c && !c.request ? c.unread || 0 : 0), 0),
   };
 }
