@@ -41,8 +41,12 @@ const GUIDE_IDS = [
 const DOMAIN_COPY = {
   capability:
     'Read and write the current Drive, fetch an http(s) URL, read or screenshot the open page, open a new tab, and in the AI Sidebar click and type on the page (in a Job, on its own page: openPage). ' +
-    "For the user's own AI: new drives, their Notes, Reader, Mods and Jobs, and HTTP requests with their saved secrets (API keys, by name).",
-  guide: 'Sections of the Nomad API reference. Open one with entity guide:<id>.',
+    "For the user's own AI: new drives, their Notes, Reader, Mods and Jobs, their home page (pin a card, change its layout), " +
+    'and HTTP requests with their saved secrets (API keys, by name).',
+  guide:
+    'Sections of the Nomad API reference, and how to draw with components: the language and a saved page ' +
+    "(guide:genui-pages), the newer components' arguments (guide:genui-components), and the home page's cards and " +
+    'layout (guide:dashboard). Open one with entity guide:<id>.',
   page: 'Tools the current page registered. Open one with entity page:<name>.',
   drive:
     'Drives their owners listed for public search (what nomad://search finds), with their hyper:// URLs. ' +
