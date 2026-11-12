@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.50.3](https://github.com/knownasilya/nomad/compare/v1.50.2...v1.50.3) (2026-11-12)
+
+
+### Bug Fixes
+
+* **mobile:** draw a PDF in Assets only once the viewer has a width ([74849b8](https://github.com/knownasilya/nomad/commit/74849b8dc02dad1fb06dcf497142e92c16d5dda0))
+
 ### [1.50.2](https://github.com/knownasilya/nomad/compare/v1.50.1...v1.50.2) (2026-11-12)
 
 
