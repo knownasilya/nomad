@@ -27,6 +27,7 @@ import { findWebContentsParentWindow } from '../../lib/electron';
 import * as tabManager from '../../ui/tabs/manager';
 import * as spacePins from '../../ui/space-pins';
 import * as homeLayout from '../../ui/home-layout';
+import * as homeLive from './home-live';
 import * as drives from '../../hyper/drives';
 import * as home from '../../../../shared/home-setup.mjs';
 import * as peerRules from '../../../../shared/peers.mjs';
@@ -1053,6 +1054,12 @@ export default {
       layout: page?.layout || hl.layoutView(null),
       cards: page?.cards || [],
     };
+  },
+
+  // The answer to a Query in a card or the layout (live cards, shared/home-live.mjs): one
+  // source's data from the caller's Space, e.g. ('events', { days: 1 }) -> { items, count, label }.
+  async homeQuery(source, args = {}) {
+    return homeLive.query(this, String(source), args);
   },
 
   // A card pinned to the home page: `change` is { wide: boolean } or { move: -1 | 1 } (one place

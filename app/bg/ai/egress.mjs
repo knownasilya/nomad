@@ -49,6 +49,7 @@ export const PRIVATE_READS = new Set([
   'listContacts',
   // The cards pinned to the home page hold what earlier chats put there.
   'getDashboard',
+  'previewLiveData',
 ])
 
 /** Whether a capability's result holds the user's private data. */

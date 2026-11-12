@@ -7,7 +7,8 @@
 import vm from 'node:vm'
 import { API_REFERENCE } from './api-reference.mjs'
 import { TEMPLATE_IDS } from './create-drive.mjs'
-import { genuiFullPrompt, genuiMoreSignatures, genuiHomeSignatures } from '../../lib/genui/library.mjs'
+import { genuiFullPrompt, genuiMoreSignatures, genuiHomeSignatures, genuiLivePrompt } from '../../lib/genui/library.mjs'
+import { sourcesGuide } from '../../../shared/home-live.mjs'
 import { DEFAULT_LAYOUT, MAX_CARDS } from '../../../shared/home-layout.mjs'
 
 export const DOMAINS = ['capability', 'guide', 'page', 'drive', 'name', 'skill']
@@ -614,6 +615,22 @@ export const CAPABILITIES = [
     gates: { personal: true },
   },
   {
+    name: 'previewLiveData',
+    description:
+      'Read what a live card\'s Query("source", {args}) would show the user now, to see the data\'s shape before you ' +
+      'write the card (guide:dashboard, Live cards). `source` is events, jobs, jobRuns, notes, driveFile or driveFolder. ' +
+      'Asks permission to read the home page, and the calendar, Jobs or Notes for those sources.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source: { type: 'string', description: 'The live source, e.g. "events"' },
+        args: { type: 'object', description: 'Optional. The Query\'s arguments, e.g. { "days": 7 }' },
+      },
+      required: ['source'],
+    },
+    gates: { personal: true },
+  },
+  {
     name: 'removeDashboardCard',
     description: 'Remove a card from the home page. Asks permission to change the home page.',
     inputSchema: {
@@ -1159,8 +1176,8 @@ export function dashboardGuide() {
       'own cards, so:\n' +
       '- Start with `CardHeader(title, subtitle?, icon?)` and put the content under it. Don\'t wrap the card in a Card.\n' +
       '- Keep it small: a card sits in a column about 320px wide. A table, chart or map that needs room gets `wide: true`.\n' +
-      '- It holds the data you write into it and never updates by itself. Say so when it will go stale, and offer a Job ' +
-      'for something that should stay current only if the user asks.\n' +
+      '- What you write into a card stays as written. For the user\'s things that change (their calendar, Jobs, Notes, ' +
+      'a file in a drive), make it a **live card** (below) instead of copying the data in.\n' +
       '- A Button with @ToAssistant puts its message in the AI Sidebar\'s input for the user to send, so a card can ask ' +
       'for its own refresh: `Button("Refresh", @ToAssistant("Update my Reading list card"))`. @OpenUrl opens a page.\n' +
       '- To change a card, call getDashboard for its id and program, then pinDashboardCard with `id` and the whole new program.\n' +
@@ -1168,6 +1185,30 @@ export function dashboardGuide() {
     'Example:\n```\nroot = Stack([head, list], "column", "s")\nhead = CardHeader("Reading list", "3 to go", "book")\n' +
       'list = List([a, b, c], "divided")\na = ListItem("The Dispossessed", "Ursula K. Le Guin", Icon("bookmark", "primary"))\n' +
       'b = ListItem("Braiding Sweetgrass", "Robin Wall Kimmerer")\nc = ListItem("The Overstory", "Richard Powers")\n```',
+    '### Live cards — Query',
+    'A card (or the layout) reads the user\'s things itself with a Query statement, and the page reads it again on a ' +
+      'schedule and when they change: `name = Query("source", {args}, {items: []}, seconds?)`. The third argument draws ' +
+      'until the data comes; the fourth is how often to read again (at least 60; leave it out for the source\'s own). ' +
+      'You never see the data in the card: each viewer sees their own, so in a shared Space every member sees theirs. ' +
+      'Call previewLiveData with the same source and args first to see what it returns, then write the card around ' +
+      'that shape. The sources, all read-only:\n' + sourcesGuide(),
+    '- Every result has `items` and `count`. Use dot access (`today.count`, `today.items[0].title`), @Each to draw ' +
+      'one component per item, @Count and @Filter for numbers, and a ternary for an empty state.\n' +
+      '- Links: use an item\'s own `url` (a ListItem\'s url, a Button\'s @OpenUrl(e.url)). A link put together from the data ' +
+      '(a site address plus a title) doesn\'t open.\n' +
+      '- `Button("Refresh", Action([@Run(today)]), "secondary")` reads it again now; the page also shows when the card ' +
+      'last updated, with its own refresh button.\n' +
+      '- In the AI Sidebar a drawing with a Query shows the user\'s data too, so they can pin it as it is.',
+    'Example, today\'s events:\n```\nroot = Stack([head, body], "column", "s")\n' +
+      'today = Query("events", {days: 1, limit: 6}, {items: [], count: 0}, 300)\n' +
+      'head = CardHeader("Today", today.count == 0 ? "Nothing on" : today.count + " events", "calendar-day")\n' +
+      'body = today.count == 0 ? Empty("A free day", "Nothing on the calendar today", "mug-hot") : list\n' +
+      'list = List(@Each(today.items, "e", ListItem(e.title, e.time + (e.location ? " · " + e.location : ""), null, null, e.url)), "divided")\n```',
+    'Example, a Job\'s last answer:\n```\nroot = Stack([head, body], "column", "s")\n' +
+      'brief = Query("jobRuns", {job: "Morning briefing", limit: 1}, {items: [], last: {}})\n' +
+      'head = CardHeader("Morning briefing", brief.last.ago, "robot")\n' +
+      'body = TextContent(brief.count == 0 ? "No run yet" : brief.last.text)\n```',
+    genuiLivePrompt().replace(/^(#{2,5}) /gm, '#$1 '),
     '### The layout — setDashboard',
     'The layout says what the page shows and where. It places the page\'s **live parts**, widgets that fill themselves ' +
       'with the user\'s own things, and can put any other component around them (a Header, Stats, a Callout, Tabs). ' +
