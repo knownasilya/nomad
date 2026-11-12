@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.50.1](https://github.com/knownasilya/nomad/compare/v1.50.0...v1.50.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **mobile:** a PDF or book that won't open in Assets says so, and logs why ([ef6e3db](https://github.com/knownasilya/nomad/commit/ef6e3db74799ebacdd1a8631c4c6833922dcfdc0))
+
 ## [1.50.0](https://github.com/knownasilya/nomad/compare/v1.49.0...v1.50.0) (2026-11-12)
 
 
