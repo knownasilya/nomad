@@ -115,8 +115,10 @@ async function start() {
     const node = document.createElement('div')
     node.className = 'pdf'
     app.replaceChildren(node)
+    // The size this page has now: a WebView that hasn't laid it out yet says 0.
+    step('layout', { width: innerWidth, height: innerHeight, dpr: devicePixelRatio })
     const { doc } = await showPdf(node, data, pdfjs, { root: null, maxWidth: 2000, onPage: (n) => step('page', { n }) })
-    step('opened', { pages: doc.numPages })
+    step('opened', { pages: doc.numPages, width: innerWidth, height: innerHeight })
   } else {
     const book = openBook(data)
     createReader(app, book, { key: q.get('key') || file, theme })
