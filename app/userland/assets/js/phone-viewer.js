@@ -64,6 +64,45 @@ function readFile(name) {
 
 const moduleUrl = (id) => URL.createObjectURL(new Blob([document.getElementById(id).textContent], { type: 'text/javascript' }))
 
+// pdf.js's worker, once it has said it's ready, or null after it runs pdf.js on this page instead.
+// Handed a worker that never loaded, pdf.js waits for it forever, and an Android WebView left the
+// screen black that way: a PDF that never opened, and nothing to say why.
+const WORKER_WAIT_MS = 10000
+
+async function pdfWorker() {
+  const src = moduleUrl('pdfjs-worker')
+  let worker = null
+  let why = 'no answer'
+  try {
+    worker = new Worker(src, { type: 'module' })
+    const ok = await new Promise((resolve) => {
+      const done = (v) => {
+        clearTimeout(timer)
+        resolve(v)
+      }
+      const timer = setTimeout(() => done(false), WORKER_WAIT_MS)
+      // The worker's first message is its "ready" (pdf.worker.mjs initializeFromPort).
+      worker.addEventListener('message', (e) => e.data?.action === 'ready' && done(true))
+      worker.addEventListener('error', (e) => {
+        why = e.message || 'it didn’t load'
+        done(false)
+      })
+    })
+    if (ok) {
+      step('worker')
+      return worker
+    }
+  } catch (err) {
+    why = err?.message || String(err)
+  }
+  worker?.terminate()
+  // Imported here, the worker's module only sets globalThis.pdfjsWorker, which pdf.js then runs in
+  // this page (its "fake worker"): slower to draw, but it draws.
+  step('worker', { failed: why, fallback: 'this page' })
+  await import(/* @vite-ignore */ src)
+  return null
+}
+
 async function start() {
   step('start')
   const data = await readFile(file)
@@ -71,7 +110,8 @@ async function start() {
   if (kind === 'pdf') {
     const pdfjs = await import(/* @vite-ignore */ moduleUrl('pdfjs'))
     step('pdfjs', { version: pdfjs.version })
-    pdfjs.GlobalWorkerOptions.workerPort = new Worker(moduleUrl('pdfjs-worker'), { type: 'module' })
+    const worker = await pdfWorker()
+    if (worker) pdfjs.GlobalWorkerOptions.workerPort = worker
     const node = document.createElement('div')
     node.className = 'pdf'
     app.replaceChildren(node)
