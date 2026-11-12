@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { closeTurn, handleMcpHttp, isLoopback, mcpToolList, openTurn, TURN_HEADER } from '../../app/bg/ai/localhost-mcp.mjs';
 import { mcpConfig } from '../../app/bg/ai/agent-cli.mjs';
+import { buildCatalog, search, runModule, assertCallAllowed } from '../../app/bg/ai/search-execute.mjs';
 
 function request(overrides = {}) {
   return handleMcpHttp({
@@ -176,5 +177,68 @@ describe('localhost mcp', () => {
     expect((await request({ headers: { 'content-type': 'text/plain' } })).status).toBe(415);
     const bad = await request({ body: '{' });
     expect(JSON.parse(bad.body).error.code).toBe(-32700);
+  });
+
+  // The home page (ADR-0048). Another program has no system prompt from Nomad, so search alone must
+  // lead it to the tools and to the language cards and layouts are written in.
+  describe('the home page, for another program', () => {
+    // The catalog callLocalTool builds (app/bg/web-apis/bg/ai.ts): the user's own AI, no tab.
+    const catalog = buildCatalog({ allowWrite: true, allowVision: true, remote: false, pageTools: [], personal: true, names: [], skills: [] });
+    const TOOLS = ['getDashboard', 'pinDashboardCard', 'removeDashboardCard', 'setDashboard'];
+    const call = async (name, args) => {
+      const res = await request({
+        callTool: async (tool, input) => {
+          if (tool === 'search') return search(input, catalog);
+          return runModule(input.code, input.params, async (c) => {
+            assertCallAllowed(c.target, c.name, catalog);
+            return { called: c.target, args: c.args };
+          });
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name, arguments: args } }),
+      });
+      const result = JSON.parse(res.body).result;
+      return { isError: result.isError, value: result.isError ? result.content[0].text : JSON.parse(result.content[0].text) };
+    };
+
+    it('says in the index that the home page and its guides are there', async () => {
+      const { value } = await call('search', {});
+      const copy = Object.fromEntries(value.domains.map((d) => [d.domain, d.description]));
+      expect(copy.capability).toMatch(/home page/);
+      for (const id of ['guide:genui-pages', 'guide:genui-components', 'guide:dashboard']) expect(copy.guide).toContain(id);
+    });
+
+    it('finds the tools and the guide by what the user would ask for', async () => {
+      const found = async (query) => (await call('search', { query })).value.hits.map((h) => h.entity);
+      expect(await found('pin a card to the home page')).toEqual(
+        expect.arrayContaining(['capability:pinDashboardCard', 'guide:dashboard'])
+      );
+      expect(await found('rebuild the dashboard layout')).toEqual(
+        expect.arrayContaining(['capability:setDashboard', 'guide:dashboard'])
+      );
+      expect(await found('dashboard')).toEqual(expect.arrayContaining(['capability:getDashboard']));
+    });
+
+    it('opens each tool with code to call it, and the guides with the language', async () => {
+      const { value } = await call('search', {
+        entity: [...TOOLS.map((t) => `capability:${t}`), 'guide:dashboard', 'guide:genui-components', 'guide:genui-pages'],
+      });
+      const text = JSON.stringify(value);
+      for (const t of TOOLS) expect(text).toContain(`nomad.${t}(params)`);
+      // The widgets a layout places, a newer component's arguments, and where the whole language is.
+      for (const part of ['HomeCards()', 'HomeNotes(', 'GridItem(', 'Accordion(', 'guide:genui-pages']) expect(text).toContain(part);
+    });
+
+    it('runs them through execute, and never for a page’s own chat', async () => {
+      const code = (t) => `import { nomad } from 'nomad:runtime'\nexport default async function main(params) {\n  return await nomad.${t}(params)\n}`;
+      for (const t of TOOLS) {
+        const { isError, value } = await call('execute', { code: code(t), params: { id: 'abc123' } });
+        expect(isError).toBe(false);
+        expect(value).toEqual({ called: t, args: { id: 'abc123' } });
+      }
+      const page = buildCatalog({ allowWrite: true, allowVision: true, remote: false, pageTools: [], personal: false });
+      for (const t of TOOLS) expect(() => assertCallAllowed(t, undefined, page)).toThrow(/not available/);
+      const hits = search({ query: 'pin a card to the home page' }, page).hits.map((h) => h.entity);
+      expect(hits).not.toContain('capability:pinDashboardCard');
+    });
   });
 });
