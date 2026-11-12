@@ -12,8 +12,8 @@ function el(tag, attrs = {}) {
 // `root` is the element that scrolls the pages, or a function that finds it. Desktop's viewer keeps
 // a drawn PDF while it re-renders around it, so the node moves into a new scroll box: call the
 // returned `rewatch()` after a move, and the pages watch the box they are in now. (Watching the old
-// one, which is gone, drew nothing, and every page stayed white.)
-export async function showPdf(node, data, pdfjs, { root = () => node.closest('.preview'), maxWidth = 900 } = {}) {
+// one, which is gone, drew nothing, and every page stayed white.) `onPage(n)` hears each page drawn.
+export async function showPdf(node, data, pdfjs, { root = () => node.closest('.preview'), maxWidth = 900, onPage = null } = {}) {
   const doc = await pdfjs.getDocument({ data, isEvalSupported: false }).promise
   const pages = el('div', { class: 'pages' })
   const meta = el('div', { class: 'pdf-meta' })
@@ -34,6 +34,7 @@ export async function showPdf(node, data, pdfjs, { root = () => node.closest('.p
       canvas.style.width = `${Math.floor(base.width * scale)}px`
       e.target.replaceChildren(canvas)
       await page.render({ canvas, viewport: vp }).promise
+      onPage?.(+e.target.dataset.n)
     }
   }
   let io = null

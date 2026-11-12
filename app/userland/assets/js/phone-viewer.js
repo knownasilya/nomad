@@ -29,6 +29,12 @@ function post(msg) {
   } catch {}
 }
 
+// Every step goes to the app, which logs it (Settings → Logs) and gives up on a page that has gone
+// quiet: without them a PDF that never drew left only a black screen and nothing to go on.
+const step = (name, more = {}) => post({ type: 'step', step: name, ...more })
+window.addEventListener('error', (e) => post({ type: 'error', message: String(e.message || e.error || 'error') }))
+window.addEventListener('unhandledrejection', (e) => post({ type: 'error', message: String(e.reason?.message || e.reason || 'rejection') }))
+
 function fail(text) {
   const box = document.createElement('div')
   box.className = 'failed'
@@ -44,6 +50,12 @@ function readFile(name) {
     // The phone passes the file's whole file: URL; a bare name is a file next to this page.
     xhr.open('GET', /^file:/i.test(name) ? name : encodeURIComponent(name))
     xhr.responseType = 'arraybuffer'
+    let said = 0
+    xhr.onprogress = (e) => {
+      if (Date.now() - said < 1000) return
+      said = Date.now()
+      step('reading', { bytes: e.loaded })
+    }
     xhr.onload = () => (xhr.response ? resolve(new Uint8Array(xhr.response)) : reject(new Error('The file is empty')))
     xhr.onerror = () => reject(new Error('The file couldn’t be read'))
     xhr.send()
@@ -53,14 +65,18 @@ function readFile(name) {
 const moduleUrl = (id) => URL.createObjectURL(new Blob([document.getElementById(id).textContent], { type: 'text/javascript' }))
 
 async function start() {
+  step('start')
   const data = await readFile(file)
+  step('read', { bytes: data.length })
   if (kind === 'pdf') {
     const pdfjs = await import(/* @vite-ignore */ moduleUrl('pdfjs'))
+    step('pdfjs', { version: pdfjs.version })
     pdfjs.GlobalWorkerOptions.workerPort = new Worker(moduleUrl('pdfjs-worker'), { type: 'module' })
     const node = document.createElement('div')
     node.className = 'pdf'
     app.replaceChildren(node)
-    await showPdf(node, data, pdfjs, { root: null, maxWidth: 2000 })
+    const { doc } = await showPdf(node, data, pdfjs, { root: null, maxWidth: 2000, onPage: (n) => step('page', { n }) })
+    step('opened', { pages: doc.numPages })
   } else {
     const book = openBook(data)
     createReader(app, book, { key: q.get('key') || file, theme })

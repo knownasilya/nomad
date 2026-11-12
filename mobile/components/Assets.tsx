@@ -1164,6 +1164,28 @@ function DocView ({ a, uri, onFailed }: { a: AssetRecord; uri: string; onFailed:
   }, [])
   const theme = JSON.stringify({ scheme: t.scheme, bg: t.surface, text: t.text, link: t.accent })
   const src = `${page}?kind=${a.kind === 'pdf' ? 'pdf' : 'book'}&key=${encodeURIComponent(a.id)}&file=${encodeURIComponent(uri)}&theme=${encodeURIComponent(theme)}`
+  const what = a.kind === 'pdf' ? 'PDF' : 'book'
+  // The page says each step it takes (phone-viewer.js). Until a PDF's first page is drawn (a book's
+  // first screen), going quiet for VIEWER_QUIET_MS means it's stuck: say so, with the file to open
+  // elsewhere, and keep the last step in the log.
+  const last = useRef('nothing yet')
+  const done = useRef(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const quiet = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current)
+    if (done.current) return
+    timer.current = setTimeout(() => {
+      console.warn('[assets] the viewer stopped', a.kind, 'after', last.current)
+      onFailed(`This ${what} didn’t open here (it stopped after: ${last.current}). Open it in another app.`)
+    }, VIEWER_QUIET_MS)
+  }, [a.kind, what, onFailed])
+  useEffect(() => {
+    done.current = false
+    last.current = 'nothing yet'
+    quiet()
+    return () => { if (timer.current) clearTimeout(timer.current) }
+  }, [src, quiet])
+  const finish = () => { done.current = true; if (timer.current) clearTimeout(timer.current) }
   return (
     <WebView
       style={a.kind === 'book' ? [s.player, { backgroundColor: t.surface }] : s.player}
@@ -1174,16 +1196,41 @@ function DocView ({ a, uri, onFailed }: { a: AssetRecord; uri: string; onFailed:
       setSupportMultipleWindows={false}
       setBuiltInZoomControls={a.kind === 'pdf'}
       setDisplayZoomControls={false}
-      onError={(e) => onFailed(`This ${a.kind === 'pdf' ? 'PDF' : 'book'} couldn’t open here (${e.nativeEvent.description || 'the viewer didn’t load'}). Open it in another app.`)}
+      onError={(e) => {
+        finish()
+        console.warn('[assets] the viewer didn’t load', e.nativeEvent.description)
+        onFailed(`This ${what} couldn’t open here (${e.nativeEvent.description || 'the viewer didn’t load'}). Open it in another app.`)
+      }}
+      onRenderProcessGone={(e) => {
+        // Android ends a WebView's renderer that runs out of memory; the view goes blank without it.
+        finish()
+        console.warn('[assets] the viewer closed', e.nativeEvent.didCrash ? '(crashed)' : '(out of memory)')
+        onFailed(`This ${what} was too much for this phone to show here. Open it in another app.`)
+      }}
       onMessage={(e) => {
-        try {
-          const msg = JSON.parse(e.nativeEvent.data)
-          if (msg.type === 'failed') onFailed(msg.message)
-        } catch {}
+        let msg: { type?: string; step?: string; message?: string; [k: string]: unknown }
+        try { msg = JSON.parse(e.nativeEvent.data) } catch { return }
+        if (msg.type === 'step') {
+          const { type: _t, step, ...more } = msg
+          last.current = Object.keys(more).length ? `${step} ${JSON.stringify(more)}` : String(step)
+          console.log('[assets] viewer', a.kind, last.current)
+          if (step === 'page' || (a.kind !== 'pdf' && step === 'ready')) finish()
+          else quiet()
+        } else if (msg.type === 'ready') {
+          if (a.kind !== 'pdf') finish()
+        } else if (msg.type === 'error') {
+          console.warn('[assets] viewer error', a.kind, msg.message)
+        } else if (msg.type === 'failed') {
+          finish()
+          console.warn('[assets] viewer failed', a.kind, msg.message)
+          onFailed(String(msg.message))
+        }
       }}
     />
   )
 }
+
+const VIEWER_QUIET_MS = 30000 // a PDF or book page silent this long, before it shows anything, is stuck
 
 // Two fingers on the grid: apart zooms in (fewer, bigger tiles), together zooms out, a step each
 // time their distance changes by PINCH_STEP. One finger is left to the list to scroll.
