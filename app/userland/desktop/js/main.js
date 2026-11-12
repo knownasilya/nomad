@@ -26,6 +26,11 @@
 // its owners and editors change it, and a viewer's page has no Customize and no card menus. A
 // layout made for a Space can place the Space's checklist Notes (HomeList("Chores"), ticked and
 // added to here), its newest photos (HomePhotos) and the people in it (HomeMembers).
+//
+// A card or the layout can be live (ADR-0048 amendment): its Query statements are answered here by
+// nomad.vault.homeQuery (shared/home-live.mjs), each on its own interval, and the ones that read
+// the Vault or Jobs again whenever the page hears they changed. A live card says when it last read
+// its data, with a button to read it now.
 
 import {
   LitElement,
@@ -69,6 +74,9 @@ const partKey = (w) => (w.name === 'HomeList' ? `HomeList:${String(w.props?.titl
 // The largest photo shown as itself when it has no thumbnail.
 const PHOTO_BYTES = 2 * 1024 * 1024;
 
+// The answer to a Query in a card or the layout (shared/home-live.mjs).
+const homeQuery = (source, args) => nomad.vault.homeQuery(source, args);
+
 const NOTIFY_ICONS = {
   job: 'fas fa-robot',
   failed: 'fas fa-exclamation-triangle',
@@ -86,6 +94,7 @@ class DesktopApp extends LitElement {
       tick: { type: Number },
       widgets: { type: Array },
       drafts: { type: Object },
+      liveCards: { type: Object },
     };
   }
 
@@ -109,12 +118,21 @@ class DesktopApp extends LitElement {
     this.lists = ''; // the checklist Notes its HomeLists name, as sent to homeDashboard
     this.drafts = {}; // HomeList title (lowercased) -> the item being typed
     this.busyItems = new Set(); // `${noteId}:${text}` while a tick or an add is saving
+    this.liveCards = {}; // card id -> <nomad-genui>'s genui-live: { queries, loading, updatedAt, errors }
+    this.liveTimer = null;
 
     this.load();
     this.loadVersion();
     this.watch();
 
-    window.addEventListener('focus', () => this.load());
+    window.addEventListener('focus', () => {
+      this.load();
+      this.queueLiveRefresh();
+    });
+    // Back on this tab: what changed in another tab (a Note, an event) shows on the live cards.
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) this.queueLiveRefresh();
+    });
     this.addEventListener('update-pins', async () => {
       this.pins = await desktop.load();
     });
@@ -167,10 +185,21 @@ class DesktopApp extends LitElement {
     this.reloadTimer = setTimeout(() => this.loadDashboard(), 400);
   }
 
+  // The live cards' (and the layout's) Queries on the Vault and Jobs, read again after a change.
+  queueLiveRefresh() {
+    clearTimeout(this.liveTimer);
+    this.liveTimer = setTimeout(() => {
+      for (const el of this.renderRoot.querySelectorAll('nomad-genui')) el.refreshVault?.();
+    }, 1500);
+  }
+
   watch() {
     const on = (fn) => {
       try {
-        fn().addEventListener('changed', () => this.queueReload());
+        fn().addEventListener('changed', () => {
+          this.queueReload();
+          this.queueLiveRefresh();
+        });
       } catch (e) {}
     };
     on(() => nomad.vault.watchAppData());
@@ -265,6 +294,7 @@ class DesktopApp extends LitElement {
         host
         class="layout"
         .source=${layout.source || ''}
+        .live=${homeQuery}
         @genui-widgets=${this.onWidgets}
         @genui-action=${this.onGenUiAction}
       >
@@ -333,10 +363,53 @@ class DesktopApp extends LitElement {
                 <strong>${c.title}</strong> can’t be drawn by this version of Nomad. Remove it from its menu, or
                 ask your AI to make it again.
               </p>`
-            : html`<nomad-genui framed .source=${c.source} @genui-action=${this.onGenUiAction}></nomad-genui>`}
+            : html`<nomad-genui
+                  framed
+                  .source=${c.source}
+                  .live=${homeQuery}
+                  @genui-action=${this.onGenUiAction}
+                  @genui-live=${(e) => this.onCardLive(c.id, e)}
+                ></nomad-genui>
+                ${this.renderLiveBar(c)}`}
         </section>
       `
     );
+  }
+
+  // Under a live card: when it last read its data, and a button to read it now.
+  renderLiveBar(c) {
+    const st = this.liveCards[c.id];
+    if (!st?.queries) return '';
+    void this.tick; // "2 min ago" moves on with the page's minute tick
+    const when = st.loading
+      ? 'Updating…'
+      : st.errors?.length
+        ? 'Couldn’t update'
+        : st.updatedAt
+          ? `Updated ${ago(new Date(st.updatedAt).toISOString())}`
+          : '';
+    return html`<div class="live-bar" role="status">
+      <span class="live-dot ${st.errors?.length ? 'err' : ''}" aria-hidden="true"></span>
+      <span class="live-when">Live${when ? html` · ${when}` : ''}</span>
+      <button
+        class="icon-btn live-refresh"
+        title="Refresh now"
+        aria-label="Refresh the card ${c.title}"
+        ?disabled=${st.loading}
+        @click=${(e) => this.onRefreshCard(e)}
+      >
+        <span class="fas fa-sync-alt ${st.loading ? 'fa-spin' : ''}" aria-hidden="true"></span>
+      </button>
+    </div>`;
+  }
+
+  onCardLive(id, e) {
+    e.stopPropagation();
+    this.liveCards = { ...this.liveCards, [id]: e.detail };
+  }
+
+  onRefreshCard(e) {
+    e.currentTarget.closest('.card.pinned')?.querySelector('nomad-genui')?.refresh();
   }
 
   renderReleaseNotice() {

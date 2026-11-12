@@ -974,6 +974,28 @@ export function genuiHomeSignatures() {
   });
 }
 
+// What a live program can do with its data (guide:dashboard's live cards, shared/home-live.mjs):
+// lang-core's expression rules and its @ functions, as it teaches them to a turn with tools. The
+// Query statement itself is taught there, with Nomad's sources.
+export function genuiLivePrompt() {
+  return once('live', () => {
+    const p = genuiLibrary.prompt({ toolCalls: true, bindings: false, tools: [] });
+    const rules = p
+      .slice(p.indexOf('## Syntax Rules'), p.indexOf('## Component Signatures'))
+      .split('\n')
+      .filter((l) => /^(8|9|1[0-5])\. /.test(l))
+      .map((l) => '- ' + l.replace(/^\d+\. /, '').replace('"text" + $var + "more"', '"Next: " + today.items[0].title'))
+      .join('\n');
+    const from = p.indexOf('## Built-in Functions');
+    const to = p.indexOf('## Query');
+    const fns = p
+      .slice(from, to < 0 ? undefined : to)
+      .replace(/^## Built-in Functions\n+/, '')
+      .trim();
+    return `### Expressions\n\n${rules}\n\n### Functions\n\n${fns}`;
+  });
+}
+
 export function genuiSchema() {
   return genuiLibrary.toJSONSchema();
 }

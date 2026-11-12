@@ -148,6 +148,7 @@ export default {
 
   // The home page (nomad://desktop, shared/home-dashboard.mjs)
   homeDashboard: 'promise', // ({ now? wall time, limits? { notifications, next, events, notes, assets, photos }, lists? [{ title, limit? }] }) -> { greeting, waiting, notifications, notificationKeys, jobs: { running, next, total, paused }, events, notes, assets, photos, lists, members, unreadMessages, spaceName, linked, layout: { source, custom, canRestore }, cards, home: { shared, canChange, people, canInvite } }
+  homeQuery: 'promise', // (source, args) -> a live source's data for a Query in a card or layout (shared/home-live.mjs)
   updateHomeCard: 'promise', // (id, { wide } | { move: -1 | 1 }) a card pinned to the home page (ADR-0048)
   removeHomeCard: 'promise', // (id)
   resetHomeLayout: 'promise', // () the home page's default layout; the one it replaces is kept

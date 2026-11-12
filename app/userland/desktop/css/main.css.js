@@ -444,6 +444,42 @@ ${spinnerCSS}
     background: var(--home-row-hover);
   }
 
+  /* Under a live card: when it last read its data, and Refresh. */
+  .live-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 10px -4px -6px 0;
+    font-size: 11px;
+    color: var(--text-color--lightish);
+  }
+
+  .live-bar .live-when {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .live-dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--home-green);
+  }
+
+  .live-dot.err {
+    background: var(--home-warn);
+  }
+
+  .live-bar .live-refresh {
+    width: 24px;
+    height: 24px;
+    font-size: 11px;
+  }
+
   .card.pinned > .empty {
     padding: 0 28px 0 0;
   }

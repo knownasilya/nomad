@@ -1281,4 +1281,20 @@ export default css`
     font-weight: 600;
     color: var(--ai-text, inherit);
   }
+
+  /* — live data that didn't come (shared/home-live.mjs) — */
+
+  .live-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 8px;
+    color: var(--genui-muted);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .live-error .fas {
+    margin-top: 2px;
+    color: var(--genui-warning-solid);
+  }
 `;

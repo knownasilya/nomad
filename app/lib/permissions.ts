@@ -549,7 +549,7 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
           >`
         : 'Let the AI assistant save files to your Assets';
     case 'dashboardRead':
-      return 'Let the AI assistant read your home page: its layout and the cards pinned to it';
+      return 'Let the AI assistant read your home page: its layout, the cards pinned to it, and what a live card shows';
     case 'dashboardWrite':
       // A shared Space's home page is everyone's in it (ADR-0048 amendment).
       return permOpts?.shared
