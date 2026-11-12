@@ -26,11 +26,13 @@ import { BrowserWindow } from 'electron';
 import { findWebContentsParentWindow } from '../../lib/electron';
 import * as tabManager from '../../ui/tabs/manager';
 import * as spacePins from '../../ui/space-pins';
+import * as homeLayout from '../../ui/home-layout';
 import * as drives from '../../hyper/drives';
 import * as home from '../../../../shared/home-setup.mjs';
 import * as peerRules from '../../../../shared/peers.mjs';
 import { isShared } from '../../../../shared/space-library.mjs';
 import * as homeDash from '../../../../shared/home-dashboard.mjs';
+import * as hl from '../../../../shared/home-layout.mjs';
 import { localWallTime, isDateTime } from '../../../../shared/calendar.mjs';
 import * as inbox from '../../hyper/inbox';
 import * as autobases from '../../hyper/autobases';
@@ -998,13 +1000,14 @@ export default {
   // Open tabs on the user's other Devices, the calling page's Space first (nomad://history).
   // The home page's dashboard (nomad://desktop; the rules are shared/home-dashboard.mjs): the
   // caller's Space's newest Notes and Assets, its calendar from now on, the Jobs running and up next,
-  // and recent notifications. `now` is the page's wall time. A source that fails or is slow (a shared
+  // and recent notifications. `now` is the page's wall time; `limits` the rows its layout asks for
+  // in a section ({ notes: 10 }). A source that fails or is slow (a shared
   // Space's Library still opening) leaves its section empty rather than holding up the rest.
   async homeDashboard(opts: any = {}) {
     const now = isDateTime(opts?.now) ? String(opts.now).slice(0, 16) : localWallTime();
     const today = now.slice(0, 10);
     const space = await callerSpace(this);
-    const [notes, assetList, cal, notices, share, mail, devices, driveRequests, dismissed]: any[] = await Promise.all([
+    const [notes, assetList, cal, notices, share, mail, devices, driveRequests, dismissed, page]: any[] = await Promise.all([
       settle(vaultApps.listNotes(this)),
       settle(assets.listAssets(this)),
       settle(calendar.listCalendar(this, { from: today, to: homeDash.addDays(today, homeDash.EVENT_DAYS) })),
@@ -1014,6 +1017,7 @@ export default {
       settle(vault.listDevices()),
       settle(waitingDriveRequests()),
       settle(vault.readAppRecord(homeDash.DISMISSED_PATH)),
+      settle(homeLayout.get(space)),
     ]);
     const names = new Map((devices || []).map((d) => [d.key, d.name]));
     const own = await jobs.ownKey().catch(() => null);
@@ -1040,11 +1044,39 @@ export default {
           devices: pairing.listPendingRequests(),
           dismissed,
         },
-        { now }
+        { now, limits: opts?.limits }
       ),
       spaceName: vaultApps.spaceNameOf(space),
       linked: !!(await vault.getVault().catch(() => null)),
+      // The page as a document (ADR-0048, shared/home-layout.mjs): the layout's program and the
+      // cards pinned to it. With no Vault to read, the default layout and no cards.
+      layout: page?.layout || hl.layoutView(null),
+      cards: page?.cards || [],
     };
+  },
+
+  // A card pinned to the home page: `change` is { wide: boolean } or { move: -1 | 1 } (one place
+  // earlier or later). Cards are made by the user's AI and the AI Sidebar's Pin to Home, never here.
+  async updateHomeCard(id, change: any = {}) {
+    const space = await callerSpace(this);
+    if (change?.move === -1 || change?.move === 1) return homeLayout.moveCard(space, String(id), change.move);
+    if (typeof change?.wide !== 'boolean') throw new Error('Nothing to change');
+    await homeLayout.pinCard(space, { id: String(id), wide: change.wide });
+    return true;
+  },
+
+  async removeHomeCard(id) {
+    await homeLayout.removeCard(await callerSpace(this), String(id));
+  },
+
+  // Back to the dashboard every Space starts with. The layout it replaces is kept, one step back.
+  async resetHomeLayout() {
+    await homeLayout.setLayout(await callerSpace(this), null);
+  },
+
+  // The layout before the last change. False when there is none.
+  async restoreHomeLayout() {
+    return homeLayout.restoreLayout(await callerSpace(this));
   },
 
   // Clear notifications from the home page, on every Device: `items` are [{ id, at }] from the

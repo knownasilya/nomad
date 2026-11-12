@@ -13,6 +13,14 @@
 // Everything but the pins comes from one call, nomad.vault.homeDashboard() (bg/web-apis/bg/vault.ts),
 // whose rules are shared/home-dashboard.mjs, the same ones the phone's home tab uses. The page loads
 // it again when the Vault, a Job or the Inbox changes, and keeps its "5 min ago"s fresh.
+//
+// The page is a document (ADR-0048, shared/home-layout.mjs). Where each part goes is the layout, an
+// openui-lang program drawn by <nomad-genui host> (nomad://app-stdlib/js/genui.build.js): it leaves
+// a slot for every Home* widget it places and says which is which (`genui-widgets`), and this page
+// puts the part above in that slot. With no layout of the user's own, that is the dashboard as it
+// always was. Cards the user pinned (the AI Sidebar's Pin to Home, or their AI's pinDashboardCard)
+// are programs too, each drawn by itself where the layout places HomeCards(). Customize, and each
+// card's menu, hand the change to the AI Sidebar as a draft the user sends.
 
 import {
   LitElement,
@@ -40,6 +48,15 @@ const WAITING_ICONS = {
   'job-needs': 'fas fa-globe',
 };
 
+// The rows a layout can ask for in a part: HomeNotes(10). The name homeDashboard knows each by.
+const SIZED = {
+  HomeNotifications: 'notifications',
+  HomeJobs: 'next',
+  HomeEvents: 'events',
+  HomeNotes: 'notes',
+  HomeFiles: 'assets',
+};
+
 const NOTIFY_ICONS = {
   job: 'fas fa-robot',
   failed: 'fas fa-exclamation-triangle',
@@ -55,6 +72,7 @@ class DesktopApp extends LitElement {
       dash: { type: Object },
       thumbs: { type: Object },
       tick: { type: Number },
+      widgets: { type: Array },
     };
   }
 
@@ -72,6 +90,9 @@ class DesktopApp extends LitElement {
     this.tick = 0;
     this.reloadTimer = null;
     this.answering = null; // the Needs you row being answered
+    this.widgets = null; // the parts the layout draws now: [{ slot, name, props }]
+    this.placed = []; // every part the layout places, also in a tab that isn't open: [{ name, limit? }]
+    this.limits = ''; // the rows the layout asks for, as sent to homeDashboard
 
     this.load();
     this.loadVersion();
@@ -95,7 +116,7 @@ class DesktopApp extends LitElement {
 
   async loadDashboard() {
     try {
-      this.dash = await nomad.vault.homeDashboard({ now: wallNow() });
+      this.dash = await nomad.vault.homeDashboard({ now: wallNow(), limits: this.limits ? JSON.parse(this.limits) : undefined });
     } catch (e) {
       console.log('Failed to load the dashboard', e);
       if (!this.dash) this.dash = { failed: true };
@@ -161,32 +182,124 @@ class DesktopApp extends LitElement {
     return html`
       <link rel="stylesheet" href="nomad://assets/font-awesome.css" />
       <div id="topright">
+        <button
+          class="link-btn customize"
+          title="Change what your home page shows"
+          aria-haspopup="menu"
+          @click=${this.onCustomize}
+        >
+          <span class="fas fa-sliders-h" aria-hidden="true"></span> Customize
+        </button>
         <a href="#" @click=${this.onClickNewHyperdrive}>+ New Hyperdrive</a>
         <a href="nomad://library/" title="Library">My Library</a>
         <a href="https://nomad.pages.dev/docs/api/" title="Help">Help</a>
       </div>
 
       <main>
+        ${d && !d.failed
+          ? this.renderPage(d)
+          : html`
+              ${this.renderGreeting(d)} ${this.renderPins()}
+              ${d?.failed
+                ? html`<div class="board-failed">The dashboard didn’t load. Try reloading the page.</div>`
+                : html`<div class="board-loading"><span class="spinner"></span></div>`}
+            `}
+      </main>
+    `;
+  }
+
+  // The page as its layout places it (shared/home-layout.mjs). A part the layout places twice shows
+  // once, where it comes first.
+  renderPage(d) {
+    const layout = d.layout || {};
+    const cards = d.cards || [];
+    const drawn = new Map();
+    for (const w of this.widgets || []) if (!drawn.has(w.name)) drawn.set(w.name, w);
+    const part = (name, fn) => (drawn.has(name) ? fn(drawn.get(name)) : '');
+    // Before the layout has said what it places, nothing of the page's is added around it. Needs
+    // you is added whenever it isn't on screen (the layout left it out, or put it in a tab that
+    // isn't open); the cards only when the layout places them nowhere.
+    const known = !!this.widgets;
+    return html`
+      ${layout.broken
+        ? html`<div class="layout-note" role="status">
+            <span class="fas fa-fw fa-exclamation-triangle" aria-hidden="true"></span>
+            Your layout can’t be drawn by this version of Nomad, so this is the default one.
+            ${layout.canRestore
+              ? html`<button class="link-btn" @click=${() => this.onRestoreLayout()}>Restore the layout before it</button>`
+              : ''}
+          </div>`
+        : ''}
+      ${known && !drawn.has('HomeNeedsYou') ? this.renderWaiting(d) : ''}
+      <nomad-genui
+        host
+        class="layout"
+        .source=${layout.source || ''}
+        @genui-widgets=${this.onWidgets}
+        @genui-action=${this.onGenUiAction}
+      >
+        ${part('HomeGreeting', (w) => this.renderGreeting(d, w.slot))}
+        ${part('HomePins', (w) => this.renderPins(w.slot))}
+        ${part('HomeNeedsYou', (w) => this.renderWaiting(d, w.slot))}
+        ${part('HomeNotifications', (w) => this.renderNotifications(d, w.slot))}
+        ${part('HomeJobs', (w) => this.renderJobs(d, w.slot))}
+        ${part('HomeEvents', (w) => this.renderEvents(d, w.slot))}
+        ${part('HomeNotes', (w) => this.renderNotes(d, w.slot))}
+        ${part('HomeFiles', (w) => this.renderFiles(d, w.slot))}
+        ${part('HomeCards', (w) => this.renderCards(cards, w.slot))}
+      </nomad-genui>
+      ${known && !this.placed.some((w) => w.name === 'HomeCards') && cards.length
+        ? html`<div class="board extra">${this.renderCards(cards)}</div>`
+        : ''}
+    `;
+  }
+
+  renderGreeting(d, slot) {
+    return html`
+      <div class="greeting" slot=${slot || ''}>
         <header class="hello">
           <h1>${d?.greeting || 'Hello'}</h1>
           <div class="sub">
             ${longDate()}${d?.spaceName ? html` · <span class="space">${d.spaceName}</span>` : ''}
           </div>
         </header>
-        ${this.renderReleaseNotice()} ${this.renderPins()}
-        ${d && !d.failed
-          ? html`
-              ${this.renderWaiting(d)}
-              <div class="board">
-                ${this.renderNotifications(d)} ${this.renderJobs(d)} ${this.renderEvents(d)}
-                ${this.renderNotes(d)} ${this.renderFiles(d)}
-              </div>
-            `
-          : d?.failed
-            ? html`<div class="board-failed">The dashboard didn’t load. Try reloading the page.</div>`
-            : html`<div class="board-loading"><span class="spinner"></span></div>`}
-      </main>
+        ${this.renderReleaseNotice()}
+      </div>
     `;
+  }
+
+  // The cards pinned to the page, each a program of its own drawn in the page's frame. With none,
+  // one quiet tile says how they get there.
+  renderCards(cards, slot) {
+    if (!cards.length) {
+      return html`<button class="card add-card" slot=${slot || ''} @click=${() => this.onAskAi('card')}>
+        <span class="fas fa-fw fa-plus" aria-hidden="true"></span>
+        <span>Add a card with AI</span>
+      </button>`;
+    }
+    return repeat(
+      cards,
+      (c) => c.id,
+      (c, i) => html`
+        <section class="card pinned ${c.wide ? 'wide' : ''}" slot=${slot || ''} aria-label=${c.title}>
+          <button
+            class="icon-btn card-menu"
+            title="Card options"
+            aria-label="Options for the card ${c.title}"
+            aria-haspopup="menu"
+            @click=${() => this.onCardMenu(c, i, cards.length)}
+          >
+            <span class="fas fa-ellipsis-h"></span>
+          </button>
+          ${c.broken
+            ? html`<p class="empty">
+                <strong>${c.title}</strong> can’t be drawn by this version of Nomad. Remove it from its menu, or
+                ask your AI to make it again.
+              </p>`
+            : html`<nomad-genui framed .source=${c.source} @genui-action=${this.onGenUiAction}></nomad-genui>`}
+        </section>
+      `
+    );
   }
 
   renderReleaseNotice() {
@@ -204,10 +317,10 @@ class DesktopApp extends LitElement {
     `;
   }
 
-  renderPins() {
+  renderPins(slot) {
     var pins = this.pins || [];
     return html`
-      <div class="pins">
+      <div class="pins" slot=${slot || ''}>
         ${repeat(
           pins,
           (pin) => pin.href,
@@ -241,9 +354,9 @@ class DesktopApp extends LitElement {
   }
 
   // One card: an icon and title, a link to the whole list, and its rows.
-  card({ id, icon, title, count, href, linkLabel, extra = '', wide = false }, body) {
+  card({ id, icon, title, count, href, linkLabel, extra = '', wide = false, slot = '' }, body) {
     return html`
-      <section class="card ${wide ? 'wide' : ''}" id=${id} aria-labelledby=${id + '-title'}>
+      <section class="card ${wide ? 'wide' : ''}" id=${id} slot=${slot} aria-labelledby=${id + '-title'}>
         <header>
           <span class=${'icon ' + icon} aria-hidden="true"></span>
           <h2 id=${id + '-title'}>${title}</h2>
@@ -258,11 +371,11 @@ class DesktopApp extends LitElement {
   }
 
   // What waits on the user, with the answer right there where it can be.
-  renderWaiting(d) {
+  renderWaiting(d, slot) {
     const list = d.waiting || [];
     if (!list.length) return '';
     return html`
-      <section class="card needs" id="needs" aria-labelledby="needs-title">
+      <section class="card needs" id="needs" slot=${slot || ''} aria-labelledby="needs-title">
         <header>
           <span class="icon fas fa-hand-paper" aria-hidden="true"></span>
           <h2 id="needs-title">Needs you</h2>
@@ -333,12 +446,13 @@ class DesktopApp extends LitElement {
     }
   }
 
-  renderNotifications(d) {
+  renderNotifications(d, slot) {
     const list = d.notifications || [];
     const keys = d.notificationKeys || [];
     return this.card(
       {
         id: 'notifications',
+        slot,
         icon: 'fas fa-bell',
         title: 'Notifications',
         count: keys.length ? String(keys.length) : '',
@@ -384,7 +498,7 @@ class DesktopApp extends LitElement {
     );
   }
 
-  renderJobs(d) {
+  renderJobs(d, slot) {
     const { running = [], next = [], total = 0, paused = 0 } = d.jobs || {};
     const body =
       !running.length && !next.length
@@ -462,16 +576,16 @@ class DesktopApp extends LitElement {
               : ''}
           `;
     return this.card(
-      { id: 'jobs', icon: 'fas fa-robot', title: 'Jobs', href: 'nomad://library/jobs', linkLabel: 'All Jobs' },
+      { id: 'jobs', slot, icon: 'fas fa-robot', title: 'Jobs', href: 'nomad://library/jobs', linkLabel: 'All Jobs' },
       body
     );
   }
 
-  renderEvents(d) {
+  renderEvents(d, slot) {
     const list = d.events || [];
     let lastDay = null;
     return this.card(
-      { id: 'events', icon: 'far fa-calendar-alt', title: 'Coming up', href: 'nomad://calendar/', linkLabel: 'Calendar' },
+      { id: 'events', slot, icon: 'far fa-calendar-alt', title: 'Coming up', href: 'nomad://calendar/', linkLabel: 'Calendar' },
       list.length
         ? html`<ul class="rows events">
             ${list.map((e) => {
@@ -503,10 +617,10 @@ class DesktopApp extends LitElement {
     );
   }
 
-  renderNotes(d) {
+  renderNotes(d, slot) {
     const list = d.notes || [];
     return this.card(
-      { id: 'notes', icon: 'far fa-sticky-note', title: 'Latest notes', href: 'nomad://notes/', linkLabel: 'Notes' },
+      { id: 'notes', slot, icon: 'far fa-sticky-note', title: 'Latest notes', href: 'nomad://notes/', linkLabel: 'Notes' },
       list.length
         ? html`<ul class="rows">
             ${list.map(
@@ -525,10 +639,10 @@ class DesktopApp extends LitElement {
     );
   }
 
-  renderFiles(d) {
+  renderFiles(d, slot) {
     const list = d.assets || [];
     return this.card(
-      { id: 'files', icon: 'far fa-folder-open', title: 'Latest files', href: 'nomad://assets/', linkLabel: 'Assets' },
+      { id: 'files', slot, icon: 'far fa-folder-open', title: 'Latest files', href: 'nomad://assets/', linkLabel: 'Assets' },
       list.length
         ? html`<div class="files">
             ${list.map(
@@ -656,7 +770,7 @@ class DesktopApp extends LitElement {
 
   async onContextmenuPin(e, pin) {
     e.preventDefault();
-    const items = [
+    this.menu([
       { label: 'Open Link in New Tab', click: () => window.open(pin.href) },
       { label: 'Copy Link Address', click: () => writeToClipboard(pin.href) },
       pin.isFixed ? undefined : { type: 'separator' },
@@ -666,10 +780,15 @@ class DesktopApp extends LitElement {
       pin.isFixed
         ? undefined
         : { label: 'Unpin', click: () => this.onClickUnpinBookmark(pin) },
-    ].filter(Boolean);
+    ]);
+  }
+
+  // A native menu at the pointer; the item picked runs its `click`.
+  async menu(items) {
+    items = items.filter(Boolean);
     var fns = {};
     for (let i = 0; i < items.length; i++) {
-      if (items[i].id) continue;
+      if (items[i].type === 'separator') continue;
       let id = `item=${i}`;
       items[i].id = id;
       fns[id] = items[i].click;
@@ -677,6 +796,130 @@ class DesktopApp extends LitElement {
     }
     var choice = await nomad.browser.showContextMenu(items);
     if (fns[choice]) fns[choice]();
+  }
+
+  // the page as a document (ADR-0048)
+  // =
+
+  // The layout says which parts it places. A part sized by the layout (HomeNotes(10)) needs that
+  // many rows from the dashboard.
+  onWidgets(e) {
+    if (!e.target.host) return; // a pinned card places no parts of the page
+    this.widgets = e.detail?.widgets || [];
+    this.placed = e.detail?.placed || [];
+    const limits = {};
+    for (const w of this.placed) {
+      const key = SIZED[w.name];
+      if (key && w.limit > 0 && !(key in limits)) limits[key] = w.limit;
+    }
+    const next = Object.keys(limits).length ? JSON.stringify(limits) : '';
+    if (next === this.limits) return;
+    this.limits = next;
+    this.loadDashboard();
+  }
+
+  // A button or link in the layout or a card. A link opens here, when it is one a drawing may open
+  // (a web or hyper:// page, or one of the user's things). A message for the assistant goes in the
+  // AI Sidebar's input: the user reads it and sends it.
+  onGenUiAction(e) {
+    const GenUi = customElements.get('nomad-genui');
+    for (const step of e.detail?.steps || []) {
+      if (step.type === 'open_url') {
+        const url = GenUi?.safeUrl ? GenUi.safeUrl(step.url) : null;
+        if (url) location.href = url;
+      } else if (step.type === 'continue_conversation' && String(step.message || '').trim()) {
+        this.draftForAi(String(step.message).trim());
+      }
+    }
+  }
+
+  async draftForAi(draft) {
+    try {
+      await nomad.aiChats.openNew({ draft });
+    } catch (e) {
+      toast.create(e.message || String(e), 'error');
+    }
+  }
+
+  // Changing the page is the AI's work: each of these opens the AI Sidebar with the request begun.
+  onAskAi(what, card) {
+    if (what === 'card') return this.draftForAi('Add a card to my home page that shows ');
+    if (what === 'change-card') {
+      return this.draftForAi(`On my home page, change the card “${card.title}” (id ${card.id}): `);
+    }
+    return this.draftForAi('Change my home page: ');
+  }
+
+  onCustomize() {
+    const layout = this.dash?.layout || {};
+    this.menu([
+      { label: 'Ask AI to Change This Page…', click: () => this.onAskAi('page') },
+      { label: 'Add a Card with AI…', click: () => this.onAskAi('card') },
+      { type: 'separator' },
+      { label: 'Restore Previous Layout', enabled: !!layout.canRestore, click: () => this.onRestoreLayout() },
+      { label: 'Reset to Default Layout', enabled: !!layout.custom, click: () => this.onResetLayout() },
+    ]);
+  }
+
+  async onRestoreLayout() {
+    try {
+      if (await nomad.vault.restoreHomeLayout()) toast.create('Layout restored');
+    } catch (e) {
+      toast.create(e.message || String(e), 'error');
+    }
+    this.loadDashboard();
+  }
+
+  async onResetLayout() {
+    try {
+      await nomad.vault.resetHomeLayout();
+      toast.create('Back to the default layout. Customize can restore yours.');
+    } catch (e) {
+      toast.create(e.message || String(e), 'error');
+    }
+    this.loadDashboard();
+  }
+
+  // A pinned card's menu. The chat that made it is looked up first (ADR-0047), so the menu can
+  // offer it only while the chat exists.
+  async onCardMenu(card, i, count) {
+    let chat = null;
+    if (card.ai?.length) {
+      try {
+        chat = (await nomad.aiChats.origins(card.ai)).find((o) => o.kind === 'chat' && o.id) || null;
+      } catch (e) {}
+    }
+    const change = (what, done) => async () => {
+      try {
+        await nomad.vault.updateHomeCard(card.id, what);
+        if (done) toast.create(done);
+      } catch (e) {
+        toast.create(e.message || String(e), 'error');
+      }
+      this.loadDashboard();
+    };
+    this.menu([
+      { label: 'Ask AI to Change This Card…', click: () => this.onAskAi('change-card', card) },
+      chat
+        ? { label: 'Open the Chat That Made It', click: () => nomad.aiChats.open(chat.id, { space: chat.space }) }
+        : undefined,
+      { type: 'separator' },
+      { label: card.wide ? 'Make Narrow' : 'Make Wide', click: change({ wide: !card.wide }) },
+      { label: 'Move Earlier', enabled: i > 0, click: change({ move: -1 }) },
+      { label: 'Move Later', enabled: i < count - 1, click: change({ move: 1 }) },
+      { type: 'separator' },
+      { label: 'Remove from Home', click: () => this.onRemoveCard(card) },
+    ]);
+  }
+
+  async onRemoveCard(card) {
+    try {
+      await nomad.vault.removeHomeCard(card.id);
+      toast.create(`Removed “${card.title}”`);
+    } catch (e) {
+      toast.create(e.message || String(e), 'error');
+    }
+    this.loadDashboard();
   }
 
   async onClickEditBookmark(file) {

@@ -19,6 +19,7 @@ export default {
   saveSession: 'promise',
   deleteSession: 'promise',
   getLastSessionId: 'promise',
+  pinToHome: 'promise',
   getPrefs: 'promise',
   savePrefs: 'promise',
 };

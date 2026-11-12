@@ -8,5 +8,5 @@ export default {
   open: 'promise', // (id, { space? }) opens it in the AI Sidebar of the caller's window, in that Space
   origins: 'promise', // (ai list of a Note or Asset) -> what it shows for the chats that made it (ADR-0047)
   driveOrigins: 'promise', // (driveUrl, path?) -> the same for a drive
-  openNew: 'promise', // () opens the AI Sidebar on a new chat
+  openNew: 'promise', // ({ draft? }) opens the AI Sidebar on a new chat; `draft` is put in its input, not sent
 };

@@ -1728,11 +1728,12 @@ export function openOrFocusDownloadsPage(win) {
 
 // The AI page (nomad://ai/chats) opens a chat in the AI Sidebar of its window: the sidebar opens
 // and switches to `sessionId`, or to a new chat when it's null (fg/shell-window/ai-sidebar.js).
-export function openAiSidebarChat(win, sessionId = null) {
+// `draft` is text for the new chat's input, left for the user to send.
+export function openAiSidebarChat(win, sessionId = null, draft = '') {
   win = getTopWindow(win);
   if (!win) return;
   setAiSidebarOpen(win, true);
-  emit(win, 'ai-open-chat', { sessionId: sessionId || null });
+  emit(win, 'ai-open-chat', { sessionId: sessionId || null, draft: sessionId ? '' : draft || '' });
 }
 
 // A chat was renamed or deleted on the AI page: every window's sidebar refreshes its list, and one

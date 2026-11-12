@@ -28,6 +28,8 @@ export const READER_LINK = 'nomad://reader/';
 export const CALENDAR_LINK = 'nomad://calendar/';
 export const calendarLink = (day) => `${CALENDAR_LINK}?day=${day}`;
 export const CONTACTS_LINK = 'nomad://library/contacts';
+// The home page (ADR-0048): where a card the AI pinned, or a layout it made, shows.
+export const HOME_LINK = 'nomad://desktop/';
 export const ASSETS_LINK = 'nomad://assets/';
 export const assetLink = (id) => `${ASSETS_LINK}?id=${id}`;
 export const assetFolderLink = (path) => `${ASSETS_LINK}?folder=${encodeURIComponent(path)}`;
@@ -69,6 +71,7 @@ function queryValue(query, key) {
  *   { kind: 'library', view, url, place }         another My Library view
  *   { kind: 'ai', view, url, place }              the AI page: chats, memory, skills, setup
  *   { kind: 'reader', url, place }                nomad://reader
+ *   { kind: 'home', url, place }                  nomad://desktop, the home page
  *   { kind: 'calendar', day?, url, place }        nomad://calendar, or one day of it
  *   { kind: 'asset', id?, folder?, tag?, url, place }  nomad://assets, or one file, folder or tag there
  * `url` is the one to open. `place` says where it is, e.g. "My Library → Mods".
@@ -108,6 +111,9 @@ export function parseItemLink(href) {
   }
   if (host === 'reader') {
     return seg.length ? null : { kind: 'reader', url: READER_LINK, place: 'Reader' };
+  }
+  if (host === 'desktop') {
+    return seg.length ? null : { kind: 'home', url: HOME_LINK, place: 'the home page' };
   }
   if (host === 'calendar') {
     if (seg.length) return null;

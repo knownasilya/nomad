@@ -260,6 +260,22 @@ export const PERMS = {
     requiresRefresh: false,
     promptTrusted: true,
   },
+  // The AI's access to the user's home page (ADR-0048): its layout and the cards pinned to it.
+  // A card or a layout is drawn from the AI Sidebar's components, so it runs no script.
+  dashboardRead: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    promptTrusted: true,
+  },
+  dashboardWrite: {
+    persist: 'allow', // dont persist 'deny'
+    idempotent: true,
+    alwaysDisallow: false,
+    requiresRefresh: false,
+    promptTrusted: true,
+  },
   // The AI's access to the user's Mods (ADR-0023). Changing them is dangerous: a Mod can run a
   // script on every page of a site.
   modsRead: {
@@ -448,6 +464,8 @@ export const PERM_ICONS = {
   calendarRead: 'fas fa-calendar-alt',
   contactsRead: 'far fa-address-book',
   assetsWrite: 'fas fa-folder-open',
+  dashboardRead: 'fas fa-home',
+  dashboardWrite: 'fas fa-home',
   modsRead: 'fas fa-magic',
   modsWrite: 'fas fa-magic',
   jobsRead: 'fas fa-clock',
@@ -530,6 +548,10 @@ export function renderPermDesc({ html, bg, url, permId, permParam, permOpts }) {
             everyone in it sees</span
           >`
         : 'Let the AI assistant save files to your Assets';
+    case 'dashboardRead':
+      return 'Let the AI assistant read your home page: its layout and the cards pinned to it';
+    case 'dashboardWrite':
+      return 'Let the AI assistant change your home page: pin and remove cards, and change its layout';
     case 'modsRead':
       return 'Let the AI assistant read your Mods (your styles and scripts for sites)';
     case 'modsWrite':

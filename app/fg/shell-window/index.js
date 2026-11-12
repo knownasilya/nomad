@@ -118,8 +118,8 @@ class ShellWindowUI extends LitElement {
     });
     // The AI page opens a chat in this window's AI Sidebar (bg tabs/manager.js openAiSidebarChat).
     // The sidebar may only exist after the replace-state that opens it, so updated() hands it over.
-    viewEvents.addEventListener('ai-open-chat', ({ sessionId }) => {
-      this._pendingAiChat = { sessionId: sessionId || null };
+    viewEvents.addEventListener('ai-open-chat', ({ sessionId, draft }) => {
+      this._pendingAiChat = { sessionId: sessionId || null, draft: draft || '' };
       this.requestUpdate();
     });
     viewEvents.addEventListener('ai-chats-changed', (change) => {
@@ -304,9 +304,9 @@ class ShellWindowUI extends LitElement {
     if (!this._pendingAiChat) return;
     const el = this.shadowRoot.querySelector('shell-window-ai-sidebar');
     if (!el) return;
-    const { sessionId } = this._pendingAiChat;
+    const { sessionId, draft } = this._pendingAiChat;
     this._pendingAiChat = null;
-    el.openChat(sessionId);
+    el.openChat(sessionId, draft);
   }
 
   // event handlers

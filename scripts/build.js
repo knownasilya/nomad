@@ -63,6 +63,13 @@ function bundleApplication() {
       format: 'iife',
       minify: true,
     }),
+    // <nomad-genui> for nomad:// pages that aren't bundled: the home page draws its layout and its
+    // pinned cards with it (nomad://app-stdlib/js/genui.build.js, ADR-0048).
+    bundle(p(fgDir, 'genui-page/element.js'), p(userlandDir, 'app-stdlib/js/genui.build.js'), {
+      browserify: true,
+      format: 'iife',
+      minify: true,
+    }),
     bundle(p(userlandDir, 'site-info/js/main.js'), p(userlandDir, 'site-info/js/main.build.js'), {
       browserify: true,
     }),

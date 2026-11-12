@@ -42,6 +42,11 @@ export const VAULT_TOOL_PERMS = {
   // personal turn's prompt already.
   remember: 'memoryWrite',
   forget: 'memoryWrite',
+  // The home page (ADR-0048): its layout and the cards pinned to it (shared/home-layout.mjs).
+  getDashboard: 'dashboardRead',
+  pinDashboardCard: 'dashboardWrite',
+  removeDashboardCard: 'dashboardWrite',
+  setDashboard: 'dashboardWrite',
   // Files into the user's Assets (ADR-0044); ai.ts runs it, not runVaultTool.
   saveAsset: 'assetsWrite',
 }
@@ -59,6 +64,8 @@ export const VAULT_PERMS = [
   'contactsRead',
   'memoryWrite',
   'assetsWrite',
+  'dashboardRead',
+  'dashboardWrite',
 ]
 
 // A Job's turn runs with nobody to ask (ADR-0030). Making the Job was the user's yes to it reading

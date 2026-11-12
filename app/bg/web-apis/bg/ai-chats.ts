@@ -18,6 +18,7 @@ import * as vaultApps from './vault-apps';
 import { resolveOrigins, originsForPath } from '../../../../shared/ai-origin.mjs';
 import { isSpaceKey } from '../../../../shared/vault-apps.mjs';
 
+const MAX_DRAFT = 4000;
 const isId = (id) => typeof id === 'string' && /^[a-z0-9]{1,40}$/.test(id);
 
 function checkId(id) {
@@ -100,9 +101,12 @@ export default {
     return resolveFor(this.sender, path ? originsForPath(list, String(path)) : list);
   },
 
-  async openNew() {
+  // A new chat in the caller's window's sidebar. `draft` is text to put in its input for the user
+  // to read and send (the home page's "Ask AI to change this page"): it is never sent for them.
+  async openNew(opts: any = {}) {
     const win = findWebContentsParentWindow(this.sender);
     if (!win) throw new Error('No window to open the chat in');
-    openAiSidebarChat(win, null);
+    const draft = typeof opts?.draft === 'string' ? opts.draft.slice(0, MAX_DRAFT) : '';
+    openAiSidebarChat(win, null, draft);
   },
 };

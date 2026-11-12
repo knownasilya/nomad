@@ -6,6 +6,7 @@
 
 import { html, nothing } from 'lit';
 import { parseItemLink } from '../../../../shared/item-links.mjs';
+import { iconName } from '../../../lib/genui/icons.mjs';
 
 const isEl = (v) => v && typeof v === 'object' && v.type === 'element';
 const list = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
@@ -91,8 +92,10 @@ export function entityCard(ui, p) {
   const fields = list(p.fields).filter(isEl);
   return html`<div class="card entity-card">
     <div class="entity-head">
-      ${p.icon
-        ? html`<span class="entity-icon"><span class="fas fa-fw fa-${str(p.icon)}"></span></span>`
+      ${iconName(p.icon)
+        ? html`<span class="entity-icon"
+            ><span class="fas fa-fw fa-${iconName(p.icon)}" aria-hidden="true"></span
+          ></span>`
         : nothing}
       <div class="entity-names">
         ${title(ui, p.title, link)}
@@ -221,7 +224,11 @@ export function timeline(ui, p) {
       const t = it.props || {};
       const v = VARIANTS.includes(t.variant) ? t.variant : 'neutral';
       return html`<li class=${v}>
-        <span class="tl-dot"></span>
+        <span class="tl-dot ${iconName(t.icon) ? 'with-icon' : ''}"
+          >${iconName(t.icon)
+            ? html`<span class="fas fa-${iconName(t.icon)}" aria-hidden="true"></span>`
+            : nothing}</span
+        >
         <div class="tl-date">${str(t.date)}</div>
         <div class="tl-title">${str(t.title)}</div>
         ${t.details ? html`<div class="tl-details">${str(t.details)}</div>` : nothing}

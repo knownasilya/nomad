@@ -71,6 +71,7 @@ class ShellWindowAiSidebar extends LitElement {
       _sessionsOpen: { state: true },
       _copied: { state: true },
       _queued: { state: true },
+      _pins: { state: true },
     };
   }
 
@@ -481,7 +482,7 @@ class ShellWindowAiSidebar extends LitElement {
     .msg.error .fas {
       margin-top: 3px;
     }
-    .msg.streaming > :last-child:not(nomad-genui)::after {
+    .msg.streaming > :last-child:not(.genui-block)::after {
       content: '';
       display: inline-block;
       width: 7px;
@@ -775,6 +776,33 @@ class ShellWindowAiSidebar extends LitElement {
     .msg-actions.copied .msg-action {
       color: var(--ai-success);
     }
+    /* A drawing in an answer, with Pin to Home under it once it is finished. */
+    .genui-block {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 2px;
+      margin: 8px 0;
+    }
+    .genui-pin {
+      align-self: flex-start;
+      cursor: pointer;
+    }
+    .genui-pin[disabled] {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .genui-pin.pinned {
+      color: var(--ai-success);
+    }
+    div.genui-pin.error {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0 7px;
+      font-size: 11px;
+      color: var(--ai-error-text);
+    }
 
     /* A message sent while the assistant works, waiting for its next step. */
     .msg.user.queued {
@@ -1033,6 +1061,8 @@ class ShellWindowAiSidebar extends LitElement {
     // Messages sent while a turn runs, waiting for the assistant's next step: { id, text }
     // (bg/ai/steering.mjs). _turnId names the running turn to bg.
     this._queued = [];
+    // Drawings pinned to the home page from this sidebar: program -> { busy } | { id } | { error }.
+    this._pins = new Map();
     this._turnId = null;
     // The assistant is the user's, not a tab's (ADR-0021): one conversation and one model choice,
     // whatever tab is open.
@@ -1043,13 +1073,19 @@ class ShellWindowAiSidebar extends LitElement {
   }
 
   // The AI page (nomad://ai/chats) opened a chat here: switch to it, or to a new chat for null.
-  async openChat(sessionId) {
+  // `draft` (the home page's "Ask AI to change this page") goes in the new chat's input for the
+  // user to read and send. While a turn runs it goes in the input of the chat that is open.
+  async openChat(sessionId, draft = '') {
     await this._sessionReady;
-    if (this.streaming) return;
+    if (this.streaming) {
+      if (draft) await this._useSuggestion(draft);
+      return;
+    }
     if (sessionId) await this._switchToSession(sessionId);
     else await this._newSession();
     this._sessionsOpen = false;
     this.requestUpdate();
+    if (draft && !sessionId) await this._useSuggestion(draft);
   }
 
   // A chat was renamed or deleted on the AI page. A deleted chat that is open here starts a new one,
@@ -1734,13 +1770,56 @@ class ShellWindowAiSidebar extends LitElement {
     return segments.map((s) =>
       s.type === 'md'
         ? unsafeHTML(mdToHtml(s.text.trim()))
-        : html`<nomad-genui
-            .source=${s.source}
-            .streaming=${streaming && !s.closed}
-            .disabled=${this.streaming}
-            @genui-action=${this._onGenUiAction}
-          ></nomad-genui>`
+        : html`<div class="genui-block">
+            <nomad-genui
+              .source=${s.source}
+              .streaming=${streaming && !s.closed}
+              .disabled=${this.streaming}
+              @genui-action=${this._onGenUiAction}
+            ></nomad-genui>
+            ${s.closed && !streaming ? this._renderPin(s.source) : ''}
+          </div>`
     );
+  }
+
+  // Pin to Home under a finished drawing (ADR-0048): it becomes a card on the home page.
+  _renderPin(source) {
+    const state = this._pins.get(source);
+    if (state?.error) {
+      return html`<div class="genui-pin error" title=${state.error}>
+        <span class="fas fa-fw fa-exclamation-circle"></span> Couldn’t pin it: ${state.error}
+      </div>`;
+    }
+    if (state?.id) {
+      return html`<button
+        class="msg-action genui-pin pinned"
+        title="Open your home page"
+        @click=${() => bg.views.createTab('nomad://desktop/', { setActive: true })}
+      >
+        <span class="fas fa-fw fa-check"></span> Pinned to Home
+      </button>`;
+    }
+    return html`<button
+      class="msg-action genui-pin"
+      title="Keep this on your home page as a card"
+      ?disabled=${!!state?.busy}
+      @click=${() => this._pinToHome(source)}
+    >
+      <span class="fas fa-fw fa-thumbtack"></span> Pin to Home
+    </button>`;
+  }
+
+  async _pinToHome(source) {
+    const set = (v) => {
+      this._pins = new Map(this._pins).set(source, v);
+    };
+    set({ busy: true });
+    try {
+      const card = await bg.aiShell.pinToHome({ source, chatId: this.sessionId });
+      set({ id: card.id });
+    } catch (e) {
+      set({ error: String(e?.message || e).replace(/^Error: /, '') });
+    }
   }
 
   // A link in an answer: a page opens in a new tab next to this one, a Note, Job, Mod or the AI's

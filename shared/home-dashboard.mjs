@@ -23,6 +23,18 @@ import { KIND_ICONS } from './assets.mjs';
 
 export const NOTIFY_DAYS = 7;
 export const LIMITS = { waiting: 8, notifications: 6, running: 4, next: 4, events: 6, notes: 5, assets: 8 };
+export const MAX_LIMIT = 20;
+// The sections a home page layout can size, and the row counts to use: LIMITS, with any whole
+// number from 1 to MAX_LIMIT in `limits` taking its place.
+export const SIZED = ['notifications', 'next', 'events', 'notes', 'assets'];
+export function sectionLimits(limits) {
+  const out = { ...LIMITS };
+  for (const key of SIZED) {
+    const n = Math.round(Number(limits?.[key]));
+    if (n >= 1) out[key] = Math.min(n, MAX_LIMIT);
+  }
+  return out;
+}
 // How far ahead "Coming up" looks.
 export const EVENT_DAYS = 14;
 // The notifications the user cleared, one Vault record for all their Devices.
@@ -450,7 +462,9 @@ export function latestAssets(assets = [], { max = LIMITS.assets } = {}) {
 
 // The whole dashboard. `now` is a wall time ('YYYY-MM-DDTHH:MM', the user's clock) for the calendar;
 // `at` the real time (ms) for "the last 7 days". Each input may be missing: its section is empty.
-/** @param {any} [input] @param {{ now?: string, at?: number }} [opts] */
+// `limits` asks for more or fewer rows in a section than LIMITS gives (a home page layout's
+// HomeNotes(10), shared/home-layout.mjs), each between 1 and MAX_LIMIT.
+/** @param {any} [input] @param {{ now?: string, at?: number, limits?: any }} [opts] */
 export function dashboard(
   {
     jobs = [],
@@ -469,8 +483,9 @@ export function dashboard(
     devices = [],
     dismissed = null,
   } = {},
-  { now, at = Date.now() } = {}
+  { now, at = Date.now(), limits = null } = {}
 ) {
+  const max = sectionLimits(limits);
   const sources = { runs, notices, memberId, spaceName, conversations };
   // Every notification not cleared yet, for Clear all: the list below shows only the newest.
   const uncleared = notifications(sources, { now: at, max: Infinity, dismissed });
@@ -478,12 +493,12 @@ export function dashboard(
     now: now || null,
     greeting: greeting(now),
     waiting: waiting({ prompts, driveRequests, spaceRequests, joins, devices, conversations, runs, jobs, spaceName }),
-    notifications: uncleared.slice(0, LIMITS.notifications),
+    notifications: uncleared.slice(0, max.notifications),
     notificationKeys: uncleared.map((n) => ({ id: n.id, at: n.at })),
-    jobs: jobsOverview(jobs),
-    events: upcomingEvents(occurrences, now),
-    notes: latestNotes(notes),
-    assets: latestAssets(assets),
+    jobs: jobsOverview(jobs, { max: max.next }),
+    events: upcomingEvents(occurrences, now, { max: max.events }),
+    notes: latestNotes(notes, { max: max.notes }),
+    assets: latestAssets(assets, { max: max.assets }),
     unreadMessages: (conversations || []).reduce((n, c) => n + (c && !c.request ? c.unread || 0 : 0), 0),
   };
 }

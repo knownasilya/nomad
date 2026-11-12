@@ -206,9 +206,65 @@ ${spinnerCSS}
     color: var(--text-color--light);
   }
 
+  /* The layout (ADR-0048): <nomad-genui host> places the page's parts, which stay this page's own
+     elements and keep its look. Its own components (a layout the AI made can use any) take the
+     page's colors. */
+  nomad-genui {
+    --ai-text: var(--text-color--default);
+    --ai-text-muted: var(--text-color--light);
+    --ai-border: var(--border-color--semi-light);
+    --ai-accent: var(--home-accent);
+    --ai-accent--hover: var(--home-accent);
+    --ai-hover: var(--home-row-hover);
+    --ai-code-bg: var(--home-soft);
+    --genui-surface: var(--home-card-bg);
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text-color--default);
+  }
+
+  .board.extra {
+    margin-top: 16px;
+    --genui-span-gap: 16px;
+  }
+
+  .layout-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 9px 14px;
+    border: 1px solid var(--home-warn-border);
+    border-radius: 10px;
+    background: var(--home-warn-soft);
+    font-size: 12.5px;
+  }
+
+  .layout-note .fas {
+    color: var(--home-warn);
+  }
+
+  #topright .customize {
+    font-size: 12px;
+    color: inherit;
+    opacity: 0.85;
+  }
+
+  #topright .customize:hover {
+    color: inherit;
+    opacity: 1;
+  }
+
+  #topright .customize .fas {
+    font-size: 11px;
+    opacity: 0.8;
+  }
+
+  /* A part keeps the gap of whatever the layout put it in: a column board, a grid, a stack. */
   .card {
     break-inside: avoid;
-    margin-bottom: 16px;
+    margin-bottom: var(--genui-item-gap, 16px);
     background: var(--home-card-bg);
     border: 1px solid var(--border-color--semi-light);
     border-radius: 10px;
@@ -351,6 +407,67 @@ ${spinnerCSS}
   .lead.message {
     background: var(--home-pink-soft);
     color: var(--home-pink);
+  }
+
+  /* A card the user pinned: its program, in the page's frame, with its menu in the corner. */
+  .card.pinned {
+    position: relative;
+    display: block;
+    padding: 14px;
+    overflow: visible;
+  }
+
+  /* A wide card spans the board it is in. In a column board the gap above it is its own: the
+     margin under the card before it ends with that card's column. */
+  .card.wide {
+    column-span: all;
+    grid-column: 1 / -1;
+    margin-top: var(--genui-span-gap, 0px);
+  }
+
+  .card-menu {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
+    border: 1px solid var(--border-color--semi-light);
+    background: var(--home-card-bg);
+    opacity: 0;
+  }
+
+  .card.pinned:hover .card-menu,
+  .card-menu:focus-visible {
+    opacity: 1;
+  }
+
+  .card-menu:hover {
+    background: var(--home-row-hover);
+  }
+
+  .card.pinned > .empty {
+    padding: 0 28px 0 0;
+  }
+
+  .card.add-card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    width: 100%;
+    min-height: 44px;
+    padding: 0 14px;
+    border-style: dashed;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-color--light);
+    font: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+
+  .card.add-card:hover {
+    background: var(--home-soft);
+    color: var(--text-color--default);
   }
 
   /* Needs you: what waits on the user, across the top. */
