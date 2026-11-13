@@ -1,4 +1,4 @@
-import { app, Tray, Menu, BrowserWindow, nativeTheme } from 'electron';
+import { app, Tray, Menu, BrowserWindow } from 'electron';
 import path from 'path';
 import { createShellWindow, restoreLastShellWindow } from './windows';
 import * as tabManager from './tabs/manager';
@@ -19,7 +19,6 @@ export function setup() {
   tray.setToolTip('Nomad Browser');
   tray.on('click', (e) => tray.popUpContextMenu());
   settingsDb.on('set:run_background', buildMenu);
-  nativeTheme.on('updated', updateIcon);
   buildMenu();
 }
 
@@ -27,16 +26,11 @@ export function setup() {
 // =
 
 function getIcon() {
-  if (IS_MAC) {
-    return nativeTheme.shouldUseDarkColors
-      ? 'assets/img/tray-icon-white.png'
-      : 'assets/img/tray-icon-black.png';
-  }
-  return 'assets/img/tray-icon-white@2x.png';
-}
-
-function updateIcon() {
-  tray.setImage(path.join(__dirname, getIcon()));
+  // On macOS a "…Template" image (black + alpha, with an @2x) is tinted by the system to fit a
+  // light or dark menu bar, so it needs no theme switching; its source is build/tray-icon.svg.
+  // Elsewhere use the colored app icon, which shows on light and dark taskbars alike.
+  if (IS_MAC) return 'assets/img/tray-iconTemplate.png';
+  return 'assets/img/tray-icon.png';
 }
 
 async function buildMenu() {
