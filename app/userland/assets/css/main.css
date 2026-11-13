@@ -1357,3 +1357,22 @@ main.dropping {
 .viewer .ai-origin-slot .ai-origins .ai-origin-when {
   color: rgba(255, 255, 255, 0.45);
 }
+
+.viewer .markdown kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--border-color--light);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  background: var(--as-code-bg);
+}
+
+.viewer .markdown details {
+  margin: 1em 0;
+}
+
+.viewer .markdown summary {
+  cursor: pointer;
+  font-weight: 600;
+}

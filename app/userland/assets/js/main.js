@@ -13,8 +13,8 @@
 // - Previews: pictures, video and audio play from a blob: URL of the file's bytes; a PDF renders
 //   with pdf.js (js/pdf.build.js, copied in by scripts/build.js; pages drawn as they scroll in,
 //   js/pdf-view.js); an EPUB or MOBI opens in the book reader (js/book/, shared with the phone's
-//   viewer page); Markdown renders with markdown-it (raw HTML off); CSV is a table, JSON is
-//   pretty-printed, code and text are shown as text. An HTML file runs in a sandboxed frame
+//   viewer page); Markdown renders with markdown-it, its HTML kept to an allowlist (js/safe-html.js);
+//   CSV is a table, JSON is pretty-printed, code and text are shown as text. An HTML file runs in a sandboxed frame
 //   (renderHtml): nomad://assets/html-frame, served with shared/assets.mjs HTML_PREVIEW_CSP and
 //   `sandbox allow-scripts`, so it has no origin, no network and no way out of the frame. Markdown
 //   and HTML have a Preview / Source switch, and an HTML file can become a new drive (makeDrive).
@@ -30,6 +30,7 @@ import { assetLink, assetFolderLink, assetTagLink } from '../../../../shared/ite
 import { showPdf } from './pdf-view.js'
 import { openBook, BookError } from './book/parse.js'
 import { createReader } from './book/reader.js'
+import { safeHtml } from './safe-html.js'
 import { showAiOrigins } from '../../app-stdlib/js/ai-origin.js'
 
 const MD_URL = 'nomad://app-stdlib/vendor/markdown-it.js'
@@ -881,9 +882,10 @@ async function renderText(node, a, blob, { source = false } = {}) {
   let body
   if (a.kind === 'markdown' && !source) {
     const markdownit = (await import(/* @vite-ignore */ MD_URL)).default
-    const md = markdownit({ html: false, linkify: true, breaks: false })
+    const md = markdownit({ html: true, linkify: true, breaks: false })
     body = el('article', { class: 'markdown' })
-    body.innerHTML = md.render(text) // html: false, so the file's own HTML stays text
+    // The file's own HTML is kept to an allowlist in an inert document first (./safe-html.js).
+    body.append(safeHtml(md.render(text)))
     for (const link of body.querySelectorAll('a')) {
       link.target = '_blank'
       link.rel = 'noopener'

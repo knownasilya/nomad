@@ -11,6 +11,8 @@ import { pathToFileURL } from 'url'
 import path from 'path'
 import os from 'os'
 import fs from 'fs'
+import http from 'http'
+import crypto from 'crypto'
 import { createFsCore, makeMetadata, AUTOBASE_OPTS } from '../../shared/fs-core.mjs'
 import * as apps from '../../shared/vault-apps.mjs'
 import * as ra from '../../shared/reader-articles.mjs'
@@ -815,7 +817,9 @@ describe('phone Assets', () => {
         readFileOf: async (b, p, range) => { const n = await b.view.get(p); return n && n.value ? content.readContent(n.value, { store: storeB, range }) : null },
         fileSizeOf: async (b, p) => { const n = await b.view.get(p); return n && n.value ? content.contentLength(n.value) : -1 },
       }
-      const assets = createAssets({ libraryOf: async () => null, vaultOf: () => base, blobs, fs, roots: ['file://' + cache + '/'] })
+      const { createAssetStreams } = await import('../../mobile/backend/lib/asset-stream.mjs')
+      const streams = createAssetStreams({ http, randomToken: () => crypto.randomBytes(24).toString('hex') })
+      const assets = createAssets({ libraryOf: async () => null, vaultOf: () => base, blobs, fs, roots: ['file://' + cache + '/'], streams })
       try {
         const video = Buffer.alloc(2 * as.CHUNK_BYTES)
         for (let i = 0; i < video.length; i += 991) video[i] = i & 255
@@ -837,12 +841,26 @@ describe('phone Assets', () => {
         expect(listed.assets.map((a) => [a.id, a.kind, a.bytes])).toEqual([[id, 'video', video.length]])
 
         expect(await assets.read(SPACE, id, { thumb: true })).toBe(thumb.toString('base64'))
+
+        // The video plays while it arrives: a range near its end comes from the computer as it's
+        // asked for, before the phone has the rest.
+        const played = await assets.stream(SPACE, id)
+        expect(played).toMatchObject({ size: video.length, mime: 'video/mp4' })
+        const start = video.length - 5000
+        const res = await fetch(played.url, { headers: { range: `bytes=${start}-` } })
+        expect(res.status).toBe(206)
+        expect(Buffer.compare(Buffer.from(await res.arrayBuffer()), video.subarray(start))).toBe(0)
+        assets.endStream(played.token)
+        expect((await fetch(played.url)).status).toBe(404)
+        expect(await assets.stream(SPACE, as.newAssetId())).toBe(null)
+
         const to = 'file://' + encodeURI(path.join(cache, 'assets', id, 'Halloween.mp4'))
         let r = await assets.readTo(SPACE, id, { to, wait: 2000 })
         for (let n = 0; r && !r.done && n < 20; n++) r = await assets.readTo(SPACE, id, { to, wait: 2000 })
         expect(r).toEqual({ size: video.length, written: video.length, done: true })
         expect(Buffer.compare(fs.readFileSync(path.join(cache, 'assets', id, 'Halloween.mp4')), video)).toBe(0)
       } finally {
+        streams.close()
         await core.close?.()
         fs.rmSync(cache, { recursive: true, force: true })
       }

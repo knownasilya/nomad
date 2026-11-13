@@ -3,7 +3,7 @@
 // gives them.
 
 import { describe, it, expect } from 'vitest'
-import { plainText, measureColumns, fitColumns, listMarker, cellAlign, MIN_COL, MAX_COL } from '../../mobile/lib/markdown.ts'
+import { plainText, measureColumns, fitColumns, listMarker, cellAlign, MIN_COL, MAX_COL, decodeEntities, nestHtml, htmlBlock, splitHtml } from '../../mobile/lib/markdown.ts'
 
 const text = (t) => ({ type: 'text', text: t })
 const cell = (tokens) => ({ text: '', tokens })
@@ -106,5 +106,73 @@ describe('cellAlign', () => {
     expect(cellAlign('center')).toBe('center')
     expect(cellAlign('left')).toBe('left')
     expect(cellAlign(null)).toBe('left')
+  })
+})
+
+describe('HTML in Markdown', () => {
+  // As marked's lexer gives a paragraph's inline tokens.
+  const html = (h) => ({ type: 'html', raw: h, text: h, block: false })
+
+  it('decodes named and numeric character references, and leaves unknown ones', () => {
+    expect(decodeEntities('AT&amp;T &dagger; &Dagger; &copy; &#169; &#x2014; &nbsp;|&bogus; &')).toBe('AT&T † ‡ © © —  |&bogus; &')
+    expect(decodeEntities('&#0; &#xD800; &#x110000;')).toBe('� � �')
+  })
+
+  it('nests inline tags around the tokens between them', () => {
+    const out = nestHtml([html('<sup>'), text('&dagger;: note '), { type: 'link', href: 'https://a.example', tokens: [text('more')] }, html('</sup>'), html('<br>'), text('\nnext')])
+    expect(out.map((t) => t.type)).toEqual(['tag', 'br', 'text'])
+    expect(out[0]).toMatchObject({ kind: 'sup', tag: 'sup' })
+    expect(out[0].tokens.map((t) => t.type)).toEqual(['text', 'link'])
+    // The source's newline after a <br> is not a second line break.
+    expect(out[2].text).toBe('next')
+    expect(plainText(out)).toBe('†: note more\nnext')
+  })
+
+  it('drops a trailing <br>, scripts and their text, and unsafe links', () => {
+    const out = nestHtml([text('a'), html('<script>'), text('alert(1)'), html('</script>'), html('<a href="javascript:alert(1)">'), text('b'), html('</a>'), html('<a href="https://ok.example">'), text('c'), html('</a>'), html('<br>')])
+    expect(out.map((t) => t.type === 'tag' ? t.kind : t.type)).toEqual(['text', 'hidden', 'plain', 'link'])
+    expect(out[3].href).toBe('https://ok.example')
+    expect(plainText(out)).toBe('abc')
+  })
+
+  it('styles the tags a phone can draw, keeps the text of others, and skips comments', () => {
+    const kinds = (h) => nestHtml([html(`<${h}>`), text('x'), html(`</${h}>`)])[0]
+    expect(kinds('b').kind).toBe('bold')
+    expect(kinds('kbd').kind).toBe('code')
+    expect(kinds('sub').kind).toBe('sub')
+    expect(kinds('mark').kind).toBe('mark')
+    expect(kinds('blink').kind).toBe('plain')
+    expect(nestHtml([html('<!-- note -->'), text('y')])).toEqual([text('y')])
+  })
+
+  it('shows a picture as a link named by its alt text, and never loads it', () => {
+    expect(nestHtml([html('<img src="https://a.example/logo.png" alt="Logo">')])).toEqual([{ type: 'image', href: 'https://a.example/logo.png', text: 'Logo' }])
+    expect(nestHtml([html('<img src="logo.png" alt="Logo">')])).toEqual([{ type: 'text', text: 'Logo' }])
+  })
+
+  it('draws an HTML block as one paragraph: block tags start lines, white space collapses', () => {
+    const out = htmlBlock('<p align="center">\n  <img src="https://a.example/x.png" alt="Logo">\n  <b>Hi</b>   &amp; bye\n</p>\n<ul><li>one</li><li>two</li></ul>')
+    expect(plainText(out)).toBe('Logo Hi & bye\n• one\n• two')
+    expect(out.find((t) => t.type === 'tag').kind).toBe('bold')
+  })
+
+  it('shows nothing for a block that holds only a comment, a closing tag or a script', () => {
+    expect(htmlBlock('<!-- hidden -->')).toEqual([])
+    expect(htmlBlock('</details>')).toEqual([])
+    expect(htmlBlock('<script>alert(1)</script>')).toEqual([])
+  })
+
+  it('keeps a <pre> block’s lines', () => {
+    expect(plainText(htmlBlock('<pre>a  b\nc</pre>'))).toBe('a  b\nc')
+  })
+
+  it('splits HTML into tags and text, with attributes decoded', () => {
+    expect(splitHtml('<a href="x?a=1&amp;b=2" title=\'t\'>hi</a><br/>')).toEqual([
+      { kind: 'open', name: 'a', attrs: { href: 'x?a=1&b=2', title: 't' }, selfClosing: false },
+      { kind: 'text', text: 'hi' },
+      { kind: 'close', name: 'a' },
+      { kind: 'open', name: 'br', attrs: {}, selfClosing: true }
+    ])
+    expect(splitHtml('1 < 2')).toEqual([{ kind: 'text', text: '1 < 2' }])
   })
 })

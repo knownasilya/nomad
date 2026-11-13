@@ -910,6 +910,10 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const [file, setFile] = useState<{ id: string; uri: string } | null>(null)
+  // A video or recording not in this phone's cache plays from the backend's loopback stream
+  // (backend/lib/asset-stream.mjs) while it arrives, instead of after the whole file is copied.
+  const [stream, setStream] = useState<{ id: string; url: string } | null>(null)
+  const [sharing, setSharing] = useState(false) // getting a streamed file whole, to hand it on
   const [text, setText] = useState<string | null>(null)
   const [failed, setFailed] = useState('')
   const [source, setSource] = useState(false) // a Markdown or HTML file shown as its source
@@ -918,10 +922,26 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
   const id = asset?.id
 
   useEffect(() => {
-    setFile(null); setText(null); setFailed(''); setGot(0); setSource(false)
+    setFile(null); setStream(null); setText(null); setFailed(''); setGot(0); setSource(false); setSharing(false)
     setCaption(asset?.caption || '')
     if (!asset) return
     let gone = false
+    if (asset.kind === 'video' || asset.kind === 'audio') {
+      const cached = cachedFile(asset.id, asset.name)
+      if (cached.exists && cached.size === asset.bytes) { setFile({ id: asset.id, uri: cached.uri }); return }
+      let token = ''
+      call<{ url: string; token: string } | null>('assets', 'stream', { id: asset.id }).then((res) => {
+        if (!res.ok) throw new Error(res.message || 'Couldn’t play the file')
+        if (gone) { if (res.value) call('assets', 'endStream', { token: res.value.token }).catch(() => {}); return }
+        if (!res.value) { setFailed('This file hasn’t reached this phone yet. Try again in a moment.'); return }
+        token = res.value.token
+        setStream({ id: asset.id, url: res.value.url })
+      }).catch((err) => { if (!gone) setFailed((err as Error)?.message || String(err)) })
+      return () => {
+        gone = true
+        if (token) call('assets', 'endStream', { token }).catch(() => {})
+      }
+    }
     fetchFile(call, asset, { onProgress: (n) => { if (!gone) setGot(n) }, gone: () => gone }).then(async (uri) => {
       if (gone) return
       if (!uri) { setFailed('This file hasn’t reached this phone yet. Try again in a moment.'); return }
@@ -938,9 +958,22 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const share = async () => {
-    if (!asset || !file) return
+    if (!asset) return
     if (!(await Sharing.isAvailableAsync())) { Alert.alert('Can’t share here', 'This phone can’t hand files to other apps.'); return }
-    await Sharing.shareAsync(file.uri, { mimeType: asset.mime, dialogTitle: asset.name }).catch(() => {})
+    let uri = file && file.id === asset.id ? file.uri : null
+    if (!uri) {
+      // A streamed video is handed on whole: get it into the cache first.
+      setSharing(true)
+      try {
+        uri = await fetchFile(call, asset)
+      } catch (err) {
+        Alert.alert('Couldn’t get the file', (err as Error)?.message || String(err))
+      } finally {
+        setSharing(false)
+      }
+      if (!uri) return
+    }
+    await Sharing.shareAsync(uri, { mimeType: asset.mime, dialogTitle: asset.name }).catch(() => {})
   }
 
   const saveCaption = async () => {
@@ -951,10 +984,12 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
   }
 
   const a = asset
-  const ready = !!a && !!file && file.id === a.id
+  const streaming = !!a && !!stream && stream.id === a.id
+  const ready = !!a && ((!!file && file.id === a.id) || streaming)
+  const canShare = ready && !sharing
   let body = null
   if (a) {
-    if (failed) body = <Card a={a} why={failed} onOpen={ready ? share : undefined} />
+    if (failed) body = <Card a={a} why={failed} onOpen={canShare ? share : undefined} />
     else if (!ready) {
       body = (
         <View style={s.fetching}>
@@ -968,7 +1003,7 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
         </View>
       )
     } else if (a.kind === 'image') body = <Image source={{ uri: file!.uri }} style={s.full} resizeMode='contain' />
-    else if (a.kind === 'video' || a.kind === 'audio') body = <Player a={a} uri={file!.uri} onFailed={setFailed} />
+    else if (a.kind === 'video' || a.kind === 'audio') body = <Player a={a} uri={streaming ? stream!.url : file!.uri} poster={thumb} onFailed={setFailed} />
     else if (a.kind === 'pdf' || a.kind === 'book') body = <DocView a={a} uri={file!.uri} onFailed={setFailed} />
     else if (a.kind === 'html' && !source) {
       body = text == null ? <ActivityIndicator color='#fff' /> : <PageView html={text} />
@@ -1005,7 +1040,7 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
                 ripple='rgba(255,255,255,0.2)'
               />
             )}
-            <IconButton icon='share-alt' label='Share or open in another app' onPress={share} disabled={!ready} color='#fff' ripple='rgba(255,255,255,0.2)' />
+            <IconButton icon='share-alt' label={sharing ? 'Getting the file to share…' : 'Share or open in another app'} onPress={share} disabled={!canShare} color='#fff' ripple='rgba(255,255,255,0.2)' />
             {a.canDelete && <IconButton icon='trash' label='Remove from Assets' onPress={() => onRemove(a)} color='#fff' ripple='rgba(255,255,255,0.2)' />}
             <IconButton icon='ellipsis-v' label='More options' onPress={() => onMenu(a)} color='#fff' ripple='rgba(255,255,255,0.2)' />
           </View>
@@ -1054,30 +1089,30 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
   )
 }
 
-// Video and audio play in a WebView from the file in this phone's cache. `uri` is already a URL
-// (expo-file-system escapes the name), so it goes in as it is: escaping it again would ask for a
-// file that isn't there. One the WebView can't play says so, with the file to open elsewhere.
-function Player ({ a, uri, onFailed }: { a: AssetRecord; uri: string; onFailed: (why: string) => void }) {
+// Video and audio play in a WebView, from the file in this phone's cache or, while it isn't there
+// whole, from the backend's loopback stream (http://127.0.0.1 with Range requests, so it plays as
+// it arrives and a seek asks for that part only). `uri` is already a URL (expo-file-system escapes
+// the name), so it goes in as it is: escaping it again would ask for a file that isn't there. One
+// the WebView can't play says so, with the file to open elsewhere.
+function Player ({ a, uri, poster, onFailed }: { a: AssetRecord; uri: string; poster?: string; onFailed: (why: string) => void }) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
-  const name = uri.split('/').pop() || ''
   const html = useMemo(() => {
     const src = uri.replace(/"/g, '%22').replace(/</g, '%3C')
     const media = a.kind === 'video'
-      ? `<video src="${src}" controls playsinline preload="metadata"></video>`
+      ? `<video src="${src}"${poster && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(poster) ? ` poster="${poster}"` : ''} controls playsinline preload="metadata"></video>`
       : `<div class="icon">♪</div><audio src="${src}" controls preload="metadata"></audio>`
     const fail = `<script>document.querySelector('video,audio').addEventListener('error',function(){window.ReactNativeWebView.postMessage(JSON.stringify({type:'failed'}))})</script>`
     return `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;background:#000;color:#fff;font-family:sans-serif}body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}video{max-width:100%;max-height:100%}audio{width:90%}.icon{font-size:56px;opacity:.7}</style>${media}${fail}`
-  }, [a.kind, uri])
+  }, [a.kind, uri, poster])
   const cantPlay = `This phone can’t play this ${a.kind === 'video' ? 'video' : 'recording'} here. Open it in another app.`
   const page = useMemo(() => {
-    const dir = uri.slice(0, uri.length - name.length)
-    const f = new File(dir + 'player.html')
+    const f = new File(new Directory(Paths.cache, 'assets'), 'player.html')
     if (f.exists) f.delete()
-    f.create()
+    f.create({ intermediates: true })
     f.write(html)
     return f.uri
-  }, [uri, name, html])
+  }, [html])
   return (
     <WebView
       containerStyle={s.webBox}
@@ -1193,7 +1228,12 @@ function DocView ({ a, uri, onFailed }: { a: AssetRecord; uri: string; onFailed:
       containerStyle={s.webBox}
       style={a.kind === 'book' ? [s.player, { backgroundColor: t.surface }] : s.player}
       source={{ uri: src }}
-      originWhitelist={['file://*']}
+      // A book's page is a blob: document in a frame (book/reader.js). Android asks about a
+      // frame's non-http load too, and react-native-webview refused one off this list (and tried
+      // to hand it to another app): the contents opened, and the page stayed blank. The viewer
+      // page and its own blob: pages load; nothing else does.
+      originWhitelist={DOC_VIEWER_ORIGINS}
+      onShouldStartLoadWithRequest={(req) => docViewerAllows(req.url, page)}
       allowFileAccess
       allowFileAccessFromFileURLs
       setSupportMultipleWindows={false}
@@ -1231,6 +1271,13 @@ function DocView ({ a, uri, onFailed }: { a: AssetRecord; uri: string; onFailed:
       }}
     />
   )
+}
+
+const DOC_VIEWER_ORIGINS = ['file://*', 'blob:*']
+// The viewer page (with its query), and the blank and blob: pages of a book's frame (a file: page's
+// blob: URLs are blob:null/… or blob:file:///…).
+function docViewerAllows (url: string, page: string): boolean {
+  return url === page || url.startsWith(page + '?') || url.startsWith(page + '#') || /^about:(blank|srcdoc)$/.test(url) || /^blob:(null|file:)/.test(url)
 }
 
 const VIEWER_QUIET_MS = 30000 // a PDF or book page silent this long, before it shows anything, is stuck

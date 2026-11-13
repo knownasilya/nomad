@@ -21,7 +21,7 @@ import { inlineOp, boundedUpdate } from './vault.mjs'
 import { memberRecords } from './space-library.mjs'
 import { decodeInlineJson, makeMetadata } from '../../../shared/fs-core.mjs'
 
-export function createAssets ({ libraryOf, vaultOf = () => null, blobs, fs = null, roots = [] }) {
+export function createAssets ({ libraryOf, vaultOf = () => null, blobs, fs = null, roots = [], streams = null }) {
   // A file: URI or path the app gave, as a path in one of its own folders.
   function localPath (uri) {
     let p = String(uri || '')
@@ -207,6 +207,27 @@ export function createAssets ({ libraryOf, vaultOf = () => null, blobs, fs = nul
     return true
   }
 
+  // A video or recording to play while it arrives (./asset-stream.mjs): a loopback URL that serves
+  // the file with Range requests, read from the blob store a piece at a time (pieces still on
+  // another Device come when asked for). -> { url, token, size, mime }, or null until it has
+  // replicated here. The app gives the token back with `endStream` when its viewer closes.
+  async function stream (space, id) {
+    if (!streams) throw new Error('Streaming isn’t available here')
+    const place = await placeOf(space)
+    if (!place || !as.isAssetId(id)) return null
+    const at = await fileOf(place, id, false)
+    const size = await blobs.fileSizeOf(place.base, at)
+    if (size < 0) return null
+    const rec = await recordAt(place, as.pathsOf(place.root).item(id)).catch(() => null)
+    const mime = (rec && typeof rec.mime === 'string' && /^(video|audio)\//.test(rec.mime)) ? rec.mime : 'application/octet-stream'
+    const { url, token } = await streams.add({ size, mime, read: (start, length) => blobs.readFileOf(place.base, at, { start, length }) })
+    return { url, token, size, mime }
+  }
+
+  function endStream (token) {
+    streams?.end(String(token || ''))
+  }
+
   // Add a file the app picked: `path` (a file: URI in its own folders) or, for a small one, base64
   // `data`; a scaled camera photo; a `thumb`, base64 JPEG, for a picture or a video.
   async function add (space, f = {}) {
@@ -356,5 +377,5 @@ export function createAssets ({ libraryOf, vaultOf = () => null, blobs, fs = nul
     return { removed: plan.assets.length }
   }
 
-  return { list, read, readTo, add, update, updateMany, remove, removeMany, addFolder, moveFolder, removeFolder }
+  return { list, read, readTo, stream, endStream, add, update, updateMany, remove, removeMany, addFolder, moveFolder, removeFolder }
 }

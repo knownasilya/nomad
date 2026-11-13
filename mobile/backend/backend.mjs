@@ -1,4 +1,5 @@
 import RPC from 'bare-rpc'
+import http from 'bare-http1'
 import URL from 'bare-url'
 import fs from 'bare-fs'
 import b4a from 'b4a'
@@ -23,6 +24,7 @@ import * as homeDash from '../../shared/home-dashboard.mjs'
 import { localWallTime, isDateTime } from '../../shared/calendar.mjs'
 import * as householdContacts from './lib/household-contacts.mjs'
 import { createAssets } from './lib/assets.mjs'
+import { createAssetStreams } from './lib/asset-stream.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
 import { createPhoneInbox } from './lib/inbox.mjs'
 import { createPhoneVouches } from './lib/vouches.mjs'
@@ -253,6 +255,8 @@ async function libraryOf (space) {
 vaultApps.useSpaceLibraries(libraryOf)
 // A Space's Assets (ADR-0044): in its Library once shared, else the Vault.
 // Files move to and from the app as files in its own folders (Bare.argv: its documents, then its cache).
+const assetStreams = createAssetStreams({ http, randomToken: () => b4a.toString(hcrypto.randomBytes(24), 'hex') })
+goodbye(() => assetStreams.close())
 const assets = createAssets({
   libraryOf,
   vaultOf: () => vault,
@@ -263,7 +267,9 @@ const assets = createAssets({
     fileSizeOf: (base, path) => manager.fileSizeOf(base, path)
   },
   fs,
-  roots: Bare.argv.slice(0, 2).filter(Boolean).map((u) => URL.fileURLToPath(u))
+  roots: Bare.argv.slice(0, 2).filter(Boolean).map((u) => URL.fileURLToPath(u)),
+  // Videos and recordings play while they arrive, from a loopback server (lib/asset-stream.mjs).
+  streams: assetStreams
 })
 
 // Open every shared Space's Library in the background, so a Space switch or a name lookup finds it
@@ -893,6 +899,8 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'assets' && action === 'list') value = await assets.list(space)
     else if (app === 'assets' && action === 'read') value = await assets.read(space, args.id, { thumb: !!args.thumb })
     else if (app === 'assets' && action === 'readTo') value = await assets.readTo(space, args.id, { to: args.to, thumb: !!args.thumb, wait: Math.min(Math.max(Number(args.wait) || 8000, 0), 10000) }) // the app asks again until `done`
+    else if (app === 'assets' && action === 'stream') value = await assets.stream(space, args.id)
+    else if (app === 'assets' && action === 'endStream') value = assets.endStream(args.token) ?? null
     else if (app === 'assets' && action === 'add') value = await assets.add(space, args.asset || {})
     else if (app === 'assets' && action === 'update') value = await assets.update(space, { id: args.id, name: args.name, caption: args.caption, tags: args.tags, folder: args.folder })
     else if (app === 'assets' && action === 'updateMany') value = await assets.updateMany(space, { ids: args.ids, folder: args.folder, addTags: args.addTags, removeTags: args.removeTags })
