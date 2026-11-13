@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.51.1](https://github.com/knownasilya/nomad/compare/v1.51.0...v1.51.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* **mobile:** open books, draw a Markdown file's HTML, and stream video in Assets ([9693fdf](https://github.com/knownasilya/nomad/commit/9693fdfc2a8eb7fa063352cafe335dfcc7c74d58))
+
 ## [1.51.0](https://github.com/knownasilya/nomad/compare/v1.50.4...v1.51.0) (2026-11-13)
 
 
