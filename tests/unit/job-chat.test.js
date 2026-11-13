@@ -50,9 +50,11 @@ describe('applyJobEvent', () => {
     expect(start).toHaveLength(1); // never changes what it was given
   });
 
-  it('keeps screenshots and a private read on the answer, and ignores other tool events', () => {
-    let m = applyJobEvent(start, 'tool', { phase: 'start', name: 'openPage', summary: 'Opening' });
-    expect(m).toBe(start);
+  it('keeps steps, screenshots and a private read on the answer, and ignores other tool events', () => {
+    let m = applyJobEvent(start, 'tool', { phase: 'start', id: 'a', name: 'openPage', summary: 'Opening' });
+    expect(m[1].steps).toEqual([{ id: 'a', name: 'openPage', label: 'Opening', done: false }]);
+    m = applyJobEvent(m, 'tool', { phase: 'end', id: 'a', name: 'openPage' });
+    expect(m[1].steps[0].done).toBe(true);
     m = applyJobEvent(m, 'tool', { phase: 'screenshot', imageDataUrl: 'data:image/png;base64,AA' });
     m = applyJobEvent(m, 'tool', { phase: 'private' });
     const again = applyJobEvent(m, 'tool', { phase: 'private' });
@@ -81,6 +83,25 @@ describe('jobChatEnd', () => {
 
   it('says a stopped run stopped, and doesn’t call it a failure', () => {
     expect(jobChatEnd(start, { stopped: true, error: 'aborted' })[1].content).toBe('_Stopped._');
+  });
+
+  it('keeps the steps on the answer, or on the failure, in their saved shape', () => {
+    const used = applyJobEvent(answered, 'tool', { phase: 'start', id: 'a', name: 'search', summary: 'Searching' });
+    expect(jobChatEnd(used, {})[1]).toEqual({
+      role: 'assistant',
+      content: 'Done.',
+      reasoning: '',
+      steps: [{ label: 'Searching' }],
+    });
+    const failed = applyJobEvent(used, 'tool', { phase: 'end', id: 'a', error: 'Boom' });
+    expect(jobChatEnd(failed, { error: 'No runtime' })[1]).toEqual({
+      role: 'error',
+      content: 'Error: No runtime',
+      steps: [{ label: 'Searching', error: true }],
+    });
+    // Tools and no words: the answer stays, for its steps.
+    const toolsOnly = applyJobEvent(start, 'tool', { phase: 'note', name: 'webmcp', summary: 'No access' });
+    expect(jobChatEnd(toolsOnly, {})[1].steps).toEqual([{ label: 'No access' }]);
   });
 
   it('answers with job.js’s result when no AI ran', () => {

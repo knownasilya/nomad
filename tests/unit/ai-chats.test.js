@@ -89,12 +89,13 @@ describe('the phone backend', () => {
     const { chats, json, files } = memoryDrive()
     const messages = [
       { role: 'user', content: 'Weekend in Lisbon?', images: ['data:image/png;base64,AA'] },
-      { role: 'assistant', content: 'Alfama on Saturday.', reasoning: 'hmm', steps: ['dropped'] }
+      { role: 'assistant', content: 'Alfama on Saturday.', reasoning: 'hmm', thoughtMs: 3000, steps: [{ label: 'Searching' }], thinking: false }
     ]
     await chats.handle('save', { space: SPACE, id: 'abc', messages })
     const saved = json('/.ai-chat/sessions/abc.json')
     expect(saved).toMatchObject({ id: 'abc', title: 'Weekend in Lisbon?' })
-    expect(saved.messages[1]).toEqual({ role: 'assistant', content: 'Alfama on Saturday.', reasoning: 'hmm' })
+    // Its steps and thinking time stay; a live flag doesn't.
+    expect(saved.messages[1]).toEqual({ role: 'assistant', content: 'Alfama on Saturday.', reasoning: 'hmm', thoughtMs: 3000, steps: [{ label: 'Searching' }] })
     expect(json(LAST_SESSION_PATH)).toEqual({ sessionId: 'abc' })
 
     // One the desktop sidebar wrote, with a failed turn and its Revert list.
