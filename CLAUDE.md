@@ -469,9 +469,12 @@ with `assetChunk` and adds with `beginAssetUpload`/`assetUploadChunk`/`finishAss
 temp file, then streamed into the blob core by fs-core `putBlobFrom`). The phone is
 `mobile/components/Assets.tsx` over `RPC_APPS` `assets` (`mobile/backend/lib/assets.mjs`; picking and
 reading files in `mobile/lib/assetFiles.ts`); its backend reads and writes files by path in the app's
-own folders (`assets/readTo`, `add` with `path`), never as base64. EPUB and MOBI open in one reader
+own folders (`assets/readTo`, `add` with `path`), never as base64. A video or recording plays while it
+arrives: `assets/stream` gives a loopback URL (`mobile/backend/lib/asset-stream.mjs`, Range requests read
+from the blob store a piece at a time, a random token per file, given back with `endStream`). EPUB and MOBI open in one reader
 (`app/userland/assets/js/book/`: `parse.js` reads the book, `reader.js` shows it in a sandboxed frame
-with no scripts). The phone shows PDFs and books in a WebView page, `mobile/lib/docViewerHtml.ts`
+with no scripts). The phone shows PDFs and books in a WebView page (its `originWhitelist` must let
+the book's blob: frame load: Android asks about a frame's loads too), `mobile/lib/docViewerHtml.ts`
 (committed), which **`npm run build:doc-viewer`** bundles from `assets/js/phone-viewer.js` with pdf.js:
 rerun it after changing the reader, `pdf-view.js` or pdf.js. The family album's photos (ADR-0043, `/photos/`) are Assets: a Device
 that can write the Space Library moves them the first time it lists them (`legacyMove`), and until

@@ -2,14 +2,16 @@ import { memo, useMemo, useState } from 'react'
 import { View, Text, ScrollView, StyleSheet, Linking } from 'react-native'
 import { marked } from 'marked'
 import { useTheme, type Theme } from '../lib/theme'
-import { measureColumns, fitColumns, listMarker, cellAlign } from '../lib/markdown'
+import { measureColumns, fitColumns, listMarker, cellAlign, nestHtml, htmlBlock, decodeEntities } from '../lib/markdown'
 import Icon from './Icon'
 
 // Native Markdown renderer for AI answers, Job runs and Markdown Assets. Uses marked's lexer (GFM on)
 // and draws its tokens as RN Text/View: no WebView, no extra dependency. Covers what model answers
 // use: paragraphs, headings, bold/italic/strikethrough, inline and fenced code, lists (nested,
-// numbered, task lists), tables, blockquotes, links and rules. Anything else shows its raw text.
-// Pure parts (table column widths, list markers) are lib/markdown.ts.
+// numbered, task lists), tables, blockquotes, links and rules. HTML in it (a README's <sup>, <br>,
+// <kbd>, <p align="center">) is drawn as text styles, never run or loaded, and entities are decoded
+// (lib/markdown.ts nestHtml, htmlBlock). Anything else shows its raw text.
+// Pure parts (table column widths, list markers, HTML) are lib/markdown.ts.
 // `onLink` opens a tapped link; without it a link goes to Linking. The AI panel passes one so the
 // user's Notes, Jobs and pages open inside Nomad (lib/itemLinks.ts).
 export default memo(function Markdown ({ text, color, onLink }: { text: string; color?: string; onLink?: (href: string) => void }) {
@@ -27,7 +29,7 @@ interface Ctx { s: Styles; t: Theme; color: string | undefined; open: Open }
 // Inline tokens don't carry color: nested <Text> inherit it from the block-level <Text> (which
 // applies the caller's tint), and codespan/link set their own colors by design.
 function renderInline (tokens: any[], s: Styles, kp: string, open: Open): any {
-  return (tokens || []).map((tk: any, i: number) => {
+  return nestHtml(tokens).map((tk: any, i: number) => {
     const key = kp + '-' + i
     switch (tk.type) {
       case 'strong': return <Text key={key} style={s.bold}>{renderInline(tk.tokens, s, key, open)}</Text>
@@ -36,6 +38,15 @@ function renderInline (tokens: any[], s: Styles, kp: string, open: Open): any {
       case 'codespan': return <Text key={key} style={s.codespan}>{tk.text}</Text>
       case 'br': return <Text key={key}>{'\n'}</Text>
       case 'checkbox': return null
+      case 'html': return null // nestHtml has made every tag a `tag` token
+      case 'tag': {
+        if (tk.kind === 'hidden') return null
+        const inner = renderInline(tk.tokens, s, key, open)
+        if (tk.kind === 'link') return <Text key={key} style={s.link} onPress={() => tk.href && open(tk.href)}>{inner}</Text>
+        if (tk.kind === 'quote') return <Text key={key}>“{inner}”</Text>
+        const style = (TAG_STYLES as any)[tk.kind]
+        return <Text key={key} style={style ? s[style as keyof Styles] : undefined}>{inner}</Text>
+      }
       case 'link':
         return (
           <Text key={key} style={s.link} onPress={() => tk.href && open(tk.href)}>
@@ -51,12 +62,18 @@ function renderInline (tokens: any[], s: Styles, kp: string, open: Open): any {
           </Text>
         )
       case 'text':
-      default:
+      default: {
         if (tk.tokens) return renderInline(tk.tokens, s, key, open)
-        return open.bare ? linkify(tk.text ?? tk.raw ?? '', s, key, open) : <Text key={key}>{tk.text ?? tk.raw ?? ''}</Text>
+        // marked leaves a text token's entities (&amp; &dagger;) as written; an escape's text is literal.
+        const words = tk.type === 'text' ? decodeEntities(tk.text ?? tk.raw ?? '') : (tk.text ?? tk.raw ?? '')
+        return open.bare ? linkify(words, s, key, open) : <Text key={key}>{words}</Text>
+      }
     }
   })
 }
+
+// How each kind of HTML tag (lib/markdown.ts) is drawn: a style in makeStyles.
+const TAG_STYLES = { bold: 'bold', italic: 'italic', underline: 'underline', del: 'del', code: 'codespan', mark: 'mark', small: 'small', sup: 'sup', sub: 'sub' } as const
 
 // marked links bare http(s) URLs itself; a bare hyper:// or nomad:// one becomes a link here.
 const BARE_URL = /((?:hyper|nomad):\/\/[^\s<>]+?)([.,;:!?)\]'"]*)(?=\s|$)/g
@@ -121,6 +138,11 @@ function renderBlock (tok: any, key: string, ctx: Ctx, depth: number): any {
       return <Table key={key} tok={tok} k={key} ctx={ctx} />
     case 'hr':
       return <View key={key} style={s.hr} />
+    case 'html': {
+      // A block of HTML (<p align="center">…</p>, <details>, a comment): its text, styled.
+      const inline = htmlBlock(String(tok.text ?? tok.raw ?? ''))
+      return inline.length ? <Text key={key} style={[s.text, tint]}>{renderInline(inline, s, key, open)}</Text> : null
+    }
     case 'space':
     case 'def':
     case 'checkbox':
@@ -176,6 +198,12 @@ function makeStyles (t: Theme) {
     bold: { fontWeight: '700' },
     italic: { fontStyle: 'italic' },
     del: { textDecorationLine: 'line-through' },
+    underline: { textDecorationLine: 'underline' },
+    mark: { backgroundColor: t.mark },
+    small: { fontSize: 12.5 },
+    // A nested Text can't be raised or lowered on Android: smaller is what shows it's a footnote mark.
+    sup: { fontSize: 11 },
+    sub: { fontSize: 11 },
     h1: { fontSize: 20, fontWeight: '700', lineHeight: 26 },
     h2: { fontSize: 18, fontWeight: '700', lineHeight: 24 },
     h3: { fontSize: 16, fontWeight: '700', lineHeight: 22 },
