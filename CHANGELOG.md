@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.50.4](https://github.com/knownasilya/nomad/compare/v1.50.3...v1.50.4) (2026-11-13)
+
+
+### Bug Fixes
+
+* **mobile:** catch the Vault up before listing a Space's Assets ([b61d129](https://github.com/knownasilya/nomad/commit/b61d129e773b5eef46e5a79a9f700df98ec87fde))
+* **mobile:** give the Assets viewer's WebView a width on Android ([3c3446d](https://github.com/knownasilya/nomad/commit/3c3446dd0cf50f9ae54a6d09b377ed310de1c125))
+
 ### [1.50.3](https://github.com/knownasilya/nomad/compare/v1.50.2...v1.50.3) (2026-11-12)
 
 
