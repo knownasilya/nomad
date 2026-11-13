@@ -1,16 +1,21 @@
 // Forks one utility process per execute. The process is killed on timeout, abort,
 // or completion. While a capability call is in flight (a permission prompt, a drive
 // read) the timeout is paused so the user can answer.
+//
+// The entry is execute-worker.build.js, bundled by scripts/build.js from execute-worker.mjs
+// with the repo-root shared/ modules it reaches. A packaged build ships only app/, so the
+// unbundled worker exits (1) as it loads there.
 
 import { app, utilityProcess } from 'electron'
 import { join } from 'path'
 import { timeoutMessage, unwrapMessage } from './execute-messages.mjs'
 
 const IDLE_MS = 20_000
+export const WORKER = 'bg/ai/execute-worker.build.js'
 
 export function executeInUtilityProcess({ code, params, invoke, signal }) {
   return new Promise((resolve, reject) => {
-    const child = utilityProcess.fork(join(app.getAppPath(), 'bg/ai/execute-worker.mjs'), [], {
+    const child = utilityProcess.fork(join(app.getAppPath(), WORKER), [], {
       serviceName: 'nomad-ai-execute',
       stdio: 'pipe',
     })

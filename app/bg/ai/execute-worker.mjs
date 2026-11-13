@@ -1,6 +1,7 @@
 // Utility-process entry. The parent posts { type: 'run', code, params }.
 // Capability calls go back to the parent as { type: 'call' } and wait for callResult.
 // The module never sees the parent process: its only bridge is nomad:runtime.
+// scripts/build.js bundles this file to execute-worker.build.js, which is what the host forks.
 
 import { runModule } from './search-execute.mjs'
 import { unwrapMessage } from './execute-messages.mjs'
