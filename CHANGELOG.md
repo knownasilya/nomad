@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.51.0](https://github.com/knownasilya/nomad/compare/v1.50.4...v1.51.0) (2026-11-13)
+
+
+### Features
+
+* **ai:** keep tool runs on the answer, time the thinking, retry and follow on scroll ([431a7ac](https://github.com/knownasilya/nomad/commit/431a7ac0eaa871b2d18de13617a0359eea809f73))
+
+
+### Bug Fixes
+
+* **ai:** bundle the execute worker so tools run in a packaged build ([64404e5](https://github.com/knownasilya/nomad/commit/64404e5ef5420c7b647f1374089216a838c2d390))
+* **mobile:** draw tables, task lists and nested lists in the AI panel's Markdown ([eb9a0b6](https://github.com/knownasilya/nomad/commit/eb9a0b616d9eba70291a8c1b43e4b6cd716fd2c9))
+* **tray:** use the N logo as a macOS template image in the menu bar ([8839cd3](https://github.com/knownasilya/nomad/commit/8839cd32fab097cd9527757fdee7ada3bb12c35f))
+* **updater:** always restart into a downloaded update on macOS ([ec9e7af](https://github.com/knownasilya/nomad/commit/ec9e7af5bdcf67b3c3f23afdd3f85bb1167ddd2a))
+
 ### [1.50.4](https://github.com/knownasilya/nomad/compare/v1.50.3...v1.50.4) (2026-11-13)
 
 
