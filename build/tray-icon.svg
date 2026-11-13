@@ -1,0 +1,8 @@
+<!-- macOS menu bar (tray) icon: the app icon's N as a template image (black + alpha; macOS tints it
+     for light and dark menu bars). Rendered to app/assets/img/tray-iconTemplate.png at 16px and
+     tray-iconTemplate@2x.png at 32px, e.g. `rsvg-convert -w 32 -h 32 build/tray-icon.svg`. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <path fill="#000" d="M2 1h4.2l7.8 13.35V15H9.91L2 1.46Z"/>
+  <path fill="#000" d="M2 3.36 6 10.21V15H2Z"/>
+  <path fill="#000" d="M10 1h4v11.45L10 5.6Z"/>
+</svg>
