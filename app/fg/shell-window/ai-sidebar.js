@@ -7,6 +7,14 @@ import { splitGenUi } from '../../lib/genui/segments.mjs';
 import { mergeUserTurns } from '../../bg/ai/steering.mjs';
 import { parseItemLink } from '../../../shared/item-links.mjs';
 import { mdToHtml } from './ai-markdown.js';
+import {
+  applyToolEvent,
+  finishSteps,
+  savedSteps,
+  stepsLabel,
+  thinkClock,
+  thoughtLabel,
+} from '../../../shared/ai-steps.mjs';
 import './genui/index.js';
 
 // Live data for a drawing's Queries: read in bg, shown here, never sent to the model.
@@ -61,7 +69,7 @@ class ShellWindowAiSidebar extends LitElement {
       sessionId: { type: String },
       _sessionJob: { state: true },
       _followingJob: { state: true },
-      _activity: { state: true },
+      _showJump: { state: true },
       _model: { state: true },
       _think: { state: true },
       _effort: { state: true },
@@ -437,6 +445,13 @@ class ShellWindowAiSidebar extends LitElement {
 
     /* — the conversation — */
 
+    .messages-wrap {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
     .messages {
       flex: 1;
       overflow-y: auto;
@@ -572,69 +587,162 @@ class ShellWindowAiSidebar extends LitElement {
       padding: 0;
     }
 
-    /* Tool calls while the reply hasn't started yet. */
-    .activity {
+    /* Status text while the assistant works, as Nuxt UI's ChatShimmer: a light sweeps across it. */
+    .shimmer {
+      background: linear-gradient(
+          90deg,
+          var(--ai-text-muted) 0%,
+          var(--ai-text-muted) 40%,
+          var(--ai-text) 50%,
+          var(--ai-text-muted) 60%,
+          var(--ai-text-muted) 100%
+        )
+        0 0 / 200% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: shimmer 2s linear infinite;
+    }
+    @keyframes shimmer {
+      from {
+        background-position: 100% 0;
+      }
+      to {
+        background-position: -100% 0;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .shimmer {
+        animation: none;
+        background: none;
+        -webkit-text-fill-color: currentColor;
+      }
+    }
+    .status {
       align-self: stretch;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
       padding: 2px;
       font-size: 12px;
       color: var(--ai-text-muted);
     }
+
+    /* An answer's steps (in .steps-body). */
     .activity-item {
       display: flex;
-      align-items: center;
+      align-items: baseline;
       gap: 8px;
+      min-width: 0;
     }
-    .activity-item.active {
-      color: var(--ai-text);
+    .activity-item > span:last-child {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .activity-item.child {
+      padding-left: 18px;
     }
     .activity-item .fa-spinner {
       color: var(--ai-accent);
     }
     .activity-item .fa-check {
       color: var(--ai-success);
+      font-size: 10px;
     }
-    .activity-item .fa-exclamation-circle {
+    .activity-item.failed,
+    .activity-item .fa-times-circle {
       color: var(--ai-error-text);
     }
 
-    .reasoning {
+    /* Thoughts and steps fold into one quiet line, as Nuxt UI's ChatReasoning and ChatTool. */
+    .reasoning,
+    .steps {
       align-self: stretch;
       font-size: 12px;
       color: var(--ai-text-muted);
     }
-    .reasoning summary {
+    .reasoning summary,
+    .steps summary {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 3px 8px 3px 6px;
+      max-width: 100%;
+      box-sizing: border-box;
+      padding: 3px 8px 3px 4px;
+      margin-left: -4px;
       border-radius: 6px;
       cursor: pointer;
       user-select: none;
       list-style: none;
     }
-    .reasoning summary::-webkit-details-marker {
+    .reasoning summary::-webkit-details-marker,
+    .steps summary::-webkit-details-marker {
       display: none;
     }
-    .reasoning summary:hover {
+    .reasoning summary:hover,
+    .steps summary:hover {
       background: var(--ai-hover);
       color: var(--ai-text);
     }
-    .reasoning summary .fa-chevron-right {
-      font-size: 9px;
+    .reasoning summary > span:not(.fas),
+    .steps summary > span:not(.fas) {
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    details[open] > summary .when-closed,
+    details:not([open]) > summary .when-open {
+      display: none;
+    }
+    .chevron {
+      font-size: 8px;
+      opacity: 0.7;
       transition: transform 0.15s;
     }
-    .reasoning[open] summary .fa-chevron-right {
+    details[open] > summary .chevron {
       transform: rotate(90deg);
     }
     .reasoning .body {
       white-space: pre-wrap;
-      margin: 6px 0 2px 10px;
+      max-height: 240px;
+      overflow-y: auto;
+      margin: 6px 0 2px 6px;
       padding-left: 10px;
       border-left: 2px solid var(--ai-border);
       line-height: 1.5;
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    }
+    .steps-body {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin: 6px 0 2px 6px;
+      padding: 2px 0 2px 10px;
+      border-left: 2px solid var(--ai-border);
+    }
+
+    /* Back to the newest message, when the user scrolled up to read. */
+    .jump-btn {
+      position: absolute;
+      left: 50%;
+      bottom: 10px;
+      transform: translateX(-50%);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid var(--ai-border);
+      border-radius: 50%;
+      background: var(--bg-color--input);
+      color: var(--ai-text);
+      font-size: 12px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+    .jump-btn:hover {
+      background: var(--ai-surface);
+      border-color: var(--ai-accent);
     }
 
     .screenshots {
@@ -1013,6 +1121,14 @@ class ShellWindowAiSidebar extends LitElement {
       opacity: 0.35;
       cursor: default;
     }
+    .send-btn.retry-btn {
+      background: var(--ai-error-bg);
+      color: var(--ai-error-text);
+      box-shadow: inset 0 0 0 1px var(--ai-error-border);
+    }
+    .send-btn.retry-btn:hover {
+      background: var(--ai-error-border);
+    }
     .send-btn.stop-btn {
       background: var(--ai-text);
       color: var(--bg-color--input);
@@ -1046,7 +1162,11 @@ class ShellWindowAiSidebar extends LitElement {
     this._driveWritable = false;
     // Drives this conversation already started a Draft for (see _send).
     this._draftDrives = new Set();
-    this._activity = [];
+    // Follow the answer down only while the user is at the bottom; scrolled up to read, they stay
+    // put and get a button back to the newest message (_onMessagesScroll).
+    this._atBottom = true;
+    this._lastScrollTop = 0;
+    this._showJump = false;
     this._model = '';
     this._think = true;
     this._effort = '';
@@ -1130,7 +1250,13 @@ class ShellWindowAiSidebar extends LitElement {
       this._loadDriveInfo();
     }
     if (changedProperties.has('messages') || changedProperties.has('streaming')) {
-      this._scrollToBottom();
+      if (this._atBottom) this._scrollToBottom();
+      // Thoughts that are still coming in show their newest lines.
+      if (this.streaming) {
+        for (const el of this.renderRoot.querySelectorAll('.reasoning.live[open] .body')) {
+          el.scrollTop = el.scrollHeight;
+        }
+      }
     }
     if (changedProperties.has('draft')) this._autosize();
   }
@@ -1218,6 +1344,7 @@ class ShellWindowAiSidebar extends LitElement {
 
   // Shows a loaded session. A Job run's that is still going on is drawn as it goes.
   _showSession(id, data) {
+    this._followBottom();
     this.sessionId = id;
     this.messages = data.messages || [];
     this._sessionJob = data.job || null;
@@ -1242,6 +1369,7 @@ class ShellWindowAiSidebar extends LitElement {
   async _newSession() {
     if (this.streaming) return;
     this.sessionId = await bg.aiShell.newSession();
+    this._followBottom();
     this.messages = [];
     this._sessionJob = null;
     this._draftDrives = new Set();
@@ -1423,6 +1551,8 @@ class ShellWindowAiSidebar extends LitElement {
           <button
             class="icon-btn ${this._sessionsOpen ? 'pressed' : ''}"
             title="Chat history"
+            aria-label="Chat history"
+            aria-pressed=${this._sessionsOpen ? 'true' : 'false'}
             @click=${this._toggleSessions}
           >
             <span class="fas fa-fw fa-history"></span>
@@ -1430,6 +1560,7 @@ class ShellWindowAiSidebar extends LitElement {
           <button
             class="icon-btn"
             title="New chat"
+            aria-label="New chat"
             @click=${this._newSession}
             ?disabled=${this.streaming}
           >
@@ -1438,6 +1569,7 @@ class ShellWindowAiSidebar extends LitElement {
           <button
             class="icon-btn"
             title="Close"
+            aria-label="Close the AI sidebar"
             @click=${() => bg.views.toggleAiSidebarOpen('active')}
           >
             <span class="fas fa-fw fa-times"></span>
@@ -1508,12 +1640,21 @@ class ShellWindowAiSidebar extends LitElement {
       ${this._sessionJob ? this._renderJobBanner() : ''}
       ${this.messages.length === 0
         ? this._renderEmpty()
-        : html`<div class="messages">
-            ${this.messages.map((m, i) => this._renderMessage(m, i))}
-            ${this.streaming && !(this.messages[this.messages.length - 1]?.content || '').trim()
-              ? this._renderActivity()
+        : html`<div class="messages-wrap">
+            <div class="messages" @scroll=${this._onMessagesScroll}>
+              ${this.messages.map((m, i) => this._renderMessage(m, i))}
+              ${this._queued.map((q) => this._renderQueued(q))}
+            </div>
+            ${this._showJump
+              ? html`<button
+                  class="jump-btn"
+                  title="Jump to the newest message"
+                  aria-label="Jump to the newest message"
+                  @click=${this._jumpToBottom}
+                >
+                  <span class="fas fa-arrow-down"></span>
+                </button>`
               : ''}
-            ${this._queued.map((q) => this._renderQueued(q))}
           </div>`}
       ${this._toolsOpen ? this._renderTools() : ''}
       <div class="composer">
@@ -1594,22 +1735,38 @@ class ShellWindowAiSidebar extends LitElement {
             </button>
           </div>
           ${this.streaming
-            ? html`<button class="send-btn stop-btn" @click=${this._stop} title="Stop">
+            ? html`<button
+                class="send-btn stop-btn"
+                @click=${this._stop}
+                title="Stop"
+                aria-label="Stop"
+              >
                 <span class="stop-icon"></span>
               </button>`
             : ''}
-          ${!this.streaming || this.draft.trim()
-            ? html`<button
-                class="send-btn"
-                title=${this.streaming
-                  ? 'Send now (Enter). The assistant reads it at its next step.'
-                  : 'Send (Enter)'}
-                @click=${this._send}
-                ?disabled=${!this.draft.trim()}
+          ${!this.streaming && !this.draft.trim() && this._lastFailed()
+            ? // The turn failed: the button asks again, from the last thing the user said.
+              html`<button
+                class="send-btn retry-btn"
+                title="Try again"
+                aria-label="Try again"
+                @click=${this._regenerate}
               >
-                <span class="fas fa-arrow-up"></span>
+                <span class="fas fa-redo"></span>
               </button>`
-            : ''}
+            : !this.streaming || this.draft.trim()
+              ? html`<button
+                  class="send-btn"
+                  title=${this.streaming
+                    ? 'Send now (Enter). The assistant reads it at its next step.'
+                    : 'Send (Enter)'}
+                  aria-label=${this.streaming ? 'Send now' : 'Send'}
+                  @click=${this._send}
+                  ?disabled=${!this.draft.trim()}
+                >
+                  <span class="fas fa-arrow-up"></span>
+                </button>`
+              : ''}
         </div>
       </div>
     `;
@@ -1705,25 +1862,31 @@ class ShellWindowAiSidebar extends LitElement {
 
   _renderMessage(m, i) {
     const streamingLast = i === this.messages.length - 1 && this.streaming;
+    const content = (m.content || '').trim();
     const body =
       m.role === 'assistant'
-        ? this._renderAnswer((m.content || '').trim(), streamingLast)
+        ? this._renderAnswer(content, streamingLast)
         : m.role === 'error'
-          ? html`<span class="fas fa-exclamation-circle"></span
-              ><span>${(m.content || '').trim()}</span>`
-          : (m.content || '').trim();
-    const reasoning =
-      m.role === 'assistant' && m.reasoning && m.reasoning.trim()
-        ? html`<details class="reasoning" ?open=${streamingLast && !m.content}>
-            <summary><span class="fas fa-chevron-right"></span> Thoughts</summary>
-            <div class="body">${m.reasoning.trim()}</div>
-          </details>`
-        : '';
+          ? html`<span class="fas fa-exclamation-circle"></span><span>${content}</span>`
+          : content;
+    const steps = m.role !== 'user' && Array.isArray(m.steps) ? m.steps : [];
+    // Before the answer's first words: the steps as they run, then "Thinking…" while the model
+    // works out what to do next (unless its Thoughts already say so).
+    const waiting =
+      streamingLast &&
+      m.role === 'assistant' &&
+      !content &&
+      !m.thinking &&
+      steps.every((x) => x.done);
     return html`
       ${m.role === 'user' && m.fromJob
         ? html`<div class="from-job"><span class="fas fa-fw fa-robot"></span> Sent by the Job</div>`
         : ''}
-      ${reasoning}
+      ${m.role === 'assistant' && m.reasoning && m.reasoning.trim()
+        ? this._renderReasoning(m, streamingLast)
+        : ''}
+      ${steps.length ? this._renderSteps(steps, streamingLast) : ''}
+      ${waiting ? html`<div class="status"><span class="shimmer">Thinking…</span></div>` : ''}
       ${m.images && m.images.length
         ? html`<div class="screenshots">
             ${m.images.map(
@@ -1736,33 +1899,98 @@ class ShellWindowAiSidebar extends LitElement {
             )}
           </div>`
         : ''}
-      ${m.role === 'assistant' && !(m.content || '').trim()
+      ${m.role === 'assistant' && !content
         ? ''
         : html`<div
             class="msg ${m.role}${streamingLast ? ' streaming' : ''}"
             @click=${this._onAnswerClick}
             @auxclick=${this._onAnswerClick}
           >${body}</div>`}
-      ${!streamingLast && (m.content || '').trim()
-        ? html`<div
-            class="msg-actions ${m.role}${this._isLatestAnswer(i) ? ' latest' : ''}${this
-              ._copied === i
-              ? ' copied'
-              : ''}"
-          >
-            <button
-              class="msg-action"
-              title=${m.role === 'user' ? 'Copy your message' : 'Copy the answer as Markdown'}
-              @click=${() => this._copyMessage(m, i)}
-            >
-              ${this._copied === i
-                ? html`<span class="fas fa-fw fa-check"></span> Copied`
-                : html`<span class="far fa-fw fa-copy"></span> Copy`}
-            </button>
-          </div>`
-        : ''}
+      ${!streamingLast && content ? this._renderActions(m, i) : ''}
       ${m.files && m.files.length ? this._renderCheckpoint(m, i) : ''}
     `;
+  }
+
+  // Under a message: Copy, and on the last answer Regenerate (Retry after a failure), as Nuxt UI's
+  // ChatMessage actions. Quiet until the message is hovered, except on the latest answer.
+  _renderActions(m, i) {
+    const latest = this._isLatestAnswer(i);
+    const again = i === this.messages.length - 1 && this._canRegenerate();
+    return html`<div
+      class="msg-actions ${m.role}${latest ? ' latest' : ''}${this._copied === i ? ' copied' : ''}"
+    >
+      <button
+        class="msg-action"
+        title=${m.role === 'user'
+          ? 'Copy your message'
+          : m.role === 'error'
+            ? 'Copy the error'
+            : 'Copy the answer as Markdown'}
+        @click=${() => this._copyMessage(m, i)}
+      >
+        ${this._copied === i
+          ? html`<span class="fas fa-fw fa-check"></span> Copied`
+          : html`<span class="far fa-fw fa-copy"></span> Copy`}
+      </button>
+      ${again
+        ? html`<button
+            class="msg-action"
+            title=${m.role === 'error'
+              ? 'Ask again, from your last message'
+              : 'Write this answer again, from your last message'}
+            @click=${this._regenerate}
+          >
+            <span class="fas fa-fw fa-redo"></span> ${m.role === 'error' ? 'Retry' : 'Regenerate'}
+          </button>`
+        : ''}
+    </div>`;
+  }
+
+  // What the model thought, as Nuxt UI's ChatReasoning: open with a shimmering "Thinking…" while
+  // it thinks, folded into "Thought for 4s" once it moves on.
+  _renderReasoning(m, live) {
+    const thinking = live && !!m.thinking;
+    return html`<details class="reasoning${live ? ' live' : ''}" ?open=${thinking}>
+      <summary>
+        <span class="fas fa-fw fa-lightbulb"></span>
+        ${thinking
+          ? html`<span class="shimmer">Thinking…</span>`
+          : html`<span>${thoughtLabel(m.thoughtMs)}</span>`}
+        <span class="fas fa-chevron-right chevron"></span>
+      </summary>
+      <div class="body">${m.reasoning.trim()}</div>
+    </details>`;
+  }
+
+  // An answer's steps, as Nuxt UI's ChatTool: open while the turn runs (a spinner and shimmering
+  // words on a running step, a check or a cross once it ended), folded into one line ("Used 3
+  // tools") once the answer is done. The user can open or fold it either way.
+  _renderSteps(steps, live) {
+    const running = live ? steps.findLast((x) => !x.done) : null;
+    return html`<details class="steps" ?open=${live}>
+      <summary>
+        <span class="fas fa-fw fa-wrench"></span>
+        ${running
+          ? // Open, the list shows the running step; folded, the line does.
+            html`<span class="shimmer when-open">Using tools…</span
+              ><span class="shimmer when-closed">${running.label}</span>`
+          : html`<span>${stepsLabel(steps)}</span>`}
+        <span class="fas fa-chevron-right chevron"></span>
+      </summary>
+      <div class="steps-body">
+        ${steps.map((x) => {
+          const going = live && !x.done;
+          const icon = going ? 'fa-spinner fa-spin' : x.error ? 'fa-times-circle' : 'fa-check';
+          return html`<div
+            class="activity-item${x.child ? ' child' : ''}${x.error ? ' failed' : ''}"
+            title=${x.why || ''}
+          >
+            <span class="fas fa-fw ${icon}"></span>
+            ${going ? html`<span class="shimmer">${x.label}</span>` : html`<span>${x.label}</span>`}
+          </div>`;
+        })}
+      </div>
+    </details>`;
   }
 
   // An answer is Markdown with OpenUI Lang programs fenced in it (ADR-0027); each program is drawn
@@ -1856,11 +2084,48 @@ class ShellWindowAiSidebar extends LitElement {
     }
   }
 
-  // The last message, when it is a finished answer: its Copy shows without a hover.
+  // The last message, when it is a finished answer or a failure: its actions show without a hover.
   _isLatestAnswer(i) {
     return (
-      i === this.messages.length - 1 && !this.streaming && this.messages[i].role === 'assistant'
+      i === this.messages.length - 1 && !this.streaming && this.messages[i].role !== 'user'
     );
+  }
+
+  // Where asking again starts: the user's last message (and any sent right before it, steered in),
+  // and the messages before them. null when there is none.
+  _retryBase() {
+    const msgs = this.messages;
+    let i = msgs.length - 1;
+    while (i >= 0 && msgs[i].role !== 'user') i--;
+    if (i < 0) return null;
+    let j = i;
+    while (j > 0 && msgs[j - 1].role === 'user') j--;
+    const texts = msgs
+      .slice(j, i + 1)
+      .map((m) => (m.content || '').trim())
+      .filter(Boolean);
+    return texts.length ? { before: msgs.slice(0, j), texts } : null;
+  }
+
+  // Regenerate (or Retry) the last answer. Not while a turn runs, and not over edits the answer
+  // made and the user kept: its Checkpoint would go with it, so they Revert first.
+  _canRegenerate() {
+    if (this.streaming || this._followingJob) return false;
+    const last = this.messages[this.messages.length - 1];
+    if (!last || (last.role !== 'assistant' && last.role !== 'error')) return false;
+    if (last.files?.length && !last.reverted) return false;
+    return !!this._retryBase();
+  }
+
+  _lastFailed() {
+    return this.messages[this.messages.length - 1]?.role === 'error' && this._canRegenerate();
+  }
+
+  async _regenerate() {
+    if (!this._canRegenerate()) return;
+    const base = this._retryBase();
+    this.messages = base.before;
+    await this._runTurn(base.texts);
   }
 
   // A prompt is copied as typed, an answer as the Markdown it arrived in.
@@ -1869,41 +2134,6 @@ class ShellWindowAiSidebar extends LitElement {
     this._copied = i;
     clearTimeout(this._copiedTimer);
     this._copiedTimer = setTimeout(() => (this._copied = null), 1500);
-  }
-
-  _renderActivity() {
-    const items = this._activity;
-    return html`
-      <div class="activity">
-        ${items.length === 0
-          ? html`<div class="activity-item active">
-              <span class="fas fa-fw fa-spinner fa-spin"></span> Thinking…
-            </div>`
-          : items.map((a, i) => {
-              // A step with an id runs until its `end` event. One without (from an older
-              // Provider over the AI Bridge) runs until the next step starts.
-              const running = a.id ? !a.done : i === items.length - 1;
-              const icon = running
-                ? 'fa-spinner fa-spin'
-                : a.error
-                  ? 'fa-exclamation-circle'
-                  : 'fa-check';
-              return html`<div
-                class="activity-item ${running ? 'active' : ''}"
-                title=${a.error || ''}
-              >
-                <span class="fas fa-fw ${icon}"></span>
-                ${a.summary}
-              </div>`;
-            })}
-        ${items.length && items.every((a) => a.id && a.done)
-          ? // Every tool ended: the model is working out what to do next.
-            html`<div class="activity-item active">
-              <span class="fas fa-fw fa-spinner fa-spin"></span> Thinking…
-            </div>`
-          : ''}
-      </div>
-    `;
   }
 
   // A message sent while the assistant works, until its next step reads it.
@@ -2058,6 +2288,8 @@ class ShellWindowAiSidebar extends LitElement {
     // always keeps mutating its own local turnMessages regardless, and the final save (in
     // `finally`) always targets turnSessionId, never live state.
     const turnSessionId = this.sessionId;
+    // The user just sent this: show the answer as it comes.
+    this._followBottom();
 
     // Draft Mode (ADR-0012): the first time this conversation is used on a writable Drive, start
     // a Draft for it, so the agent's writes there stage privately — the user reviews the whole
@@ -2121,7 +2353,6 @@ class ShellWindowAiSidebar extends LitElement {
     const turnJob = isCurrent() ? this._sessionJob : null;
     this.streaming = true;
     this._followingJob = job;
-    this._activity = [];
     const turnId = `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     this._turnId = turnId;
 
@@ -2140,29 +2371,31 @@ class ShellWindowAiSidebar extends LitElement {
       this.requestUpdate();
     };
 
+    // The answer being written, changed by `patch`.
+    const patchAnswer = (patch) => {
+      const cur = turnMessages[assistantIdx];
+      if (!cur) return;
+      turnMessages = [...turnMessages];
+      turnMessages[assistantIdx] = { ...cur, ...patch };
+    };
+    // How long the model thinks, for "Thought for 4s" (shared/ai-steps.mjs). Each answer has its own.
+    let clock = thinkClock();
+    // The model did something other than think: a stretch of thinking, if any, ended.
+    const stopThinking = () => {
+      if (!clock.thinking) return;
+      patchAnswer({ thinking: false, thoughtMs: clock.stop() });
+    };
+
     const onToolEvent = (e) => {
-      if (e.phase === 'start') {
-        if (isCurrent()) {
-          this._activity = [...this._activity, { id: e.id, name: e.name, summary: e.summary }];
-        }
-      } else if (e.phase === 'end' && e.id) {
-        // The call with this id finished (AG-UI's TOOL_CALL_END). A call made inside `execute`
-        // ends before `execute` does, so several steps can run at once.
-        if (isCurrent()) {
-          this._activity = this._activity.map((a) =>
-            a.id === e.id ? { ...a, done: true, error: e.error || null } : a
-          );
-        }
-      } else if (e.phase === 'detail' && e.summary) {
-        // A page action names the control once it has found it ("Clicking button “Sign in”"):
-        // it replaces the step's first words.
-        if (isCurrent()) {
-          const last = this._activity[this._activity.length - 1];
-          this._activity = e.id
-            ? this._activity.map((a) => (a.id === e.id ? { ...a, summary: e.summary } : a))
-            : last && last.name === e.name
-              ? [...this._activity.slice(0, -1), { ...last, summary: e.summary }]
-              : this._activity;
+      if (['start', 'end', 'detail', 'note'].includes(e.phase)) {
+        // A step of the turn (AG-UI's TOOL_CALL_START / _END). A call made inside `execute` ends
+        // before `execute` does, so several steps can run at once. A page action names the control
+        // once it has found it ("Clicking button “Sign in”") with a `detail`. The answer keeps them.
+        const cur = turnMessages[assistantIdx];
+        const steps = applyToolEvent(cur?.steps || [], e);
+        if (cur && steps !== cur.steps) {
+          if (e.phase === 'start') stopThinking();
+          patchAnswer({ steps });
         }
       } else if (e.phase === 'private') {
         // The turn read the user's private data (ADR-0037): the answer keeps it, so the chat's next
@@ -2198,8 +2431,8 @@ class ShellWindowAiSidebar extends LitElement {
     const onReasoning = (chunk) => {
       const cur = turnMessages[assistantIdx];
       if (!cur) return;
-      turnMessages = [...turnMessages];
-      turnMessages[assistantIdx] = { ...cur, reasoning: (cur.reasoning || '') + chunk };
+      clock.think();
+      patchAnswer({ reasoning: (cur.reasoning || '') + chunk, thinking: true });
       sync();
     };
 
@@ -2218,11 +2451,15 @@ class ShellWindowAiSidebar extends LitElement {
         !(cur.reasoning || '').trim() &&
         !cur.files?.length &&
         !cur.images?.length;
+      if (!unused) {
+        stopThinking();
+        if (cur.steps?.length) patchAnswer({ steps: finishSteps(cur.steps) });
+      }
       turnMessages = unused ? turnMessages.slice(0, assistantIdx) : [...turnMessages];
       for (const content of sent) turnMessages.push({ role: 'user', content });
       assistantIdx = turnMessages.length;
       turnMessages.push({ role: 'assistant', content: '', reasoning: '', files: [] });
-      if (isCurrent()) this._activity = [];
+      clock = thinkClock();
       sync();
     };
 
@@ -2246,11 +2483,13 @@ class ShellWindowAiSidebar extends LitElement {
       while (true) {
         const { value: chunk, done } = await iterator.next();
         if (done) break;
-        turnMessages = [...turnMessages];
-        turnMessages[assistantIdx] = {
-          ...turnMessages[assistantIdx],
-          content: (turnMessages[assistantIdx].content || '') + chunk,
-        };
+        stopThinking();
+        const cur = turnMessages[assistantIdx];
+        patchAnswer({
+          content: (cur.content || '') + chunk,
+          // Words arrived: the tools before them are done.
+          ...(cur.steps?.length ? { steps: finishSteps(cur.steps) } : {}),
+        });
         const now = performance.now();
         if (now - lastPaint >= 16) {
           sync();
@@ -2264,11 +2503,14 @@ class ShellWindowAiSidebar extends LitElement {
     } catch (err) {
       failed = true;
       if (!stopped) {
+        const steps = savedSteps(finishSteps(turnMessages[assistantIdx]?.steps || []));
         turnMessages = [...turnMessages];
         turnMessages[assistantIdx] = {
           role: 'error',
           content: `Error: ${err.message}`,
           files: turnMessages[assistantIdx]?.files || [],
+          // What it did before it failed.
+          ...(steps.length ? { steps } : {}),
         };
       }
     } finally {
@@ -2284,8 +2526,16 @@ class ShellWindowAiSidebar extends LitElement {
       if (isCurrent()) {
         this.streaming = false;
         this._followingJob = false;
-        this._activity = [];
       }
+      // The turn's answers as they're kept: steps in their saved shape, how long each thought, no
+      // live flags. (A steered turn wrote more than one.)
+      stopThinking();
+      turnMessages = turnMessages.map((m, i) => {
+        if (i < messages.length || m.role !== 'assistant') return m;
+        const { thinking, steps, ...settled } = m;
+        const kept = savedSteps(finishSteps(steps || []));
+        return kept.length ? { ...settled, steps: kept } : settled;
+      });
       const cur = turnMessages[assistantIdx];
       if (stopped && cur && cur.role === 'assistant' && !cur.content) {
         turnMessages = [...turnMessages];
@@ -2341,7 +2591,33 @@ class ShellWindowAiSidebar extends LitElement {
 
   _scrollToBottom() {
     const el = this.renderRoot?.querySelector('.messages');
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+      this._lastScrollTop = el.scrollTop;
+    }
+  }
+
+  _followBottom() {
+    this._atBottom = true;
+    this._showJump = false;
+  }
+
+  // Near the bottom, the chat follows the answer again. Scrolling up stops it. Growing content
+  // fires no scroll event, and a smooth scroll down (Jump) only moves down, so neither stops it.
+  _onMessagesScroll(e) {
+    const el = e.currentTarget;
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    if (near) this._atBottom = true;
+    else if (el.scrollTop < this._lastScrollTop - 2) this._atBottom = false;
+    this._lastScrollTop = el.scrollTop;
+    const show = !near && !this._atBottom;
+    if (show !== this._showJump) this._showJump = show;
+  }
+
+  _jumpToBottom() {
+    const el = this.renderRoot?.querySelector('.messages');
+    this._followBottom();
+    el?.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }
 }
 

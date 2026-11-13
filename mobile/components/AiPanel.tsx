@@ -6,13 +6,14 @@ import { useTheme, radius, type Theme } from '../lib/theme'
 import type { AiChatHandlers, AiChatHandle, AiPromptHandler, AppsResult } from '../lib/useBackend'
 import { pickImages } from '../lib/pickImages'
 import { showLabel } from '../lib/tooltip'
-import { applyToolEvent, finishSteps as finishedSteps, type Step } from '../lib/aiSteps'
+import { applyToolEvent, finishSteps as finishedSteps, savedSteps, stepsLabel, thoughtLabel, thinkClock, type Step, type SavedStep, type ThinkClock } from '../lib/aiSteps'
 import { applySteer, mergeUserTurns, newSteerId, type Queued } from '../lib/aiSteer'
 import Markdown from './Markdown'
 import { parseItemLink, type ItemLink } from '../lib/itemLinks'
 import ScreenHeader from './ScreenHeader'
 import IconButton from './IconButton'
 import Icon from './Icon'
+import Shimmer from './Shimmer'
 import ActionSheet from './ActionSheet'
 import AiChats from './AiChats'
 import { newChatId, chatSuggestions, retryHistory, type AiChatData } from '../lib/aiChats'
@@ -23,7 +24,9 @@ import { newChatId, chatSuggestions, retryHistory, type AiChatData } from '../li
 // `privateData`: the turn that wrote this answer read the user's private data (ADR-0037).
 // `error` is a failed turn in a chat the desktop sidebar saved: shown, never sent. `files` is the
 // sidebar's list of a turn's writes, kept when the phone saves that chat again.
-interface ChatMsg { role: 'user' | 'assistant' | 'error'; content: string; images?: string[]; reasoning?: string; privateData?: boolean; files?: unknown[] }
+// `steps` are the tools the answer used and `thoughtMs` how long it thought (lib/aiSteps.ts);
+// `thinking` is true only while the model is thinking now, and is never saved.
+interface ChatMsg { role: 'user' | 'assistant' | 'error'; content: string; images?: string[]; reasoning?: string; thoughtMs?: number; thinking?: boolean; steps?: SavedStep[]; privateData?: boolean; files?: unknown[] }
 
 // The chat open in the panel: its id, and the Space whose Root Drive keeps it (shared/ai-chats.mjs).
 // `title` is the user's name for it, when they gave one.
@@ -183,8 +186,14 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
   // round-trips, no streamed text) doesn't look frozen. A step runs until its tool ends or the
   // next text arrives (mobile/lib/aiSteps.ts).
   const [steps, setSteps] = useState<Step[]>([])
-  // Which answers' Thoughts the user opened or closed, by message index.
+  // The ref is the truth for the turn's handlers; the state draws them.
+  const stepsRef = useRef<Step[]>([])
+  const putSteps = (next: Step[]) => { stepsRef.current = next; setSteps(next) }
+  // How long the model thinks, for "Thought for 4s". Each answer has its own.
+  const clockRef = useRef<ThinkClock>(thinkClock())
+  // Which answers' Thoughts and steps the user opened or closed, by message index.
   const [openThoughts, setOpenThoughts] = useState<Record<number, boolean>>({})
+  const [openSteps, setOpenSteps] = useState<Record<number, boolean>>({})
   // Paths the AI has staged into each Drive's Draft, by drive (hyper://<key>) — drives the review
   // banner for the open tab's Drive. Publishing/discarding runs on the desktop Provider (it can
   // write the Drive); preview is local.
@@ -253,12 +262,38 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
       return copy
     })
 
-  const appendReasoning = (chunk: string) =>
+  const appendReasoning = (chunk: string) => {
+    clockRef.current.think()
     setMessages((prev) => {
       const last = prev[prev.length - 1]
       if (!last || last.role !== 'assistant') return prev
-      return [...prev.slice(0, -1), { ...last, reasoning: (last.reasoning || '') + chunk }]
+      return [...prev.slice(0, -1), { ...last, reasoning: (last.reasoning || '') + chunk, thinking: true }]
     })
+  }
+
+  // The model did something other than think (words, a tool): its stretch of thinking ended.
+  const stopThinking = () => {
+    if (!clockRef.current.thinking) return
+    const ms = clockRef.current.stop()
+    setMessages((prev) => {
+      const last = prev[prev.length - 1]
+      if (!last || last.role !== 'assistant') return prev
+      return [...prev.slice(0, -1), { ...last, thinking: false, thoughtMs: ms }]
+    })
+  }
+
+  // The answer is done (or a steered message starts the next one): it keeps its steps, folded into
+  // "Used 3 tools", and how long it thought.
+  const settleAnswer = () => {
+    const ms = clockRef.current.thinking ? clockRef.current.stop() : null
+    const kept = savedSteps(stepsRef.current)
+    setMessages((prev) => {
+      const last = prev[prev.length - 1]
+      if (!last || last.role !== 'assistant') return prev
+      const { thinking, ...rest } = last
+      return [...prev.slice(0, -1), { ...rest, ...(ms !== null ? { thoughtMs: ms } : {}), ...(kept.length ? { steps: kept } : {}) }]
+    })
+  }
 
   // Store the reply without a JSON wrapper, so the next turn's history doesn't teach the model to
   // keep wrapping.
@@ -275,8 +310,8 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
     ? !!input.trim() && attachments.length === 0
     : !!input.trim() || attachments.length > 0)
 
-  const finishSteps = () => setSteps(finishedSteps)
-  const endTurn = () => { settleLast(); setBusy(false); setSteps([]); handleRef.current = null }
+  const finishSteps = () => putSteps(finishedSteps(stepsRef.current))
+  const endTurn = () => { settleAnswer(); settleLast(); setBusy(false); putSteps([]); handleRef.current = null }
   // Stopped or failed: what the AI never read goes back in the input, for the person to send or not.
   const returnQueued = () => {
     const left = queuedRef.current.map((q) => q.text)
@@ -340,8 +375,13 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
     // The chat's id goes with the turn, so a Note or an Asset the AI makes links back to it (ADR-0047).
     const chatId = chatRef.current?.id
     setMessages([...history, { role: 'assistant', content: '' }])
+    // A regenerated answer takes the place of the one it replaces: it starts with the defaults.
+    const keep = (prev: Record<number, boolean>) => Object.fromEntries(Object.entries(prev).filter(([k]) => Number(k) < history.length))
+    setOpenThoughts(keep)
+    setOpenSteps(keep)
     setBusy(true)
-    setSteps([])
+    putSteps([])
+    clockRef.current = thinkClock()
     // A write with no drive on the event (an older Provider) went to the drive that was open.
     const sendDrive = tabDrive
     // The panel is the user's own AI: a personal turn, with their names, Notes, and this Space's
@@ -352,14 +392,15 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
     // from the start of this turn (ADR-0037).
     const privateData = history.some((m) => m.privateData === true)
     handleRef.current = aiChat(fitImages(mergeUserTurns(history.filter((m) => m.role !== 'error'))), { context: describeContext(url, title), personal: true, space, tab, privateData, chat: chatId }, {
-      onChunk: (chunk) => { finishSteps(); appendToLast(chunk) },
+      onChunk: (chunk) => { stopThinking(); finishSteps(); appendToLast(chunk) },
       onReasoning: appendReasoning,
       onTool: (event: any) => {
         if (event?.phase === 'private') {
           setMessages((prev) => markPrivate(prev))
           return
         }
-        setSteps((prev) => applyToolEvent(prev, event))
+        if (event?.phase === 'start') stopThinking()
+        putSteps(applyToolEvent(stepsRef.current, event))
         // A staged write → track it for its Drive's draft review banner.
         const drive = driveOf(event?.drive) || sendDrive
         if (event && event.phase === 'write' && event.path && event.draft !== false && drive) {
@@ -372,7 +413,9 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
       // The Provider read these messages: they go in the transcript here, and a new answer starts.
       onSteer: ({ ids, texts }) => {
         setQueued(queuedRef.current.filter((q) => !ids.includes(q.id)))
-        setSteps([])
+        settleAnswer()
+        putSteps([])
+        clockRef.current = thinkClock()
         setMessages((prev) => applySteer(prev, texts, unwrapReply))
       },
       onDone: () => {
@@ -396,7 +439,9 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
     wasBusy.current = busy
     const c = chatRef.current
     if (!ended || !c) return
-    const msgs = messagesRef.current.filter((m) => !(m.role === 'assistant' && !m.content && !(m.reasoning || '').trim()))
+    const msgs = messagesRef.current
+      .filter((m) => !(m.role === 'assistant' && !m.content && !(m.reasoning || '').trim() && !m.steps?.length))
+      .map(({ thinking, ...m }) => m)
     if (!msgs.some((m) => m.role === 'user')) return
     apps('aiChats', 'save', { space: c.space, ns: c.ns, id: c.id, messages: msgs, job: c.job })
       .then((r) => {
@@ -410,8 +455,9 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
     setChat(next)
     setMessages(msgs)
     setOpenThoughts({})
+    setOpenSteps({})
     setError(null)
-    setSteps([])
+    putSteps([])
     atBottom.current = true
     setShowJump(false)
     onChatsOpenChange(false)
@@ -454,7 +500,7 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
   const onChatDeleted = (id: string) => {
     if (chatRef.current?.id !== id) return
     setChat(null)
-    if (!busy) { setMessages([]); setOpenThoughts({}); setError(null) }
+    if (!busy) { setMessages([]); setOpenThoughts({}); setOpenSteps({}); setError(null) }
   }
   const onChatRenamed = (id: string, newTitle: string, named: boolean) => {
     const c = chatRef.current
@@ -508,41 +554,60 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
     })
   }
 
-  // The turn's progress, under the answer as it streams in: done steps with a check (or a warning
-  // sign when the tool failed), running ones with a spinner. Before any step or text, it says the AI is thinking.
+  // Before the answer's first words: "Thinking…" while the model works out what to do next, unless
+  // its Thoughts already say so or a step is running (Nuxt UI's ChatShimmer).
   const renderSteps = () => {
     const last = messages[messages.length - 1]
-    const answering = last?.role === 'assistant' && !!unwrapReply(last.content, true)
-    if (!steps.length) {
-      if (answering) return null
-      return (
-        <View style={[s.bubble, s.aiBubble, s.stepRow]}>
-          <ActivityIndicator size='small' color={t.accent} />
-          <Text style={s.stepText}>{last?.content ? 'Writing the answer…' : 'Thinking…'}</Text>
-        </View>
-      )
-    }
-    const hidden = Math.max(0, steps.length - MAX_STEPS_SHOWN)
+    if (last?.role !== 'assistant' || unwrapReply(last.content, true) || last.thinking) return null
+    if (!steps.every((x) => x.done)) return null
+    return <View style={s.steps}><Shimmer style={s.statusText}>Thinking…</Shimmer></View>
+  }
+
+  // An answer's steps, as Nuxt UI's ChatTool: open while the turn runs (a spinner and breathing
+  // words on a running step, a check or a cross once it ended), folded into one line ("Used 3
+  // tools") once the answer is done. What the person opened or closed stays that way.
+  const renderUsedSteps = (i: number, list: Array<Step | SavedStep>, live: boolean) => {
+    const open = openSteps[i] ?? live
+    const running = live ? [...list].reverse().find((x) => 'done' in x && !x.done) : undefined
+    // While it runs, the newest few; the rest collapse into one line.
+    const hidden = live ? Math.max(0, list.length - MAX_STEPS_SHOWN) : 0
     return (
-      <View style={[s.bubble, s.aiBubble, s.steps]}>
-        {hidden > 0 && <Text style={s.stepMore}>{hidden} earlier step{hidden > 1 ? 's' : ''}</Text>}
-        {steps.slice(hidden).map((step, i) => (
-          <View key={hidden + i} style={s.stepRow}>
-            <View style={s.stepIcon}>
-              {!step.done
-                ? <ActivityIndicator size='small' color={t.accent} />
-                : step.error
-                  ? <Icon name='exclamation-circle' size={12} color={t.danger} />
-                  : <Icon name='check' size={12} color={t.secure} />}
-            </View>
-            <Text style={[s.stepText, step.done && s.stepDoneText]} numberOfLines={2}>{step.label}</Text>
-          </View>
-        ))}
-        {!answering && steps.every((x) => x.done) && (
-          // Every tool ended: the model is working out what to do next.
-          <View style={s.stepRow}>
-            <View style={s.stepIcon}><ActivityIndicator size='small' color={t.accent} /></View>
-            <Text style={s.stepText}>Thinking…</Text>
+      <View style={s.fold}>
+        <Pressable
+          style={s.foldHead}
+          onPress={() => setOpenSteps((prev) => ({ ...prev, [i]: !open }))}
+          accessibilityRole='button'
+          accessibilityState={{ expanded: open }}
+          accessibilityHint={open ? 'Hides the steps' : 'Shows each step the AI took'}
+          hitSlop={8}
+        >
+          <Icon name='wrench' size={11} color={t.textMuted} />
+          {/* Open, the list shows the running step; folded, the line does. */}
+          {running
+            ? <Shimmer style={s.foldLabel} numberOfLines={1}>{open ? 'Using tools…' : running.label}</Shimmer>
+            : <Text style={s.foldLabel} numberOfLines={1}>{stepsLabel(list)}</Text>}
+          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={9} color={t.textMuted} />
+        </Pressable>
+        {open && (
+          <View style={s.foldBody}>
+            {hidden > 0 && <Text style={s.stepMore}>{hidden} earlier step{hidden > 1 ? 's' : ''}</Text>}
+            {list.slice(hidden).map((x, j) => {
+              const going = live && 'done' in x && !x.done
+              return (
+                <View key={hidden + j} style={[s.stepRow, x.child && s.stepChild]}>
+                  <View style={s.stepIcon}>
+                    {going
+                      ? <ActivityIndicator size='small' color={t.accent} />
+                      : x.error
+                        ? <Icon name='times-circle' size={12} color={t.danger} />
+                        : <Icon name='check' size={11} color={t.secure} />}
+                  </View>
+                  {going
+                    ? <Shimmer style={s.stepText} numberOfLines={2}>{x.label}</Shimmer>
+                    : <Text style={[s.stepText, s.stepDoneText, x.error && s.stepFailed]} selectable={!live}>{x.label}</Text>}
+                </View>
+              )
+            })}
           </View>
         )}
       </View>
@@ -578,6 +643,11 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
   const chatTitle = chat?.named ? chat.title : chat?.job?.title || firstAsk || ''
   const suggestions = chatSuggestions(url)
   const canRetry = !!error && !busy && !!retryHistory(messages)
+  // Ask again, from the last thing the person said: Regenerate on the latest answer, Try again after
+  // a failure. Not over an answer whose edits the desktop sidebar keeps (its Checkpoint would go).
+  const lastMsg = messages[messages.length - 1]
+  const canRegenerate = !busy && !attaching && !!lastMsg && lastMsg.role !== 'user' && !lastMsg.files?.length && !!retryHistory(messages)
+  const failed = !!error || lastMsg?.role === 'error'
   return (
     <View style={[s.overlay, { paddingTop: insets.top }]}>
       {chatsOpen ? (
@@ -668,11 +738,23 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
           ) : (
             messages.map((m, i) => {
               if (m.role === 'error') {
-                // A failed turn in a chat the desktop sidebar saved.
+                // A failed turn in a chat the desktop sidebar saved, after the steps it took.
+                const lastOne = i === messages.length - 1
                 return (
-                  <View key={i} style={s.errorRow}>
-                    <Icon name='exclamation-circle' size={13} color={t.danger} style={s.errorIcon} />
-                    <Text style={[s.error, s.flex]}>{m.content.replace(/^Error:\s*/, '')}</Text>
+                  <View key={i} style={s.aiMsg}>
+                    {!!m.steps?.length && renderUsedSteps(i, m.steps, false)}
+                    <View style={[s.errorRow, s.selfStretch]}>
+                      <Icon name='exclamation-circle' size={13} color={t.danger} style={s.errorIcon} />
+                      <View style={s.errorBody}>
+                        <Text style={s.error}>{m.content.replace(/^Error:\s*/, '')}</Text>
+                        {lastOne && !error && canRegenerate && (
+                          <Pressable style={({ pressed }) => [s.retryBtn, pressed && s.sendNowPressed]} onPress={retry} hitSlop={6} accessibilityRole='button'>
+                            <Icon name='redo' size={11} color={t.accent} />
+                            <Text style={s.retryText}>Try again</Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    </View>
                   </View>
                 )
               }
@@ -681,27 +763,41 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
               // The trailing empty assistant message is the response slot. renderSteps() below
               // stands in for it until the first words land.
               const thoughts = m.role === 'assistant' ? (m.reasoning || '').trim() : ''
-              if (m.role === 'assistant' && !shown && !thoughts) return null
+              // The tools the answer used: live ones while it runs, saved ones after.
+              const used: Array<Step | SavedStep> = streaming ? steps : (m.steps || [])
+              if (m.role === 'assistant' && !shown && !thoughts && !used.length) return null
               if (m.role === 'assistant') {
-                // Thoughts are open while the model is still thinking, then fold away.
-                const thoughtsOpen = openThoughts[i] ?? (streaming && !shown)
+                // Thoughts are open while the model is still thinking, then fold into "Thought for 4s"
+                // (Nuxt UI's ChatReasoning). What the person opened or closed stays that way.
+                const thinkingNow = streaming && !!m.thinking
+                const thoughtsOpen = openThoughts[i] ?? thinkingNow
+                const latest = i === messages.length - 1
                 return (
                   <View key={i} style={s.aiMsg}>
                     {!!thoughts && (
-                      <View style={s.thoughts}>
+                      <View style={s.fold}>
                         <Pressable
-                          style={s.thoughtsHead}
+                          style={s.foldHead}
                           onPress={() => setOpenThoughts((prev) => ({ ...prev, [i]: !thoughtsOpen }))}
                           accessibilityRole='button'
                           accessibilityState={{ expanded: thoughtsOpen }}
+                          accessibilityHint={thoughtsOpen ? 'Hides what the AI thought' : 'Shows what the AI thought'}
                           hitSlop={8}
                         >
-                          <Icon name={thoughtsOpen ? 'chevron-down' : 'chevron-right'} size={10} color={t.textMuted} />
-                          <Text style={s.thoughtsLabel}>Thoughts</Text>
+                          <Icon name='lightbulb' size={11} color={t.textMuted} />
+                          {thinkingNow
+                            ? <Shimmer style={s.foldLabel}>Thinking…</Shimmer>
+                            : <Text style={s.foldLabel}>{thoughtLabel(m.thoughtMs)}</Text>}
+                          <Icon name={thoughtsOpen ? 'chevron-down' : 'chevron-right'} size={9} color={t.textMuted} />
                         </Pressable>
-                        {thoughtsOpen && <Text style={s.thoughtsBody} selectable>{thoughts}</Text>}
+                        {thoughtsOpen && (
+                          <ScrollView style={s.thoughtsScroll} nestedScrollEnabled>
+                            <Text style={s.thoughtsBody} selectable>{thoughts}</Text>
+                          </ScrollView>
+                        )}
                       </View>
                     )}
+                    {used.length > 0 && renderUsedSteps(i, used, streaming)}
                     {/* An answer runs the width of the panel, as on desktop: room for lists and code. */}
                     {!!shown && <Pressable
                       style={s.answer}
@@ -711,15 +807,27 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
                       <Markdown text={shown} onLink={openLink} />
                     </Pressable>}
                     {!streaming && !!shown && (
-                      <IconButton
-                        icon={copied === i ? 'check' : 'copy'}
-                        regular={copied !== i}
-                        label={copied === i ? 'Copied' : 'Copy the answer'}
-                        size={14}
-                        color={copied === i ? t.secure : t.textMuted}
-                        onPress={() => copy(shown, i)}
-                        style={s.copyBtn}
-                      />
+                      <View style={s.actions}>
+                        <IconButton
+                          icon={copied === i ? 'check' : 'copy'}
+                          regular={copied !== i}
+                          label={copied === i ? 'Copied' : 'Copy the answer'}
+                          size={14}
+                          color={copied === i ? t.secure : t.textMuted}
+                          onPress={() => copy(shown, i)}
+                          style={s.actionBtn}
+                        />
+                        {latest && canRegenerate && (
+                          <IconButton
+                            icon='redo'
+                            label='Regenerate the answer'
+                            size={13}
+                            color={t.textMuted}
+                            onPress={retry}
+                            style={s.actionBtn}
+                          />
+                        )}
+                      </View>
                     )}
                   </View>
                 )
@@ -893,7 +1001,18 @@ export default function AiPanel ({ visible, onClose, url, title, space, spaceNs 
                   <Icon name='stop' size={13} color={t.onAccent} />
                 </TouchableOpacity>
               )}
-              {(!busy || canSend) && (
+              {!busy && !canSend && failed && canRegenerate ? (
+                // The turn failed: Send asks again, from the last thing the person said.
+                <TouchableOpacity
+                  style={[s.sendBtn, s.retrySendBtn]}
+                  onPress={retry}
+                  onLongPress={() => showLabel('Try again')}
+                  accessibilityRole='button'
+                  accessibilityLabel='Try again'
+                >
+                  <Icon name='redo' size={14} color={t.danger} />
+                </TouchableOpacity>
+              ) : (!busy || canSend) && (
                 <TouchableOpacity
                   style={[s.sendBtn, !canSend && s.sendDisabled]}
                   onPress={send}
@@ -947,11 +1066,16 @@ function makeStyles (t: Theme) {
     // An answer and its copy button, under it on the left.
     aiMsg: { alignSelf: 'stretch', alignItems: 'flex-start' },
     answer: { alignSelf: 'stretch', paddingHorizontal: 2 },
-    thoughts: { marginBottom: 6 },
-    thoughtsHead: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 28 },
-    thoughtsLabel: { color: t.textMuted, fontSize: 13 },
-    thoughtsBody: { color: t.textMuted, fontSize: 13, lineHeight: 19, marginTop: 4, marginLeft: 4, paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: t.border },
-    copyBtn: { width: 40, height: 40, marginLeft: 2, marginBottom: -6 },
+    // Thoughts and steps: one quiet line each, that opens.
+    fold: { alignSelf: 'stretch', marginBottom: 6 },
+    foldHead: { flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 32, alignSelf: 'flex-start', maxWidth: '100%' },
+    foldLabel: { color: t.textMuted, fontSize: 13, flexShrink: 1 },
+    foldBody: { gap: 6, marginTop: 4, marginLeft: 4, paddingLeft: 10, paddingVertical: 2, borderLeftWidth: 2, borderLeftColor: t.border },
+    thoughtsScroll: { maxHeight: 260, marginTop: 4, marginLeft: 4, borderLeftWidth: 2, borderLeftColor: t.border },
+    thoughtsBody: { color: t.textMuted, fontSize: 13, lineHeight: 19, paddingLeft: 10 },
+    actions: { flexDirection: 'row', alignItems: 'center', marginLeft: 2, marginBottom: -6 },
+    actionBtn: { width: 40, height: 40 },
+    selfStretch: { alignSelf: 'stretch' },
     userImages: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 },
     userImage: { width: 120, height: 120, borderRadius: radius.md, backgroundColor: t.surfaceAlt },
     aiBubble: { alignSelf: 'flex-start', backgroundColor: t.surface },
@@ -964,11 +1088,14 @@ function makeStyles (t: Theme) {
     jumpBtn: { position: 'absolute', right: 14, bottom: 12, width: 40, height: 40, borderRadius: radius.pill, backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, elevation: 3, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
     errorIcon: { marginTop: 2 },
     error: { color: t.danger, fontSize: 13, lineHeight: 18 },
-    steps: { gap: 6, paddingVertical: 8 },
+    steps: { alignSelf: 'stretch', gap: 6, paddingVertical: 4, paddingHorizontal: 2 },
     stepRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    stepChild: { paddingLeft: 18 },
     stepIcon: { width: 20, alignItems: 'center' },
     stepText: { color: t.textDim, fontSize: 14, flexShrink: 1 },
     stepDoneText: { color: t.textMuted },
+    stepFailed: { color: t.danger },
+    statusText: { color: t.textMuted, fontSize: 14, paddingVertical: 2 },
     stepMore: { color: t.textMuted, fontSize: 12 },
     draftBanner: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border, backgroundColor: t.surface, paddingHorizontal: 16, paddingVertical: 10, gap: 10 },
     draftHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -995,6 +1122,7 @@ function makeStyles (t: Theme) {
     pageChipText: { flexShrink: 1, color: t.textMuted, fontSize: 13 },
     sendBtn: { width: 38, height: 38, borderRadius: radius.pill, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center' },
     stopBtn: { backgroundColor: t.danger },
+    retrySendBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: t.danger },
     // A message waiting for the AI's next step: the user's bubble, dimmed, with a dashed edge.
     queuedBubble: { opacity: 0.7, borderWidth: 1, borderStyle: 'dashed', borderColor: t.trustText },
     queuedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

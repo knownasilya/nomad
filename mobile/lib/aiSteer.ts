@@ -4,7 +4,7 @@
 // Provider never read is sent as the next turn when this one ends.
 
 // 'error' is a failed turn shown in a saved chat; the panel leaves it out of what it sends.
-export interface SteerMsg { role: 'user' | 'assistant' | 'error'; content: string; images?: string[]; reasoning?: string }
+export interface SteerMsg { role: 'user' | 'assistant' | 'error'; content: string; images?: string[]; reasoning?: string; steps?: unknown[] }
 // now: the person pressed Send now, and the Provider is stopping the AI's current step for it.
 export interface Queued { id: string; text: string; now?: boolean }
 
@@ -13,14 +13,14 @@ export function newSteerId (): string {
 }
 
 // The Provider read `texts`: the answer so far stays as it is (or goes, when nothing came of it
-// yet), the messages follow it, and a new answer starts after them.
+// yet: no words, Thoughts or steps), the messages follow it, and a new answer starts after them.
 export function applySteer<M extends SteerMsg> (messages: M[], texts: string[], settle: (text: string) => string = (x) => x): M[] {
   if (!texts.length) return messages
   let base = messages
   const last = messages[messages.length - 1]
   if (last && last.role === 'assistant') {
     const content = settle(last.content)
-    const empty = !content.trim() && !(last.reasoning || '').trim()
+    const empty = !content.trim() && !(last.reasoning || '').trim() && !last.steps?.length
     base = empty ? messages.slice(0, -1) : [...messages.slice(0, -1), { ...last, content }]
   }
   const sent = texts.map((content) => ({ role: 'user', content }) as M)

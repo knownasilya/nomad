@@ -30,7 +30,8 @@ import { resolveOrigins } from '../../../shared/ai-origin.mjs'
 
 // What a saved message keeps. `error` is the sidebar's failed turn; `files` its Revert list. The
 // phone keeps both when it saves a chat desktop started.
-const MESSAGE_FIELDS = ['role', 'content', 'images', 'reasoning', 'privateData', 'files']
+// `steps` and `thoughtMs`: what the AI did and how long it thought (shared/ai-steps.mjs).
+const MESSAGE_FIELDS = ['role', 'content', 'images', 'reasoning', 'thoughtMs', 'steps', 'privateData', 'files']
 const ROLES = ['user', 'assistant', 'error']
 
 function checkId (id) {

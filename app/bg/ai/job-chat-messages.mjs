@@ -8,6 +8,8 @@
 // the run records what it changed itself, and a Job's writes can be staged in a Draft, which the
 // sidebar's Revert doesn't know about.
 
+import { applyToolEvent, finishSteps, savedSteps } from '../../../shared/ai-steps.mjs';
+
 const MAX_TITLE = 80;
 
 // { id, title } for a session's `job`, or null when it isn't one.
@@ -56,20 +58,29 @@ export function applyJobEvent(messages, type, e) {
     const [rest, answer] = withAnswer(messages);
     return [...rest, { ...answer, images: [...(answer.images || []), e.imageDataUrl] }];
   }
+  if (type === 'tool') {
+    // A step the run took: the answer keeps it, as the sidebar's own turns do (shared/ai-steps.mjs).
+    const [rest, answer] = withAnswer(messages);
+    const steps = applyToolEvent(answer.steps || [], e);
+    return steps === (answer.steps || []) ? messages : [...rest, { ...answer, steps }];
+  }
   return messages;
 }
 
 // The session's messages once the run ended: an error takes the answer's place, a stopped run with
 // no answer says so, and a Job with no prompt (only job.js) answers with its module's result.
 export function jobChatEnd(messages, { error = null, stopped = false, output = '' } = {}) {
-  const [rest, answer] = withAnswer(messages);
+  const [rest, live] = withAnswer(messages);
+  const { steps: liveSteps, ...settled } = live;
+  const steps = savedSteps(finishSteps(liveSteps || []));
+  const answer = steps.length ? { ...settled, steps } : settled;
   const content = (answer.content || '').trim();
   if (error && !stopped) {
-    return [...rest, { role: 'error', content: `Error: ${error}` }];
+    return [...rest, { role: 'error', content: `Error: ${error}`, ...(steps.length ? { steps } : {}) }];
   }
   if (!content) {
     const text = stopped ? '_Stopped._' : String(output || '').trim();
-    if (!text && !answer.reasoning && !answer.images?.length) return rest;
+    if (!text && !answer.reasoning && !answer.images?.length && !steps.length) return rest;
     return [...rest, { ...answer, content: text }];
   }
   return [...rest, answer];
