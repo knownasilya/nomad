@@ -1080,6 +1080,7 @@ function Player ({ a, uri, onFailed }: { a: AssetRecord; uri: string; onFailed: 
   }, [uri, name, html])
   return (
     <WebView
+      containerStyle={s.webBox}
       style={s.player}
       source={{ uri: page }}
       originWhitelist={['file://*']}
@@ -1123,6 +1124,7 @@ function PageView ({ html }: { html: string }) {
   const page = useMemo(() => as.withPreviewCsp(html), [html])
   return (
     <WebView
+      containerStyle={s.webBox}
       style={[s.player, { backgroundColor: '#fff' }]}
       source={{ html: page, baseUrl: 'about:blank' }}
       // Every URL comes to the check below (one off the list would go to another app), which lets
@@ -1188,6 +1190,7 @@ function DocView ({ a, uri, onFailed }: { a: AssetRecord; uri: string; onFailed:
   const finish = () => { done.current = true; if (timer.current) clearTimeout(timer.current) }
   return (
     <WebView
+      containerStyle={s.webBox}
       style={a.kind === 'book' ? [s.player, { backgroundColor: t.surface }] : s.player}
       source={{ uri: src }}
       originWhitelist={['file://*']}
@@ -1364,6 +1367,10 @@ function makeStyles (t: Theme) {
     fetchingNote: { position: 'absolute', alignItems: 'center', gap: 10, padding: 14, borderRadius: radius.md, backgroundColor: 'rgba(0,0,0,0.45)' },
     fetchingText: { color: 'rgba(255,255,255,0.85)', fontSize: 13 },
     player: { width: '100%', flex: 1, alignSelf: 'stretch', backgroundColor: '#000' },
+    // On Android, WebView's `style` sizes the page inside a View of its own, which has only
+    // flex: 1. In the centered stage that View shrank to no width at all, and the page laid out
+    // 0 wide: the PDF, page or video drew, and nothing showed. `containerStyle` sizes that View.
+    webBox: { flex: 1, alignSelf: 'stretch' },
     paper: { alignSelf: 'stretch', flex: 1, backgroundColor: t.surface, borderTopLeftRadius: radius.md, borderTopRightRadius: radius.md },
     paperBody: { padding: sp.lg, paddingBottom: 40 },
     code: { color: t.text, fontFamily: 'monospace', fontSize: 12.5, lineHeight: 19 },
