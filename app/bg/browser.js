@@ -10,6 +10,7 @@ import {
   screen,
   session,
   nativeImage,
+  autoUpdater as nativeUpdater,
 } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import os from 'os';
@@ -66,6 +67,14 @@ const UPDATER_STATUS_CHECKING = 'checking';
 const UPDATER_STATUS_DOWNLOADING = 'downloading';
 const UPDATER_STATUS_DOWNLOADED = 'downloaded';
 
+// On macOS electron-updater says 'update-downloaded' as soon as it has the zip, before Squirrel.Mac
+// has fetched, checked and unpacked it. Only then can quitAndInstall() restart into it: a click on
+// "Restart to update" before that just waits, and if Squirrel then fails nothing restarts at all. So
+// on macOS the update counts as downloaded when Squirrel says so (onSquirrelReady), and a Squirrel
+// that hasn't answered after this long counts as an error, so the next check can try again.
+const IS_MAC = process.platform === 'darwin';
+const SQUIRREL_READY_TIMEOUT = 10 * 60 * 1e3;
+
 // globals
 // =
 
@@ -76,6 +85,7 @@ autoUpdater.autoDownload = false;
 var updaterState = UPDATER_STATUS_IDLE;
 var updaterError = undefined; // has there been an error?
 var updaterVersion = undefined; // the version being downloaded, or downloaded
+var squirrelTimer = undefined; // macOS: waiting for Squirrel.Mac to stage the download
 
 // content-type tracker
 var resourceContentTypes = new LRU(100); // URL -> Content-Type
@@ -115,6 +125,12 @@ export async function setup() {
       autoUpdater.on('update-not-available', onUpdateNotAvailable);
       autoUpdater.on('update-downloaded', onUpdateDownloaded);
       autoUpdater.on('error', onUpdateError);
+      if (IS_MAC) {
+        nativeUpdater.on('update-downloaded', onSquirrelReady);
+        nativeUpdater.on('before-quit-for-update', () => {
+          logger.info('[AUTO-UPDATE] Closing windows to install the update and restart.');
+        });
+      }
     } catch (e) {
       logger.error(`Auto-updater error: ${e.toString()}`);
     }
@@ -759,7 +775,9 @@ export function downloadUpdateNow({ prerelease = false } = {}) {
 // and relaunched afterwards on every platform (Squirrel.Mac always relaunches; NSIS needs both flags).
 export function installUpdateAndRestart() {
   if (updaterState != UPDATER_STATUS_DOWNLOADED) return false;
-  logger.info('[AUTO-UPDATE] Quitting and installing, asked for by another device.');
+  logger.info('[AUTO-UPDATE] Quitting and installing, asked for by another device.', {
+    version: updaterVersion,
+  });
   autoUpdater.quitAndInstall(true, true);
   return true;
 }
@@ -775,8 +793,8 @@ export function offUpdaterState(fn) {
 export function restartBrowser() {
   if (updaterState == UPDATER_STATUS_DOWNLOADED) {
     // run the update installer
+    logger.info('[AUTO-UPDATE] Quitting and installing.', { version: updaterVersion });
     autoUpdater.quitAndInstall();
-    logger.info('[AUTO-UPDATE] Quitting and installing.');
   } else {
     logger.info('Restarting Nomad by restartBrowser()');
     // do a simple restart
@@ -1038,12 +1056,37 @@ function onUpdateNotAvailable() {
 
 function onUpdateDownloaded(info) {
   if (info?.version) updaterVersion = info.version;
-  logger.info('[AUTO-UPDATE] New browser version downloaded. Ready to install.');
+  if (IS_MAC) {
+    // Squirrel.Mac fetches it from electron-updater now; ready once it says so (onSquirrelReady).
+    logger.info('[AUTO-UPDATE] New browser version downloaded. Waiting for macOS to stage it.');
+    clearTimeout(squirrelTimer);
+    squirrelTimer = setTimeout(() => {
+      squirrelTimer = undefined;
+      onUpdateError(new Error('macOS did not get the update ready to install'));
+    }, SQUIRREL_READY_TIMEOUT);
+    return;
+  }
+  markUpdateDownloaded();
+}
+
+function onSquirrelReady() {
+  if (updaterState == UPDATER_STATUS_DOWNLOADED) return;
+  clearTimeout(squirrelTimer);
+  squirrelTimer = undefined;
+  markUpdateDownloaded();
+}
+
+function markUpdateDownloaded() {
+  logger.info('[AUTO-UPDATE] New browser version downloaded. Ready to install.', {
+    version: updaterVersion,
+  });
   setUpdaterState(UPDATER_STATUS_DOWNLOADED);
   browserEvents.emit('updater-downloaded', { version: updaterVersion || null });
 }
 
 function onUpdateError(e) {
+  clearTimeout(squirrelTimer);
+  squirrelTimer = undefined;
   console.error(e);
   logger.error(`[AUTO-UPDATE] error: ${e.toString()}`);
   setUpdaterState(UPDATER_STATUS_IDLE);

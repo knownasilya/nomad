@@ -49,6 +49,7 @@ import * as pageControl from './bg/ui/page-control';
 import * as openTabs from './bg/ui/open-tabs';
 import * as remoteUpdate from './bg/remote-update';
 import * as inbox from './bg/hyper/inbox';
+import { createQuitTeardown } from './bg/quit-teardown.mjs';
 import * as vouches from './bg/ui/vouches';
 import * as desktopNotifications from './bg/ui/desktop-notifications';
 import * as deviceActivity from './bg/ui/device-activity';
@@ -286,16 +287,28 @@ app.on('window-all-closed', () => {
   // do nothing
 });
 
-app.on('will-quit', async (e) => {
-  if (hyper.daemon.requiresShutdown()) {
-    e.preventDefault();
-    log.info('Delaying shutdown to teardown the daemon');
-    // Unannounce this Device's mailboxes first, so a sender tries the user's other Devices at once.
-    await inbox.shutdown();
-    await hyper.daemon.shutdown();
-    app.quit();
-  }
-});
+// Close the daemon before the process ends, and always end it afterwards, even when closing fails
+// or hangs: on macOS an update installs only once this process is gone (bg/quit-teardown.mjs).
+app.on(
+  'will-quit',
+  createQuitTeardown({
+    needed: () => hyper.daemon.requiresShutdown(),
+    steps: [
+      // Unannounce this Device's mailboxes first, so a sender tries the user's other Devices at once.
+      ['inbox', () => inbox.shutdown()],
+      ['daemon', () => hyper.daemon.shutdown()],
+    ],
+    quit: () => {
+      app.quit();
+      // If something holds the quit up after this, end the process anyway.
+      setTimeout(() => {
+        log.warn('Quit did not finish, exiting');
+        app.exit(0);
+      }, 5000);
+    },
+    logger: log,
+  })
+);
 
 app.on('quit', () => {
   log.info('Program quit');

@@ -158,6 +158,23 @@ trusts it for code signing, and `scripts/afterPackHook.js` signs with it
 > script reuses the existing certificate. An app that was ad-hoc signed (1.17.0 and earlier) can't
 > update to a self-signed build either: install the first self-signed release from its dmg.
 
+### When the Mac app doesn't restart into an update
+
+"Restart to update Nomad" (and an update asked for from the phone) calls `quitAndInstall()`. On
+macOS that only works once Squirrel.Mac has fetched, checked and unpacked the zip that
+electron-updater downloaded, so Nomad shows the restart item only after Squirrel's own
+`update-downloaded` (`onSquirrelReady` in `app/bg/browser.js`). Squirrel's ShipIt then waits for the
+old process to end before it installs and relaunches, so the quit teardown in `main.js` always ends
+the process, even when closing the daemon fails or hangs (`app/bg/quit-teardown.mjs`).
+
+To see where an update stopped, look at:
+
+- `~/Library/Application Support/Nomad/nomad.log`: `[AUTO-UPDATE]` lines (downloaded, waiting for
+  macOS to stage it, ready, quitting and installing, closing windows) and `Quit:` lines (each
+  teardown step and how long it took).
+- `~/Library/Caches/com.knownasilya.nomad.ShipIt/ShipIt_stderr.log`: Squirrel's installer. A
+  signature problem shows here as *"code failed to satisfy specified code requirement(s)"*.
+
 ### Setting up the Android release keystore
 
 Generate a keystore once (modern `keytool` creates PKCS12, where the store and key passwords are

@@ -17,7 +17,7 @@
 // The actions themselves are ui/page-control.js's, with the Job's rules in place of the sidebar's.
 
 import path from 'path';
-import { BrowserWindow } from 'electron';
+import { app, autoUpdater, BrowserWindow } from 'electron';
 import * as logLib from '../logger';
 import * as permissions from '../ui/permissions';
 import * as tabManager from '../ui/tabs/manager';
@@ -33,6 +33,12 @@ import { readPageText } from './scratch.mjs';
 import { grantPage, pageGrant, pageSite } from '../../../shared/jobs.mjs';
 
 const logger = logLib.get().child({ category: 'ai', subcategory: 'job-page' });
+
+// A shown Job window hides instead of closing while its run goes on, but never holds up a quit: an
+// update's quitAndInstall closes every window first and installs only once they are all gone.
+let quitting = false;
+app.on('before-quit', () => (quitting = true));
+autoUpdater?.on?.('before-quit-for-update', () => (quitting = true));
 
 const PRELOAD_WORLD = 999;
 const LOAD_TIMEOUT = 20_000;
@@ -310,7 +316,7 @@ export function createJobPage({
       if (!shown) {
         shown = true;
         hiddenWin.on('close', (e) => {
-          if (ended) return;
+          if (ended || quitting) return;
           e.preventDefault();
           hiddenWin.hide();
         });
