@@ -36,6 +36,10 @@ function bundleApplication() {
     // The crawler's utility-process entry (bg/hyper/crawler-host.js). Bundled so it carries the
     // repo-root shared/ modules, which a packaged build does not ship.
     bundle(p(appDir, 'tools/crawler-process.mjs'), p(appDir, 'tools/crawler-process.build.js')),
+    // The AI's execute worker (bg/ai/execute-host.mjs forks it in a utility process). Bundled for the
+    // same reason: search-execute.mjs imports repo-root shared/ modules (home-live, home-layout), and
+    // an unbundled worker in a packaged build exits (1) on load (1.50.0 to 1.50.4).
+    bundle(p(appDir, 'bg/ai/execute-worker.mjs'), p(appDir, 'bg/ai/execute-worker.build.js')),
     bundle(p(fgDir, 'webview-preload/index.js'), p(fgDir, 'webview-preload/index.build.js'), {
       browserify: true,
     }),
