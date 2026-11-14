@@ -302,6 +302,27 @@ export function createAssets ({ libraryOf, vaultOf = () => null, blobs, fs = nul
     return { changed }
   }
 
+  // A thumbnail made after the file was added (shared/assets.mjs needsThumb): the app makes it from
+  // the file when it is opened. Anyone who can write the Space may add one where there is none; one
+  // that is there is never replaced. -> the record, or null when it had one already.
+  async function setThumb (space, id, thumb) {
+    const place = await writable(space)
+    const small = b4a.from(String(thumb || ''), 'base64')
+    if (!small.length) throw new Error('That thumbnail is empty')
+    const err = as.sizeError({ bytes: 1, thumbBytes: small.length })
+    if (err) throw new Error(err)
+    const p = as.pathsOf(place.root)
+    const prev = as.isAssetId(id) ? await recordAt(place, p.item(id)) : null
+    if (!as.isAsset(prev)) throw new Error('That file was removed')
+    if (!as.needsThumb(prev)) return null
+    const now = Date.now()
+    await place.base.append({ op: 'put', path: p.thumb(id), metadata: makeMetadata({ mtime: now, ctime: now }), blob: await blobs.putBlobFor(place.base, small) })
+    const rec = as.withThumb(prev)
+    await place.base.append(inlineOp(p.item(id), rec))
+    await place.base.update()
+    return rec
+  }
+
   async function removeFrom (place, id) {
     const p = as.pathsOf(place.root)
     const prev = await recordAt(place, p.item(id))
@@ -377,5 +398,5 @@ export function createAssets ({ libraryOf, vaultOf = () => null, blobs, fs = nul
     return { removed: plan.assets.length }
   }
 
-  return { list, read, readTo, stream, endStream, add, update, updateMany, remove, removeMany, addFolder, moveFolder, removeFolder }
+  return { list, read, readTo, stream, endStream, add, setThumb, update, updateMany, remove, removeMany, addFolder, moveFolder, removeFolder }
 }

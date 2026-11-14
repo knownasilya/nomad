@@ -97,6 +97,7 @@ export default {
   abortAssetUpload: 'promise', // (uploadId) -> true
   updateAsset: 'promise', // ({ id, name?, caption?, tags?, folder? }) -> asset
   updateAssets: 'promise', // ({ ids, folder?, addTags?, removeTags? }) -> { changed }
+  setAssetThumb: 'promise', // (id, thumb (base64 JPEG)) -> asset, or null when it has one already: a thumbnail made after the file was added
   deleteAsset: 'promise', // (id) -> boolean
   deleteAssets: 'promise', // (ids) -> { removed, refused }
   addAssetFolder: 'promise', // (path) -> path

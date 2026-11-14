@@ -88,6 +88,14 @@ export function kindOf (mime: string, name = '') {
   return 'other'
 }
 
+// Kinds a thumbnail can be made for: a picture, a frame of a video, a PDF's first page, a book's cover.
+export const THUMB_KINDS = ['image', 'video', 'pdf', 'book']
+
+// An Asset with no thumbnail that one could be made for (shared/assets.mjs needsThumb).
+export function needsThumb (rec: { thumb?: boolean, kind?: string, mime?: string, name?: string } | null | undefined) {
+  return !!rec && !rec.thumb && THUMB_KINDS.includes(rec.kind || kindOf(rec.mime || '', rec.name || ''))
+}
+
 // Kinds whose preview is the file's text.
 export function isTextKind (kind: string) {
   return kind === 'markdown' || kind === 'code' || kind === 'data' || kind === 'text'

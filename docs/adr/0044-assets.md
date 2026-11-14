@@ -152,3 +152,19 @@ The AI still only adds Assets; it can't tag, move or remove them.
    bundled by `scripts/build.js`), the colors in light and dark, and Font Awesome's solid font with
    only the icons the page can show. A Button that only talks to the assistant is left out. The
    model learns the language from `guide:genui-pages` (made from `genuiPrompt()`).
+
+## Amendment: thumbnails for PDFs, books and every video (2026-11-14)
+
+A PDF (its first page) and an e-book (its cover: EPUB 3 `cover-image`, EPUB 2 `<meta name="cover">`,
+MOBI EXTH 201) get a 480 px JPEG thumbnail like a picture or a video, and the phone makes a video's
+from a frame (`expo-video-thumbnails`) when it adds one. `THUMB_KINDS` and `needsThumb` in
+`shared/assets.mjs` say which files can still get one.
+
+Files added without one (from the phone before this, by the AI, a GIF or a WebP) get it later, once,
+from whichever Device can write the Space and has the file: desktop's nomad://assets reads a file up
+to 64 MB for it as its tile comes into view, and makes it from the file when it is opened; the phone
+makes it when the file is opened (a picture or a video from the file, a PDF or a book from the viewer
+page, `thumb=1`). `nomad.vault.setAssetThumb` and the phone's `assets`/`setThumb` write it, only
+where there is none, and change only `thumb` on the record (`withThumb`: not an edit, `updatedAt`
+stays). The drawing is `app/userland/assets/js/thumbs.js`, shared by desktop and the phone's viewer
+page. Markdown, HTML and other documents keep their icon.

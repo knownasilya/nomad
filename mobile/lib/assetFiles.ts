@@ -1,13 +1,15 @@
 import * as ImagePicker from 'expo-image-picker'
 import * as DocumentPicker from 'expo-document-picker'
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
+import { ImageManipulator, SaveFormat, type ImageRef } from 'expo-image-manipulator'
+import * as VideoThumbnails from 'expo-video-thumbnails'
 import { File, Directory, Paths } from 'expo-file-system'
 import * as as from './assetRules'
 
 // Files for a Space's Assets (ADR-0044, shared/assets.mjs). A photo from the camera or the gallery
 // is scaled to MAX_SIDE on its long side, as desktop's nomad://assets does, with a THUMB_SIDE
 // thumbnail, both JPEG. A video from the gallery, and any file from the file picker, is kept as it
-// is (a picture gets a thumbnail). A file goes to the backend as its path in the app's cache, which
+// is (a picture gets a thumbnail, a video one of a frame a moment in). A PDF's or a book's comes from
+// the viewer page when it is first opened (Assets.tsx DocView). A file goes to the backend as its path in the app's cache, which
 // the backend reads itself, a piece at a time: a movie never crosses as one message. At most
 // MAX_BYTES.
 
@@ -94,7 +96,7 @@ function inCache (uri: string, name: string): string {
 
 const safeName = (name: string) => as.cleanName(name).replace(/[^\w.\- ]+/g, '_')
 
-// Get one picked file ready for the backend: a photo scaled, a picture's thumbnail made.
+// Get one picked file ready for the backend: a photo scaled, a picture's or a video's thumbnail made.
 export async function prepare (p: PickedFile): Promise<AssetUpload> {
   const out: AssetUpload = { path: '', name: p.name, mime: p.mime }
   if (p.takenAt) out.takenAt = p.takenAt
@@ -113,12 +115,13 @@ export async function prepare (p: PickedFile): Promise<AssetUpload> {
       out.name = out.name.replace(/\.(heic|heif|png|webp)$/i, '.jpg')
       if (!out.takenAt) out.takenAt = new Date().toISOString()
     }
-    const small = await ImageManipulator.manipulate(source).resize(fit(as.THUMB_SIDE)).renderAsync()
-    const thumb = await small.saveAsync({ format: SaveFormat.JPEG, compress: as.THUMB_QUALITY, base64: true })
-    if (thumb.base64) out.thumb = thumb.base64
+    const thumb = await smallJpeg(source)
+    if (thumb) out.thumb = thumb
   } else if (p.kind === 'video') {
     if (p.width && p.height) Object.assign(out, { width: p.width, height: p.height })
     if (p.duration) out.duration = p.duration
+    const thumb = await videoThumb(p.uri, p.duration).catch(() => '')
+    if (thumb) out.thumb = thumb
   }
   if (!out.path) {
     const size = p.size || new File(p.uri).size || 0
@@ -128,6 +131,36 @@ export async function prepare (p: PickedFile): Promise<AssetUpload> {
   const bytes = new File(out.path).size || 0
   if (bytes > as.MAX_BYTES) throw tooBig(p, bytes)
   return out
+}
+
+// A picture as a THUMB_SIDE JPEG thumbnail, base64.
+async function smallJpeg (source: string | ImageRef): Promise<string> {
+  const pic = typeof source === 'string' ? await ImageManipulator.manipulate(source).renderAsync() : source
+  const fit = pic.width >= pic.height ? { width: Math.min(as.THUMB_SIDE, pic.width) } : { height: Math.min(as.THUMB_SIDE, pic.height) }
+  const small = await ImageManipulator.manipulate(pic).resize(fit).renderAsync()
+  const saved = await small.saveAsync({ format: SaveFormat.JPEG, compress: as.THUMB_QUALITY, base64: true })
+  return saved.base64 || ''
+}
+
+// A frame a moment into a video (a third of the way into a short one), as a thumbnail. `uri` is a
+// file in the cache or the backend's loopback stream (assets/stream).
+async function videoThumb (uri: string, duration?: number): Promise<string> {
+  const time = Math.round(Math.min(1, (duration || 3) / 3) * 1000)
+  const frame = await VideoThumbnails.getThumbnailAsync(uri, { time, quality: 1 })
+  try {
+    return await smallJpeg(frame.uri)
+  } finally {
+    try { new File(frame.uri).delete() } catch {}
+  }
+}
+
+// A thumbnail for an Asset that has none (shared/assets.mjs needsThumb), from its file once the
+// viewer has it: a picture's, or a video's frame. '' when it can't be made here (a PDF's and a
+// book's come from the viewer page).
+export async function thumbOf (kind: string, uri: string, mime = '', duration?: number): Promise<string> {
+  if (kind === 'image' && mime !== 'image/svg+xml') return smallJpeg(uri)
+  if (kind === 'video') return videoThumb(uri, duration)
+  return ''
 }
 
 // Where an Asset's file goes in this phone's cache, for a viewer or another app to open (the

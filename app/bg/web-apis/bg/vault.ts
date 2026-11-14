@@ -636,6 +636,9 @@ export default {
   async updateAssets(change: any = {}) {
     return assets.updateAssets(this, change || {});
   },
+  async setAssetThumb(id, thumb) {
+    return assets.setAssetThumb(this, id, thumb);
+  },
   async deleteAsset(id) {
     return assets.deleteAsset(this, id);
   },

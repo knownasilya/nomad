@@ -31,8 +31,9 @@ export function vaultRoot(space) {
 }
 
 // A file is kept as it is, up to MAX_BYTES. A photo from a camera is scaled to MAX_SIDE first, as
-// the album did, and every picture and video gets a THUMB_SIDE JPEG thumbnail where the Device can
-// make one.
+// the album did. A picture, a video, a PDF (its first page) and an e-book (its cover) get a
+// THUMB_SIDE JPEG thumbnail where the Device can make one: when it is added, or later, once by
+// whichever Device can write the Space and has the file (needsThumb, withThumb).
 export const MAX_BYTES = 500 * 1024 * 1024
 // What the user's AI saves (saveAsset): it fetches or writes the whole file in memory.
 export const MAX_AI_BYTES = 100 * 1024 * 1024
@@ -169,6 +170,21 @@ export function kindOf(mime, name = '') {
   if (DOCUMENT_EXT.has(ext)) return 'document'
   if (ARCHIVE_EXT.has(ext) || /zip|tar|gzip|compressed|rar/.test(m)) return 'archive'
   return 'other'
+}
+
+// Kinds a thumbnail can be made for: a picture, a frame of a video, a PDF's first page, a book's cover.
+export const THUMB_KINDS = ['image', 'video', 'pdf', 'book']
+
+// An Asset with no thumbnail that one could be made for. A Device that can write the Space makes it
+// when it has the file (desktop as a tile shows, either one when the file is opened).
+export function needsThumb(rec) {
+  return !!rec && !rec.thumb && THUMB_KINDS.includes(rec.kind || kindOf(rec.mime, rec.name))
+}
+
+// The record once its thumbnail is in: only `thumb` changes, so it is never an edit (`updatedAt`
+// stays) and never a conflict with one.
+export function withThumb(prev) {
+  return { ...prev, thumb: true }
 }
 
 // Kinds whose preview is the file's text.

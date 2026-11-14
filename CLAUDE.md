@@ -483,6 +483,12 @@ user's AI saves files there with `saveAsset` (personal turns, `assetsWrite`, onc
 `app/bg/ai/save-asset.mjs`, run in `ai.ts`, written by `assets.ts` `saveForAi`; up to `MAX_AI_BYTES`, 100 MB), and links
 `nomad://assets/?id=` (`assetLink`).
 
+Pictures, videos, PDFs (first page) and e-books (cover) get a THUMB_SIDE JPEG thumbnail (ADR-0044
+amendment, 2026-11-14): when added, or later from whichever Device can write the Space and has the file
+(`needsThumb`/`withThumb` in `shared/assets.mjs`, `nomad.vault.setAssetThumb`, the phone's
+`assets`/`setThumb`). Desktop and the phone's viewer page draw them with `assets/js/thumbs.js`; the phone
+makes a video's with `expo-video-thumbnails`. Rerun `npm run build:doc-viewer` after changing thumbs.js.
+
 Assets have `tags` and a `folder` path (`Recipes/Desserts`); an empty folder is kept by its own record
 (`<root>folders/<folderKey>.json`, `makeFolder`), and moving or removing one follows `moveFolderPlan`/
 `deleteFolderPlan` in `shared/assets.mjs` (ADR-0044 amendment). Both apps select many files to move,

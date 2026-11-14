@@ -8,7 +8,7 @@ import * as Sharing from 'expo-sharing'
 import * as Clipboard from 'expo-clipboard'
 import { useTheme, radius, space as sp, type Theme } from '../lib/theme'
 import type { Backend, AssetRecord, AssetsList } from '../lib/useBackend'
-import { pickMedia, pickFiles, prepare, cachedFile, type PickedFile } from '../lib/assetFiles'
+import { pickMedia, pickFiles, prepare, cachedFile, thumbOf, type PickedFile } from '../lib/assetFiles'
 import docViewerHtml from '../lib/docViewerHtml'
 import * as as from '../lib/assetRules'
 import { assetLink, assetFolderLink, assetTagLink } from '../lib/itemLinks'
@@ -96,7 +96,11 @@ const describe = (a: AssetRecord) => [as.KIND_LABELS[a.kind] || 'File', as.forma
 const iconOf = (a: AssetRecord) => (as.KIND_ICONS[a.kind] || 'file') as IconName
 // A picture with no thumbnail (the AI saved a GIF) shows itself in the grid up to this size.
 const SMALL_PICTURE = 3 * 1024 * 1024
-const hasPicture = (a: AssetRecord) => !!a.thumb || (a.kind === 'image' && a.bytes <= SMALL_PICTURE && a.mime !== 'image/svg+xml')
+// A picture or a video shows its thumbnail (or a small picture itself); a PDF or a book with one
+// shows its first page or cover above its name (a cover).
+const isMedia = (a: AssetRecord) => a.kind === 'image' || a.kind === 'video'
+const hasPicture = (a: AssetRecord) => isMedia(a) && (!!a.thumb || (a.kind === 'image' && a.bytes <= SMALL_PICTURE && a.mime !== 'image/svg+xml'))
+const hasCover = (a: AssetRecord) => !isMedia(a) && !!a.thumb
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
 const crumbs = (path: string) => path.split('/').join(' › ')
 // A Markdown link to paste in a Note (desktop's Copy link writes the same).
@@ -187,7 +191,7 @@ export default function Assets ({ visible, onClose, openAssetId, openFolder, ope
         askedBig.current.add(a.id)
         fetchFile(call, a).then((uri) => { if (uri) setBig((m) => ({ ...m, [a.id]: uri })) }).catch(() => setTimeout(() => askedBig.current.delete(a.id), 5000))
       }
-      if (!hasPicture(a) || asked.current.has(a.id)) continue
+      if (!(hasPicture(a) || hasCover(a)) || asked.current.has(a.id)) continue
       asked.current.add(a.id)
       call<string | null>('assets', 'read', { id: a.id, thumb: !!a.thumb }).then((res) => {
         if (res.ok && res.value) setThumbs((m) => ({ ...m, [a.id]: `data:${a.thumb ? 'image/jpeg' : a.mime};base64,` + res.value }))
@@ -197,6 +201,16 @@ export default function Assets ({ visible, onClose, openAssetId, openFolder, ope
   }, [call, columns])
 
   const onViewable = useViewable(loadThumbs)
+
+  // A thumbnail made for a file that had none, when it was opened here (shared/assets.mjs needsThumb).
+  const saveThumb = useCallback(async (a: AssetRecord, data: string) => {
+    if (!data || !as.needsThumb(a)) return
+    const res = await call<AssetRecord | null>('assets', 'setThumb', { id: a.id, thumb: data })
+    if (!res.ok) { console.warn('[assets] the thumbnail wasn’t kept', res.message); return }
+    asked.current.add(a.id)
+    setThumbs((m) => ({ ...m, [a.id]: 'data:image/jpeg;base64,' + data }))
+    setList((l) => (l ? { ...l, assets: l.assets.map((x) => (x.id === a.id ? { ...x, thumb: true } : x)) } : l))
+  }, [call])
   const all = list?.assets || []
   const folders = list?.folders || []
   // Just looking around (no kind or tag): the folder's own folders and files. A kind or a tag looks
@@ -578,9 +592,9 @@ export default function Assets ({ visible, onClose, openAssetId, openFolder, ope
                       </View>
                     )}
                     <View style={[s.lineThumb, !hasPicture(a) && s.docTile]}>
-                      {hasPicture(a)
-                        ? thumbs[a.id] ? <Image source={{ uri: thumbs[a.id] }} style={s.thumb} /> : null
-                        : <Icon name={iconOf(a)} size={20} color={kindColor(t, a.kind)} />}
+                      {(hasPicture(a) || hasCover(a)) && thumbs[a.id]
+                        ? <Image source={{ uri: thumbs[a.id] }} style={s.thumb} resizeMode={a.kind === 'book' ? 'contain' : 'cover'} />
+                        : hasPicture(a) ? null : <Icon name={iconOf(a)} size={20} color={kindColor(t, a.kind)} />}
                       {a.kind === 'video' && <View style={s.linePlay}><Icon name='play' size={8} color='#fff' /></View>}
                     </View>
                     <View style={s.lineText}>
@@ -615,14 +629,21 @@ export default function Assets ({ visible, onClose, openAssetId, openFolder, ope
                             big[a.id] && one ? <Image source={{ uri: big[a.id] }} style={s.thumb} /> : thumbs[a.id] ? <Image source={{ uri: thumbs[a.id] }} style={s.thumb} /> : null
                           ) : (
                             <>
-                              <View style={s.docFace}>
-                                <Icon name={iconOf(a)} size={columns >= 5 ? 20 : face} color={kindColor(t, a.kind)} />
-                                {columns < 6 && <Text style={[s.ext, { color: kindColor(t, a.kind) }, one && s.extBig]}>{as.extOf(a.name).toUpperCase() || as.KIND_LABELS[a.kind]}</Text>}
-                              </View>
+                              {hasCover(a) && thumbs[a.id] ? (
+                                <View style={s.docFace}>
+                                  <Image source={{ uri: thumbs[a.id] }} style={a.kind === 'book' ? s.bookCover : s.pageCover} resizeMode={a.kind === 'book' ? 'contain' : 'cover'} />
+                                  {columns < 6 && <View style={s.coverBadge}><Text style={s.coverBadgeText}>{as.extOf(a.name).toUpperCase() || as.KIND_LABELS[a.kind]}</Text></View>}
+                                </View>
+                              ) : (
+                                <View style={s.docFace}>
+                                  <Icon name={iconOf(a)} size={columns >= 5 ? 20 : face} color={kindColor(t, a.kind)} />
+                                  {columns < 6 && <Text style={[s.ext, { color: kindColor(t, a.kind) }, one && s.extBig]}>{as.extOf(a.name).toUpperCase() || as.KIND_LABELS[a.kind]}</Text>}
+                                </View>
+                              )}
                               {columns < 5 && <Text style={[s.docName, one && s.docNameBig]} numberOfLines={1}>{a.name}</Text>}
                             </>
                           )}
-                          {a.kind === 'video' && (
+                          {a.kind === 'video' && hasPicture(a) && (
                             <View style={s.play}><Icon name='play' size={9} color='#fff' /><Text style={s.playText}>{columns < 5 && a.duration ? as.formatDuration(a.duration) : ''}</Text></View>
                           )}
                           {a.source === 'ai' && <View style={s.ai}><Icon name='magic' size={9} color='#fff' /></View>}
@@ -673,6 +694,8 @@ export default function Assets ({ visible, onClose, openAssetId, openFolder, ope
           many={shown.length > 1}
           canEdit={canAdd}
           thumb={current ? thumbs[current.id] : undefined}
+          makeThumb={!!current && canAdd && as.needsThumb(current)}
+          onThumb={(id, data) => { const a = all.find((x) => x.id === id); if (a) saveThumb(a, data) }}
           call={call}
           onClose={() => setOpen(null)}
           onStep={step}
@@ -891,11 +914,13 @@ function TagsSheet ({ files, known, onClose, onSave }: { files: AssetRecord[] | 
   )
 }
 
-function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove, onSaved, onMenu, onTag, onOpenJob, onOpenChat, children }: {
+function Viewer ({ asset, many, canEdit, thumb, makeThumb, onThumb, call, onClose, onStep, onRemove, onSaved, onMenu, onTag, onOpenJob, onOpenChat, children }: {
   asset: AssetRecord | null
   many: boolean
   canEdit: boolean
   thumb?: string
+  makeThumb: boolean // it has no thumbnail, and this phone can add one: make it from the file
+  onThumb: (id: string, data: string) => void // a thumbnail made (base64 JPEG)
   call: Backend['apps']
   onClose: () => void
   onStep: (n: number) => void
@@ -920,6 +945,9 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
   const [got, setGot] = useState(0) // bytes of the file in this phone's cache so far
   const [caption, setCaption] = useState('')
   const id = asset?.id
+  // Asked once per file opened (saving one changes the record, which mustn't reload the viewer page).
+  const wantThumb = useMemo(() => makeThumb, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const thumbTried = useRef(new Set<string>())
 
   useEffect(() => {
     setFile(null); setStream(null); setText(null); setFailed(''); setGot(0); setSource(false); setSharing(false)
@@ -956,6 +984,18 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
     }).catch((err) => { if (!gone) setFailed((err as Error)?.message || String(err)) })
     return () => { gone = true }
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A picture's or a video's missing thumbnail, from the file (or the stream) once it is here. A PDF's
+  // or a book's comes from the viewer page (DocView).
+  const media = asset && (asset.kind === 'image' || asset.kind === 'video') ? asset : null
+  const mediaUri = media && file?.id === media.id ? file.uri : media && stream?.id === media.id ? stream.url : ''
+  useEffect(() => {
+    if (!media || !mediaUri || !wantThumb || thumbTried.current.has(media.id)) return
+    thumbTried.current.add(media.id)
+    thumbOf(media.kind, mediaUri, media.mime, media.duration)
+      .then((data) => { if (data) onThumb(media.id, data) })
+      .catch((err) => console.warn('[assets] no thumbnail for', media.kind, (err as Error)?.message || err))
+  }, [media?.id, mediaUri, wantThumb]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const share = async () => {
     if (!asset) return
@@ -1004,7 +1044,7 @@ function Viewer ({ asset, many, canEdit, thumb, call, onClose, onStep, onRemove,
       )
     } else if (a.kind === 'image') body = <Image source={{ uri: file!.uri }} style={s.full} resizeMode='contain' />
     else if (a.kind === 'video' || a.kind === 'audio') body = <Player a={a} uri={streaming ? stream!.url : file!.uri} poster={thumb} onFailed={setFailed} />
-    else if (a.kind === 'pdf' || a.kind === 'book') body = <DocView a={a} uri={file!.uri} onFailed={setFailed} />
+    else if (a.kind === 'pdf' || a.kind === 'book') body = <DocView a={a} uri={file!.uri} onFailed={setFailed} onThumb={wantThumb && !thumbTried.current.has(a.id) ? (data) => { thumbTried.current.add(a.id); onThumb(a.id, data) } : undefined} />
     else if (a.kind === 'html' && !source) {
       body = text == null ? <ActivityIndicator color='#fff' /> : <PageView html={text} />
     } else if (as.isTextKind(a.kind) || a.kind === 'html') {
@@ -1188,7 +1228,7 @@ const MAX_TEXT_FILE = 8 * 1024 * 1024
 // A PDF or an e-book in the viewer page (lib/docViewerHtml.ts: pdf.js, and the reader desktop's
 // nomad://assets uses), which reads the file from this phone's cache. The page is written once per
 // version of it, next to the cached files.
-function DocView ({ a, uri, onFailed }: { a: AssetRecord; uri: string; onFailed: (why: string) => void }) {
+function DocView ({ a, uri, onFailed, onThumb }: { a: AssetRecord; uri: string; onFailed: (why: string) => void; onThumb?: (data: string) => void }) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
   const page = useMemo(() => {
@@ -1200,7 +1240,12 @@ function DocView ({ a, uri, onFailed }: { a: AssetRecord; uri: string; onFailed:
     return f.uri
   }, [])
   const theme = JSON.stringify({ scheme: t.scheme, bg: t.surface, text: t.text, link: t.accent })
-  const src = `${page}?kind=${a.kind === 'pdf' ? 'pdf' : 'book'}&key=${encodeURIComponent(a.id)}&file=${encodeURIComponent(uri)}&theme=${encodeURIComponent(theme)}`
+  // `thumb=1`: the file has no thumbnail yet, and the page draws one (phone-viewer.js). Fixed when the
+  // page opens, so keeping the thumbnail doesn't reload it.
+  const askThumb = useMemo(() => !!onThumb, [a.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const thumbTo = useRef(onThumb)
+  thumbTo.current = onThumb
+  const src = `${page}?kind=${a.kind === 'pdf' ? 'pdf' : 'book'}&key=${encodeURIComponent(a.id)}&file=${encodeURIComponent(uri)}&theme=${encodeURIComponent(theme)}${askThumb ? '&thumb=1' : ''}`
   const what = a.kind === 'pdf' ? 'PDF' : 'book'
   // The page says each step it takes (phone-viewer.js). Until a PDF's first page is drawn (a book's
   // first screen), going quiet for VIEWER_QUIET_MS means it's stuck: say so, with the file to open
@@ -1261,6 +1306,8 @@ function DocView ({ a, uri, onFailed }: { a: AssetRecord; uri: string; onFailed:
           else quiet()
         } else if (msg.type === 'ready') {
           if (a.kind !== 'pdf') finish()
+        } else if (msg.type === 'thumb') {
+          if (typeof msg.data === 'string' && msg.data) thumbTo.current?.(msg.data)
         } else if (msg.type === 'error') {
           console.warn('[assets] viewer error', a.kind, msg.message)
         } else if (msg.type === 'failed') {
@@ -1394,7 +1441,12 @@ function makeStyles (t: Theme) {
     lineSub: { color: t.textMuted, fontSize: 12, marginTop: 2 },
     tile: { borderRadius: 4, overflow: 'hidden', backgroundColor: t.surfaceAlt },
     docTile: { backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border },
-    docFace: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: t.surfaceAlt },
+    docFace: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: t.surfaceAlt, overflow: 'hidden' },
+    // A page's top shows, as desktop's does (a page is taller than the tile's face).
+    pageCover: { position: 'absolute', top: 0, left: 0, width: '100%', aspectRatio: 0.7 },
+    bookCover: { position: 'absolute', top: 6, left: 6, right: 6, bottom: 6 },
+    coverBadge: { position: 'absolute', left: 5, bottom: 5, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.6)' },
+    coverBadgeText: { color: '#fff', fontSize: 9, fontWeight: '700', letterSpacing: 0.6 },
     ext: { fontSize: 9, fontWeight: '700', letterSpacing: 0.6 },
     extBig: { fontSize: 13 },
     docName: { color: t.text, fontSize: 11, paddingHorizontal: 6, paddingVertical: 5 },
