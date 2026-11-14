@@ -37,8 +37,9 @@ import AiPanel from '../components/AiPanel'
 import Shortcuts from '../components/Shortcuts'
 import HomeDashboard, { type HomeDashboardProps } from '../components/HomeDashboard'
 import FileExplorer, { type ExplorerDrive } from '../components/FileExplorer'
+import VersionHistory, { type HistoryDrive } from '../components/VersionHistory'
 import type { HyperRender } from '../components/HyperView'
-import { useBackend, type SpaceJoin, type AiPromptRequest, type AiPromptAnswer } from '../lib/useBackend'
+import { useBackend, type SpaceJoin, type AiPromptRequest, type AiPromptAnswer, type DriveSearch } from '../lib/useBackend'
 import { aiPromptText } from '../lib/aiPrompts'
 import AiPromptSheet, { type AiPrompt } from '../components/AiPromptSheet'
 import { useJobNotifications } from '../lib/useJobNotifications'
@@ -92,6 +93,7 @@ type Screen =
   | { name: 'calendar'; day?: string } // day: YYYY-MM-DD to show, e.g. from a link in an AI answer
   | { name: 'messages'; personaId?: string; with?: string; link?: string } // a Conversation, or a message link to answer
   | { name: 'explorer'; drive: ExplorerDrive }
+  | { name: 'versions'; drive: HistoryDrive; path?: string } // a drive's version history, or one file's
 type ScreenName = Screen['name']
 
 // One entry in a tab's back/forward history.
@@ -268,6 +270,11 @@ export default function Browser () {
   // FileExplorer renders nothing without a drive, so keep the last one while its Modal slides away.
   const lastExplorerDrive = useRef<ExplorerDrive | null>(null)
   if (explorerDrive) lastExplorerDrive.current = explorerDrive
+  const versionsScreen = screens.find((sc) => sc.name === 'versions')
+  const versionsOpen = versionsScreen?.name === 'versions' ? versionsScreen : null
+  // VersionHistory renders nothing without a drive, so keep the last one while its Modal slides away.
+  const lastVersions = useRef<{ drive: HistoryDrive; path?: string } | null>(null)
+  if (versionsOpen) lastVersions.current = { drive: versionsOpen.drive, path: versionsOpen.path }
   const notesScreen = screens.find((sc) => sc.name === 'notes')
   const jobsScreen = screens.find((sc) => sc.name === 'jobs')
   const calendarScreen = screens.find((sc) => sc.name === 'calendar')
@@ -832,6 +839,21 @@ export default function Browser () {
     setMenuOpen(false)
     openScreen({ name: 'explorer', drive: { url: d.url, key: hyperKeyOf(d.url), name: d.name, type: d.type, ns: d.ns } })
   }, [openScreen])
+
+  // A collaborative drive's version history (or one file's), over the screen it was opened from.
+  const openVersions = useCallback((d: { url: string; name: string; type: DriveType; ns?: string }, path?: string) => {
+    openScreen({ name: 'versions', drive: { url: d.url, key: hyperKeyOf(d.url), name: d.name, type: d.type, ns: d.ns }, path })
+  }, [openScreen])
+
+  // Search in the text files of the drives My Library lists (backend/lib/drive-search.mjs).
+  const searchDrives = useCallback(async (query: string, drives: SavedDrive[]) => {
+    const res = await backend.apps<DriveSearch>('drives', 'search', {
+      query,
+      drives: drives.map((d) => ({ key: hyperKeyOf(d.url), type: d.type, ns: d.ns }))
+    })
+    if (!res.ok) throw new Error(res.message || 'Couldn’t search your drives')
+    return res.value || null
+  }, [backend.apps])
 
   // On close, reflect any edits in an open tab showing the same drive.
   const closeExplorer = useCallback(() => {
@@ -1502,6 +1524,8 @@ export default function Browser () {
         onClearHistory={persist.clearHistory}
         drivePeers={drivePeers}
         setPeerDrive={setPeerDrive}
+        onDriveHistory={(d) => openVersions(d)}
+        searchDrives={searchDrives}
       />
 
       <Reader
@@ -1653,6 +1677,16 @@ export default function Browser () {
         drive={explorerDrive ?? lastExplorerDrive.current}
         backend={backend}
         onClose={closeExplorer}
+        onHistory={(path) => { const d = explorerDrive ?? lastExplorerDrive.current; if (d) openVersions(d, path) }}
+      />
+
+      <VersionHistory
+        visible={!!versionsOpen}
+        drive={versionsOpen?.drive ?? lastVersions.current?.drive ?? null}
+        path={versionsOpen ? versionsOpen.path : lastVersions.current?.path}
+        apps={backend.apps}
+        onClose={() => closeScreenNamed('versions')}
+        onOpen={(url) => openFromScreens(url, 'autobase')}
       />
     </SafeAreaView>
 

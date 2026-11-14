@@ -35,6 +35,8 @@ import { createDevicePresence } from '../../shared/device-presence.mjs'
 import * as deviceActivity from '../../shared/device-activity.mjs'
 import { createLogStore } from './lib/log-store.mjs'
 import { createAiChats } from './lib/ai-chats.mjs'
+import { createDriveHistory } from './lib/drive-history.mjs'
+import { createDriveSearch } from './lib/drive-search.mjs'
 import { createPhoneLiveNotes } from './lib/live-notes.mjs'
 import {
   RPC_OPEN,
@@ -809,6 +811,21 @@ async function homeDashboard (space, now) {
   }, { now })
 }
 
+// --- Version history and search in drives ---------------------------------
+const driveHistory = createDriveHistory(manager)
+const driveSearch = createDriveSearch(manager)
+
+async function handleDrives (action, args) {
+  const drive = args.drive || {}
+  if (action === 'history') return driveHistory.history(drive, { before: args.before ?? null, path: args.path || null })
+  if (action === 'fileAt') return driveHistory.fileAt(drive, args.path, args.version)
+  if (action === 'restoreFile') return driveHistory.restoreFile(drive, args.path, args.version)
+  if (action === 'restorePreview') return driveHistory.restorePreview(drive, args.version)
+  if (action === 'restoreDrive') return driveHistory.restoreDrive(drive, args.version)
+  if (action === 'search') return driveSearch.search(args.query, args.drives)
+  throw new Error(`Unknown drives action: ${action}`)
+}
+
 // --- Reader, Notes and Names (ADR-0017, ADR-0018) ------------------------
 // All live in the Vault, so they need this phone to be linked. Reading a Feed doesn't, but the
 // Reader only reads the Feeds the Vault lists. Replies with one RPC_APPS_RESULT keyed by reqId.
@@ -822,6 +839,12 @@ async function handleApps ({ reqId, app, action, ...args }) {
     // need no Vault (lib/ai-chats.mjs).
     if (app === 'aiChats') {
       send(RPC_APPS_RESULT, { reqId, ok: true, value: await aiChats.handle(action, args) })
+      return
+    }
+    // Version history and search in the user's drives (shared/drive-history.mjs, drive-search.mjs).
+    // They read the drives themselves, so they need no Vault. `drive` is { key, type, ns }.
+    if (app === 'drives') {
+      send(RPC_APPS_RESULT, { reqId, ok: true, value: await handleDrives(action, args) })
       return
     }
     // Whether the user is using this phone (the UI's pings), and whether a notification shows here

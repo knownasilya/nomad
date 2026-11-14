@@ -9,7 +9,8 @@
 // blob cores are append-only, so the bytes are still there and nothing is copied.
 //
 // The functions take the view (and, to write, an `append(ops)`), so desktop runs them on a session
-// (app/bg/hyper/drive-history.js) and tests run them on a plain Autobase. Tests:
+// (app/bg/hyper/drive-history.js), the phone on its DriveManager's base
+// (mobile/backend/lib/drive-history.mjs), and tests run them on a plain Autobase. Tests:
 // tests/unit/drive-history.test.js.
 
 import { makeMetadata, WRITERS_PREFIX } from './fs-core.mjs';
@@ -27,7 +28,10 @@ export const HISTORY_PAGE = 50;
 // the history is for one file), so a page always answers.
 const SCAN_LIMIT = 2000;
 
-const keyOf = (k) => (typeof k === 'string' ? k : k == null ? '' : new TextDecoder().decode(k));
+// The view's keys are utf-8 strings (fs-core); a Buffer key is decoded where TextDecoder exists (the
+// phone's Bare worklet has none, so it never decodes as this module loads, CLAUDE.md).
+const keyOf = (k) =>
+  typeof k === 'string' ? k : k == null ? '' : typeof TextDecoder !== 'undefined' ? new TextDecoder().decode(k) : String(k);
 
 function sizeOf(rec) {
   if (!rec) return 0;

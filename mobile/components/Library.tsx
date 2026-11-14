@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Alert, Modal, View, Text, TextInput, Pressable, ScrollView, StyleSheet, ToastAndroid } from 'react-native'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, Alert, Modal, View, Text, TextInput, Pressable, ScrollView, StyleSheet, ToastAndroid } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Clipboard from 'expo-clipboard'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
@@ -13,6 +13,9 @@ import Icon, { type IconName } from './Icon'
 import SiteIcon from './SiteIcon'
 import { ListSection, ListRow, ListEmpty } from './List'
 import { DRIVE_TEMPLATES, templateIcon } from '../lib/driveTemplates'
+import SearchField, { Marked } from './SearchField'
+import { queryWords } from '../lib/search'
+import type { DriveSearch } from '../lib/useBackend'
 
 type Page = 'drives' | 'bookmarks' | 'history' | 'downloads'
 
@@ -42,6 +45,10 @@ interface Props {
   // keepsDrive), and keeping it on one by itself. Left out on a phone not linked to a Vault.
   drivePeers?: (drive: SavedDrive) => Promise<DrivePeer[] | null>
   setPeerDrive?: (peerKey: string, drive: SavedDrive, on: boolean) => Promise<boolean>
+  // Version history of a collaborative drive (components/VersionHistory.tsx), and search in the
+  // text files of the drives listed here (backend/lib/drive-search.mjs).
+  onDriveHistory?: (drive: SavedDrive) => void
+  searchDrives?: (query: string, drives: SavedDrive[]) => Promise<DriveSearch | null>
 }
 
 export interface DrivePeer { key: string; name: string; online: boolean; summary: string; keeps: 'space' | 'drive' | false; space?: string | null }
@@ -96,6 +103,7 @@ export default function Library (props: Props) {
       return [
         { label: 'Open', icon: 'external-link-alt', onPress: () => props.onOpen(d.url, d.type) },
         { label: 'Edit files', icon: 'folder-open', hidden: !d.ns, onPress: () => props.onEditDrive(d) },
+        { label: 'Version history', icon: 'history', hidden: d.type !== 'autobase' || !props.onDriveHistory, onPress: () => props.onDriveHistory!(d) },
         { label: 'Copy link', icon: 'link', onPress: () => { Clipboard.setStringAsync(d.url) } },
         {
           label: 'Remove from library',
@@ -169,8 +177,9 @@ export default function Library (props: Props) {
   )
 }
 
-function DrivesPage ({ drives, onOpen, onCreateDrive, onEditDrive, onMore, s, t }: Props & { onMore: (d: SavedDrive) => void; s: Styles; t: Theme }) {
+function DrivesPage ({ drives, onOpen, onCreateDrive, onEditDrive, onMore, searchDrives, s, t }: Props & { onMore: (d: SavedDrive) => void; s: Styles; t: Theme }) {
   const [creating, setCreating] = useState(false)
+  const search = useDriveSearch(drives, searchDrives)
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
   const [type, setType] = useState<DriveType>('hyperdrive')
@@ -195,79 +204,149 @@ function DrivesPage ({ drives, onOpen, onCreateDrive, onEditDrive, onMore, s, t 
 
   return (
     <ScrollView contentContainerStyle={s.page} keyboardShouldPersistTaps='handled'>
-      {/* A drive is created (and assigned a hyper:// URL), not added by URL. The form opens in
-          place, at the top of the page, so the keyboard never covers it. */}
-      <ListSection>
-        {creating ? (
-          <View style={s.form}>
-            <Text style={s.formTitle}>New drive</Text>
-            <View style={s.templates} accessibilityRole='radiogroup' accessibilityLabel='Start with'>
-              <TemplateOption title='Blank' sub='Any files you like' icon='file' active={template === 'blank'} onPress={() => pickTemplate('blank')} s={s} t={t} />
-              {DRIVE_TEMPLATES.map((x) => (
-                <TemplateOption key={x.id} title={x.title} sub={x.description} icon={templateIcon(x)} active={template === x.id} onPress={() => pickTemplate(x.id)} s={s} t={t} />
-              ))}
-            </View>
-            <TextInput
-              style={s.input}
-              value={name}
-              onChangeText={setName}
-              placeholder={tpl ? `Name (My ${tpl.title.toLowerCase()})` : 'Drive name'}
-              placeholderTextColor={t.textMuted}
-              autoCorrect={false}
-              autoFocus
-            />
-            <TextInput
-              style={s.input}
-              value={desc}
-              onChangeText={setDesc}
-              placeholder='Description (optional)'
-              placeholderTextColor={t.textMuted}
-              autoCorrect={false}
-            />
-            <View style={s.typePick}>
-              <TypeOption label='Hyperdrive' sub='Only you write' icon='hdd' active={type === 'hyperdrive'} onPress={() => setType('hyperdrive')} s={s} t={t} />
-              <TypeOption label='Collaborative' sub='Invite writers' icon='users' active={type === 'autobase'} onPress={() => setType('autobase')} s={s} t={t} />
-            </View>
-            <View style={s.formActions}>
-              <Pressable style={s.btnGhost} onPress={() => setCreating(false)} accessibilityRole='button'>
-                <Text style={s.btnGhostText}>Cancel</Text>
-              </Pressable>
-              <Pressable style={s.btn} onPress={submit} android_ripple={{ color: t.ripple }} accessibilityRole='button'>
-                <Text style={s.btnText}>Create</Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : (
-          <ListRow title='New drive' icon='plus' iconColor={t.accent} accent onPress={() => setCreating(true)} />
-        )}
-      </ListSection>
-
-      <ListSection title={drives.length ? 'Your drives' : undefined}>
-        {drives.length === 0 ? (
-          <ListEmpty text='No drives yet. Create one above, or open a hyper:// address.' />
-        ) : drives.map((d, i) => (
-          <ListRow
-            key={d.url}
-            title={d.name}
-            subtitle={`${d.ns ? 'Yours · ' : ''}${d.type === 'autobase' ? 'Collaborative' : 'Hyperdrive'} · ${shortKey(hyperKeyOf(d.url))}`}
-            divider={i > 0}
-            left={(
-              <View style={s.driveIcon}>
-                <Icon name={d.type === 'autobase' ? 'users' : 'hdd'} size={15} color={t.trustText} />
+      {searchDrives && drives.length ? (
+        <SearchField value={search.query} onChangeText={search.setQuery} placeholder='Search in your drives' style={s.search} />
+      ) : null}
+      {search.query.trim() ? <DriveResults search={search} drives={drives} onOpen={onOpen} s={s} t={t} /> : (
+        <>
+          {/* A drive is created (and assigned a hyper:// URL), not added by URL. The form opens in
+              place, at the top of the page, so the keyboard never covers it. */}
+          <ListSection>
+            {creating ? (
+              <View style={s.form}>
+                <Text style={s.formTitle}>New drive</Text>
+                <View style={s.templates} accessibilityRole='radiogroup' accessibilityLabel='Start with'>
+                  <TemplateOption title='Blank' sub='Any files you like' icon='file' active={template === 'blank'} onPress={() => pickTemplate('blank')} s={s} t={t} />
+                  {DRIVE_TEMPLATES.map((x) => (
+                    <TemplateOption key={x.id} title={x.title} sub={x.description} icon={templateIcon(x)} active={template === x.id} onPress={() => pickTemplate(x.id)} s={s} t={t} />
+                  ))}
+                </View>
+                <TextInput
+                  style={s.input}
+                  value={name}
+                  onChangeText={setName}
+                  placeholder={tpl ? `Name (My ${tpl.title.toLowerCase()})` : 'Drive name'}
+                  placeholderTextColor={t.textMuted}
+                  autoCorrect={false}
+                  autoFocus
+                />
+                <TextInput
+                  style={s.input}
+                  value={desc}
+                  onChangeText={setDesc}
+                  placeholder='Description (optional)'
+                  placeholderTextColor={t.textMuted}
+                  autoCorrect={false}
+                />
+                <View style={s.typePick}>
+                  <TypeOption label='Hyperdrive' sub='Only you write' icon='hdd' active={type === 'hyperdrive'} onPress={() => setType('hyperdrive')} s={s} t={t} />
+                  <TypeOption label='Collaborative' sub='Invite writers' icon='users' active={type === 'autobase'} onPress={() => setType('autobase')} s={s} t={t} />
+                </View>
+                <View style={s.formActions}>
+                  <Pressable style={s.btnGhost} onPress={() => setCreating(false)} accessibilityRole='button'>
+                    <Text style={s.btnGhostText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable style={s.btn} onPress={submit} android_ripple={{ color: t.ripple }} accessibilityRole='button'>
+                    <Text style={s.btnText}>Create</Text>
+                  </Pressable>
+                </View>
               </View>
+            ) : (
+              <ListRow title='New drive' icon='plus' iconColor={t.accent} accent onPress={() => setCreating(true)} />
             )}
-            onPress={() => onOpen(d.url, d.type)}
-            onLongPress={() => onMore(d)}
-            right={(
-              <>
-                {d.ns ? <IconButton icon='folder-open' label={`Edit files in ${d.name}`} size={16} onPress={() => onEditDrive(d)} /> : null}
-                <IconButton icon='ellipsis-v' label={`More for ${d.name}`} size={16} onPress={() => onMore(d)} style={s.more} />
-              </>
-            )}
-          />
-        ))}
-      </ListSection>
+          </ListSection>
+
+          <ListSection title={drives.length ? 'Your drives' : undefined}>
+            {drives.length === 0 ? (
+              <ListEmpty text='No drives yet. Create one above, or open a hyper:// address.' />
+            ) : drives.map((d, i) => (
+              <ListRow
+                key={d.url}
+                title={d.name}
+                subtitle={`${d.ns ? 'Yours · ' : ''}${d.type === 'autobase' ? 'Collaborative' : 'Hyperdrive'} · ${shortKey(hyperKeyOf(d.url))}`}
+                divider={i > 0}
+                left={(
+                  <View style={s.driveIcon}>
+                    <Icon name={d.type === 'autobase' ? 'users' : 'hdd'} size={15} color={t.trustText} />
+                  </View>
+                )}
+                onPress={() => onOpen(d.url, d.type)}
+                onLongPress={() => onMore(d)}
+                right={(
+                  <>
+                    {d.ns ? <IconButton icon='folder-open' label={`Edit files in ${d.name}`} size={16} onPress={() => onEditDrive(d)} /> : null}
+                    <IconButton icon='ellipsis-v' label={`More for ${d.name}`} size={16} onPress={() => onMore(d)} style={s.more} />
+                  </>
+                )}
+              />
+            ))}
+          </ListSection>
+        </>
+      )}
     </ScrollView>
+  )
+}
+
+interface SearchState { query: string; setQuery: (q: string) => void; busy: boolean; result: DriveSearch | null; error: string; words: string[] }
+
+// Search as you type, a moment after the last key, and only the newest answer counts.
+function useDriveSearch (drives: SavedDrive[], searchDrives?: Props['searchDrives']): SearchState {
+  const [query, setQuery] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<DriveSearch | null>(null)
+  const [error, setError] = useState('')
+  const seq = useRef(0)
+  useEffect(() => {
+    const q = query.trim()
+    const n = ++seq.current
+    if (!q || !searchDrives) {
+      setBusy(false)
+      setResult(null)
+      setError('')
+      return
+    }
+    setBusy(true)
+    const timer = setTimeout(() => {
+      searchDrives(q, drives)
+        .then((r) => { if (n === seq.current) { setResult(r); setError(r ? '' : 'Couldn’t search your drives') } })
+        .catch((err) => { if (n === seq.current) setError(String(err?.message || err)) })
+        .finally(() => { if (n === seq.current) setBusy(false) })
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [query, drives, searchDrives])
+  return { query, setQuery, busy, result, error, words: useMemo(() => queryWords(query), [query]) }
+}
+
+function DriveResults ({ search, drives, onOpen, s, t }: { search: SearchState; drives: SavedDrive[]; onOpen: Props['onOpen']; s: Styles; t: Theme }) {
+  const { busy, result, error, words } = search
+  const typeOf = (key: string) => drives.find((d) => hyperKeyOf(d.url) === key.toLowerCase())?.type
+  if (error) return <ListSection><ListEmpty text={error} /></ListSection>
+  if (!result) return <View style={s.searching}><ActivityIndicator color={t.accent} /><Text style={s.emptyText}>Looking in your drives…</Text></View>
+  const n = result.results.length
+  const head = busy ? 'Looking…' : n ? `${n === 50 ? 'First 50' : n} ${n === 1 ? 'file' : 'files'} in ${result.searched} ${result.searched === 1 ? 'drive' : 'drives'}` : undefined
+  return (
+    <ListSection
+      title={head}
+      footer={result.partial ? 'Some files weren’t on this phone and no device that has them was online, so they weren’t searched. They’re tried again next time.' : undefined}
+    >
+      {!n ? <ListEmpty text={busy ? 'Looking in your drives…' : 'No file in your drives has every word.'} /> : result.results.map((r, i) => (
+        <Pressable
+          key={r.url}
+          style={[s.result, i > 0 && s.resultDivider]}
+          onPress={() => onOpen(r.url, typeOf(r.driveKey))}
+          android_ripple={{ color: t.ripple }}
+          accessibilityRole='button'
+          accessibilityLabel={`${r.title}, in ${r.driveTitle}, ${r.path}`}
+        >
+          <Icon name='file-alt' size={15} color={t.textDim} style={s.resultIcon} />
+          <View style={s.flex}>
+            <Text style={s.resultTitle} numberOfLines={1}><Marked text={r.title} words={words} /></Text>
+            <Text style={s.resultMeta} numberOfLines={1}>{r.driveTitle} · {r.path}</Text>
+            {r.snippet ? <Text style={s.resultSnippet} numberOfLines={2}><Marked text={r.snippet} words={words} /></Text> : null}
+          </View>
+        </Pressable>
+      ))}
+    </ListSection>
   )
 }
 
@@ -367,6 +446,14 @@ function makeStyles (t: Theme) {
     driveIcon: { width: 32, height: 32, borderRadius: radius.pill, backgroundColor: t.trustBg, alignItems: 'center', justifyContent: 'center' },
     more: { width: 36, marginRight: -space.sm },
     emptyPage: { alignItems: 'center', gap: space.md, paddingHorizontal: space.xl, paddingTop: 48 },
-    emptyText: { color: t.textMuted, fontSize: 14, textAlign: 'center', lineHeight: 20 }
+    emptyText: { color: t.textMuted, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+    search: { marginBottom: space.lg },
+    searching: { alignItems: 'center', gap: space.md, paddingTop: 32 },
+    result: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md, minHeight: 56 },
+    resultDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
+    resultIcon: { marginTop: 2, width: 18, textAlign: 'center' },
+    resultTitle: { color: t.text, fontSize: 15, fontWeight: '500' },
+    resultMeta: { color: t.textMuted, fontSize: 12, marginTop: 2 },
+    resultSnippet: { color: t.textDim, fontSize: 13, lineHeight: 18, marginTop: 4 }
   })
 }

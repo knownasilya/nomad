@@ -135,3 +135,66 @@ export function rankDocs(docs, words, limit = 50) {
   out.sort((a, b) => b.score - a.score || b.doc.mtime - a.doc.mtime);
   return out.slice(0, limit);
 }
+
+/**
+ * Bring one drive's docs up to date. `files` is an (async) iterable of `{ path, size, mtime, stamp? }`,
+ * every file in the drive (`stamp` tells a changed file when there's no mtime, e.g. a Hyperdrive
+ * entry's seq; it defaults to the mtime); `old` the docs from the last time (a Map of path → doc, or null); `read(path)`
+ * gives a file's text, or null/undefined when its bytes can't be read now. A file whose mtime and
+ * size (or stamp) didn't change keeps its doc; a file that isn't searchable is skipped; once `deadline` passes,
+ * the rest are left out. Returns `{ docs, missing }`: `missing` says some files were left out, so
+ * the next search tries them again. Desktop (app/bg/hyper/drive-search.js) and the phone
+ * (mobile/backend/lib/drive-search.mjs) each bring their own files and read.
+ */
+export async function indexFiles(files, { old = null, read, deadline = Infinity } = {}) {
+  const docs = new Map();
+  let missing = false;
+  let count = 0;
+  for await (const f of files) {
+    const path = f?.path;
+    const size = Number(f?.size) || 0;
+    const mtime = Number(f?.mtime) || 0;
+    const stamp = f?.stamp ?? mtime;
+    if (!isSearchable(path, size)) continue;
+    if (++count > MAX_FILES_PER_DRIVE) break;
+    const prev = old?.get(path);
+    if (prev && prev.stamp === stamp && prev.size === size) {
+      docs.set(path, prev);
+      continue;
+    }
+    if (Date.now() > deadline) {
+      missing = true;
+      continue;
+    }
+    const text = await read(path, f);
+    if (text == null) {
+      missing = true;
+      continue;
+    }
+    docs.set(path, { ...makeDoc({ path, text, mtime, size }), stamp });
+  }
+  return { docs, missing };
+}
+
+/**
+ * The best matches across several drives' indexes ([{ key, title, docs }]), as the search shows
+ * them: [{ driveKey, driveTitle, url, path, title, snippet, mtime }].
+ */
+export function searchIndexes(indexes, words, limit = 50) {
+  const found = [];
+  for (const idx of indexes) {
+    for (const { doc, score } of rankDocs(idx.docs.values(), words, limit)) {
+      found.push({ key: idx.key, title: idx.title, doc, score });
+    }
+  }
+  found.sort((a, b) => b.score - a.score || b.doc.mtime - a.doc.mtime);
+  return found.slice(0, limit).map(({ key, title, doc }) => ({
+    driveKey: key,
+    driveTitle: title,
+    url: `hyper://${key}${doc.path}`,
+    path: doc.path,
+    title: doc.title,
+    snippet: snippetFor(doc.body, words),
+    mtime: doc.mtime,
+  }));
+}
