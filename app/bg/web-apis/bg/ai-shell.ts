@@ -14,7 +14,7 @@
 // nomad://shell-window and so trusted) rather than the active tab's (usually untrusted) webContents.
 
 import { findWebContentsParentWindow } from '../../lib/electron';
-import { getActive } from '../../ui/tabs/manager';
+import { getActive, findTab } from '../../ui/tabs/manager';
 import {
   callAgentHost,
   isAgentHostApp,
@@ -44,9 +44,17 @@ function activePane(sender) {
   return tab?.primaryPane || null;
 }
 
+// The drive terminal (nomad://webterm) asks from a pane of its own: its turn is about the page the
+// terminal is attached to, in the same tab, whichever tab is in front.
+function terminalPane(sender) {
+  const tab = findTab(sender);
+  const own = tab?.findPane?.(sender);
+  return own?.attachedPane || tab?.primaryPane || activePane(sender) || own || null;
+}
+
 // The tab the user is on in the sidebar's window, right now — or null.
-async function currentTabOf(shell) {
-  const pane = activePane(shell);
+async function currentTabOf(shell, paneOf = activePane) {
+  const pane = paneOf(shell);
   const wc = pane?.webContents;
   if (!wc || (typeof wc.isDestroyed === 'function' && wc.isDestroyed())) return null;
   const drive = await resolveActiveDrive(pane);
@@ -67,6 +75,26 @@ function describeTab(pane, drive) {
     "readCurrentPage and screenshotCurrentPage read that tab's rendered page; for a Drive, readDriveFile " +
     'and listDriveFiles read its files. To write a file, name its drive (`drive`). When they ask you to do ' +
     'something on the page, snapshotPage and the page actions click and type on it.'
+  );
+}
+
+// The same assistant, answering in the drive terminal under the page. The terminal shows plain text
+// and Markdown, so no drawings; it can undo a change with `restore`.
+function describeTerminal(pane, drive, cwd) {
+  const title = pane.title ? ` ("${pane.title}")` : '';
+  const page =
+    drive.url && drive.url.startsWith('hyper://')
+      ? `${pane.url}${title}, whose Nomad Drive is ${drive.url}${drive.writable ? ', which they can write' : ', which they can only read'}`
+      : `${pane.url || 'a new tab'}${title}, a regular web page, not a Nomad Drive`;
+  const where = cwd ? ` Its current directory is ${cwd}.` : '';
+  return (
+    "You are the user's own assistant, answering in Nomad's drive terminal: a command line the user " +
+    `opened under ${page}.${where} Read and write that drive with readDriveFile, listDriveFiles and ` +
+    'writeDriveFile (name its `drive` to write). Answer for a terminal: short, plain Markdown, code in ' +
+    'fenced blocks, no openui-lang drawings, no wide tables. When one of the terminal\'s own commands ' +
+    'does what they ask, show it in a ```sh block (ls, tree, cat, find, grep, search, write, edit, mv, ' +
+    'cp, rm, mkdir, versions, diff, restore, open); they can run it. A change can be undone with ' +
+    '`versions <file>` then `restore <file> <version>`.'
   );
 }
 
@@ -92,7 +120,11 @@ export default {
     const shell = this.sender;
     const turnId = typeof opts.turnId === 'string' && opts.turnId ? opts.turnId : null;
     const chatId = typeof opts.chatId === 'string' && opts.chatId ? opts.chatId : null;
-    const pane = activePane(shell);
+    // Asked from the drive terminal (nomad://webterm `ai`), not the sidebar.
+    const terminal = opts.terminal && typeof opts.terminal === 'object' ? opts.terminal : null;
+    const cwd = terminal && typeof terminal.cwd === 'string' ? terminal.cwd.slice(0, 2000) : '';
+    const paneOf = terminal ? terminalPane : activePane;
+    const pane = paneOf(shell);
     if (!pane) {
       return createChatStream(async () => {
         throw new Error('No active tab');
@@ -114,11 +146,11 @@ export default {
     async function runSidebarTurn(emitter, signal, steering) {
       // An editor or explorer that shows the drive the AI wrote to reloads that file.
       emitter.on('tool', (e) => {
-        if (e?.phase === 'write') notifyAgentHostOfWrite(activePane(shell), e.drive, e.path);
+        if (e?.phase === 'write') notifyAgentHostOfWrite(paneOf(shell), e.drive, e.path);
       });
 
       const drive = await resolveActiveDrive(pane);
-      let context = describeTab(pane, drive);
+      let context = terminal ? describeTerminal(pane, drive, cwd) : describeTab(pane, drive);
       if (isAgentHostApp(pane.url)) {
         const hostCtx = await callAgentHost(
           pane,
@@ -138,16 +170,17 @@ export default {
         effort: opts.effort,
         allowVision: opts.allowVision,
         stage: 'sidebar',
-        // The sidebar renders charts, maps and other UI the model writes in openui-lang.
-        genUi: true,
-        currentTab: () => currentTabOf(shell),
+        // The sidebar renders charts, maps and other UI the model writes in openui-lang; the
+        // terminal shows text.
+        genUi: !terminal,
+        currentTab: () => currentTabOf(shell, paneOf),
         context,
         signal,
         steering,
         // Page control remembers "allow similar" per chat, in this window.
         pageChat: chatId ? `${shell.id}:${chatId}` : null,
         // What the AI saves with saveScratch stays for the chat's later turns (scratch.mjs).
-        scratchScope: chatId ? `sidebar:${shell.id}:${chatId}` : null,
+        scratchScope: chatId ? `${terminal ? 'terminal' : 'sidebar'}:${shell.id}:${chatId}` : null,
         // An earlier answer in this chat read the user's private data (ADR-0037).
         privateData: opts.privateData === true,
         // What the AI makes or changes links back to this chat (ADR-0047). A chat is kept in

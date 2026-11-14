@@ -18,6 +18,8 @@ import aiSitesManifest from '../manifests/internal/ai-sites';
 import sharedFilesManifest from '../manifests/internal/shared-files';
 import personasManifest from '../manifests/internal/personas';
 import inboxManifest from '../manifests/internal/inbox';
+import aiShellManifest from '../manifests/internal/ai-shell';
+import { streamToAsyncIterator } from './ai-stream';
 
 export const setup = function (rpc) {
   const internal: any = {};
@@ -41,6 +43,7 @@ export const setup = function (rpc) {
   const sharedFilesRPC = rpc.importAPI('shared-files', sharedFilesManifest, opts);
   const personasRPC = rpc.importAPI('personas', personasManifest, opts);
   const inboxRPC = rpc.importAPI('inbox', inboxManifest, opts);
+  const aiShellRPC = rpc.importAPI('ai-shell', aiShellManifest, opts);
 
   // attach APIs
   internal.browser = Object.assign({}, beakerBrowserRPC);
@@ -82,6 +85,31 @@ export const setup = function (rpc) {
   internal.personas.watch = () => fromEventStream(personasRPC.watch());
   internal.inbox = Object.assign({}, inboxRPC);
   internal.inbox.watch = () => fromEventStream(inboxRPC.watch());
+  // The user's own assistant, asked from the drive terminal's prompt (nomad://webterm `ai`). The
+  // same turn as the AI Sidebar's, about the page the terminal is attached to (bg/ai-shell.ts
+  // `terminal`). Its chats are saved with the sidebar's, so they open there too.
+  internal.aiTerminal = {
+    chat(messages, o: any = {}) {
+      const events = fromEventStream(
+        aiShellRPC.chat(messages, {
+          model: o.model,
+          think: o.think,
+          turnId: o.turnId,
+          chatId: o.chatId,
+          privateData: o.privateData === true,
+          terminal: { cwd: typeof o.cwd === 'string' ? o.cwd : '' },
+        })
+      );
+      if (typeof o.onToolEvent === 'function') events.addEventListener('tool', (e) => o.onToolEvent(e));
+      if (typeof o.onReasoning === 'function') events.addEventListener('reasoning', (e) => o.onReasoning(e.text));
+      return streamToAsyncIterator(events);
+    },
+    newSession: () => aiShellRPC.newSession(),
+    saveSession: (id, data) => aiShellRPC.saveSession(id, data),
+    loadSession: (id) => aiShellRPC.loadSession(id),
+    listModels: () => aiShellRPC.listModels(),
+    getPrefs: () => aiShellRPC.getPrefs(),
+  };
 
   // internal.drives
   internal.drives = new EventTarget();
@@ -92,6 +120,13 @@ export const setup = function (rpc) {
   internal.drives.cancelInvite = drivesRPC.cancelInvite;
   internal.drives.acceptInvite = drivesRPC.acceptInvite;
   internal.drives.askToEdit = drivesRPC.askToEdit;
+  // Version history and search in your drives (nomad://versions, nomad://search, the terminal).
+  internal.drives.history = drivesRPC.history;
+  internal.drives.fileAt = drivesRPC.fileAt;
+  internal.drives.restoreFile = drivesRPC.restoreFile;
+  internal.drives.restorePreview = drivesRPC.restorePreview;
+  internal.drives.restoreDrive = drivesRPC.restoreDrive;
+  internal.drives.searchFiles = drivesRPC.searchFiles;
   internal.drives.configure = drivesRPC.configure;
   internal.drives.remove = drivesRPC.remove;
   internal.drives.listTrash = drivesRPC.listTrash;

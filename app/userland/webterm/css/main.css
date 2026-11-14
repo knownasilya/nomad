@@ -1,9 +1,9 @@
 @import 'nomad://app-stdlib/css/common.css';
 @import 'nomad://assets/font-awesome.css';
 
+html,
 body {
-  font-size: 12px;
-  background: #222;
-  --border-color: #d4d7dc;
+  margin: 0;
+  overflow: hidden;
   min-height: 100vh;
 }
