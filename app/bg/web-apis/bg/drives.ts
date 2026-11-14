@@ -13,6 +13,22 @@ import {
 import { findTab } from '../../ui/tabs/manager';
 import * as filesystem from '../../filesystem/index';
 import * as trash from '../../filesystem/trash';
+import * as driveEditors from '../../hyper/drive-editors';
+import * as personas from '../../ui/personas';
+import * as tabManager from '../../ui/tabs/manager';
+import { findWebContentsParentWindow } from '../../lib/electron';
+import autobaseAPI from './autobase';
+
+// The profile of the Persona of the Space the sender's window shows (site-info isn't a tab), so the
+// people who can edit a drive see who is asking.
+function senderProfileUrl(sender) {
+  let id = getSenderSpaceId(sender);
+  if (!id && sender) {
+    const win = findWebContentsParentWindow(sender);
+    if (win) id = tabManager.getWindowActiveSpaceId(win);
+  }
+  return personas.personaForSpaceId(Number(id) || 1)?.profileUrl || null;
+}
 
 function getSenderSpaceId(sender) {
   return findTab(sender)?.spaceId ?? filesystem.getSpaceIdForWebContents(sender?.id);
@@ -38,6 +54,25 @@ export default {
       forkOf: drive ? drive.forkOf : undefined,
       ident,
     };
+  },
+
+  // Who can edit the drive, the requests waiting and its open invite links (site-info's Editors tab).
+  async editors(url) {
+    return driveEditors.editors(await drives.fromURLToKey(url, true));
+  },
+
+  async cancelInvite(url, id) {
+    return driveEditors.cancelInvite(await drives.fromURLToKey(url, true), id);
+  },
+
+  // Accept an invite link (`hyper://<key>/?invite=<token>`) as the window's Persona.
+  async acceptInvite(inviteUrl) {
+    return autobaseAPI.claimInvite.call(this, inviteUrl, { profileUrl: senderProfileUrl(this.sender) });
+  },
+
+  // Ask the people who can edit a collaborative drive to let this device edit it too.
+  async askToEdit(url) {
+    return autobaseAPI.requestAccess.call(this, url, { profileUrl: senderProfileUrl(this.sender) });
   },
 
   async list(opts) {

@@ -161,8 +161,8 @@ declare namespace Nomad {
     writeFile(path: string, data: any, opts?: object): Promise<void>;
     unlink(path: string, opts?: object): Promise<void>;
     readdir(path?: string, opts?: ReaddirOptions): Promise<string[] | DirEntry[]>;
-    /** Create an invite link granting write access. */
-    createInvite(opts?: object): Promise<string>;
+    /** An invite link to edit this drive. Whoever claims it is added at once: once, for 7 days, unless `multiUse` or `days` (1 to 30). */
+    createInvite(opts?: { multiUse?: boolean; days?: number; note?: string }): Promise<string>;
     listRequests(): Promise<any[]>;
     /** Watch for writer-access requests arriving over the network; emits 'changed'. */
     watchRequests(onRequest?: (e: any) => void): DriveWatcher;
@@ -507,8 +507,10 @@ declare namespace Nomad {
     exportToFilesystem(opts?: object): Promise<any>;
     exportToDrive(opts?: object): Promise<any>;
     // collaborative-drive writer management (url-first)
-    createInvite(url: string, opts?: object): Promise<string>;
-    claimInvite(inviteUrl: string, opts?: object): Promise<any>;
+    /** An invite link to edit the drive. Whoever claims it is added at once: once, for 7 days, unless `multiUse` or `days` (1 to 30). */
+    createInvite(url: string, opts?: { multiUse?: boolean; days?: number; note?: string }): Promise<string>;
+    /** Accept an invite link: the drive's writers add this device when one of them is online. */
+    claimInvite(inviteUrl: string, opts?: { profileUrl?: string }): Promise<{ writerKey: string; writable: boolean }>;
     requestAccess(url: string, opts?: object): Promise<any>;
     listRequests(url: string): Promise<any[]>;
     watchRequests(url: string, onRequest?: (e: any) => void): EventTarget;

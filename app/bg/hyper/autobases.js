@@ -5,7 +5,7 @@ import Protomux from 'protomux';
 import c from 'compact-encoding';
 import b4a from 'b4a';
 import Hyperblobs from 'hyperblobs';
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import { EventEmitter } from 'events';
 import { promises as nodefs } from 'fs';
 import path from 'path';
@@ -18,6 +18,14 @@ import {
   BLOBS_CORE_NAME,
   viewDirHasChildren,
 } from '../../../shared/fs-core.mjs';
+import {
+  INVITES_PREFIX,
+  invitePath,
+  isInviteToken,
+  makeInvite,
+  inviteUsable,
+  openInvites,
+} from '../../../shared/drive-invites.mjs';
 import * as logLib from '../logger';
 import * as daemon from './daemon';
 import * as archivesDb from '../dbs/archives';
@@ -48,7 +56,6 @@ var loadPromises = {};
 var pendingRequests = {};
 
 // pending invites: token → { bootstrapKey, multiUse, expiresAt }
-var pendingInvites = {};
 
 export async function createCollaborativeDrive(meta = {}) {
   const store = daemon.getCorestore();
@@ -411,22 +418,49 @@ export function dirHasChildren(sess, dirPath) {
 
 // Invite management
 // =
+// An invite link names one drive and a random token (shared/drive-invites.mjs). The drive keeps the
+// token's SHA-256 as an inline record, so every Device that writes the drive can check it, it
+// survives a restart, and the owner can cancel it.
 
-export function createInvite(bootstrapKey, { multiUse = false } = {}) {
+export const inviteIdFor = (token) => createHash('sha256').update(String(token)).digest('hex');
+
+// A new link's token for `sess` (which this Device must write). The record syncs to the drive's peers.
+export async function createInvite(sess, { multiUse = false, days, note } = {}) {
   const token = randomBytes(16).toString('hex');
-  pendingInvites[token] = { bootstrapKey, multiUse, createdAt: Date.now() };
+  const rec = makeInvite({ multiUse, days, note, by: b4a.toString(sess.base.local.key, 'hex') });
+  await putInline(sess, invitePath(inviteIdFor(token)), b4a.from(JSON.stringify(rec)));
   return token;
 }
 
-export function getInvite(token) {
-  return pendingInvites[token] || null;
+// The drive's open links: [{ id, createdAt, expiresAt, multiUse, note? }].
+export async function listInvites(sess) {
+  const out = [];
+  for (const { path: p } of await listRecords(sess, INVITES_PREFIX)) {
+    out.push({ path: p, value: await readJson(sess, p) });
+  }
+  return openInvites(out);
 }
 
-export function consumeInvite(token) {
-  const invite = pendingInvites[token];
-  if (!invite) return null;
-  if (!invite.multiUse) delete pendingInvites[token];
-  return invite;
+export async function cancelInvite(sess, id) {
+  await deletePath(sess, invitePath(id));
+}
+
+// A writer request that came with a token: add the writer when the token is one of the drive's open
+// links and this Device can write the drive. Returns true when it did.
+async function _redeemInvite(keyStr, { writerKey, profileUrl, invite }) {
+  const sess = sessions[keyStr];
+  if (!sess?.writable || !isInviteToken(invite) || !/^[0-9a-f]{64}$/.test(String(writerKey))) return false;
+  const p = invitePath(inviteIdFor(invite));
+  const rec = await readJson(sess, p).catch(() => null);
+  if (!inviteUsable(rec)) return false;
+  await sess.base.append({ addWriter: writerKey, profileUrl: profileUrl || null });
+  if (!rec.multiUse) await sess.base.append({ op: 'del', path: p });
+  await sess.base.update();
+  await setCollaborative(sess, true).catch(() => {});
+  removePendingRequest(keyStr, writerKey);
+  logger.info('Added a writer from an invite link', { key: keyStr, writerKey });
+  events.emit('writer-added', { key: keyStr, writerKey, profileUrl: profileUrl || null });
+  return true;
 }
 
 // Request management
@@ -471,8 +505,12 @@ export function removePendingRequest(bootstrapKey, writerKey) {
 // swarm. pendingRequests is per-process, so without this the owner never learns a remote
 // peer wants access. The request is remembered and re-sent to any peer that connects until
 // we actually become a writer, so it survives a not-yet-connected owner.
-export function requestWriterAccess(bootstrapKey, { writerKey, profileUrl }) {
-  outgoingRequests[bootstrapKey] = { writerKey, profileUrl: profileUrl || null };
+export function requestWriterAccess(bootstrapKey, { writerKey, profileUrl, invite }) {
+  outgoingRequests[bootstrapKey] = {
+    writerKey,
+    profileUrl: profileUrl || null,
+    ...(isInviteToken(invite) ? { invite } : {}),
+  };
   const peers = controlChannels[bootstrapKey];
   if (peers) for (const peerId of peers.keys()) _sendOutgoingTo(bootstrapKey, peerId);
 }
@@ -610,7 +648,16 @@ function _openControlChannel(conn, keyStr) {
           } catch {
             return;
           }
-          if (msg && msg.type === 'writer-request' && msg.writerKey) {
+          if (msg && msg.type === 'writer-request' && msg.writerKey && isInviteToken(msg.invite)) {
+            // With an invite link's token: add them at once when the link is open, else ask as usual.
+            _redeemInvite(keyStr, msg)
+              .catch(() => false)
+              .then((done) => {
+                if (done) return;
+                addPendingRequest(keyStr, { writerKey: msg.writerKey, profileUrl: msg.profileUrl || null });
+                events.emit('request', { key: keyStr, writerKey: msg.writerKey, profileUrl: msg.profileUrl || null });
+              });
+          } else if (msg && msg.type === 'writer-request' && msg.writerKey) {
             addPendingRequest(keyStr, {
               writerKey: msg.writerKey,
               profileUrl: msg.profileUrl || null,
@@ -660,6 +707,7 @@ function _sendOutgoingTo(keyStr, peerId) {
           type: 'writer-request',
           writerKey: req.writerKey,
           profileUrl: req.profileUrl || null,
+          ...(req.invite ? { invite: req.invite } : {}),
         })
       )
     );

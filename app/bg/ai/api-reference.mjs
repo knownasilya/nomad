@@ -142,8 +142,10 @@ const doc = await nomad.fs.createDrive({ title: 'Team plan', template: 'document
 await drive.writeFile('/state.json', JSON.stringify(state), { inline: true })
 
 // Multi-writer: invite/approve writers so others can write to the same drive (this also unlocks it)
+// An invite link (hyper://<key>/?invite=<token>) adds whoever claims it at once, on any Device that
+// writes the drive: once, for 7 days, unless { multiUse: true } or { days: 1..30 }.
 const inviteUrl = await drive.createInvite()
-await nomad.fs.claimInvite(inviteUrl)                 // recipient calls this
+await nomad.fs.claimInvite(inviteUrl)                 // recipient calls this: { writerKey, writable }
 const requests = await drive.listRequests()            // [{ writerKey, profileUrl }]
 await drive.approveRequest(writerKey)
 const writers = await drive.listWriters()

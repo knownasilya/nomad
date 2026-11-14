@@ -14,7 +14,9 @@ import './com/site-perms.js';
 import './com/shared-files.js';
 import './com/identity.js';
 import './com/drive-forks.js';
+import './com/drive-editors.js';
 import { aiOriginsElement } from '../../app-stdlib/js/ai-origin.js';
+import { parseInviteUrl } from '../../../../shared/drive-invites.mjs';
 
 const isHyperHashRegex = /^[a-z0-9]{64}/i;
 
@@ -170,7 +172,8 @@ class SiteInfoApp extends LitElement {
       }
 
       if (!this.view) {
-        this.view = 'identity';
+        // Opened on an invite link to edit this drive: start where it's accepted.
+        this.view = this.isDrive && !this.info?.writable && parseInviteUrl(this.url) ? 'editors' : 'identity';
       }
 
       // Who the user is on this site (ADR-0031): its Session in the window's Space.
@@ -545,6 +548,15 @@ class SiteInfoApp extends LitElement {
             : ''}
           ${this.isDrive
             ? html`
+                ${this.info?.collaborative !== undefined
+                  ? html`<a
+                      class=${classMap({ active: this.view === 'editors' })}
+                      @click=${(e) => this.onSetView(e, 'editors')}
+                    >
+                      <span class="fas fa-fw fa-user-friends"></span>
+                      Editors
+                    </a>`
+                  : ''}
                 <a
                   class=${classMap({ active: this.view === 'forks' })}
                   @click=${(e) => this.onSetView(e, 'forks')}
@@ -587,6 +599,16 @@ class SiteInfoApp extends LitElement {
             `
           : ''}
         ${this.view === 'session' && this.session ? this.renderSession() : ''}
+        ${this.view === 'editors' && this.isDrive
+          ? html`
+              <drive-editors
+                url=${this.url}
+                .info=${this.info}
+                ?covered=${!!this.edit?.canAsk}
+                @resized=${() => this.updated()}
+              ></drive-editors>
+            `
+          : ''}
         ${this.view === 'forks'
           ? html`
               <drive-forks
