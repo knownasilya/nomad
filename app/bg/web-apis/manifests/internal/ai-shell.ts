@@ -9,6 +9,7 @@ export default {
   steer: 'promise',
   unsteer: 'promise',
   steerNow: 'promise',
+  terminalResult: 'promise',
   getActiveDriveInfo: 'promise',
   notifyAgentWroteFile: 'promise',
   listSessions: 'promise',

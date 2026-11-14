@@ -15,6 +15,7 @@ const cssStr = css`
     --term-muted: #646a7b;
     --term-faint: #9aa0b0;
     --term-accent: #3b5bdb;
+    --term-on-accent: #ffffff;
     --term-path: #0c7c74;
     --term-caret: #7048e8;
     --term-dir: #3456c9;
@@ -66,6 +67,7 @@ const cssStr = css`
       --term-muted: #9b9fab;
       --term-faint: #686c78;
       --term-accent: #8ca4ff;
+      --term-on-accent: #10131c;
       --term-path: #5fd4c4;
       --term-caret: #b39dfc;
       --term-dir: #8ca4ff;
@@ -792,6 +794,70 @@ const cssStr = css`
   }
   .ai .step.failed .mark {
     color: var(--term-error);
+  }
+  /* A command the AI ran in the terminal (runTerminalCommand). */
+  .ai .ai-run {
+    margin: 4px 0 6px;
+    padding: 4px 8px 6px;
+    border: 1px solid var(--term-border);
+    border-radius: 6px;
+    background: var(--term-bg);
+    font-family: var(--font);
+  }
+  .ai .ai-run.is-asking {
+    border-color: color-mix(in srgb, var(--term-warning) 55%, transparent);
+  }
+  .ai .ai-run .ps-line {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .ai .ai-run .by {
+    color: var(--term-caret);
+    font-size: 11px;
+  }
+  .ai .ai-run .out {
+    margin-top: 2px;
+    max-height: 320px;
+    overflow: auto;
+  }
+  .ai .ai-run .ask {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    color: var(--term-warning);
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: 12px;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 10px;
+    border: 1px solid var(--term-border);
+    border-radius: 6px;
+    background: var(--term-surface);
+    color: var(--term-fg);
+    font: 500 12px system-ui, -apple-system, 'Segoe UI', sans-serif;
+    cursor: pointer;
+  }
+  .btn:hover {
+    background: var(--term-surface-2);
+  }
+  .btn.primary {
+    border-color: var(--term-accent);
+    background: var(--term-accent);
+    color: var(--term-on-accent);
+  }
+  .btn.primary:hover {
+    filter: brightness(1.08);
+  }
+  .btn:focus-visible {
+    outline: 2px solid var(--term-accent);
+    outline-offset: 2px;
   }
   .ai .thinking {
     color: var(--term-faint);

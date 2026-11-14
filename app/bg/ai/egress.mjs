@@ -28,6 +28,8 @@ export const PRIVATE_READS = new Set([
   'listDriveFiles',
   'searchDrives',
   'driveHistory',
+  // The terminal's ls, cat, grep, … show the drive's files.
+  'runTerminalCommand',
   'currentTab',
   'readCurrentPage',
   'screenshotCurrentPage',

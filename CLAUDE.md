@@ -331,6 +331,17 @@ turns (`nomad.ai.chat()`) and Jobs never steer. **Send now** on a queued message
 run, lets the running one finish and skips the rest of that round (`SKIPPED_FOR_STEER`); the loop
 reads the message before its next call.
 
+### The AI in the drive terminal
+
+`ai` / `?` in nomad://webterm (`app/userland/webterm/`, unbundled) is a sidebar-stage turn through
+internal `nomad.aiTerminal` (`aiShell.chat` with `terminal: { cwd }`; `terminalPane` and
+`describeTerminal` in `ai-shell.ts`, no genUi). That turn alone gets `runTerminalCommand`
+(`gates: { personal, terminal }`, local path only, never Jobs): `makeTerminalRun` emits a `terminal`
+event on the chat stream, the terminal runs the line where the user sees it, and answers with
+`aiShell.terminalResult(id, …)` (only the asking webContents can). Which commands run at once, which
+wait for the user's yes, and which are refused is `webterm/js/lib/ai-run.js` (tests
+`tests/unit/webterm.test.js`); a command that changes the drive must stay in its ask list.
+
 ### Links to the user's things in AI answers
 
 When the user's AI makes or changes something, it links it in its answer (`Links:` in

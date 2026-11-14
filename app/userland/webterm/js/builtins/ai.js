@@ -68,6 +68,19 @@ export class TermAI {
     if (this.term) this.term.requestUpdate();
   }
 
+  async runCommand(api, e, view, signal) {
+    if (!e || typeof e.id !== 'string' || typeof e.command !== 'string') return;
+    const run = view.addRun();
+    let result;
+    try {
+      result = await this.term.runForAI(e.command, run, signal);
+    } catch (err) {
+      result = { ok: false, output: `Error: ${err && err.message ? err.message : err}` };
+    }
+    view.requestUpdate();
+    api.terminalResult(e.id, result).catch(() => {});
+  }
+
   get active() {
     return this.messages.length > 0;
   }
@@ -102,6 +115,9 @@ export class TermAI {
           view.tool(e);
         },
         onReasoning: () => view.think(),
+        // A command the AI runs here (runTerminalCommand): it shows in the answer, and its output
+        // goes back.
+        onTerminal: (e) => this.runCommand(api, e, view, ctx.term.signal),
       }
     );
     const stop = () => iterator.return && iterator.return();
@@ -178,6 +194,16 @@ class TermAiAnswer extends LitElement {
 
   tool(e) {
     if (!e) return;
+    if (e.name === 'runTerminalCommand') {
+      // The command shows itself (addRun); code that only runs commands needs no line of its own.
+      if (e.phase === 'start' && e.parentId) {
+        this.steps = this.steps.map((s) =>
+          s.id === e.parentId && /^Running code to run terminal commands$/.test(s.label) ? { ...s, quiet: true } : s
+        );
+        this.requestUpdate();
+      }
+      return;
+    }
     if (e.phase === 'start' || e.phase === 'note') {
       this.steps = [
         ...this.steps.map((s) => (s.id ? s : { ...s, done: true })),
@@ -210,8 +236,29 @@ class TermAiAnswer extends LitElement {
     this.finish('error');
   }
 
+  // A command the AI runs in the terminal; the terminal fills in `block` (main.js runForAI).
+  addRun() {
+    const run = { at: Date.now(), block: null, update: () => this._stickUpdate() };
+    // The step that called it ("Running code to run terminal commands") is done once its command shows.
+    this.steps = [...this.steps, { run, done: true }];
+    this._stickUpdate();
+    return run;
+  }
+
+  _stickUpdate() {
+    this.requestUpdate();
+    this.updateComplete.then(() => {
+      const host = this.getRootNode()?.host;
+      if (host && host.stick) host.updated();
+    });
+  }
+
   savedSteps() {
-    return this.steps.map((s) => ({ label: s.label, done: true, ...(s.failed ? { error: true } : {}) }));
+    return this.steps.filter((s) => !s.quiet).map((s) =>
+      s.run
+        ? { label: `$ ${s.run.block ? s.run.block.input : ''}${s.run.block && s.run.block.status === 'declined' ? ' (you said no)' : ''}`, done: true, ...(s.run.block && s.run.block.status === 'error' ? { error: true } : {}) }
+        : { label: s.label, done: true, ...(s.failed ? { error: true } : {}) }
+    );
   }
 
   render() {
@@ -221,8 +268,12 @@ class TermAiAnswer extends LitElement {
       <div class="who">${icon('robot')} AI ${running ? html`<span class="spinner" style="width: 10px; height: 10px"></span>` : ''}</div>
       ${this.steps.length
         ? html`<div class="steps">
-            ${this.steps.map(
-              (s) => html`<div class="step ${s.failed ? 'failed' : s.done ? 'done' : ''}">
+            ${this.steps.filter((s) => !s.quiet).map((s) =>
+              s.run
+                ? s.run.block
+                  ? this.getRootNode()?.host?.renderAiRun(s.run.block) || ''
+                  : ''
+                : html`<div class="step ${s.failed ? 'failed' : s.done ? 'done' : ''}">
                 <span class="mark">${s.failed ? '✗' : s.done ? '✓' : html`<span class="spinner" style="width: 8px; height: 8px"></span>`}</span>
                 <span>${s.label}</span>
               </div>`

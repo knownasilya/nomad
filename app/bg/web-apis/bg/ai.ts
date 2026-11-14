@@ -937,6 +937,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     names: personal ? names.list(await turnSpaceKey(sender, opts)).filter((r) => !r.hidden) : null,
     // saveScratch, readScratch, …: every chat turn has a scratch space (scratch.mjs).
     scratch: true,
+    // Asked from the drive terminal (ai-shell.ts): runTerminalCommand runs its commands there.
+    terminal: typeof opts.terminalRun === 'function',
     ownerId: opts.ownerId,
   });
   // What the AI saves to use again in this chat: the store the caller passes (a Job's run), the
@@ -1044,6 +1046,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     // Messages the user sends while this turn runs (steering.mjs). A CLI's loopback MCP calls
     // carry them on their results.
     steering: opts.steering || null,
+    // The drive terminal the turn was asked from (ai-shell.ts terminalRun).
+    terminalRun: typeof opts.terminalRun === 'function' ? opts.terminalRun : null,
   };
   const steering = toolOpts.steering;
   const mcpTurn = cli && mcpPort ? openTurn({ sender, toolOpts }) : null;
@@ -1251,6 +1255,7 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
     jobPage = null,
     scratch = null,
     origin = null,
+    terminalRun = null,
   } = opts;
   // WebMCP page tool — round-trip to the renderer that registered it. Access was already
   // consented per-origin in resolvePageTools(); running it can only do what page JS can do.
@@ -1711,6 +1716,15 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
         origin
       );
       return JSON.stringify({ id: card.id, title: card.title, ...(card.wide ? { wide: true } : {}), url: HOME_LINK });
+    }
+    case 'runTerminalCommand': {
+      if (!terminalRun || !catalog?.capabilities?.some((c) => c.name === 'runTerminalCommand')) {
+        throw new Error('runTerminalCommand is only available in the drive terminal');
+      }
+      const command = typeof args?.command === 'string' ? args.command.trim() : '';
+      if (!command) throw new Error('runTerminalCommand needs a command');
+      if (command.length > 4000) throw new Error('That command is too long');
+      return await terminalRun(command, signal);
     }
     case 'currentTab': {
       if (!currentTab) throw new Error('currentTab is not available here');

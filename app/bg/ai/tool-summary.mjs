@@ -8,6 +8,7 @@ const PURPOSES = {
   listDriveFiles: 'list files',
   searchDrives: 'search your drives',
   driveHistory: 'look at a drive\'s history',
+  runTerminalCommand: 'run terminal commands',
   writeDriveFile: 'write a file',
   createDrive: 'make a drive',
   fetchUrl: 'fetch a web page',
@@ -77,6 +78,8 @@ export function toolSummary(name, args) {
       return a.query ? `Searching your drives for ${quote(a.query)}` : 'Searching your drives';
     case 'driveHistory':
       return a.path ? `Looking at the history of ${inDrive(a.path, a.drive)}` : 'Looking at the drive\'s history';
+    case 'runTerminalCommand':
+      return a.command ? `Running ${quote(a.command)} in the terminal` : 'Running a terminal command';
     case 'createDrive':
       return a.title ? `Making the drive ${quote(a.title)}` : 'Making a drive';
     case 'fetchUrl':

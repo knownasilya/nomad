@@ -52,6 +52,45 @@ function terminalPane(sender) {
   return own?.attachedPane || tab?.primaryPane || activePane(sender) || own || null;
 }
 
+// Commands the AI runs in the drive terminal (runTerminalCommand), waiting for the terminal's
+// answer, by the terminal's webContents and the run's id. The terminal shows each one and asks the
+// user before one that changes the drive (webterm/js/lib/ai-run.js).
+const terminalRuns = new Map();
+let terminalRunIds = 0;
+const TERMINAL_OUTPUT_MAX = 20000;
+
+function makeTerminalRun(shell, emitter) {
+  return (command, signal) =>
+    new Promise((resolve, reject) => {
+      const id = `run${++terminalRunIds}`;
+      const key = `${shell.id}:${id}`;
+      const onAbort = () => {
+        terminalRuns.delete(key);
+        reject(new Error('Stopped'));
+      };
+      if (signal?.aborted) return onAbort();
+      signal?.addEventListener?.('abort', onAbort, { once: true });
+      terminalRuns.set(key, (result) => {
+        terminalRuns.delete(key);
+        signal?.removeEventListener?.('abort', onAbort);
+        resolve(terminalRunText(command, result));
+      });
+      emitter.emit('terminal', { id, command });
+    });
+}
+
+// What the model reads back: the output as the terminal printed it, or why it didn't run.
+function terminalRunText(command, result: any = {}) {
+  if (result?.refused) return `The terminal didn't run \`${command}\`: ${String(result.refused).slice(0, 500)}`;
+  if (result?.declined) return `The user said no to \`${command}\`. Don't run it again unless they ask.`;
+  let out = typeof result?.output === 'string' ? result.output : '';
+  if (out.length > TERMINAL_OUTPUT_MAX) {
+    out = out.slice(0, TERMINAL_OUTPUT_MAX) + `\n… (${out.length - TERMINAL_OUTPUT_MAX} more characters; narrow the command)`;
+  }
+  const failed = result?.ok === false ? '\n(It failed.)' : '';
+  return `$ ${command}\n${out || '(no output)'}${failed}`;
+}
+
 // The tab the user is on in the sidebar's window, right now — or null.
 async function currentTabOf(shell, paneOf = activePane) {
   const pane = paneOf(shell);
@@ -89,12 +128,12 @@ function describeTerminal(pane, drive, cwd) {
   const where = cwd ? ` Its current directory is ${cwd}.` : '';
   return (
     "You are the user's own assistant, answering in Nomad's drive terminal: a command line the user " +
-    `opened under ${page}.${where} Read and write that drive with readDriveFile, listDriveFiles and ` +
-    'writeDriveFile (name its `drive` to write). Answer for a terminal: short, plain Markdown, code in ' +
-    'fenced blocks, no openui-lang drawings, no wide tables. When one of the terminal\'s own commands ' +
-    'does what they ask, show it in a ```sh block (ls, tree, cat, find, grep, search, write, edit, mv, ' +
-    'cp, rm, mkdir, versions, diff, restore, open); they can run it. A change can be undone with ' +
-    '`versions <file>` then `restore <file> <version>`.'
+    `opened under ${page}.${where} Work in that terminal with runTerminalCommand: run its own commands ` +
+    '(ls, tree, cat, find, grep, search, versions, diff, and write, mv, cp, rm, mkdir, restore) yourself ' +
+    'instead of asking the user to. They see every command; one that changes the drive waits for their yes. ' +
+    'Use writeDriveFile for a whole file\'s new content (name its `drive`). Answer for a terminal: short, ' +
+    'plain Markdown, code in fenced blocks, no openui-lang drawings, no wide tables. A change can be undone ' +
+    'with `versions <file>` then `restore <file> <version>`; say so after you change something.'
   );
 }
 
@@ -183,6 +222,8 @@ export default {
         scratchScope: chatId ? `${terminal ? 'terminal' : 'sidebar'}:${shell.id}:${chatId}` : null,
         // An earlier answer in this chat read the user's private data (ADR-0037).
         privateData: opts.privateData === true,
+        // runTerminalCommand: the terminal runs the AI's commands where the user sees them.
+        terminalRun: terminal ? makeTerminalRun(shell, emitter) : undefined,
         // What the AI makes or changes links back to this chat (ADR-0047). A chat is kept in
         // hyper://private/ of the window's Space (chat-store.js), so the Space goes with it.
         origin: chatId
@@ -190,6 +231,15 @@ export default {
           : null,
       });
     }
+  },
+
+  // The drive terminal's answer to a command the AI ran there (makeTerminalRun): { ok, output },
+  // { declined } or { refused }. Only the terminal that was asked can answer.
+  async terminalResult(id, result) {
+    const done = terminalRuns.get(`${this.sender?.id}:${id}`);
+    if (!done) return false;
+    done(result && typeof result === 'object' ? result : {});
+    return true;
   },
 
   // A message the user sent while turn `turnId` runs. true when the turn will read it at its next

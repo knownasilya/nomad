@@ -8,6 +8,7 @@ import * as hist from '../../app/userland/webterm/js/lib/history.js'
 import { diffLines, hunks, stats, unified } from '../../app/userland/webterm/js/lib/diff.js'
 import * as fmt from '../../app/userland/webterm/js/lib/format.js'
 import { friendlyError, cleanMessage } from '../../app/userland/webterm/js/lib/errors.js'
+import { classifyAiLine } from '../../app/userland/webterm/js/lib/ai-run.js'
 
 const at = (value, start, end = start) => ({ value, start, end })
 
@@ -143,6 +144,38 @@ describe('diff', () => {
     expect(diffLines('', 'a\nb').map((o) => o.op)).toEqual(['+', '+'])
     expect(diffLines('a', '').map((o) => o.op)).toEqual(['-'])
     expect(unified(diffLines('', ''))).toBe('')
+  })
+})
+
+describe('commands the AI runs', () => {
+  const opts = { expand: (l) => l.replace(/^ll\b/, 'ls -l').replace(/^\?/, 'ai'), known: (n) => n !== 'nope' }
+  const kind = (l) => classifyAiLine(l, opts).kind
+
+  it('runs commands that only look at once', () => {
+    expect(kind('ls -l')).toBe('look')
+    expect(kind('ll')).toBe('look')
+    expect(kind('cd posts; grep -i todo && diff a.md b.md')).toBe('look')
+    expect(kind('versions -n 5 /index.html')).toBe('look')
+  })
+
+  it('asks before a command that changes the drive, or writes output to a file', () => {
+    expect(kind('rm -r drafts')).toBe('change')
+    expect(kind('restore /a.md 4')).toBe('change')
+    expect(kind('ls && mv a b')).toBe('change')
+    expect(kind('grep TODO > todo.txt')).toBe('change')
+    expect(kind('cat "a > b"')).toBe('look')
+  })
+
+  it("refuses the user's own commands and what isn't there", () => {
+    expect(kind('edit /a.md')).toBe('refuse')
+    expect(kind('? hello')).toBe('refuse')
+    expect(kind('go https://example.com')).toBe('refuse')
+    expect(kind('@deploy')).toBe('refuse')
+    expect(kind('versions --open')).toBe('refuse')
+    expect(kind('ls; exit')).toBe('refuse')
+    expect(classifyAiLine('nope', opts)).toEqual({ kind: 'refuse', reason: 'Command not found: nope' })
+    expect(kind('ls\nrm -r /')).toBe('refuse')
+    expect(kind('  ')).toBe('refuse')
   })
 })
 

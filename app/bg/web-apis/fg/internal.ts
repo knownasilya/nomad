@@ -102,8 +102,11 @@ export const setup = function (rpc) {
       );
       if (typeof o.onToolEvent === 'function') events.addEventListener('tool', (e) => o.onToolEvent(e));
       if (typeof o.onReasoning === 'function') events.addEventListener('reasoning', (e) => o.onReasoning(e.text));
+      // A command the AI runs here (runTerminalCommand); answer with terminalResult(id, …).
+      if (typeof o.onTerminal === 'function') events.addEventListener('terminal', (e) => o.onTerminal(e));
       return streamToAsyncIterator(events);
     },
+    terminalResult: (id, result) => aiShellRPC.terminalResult(id, result),
     newSession: () => aiShellRPC.newSession(),
     saveSession: (id, data) => aiShellRPC.saveSession(id, data),
     loadSession: (id) => aiShellRPC.loadSession(id),

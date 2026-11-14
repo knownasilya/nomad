@@ -17,6 +17,8 @@ import { writeToClipboard } from 'nomad://app-stdlib/js/clipboard.js';
 import * as line from './lib/line.js';
 import * as hist from './lib/history.js';
 import { friendlyError } from './lib/errors.js';
+import { classifyAiLine } from './lib/ai-run.js';
+import { render as litRender } from 'nomad://app-stdlib/vendor/lit-element/lit-html/lit-html.js';
 import * as builtinsFns from './builtins/index.js';
 import builtinsManifest, { GROUPS, ALIASES } from './builtins/manifest.js';
 import { TermAI } from './builtins/ai.js';
@@ -367,6 +369,7 @@ class WebTerm extends LitElement {
   }
 
   print(block, output) {
+    if (block.collect) block.collect.push(outputText(output));
     const rendered = renderResult(output);
     if (rendered == null) return;
     block.entries.push(rendered);
@@ -377,6 +380,7 @@ class WebTerm extends LitElement {
     if (err && err.shown) return;
     const b = block || this.newBlock(null);
     const f = friendlyError(err, { cwd: this.cwd && this.cwd.toString() });
+    if (b.collect) b.collect.push(`Error: ${f.message}${f.tip ? ` (${outputText(f.tip)})` : ''}`);
     b.entries.push(renderError(f));
     if (!block) b.status = 'error';
     this.requestUpdate();
@@ -448,6 +452,66 @@ class WebTerm extends LitElement {
     this.requestUpdate();
     await this.updateComplete;
     this.setFocus();
+  }
+
+  // A line the AI runs (runTerminalCommand). It shows in its answer as `run.block`; one that
+  // changes the drive waits for the user's Run (lib/ai-run.js). The text output goes back to the AI.
+  async runForAI(command, run, signal) {
+    const block = {
+      id: ++blockIds,
+      cwd: new URL(this.cwd.toString()),
+      input: command,
+      entries: [],
+      status: 'running',
+      collect: [],
+      ai: true,
+    };
+    run.block = block;
+    const update = () => run.update && run.update();
+    const verdict = classifyAiLine(command, { expand: expandAlias, known: (name) => !!this.commands[name] });
+    if (verdict.kind === 'refuse') {
+      block.status = 'error';
+      block.entries.push(html`<div class="faint">The AI can't run this here: ${verdict.reason.split('. ')[0]}</div>`);
+      update();
+      return { refused: verdict.reason };
+    }
+    if (verdict.kind === 'change') {
+      block.status = 'asking';
+      update();
+      const yes = await new Promise((resolve) => {
+        block.answer = resolve;
+        this.aiAsking = block;
+        signal?.addEventListener('abort', () => resolve(false), { once: true });
+        this.updateComplete.then(() => this.shadowRoot.querySelector(`[data-ai-allow="${block.id}"]`)?.focus());
+      });
+      block.answer = null;
+      if (this.aiAsking === block) this.aiAsking = null;
+      if (!yes) {
+        block.status = 'declined';
+        update();
+        this.setFocus();
+        return { declined: true };
+      }
+      block.approved = true;
+      block.status = 'running';
+      update();
+    }
+    const before = this.cwd.toString();
+    let ok = true;
+    for (const { line: one, and } of line.splitCommands(command)) {
+      if (signal?.aborted) break;
+      if (and && !ok) continue;
+      ok = await this.runOne(one, block, signal);
+      update();
+    }
+    block.status = ok ? 'ok' : 'error';
+    block.took = Date.now() - (run.at || Date.now());
+    update();
+    this.loadPageCommands().catch(() => {});
+    if (verdict.kind === 'change') this.setFocus();
+    let output = block.collect.filter((t) => t !== '').join('\n');
+    if (this.cwd.toString() !== before) output += `${output ? '\n' : ''}(now in ${this.cwd.toString()})`;
+    return { ok, output };
   }
 
   // One command; true when it worked.
@@ -579,7 +643,9 @@ class WebTerm extends LitElement {
       term: {
         signal,
         info: (origin) => this.driveInfoNow(origin),
-        confirm: (q) => ctxPrompt(q + ' [y/N]').then((a) => /^y(es)?$/i.test(String(a || '').trim())),
+        // A command the user already allowed the AI to run doesn't ask again.
+        confirm: (q) =>
+          block.approved ? Promise.resolve(true) : ctxPrompt(q + ' [y/N]').then((a) => /^y(es)?$/i.test(String(a || '').trim())),
         fill: (text) => this.fill(text),
         history: () => this.history.slice(),
         clearHistory: () => {
@@ -1075,6 +1141,32 @@ class WebTerm extends LitElement {
     </div>`;
   }
 
+  // A command the AI ran, inside its answer: the line, a Run / Don't for a change, then the output.
+  renderAiRun(b) {
+    const failed = b.status === 'error';
+    const asking = b.status === 'asking';
+    return html`<div class="ai-run is-${b.status}">
+      <div class="ps-line">
+        <span class="by" title="The AI ran this">${icon('robot')}</span>${this.renderPs(b.cwd, { cmd: b.input, failed })}
+      </div>
+      ${asking
+        ? html`<div class="ask" role="group" aria-label="The AI wants to run this">
+            <span>The AI wants to run this. It changes the drive.</span>
+            <span class="faint">${b2('y')} / ${b2('n')}</span>
+            <button class="btn primary small" data-ai-allow=${b.id} @click=${() => b.answer && b.answer(true)}>Run it</button>
+            <button class="btn small" @click=${() => b.answer && b.answer(false)}>Don't</button>
+          </div>`
+        : ''}
+      ${b.status === 'declined' ? html`<div class="faint">You said no, so it didn't run.</div>` : ''}
+      ${b.entries.length || b.status === 'running'
+        ? html`<div class="out" data-block=${b.id}>
+            ${b.entries.map((e) => html`<div class="entry">${e}</div>`)}
+            ${b.status === 'running' && !b.entries.length ? html`<span class="spinner"></span>` : ''}
+          </div>`
+        : ''}
+    </div>`;
+  }
+
   renderBlock(b) {
     const failed = b.status === 'error';
     return html`<div class="block">
@@ -1213,6 +1305,13 @@ class WebTerm extends LitElement {
 
   // Keys that work while a command runs, and anywhere in the terminal.
   onHostKeyDown(e) {
+    // The AI asks to run a command that changes the drive: y runs it, n or Esc doesn't.
+    const asking = this.aiAsking;
+    if (asking && asking.answer && !e.ctrlKey && !e.metaKey && !e.altKey && /^(y|n|Escape)$/.test(e.key)) {
+      e.preventDefault();
+      asking.answer(e.key === 'y');
+      return;
+    }
     if (e.ctrlKey && !e.metaKey && !e.altKey && e.key === 'c' && this.running) {
       if (window.getSelection().type === 'Range') return; // copying
       e.preventDefault();
@@ -1487,6 +1586,30 @@ function renderResult(output) {
     return html`<pre>${String(output)}</pre>`;
   }
   return html`<pre>${JSON.stringify(output, null, 2)}</pre>`;
+}
+
+// A command's output as plain text, for the AI: its own text form, else the words it shows.
+function outputText(res) {
+  if (res == null) return '';
+  if (typeof res === 'string' || typeof res === 'number' || typeof res === 'boolean') return String(res);
+  if (typeof res.toText === 'function') return String(res.toText());
+  if (typeof res.toHTML === 'function') return outputText(res.toHTML());
+  if (res instanceof HTMLElement) return res.textContent ? res.textContent.trim() : `(${res.localName})`;
+  if (res instanceof TemplateResult || Array.isArray(res)) {
+    const div = document.createElement('div');
+    try {
+      litRender(res, div);
+    } catch (err) {
+      return '';
+    }
+    for (const el of div.querySelectorAll('img, video, audio')) el.replaceWith(`(${el.localName})`);
+    return div.textContent.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  try {
+    return JSON.stringify(res, null, 2);
+  } catch (err) {
+    return String(res);
+  }
 }
 
 function resultToText(res) {
