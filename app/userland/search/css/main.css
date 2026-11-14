@@ -547,3 +547,73 @@ input.source-name:focus {
     grid-column: 2;
   }
 }
+
+/* "In your drives": the user's own files, above the listed drives. */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 10px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-color--light);
+}
+
+.section-title .count {
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--text-color--pretty-light);
+}
+
+.mine-section {
+  margin-bottom: 22px;
+}
+
+.mine-status,
+.mine-note {
+  margin: 4px 10px;
+  font-size: 12px;
+  color: var(--text-color--pretty-light);
+}
+
+.url-line .drive {
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-color--light);
+}
+
+.url-line .drive::after {
+  content: ' ·';
+}
+
+.result.file .url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result mark {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: var(--srch-accent-soft);
+  color: inherit;
+  font-weight: 600;
+}
+
+.more-btn {
+  margin: 4px 10px 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--srch-accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.more-btn:hover {
+  text-decoration: underline;
+}

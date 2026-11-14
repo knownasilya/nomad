@@ -119,6 +119,10 @@ export class DrivesView extends LitElement {
         label: 'Diff / Merge',
         click: () => this.diffDrive(drive),
       },
+      {
+        label: 'Version history',
+        click: () => window.open(`nomad://versions/?drive=${encodeURIComponent(drive.url)}`),
+      },
       { type: 'separator' },
       {
         label: 'Drive Properties',

@@ -11,6 +11,10 @@
 // The others are the `search_sources` setting, each with a name (js/sources.js). They are managed
 // behind the cog in the header. With more than one source, each result names the ones that found it.
 //
+// Above them, "In your drives" searches the files of the drives in this Space's library (the ones
+// My Library lists): nomad.drives.searchFiles, app/bg/hyper/drive-search.js, rules in
+// shared/drive-search.mjs. Every word, in any order, ignoring case and accents, as in Notes.
+//
 // Vanilla JS modules (served as-is, no bundle) like nomad://reader. Reaches the sources over
 // fetch(), which the search page's dedicated CSP (bg/protocols/nomad.js SEARCH_CSP) permits via
 // connect-src. Styled with the shell's own tokens (nomad://assets/design-tokens.css), so the page
@@ -25,6 +29,7 @@ import {
   mergeResults,
   mergeTopics,
 } from './sources.js';
+import { markPieces, queryWords } from 'nomad://app-stdlib/js/search-match.js';
 
 const SOURCES_SETTING = 'search_sources';
 // Before named sources, the page kept one custom address here. Moved into the setting on load.
@@ -49,7 +54,12 @@ const state = {
   status: 'idle', // idle | loading | ok | error | none
   panelOpen: false,
   addError: '',
+  // "In your drives": the files of the user's own drives that match (nomad.drives.searchFiles).
+  mine: { status: 'idle', results: [], searched: 0, skipped: 0, partial: false, expanded: false },
 };
+
+// How many of your own files show before "Show all".
+const MINE_SHOWN = 5;
 
 // sources
 // =
@@ -104,6 +114,7 @@ let searchSeq = 0;
 async function runSearch() {
   const seq = ++searchSeq;
   syncUrl();
+  runMineSearch();
   if (!activeSources().length) {
     state.status = 'none';
     state.results = [];
@@ -120,11 +131,33 @@ async function runSearch() {
   renderMain();
 }
 
+let mineSeq = 0;
+async function runMineSearch() {
+  const seq = ++mineSeq;
+  const q = state.query.trim();
+  if (!q || !window.nomad?.drives?.searchFiles) {
+    state.mine = { ...state.mine, status: 'idle', results: [] };
+    return;
+  }
+  state.mine = { ...state.mine, status: 'loading', expanded: false };
+  renderMain();
+  try {
+    const res = await nomad.drives.searchFiles(q, { limit: 50 });
+    if (seq !== mineSeq) return;
+    state.mine = { ...res, status: 'ok', expanded: false };
+  } catch (e) {
+    if (seq !== mineSeq) return;
+    state.mine = { status: 'error', results: [], searched: 0, skipped: 0, partial: false, expanded: false, error: e.message };
+  }
+  renderMain();
+}
+
 // Keep the current search in the URL, so a reload or a copied link runs it again.
 function syncUrl() {
   const qs = new URLSearchParams();
   if (state.query) qs.set('q', state.query);
   if (state.topic) qs.set('topic', state.topic);
+  document.title = state.query.trim() ? `${state.query.trim()} · Search` : 'Search';
   const search = qs.toString() ? '?' + qs : '';
   if (search !== location.search) history.replaceState(null, '', location.pathname + search);
 }
@@ -282,8 +315,8 @@ function renderShell() {
   let timer;
   const input = el('input', {
     type: 'search',
-    placeholder: 'Search listed drives',
-    'aria-label': 'Search listed drives',
+    placeholder: 'Search your drives and listed drives',
+    'aria-label': 'Search your drives and listed drives',
     autofocus: true,
     value: state.query,
     oninput: (e) => {
@@ -440,6 +473,12 @@ function renderMain() {
   mainEl.textContent = '';
   const wrap = el('div', { class: 'wrap' });
 
+  // Your own files first, while a search (not a topic) is on.
+  const mineShown = state.mine.status !== 'idle' && !state.topic;
+  if (mineShown) {
+    wrap.append(renderMine(), el('h3', { class: 'section-title' }, ['Listed drives']));
+  }
+
   if (state.topics.length) {
     wrap.append(
       el('div', { class: 'topics' }, [
@@ -496,6 +535,68 @@ function renderMain() {
   }
 
   mainEl.append(wrap);
+}
+
+function renderMine() {
+  const m = state.mine;
+  const head = el('h3', { class: 'section-title' }, [
+    'In your drives',
+    m.status === 'ok' && m.results.length ? el('span', { class: 'count' }, [String(m.results.length)]) : null,
+  ]);
+  const notes = [];
+  if (m.partial) notes.push('Some files weren’t here yet and were left out; they’re tried again next time.');
+  if (m.skipped) notes.push(`${plural(m.skipped, 'older drive')} can’t be searched.`);
+  let body;
+  if (m.status === 'loading') body = el('div', { class: 'mine-status' }, ['Searching your drives…']);
+  else if (m.status === 'error') body = el('div', { class: 'mine-status' }, [`Couldn’t search your drives: ${m.error || 'unknown error'}`]);
+  else if (!m.results.length) {
+    body = el('div', { class: 'mine-status' }, [
+      m.searched ? `Nothing in your ${plural(m.searched, 'drive')} matches.` : 'You have no drives in this Space to search.',
+    ]);
+  } else {
+    const shown = m.expanded ? m.results : m.results.slice(0, MINE_SHOWN);
+    const words = queryWords(state.query);
+    body = el('div', {}, [
+      el('ol', { class: 'results mine' }, shown.map((r) => renderFileResult(r, words))),
+      m.results.length > shown.length
+        ? el('button', { class: 'more-btn', onclick: () => ((state.mine.expanded = true), renderMain()) }, [
+            `Show all ${m.results.length}`,
+          ])
+        : null,
+    ]);
+  }
+  return el('section', { class: 'mine-section' }, [
+    head,
+    body,
+    notes.length && m.status === 'ok' ? el('div', { class: 'mine-note' }, [notes.join(' ')]) : null,
+  ]);
+}
+
+function marked(text, words) {
+  return markPieces(text, words).map((p) => (p.match ? el('mark', {}, [p.text]) : p.text));
+}
+
+function renderFileResult(r, words) {
+  return el('li', { class: 'result file', onclick: () => openInTab(r.url) }, [
+    el('span', { class: 'favicon placeholder' }, [icon(fileIcon(r.path))]),
+    el('div', { class: 'body' }, [
+      el('div', { class: 'title-line' }, [tabLink({ class: 'title' }, r.url, marked(r.title || r.path, words))]),
+      el('div', { class: 'url-line' }, [
+        el('span', { class: 'drive' }, [r.driveTitle]),
+        el('span', { class: 'url' }, [r.path]),
+      ]),
+      r.snippet ? el('div', { class: 'desc' }, marked(r.snippet, words)) : null,
+    ]),
+  ]);
+}
+
+function fileIcon(path) {
+  const ext = (/\.([a-z0-9]+)$/i.exec(path)?.[1] || '').toLowerCase();
+  if (ext === 'md' || ext === 'markdown' || ext === 'txt' || ext === 'text') return 'file-alt';
+  if (ext === 'html' || ext === 'htm') return 'globe';
+  if (ext === 'csv' || ext === 'tsv') return 'table';
+  if (ext === 'ics') return 'calendar-alt';
+  return 'file-code';
 }
 
 function notice(iconName, title, body) {

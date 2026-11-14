@@ -6,6 +6,8 @@
 const PURPOSES = {
   readDriveFile: 'read a file',
   listDriveFiles: 'list files',
+  searchDrives: 'search your drives',
+  driveHistory: 'look at a drive\'s history',
   writeDriveFile: 'write a file',
   createDrive: 'make a drive',
   fetchUrl: 'fetch a web page',
@@ -71,6 +73,10 @@ export function toolSummary(name, args) {
       return `Listing the files in ${inDrive(a.path || '/', a.drive)}`;
     case 'writeDriveFile':
       return `Writing ${inDrive(a.path || 'a file', a.drive)}`;
+    case 'searchDrives':
+      return a.query ? `Searching your drives for ${quote(a.query)}` : 'Searching your drives';
+    case 'driveHistory':
+      return a.path ? `Looking at the history of ${inDrive(a.path, a.drive)}` : 'Looking at the drive\'s history';
     case 'createDrive':
       return a.title ? `Making the drive ${quote(a.title)}` : 'Making a drive';
     case 'fetchUrl':

@@ -34,6 +34,7 @@ describe('vault tools: permissions', () => {
     // openTab is the user's own AI's too, but opens a tab: no Vault data, no Vault permission.
     // Secrets (listSecrets, httpRequest) aren't Vault data: they ask per secret (ADR-0033).
     // createDrive makes a drive, not a Vault record: it asks aiCreateDrive (create-drive.mjs).
+    // searchDrives reads the user's drives, like readDriveFile: no Vault data, no prompt.
     const gated = CAPABILITIES.filter(
       (c) =>
         c.gates?.personal &&
@@ -41,7 +42,8 @@ describe('vault tools: permissions', () => {
         !c.gates?.secrets &&
         !c.namedDescription &&
         c.name !== 'openTab' &&
-        c.name !== 'createDrive'
+        c.name !== 'createDrive' &&
+        c.name !== 'searchDrives'
     ).map((c) => c.name);
     expect(gated.sort()).toEqual(Object.keys(VAULT_TOOL_PERMS).sort());
     expect([...new Set(Object.values(VAULT_TOOL_PERMS))].sort()).toEqual([...VAULT_PERMS].sort());

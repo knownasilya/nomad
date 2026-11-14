@@ -19,6 +19,9 @@ import * as daemon from '../../hyper/daemon';
 import * as aiBridge from '../../hyper/ai-bridge';
 import * as names from '../../hyper/names';
 import * as vaultApps from './vault-apps';
+import * as hyperDrives from '../../hyper/drives';
+import * as driveSearch from '../../hyper/drive-search';
+import * as driveHistory from '../../hyper/drive-history';
 import { isVaultTool, runVaultTool } from './ai-vault';
 import * as aiMemory from '../../ai/memory';
 import * as aiSkills from '../../ai/skills';
@@ -1410,6 +1413,63 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
         readOpts(await stagesInDraft(base))
       );
       return JSON.stringify((entries || []).map((e) => e.key ?? e.name ?? e));
+    }
+    // Inside the user's own drives (drive-search.js): every word, in any order. The Space is the
+    // tab's (or the one the phone sent), as for names.
+    case 'searchDrives': {
+      if (!hasCapability(catalog, 'searchDrives')) throw new Error('searchDrives is not available here');
+      const query = String(args?.query || '').trim();
+      if (!query) throw new Error('Pass `query`: the words to find');
+      const limit = Math.min(Math.max(Number(args?.limit) || 20, 1), 50);
+      const driveKeys = args?.drive ? [await hyperDrives.fromURLToKey(driveFor(args.drive).base, true)] : null;
+      const res = await driveSearch.search(query, {
+        spaceId: await driveSearch.spaceIdForKey(nameSpace),
+        driveKeys,
+        limit,
+      });
+      const out: Record<string, any> = {
+        results: res.results.map((r) => ({
+          drive: r.driveTitle,
+          path: r.path,
+          url: r.url,
+          title: r.title,
+          snippet: r.snippet,
+          changed: r.mtime ? new Date(r.mtime).toISOString() : null,
+        })),
+        searched: res.searched,
+      };
+      if (res.partial) out.note = 'Some files were not on this device yet and were left out.';
+      if (res.skipped) out.skipped = `${res.skipped} older drive(s) can't be searched.`;
+      return JSON.stringify(out, null, 2);
+    }
+    // A drive's changes (drive-history.js). Read-only: the user restores on nomad://versions.
+    case 'driveHistory': {
+      if (!hasCapability(catalog, 'driveHistory')) throw new Error('driveHistory is not available here');
+      const { base } = driveFor(args?.drive);
+      const key = await hyperDrives.fromURLToKey(base, true);
+      const path = typeof args?.path === 'string' && args.path ? (args.path.startsWith('/') ? args.path : '/' + args.path) : null;
+      const limit = Math.min(Math.max(Number(args?.limit) || 30, 1), 100);
+      const res = await driveHistory.history(key, { path, limit });
+      if (!res) throw new Error('This drive has no version history (it was made before collaborative drives)');
+      const versionsUrl =
+        `nomad://versions/?drive=${encodeURIComponent(`hyper://${key}/`)}` + (path ? `&path=${encodeURIComponent(path)}` : '');
+      return JSON.stringify(
+        {
+          drive: res.title || `hyper://${key}/`,
+          changes: res.rows.map((r) => ({
+            path: r.path,
+            kind: r.kind,
+            at: r.at ? new Date(r.at).toISOString() : null,
+            ...(r.approx ? { approx: true } : {}),
+            ...(r.kind !== 'deleted' ? { size: r.size } : {}),
+          })),
+          more: res.before != null,
+          versionsUrl,
+          note: 'Link versionsUrl for the user to see old versions and restore a file or the whole drive. You can\'t restore.',
+        },
+        null,
+        2
+      );
     }
     case 'fetchUrl': {
       const urlp = new URL(args.url);

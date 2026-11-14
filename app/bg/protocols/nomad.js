@@ -528,6 +528,16 @@ async function nomadProtocol(request) {
         { fallbackToIndexHTML: true }
       );
     }
+    // A drive's version history (shared/drive-history.mjs): ?drive=<url>&path=<file>.
+    if (requestUrl === 'nomad://versions' || requestUrl.startsWith('nomad://versions/')) {
+      return serveAppAsset(
+        requestUrl,
+        path.join(__dirname, 'userland', 'versions'),
+        cb,
+        // @ts-ignore
+        { fallbackToIndexHTML: true }
+      );
+    }
     // The family calendar: the user's and the Space's events, and iCal feeds. ?day= is a route.
     if (requestUrl === 'nomad://calendar' || requestUrl.startsWith('nomad://calendar/')) {
       return serveAppAsset(
