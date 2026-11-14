@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.52.0](https://github.com/knownasilya/nomad/compare/v1.51.1...v1.52.0) (2026-11-14)
+
+
+### Features
+
+* **assets:** thumbnails for PDFs, books and phone videos, and fill in missing ones ([1cca7e1](https://github.com/knownasilya/nomad/commit/1cca7e1a474ad91afebe44d5a801a0d32838d0a8))
+* **drives:** add photos, videos and files to a drive from the phone ([9e8315c](https://github.com/knownasilya/nomad/commit/9e8315caa3cf21f45b2b0504b300a583dcac6350))
+* **drives:** invite links to edit a drive, and an Editors tab in site info ([fb56917](https://github.com/knownasilya/nomad/commit/fb569170009b46b411bc8a37fc4b49422dfe4c26))
+* **drives:** see what keeps a drive online, and keep one drive on a Peer ([c8b29c0](https://github.com/knownasilya/nomad/commit/c8b29c0026dc49ffdd6523e7ec30ca8fefe4a6d2))
+* **drives:** start a drive as a Blog, Website, Photo album or Forum ([6718d96](https://github.com/knownasilya/nomad/commit/6718d96e156b6036f9ac9598b392ebe1746b2224))
+* **drives:** version history and restore, and search inside your own drives ([a95e911](https://github.com/knownasilya/nomad/commit/a95e91134248027405e644b0c7a49e669d28f305))
+* **phone:** version history and search in your drives ([6df638c](https://github.com/knownasilya/nomad/commit/6df638cc64a0daebaf205212df100eff24c56266))
+* **webterm:** a terminal worth living in ([b44ab1b](https://github.com/knownasilya/nomad/commit/b44ab1b68c10de780ea83f4e2653f77f945b0141))
+* **webterm:** the AI runs terminal commands ([3ddc2b3](https://github.com/knownasilya/nomad/commit/3ddc2b3b3507c9d9d2281b3474ec1d73ce3310e9))
+
+
+### Bug Fixes
+
+* **editor:** no backticks inside the nomad.d.ts template string ([d0faa7b](https://github.com/knownasilya/nomad/commit/d0faa7b97fceeb82e5eb82a6f54ebc9189d4729e))
+* **phone:** one Blank card in New drive ([d14f73b](https://github.com/knownasilya/nomad/commit/d14f73b1c46c3e4ee221e7597fa9a29ddb9d6070))
+
 ### [1.51.1](https://github.com/knownasilya/nomad/compare/v1.51.0...v1.51.1) (2026-11-13)
 
 
