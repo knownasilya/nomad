@@ -4,6 +4,7 @@ import { promises as nodefs } from 'fs';
 import * as autobases from '../../hyper/autobases';
 import * as discovery from '../../hyper/discovery';
 import * as driveTemplates from '../../hyper/drive-templates';
+import { inviteUrl, parseInviteUrl } from '../../../../shared/drive-invites.mjs';
 import { sanitizeListingFields } from '../../../lib/listing';
 import * as archivesDb from '../../dbs/archives';
 import { gitCloneToTmp } from '../../lib/git';
@@ -459,32 +460,30 @@ const autobaseAPI = {
   // Writer management
   // =
 
-  async createInvite(url, { multiUse = false }: any = {}) {
+  // An invite link to edit this drive (shared/drive-invites.mjs): `hyper://<key>/?invite=<token>`.
+  // It works on any of the drive's writing Devices, once (unless `multiUse`), for `days` (7).
+  async createInvite(url, { multiUse = false, days, note }: any = {}) {
     const sess = await _lookup(url);
     assertOwner(sess);
     // Inviting a writer is the owner opting into collaboration — unlock the drive so incoming
     // access requests are accepted (same URL). A locked drive otherwise never opens the channel.
     await autobases.setCollaborative(sess, true).catch(() => {});
-    const token = autobases.createInvite(sess.keyStr, { multiUse });
-    return `${sess.url}?invite=${token}`;
+    const token = await autobases.createInvite(sess, { multiUse, days, note });
+    return inviteUrl(sess.url, token);
   },
 
-  async claimInvite(inviteUrl, { profileUrl }: any = {}) {
-    const urlp = new URL(inviteUrl);
-    const token = urlp.searchParams.get('invite');
-    if (!token) throw new Error('Invalid invite URL: missing invite token');
-
-    const key = urlp.hostname;
-    const sess = await autobases.getOrLoadCollaborativeDrive(key);
+  // Accept an invite link: ask the drive's writers to add this Device, with the link's token, which
+  // they check against the drive's open links. Resolves once asked; the writer is added when one of
+  // them is online.
+  async claimInvite(inviteLink, { profileUrl }: any = {}) {
+    const parsed = parseInviteUrl(inviteLink);
+    if (!parsed) throw new Error('Invalid invite URL: missing invite token');
+    const sess = await autobases.getOrLoadCollaborativeDrive(parsed.key);
     if (!sess) throw new Error('Could not connect to collaborative drive');
-
-    const invite = autobases.getInvite(token);
-    if (!invite) throw new Error('Invite token not found or already used');
-
     const writerKey = b4a.toString(sess.base.local.key, 'hex');
-    autobases.requestWriterAccess(key, { writerKey, profileUrl });
-    autobases.consumeInvite(token);
-    return { writerKey };
+    if (sess.writable) return { writerKey, writable: true };
+    autobases.requestWriterAccess(parsed.key, { writerKey, profileUrl, invite: parsed.token });
+    return { writerKey, writable: false };
   },
 
   async requestAccess(url, { profileUrl }: any = {}) {

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Alert, Modal, View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-native'
+import { useEffect, useMemo, useState } from 'react'
+import { Alert, Modal, View, Text, TextInput, Pressable, ScrollView, StyleSheet, ToastAndroid } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Clipboard from 'expo-clipboard'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
@@ -9,9 +9,10 @@ import ScreenHeader from './ScreenHeader'
 import Tabs from './Tabs'
 import ActionSheet, { type SheetAction } from './ActionSheet'
 import IconButton from './IconButton'
-import Icon from './Icon'
+import Icon, { type IconName } from './Icon'
 import SiteIcon from './SiteIcon'
 import { ListSection, ListRow, ListEmpty } from './List'
+import { DRIVE_TEMPLATES, templateIcon } from '../lib/driveTemplates'
 
 type Page = 'drives' | 'bookmarks' | 'history' | 'downloads'
 
@@ -30,13 +31,20 @@ interface Props {
   history: SavedSite[]
   iconFor?: (url: string) => string | undefined
   onOpen: (url: string, type?: DriveType) => void
-  onCreateDrive: (title: string, type: DriveType, description: string) => void
+  // `template`: a built-in template's id (lib/driveTemplates.ts), 'blank' for none
+  onCreateDrive: (title: string, type: DriveType, description: string, template: string) => void
   onEditDrive: (drive: SavedDrive) => void
   onRemoveDrive: (url: string) => void
   onRemoveBookmark: (url: string) => void
   onClearHistory: () => void
   initialPage?: Page
+  // The user's always-on Peers and whether each keeps a drive online (ADR-0038, shared/peers.mjs
+  // keepsDrive), and keeping it on one by itself. Left out on a phone not linked to a Vault.
+  drivePeers?: (drive: SavedDrive) => Promise<DrivePeer[] | null>
+  setPeerDrive?: (peerKey: string, drive: SavedDrive, on: boolean) => Promise<boolean>
 }
+
+export interface DrivePeer { key: string; name: string; online: boolean; summary: string; keeps: 'space' | 'drive' | false; space?: string | null }
 
 // What a long-press (or a row's ⋮ button) acts on.
 type Target = { kind: 'drive'; drive: SavedDrive } | { kind: 'bookmark' | 'history'; site: SavedSite }
@@ -53,6 +61,33 @@ export default function Library (props: Props) {
   // Kept apart from `target` so the sheet keeps its rows while it slides away.
   const [sheetOpen, setSheetOpen] = useState(false)
   const openActions = (next: Target) => { setTarget(next); setSheetOpen(true) }
+  // The Peers for the drive whose actions are open, so the sheet can keep it online on one.
+  const [peers, setPeers] = useState<DrivePeer[] | null>(null)
+  useEffect(() => {
+    setPeers(null)
+    if (!sheetOpen || target?.kind !== 'drive' || !props.drivePeers) return
+    let live = true
+    props.drivePeers(target.drive).then((list) => { if (live) setPeers(list) }).catch(() => {})
+    return () => { live = false }
+  }, [sheetOpen, target])
+
+  // One row per Peer: kept with its Space (nothing to change here), kept on its own, or not kept.
+  const peerActions = (): SheetAction[] => {
+    if (target?.kind !== 'drive' || !peers?.length || !props.setPeerDrive) return []
+    const d = target.drive
+    return peers.map((p) => p.keeps === 'space'
+      ? { label: `Kept online by ${p.name} with ${p.space || 'its Space'}`, icon: 'server', active: true, disabled: true, onPress: () => {} }
+      : {
+          label: p.keeps ? `Stop keeping it on ${p.name}` : `Keep online on ${p.name}`,
+          icon: 'server',
+          active: !!p.keeps,
+          onPress: () => {
+            props.setPeerDrive!(p.key, d, !p.keeps).then((ok) => {
+              if (ok) ToastAndroid.show(p.keeps ? `${p.name} stops keeping ${d.name}` : `${p.name} will keep ${d.name} online`, ToastAndroid.SHORT)
+            }).catch((err) => Alert.alert('Couldn’t change that', String(err?.message || err)))
+          }
+        })
+  }
 
   const actions = (): SheetAction[] => {
     if (!target) return []
@@ -127,7 +162,7 @@ export default function Library (props: Props) {
           onClose={() => setSheetOpen(false)}
           title={target ? (target.kind === 'drive' ? target.drive.name : target.site.title) : ''}
           subtitle={target ? (target.kind === 'drive' ? target.drive.url : target.site.url) : ''}
-          groups={[actions()]}
+          groups={[actions(), peerActions()]}
         />
       </SafeAreaView>
     </Modal>
@@ -139,11 +174,22 @@ function DrivesPage ({ drives, onOpen, onCreateDrive, onEditDrive, onMore, s, t 
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
   const [type, setType] = useState<DriveType>('hyperdrive')
+  const [template, setTemplate] = useState('blank')
+  const tpl = DRIVE_TEMPLATES.find((x) => x.id === template)
+
+  // A template brings its own default for taking writers (a Blog or a Forum is for several people),
+  // as desktop's Create Drive does.
+  const pickTemplate = (id: string) => {
+    setTemplate(id)
+    setType(DRIVE_TEMPLATES.find((x) => x.id === id)?.collaborative ? 'autobase' : 'hyperdrive')
+  }
 
   const submit = () => {
-    onCreateDrive(name.trim() || 'Untitled drive', type, desc.trim())
+    onCreateDrive(name.trim() || (tpl ? `My ${tpl.title.toLowerCase()}` : 'Untitled drive'), type, desc.trim(), template)
     setName('')
     setDesc('')
+    setTemplate('blank')
+    setType('hyperdrive')
     setCreating(false)
   }
 
@@ -155,11 +201,17 @@ function DrivesPage ({ drives, onOpen, onCreateDrive, onEditDrive, onMore, s, t 
         {creating ? (
           <View style={s.form}>
             <Text style={s.formTitle}>New drive</Text>
+            <View style={s.templates} accessibilityRole='radiogroup' accessibilityLabel='Start with'>
+              <TemplateOption title='Blank' sub='Any files you like' icon='file' active={template === 'blank'} onPress={() => pickTemplate('blank')} s={s} t={t} />
+              {DRIVE_TEMPLATES.map((x) => (
+                <TemplateOption key={x.id} title={x.title} sub={x.description} icon={templateIcon(x)} active={template === x.id} onPress={() => pickTemplate(x.id)} s={s} t={t} />
+              ))}
+            </View>
             <TextInput
               style={s.input}
               value={name}
               onChangeText={setName}
-              placeholder='Drive name'
+              placeholder={tpl ? `Name (My ${tpl.title.toLowerCase()})` : 'Drive name'}
               placeholderTextColor={t.textMuted}
               autoCorrect={false}
               autoFocus
@@ -252,6 +304,25 @@ function SitesPage ({ items, empty, iconFor, onOpen, onMore, action, s }: {
   )
 }
 
+function TemplateOption ({ title, sub, icon, active, onPress, s, t }: { title: string; sub: string; icon: IconName; active: boolean; onPress: () => void; s: Styles; t: Theme }) {
+  return (
+    <Pressable
+      style={[s.tplOpt, active && s.typeOptActive]}
+      onPress={onPress}
+      android_ripple={{ color: t.ripple }}
+      accessibilityRole='radio'
+      accessibilityState={{ checked: active }}
+      accessibilityLabel={`${title}: ${sub}`}
+    >
+      <Icon name={icon} size={15} color={active ? t.trustText : t.textMuted} style={s.tplIcon} />
+      <View style={s.flex}>
+        <Text style={[s.typeOptText, active && s.typeOptTextActive]} numberOfLines={1}>{title}</Text>
+        <Text style={s.typeOptSub} numberOfLines={2}>{sub}</Text>
+      </View>
+    </Pressable>
+  )
+}
+
 function TypeOption ({ label, sub, icon, active, onPress, s, t }: { label: string; sub: string; icon: 'hdd' | 'users'; active: boolean; onPress: () => void; s: Styles; t: Theme }) {
   return (
     <Pressable
@@ -280,6 +351,9 @@ function makeStyles (t: Theme) {
     formTitle: { color: t.text, fontSize: 15, fontWeight: '600' },
     input: { height: 48, color: t.text, fontSize: 15, backgroundColor: t.bg, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, paddingHorizontal: space.md },
     typePick: { flexDirection: 'row', gap: space.sm },
+    templates: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+    tplOpt: { flexBasis: '47%', flexGrow: 1, flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, minHeight: 56, padding: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: t.border, overflow: 'hidden' },
+    tplIcon: { marginTop: 2, width: 18, textAlign: 'center' },
     typeOpt: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: t.border },
     typeOptActive: { backgroundColor: t.trustBg, borderColor: t.trustText },
     typeOptText: { color: t.text, fontSize: 14, fontWeight: '600' },

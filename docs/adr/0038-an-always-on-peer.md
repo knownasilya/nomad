@@ -291,3 +291,19 @@ Rollout steps 1 to 3 are in. What changed from the text above:
 - Still not built: per-drive switches (the record supports a list of drives), Blind Peers (§4), the
   Inbox (§7), "a newer format than it knows" (§9), and a container image.
 
+
+## Amendment: one drive at a time (2026-11-14)
+
+A Peer can keep one drive online without keeping its whole Space. The hold gains `extra`, a list of
+drive keys kept beside the Spaces (`normalizeHold`, `withDrive`, `keepsDrive` in `shared/peers.mjs`),
+and `PEERS_VERSION` is 2, so a Peer older than this shows "Update the Peer" instead of quietly ignoring
+the list.
+
+- **Where the drive is found.** A Peer still learns about drives only from Space Drive Registries:
+  `holdingsOf` adds an `extra` drive when some registry the Peer can read lists it (a Blind Peer only
+  when the entry is public). A drive that is in no library can't be kept on its own, and the switch
+  says so.
+- **UI.** Site info's Online tab (`site-info/js/com/drive-online.js`, internal
+  `nomad.vault.drivePeers`/`setPeerDrive`) says who keeps the drive online right now: this computer,
+  and each Peer with a switch, off and disabled when the Peer keeps it with its Space. The phone's
+  drive sheet in My Library has the same switches (`peers`/`forDrive`, `peers`/`setDrive`).

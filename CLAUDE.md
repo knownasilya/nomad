@@ -516,7 +516,9 @@ A Peer is a Nomad with no windows that the user runs on a machine that stays on 
 Peer reads its Holdings (`peer/holdings.mjs`), keeps a full mirror of each with the phone backend's
 `DriveManager.setHosting` (`hostingState` says when it's synced), and sends its status in its
 `nomad/device-presence` HELLO (`getStatus`, `announce()`, `statuses()`). When its record goes, it
-stops and deletes its folder. UI: Settings → Devices (`nomad.vault.listPeers`/`setPeerSpace`/
+stops and deletes its folder. A hold's `extra` lists single drives kept beside its Spaces
+(`withDrive`, `keepsDrive`; site info's Online tab and the phone's drive sheet, ADR-0038 amendment).
+UI: Settings → Devices (`nomad.vault.listPeers`/`setPeerSpace`/
 `removePeer`) and the phone's Devices screen (`RPC_APPS` `peers`, `mobile/backend/lib/peers.mjs`).
 `peer/` runs the code in `mobile/backend/lib/` under Node, resolving packages from
 `mobile/node_modules`, so a change there must keep `tests/unit/peer.test.js` passing (it includes a
@@ -957,11 +959,32 @@ Every new or changed screen must work in light **and** dark, and look like its n
   `lib/page-title.js` (`PAGES`, `setItemTitle`) and Notes' `js/page-title.js` are the examples.
 - Check both schemes before calling UI work done.
 
-## Drive templates live in `nomad.dev`
+## Drive templates
 
 The "Create Drive From This Template" starter drives (forum, blog, microblog, …) live in the sibling
-**`nomad.dev`** repo (`static/templates/` + `src/content/docs/docs/templates/`), not here. See `nomad.dev/CLAUDE.md`
+**`nomad.dev`** repo (`static/templates/` + `src/content/docs/docs/templates/`). See `nomad.dev/CLAUDE.md`
 for how a template is structured and how to add one.
+
+Four of them are also built in, so Create Drive, the phone's New drive form and the AI's `createDrive`
+start one without the website: Blog, Website (nomad.dev's Simple CMS), Photo album and Forum. Their
+entries are `app/lib/drive-templates.ts` (with Blank and Document; `manifest` adds fields such as a
+Blog's `itemsPath`), their files `app/drive-templates/<id>/` (never an `index.json`: the manifest is
+built from the entry). After changing one of them in nomad.dev, run `npm run sync:drive-templates`
+(copies from `../nomad.dev`), then `npm run build:phone-templates`, which writes
+`mobile/lib/driveTemplates.json` (committed; Document is left out, the phone can't edit one).
+`tests/unit/drive-templates.test.js` checks that the phone's copy matches.
+
+## Inviting someone to edit a drive
+
+`nomad.fs.createInvite` gives a link, `hyper://<key>/?invite=<token>`, that works once (or for anyone,
+`multiUse`) for 7 days. The drive keeps only the token's SHA-256 at `/.data/nomad/invites/<hash>.json`,
+so every Device that writes the drive adds whoever sends a valid token over `nomad/autobase-control`,
+with no approval step (`autobases.js` `_redeemInvite`), and the owner can cancel it. Rules are
+`shared/drive-invites.mjs` (tests `tests/unit/drive-invites.test.js`). Site info's Editors tab
+(`site-info/js/com/drive-editors.js`, internal `nomad.drives.editors`/`cancelInvite`/`acceptInvite`/
+`askToEdit`, `bg/hyper/drive-editors.js`) makes and cancels links, allows or denies requests, and
+removes people; opening an invite link shows an "Invited to edit" pill in the location bar
+(pane state `driveInvite`). The phone doesn't accept or make invites yet.
 
 ## Mobile: back goes where you came from
 

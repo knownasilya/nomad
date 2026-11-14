@@ -125,7 +125,11 @@ export default class DriveManager {
     // the storage kind here — the manifest `type` is a *semantic* content type
     // (e.g. 'unwalled.garden/website'), not hyperdrive-vs-autobase, which the app
     // and nomad both detect structurally.
-    const indexJson = JSON.stringify(description ? { title, description } : { title }, null, 2)
+    // A built-in template (mobile/lib/driveTemplates.ts) adds its manifest fields (`type`,
+    // `fallback`, `collaborative`, a Blog's `itemsPath`, …) and its files, which replace the welcome page.
+    const extra = meta.manifest && typeof meta.manifest === 'object' ? meta.manifest : {}
+    const files = Array.isArray(meta.files) ? meta.files.filter((f) => f && typeof f.path === 'string' && f.path.startsWith('/') && f.path !== '/index.json') : []
+    const indexJson = JSON.stringify({ ...extra, title, ...(description ? { description } : {}) }, null, 2)
     const indexHtml = welcomeHtml(title)
 
     let drive, reader
@@ -144,6 +148,12 @@ export default class DriveManager {
       await drive.put('/index.html', b4a.from(indexHtml))
       reader = hyperdriveReader(drive)
     }
+
+    for (const f of files) {
+      const buf = typeof f.base64 === 'string' ? b4a.from(f.base64, 'base64') : b4a.from(String(f.text ?? ''))
+      await this._put(driveType, drive, f.path, buf, { flush: false, inline: !!f.inline })
+    }
+    if (files.length) await this._flush(driveType, drive)
 
     const keyHex = b4a.toString(drive.key, 'hex')
     const discovery = this.swarm.join(drive.discoveryKey) // announce + lookup
@@ -637,6 +647,31 @@ export default class DriveManager {
   async writeFile (driveType, key, ns, path, buf) {
     const { drive } = await this._openOwned(driveType, key, ns)
     await this._put(driveType, drive, path, buf)
+  }
+
+  // Write a file from a stream of chunks (a file the app picked, read a piece at a time), so a big
+  // photo or video never sits in memory or crosses the RPC as one message.
+  async writeFileFrom (driveType, key, ns, path, chunks) {
+    const { drive } = await this._openOwned(driveType, key, ns)
+    if (driveType === DRIVE_AUTOBASE) {
+      const blob = await _blobStore.putBlobFrom(this._blobsForBase(drive), chunks)
+      await drive.append({ op: 'put', path, metadata: makeMetadata({ mtime: Date.now(), ctime: Date.now() }), blob })
+      await drive.update()
+      return
+    }
+    const ws = drive.createWriteStream(path)
+    await new Promise((resolve, reject) => {
+      ws.on('error', reject)
+      ws.on('close', resolve)
+      ;(async () => {
+        try {
+          for await (const chunk of chunks) {
+            if (!ws.write(chunk)) await new Promise((r) => ws.once('drain', r))
+          }
+          ws.end()
+        } catch (err) { ws.destroy(err) }
+      })()
+    })
   }
 
   async deletePath (driveType, key, ns, path, isDir) {

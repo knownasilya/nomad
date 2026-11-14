@@ -148,7 +148,8 @@ export interface BackendHandlers {
 export interface Backend {
   open: (tabId: string, url: string, driveType: DriveType, ns?: string, detect?: boolean) => void
   close: (driveType: DriveType, key?: string) => void
-  create: (type: DriveType, title: string, description?: string) => Promise<CreatedMsg>
+  // `template`: a built-in template's manifest fields and files (lib/driveTemplates.ts templateDrive)
+  create: (type: DriveType, title: string, description?: string, template?: { manifest?: Record<string, unknown>; files?: { path: string; text: string; inline?: boolean }[] }) => Promise<CreatedMsg>
   pair: (code: string, name?: string) => Promise<PairedMsg>
   // ownSpaces: this phone's Spaces, written to its own Device record when they changed.
   vaultStatus: (spaceKeys?: string[], ownSpaces?: DeviceSpace[]) => Promise<VaultMsg>
@@ -169,6 +170,8 @@ export interface Backend {
   fsList: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
   fsRead: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
   fsWrite: (driveType: DriveType, key: string, ns: string, path: string, base64: string) => Promise<FsResult>
+  // Write a file the app picked (a file: URI in its own folders); the backend reads it in pieces.
+  fsWriteFrom: (driveType: DriveType, key: string, ns: string, path: string, fromPath: string) => Promise<FsResult>
   fsDelete: (driveType: DriveType, key: string, ns: string, path: string, isDir: boolean) => Promise<FsResult>
   fsRename: (driveType: DriveType, key: string, ns: string, from: string, to: string, isDir: boolean) => Promise<FsResult>
   fsMkdir: (driveType: DriveType, key: string, ns: string, path: string) => Promise<FsResult>
@@ -655,6 +658,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
     fsList: (driveType, key, ns, path) => fsCall(RPC_FS_LIST, { driveType, key, ns, path }),
     fsRead: (driveType, key, ns, path) => fsCall(RPC_FS_READ, { driveType, key, ns, path }),
     fsWrite: (driveType, key, ns, path, base64) => fsCall(RPC_FS_WRITE, { driveType, key, ns, path, base64 }),
+    fsWriteFrom: (driveType, key, ns, path, fromPath) => fsCall(RPC_FS_WRITE, { driveType, key, ns, path, fromPath }),
     fsDelete: (driveType, key, ns, path, isDir) => fsCall(RPC_FS_DELETE, { driveType, key, ns, path, isDir }),
     fsRename: (driveType, key, ns, from, to, isDir) => fsCall(RPC_FS_RENAME, { driveType, key, ns, from, to, isDir }),
     fsMkdir: (driveType, key, ns, path) => fsCall(RPC_FS_MKDIR, { driveType, key, ns, path }),
@@ -706,14 +710,14 @@ export function useBackend (handlers: BackendHandlers): Backend {
       const req = rpc.request(RPC_CLOSE)
       req.send(b4a.from(JSON.stringify({ driveType, key })))
     },
-    create (type, title, description = '') {
+    create (type, title, description = '', template) {
       return new Promise<CreatedMsg>((resolve) => {
         const rpc = rpcRef.current
         if (!rpc) return resolve({ reqId: '', ok: false, message: 'backend not ready' })
         const reqId = `c_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
         pending.current[reqId] = resolve
         const req = rpc.request(RPC_CREATE)
-        req.send(b4a.from(JSON.stringify({ reqId, type, title, description })))
+        req.send(b4a.from(JSON.stringify({ reqId, type, title, description, manifest: template?.manifest, files: template?.files })))
       })
     },
     pair (code, name) {

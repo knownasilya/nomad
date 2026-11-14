@@ -9,7 +9,7 @@ describe('Peer records', () => {
   it('keeps an Own Peer that holds everything by default', () => {
     const p = pe.makePeer({ key: K('a'), name: '  NAS  ', addedBy: K('d') }, null, T0)
     expect(p).toMatchObject({ type: pe.PEER_TYPE, key: K('a'), name: 'NAS', kind: 'own', addedBy: K('d'), addedAt: T0 })
-    expect(p.hold).toEqual({ vault: true, spaces: 'all', drives: 'all', profiles: true })
+    expect(p.hold).toEqual({ vault: true, spaces: 'all', drives: 'all', profiles: true, extra: [] })
     expect(pe.isPeer(p)).toBe(true)
     expect(pe.peerPath(K('a'))).toBe(`/.vault/peers/${K('a')}.json`)
     expect(() => pe.makePeer({ key: 'nope' })).toThrow()
@@ -20,7 +20,7 @@ describe('Peer records', () => {
 
   it('never lets a Blind Peer hold the Vault or a Space', () => {
     const b = pe.makePeer({ key: K('b'), kind: 'blind', hold: { vault: true, spaces: 'all', drives: 'all' } }, null, T0)
-    expect(b.hold).toEqual({ vault: false, spaces: [], drives: 'public', profiles: true })
+    expect(b.hold).toEqual({ vault: false, spaces: [], drives: 'public', profiles: true, extra: [] })
   })
 
   it('turns one Space on and off', () => {
@@ -69,6 +69,37 @@ describe('Holdings', () => {
   it('a Blind Peer gets only public drives and profiles', () => {
     const b = pe.makePeer({ key: K('b'), kind: 'blind' }, null, T0)
     expect(pe.holdingsOf(b, world).map((h) => [h.key, h.what])).toEqual([[K('7'), 'drive'], [K('9'), 'profile']])
+  })
+})
+
+describe('single drives kept online (extra)', () => {
+  const world = {
+    vaultKey: K('f'),
+    spaces: [{ rootDriveKey: K('1') }, { rootDriveKey: K('2') }],
+    registries: {
+      [K('1')]: [{ key: K('6'), type: 'autobase' }],
+      [K('2')]: [{ key: K('8'), type: 'autobase' }, { key: K('7'), public: true }],
+    },
+  }
+
+  it('keeps a drive given on its own, in a Space it doesn\'t keep', () => {
+    let p = pe.makePeer({ key: K('a'), hold: { spaces: [K('1')] } }, null, T0)
+    expect(pe.keepsDrive(p, { key: K('6') }, K('1'))).toBe('space')
+    expect(pe.keepsDrive(p, { key: K('8') }, K('2'))).toBe(false)
+    p = { ...p, hold: pe.withDrive(p, K('8'), true) }
+    expect(p.hold.extra).toEqual([K('8')])
+    expect(pe.keepsDrive(p, { key: K('8') }, K('2'))).toBe('drive')
+    expect(pe.holdingsOf(p, world).map((h) => h.key)).toContain(K('8'))
+    p = { ...p, hold: pe.withDrive(p, K('8'), false) }
+    expect(pe.keepsDrive(p, { key: K('8') }, K('2'))).toBe(false)
+    expect(() => pe.withDrive(p, 'nope', true)).toThrow()
+  })
+
+  it('a Blind Peer keeps a single drive only when it is public', () => {
+    const b = pe.makePeer({ key: K('b'), kind: 'blind', hold: { drives: [], extra: [K('8'), K('7')] } }, null, T0)
+    expect(pe.keepsDrive(b, { key: K('8') }, K('2'))).toBe(false)
+    expect(pe.keepsDrive(b, { key: K('7'), public: true }, K('2'))).toBe('drive')
+    expect(pe.holdingsOf(b, world).map((h) => h.key)).toEqual([K('7')])
   })
 })
 

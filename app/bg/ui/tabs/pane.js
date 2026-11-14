@@ -33,6 +33,7 @@ import * as drafts from '../../hyper/drafts';
 import * as mods from '../mods';
 import * as personas from '../personas';
 import { acceptUrlFor } from '../../hyper/invites';
+import { parseInviteUrl } from '../../../../shared/drive-invites.mjs';
 import fsAPI from '../../web-apis/bg/fs';
 
 const ERR_ABORTED = -3;
@@ -112,6 +113,8 @@ const STATE_VARS = [
   // Draft Mode (ADR-0012): whether the shown Drive has a Draft, and whether this tab is previewing it
   'hasDraft',
   'draftPreviewing',
+  // An invite link to edit the shown Drive (shared/drive-invites.mjs) this Device can't write yet
+  'driveInvite',
   // Mods (ADR-0023): { count, on } for the page's site, or null where Mods can't apply
   'mods',
   // Personas (ADR-0031): { label, title, thumbUrl } when the page's site holds a Session, else null
@@ -189,6 +192,7 @@ export class Pane extends EventEmitter {
     this.peers = 0; // how many peers does the site have?
     this.isBookmarked = false; // is the active page bookmarked?
     this.hasDraft = false; // does the shown Drive have a Draft on this Device? (ADR-0012)
+    this.driveInvite = false; // is the URL an invite link to edit a Drive this Device can't write?
     this.driveInfo = null; // metadata about the site if viewing a hyperdrive
     this.donateLinkHref = null; // the URL of the donate site, if set by the index.json
     this.wasDriveTimeout = false; // did the last navigation result in a timed-out hyperdrive?
@@ -757,6 +761,7 @@ export class Pane extends EventEmitter {
     this.peers = 0;
     this.donateLinkHref = null;
     this.hasDraft = false;
+    this.driveInvite = false;
 
     if (!isHyperOrPearUrl(this.url)) {
       this.driveInfo = null;
@@ -775,6 +780,8 @@ export class Pane extends EventEmitter {
     } catch (e) {
       this.driveInfo = null;
     }
+    // Someone sent an invite link to edit this Drive: the location bar offers to accept it.
+    this.driveInvite = !!(this.driveInfo && !this.driveInfo.writable && parseInviteUrl(this.url));
     // Draft indicator: only writable Drives can have a Draft you'd publish (ADR-0012). Uses the
     // pane's own webContents as ctx so `hyper://private/` resolves to this space's root, exactly as
     // staging/serving do.

@@ -23,14 +23,14 @@ export function getTemplate(id = 'blank') {
 }
 
 // The manifest a Drive made from `tpl` starts with. The caller's own fields win, except `type` and
-// `fallback`, which the template's files depend on.
+// `fallback`, which the template's files depend on. `tpl.manifest` adds fields the caller left out.
 /**
  * @param {import('../../lib/drive-templates').DriveTemplate} tpl
  * @param {Record<string, any>} [meta]
  * @returns {Record<string, any>}
  */
 export function templateManifest(tpl, meta = {}) {
-  const out = { ...meta };
+  const out = { ...tpl.manifest, ...meta };
   if (tpl.type) out.type = tpl.type;
   if (tpl.fallback) out.fallback = tpl.fallback;
   if (typeof out.collaborative === 'undefined' && tpl.collaborative) out.collaborative = true;

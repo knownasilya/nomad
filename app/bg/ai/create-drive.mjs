@@ -8,7 +8,7 @@
 // The template ids app/lib/drive-templates.ts lists (tests/unit/create-drive.test.js keeps them equal).
 // This file can't import that one: search-execute.mjs, which the execute worker loads as plain
 // JavaScript, takes its enum from here.
-export const TEMPLATE_IDS = ['blank', 'document']
+export const TEMPLATE_IDS = ['blank', 'document', 'blog', 'website', 'photo-album', 'forum']
 
 export const MAX_TITLE = 100
 export const MAX_DESCRIPTION = 500

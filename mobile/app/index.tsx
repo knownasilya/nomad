@@ -12,7 +12,7 @@ import b4a from 'b4a'
 import AddressBar from '../components/AddressBar'
 import HyperView from '../components/HyperView'
 import RecentsSheet from '../components/RecentsSheet'
-import Library from '../components/Library'
+import Library, { type DrivePeer } from '../components/Library'
 import Reader from '../components/Reader'
 import Notes from '../components/Notes'
 import Calendar from '../components/Calendar'
@@ -69,6 +69,7 @@ import { isWidgetLink, parseWidgetLink, type WidgetLink } from '../lib/widgetLin
 import { useSearchWidget } from '../lib/useSearchWidget'
 import type { ItemLink } from '../lib/itemLinks'
 import { pushScreen, closeScreen, loadEntry, pageLoaded, planStep, backAction, type NavEntry as StackEntry, type TabHistory } from '../lib/navStack'
+import { DRIVE_TEMPLATES, templateDrive } from '../lib/driveTemplates'
 
 // Thumbnails for the tab grid are scaled to this width; a grid card is about half a phone wide.
 const THUMB_WIDTH = 360
@@ -780,12 +781,32 @@ export default function Browser () {
     [openFromScreens]
   )
 
+  // Which always-on Peers keep a drive online (Library's drive actions). A Peer finds drives through
+  // a Space's Drive Registry, so only a drive in the active Space's can be kept on one by itself.
+  const drivePeers = useCallback(async (drive: SavedDrive): Promise<DrivePeer[] | null> => {
+    const key = hyperKeyOf(drive.url)
+    if (!key) return null
+    const sp = spacesApi.activeSpace
+    const inRegistry = registryDrives.some((d) => d.key === key)
+    const res = await backend.apps<DrivePeer[]>('peers', 'forDrive', { driveKey: key, rootDriveKey: inRegistry ? sp.rootDriveKey : null })
+    if (!res.ok || !res.value) return null
+    return res.value.map((p) => ({ ...p, space: sp.name }))
+  }, [backend.apps, spacesApi.activeSpace, registryDrives])
+
+  const setPeerDrive = useCallback(async (peerKey: string, drive: SavedDrive, on: boolean) => {
+    const res = await backend.apps('peers', 'setDrive', { key: peerKey, driveKey: hyperKeyOf(drive.url), on })
+    if (!res.ok) throw new Error(res.message || 'Couldn’t change the Peer')
+    return true
+  }, [backend.apps])
+
   // Create a brand-new writable drive (nomad's createNewDrive): the backend
   // generates a key + URL; we save it (with its ns, so it reopens writable) and
   // open it.
   const createDrive = useCallback(
-    async (title: string, type: DriveType, description: string) => {
-      const res = await backend.create(type, title, description)
+    async (title: string, type: DriveType, description: string, template = 'blank') => {
+      // A built-in template's files and manifest fields go in as the drive is made (lib/driveTemplates.ts).
+      const tpl = DRIVE_TEMPLATES.find((x) => x.id === template)
+      const res = await backend.create(type, title, description, tpl ? templateDrive(tpl, { collaborative: type === 'autobase' }) : undefined)
       if (!res.ok || !res.url) return
       persist.rememberDrive(res.url, title, type, res.ns)
       // Register it in the active space's Drive Registry (/drives.json) so it syncs to the user's
@@ -1479,6 +1500,8 @@ export default function Browser () {
         onRemoveDrive={persist.removeDrive}
         onRemoveBookmark={(url) => persist.toggleBookmark(url, '')}
         onClearHistory={persist.clearHistory}
+        drivePeers={drivePeers}
+        setPeerDrive={setPeerDrive}
       />
 
       <Reader

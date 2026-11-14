@@ -40,6 +40,7 @@ class NavbarLocation extends LitElement {
       isDonateMenuOpen: { type: Boolean },
       isBookmarked: { type: Boolean, attribute: 'is-bookmarked' },
       hasDraft: { type: Boolean, attribute: 'has-draft' },
+      driveInvite: { type: Boolean, attribute: 'drive-invite' },
       draftPreviewing: { type: Boolean, attribute: 'draft-previewing' },
       mods: { type: Object },
       session: { type: Object }, // the site's Session (ADR-0031): { label, title, thumbUrl } or null
@@ -73,6 +74,7 @@ class NavbarLocation extends LitElement {
     this.isDonateMenuOpen = false;
     this.isBookmarked = false;
     this.hasDraft = false;
+    this.driveInvite = false;
     this.draftPreviewing = false;
     this.mods = null;
     this.session = null;
@@ -189,7 +191,7 @@ class NavbarLocation extends LitElement {
       >
       </shell-window-navbar-site-info>
       ${this.renderLocation()} ${this.renderZoom()} ${this.renderLiveReloadingBtn()}
-      ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderSessionBtn()}
+      ${this.renderFolderSyncBtn()} ${this.renderDraftBtn()} ${this.renderInviteBtn()} ${this.renderSessionBtn()}
       ${this.renderCopyUrlBtn()} ${this.renderPeers()} ${this.renderDonateBtn()}
       ${'' /* DISABLED this.renderShareBtn()*/} ${this.renderBookmarkBtn()} ${this.renderSiteBtn()}
     `;
@@ -372,6 +374,29 @@ class NavbarLocation extends LitElement {
         <span class="fas fa-pen-nib" style=${this.draftPreviewing ? 'color: #2864dc' : ''}></span>
       </button>
     `;
+  }
+
+  // An invite link to edit this Drive (shared/drive-invites.mjs): opens site-info's Editors tab,
+  // where the user accepts it. Nothing is accepted without that click.
+  renderInviteBtn() {
+    if (!this.driveInvite) return '';
+    return html`
+      <button
+        class="text invite"
+        @click=${this.onClickInvite}
+        title="You were invited to edit this drive. Click to see the invite."
+      >
+        <span class="fas fa-user-plus"></span> Invited to edit
+      </button>
+    `;
+  }
+
+  async onClickInvite(e) {
+    var rect = e.currentTarget.getClientRects()[0];
+    await bg.views.toggleSiteInfo({
+      bounds: { top: rect.bottom | 0, left: Math.max(0, (rect.right | 0) - 420) },
+      params: { view: 'editors' },
+    });
   }
 
   // Personas (ADR-0031 §11): shown only while the site holds a Session. Opens the Persona menu
@@ -784,6 +809,26 @@ NavbarLocation.styles = [
 
     button.copy-url .fa-link {
       font-size: 14px;
+    }
+
+    button.invite {
+      margin: 3px 2px;
+      padding: 0 8px;
+      border-radius: 10px;
+      color: #2864dc;
+      background: rgba(40, 100, 220, 0.1);
+      font-weight: 500;
+    }
+    @media (prefers-color-scheme: dark) {
+      button.invite {
+        color: #8fb0ff;
+        background: rgba(120, 160, 255, 0.16);
+      }
+    }
+
+    button.invite .fas {
+      font-size: 11px;
+      margin-right: 2px;
     }
 
     button.session {

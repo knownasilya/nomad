@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/png" sizes="32x32" href="/thumb">
+    <title>Blog</title>
+  </head>
+  <body>
+    <blog-app></blog-app>
+  </body>
+  <script type="module" src="/app.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      color: #1f2330;
+      background: #fbfbfd;
+    }
+    a { color: #2563eb; }
+    .error { color: #dc2626; padding: 24px; font-family: monospace; }
+
+    header.site {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 24px 8px;
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+    header.site h1 { margin: 0; font-size: 26px; font-weight: 700; flex: 1; }
+    header.site h1 a { color: inherit; text-decoration: none; }
+    header.site .desc { display: block; font-size: 14px; font-weight: 400; color: #6b7280; margin-top: 4px; }
+    .toolbar { display: flex; gap: 8px; }
+
+    main { max-width: 720px; margin: 0 auto; padding: 16px 24px 80px; }
+
+    .post-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+    .post-card {
+      display: block;
+      padding: 18px 0;
+      border-bottom: 1px solid #ececf0;
+      text-decoration: none;
+      color: inherit;
+    }
+    .post-card:hover h2 { color: #2563eb; }
+    .post-card h2 { margin: 0 0 4px; font-size: 19px; font-weight: 650; }
+    .post-card .summary { margin: 4px 0 6px; color: #4b5563; font-size: 15px; }
+    .post-meta { color: #9097a3; font-size: 13px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .tag { background: #eef2ff; color: #4f46e5; padding: 1px 7px; border-radius: 99px; font-size: 12px; }
+    .badge-draft { background: #fef3c7; color: #92400e; padding: 1px 7px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+
+    article.post .post-title { font-size: 30px; font-weight: 750; margin: 8px 0 6px; line-height: 1.2; }
+    article.post .post-meta { margin-bottom: 24px; }
+    article.post .body { font-size: 17px; }
+    article.post .body img { max-width: 100%; height: auto; border-radius: 6px; }
+    article.post .body pre { background: #f3f4f6; padding: 14px; border-radius: 6px; overflow: auto; }
+    article.post .body code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 90%; }
+    article.post .body pre code { background: none; padding: 0; }
+    article.post .body blockquote { border-left: 3px solid #d1d5db; margin: 0; padding-left: 16px; color: #6b7280; }
+    .body.plain { white-space: pre-wrap; }
+
+    a.back { font-size: 14px; text-decoration: none; }
+    a.back:hover { text-decoration: underline; }
+
+    .empty { color: #9097a3; font-style: italic; padding: 40px 0; text-align: center; }
+
+    form.compose { display: flex; flex-direction: column; gap: 12px; }
+    form.compose label { font-size: 13px; font-weight: 600; color: #374151; }
+    form.compose input, form.compose textarea {
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 15px;
+      font-family: inherit;
+    }
+    form.compose textarea { min-height: 320px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; line-height: 1.55; }
+    .row { display: flex; gap: 16px; align-items: center; }
+    .row label.inline { display: flex; align-items: center; gap: 6px; font-weight: 400; }
+
+    .btn { border: 1px solid #d1d5db; background: #fff; border-radius: 6px; padding: 8px 14px; cursor: pointer; font-size: 14px; color: #1f2330; }
+    .btn:hover { border-color: #9ca3af; }
+    .btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-danger { background: #fff; color: #dc2626; border-color: #f0b4b4; }
+
+    .panel { border: 1px solid #e5e7eb; border-radius: 8px; padding: 18px; background: #fff; }
+    .panel h3 { margin: 0 0 10px; font-size: 14px; }
+    .row-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f1f2f4; font-size: 14px; }
+    .row-item:last-child { border-bottom: 0; }
+    .row-item .spacer { flex: 1; }
+    .muted { color: #6b7280; font-size: 13px; }
+    code.inline { background: #f3f4f6; padding: 1px 6px; border-radius: 4px; font-size: 13px; word-break: break-all; }
+  </style>
+</html>

@@ -10,7 +10,7 @@ import goodbye from 'graceful-goodbye'
 import DriveManager from './lib/drive-manager.mjs'
 import { HttpGateway } from './lib/http-gateway.mjs'
 import { parseHyperUrl } from './lib/hyper-url.mjs'
-import { listPeers, setPeerSpace, removePeer } from './lib/peers.mjs'
+import { listPeers, setPeerSpace, removePeer, peersForDrive, setPeerDrive } from './lib/peers.mjs'
 import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault, updateSpaceInVault, deleteSpaceInVault, publishOwnSpaces, publishOwnVersion } from './lib/vault.mjs'
 import * as drafts from './lib/drafts.mjs'
 import * as vaultApps from './lib/vault-apps.mjs'
@@ -23,7 +23,7 @@ import * as calendar from './lib/calendar.mjs'
 import * as homeDash from '../../shared/home-dashboard.mjs'
 import { localWallTime, isDateTime } from '../../shared/calendar.mjs'
 import * as householdContacts from './lib/household-contacts.mjs'
-import { createAssets } from './lib/assets.mjs'
+import { createAssets, localPathIn } from './lib/assets.mjs'
 import { createAssetStreams } from './lib/asset-stream.mjs'
 import { createAiBridge } from './lib/ai-bridge.mjs'
 import { createPhoneInbox } from './lib/inbox.mjs'
@@ -255,6 +255,7 @@ async function libraryOf (space) {
 vaultApps.useSpaceLibraries(libraryOf)
 // A Space's Assets (ADR-0044): in its Library once shared, else the Vault.
 // Files move to and from the app as files in its own folders (Bare.argv: its documents, then its cache).
+const appRoots = Bare.argv.slice(0, 2).filter(Boolean).map((u) => URL.fileURLToPath(u))
 const assetStreams = createAssetStreams({ http, randomToken: () => b4a.toString(hcrypto.randomBytes(24), 'hex') })
 goodbye(() => assetStreams.close())
 const assets = createAssets({
@@ -267,7 +268,7 @@ const assets = createAssets({
     fileSizeOf: (base, path) => manager.fileSizeOf(base, path)
   },
   fs,
-  roots: Bare.argv.slice(0, 2).filter(Boolean).map((u) => URL.fileURLToPath(u)),
+  roots: appRoots,
   // Videos and recordings play while they arrive, from a loopback server (lib/asset-stream.mjs).
   streams: assetStreams
 })
@@ -530,8 +531,15 @@ async function handleFsRead ({ reqId, driveType, key, ns, path }) {
   } catch (err) { fsFail(reqId, err) }
 }
 
-async function handleFsWrite ({ reqId, driveType, key, ns, path, base64 = '' }) {
+// `fromPath`: a file the app picked, in its own folders (Bare.argv), read here a piece at a time.
+async function handleFsWrite ({ reqId, driveType, key, ns, path, base64 = '', fromPath = null }) {
   try {
+    if (fromPath) {
+      const from = localPathIn(appRoots, fs, fromPath)
+      await manager.writeFileFrom(driveType, keyBuf(key), ns, path, fs.createReadStream(from))
+      send(RPC_FS_RESULT, { reqId, ok: true })
+      return
+    }
     await manager.writeFile(driveType, keyBuf(key), ns, path, b4a.from(base64, 'base64'))
     send(RPC_FS_RESULT, { reqId, ok: true })
   } catch (err) { fsFail(reqId, err) }
@@ -940,6 +948,8 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'vouches') value = await vouches.handle(action, args)
     else if (app === 'peers' && action === 'setSpace') value = await setPeerSpace(vault, args)
     else if (app === 'peers' && action === 'remove') value = await removePeer(vault, args)
+    else if (app === 'peers' && action === 'forDrive') value = await peersForDrive(vault, args, { connected: presence.connectedDevices(), statuses: presence.statuses() })
+    else if (app === 'peers' && action === 'setDrive') value = await setPeerDrive(vault, args)
     else if (app === 'updates' && action === 'list') value = await vaultApps.deviceUpdates(vault, args.version)
     else if (app === 'updates' && action === 'request') value = await vaultApps.requestDeviceUpdate(vault, { device: args.device, version: args.version, prerelease: !!args.prerelease })
     else throw new Error(`Unknown ${app} action: ${action}`)
@@ -1501,9 +1511,9 @@ function handleClose ({ driveType = DRIVE_HYPERDRIVE, key }) {
   if (!stillOpen) gateway.closeFor(key)
 }
 
-async function handleCreate ({ reqId, type = DRIVE_HYPERDRIVE, title, description }) {
+async function handleCreate ({ reqId, type = DRIVE_HYPERDRIVE, title, description, manifest, files }) {
   try {
-    const { key, ns, title: t } = await manager.createDrive(type, { title, description })
+    const { key, ns, title: t } = await manager.createDrive(type, { title, description, manifest, files })
     if (ns) { drivesNs[key] = ns; saveDrivesNs() }
     send(RPC_CREATED, { reqId, ok: true, url: `hyper://${key}/`, key, type, ns, title: t })
   } catch (err) {

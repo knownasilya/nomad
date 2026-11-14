@@ -19,6 +19,8 @@
     "build:canvas": "node scripts/build-canvas.mjs",
     "build:doc-viewer": "node scripts/build-doc-viewer.mjs",
     "build:drive-templates": "node scripts/build-drive-templates.mjs",
+    "build:phone-templates": "node scripts/build-phone-templates.mjs",
+    "sync:drive-templates": "node scripts/sync-drive-templates.mjs",
     "burnthemall": "node scripts/tasks/burnthemall.js",
     "rebuild": "node scripts/tasks/rebuild.js",
     "prerelease": "npm run build",

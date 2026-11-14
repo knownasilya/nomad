@@ -100,6 +100,7 @@ class ShellWindowNavbar extends LitElement {
         ?is-live-reloading=${this.activeTab?.isLiveReloading}
         ?is-bookmarked=${this.activeTab?.isBookmarked ?? false}
         ?has-draft=${this.activeTab?.hasDraft ?? false}
+        ?drive-invite=${this.activeTab?.driveInvite ?? false}
         ?draft-previewing=${this.activeTab?.draftPreviewing ?? false}
         .mods=${this.activeTab?.mods ?? null}
         .session=${this.activeTab?.session ?? null}
