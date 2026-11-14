@@ -1,8 +1,8 @@
 // The built-in drive templates on the phone: the same list and files as desktop's Create Drive
 // (app/lib/drive-templates.ts, app/drive-templates/<id>/), from driveTemplates.json, which
 // `npm run build:phone-templates` writes (tests/unit/drive-templates.test.js keeps it equal).
-// The phone's bundle can't reach app/, so it carries that copy. It leaves out Document, which the
-// phone can't edit yet (scripts/lib/phone-templates.mjs PHONE_SKIP).
+// The phone's bundle can't reach app/, so it carries that copy. It leaves out Blank (the New drive
+// form has its own) and Document, which the phone can't edit yet (scripts/lib/phone-templates.mjs PHONE_SKIP).
 
 import type { IconName } from '../components/Icon'
 import TEMPLATES from './driveTemplates.json'

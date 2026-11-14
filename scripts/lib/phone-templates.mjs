@@ -7,9 +7,9 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-// Templates the phone leaves out: it can't edit a Document yet (ADR-0026's phases aren't built), so
-// it skips that one and its half-megabyte editor.
-export const PHONE_SKIP = ['document'];
+// Templates the phone leaves out: Blank, which its New drive form draws itself, and Document, which
+// it can't edit yet (ADR-0026's phases aren't built), with its half-megabyte editor.
+export const PHONE_SKIP = ['blank', 'document'];
 
 export async function phoneTemplates(root) {
   const { DRIVE_TEMPLATES } = await import(pathToFileURL(path.join(root, 'app/lib/drive-templates.ts')).href);

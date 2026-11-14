@@ -1,12 +1,5 @@
 [
  {
-  "id": "blank",
-  "title": "Blank",
-  "description": "An empty drive for any files you like.",
-  "icon": "file",
-  "files": []
- },
- {
   "id": "blog",
   "title": "Blog",
   "description": "Posts people can read and follow in Reader.",
