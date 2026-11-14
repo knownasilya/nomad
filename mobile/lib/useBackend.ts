@@ -148,7 +148,8 @@ export interface BackendHandlers {
 export interface Backend {
   open: (tabId: string, url: string, driveType: DriveType, ns?: string, detect?: boolean) => void
   close: (driveType: DriveType, key?: string) => void
-  create: (type: DriveType, title: string, description?: string) => Promise<CreatedMsg>
+  // `template`: a built-in template's manifest fields and files (lib/driveTemplates.ts templateDrive)
+  create: (type: DriveType, title: string, description?: string, template?: { manifest?: Record<string, unknown>; files?: { path: string; text: string; inline?: boolean }[] }) => Promise<CreatedMsg>
   pair: (code: string, name?: string) => Promise<PairedMsg>
   // ownSpaces: this phone's Spaces, written to its own Device record when they changed.
   vaultStatus: (spaceKeys?: string[], ownSpaces?: DeviceSpace[]) => Promise<VaultMsg>
@@ -706,14 +707,14 @@ export function useBackend (handlers: BackendHandlers): Backend {
       const req = rpc.request(RPC_CLOSE)
       req.send(b4a.from(JSON.stringify({ driveType, key })))
     },
-    create (type, title, description = '') {
+    create (type, title, description = '', template) {
       return new Promise<CreatedMsg>((resolve) => {
         const rpc = rpcRef.current
         if (!rpc) return resolve({ reqId: '', ok: false, message: 'backend not ready' })
         const reqId = `c_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
         pending.current[reqId] = resolve
         const req = rpc.request(RPC_CREATE)
-        req.send(b4a.from(JSON.stringify({ reqId, type, title, description })))
+        req.send(b4a.from(JSON.stringify({ reqId, type, title, description, manifest: template?.manifest, files: template?.files })))
       })
     },
     pair (code, name) {

@@ -166,9 +166,13 @@ export const CAPABILITIES = [
     name: 'createDrive',
     description:
       "Create a new drive in the user's library, as the Create Drive dialog does: a `title`, an optional " +
-      '`description`, and a `template`: "blank" (an empty drive for any files, the default) or "document" (a page ' +
-      'several people can edit at the same time). `collaborative` lets other people ask to write to it; a document ' +
-      'is collaborative unless you pass false, a blank drive is not unless you pass true. Returns { url, title, ' +
+      '`description`, and a `template`: "blank" (an empty drive for any files, the default), "document" (a page ' +
+      'several people can edit at the same time), "blog" (posts people follow in Reader; write each post as ' +
+      '/posts/<YYYY-MM-DD-slug>/post.json + post.md), "website" (pages in /pages/<name>.html the owner edits in ' +
+      'place), "photo-album" (images in /photos/) or "forum" (topics and replies from everyone let in). Pick the ' +
+      'template that is the thing the user asked for, rather than building it on a blank drive. `collaborative` ' +
+      'lets other people ask to write to it; a document, blog or forum is collaborative unless you pass false, the ' +
+      'others are not unless you pass true. Returns { url, title, ' +
       'template, collaborative }. Then write its files with writeDriveFile, passing its url as `drive`: you may ' +
       'write to a drive you made without asking again on this turn. Link it in your answer. Make a drive only when ' +
       'the user asks for one, or for a site or app they asked you to build. Asks permission to create drives.',
@@ -180,7 +184,7 @@ export const CAPABILITIES = [
         template: {
           type: 'string',
           enum: TEMPLATE_IDS,
-          description: 'Optional. "blank" (default) or "document"',
+          description: 'Optional. "blank" (default), "document", "blog", "website", "photo-album" or "forum"',
         },
         collaborative: {
           type: 'boolean',

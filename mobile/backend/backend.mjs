@@ -1501,9 +1501,9 @@ function handleClose ({ driveType = DRIVE_HYPERDRIVE, key }) {
   if (!stillOpen) gateway.closeFor(key)
 }
 
-async function handleCreate ({ reqId, type = DRIVE_HYPERDRIVE, title, description }) {
+async function handleCreate ({ reqId, type = DRIVE_HYPERDRIVE, title, description, manifest, files }) {
   try {
-    const { key, ns, title: t } = await manager.createDrive(type, { title, description })
+    const { key, ns, title: t } = await manager.createDrive(type, { title, description, manifest, files })
     if (ns) { drivesNs[key] = ns; saveDrivesNs() }
     send(RPC_CREATED, { reqId, ok: true, url: `hyper://${key}/`, key, type, ns, title: t })
   } catch (err) {

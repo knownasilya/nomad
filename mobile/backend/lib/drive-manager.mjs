@@ -125,7 +125,11 @@ export default class DriveManager {
     // the storage kind here — the manifest `type` is a *semantic* content type
     // (e.g. 'unwalled.garden/website'), not hyperdrive-vs-autobase, which the app
     // and nomad both detect structurally.
-    const indexJson = JSON.stringify(description ? { title, description } : { title }, null, 2)
+    // A built-in template (mobile/lib/driveTemplates.ts) adds its manifest fields (`type`,
+    // `fallback`, `collaborative`, a Blog's `itemsPath`, …) and its files, which replace the welcome page.
+    const extra = meta.manifest && typeof meta.manifest === 'object' ? meta.manifest : {}
+    const files = Array.isArray(meta.files) ? meta.files.filter((f) => f && typeof f.path === 'string' && f.path.startsWith('/') && f.path !== '/index.json') : []
+    const indexJson = JSON.stringify({ ...extra, title, ...(description ? { description } : {}) }, null, 2)
     const indexHtml = welcomeHtml(title)
 
     let drive, reader
@@ -144,6 +148,12 @@ export default class DriveManager {
       await drive.put('/index.html', b4a.from(indexHtml))
       reader = hyperdriveReader(drive)
     }
+
+    for (const f of files) {
+      const buf = typeof f.base64 === 'string' ? b4a.from(f.base64, 'base64') : b4a.from(String(f.text ?? ''))
+      await this._put(driveType, drive, f.path, buf, { flush: false, inline: !!f.inline })
+    }
+    if (files.length) await this._flush(driveType, drive)
 
     const keyHex = b4a.toString(drive.key, 'hex')
     const discovery = this.swarm.join(drive.discoveryKey) // announce + lookup

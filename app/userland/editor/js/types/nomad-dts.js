@@ -57,8 +57,8 @@ declare namespace Nomad {
     description?: string;
     /** Accept writer-access requests. A template can default this on (Document does). */
     collaborative?: boolean;
-    /** A built-in template: 'blank' (default) or 'document', a page several people edit at once. */
-    template?: 'blank' | 'document';
+    /** A built-in template: 'blank' (default), 'document' (a page several people edit at once), 'blog', 'website', 'photo-album' or 'forum'. */
+    template?: 'blank' | 'document' | 'blog' | 'website' | 'photo-album' | 'forum';
     tags?: string | string[];
   }
   interface ReaddirOptions { recursive?: boolean; includeStats?: boolean; }

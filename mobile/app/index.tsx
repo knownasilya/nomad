@@ -69,6 +69,7 @@ import { isWidgetLink, parseWidgetLink, type WidgetLink } from '../lib/widgetLin
 import { useSearchWidget } from '../lib/useSearchWidget'
 import type { ItemLink } from '../lib/itemLinks'
 import { pushScreen, closeScreen, loadEntry, pageLoaded, planStep, backAction, type NavEntry as StackEntry, type TabHistory } from '../lib/navStack'
+import { DRIVE_TEMPLATES, templateDrive } from '../lib/driveTemplates'
 
 // Thumbnails for the tab grid are scaled to this width; a grid card is about half a phone wide.
 const THUMB_WIDTH = 360
@@ -784,8 +785,10 @@ export default function Browser () {
   // generates a key + URL; we save it (with its ns, so it reopens writable) and
   // open it.
   const createDrive = useCallback(
-    async (title: string, type: DriveType, description: string) => {
-      const res = await backend.create(type, title, description)
+    async (title: string, type: DriveType, description: string, template = 'blank') => {
+      // A built-in template's files and manifest fields go in as the drive is made (lib/driveTemplates.ts).
+      const tpl = DRIVE_TEMPLATES.find((x) => x.id === template)
+      const res = await backend.create(type, title, description, tpl ? templateDrive(tpl, { collaborative: type === 'autobase' }) : undefined)
       if (!res.ok || !res.url) return
       persist.rememberDrive(res.url, title, type, res.ns)
       // Register it in the active space's Drive Registry (/drives.json) so it syncs to the user's

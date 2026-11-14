@@ -1,0 +1,122 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <link rel="icon" type="image/png" sizes="32x32" href="/thumb">
+    <title>Forum</title>
+  </head>
+  <body>
+    <forum-app></forum-app>
+  </body>
+  <script type="module" src="/app.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      color: #222;
+      background: #f5f5f7;
+    }
+    header {
+      background: #fff;
+      border-bottom: 1px solid #ddd;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      flex: 1;
+    }
+    header button { cursor: pointer; }
+    main { max-width: 760px; margin: 0 auto; padding: 20px; }
+    .post-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+    .post-item {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 14px 16px;
+      cursor: pointer;
+    }
+    .post-item:hover { border-color: #aaa; }
+    .post-item h2 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+    .post-meta { color: #666; font-size: 12px; }
+    .post-meta .category { background: #eef; color: #44c; padding: 2px 6px; border-radius: 3px; margin-right: 6px; }
+    .thread-header { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 16px; margin-bottom: 12px; }
+    .thread-header h2 { margin: 0 0 6px; font-size: 17px; }
+    .thread-body { margin: 10px 0; white-space: pre-wrap; line-height: 1.5; }
+    .comment-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+    .comment-item {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 12px 16px;
+    }
+    .comment-item .comment-body { white-space: pre-wrap; line-height: 1.5; }
+    .profile-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #555;
+      text-decoration: none;
+    }
+    a.profile-chip:hover { color: #2563eb; text-decoration: underline; }
+    .profile-chip img { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; }
+    form.post-form, form.comment-form {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 16px;
+      margin-top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    form input, form textarea, form select {
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    form textarea { min-height: 100px; resize: vertical; }
+    form button[type=submit] {
+      align-self: flex-start;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    form button[type=submit]:hover { background: #1d4ed8; }
+    .btn { border: 1px solid #ccc; background: #fff; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+    .btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .btn-danger { background: #dc2626; color: #fff; border-color: #dc2626; }
+    .notice {
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+    .writers-panel { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 16px; margin-top: 16px; }
+    .writers-panel h3 { margin: 0 0 12px; font-size: 14px; font-weight: 600; }
+    .request-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 13px; }
+    .request-row:last-child { border-bottom: 0; }
+    .request-row .spacer { flex: 1; }
+    .writer-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; }
+    .empty { color: #888; font-style: italic; padding: 20px 0; text-align: center; }
+    a.back { color: #2563eb; text-decoration: none; font-size: 13px; cursor: pointer; }
+    a.back:hover { text-decoration: underline; }
+    .no-profile-hint { font-size: 12px; color: #92400e; background: #fef3c7; border: 1px solid #fcd34d; border-radius: 4px; padding: 3px 8px; }
+    .no-profile-hint a { color: inherit; font-weight: 600; }
+  </style>
+</html>
