@@ -149,6 +149,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Start the phone's backend in Bare before building anything: a module Bare can't load
+      # closes the app at launch, and Node-based tests don't see it (1.52.0).
+      - name: Check the phone backend starts in Bare
+        run: npm run check:backend
+
       - name: Bundle Bare backend
         run: npm run bundle
 

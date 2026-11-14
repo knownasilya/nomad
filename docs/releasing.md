@@ -20,6 +20,12 @@ git push --follow-tags origin main             # pushes the chore(release) commi
   etc. commit messages),
 - makes the **`chore(release): X.Y.Z`** commit and the annotated **`vX.Y.Z`** tag.
 
+Before it bumps anything, `npm run release-version` starts the phone's backend in Bare
+(`prerelease-version` → `npm run check:backend` in `mobile/`, so run `npm ci` in `mobile/` first). A
+backend that dies in Bare closes the phone at launch while every Node test passes (1.52.0), so a
+failure here stops the release before the tag. The Android job in `release.yml` runs the same check,
+and so does every pull request (`phone-backend.yml`).
+
 The `--follow-tags` push of the tag is what triggers the workflow below. Because `standard-version`
 sets `package.json` to the same version as the tag it creates, the desktop and Android artifacts
 always land on one release — no manual sync needed.

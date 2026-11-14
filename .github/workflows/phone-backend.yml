@@ -1,0 +1,41 @@
+# Starts the phone's backend (mobile/backend/backend.mjs) in Bare, the runtime the phone runs it in,
+# on every pull request. Node and Vitest load modules more leniently than Bare, so a mistake that
+# closes the phone at launch can pass every unit test: in 1.52.0 a shared module imported a `.js`
+# file from app/, which Bare reads as CommonJS. The backend reaches shared/ and beyond, so this runs
+# whatever the pull request touches. release.yml runs the same check before the Android build, and
+# `npm run release-version` runs it before tagging. See mobile/tools/check-backend-starts.cjs.
+name: Phone backend
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: phone-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  starts-in-bare:
+    runs-on: ubuntu-latest
+    name: Starts in Bare
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: volta-cli/action@v5
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start the backend in Bare
+        run: npm run check:backend
+
+      - name: Bundle Bare backend
+        run: npm run bundle

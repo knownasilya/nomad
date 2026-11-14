@@ -932,6 +932,13 @@ don't change the record's bytes without a new `v`.
 `crypto`, `Buffer` or `structuredClone` globals. A shared module must not touch one as it loads: an
 error there kills the worklet and the app closes at launch (1.39.0, `shared/inbox.mjs`). Use `b4a`,
 pass the dependency in, or check `typeof` first.
+Bare also reads a `.js` file as CommonJS unless its package.json says `"type": "module"` (none under
+`app/` does), so the backend may import only `.mjs` files in `mobile/` and `shared/` (1.52.0 closed
+at launch on an import of app-stdlib's `search-match.js`). Unit tests run on Node and miss both, so
+`npm run check:backend` in `mobile/` starts the backend in Bare (`mobile/tools/check-backend-starts.cjs`).
+It runs on every pull request (`.github/workflows/phone-backend.yml`), before the Android build in
+`release.yml`, and before `npm run release-version` tags (`prerelease-version`, which needs
+`mobile/node_modules`).
 
 **A package the main process imports goes in `app/package.json` too.** The main bundle leaves npm
 packages as `require()` calls and the packaged app resolves them from `app/node_modules`, so a package
