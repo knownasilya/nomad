@@ -986,6 +986,28 @@ with no approval step (`autobases.js` `_redeemInvite`), and the owner can cancel
 removes people; opening an invite link shows an "Invited to edit" pill in the location bar
 (pane state `driveInvite`). The phone doesn't accept or make invites yet.
 
+## Version history and search in your own drives
+
+**Version history** (`nomad://versions/?drive=<url>&path=<file>`, `app/userland/versions/`): every
+change to an Autobase drive, newest first, an old version of a file, and restoring a file or the whole
+drive to a point. The view's Hyperbee keeps every change (`createHistoryStream`, `checkout`), so there
+is no separate store. A restore appends ordinary puts and deletes (reusing the old blob pointer), so it
+syncs like any edit and can itself be undone. Writer and invite records are hidden and never restored.
+Rules are `shared/drive-history.mjs` (tests `tests/unit/drive-history.test.js`); the I/O is
+`app/bg/hyper/drive-history.js`, behind internal `nomad.drives.history`/`fileAt`/`restoreFile`/
+`restorePreview`/`restoreDrive`. Opened from site-info's Tools menu and My Library's drive menu. Old
+Hyperdrives answer null (no history).
+
+**Search in your drives**: nomad://search's "In your drives" and the AI's `searchDrives` look inside
+the text files of the drives in the Space's library, with the Notes rule (every word, any order, no
+case or accents). The index is in memory per drive, rebuilt only where the view version, a file's
+mtime or size changed; a file whose bytes aren't here in time is left out and tried next time.
+Rules (which files, their text and title, ranking, snippets) are `shared/drive-search.mjs` (tests
+`tests/unit/drive-search.test.js`); the index is `app/bg/hyper/drive-search.js`, behind internal
+`nomad.drives.searchFiles`. The AI also gets `driveHistory` (read-only: it links `versionsUrl`, it
+never restores). Both are personal capabilities, in `JOB_CAPS` and `PRIVATE_READS`. The phone has
+neither yet.
+
 ## Mobile: back goes where you came from
 
 The phone's navigation is a stack (`mobile/lib/navStack.ts`, tests in `tests/unit/mobile-nav-stack.test.js`).

@@ -14,6 +14,8 @@ import { findTab } from '../../ui/tabs/manager';
 import * as filesystem from '../../filesystem/index';
 import * as trash from '../../filesystem/trash';
 import * as driveEditors from '../../hyper/drive-editors';
+import * as driveHistory from '../../hyper/drive-history';
+import * as driveSearch from '../../hyper/drive-search';
 import * as personas from '../../ui/personas';
 import * as tabManager from '../../ui/tabs/manager';
 import { findWebContentsParentWindow } from '../../lib/electron';
@@ -73,6 +75,35 @@ export default {
   // Ask the people who can edit a collaborative drive to let this device edit it too.
   async askToEdit(url) {
     return autobaseAPI.requestAccess.call(this, url, { profileUrl: senderProfileUrl(this.sender) });
+  },
+
+  // Version history (nomad://versions, app/bg/hyper/drive-history.js).
+  async history(url, opts = {}) {
+    return driveHistory.history(await drives.fromURLToKey(url, true), opts);
+  },
+
+  async fileAt(url, path, version) {
+    return driveHistory.fileAt(await drives.fromURLToKey(url, true), String(path), Number(version));
+  },
+
+  async restoreFile(url, path, version) {
+    return driveHistory.restoreFile(await drives.fromURLToKey(url, true), String(path), Number(version));
+  },
+
+  async restorePreview(url, version) {
+    return driveHistory.restorePreview(await drives.fromURLToKey(url, true), Number(version));
+  },
+
+  async restoreDrive(url, version) {
+    return driveHistory.restoreDrive(await drives.fromURLToKey(url, true), Number(version));
+  },
+
+  // Search the files of the drives in this page's Space (nomad://search, app/bg/hyper/drive-search.js).
+  async searchFiles(query, opts: any = {}) {
+    return driveSearch.search(String(query || ''), {
+      spaceId: getSenderSpaceId(this.sender) || 1,
+      limit: Math.min(Math.max(Number(opts.limit) || 30, 1), 100),
+    });
   },
 
   async list(opts) {

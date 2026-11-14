@@ -26,6 +26,8 @@ export function sendPermission(host) {
 export const PRIVATE_READS = new Set([
   'readDriveFile',
   'listDriveFiles',
+  'searchDrives',
+  'driveHistory',
   'currentTab',
   'readCurrentPage',
   'screenshotCurrentPage',

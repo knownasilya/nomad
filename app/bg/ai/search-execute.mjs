@@ -85,6 +85,55 @@ export const CAPABILITIES = [
       required: ['path'],
     },
   },
+  // Search inside the user's own drives and read a drive's history (app/bg/hyper/drive-search.js,
+  // drive-history.js). Read-only: restoring is the user's, on nomad://versions.
+  {
+    name: 'searchDrives',
+    description:
+      "Search inside the files of the user's own drives (the drives in the Space's library, as My Library lists them): " +
+      'text files such as Markdown, HTML, JSON, CSV and code. A file matches when its name, path, title or text has every ' +
+      'word, in any order, ignoring case and accents. Gives each match\'s drive, path, url, title, a snippet of the text ' +
+      "around the words, and when it changed. Pass `drive` to search only that one. Then read a file with readDriveFile. " +
+      'Older drives (made before collaborative drives) and dot folders (/.data/ and the like) are not searched.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The words to find, e.g. "packing list lisbon"' },
+        drive: { type: 'string', description: 'Optional. Only this drive: one of the user\'s names or a hyper:// URL' },
+        limit: { type: 'number', description: 'Optional. At most this many files (default 20, up to 50)' },
+      },
+      required: ['query'],
+    },
+    gates: { personal: true },
+  },
+  {
+    name: 'driveHistory',
+    description:
+      "A drive's version history, newest first: each change's path, kind (added, changed or deleted), time and size. " +
+      'Pass `path` for one file\'s changes. Use it to answer "what changed in my blog this week" or "when did I delete that". ' +
+      'You can\'t restore: send the user the `versionsUrl` it gives, where they can see any version and restore a file or ' +
+      'the whole drive. Only drives made since collaborative drives have a history.',
+    namedDescription:
+      "A drive's version history, newest first: each change's path, kind (added, changed or deleted), time and size, for " +
+      'a named drive (`drive`) or the current one. Pass `path` for one file\'s changes. Use it to answer "what changed in my ' +
+      'blog this week" or "when did I delete that". You can\'t restore: send the user the `versionsUrl` it gives, where ' +
+      'they can see any version and restore a file or the whole drive. Only drives made since collaborative drives have a history.',
+    tabDescription:
+      "A drive's version history, newest first: each change's path, kind (added, changed or deleted), time and size, for " +
+      "a named drive (`drive`) or the drive in the user's current tab. Pass `path` for one file's changes. Use it to answer " +
+      '"what changed in my blog this week" or "when did I delete that". You can\'t restore: send the user the `versionsUrl` ' +
+      'it gives, where they can see any version and restore a file or the whole drive. Only drives made since collaborative ' +
+      'drives have a history.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Optional. Only this file\'s changes, e.g. /index.html' },
+        limit: { type: 'number', description: 'Optional. At most this many changes (default 30, up to 100)' },
+      },
+      required: [],
+    },
+    gates: { personal: true },
+  },
   {
     name: 'fetchUrl',
     returns: 'text',
@@ -1041,6 +1090,8 @@ export const JOB_CAPS = new Set([
   'readReaderPost',
   'listCalendarEvents',
   'listContacts',
+  'searchDrives',
+  'driveHistory',
   'notify',
   'listSecrets',
   'httpRequest',

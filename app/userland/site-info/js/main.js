@@ -787,6 +787,12 @@ class SiteInfoApp extends LitElement {
             }
           : undefined,
         {
+          icon: 'fas fa-fw fa-history',
+          label: 'Version history',
+          click: () =>
+            nomad.browser.openUrl(`nomad://versions/?drive=${encodeURIComponent(this.origin)}`, { setActive: true }),
+        },
+        {
           icon: 'far fa-fw fa-list-alt',
           label: 'Hyperdrive Properties',
           click: () => this.onDriveProps(),

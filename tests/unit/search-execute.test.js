@@ -371,6 +371,19 @@ describe('search: a personal turn (the user\'s own AI)', () => {
     expect(empty.inputSchema.properties).toHaveProperty('drive');
   });
 
+  it('offers drive search and history only to the user\'s own AI, Jobs included', () => {
+    for (const n of ['searchDrives', 'driveHistory']) {
+      expect(catalog().capabilities.some((c) => c.name === n)).toBe(false);
+      expect(personal().capabilities.some((c) => c.name === n)).toBe(true);
+      const job = buildCatalog({ personal: true, remote: true, allowWrite: false, job: { extra: [] } });
+      expect(job.capabilities.some((c) => c.name === n)).toBe(true);
+    }
+    // driveHistory takes a drive like the other drive tools; neither can restore.
+    const hist = personal().capabilities.find((c) => c.name === 'driveHistory');
+    expect(hist.inputSchema.properties).toHaveProperty('drive');
+    expect(hist.description).toMatch(/can't restore/);
+  });
+
   it('offers Notes and Reader only on a personal turn', () => {
     for (const n of VAULT_CAPS) {
       expect(catalog().capabilities.some((c) => c.name === n)).toBe(false);
