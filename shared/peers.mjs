@@ -13,7 +13,8 @@ export const PEER_TYPE = 'nomad/peer';
 export const PEERS_PREFIX = '/.vault/peers/';
 export const PEER_PLATFORM = 'peer';
 // The version of these rules a Peer reports, so a Device can say "Update the Peer" (ADR-0038 §9).
-export const PEERS_VERSION = 1;
+// 2: `extra`, single drives kept beside the Spaces (site info's Online tab).
+export const PEERS_VERSION = 2;
 export const KINDS = ['own', 'blind'];
 
 const KEY_RE = /^[0-9a-f]{64}$/;
@@ -32,7 +33,9 @@ export function defaultHold(kind = 'own') {
 }
 
 // A hold as stored: `spaces` is 'all' or a list of Root Drive keys; `drives` is 'all', 'public' or
-// a list of drive keys. A Blind Peer can never hold the Vault or a Space: they aren't encrypted.
+// a list of drive keys; `extra` lists single drives kept as well, whatever Space they're in (the
+// user's "Keep online" on one drive). A Blind Peer can never hold the Vault or a Space: they aren't
+// encrypted, and it keeps an `extra` drive only when the drive is public.
 export function normalizeHold(hold, kind = 'own') {
   const d = defaultHold(kind);
   const h = hold && typeof hold === 'object' ? hold : {};
@@ -42,6 +45,7 @@ export function normalizeHold(hold, kind = 'own') {
     spaces: kind === 'blind' ? [] : keys(h.spaces, true) ?? d.spaces,
     drives: h.drives === 'public' ? 'public' : keys(h.drives, kind !== 'blind') ?? d.drives,
     profiles: h.profiles === undefined ? d.profiles : !!h.profiles,
+    extra: keys(h.extra, false) ?? [],
   };
   return out;
 }
@@ -115,7 +119,8 @@ export function holdingsOf(peer, { vaultKey, spaces = [], registries = {}, perso
     for (const d of registries[root] || []) {
       if (!d || !isKey(d.key)) continue;
       const wanted = h.drives === 'all' ? keep : h.drives === 'public' ? !!d.public && (keep || peer.kind === 'blind') : h.drives.includes(d.key);
-      if (wanted) add(d.key, d.type === 'autobase' ? 'autobase' : 'hyperdrive', 'drive', root);
+      const extra = h.extra.includes(d.key) && (peer.kind !== 'blind' || !!d.public);
+      if (wanted || extra) add(d.key, d.type === 'autobase' ? 'autobase' : 'hyperdrive', 'drive', root);
     }
   }
   if (h.profiles) {
@@ -125,6 +130,32 @@ export function holdingsOf(peer, { vaultKey, spaces = [], registries = {}, perso
     }
   }
   return [...out.values()];
+}
+
+/**
+ * Whether Peer `peer` keeps drive `drive` (an entry of Space `space`'s Drive Registry): 'space' when
+ * it comes with a Space the Peer keeps (or all of its drives, or all public ones), 'drive' when it was
+ * kept on its own (`extra`), else false.
+ * @param {any} peer
+ * @param {{ key: string, public?: boolean }} drive
+ * @param {string | null} space the Root Drive key of the Space whose registry lists it
+ */
+export function keepsDrive(peer, drive, space) {
+  if (!isPeer(peer) || !drive || !isKey(drive.key)) return false;
+  const h = normalizeHold(peer.hold, peer.kind);
+  const keep = !!space && peer.kind === 'own' && (h.spaces === 'all' || h.spaces.includes(space));
+  const byRule = h.drives === 'all' ? keep : h.drives === 'public' ? !!drive.public && (keep || peer.kind === 'blind') : h.drives.includes(drive.key);
+  if (byRule) return 'space';
+  if (h.extra.includes(drive.key) && (peer.kind !== 'blind' || !!drive.public)) return 'drive';
+  return false;
+}
+
+// The same hold with drive `driveKey` kept on its own, or not.
+export function withDrive(peer, driveKey, on) {
+  if (!isKey(driveKey)) throw new Error('Not a drive key: ' + driveKey);
+  const h = normalizeHold(peer?.hold, peer?.kind);
+  const extra = on ? [...new Set([...h.extra, driveKey])] : h.extra.filter((k) => k !== driveKey);
+  return { ...h, extra };
 }
 
 // The status a Peer sends in its presence HELLO (shared/device-presence.mjs): a display hint, never

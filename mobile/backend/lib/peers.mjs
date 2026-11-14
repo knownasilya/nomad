@@ -62,3 +62,31 @@ export async function removePeer (base, { key } = {}) {
   await boundedUpdate(base)
   return true
 }
+
+// The Peers with whether each keeps drive `driveKey` of Space `rootDriveKey` online (shared/peers.mjs
+// keepsDrive): [{ key, name, online, summary, keeps: 'space' | 'drive' | false }].
+export async function peersForDrive (base, { driveKey, rootDriveKey = null } = {}, { connected = new Set(), statuses = new Map() } = {}) {
+  if (!peers.isKey(driveKey)) throw new Error('Not a drive')
+  const list = (await readPrefix(base, peers.PEERS_PREFIX)).filter(peers.isPeer)
+  return list.map((p) => {
+    const online = connected.has(p.key)
+    const status = peers.readStatus(statuses.get(p.key))
+    return {
+      key: p.key,
+      name: p.name,
+      online,
+      summary: peers.describePeer(p, status, { online }),
+      keeps: peers.isKey(rootDriveKey) ? peers.keepsDrive(p, { key: driveKey }, rootDriveKey) : false
+    }
+  })
+}
+
+// Keep drive `driveKey` online on Peer `key` on its own, or stop.
+export async function setPeerDrive (base, { key, driveKey, on } = {}) {
+  if (!base.writable) throw new Error('This phone can’t change the Vault yet. Try again once it has synced.')
+  const prev = await readPeer(base, key)
+  const rec = peers.makePeer({ key, hold: peers.withDrive(prev, driveKey, !!on) }, prev)
+  await base.append(inlineOp(peers.peerPath(key), rec))
+  await boundedUpdate(base)
+  return rec
+}

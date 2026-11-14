@@ -118,6 +118,19 @@ import {
 } from '../../../../shared/jobs.mjs';
 
 // The Drive key of a hyper://<key>/ URL, or null.
+// The Space whose Drive Registry lists drive `key`: { rootDriveKey, name, entry }, or null.
+async function driveSpace(key) {
+  // Personal (id 1) last: its list is every drive this Device keeps, so another Space's comes first.
+  const list = (await spacesDb.list()).slice().sort((a, b) => (a.id === 1) - (b.id === 1));
+  for (const sp of list) {
+    const entries = await filesystem.listDrivesForSpace(sp.id).catch(() => []);
+    const entry = entries.find((d) => d?.key === key);
+    const root = driveKeyOf(sp.root_drive_url);
+    if (entry && root) return { rootDriveKey: root, name: sp.name, entry };
+  }
+  return null;
+}
+
 function driveKeyOf(url) {
   const m = /^hyper:\/\/([0-9a-f]{64})(?:[/?#]|$)/i.exec(String(url || ''));
   return m ? m[1].toLowerCase() : null;
@@ -309,6 +322,45 @@ export default {
     if (!peer) throw new Error('That Peer was removed');
     const all = liveSpaces(await vault.listSpaces()).map((s) => s.rootDriveKey);
     return vault.updatePeer(peerKey, { hold: peerRules.withSpace(peer, rootDriveKey, !!on, all) });
+  },
+
+  // Which of the user's Peers keep drive `url` online (site info's Online tab): each Peer with how
+  // (with its Space, on its own, or not), and the Space whose library lists the drive. A drive in no
+  // library can't be kept: a Peer finds its drives through the libraries.
+  async drivePeers(url) {
+    const key = driveKeyOf(url);
+    if (!key) return { space: null, peers: [] };
+    const where = await driveSpace(key);
+    const [list, spaces] = await Promise.all([vault.listPeers(), vault.listSpaces()]);
+    const connected = new Set(devicePresence.connectedDevices());
+    const statuses = devicePresence.peerStatuses();
+    const live = liveSpaces(spaces);
+    const space = where ? live.find((s) => s.rootDriveKey === where.rootDriveKey) || null : null;
+    return {
+      space: space ? { rootDriveKey: space.rootDriveKey, name: where.name || space.name || 'Space' } : null,
+      peers: list.map((p) => {
+        const online = connected.has(p.key);
+        const status = peerRules.readStatus(statuses[p.key]);
+        return {
+          key: p.key,
+          name: p.name,
+          kind: p.kind,
+          online,
+          summary: peerRules.describePeer(p, status, { online }),
+          keeps: space ? peerRules.keepsDrive(p, { key, public: !!where.entry?.public }, space.rootDriveKey) : false,
+        };
+      }),
+    };
+  },
+
+  // Keep drive `url` online on Peer `peerKey` on its own, or stop.
+  async setPeerDrive(peerKey, url, on) {
+    const key = driveKeyOf(url);
+    if (!key) throw new Error('Not a drive');
+    const peer = (await vault.listPeers()).find((p) => p.key === peerKey);
+    if (!peer) throw new Error('That Peer was removed');
+    if (on && !(await driveSpace(key))) throw new Error('Add the drive to your library first');
+    return vault.updatePeer(peerKey, { hold: peerRules.withDrive(peer, key, !!on) });
   },
 
   async renamePeer(peerKey, name) {

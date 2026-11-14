@@ -10,7 +10,7 @@ import goodbye from 'graceful-goodbye'
 import DriveManager from './lib/drive-manager.mjs'
 import { HttpGateway } from './lib/http-gateway.mjs'
 import { parseHyperUrl } from './lib/hyper-url.mjs'
-import { listPeers, setPeerSpace, removePeer } from './lib/peers.mjs'
+import { listPeers, setPeerSpace, removePeer, peersForDrive, setPeerDrive } from './lib/peers.mjs'
 import { pairDevice, openVault, readVaultIndex, renameDevice, removeDevice, addSpaceToVault, updateSpaceInVault, deleteSpaceInVault, publishOwnSpaces, publishOwnVersion } from './lib/vault.mjs'
 import * as drafts from './lib/drafts.mjs'
 import * as vaultApps from './lib/vault-apps.mjs'
@@ -940,6 +940,8 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'vouches') value = await vouches.handle(action, args)
     else if (app === 'peers' && action === 'setSpace') value = await setPeerSpace(vault, args)
     else if (app === 'peers' && action === 'remove') value = await removePeer(vault, args)
+    else if (app === 'peers' && action === 'forDrive') value = await peersForDrive(vault, args, { connected: presence.connectedDevices(), statuses: presence.statuses() })
+    else if (app === 'peers' && action === 'setDrive') value = await setPeerDrive(vault, args)
     else if (app === 'updates' && action === 'list') value = await vaultApps.deviceUpdates(vault, args.version)
     else if (app === 'updates' && action === 'request') value = await vaultApps.requestDeviceUpdate(vault, { device: args.device, version: args.version, prerelease: !!args.prerelease })
     else throw new Error(`Unknown ${app} action: ${action}`)

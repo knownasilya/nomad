@@ -23,6 +23,8 @@ export default {
   // Always-on Peers (ADR-0038): a Peer pairs like a Device but never writes
   listPeers: 'promise', // -> [{ key, name, kind, hold, online, status, summary, spaces: [{ rootDriveKey, name, kept }] }]
   setPeerSpace: 'promise', // (peerKey, rootDriveKey, on)
+  drivePeers: 'promise', // (url) -> { space: { rootDriveKey, name } | null, peers: [{ key, name, kind, online, summary, keeps: 'space' | 'drive' | false }] }
+  setPeerDrive: 'promise', // (peerKey, url, on): keep one drive online on a Peer
   renamePeer: 'promise', // (peerKey, name)
   removePeer: 'promise', // (peerKey)
 

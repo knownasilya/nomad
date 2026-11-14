@@ -15,6 +15,7 @@ import './com/shared-files.js';
 import './com/identity.js';
 import './com/drive-forks.js';
 import './com/drive-editors.js';
+import './com/drive-online.js';
 import { aiOriginsElement } from '../../app-stdlib/js/ai-origin.js';
 import { parseInviteUrl } from '../../../../shared/drive-invites.mjs';
 
@@ -558,6 +559,13 @@ class SiteInfoApp extends LitElement {
                     </a>`
                   : ''}
                 <a
+                  class=${classMap({ active: this.view === 'online' })}
+                  @click=${(e) => this.onSetView(e, 'online')}
+                >
+                  <span class="fas fa-fw fa-cloud"></span>
+                  Online
+                </a>
+                <a
                   class=${classMap({ active: this.view === 'forks' })}
                   @click=${(e) => this.onSetView(e, 'forks')}
                 >
@@ -607,6 +615,16 @@ class SiteInfoApp extends LitElement {
                 ?covered=${!!this.edit?.canAsk}
                 @resized=${() => this.updated()}
               ></drive-editors>
+            `
+          : ''}
+        ${this.view === 'online' && this.isDrive
+          ? html`
+              <drive-online
+                url=${this.url}
+                .info=${this.info}
+                ?saved=${!!this.driveCfg?.saved}
+                @resized=${() => this.updated()}
+              ></drive-online>
             `
           : ''}
         ${this.view === 'forks'

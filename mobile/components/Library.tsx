@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Alert, Modal, View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-native'
+import { useEffect, useMemo, useState } from 'react'
+import { Alert, Modal, View, Text, TextInput, Pressable, ScrollView, StyleSheet, ToastAndroid } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Clipboard from 'expo-clipboard'
 import { useTheme, radius, space, type Theme } from '../lib/theme'
@@ -38,7 +38,13 @@ interface Props {
   onRemoveBookmark: (url: string) => void
   onClearHistory: () => void
   initialPage?: Page
+  // The user's always-on Peers and whether each keeps a drive online (ADR-0038, shared/peers.mjs
+  // keepsDrive), and keeping it on one by itself. Left out on a phone not linked to a Vault.
+  drivePeers?: (drive: SavedDrive) => Promise<DrivePeer[] | null>
+  setPeerDrive?: (peerKey: string, drive: SavedDrive, on: boolean) => Promise<boolean>
 }
+
+export interface DrivePeer { key: string; name: string; online: boolean; summary: string; keeps: 'space' | 'drive' | false; space?: string | null }
 
 // What a long-press (or a row's ⋮ button) acts on.
 type Target = { kind: 'drive'; drive: SavedDrive } | { kind: 'bookmark' | 'history'; site: SavedSite }
@@ -55,6 +61,33 @@ export default function Library (props: Props) {
   // Kept apart from `target` so the sheet keeps its rows while it slides away.
   const [sheetOpen, setSheetOpen] = useState(false)
   const openActions = (next: Target) => { setTarget(next); setSheetOpen(true) }
+  // The Peers for the drive whose actions are open, so the sheet can keep it online on one.
+  const [peers, setPeers] = useState<DrivePeer[] | null>(null)
+  useEffect(() => {
+    setPeers(null)
+    if (!sheetOpen || target?.kind !== 'drive' || !props.drivePeers) return
+    let live = true
+    props.drivePeers(target.drive).then((list) => { if (live) setPeers(list) }).catch(() => {})
+    return () => { live = false }
+  }, [sheetOpen, target])
+
+  // One row per Peer: kept with its Space (nothing to change here), kept on its own, or not kept.
+  const peerActions = (): SheetAction[] => {
+    if (target?.kind !== 'drive' || !peers?.length || !props.setPeerDrive) return []
+    const d = target.drive
+    return peers.map((p) => p.keeps === 'space'
+      ? { label: `Kept online by ${p.name} with ${p.space || 'its Space'}`, icon: 'server', active: true, disabled: true, onPress: () => {} }
+      : {
+          label: p.keeps ? `Stop keeping it on ${p.name}` : `Keep online on ${p.name}`,
+          icon: 'server',
+          active: !!p.keeps,
+          onPress: () => {
+            props.setPeerDrive!(p.key, d, !p.keeps).then((ok) => {
+              if (ok) ToastAndroid.show(p.keeps ? `${p.name} stops keeping ${d.name}` : `${p.name} will keep ${d.name} online`, ToastAndroid.SHORT)
+            }).catch((err) => Alert.alert('Couldn’t change that', String(err?.message || err)))
+          }
+        })
+  }
 
   const actions = (): SheetAction[] => {
     if (!target) return []
@@ -129,7 +162,7 @@ export default function Library (props: Props) {
           onClose={() => setSheetOpen(false)}
           title={target ? (target.kind === 'drive' ? target.drive.name : target.site.title) : ''}
           subtitle={target ? (target.kind === 'drive' ? target.drive.url : target.site.url) : ''}
-          groups={[actions()]}
+          groups={[actions(), peerActions()]}
         />
       </SafeAreaView>
     </Modal>
