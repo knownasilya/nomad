@@ -6,13 +6,13 @@ import { openBook, bookFormat, palmDoc, trailingSize, resolvePath, huffCdic, Boo
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4])
 
-function epub ({ nav = true, encryption = null } = {}) {
+function epub ({ nav = true, encryption = null, cover = '' } = {}) {
   const files = {
     mimetype: strToU8('application/epub+zip'),
     'META-INF/container.xml': strToU8('<?xml version="1.0"?><container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>'),
     'OEBPS/content.opf': strToU8(`<?xml version="1.0"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>The Walk</dc:title><dc:creator>Ann Author</dc:creator></metadata>
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>The Walk</dc:title><dc:creator>Ann Author</dc:creator>${cover === 'meta' ? '<meta name="cover" content="front"/>' : ''}</metadata>
   <manifest>
     ${nav ? '<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>' : ''}
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
@@ -20,6 +20,9 @@ function epub ({ nav = true, encryption = null } = {}) {
     <item id="c2" href="text/two%20b.xhtml" media-type="application/xhtml+xml"/>
     <item id="css" href="style.css" media-type="text/css"/>
     <item id="img" href="images/map.png" media-type="image/png"/>
+    ${cover === 'props' ? '<item id="front" href="images/front.png" media-type="image/png" properties="cover-image"/>' : ''}
+    ${cover === 'meta' ? '<item id="front" href="images/front.png" media-type="image/png"/>' : ''}
+    ${cover === 'name' ? '<item id="pic9" href="images/Cover.png" media-type="image/png"/>' : ''}
   </manifest>
   <spine toc="ncx"><itemref idref="c1"/><itemref idref="c2"/></spine>
 </package>`),
@@ -30,12 +33,14 @@ function epub ({ nav = true, encryption = null } = {}) {
     'OEBPS/style.css': strToU8('h1 { color: red }'),
     'OEBPS/images/map.png': PNG,
   }
+  if (cover === 'props' || cover === 'meta') files['OEBPS/images/front.png'] = PNG
+  if (cover === 'name') files['OEBPS/images/Cover.png'] = PNG
   if (encryption) files['META-INF/encryption.xml'] = strToU8(encryption)
   return zipSync(files)
 }
 
 // A Palm database with one text record (PalmDOC, literals only), a picture, and the end records.
-function mobi ({ text, title = 'Short Book', author = 'Bo Writer', drm = false, compression = 2, extraFlags = 0, trailing = [] }) {
+function mobi ({ text, title = 'Short Book', author = 'Bo Writer', drm = false, compression = 2, extraFlags = 0, trailing = [], cover = -1 }) {
   const enc = new TextEncoder()
   const body = enc.encode(text)
   // Every byte as a literal: 0x09-0x7f stand for themselves, anything else goes behind a 0x01 escape.
@@ -52,7 +57,8 @@ function mobi ({ text, title = 'Short Book', author = 'Bo Writer', drm = false, 
   }
   put(100, author)
   put(503, title)
-  const exthRec = [...enc.encode('EXTH'), ...u32(12 + exth.length), ...u32(2), ...exth]
+  if (cover >= 0) exth.push(...u32(201), ...u32(12), ...u32(cover))
+  const exthRec = [...enc.encode('EXTH'), ...u32(12 + exth.length), ...u32(cover >= 0 ? 3 : 2), ...exth]
   const mobiLen = 0xe8
   const r0 = new Uint8Array(16 + mobiLen + exthRec.length + 64)
   const v = new DataView(r0.buffer)
@@ -119,6 +125,13 @@ describe('e-books', () => {
     expect(book.resources.get('OEBPS/style.css').type).toBe('text/css')
   })
 
+  it('finds an EPUB’s cover for its thumbnail', () => {
+    expect(openBook(epub(), { DOMParser }).cover).toBe('')
+    expect(openBook(epub({ cover: 'props' }), { DOMParser }).cover).toBe('OEBPS/images/front.png')
+    expect(openBook(epub({ cover: 'meta' }), { DOMParser }).cover).toBe('OEBPS/images/front.png')
+    expect(openBook(epub({ cover: 'name' }), { DOMParser }).cover).toBe('OEBPS/images/Cover.png')
+  })
+
   it('falls back to the EPUB 2 contents (NCX)', () => {
     const book = openBook(epub({ nav: false }), { DOMParser })
     expect(book.toc).toEqual([
@@ -143,6 +156,12 @@ describe('e-books', () => {
     expect(html).toContain('<a id="filepos60"></a>')
     expect(html).not.toContain('mbp:pagebreak')
     expect(book.resources.get('images/00001.png').type).toBe('image/png')
+  })
+
+  it('finds a MOBI’s cover (EXTH 201, counted from the first picture)', () => {
+    expect(openBook(mobi({ text: '<p>Hi</p>' })).cover).toBe('')
+    expect(openBook(mobi({ text: '<p>Hi</p>', cover: 0 })).cover).toBe('images/00001.png')
+    expect(openBook(mobi({ text: '<p>Hi</p>', cover: 5 })).cover).toBe('')
   })
 
   it('strips trailing entries from MOBI text records', () => {

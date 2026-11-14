@@ -5,7 +5,8 @@
 //   { format: 'epub' | 'mobi', title, author,
 //     sections: [{ path, html, type }],          // one page of the book each: its markup as text
 //     toc: [{ label, section, anchor, depth }],   // the book's contents, pointing into sections
-//     resources: Map(path -> { data, type }) }    // pictures, styles, fonts, by their path
+//     resources: Map(path -> { data, type }),     // pictures, styles, fonts, by their path
+//     cover: path | '' }                          // the cover picture's path in resources, if it has one
 //
 // Nothing here runs the book: the reader shows each section in a sandboxed frame with no scripts.
 // The XML parser is the page's DOMParser (or one passed in, as the tests do).
@@ -142,7 +143,20 @@ function openEpub(data, opts) {
     if (ncx && files[ncx.path]) toc = ncxToc(xml(textOf(files[ncx.path]), opts), ncx.path, where)
   }
 
-  return { format: 'epub', title: meta('title'), author: meta('creator'), sections, toc, resources }
+  return { format: 'epub', title: meta('title'), author: meta('creator'), sections, toc, resources, cover: epubCover(opf, manifest, resources) }
+}
+
+// The cover picture: EPUB 3's `cover-image` item, else EPUB 2's <meta name="cover">, else a
+// picture called "cover".
+function epubCover(opf, manifest, resources) {
+  const isPicture = (m) => m && /^image\//.test(m.type) && resources.has(m.path)
+  const items = [...manifest.values()]
+  const byProps = items.find((m) => /\bcover-image\b/.test(m.props))
+  if (isPicture(byProps)) return byProps.path
+  const metaId = byName(opf, 'meta').find((m) => m.getAttribute('name') === 'cover')?.getAttribute('content')
+  if (metaId && isPicture(manifest.get(metaId))) return manifest.get(metaId).path
+  const named = [...manifest.entries()].find(([id, m]) => isPicture(m) && (/cover/i.test(id) || /cover/i.test(m.path.split('/').pop())))
+  return named ? named[1].path : ''
 }
 
 function decodeURIComponentSafe(s) {
@@ -222,6 +236,7 @@ export function openMobi(data) {
   let title = ''
   let author = ''
   let version = 0
+  let coverAt = -1
   const isMobi = ascii(r0, 16, 4) === "MOBI"
   if (isMobi) {
     const len = h.getUint32(20)
@@ -238,6 +253,7 @@ export function openMobi(data) {
       const exth = readExth(r0, 16 + len, encoding)
       author = exth.get(100) || ''
       title = exth.get(503) || title
+      if (exth.has(201)) coverAt = exth.get(201)
     }
   } else {
     title = ascii(data, 0, 32).replace(/\0.*$/, '')
@@ -291,7 +307,9 @@ export function openMobi(data) {
   }
 
   const html = version >= 8 ? kf8Html(text, encoding, images) : mobi7Html(text, encoding, images)
-  return { format: 'mobi', title, author, sections: [{ path: 'book.html', type: 'text/html', html, linear: true }], toc: [], resources }
+  // The cover is the picture EXTH 201 points at, counted from the first picture.
+  const cover = (coverAt >= 0 && images[coverAt]) || ''
+  return { format: 'mobi', title, author, sections: [{ path: 'book.html', type: 'text/html', html, linear: true }], toc: [], resources, cover }
 }
 
 function readExth(r0, at, encoding) {
@@ -305,6 +323,8 @@ function readExth(r0, at, encoding) {
     const len = v.getUint32(p + 4)
     if (len < 8 || p + len > r0.length) break
     if (!out.has(type) && (type === 100 || type === 503)) out.set(type, new TextDecoder(encoding).decode(r0.subarray(p + 8, p + len)).trim())
+    // 201: the cover, as a picture's number counted from the first picture.
+    if (!out.has(type) && type === 201 && len >= 12) out.set(type, v.getUint32(p + 8))
     p += len
   }
   return out

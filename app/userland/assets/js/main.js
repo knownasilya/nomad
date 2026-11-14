@@ -6,7 +6,10 @@
 //
 // - Everything comes from nomad.vault (bg/web-apis/bg/assets.ts; the rules are shared/assets.mjs).
 // - A camera photo bigger than MAX_SIDE is scaled here before it is sent, as the phone does; any
-//   other file is kept as it is. Pictures and videos get a THUMB_SIDE thumbnail.
+//   other file is kept as it is. Pictures, videos, PDFs (the first page) and e-books (the cover)
+//   get a THUMB_SIDE thumbnail (js/thumbs.js). One added without (from the phone, by the AI, before
+//   PDFs had them) gets it here once: as its tile comes into view, if the file is small enough to
+//   read for it (MAKE_THUMB_BYTES), else when it is opened (makeMissingThumb).
 // - Files move in pieces of CHUNK_BYTES both ways (nomad.vault.assetChunk to read; beginAssetUpload/
 //   assetUploadChunk/finishAssetUpload to add), so a 500 MB movie never crosses IPC whole. The viewer
 //   shows how much has arrived while a big file comes in.
@@ -31,6 +34,7 @@ import { showPdf } from './pdf-view.js'
 import { openBook, BookError } from './book/parse.js'
 import { createReader } from './book/reader.js'
 import { safeHtml } from './safe-html.js'
+import { drawThumb, pdfThumb, bookThumb, picture as pictureOf } from './thumbs.js'
 import { showAiOrigins } from '../../app-stdlib/js/ai-origin.js'
 
 const MD_URL = 'nomad://app-stdlib/vendor/markdown-it.js'
@@ -38,6 +42,9 @@ const PDF_URL = '/js/pdf.build.js'
 const PDF_WORKER_URL = '/js/pdf.worker.build.js'
 // A picture with no thumbnail (the AI saved a GIF) shows itself in the grid up to this size.
 const SMALL_PICTURE = 3 * 1024 * 1024
+// A file with no thumbnail is read for one as its tile shows up to this size; a bigger one gets it
+// when it is opened (the viewer reads it anyway).
+const MAKE_THUMB_BYTES = 64 * 1024 * 1024
 const CSV_ROWS = 500
 
 const params = () => new URLSearchParams(location.search)
@@ -59,6 +66,7 @@ const state = {
 // Dragging tiles onto a folder moves them.
 const DRAG_TYPE = 'application/x-nomad-assets'
 const thumbs = new Map() // id -> URL ('' while loading, null when not here yet)
+const thumbTried = new Set() // ids this page tried to make a thumbnail for (makeMissingThumb)
 const files = new Map() // id -> { url, blob } of the whole file, the newest few
 const KEEP_FILES = 6
 
@@ -381,7 +389,13 @@ function renderBody() {
   ])
 }
 
-const hasPicture = (a) => a.thumb || (a.kind === 'image' && a.bytes <= SMALL_PICTURE)
+// A tile shows a picture: a picture or a video (its thumbnail, or a small picture itself). A PDF or a
+// book with a thumbnail keeps its name under its page or cover (a `cover` tile).
+const isMedia = (a) => a.kind === 'image' || a.kind === 'video'
+const hasPicture = (a) => isMedia(a) && (a.thumb || (a.kind === 'image' && a.bytes <= SMALL_PICTURE))
+const hasCover = (a) => !isMedia(a) && !!a.thumb
+// No thumbnail yet, and this page can make one now as the tile shows.
+const canMakeThumb = (a) => canAdd() && as.needsThumb(a) && a.bytes <= MAKE_THUMB_BYTES && !thumbTried.has(a.id)
 
 function renderFolderTile(f) {
   return el(
@@ -399,14 +413,16 @@ function renderFolderTile(f) {
 
 function renderTile(a) {
   const media = hasPicture(a)
+  const cover = hasCover(a)
   const picked = state.selected.has(a.id)
   const label = `${a.name}, ${as.KIND_LABELS[a.kind] || 'File'}, ${whenText(a.takenAt)}${a.by ? `, added by ${a.by}` : ''}${a.source === 'ai' ? ', saved by your AI' : ''}${a.folder && !browsing() ? `, in ${a.folder}` : ''}`
   const tile = el(
     'button',
     {
-      class: `tile${media ? ' media' : ' doc'}`,
+      class: `tile${media ? ' media' : ' doc'}${cover ? ' cover' : ''}`,
       'data-id': a.id,
-      'data-picture': media ? '1' : '',
+      'data-picture': media || cover ? '1' : '',
+      'data-make': !media && !cover && canMakeThumb(a) ? '1' : '',
       title: [a.caption || a.name, a.folder && !browsing() ? `In ${a.folder}` : '', (a.tags || []).map((t) => `#${t}`).join(' ')].filter(Boolean).join('\n'),
       'aria-label': label,
       draggable: canAdd() ? 'true' : null,
@@ -424,11 +440,13 @@ function renderTile(a) {
       media && thumbs.get(a.id) ? el('img', { src: thumbs.get(a.id), alt: '' }) : null,
       !media
         ? el('div', { class: `doc-face kind-${a.kind}` }, [
+            cover && thumbs.get(a.id) ? el('img', { src: thumbs.get(a.id), alt: '' }) : null,
             icon(as.KIND_ICONS[a.kind] || 'file'),
             el('span', { class: 'ext' }, [as.extOf(a.name).toUpperCase() || as.KIND_LABELS[a.kind]]),
           ])
         : null,
-      a.kind === 'video' ? el('span', { class: 'play' }, [icon('play'), a.duration ? as.formatDuration(a.duration) : '']) : null,
+      // On a video's picture; one with none yet is a file tile, where it would cover the name.
+      a.kind === 'video' && media ? el('span', { class: 'play' }, [icon('play'), a.duration ? as.formatDuration(a.duration) : '']) : null,
       a.source === 'ai' ? el('span', { class: 'ai', title: 'Saved by your AI' }, [icon('magic')]) : null,
       !media ? el('span', { class: 'name' }, [a.name]) : null,
       a.by && media ? el('span', { class: 'by' }, [a.by]) : null,
@@ -529,20 +547,99 @@ function observeThumbs() {
     },
     { rootMargin: '400px' }
   )
-  for (const t of document.querySelectorAll('.tile[data-picture="1"]')) if (!thumbs.get(t.dataset.id)) observer.observe(t)
+  for (const t of document.querySelectorAll('.tile[data-picture="1"], .tile[data-make="1"]')) if (!thumbs.get(t.dataset.id)) observer.observe(t)
+}
+
+// The thumbnail's picture in its tile: over a picture's tile, or on a PDF's or book's face.
+function showThumb(tile, url) {
+  const at = tile.querySelector('.doc-face') || tile
+  if (!at.querySelector('img')) at.prepend(el('img', { src: url, alt: '' }))
 }
 
 async function loadThumb(id) {
   if (thumbs.has(id) && thumbs.get(id) !== null) return
   const a = assets().find((x) => x.id === id)
   if (!a) return
+  if (!hasPicture(a) && !hasCover(a)) {
+    if (canMakeThumb(a)) makeMissingThumb(a)
+    return
+  }
   thumbs.set(id, '')
+  // A small picture shows itself until it has a thumbnail of its own.
+  if (!a.thumb && canMakeThumb(a)) makeMissingThumb(a)
   const url = await nomad.vault.assetData(id, { thumb: !!a.thumb }).catch(() => null)
   thumbs.set(id, url)
   if (url) {
     const tile = document.querySelector(`.tile[data-id="${id}"]`)
-    if (tile && !tile.querySelector('img')) tile.prepend(el('img', { src: url, alt: '' }))
+    if (tile) showThumb(tile, url)
   } else setTimeout(() => thumbs.delete(id), 5000) // not replicated yet: try again on the next render
+}
+
+// Making a missing thumbnail (shared/assets.mjs needsThumb): from the file when it is here already
+// (opened), else read for it. One at a time, and once per file per page load: one that can't be made
+// (a book with no cover, a video this computer can't play) isn't read again.
+let thumbQueue = Promise.resolve()
+function makeMissingThumb(a, blob = null) {
+  if (!canAdd() || !as.needsThumb(a) || thumbTried.has(a.id)) return
+  thumbTried.add(a.id)
+  thumbQueue = thumbQueue.then(async () => {
+    try {
+      const data = blob || (await readWhole(a.id))
+      if (!data) return thumbTried.delete(a.id) // not replicated yet: the next render asks again
+      const thumb = await thumbFor(a, new File([data], a.name, { type: a.mime }))
+      if (!thumb) return
+      const rec = await nomad.vault.setAssetThumb(a.id, thumb)
+      if (!rec) return
+      const list = state.data?.assets
+      const i = list ? list.findIndex((x) => x.id === a.id) : -1
+      if (i >= 0) list[i] = { ...list[i], thumb: true }
+      thumbs.set(a.id, 'data:image/jpeg;base64,' + thumb)
+      // The tile again, with its picture (a whole render would restart the page).
+      const cell = document.querySelector(`.tile[data-id="${a.id}"]`)?.closest('.cell')
+      if (cell && i >= 0) cell.replaceWith(renderTile(list[i]))
+    } catch (err) {
+      console.warn('[assets] no thumbnail for', a.name, err?.message || err)
+    }
+  })
+}
+
+// A file's bytes, read for its thumbnail (not kept: the viewer's files are loadFile's).
+async function readWhole(id) {
+  const parts = []
+  let got = 0
+  let size = Infinity
+  while (got < size) {
+    const piece = await nomad.vault.assetChunk(id, { start: got }).catch(() => null)
+    if (!piece) return null
+    size = piece.size
+    const n = piece.data?.byteLength || 0
+    if (!n && got < size) return null
+    parts.push(piece.data)
+    got += n
+  }
+  return new Blob(parts)
+}
+
+// A THUMB_SIDE JPEG (base64) for a file of a kind that gets one, or '' when it can't be made.
+async function thumbFor(a, file) {
+  const kind = a.kind || as.kindOf(file.type, file.name)
+  const opts = { side: as.THUMB_SIDE, quality: as.THUMB_QUALITY }
+  let blob = null
+  if (kind === 'image') {
+    const pic = await pictureOf(file, /\.svg$/i.test(file.name) ? 'image/svg+xml' : file.type)
+    try {
+      blob = await drawThumb(pic.source, pic.width, pic.height, opts)
+    } finally {
+      pic.close?.()
+    }
+  } else if (kind === 'video') {
+    return (await videoFrame(file))?.thumb || ''
+  } else if (kind === 'pdf') {
+    blob = await pdfThumb(await loadPdfjs(), new Uint8Array(await file.arrayBuffer()), opts)
+  } else if (kind === 'book') {
+    blob = await bookThumb(openBook(new Uint8Array(await file.arrayBuffer())), opts)
+  }
+  return blob ? base64(blob) : ''
 }
 
 // The whole file as a blob: URL, kept for the last few opened. It comes in CHUNK_BYTES pieces (a
@@ -583,6 +680,8 @@ async function loadFile(id) {
   if (!got) files.delete(id)
   else {
     files.set(id, got)
+    const a = assets().find((x) => x.id === id)
+    if (a) makeMissingThumb(a, got.blob)
     while (files.size > KEEP_FILES) {
       const [oldId, old] = files.entries().next().value
       if (oldId === state.open) break
@@ -962,13 +1061,17 @@ async function renderBook(node, a, blob) {
 }
 
 let pdfjs = null
-const pdfWatch = new WeakMap() // a PDF's node -> rewatch(), for when a render moves it
-async function renderPdf(node, blob) {
+async function loadPdfjs() {
   if (!pdfjs) {
     pdfjs = await import(/* @vite-ignore */ PDF_URL)
     pdfjs.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL
   }
-  const { rewatch } = await showPdf(node, new Uint8Array(await blob.arrayBuffer()), pdfjs)
+  return pdfjs
+}
+
+const pdfWatch = new WeakMap() // a PDF's node -> rewatch(), for when a render moves it
+async function renderPdf(node, blob) {
+  const { rewatch } = await showPdf(node, new Uint8Array(await blob.arrayBuffer()), await loadPdfjs())
   pdfWatch.set(node, rewatch)
 }
 
@@ -1337,6 +1440,12 @@ async function prepare(file) {
     const d = await mediaDuration(file).catch(() => 0)
     if (d) out.duration = d
     out.takenAt = undefined
+  } else if (kind === 'pdf' || kind === 'book') {
+    out.takenAt = undefined // a document goes by when it was added
+    if (file.size <= MAKE_THUMB_BYTES) {
+      const thumb = await thumbFor({ kind, name: file.name }, file).catch(() => '')
+      if (thumb) out.thumb = thumb
+    }
   } else {
     out.takenAt = undefined // a document goes by when it was added
   }
@@ -1346,20 +1455,8 @@ async function prepare(file) {
 }
 
 // A picture, turned upright, as something a canvas can draw: an ImageBitmap, or an <img> for SVG.
-async function picture(file) {
-  if (file.type === 'image/svg+xml' || /\.svg$/i.test(file.name)) {
-    const url = URL.createObjectURL(file)
-    try {
-      const img = new Image()
-      img.src = url
-      await img.decode()
-      return { width: img.naturalWidth || 480, height: img.naturalHeight || 480, source: img }
-    } finally {
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
-    }
-  }
-  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
-  return { width: bitmap.width, height: bitmap.height, source: bitmap, close: () => bitmap.close?.() }
+function picture(file) {
+  return pictureOf(file, file.type === 'image/svg+xml' || /\.svg$/i.test(file.name) ? 'image/svg+xml' : file.type)
 }
 
 async function draw(pic, side, quality) {

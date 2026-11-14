@@ -902,6 +902,7 @@ async function handleApps ({ reqId, app, action, ...args }) {
     else if (app === 'assets' && action === 'stream') value = await assets.stream(space, args.id)
     else if (app === 'assets' && action === 'endStream') value = assets.endStream(args.token) ?? null
     else if (app === 'assets' && action === 'add') value = await assets.add(space, args.asset || {})
+    else if (app === 'assets' && action === 'setThumb') value = await assets.setThumb(space, args.id, args.thumb)
     else if (app === 'assets' && action === 'update') value = await assets.update(space, { id: args.id, name: args.name, caption: args.caption, tags: args.tags, folder: args.folder })
     else if (app === 'assets' && action === 'updateMany') value = await assets.updateMany(space, { ids: args.ids, folder: args.folder, addTags: args.addTags, removeTags: args.removeTags })
     else if (app === 'assets' && action === 'delete') value = await assets.remove(space, args.id)

@@ -745,6 +745,14 @@ describe('phone Assets', () => {
         const pdf = await assets.add(SHARED, { data: Buffer.from('%PDF-1.4 x').toString('base64'), name: 'Field trip form.pdf', mime: '' })
         expect(pdf).toMatchObject({ kind: 'pdf', mime: 'application/pdf' })
         expect(pdf.thumb).toBeUndefined()
+        // Its first page, drawn when it is first opened, goes in once; one that's there stays.
+        const page = Buffer.from('PAGE ONE')
+        const withThumb = await assets.setThumb(SHARED, pdf.id, page.toString('base64'))
+        expect(withThumb).toMatchObject({ id: pdf.id, thumb: true, updatedAt: pdf.updatedAt })
+        expect(await assets.read(SHARED, pdf.id, { thumb: true })).toBe(page.toString('base64'))
+        expect(await assets.setThumb(SHARED, pdf.id, Buffer.from('AGAIN').toString('base64'))).toBe(null)
+        expect(await assets.read(SHARED, pdf.id, { thumb: true })).toBe(page.toString('base64'))
+        await expect(assets.setThumb(SHARED, pdf.id, '')).rejects.toThrow(/empty/)
 
         // Someone else's file: an editor can't remove it.
         const other = as.makeAsset({ id: as.newAssetId(), name: 'Notes.md', by: 'Ilya', memberId: '3'.repeat(32), bytes: 10 })

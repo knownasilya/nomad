@@ -722,6 +722,49 @@ main.dropping {
   letter-spacing: 0.06em;
 }
 
+/* A PDF's first page or a book's cover, with its kind on a badge, above its name. */
+.tile.cover .doc-face {
+  position: relative;
+  overflow: hidden;
+}
+
+.tile.cover .doc-face img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+.tile.cover .doc-face.kind-book img {
+  inset: 8px;
+  width: calc(100% - 16px);
+  height: calc(100% - 16px);
+  object-fit: contain;
+  object-position: center;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.tile.cover .doc-face img ~ .fas {
+  display: none;
+}
+
+.tile.cover .doc-face img ~ .ext {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 2px 7px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+}
+
+.cell.picked .tile.cover .doc-face img {
+  transform: none;
+  border-radius: 0;
+}
+
 .doc-face.kind-image { color: var(--as-kind-image); }
 .doc-face.kind-video { color: var(--as-kind-video); }
 .doc-face.kind-audio { color: var(--as-kind-audio); }

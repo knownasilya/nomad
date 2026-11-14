@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import * as as from '../../shared/assets.mjs'
 import * as phone from '../../mobile/lib/assetRules.ts'
+import * as pageThumbs from '../../app/userland/assets/js/thumbs.js'
 import { assetRequest, nameForUrl, sizeCheck } from '../../app/bg/ai/save-asset.mjs'
 import { spaceLibPrefix } from '../../shared/vault-apps.mjs'
 
@@ -76,6 +77,17 @@ for (const [name, m] of [['shared', as], ['phone', phone]]) {
         expect(m.KIND_ICONS[k], k).toBeTruthy()
         expect(m.KIND_LABELS[k], k).toBeTruthy()
       }
+    })
+
+    it('says which files a thumbnail can still be made for', () => {
+      expect(m.THUMB_KINDS).toEqual(['image', 'video', 'pdf', 'book'])
+      expect(m.needsThumb({ kind: 'pdf' })).toBe(true)
+      expect(m.needsThumb({ kind: 'book', thumb: false })).toBe(true)
+      expect(m.needsThumb({ mime: 'video/mp4', name: 'trip.mp4' })).toBe(true)
+      expect(m.needsThumb({ kind: 'image', thumb: true })).toBe(false)
+      expect(m.needsThumb({ kind: 'markdown' })).toBe(false)
+      expect(m.needsThumb({ kind: 'audio' })).toBe(false)
+      expect(m.needsThumb(null)).toBe(false)
     })
 
     it('puts the preview policy first in an HTML file, after its doctype', () => {
@@ -224,6 +236,21 @@ describe('tags and folders on records', () => {
 })
 
 describe('asset records', () => {
+  it('draws thumbnails in pages at the same size and quality', () => {
+    expect(pageThumbs.SIDE).toBe(as.THUMB_SIDE)
+    expect(pageThumbs.QUALITY).toBe(as.THUMB_QUALITY)
+  })
+
+  it('adds a thumbnail later without making it an edit', () => {
+    const rec = as.makeAsset({ id: 'a1234567-abcd', name: 'Lease.pdf', bytes: 5000 }, null, T)
+    expect(as.needsThumb(rec)).toBe(true)
+    const done = as.withThumb(rec)
+    expect(done).toEqual({ ...rec, thumb: true })
+    expect(done.updatedAt).toBe(T)
+    expect(as.needsThumb(done)).toBe(false)
+    expect(as.makeAsset({ id: rec.id, name: 'Lease 2026.pdf' }, done).thumb).toBe(true)
+  })
+
   it('makes a record from what was added, and an edit keeps the rest', () => {
     const rec = as.makeAsset(
       { id: 'a1234567-abcd', name: 'plan.md', mime: 'text/plain', bytes: 120, by: 'Sam', memberId: 'm1', source: 'ai', sourceUrl: 'https://example.com/plan', caption: '  For   the trip ' },

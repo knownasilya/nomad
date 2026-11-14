@@ -2,7 +2,10 @@
 // it (mobile/lib/docViewerHtml.ts, made by scripts/build-doc-viewer.mjs) next to the file the
 // backend put in the app's cache, and opens it in a WebView as
 //
-//   viewer.html?kind=pdf|book&file=<file: URL, or a name next to the page>&key=<asset id>&theme=<JSON { scheme, bg, text, link }>
+//   viewer.html?kind=pdf|book&file=<file: URL, or a name next to the page>&key=<asset id>&theme=<JSON { scheme, bg, text, link }>[&thumb=1]
+//
+// With `thumb=1` (the Asset has no thumbnail yet) it also draws one, the PDF's first page or the
+// book's cover (./thumbs.js), and posts it to the app as { type: 'thumb', data: <base64 JPEG> }.
 //
 // pdf.js and its worker ride in the page as text (<script type="text/plain">) and load as blob:
 // modules. The page reads the file next to it; nothing here reaches the network.
@@ -10,9 +13,11 @@
 import { showPdf } from './pdf-view.js'
 import { openBook, BookError } from './book/parse.js'
 import { createReader } from './book/reader.js'
+import { pdfThumb, bookThumb, toBase64 } from './thumbs.js'
 
 const q = new URLSearchParams(location.search)
 const kind = q.get('kind')
+const wantThumb = q.get('thumb') === '1'
 const file = q.get('file') || ''
 let theme = { scheme: 'light', bg: '#fff', text: '#1f2328', link: '#4040e7' }
 try {
@@ -27,6 +32,18 @@ function post(msg) {
   try {
     window.ReactNativeWebView?.postMessage(JSON.stringify(msg))
   } catch {}
+}
+
+// The thumbnail the app asked for, once the file shows. Nothing is said when there is none (a book
+// with no cover).
+async function sendThumb(make) {
+  if (!wantThumb) return
+  try {
+    const blob = await make()
+    if (blob) post({ type: 'thumb', data: await toBase64(blob) })
+  } catch (err) {
+    step('thumb', { failed: err?.message || String(err) })
+  }
 }
 
 // Every step goes to the app, which logs it (Settings → Logs) and gives up on a page that has gone
@@ -119,11 +136,14 @@ async function start() {
     step('layout', { width: innerWidth, height: innerHeight, dpr: devicePixelRatio })
     const { doc } = await showPdf(node, data, pdfjs, { root: null, maxWidth: 2000, onPage: (n) => step('page', { n }) })
     step('opened', { pages: doc.numPages, width: innerWidth, height: innerHeight })
+    post({ type: 'ready' })
+    await sendThumb(() => pdfThumb(pdfjs, doc))
   } else {
     const book = openBook(data)
     createReader(app, book, { key: q.get('key') || file, theme })
+    post({ type: 'ready' })
+    await sendThumb(() => bookThumb(book))
   }
-  post({ type: 'ready' })
 }
 
 start().catch((err) => fail(err instanceof BookError ? err.message : `This ${kind === 'pdf' ? 'PDF' : 'book'} can’t be shown here (${err?.message || err})`))

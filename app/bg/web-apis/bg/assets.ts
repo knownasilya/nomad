@@ -382,6 +382,28 @@ export async function updateAssets(ctx, { ids = [], folder, addTags = [], remove
   return { changed };
 }
 
+// A thumbnail made after the file was added (shared/assets.mjs needsThumb): by the page, as a tile
+// shows or the file opens. Anyone who can write the Space may add one where there is none; one that
+// is there is never replaced. -> the record, or null when it had one already or isn't a kind that
+// gets one.
+export async function setAssetThumb(ctx, id, thumb) {
+  const place = await writable(ctx);
+  if (!as.isAssetId(id)) throw new Error('That file was removed');
+  const small = b4a.from(String(thumb || ''), 'base64');
+  if (!small.length) throw new Error('That thumbnail is empty');
+  const err = as.sizeError({ bytes: 1, thumbBytes: small.length });
+  if (err) throw new Error(err);
+  const p = as.pathsOf(place.root);
+  const prev = await autobases.readJson(place.sess, p.item(id)).catch(() => null);
+  if (!as.isAsset(prev)) throw new Error('That file was removed');
+  if (!as.needsThumb(prev)) return null;
+  await place.sess.base.append(await autobases.buildPutBlobOp(place.sess, p.thumb(id), small));
+  const rec = as.withThumb(prev);
+  await place.sess.base.append(await autobases.buildPutInlineOp(place.sess, p.item(id), rec));
+  await place.sess.base.update();
+  return forPage(place)(rec);
+}
+
 async function removeFrom(place: Place, id) {
   const p = as.pathsOf(place.root);
   const prev = await autobases.readJson(place.sess, p.item(id)).catch(() => null);
