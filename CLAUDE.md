@@ -1005,8 +1005,17 @@ mtime or size changed; a file whose bytes aren't here in time is left out and tr
 Rules (which files, their text and title, ranking, snippets) are `shared/drive-search.mjs` (tests
 `tests/unit/drive-search.test.js`); the index is `app/bg/hyper/drive-search.js`, behind internal
 `nomad.drives.searchFiles`. The AI also gets `driveHistory` (read-only: it links `versionsUrl`, it
-never restores). Both are personal capabilities, in `JOB_CAPS` and `PRIVATE_READS`. The phone has
-neither yet.
+never restores). Both are personal capabilities, in `JOB_CAPS` and `PRIVATE_READS`.
+
+The phone has both, from the same rules: `mobile/backend/lib/drive-history.mjs` and
+`drive-search.mjs` over `RPC_APPS` `drives` (no Vault needed; the UI sends each drive as
+`{ key, type, ns }`, and the `ns` is what makes a drive this phone made writable for a restore).
+`components/VersionHistory.tsx` is the screen (a `versions` screen, opened from My Library's drive
+menu and the file explorer), its wording `lib/versionHistory.ts`; search is the field on My Library's
+Drives page. A file is indexed through `indexFiles`/`searchIndexes` in `shared/drive-search.mjs` on
+both platforms. The phone searches Hyperdrives too (a `stamp`, the entry's seq, stands in for the
+mtime they lack); desktop searches Autobase drives only. Tests: `tests/unit/mobile-drive-tools.test.js`,
+`mobile-version-history.test.js`.
 
 ## Mobile: back goes where you came from
 

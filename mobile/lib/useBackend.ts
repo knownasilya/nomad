@@ -193,8 +193,18 @@ export interface NoteLiveEvent { id: string; conn: string; kind: 'message' | 'st
 
 // The phone's Reader, Notes and Names (ADR-0017, ADR-0018), and open tabs (shared/open-tabs.mjs).
 // `noVault`: this phone isn't linked, so there's no data.
-export type AppName = 'aiChats' | 'activity' | 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages' | 'vouches' | 'calendar' | 'assets' | 'peers' | 'invites' | 'contacts' | 'home'
+export type AppName = 'aiChats' | 'activity' | 'reader' | 'notes' | 'names' | 'tabs' | 'spaces' | 'jobs' | 'updates' | 'personas' | 'messages' | 'vouches' | 'calendar' | 'assets' | 'peers' | 'invites' | 'contacts' | 'home' | 'drives'
 export interface AppsResult<T = unknown> { ok: boolean; value?: T; noVault?: boolean; message?: string }
+// Version history and search in drives (backend/lib/drive-history.mjs and drive-search.mjs over
+// RPC_APPS `drives`; the rules are shared/drive-history.mjs and drive-search.mjs). A drive goes as
+// { key, type, ns }. `restore` is the version a row's file is restored from; `before` pages back.
+export interface HistoryDriveRef { key: string; type: 'hyperdrive' | 'autobase'; ns?: string }
+export interface HistoryRow { seq: number; path: string; kind: 'added' | 'changed' | 'deleted'; at: number | null; approx?: boolean; size: number; restore: number }
+export interface DriveHistory { title: string; writable: boolean; version: number; rows: HistoryRow[]; before: number | null }
+export interface FileVersion { exists: boolean; size: number; text: string | null }
+export interface RestoreSummary { total: number; changed: number; back: number; removed: number; paths: string[] }
+export interface DriveSearchResult { driveKey: string; driveTitle: string; url: string; path: string; title: string; snippet: string; mtime: number }
+export interface DriveSearch { results: DriveSearchResult[]; searched: number; partial: boolean }
 // title and snippet are worked out by the backend (shared/vault-apps.mjs); they aren't stored.
 // conflictOf: this Note is a conflict copy of that one (two Devices edited it at once).
 // space: the Space's key when the note is kept only in that Space (ADR-0029), else null.
@@ -507,7 +517,7 @@ export function useBackend (handlers: BackendHandlers): Backend {
       const reqId = `ap_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
       const timer = setTimeout(() => {
         if (pending.current[reqId]) { delete pending.current[reqId]; resolve({ ok: false, message: 'backend did not respond' }) }
-      }, action === 'feed' ? 45000 : app === 'assets' && action === 'add' ? 600000 : 15000)
+      }, action === 'feed' ? 45000 : app === 'assets' && action === 'add' ? 600000 : app === 'drives' ? 40000 : 15000)
       pending.current[reqId] = (msg: AppsResult<T>) => { clearTimeout(timer); resolve(msg) }
       const req = rpc.request(RPC_APPS)
       req.send(b4a.from(JSON.stringify({ reqId, app, action, ...args })))

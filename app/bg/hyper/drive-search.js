@@ -15,14 +15,7 @@ import * as autobases from './autobases';
 import * as spacesDb from '../dbs/spaces';
 import { listDrivesForSpace } from '../filesystem/index';
 import { isKey } from '../../../shared/drive-writers.mjs';
-import {
-  isSearchable,
-  makeDoc,
-  rankDocs,
-  snippetFor,
-  queryWords,
-  MAX_FILES_PER_DRIVE,
-} from '../../../shared/drive-search.mjs';
+import { indexFiles, searchIndexes, queryWords } from '../../../shared/drive-search.mjs';
 
 const FILE_TIMEOUT = 3000;
 const SEARCH_BUDGET = 12000;
@@ -57,32 +50,23 @@ export async function indexDrive(key, { deadline = Date.now() + SEARCH_BUDGET } 
   let idx = indexes.get(key);
   const version = sess.drive.version;
   if (idx && idx.version === version && !idx.missing) return idx;
-  const docs = new Map();
-  let missing = false;
-  let count = 0;
-  for await (const node of sess.drive.createReadStream()) {
-    const path = typeof node.key === 'string' ? node.key : b4a.toString(node.key);
-    const rec = node.value;
-    const size = autobases.recordByteLength(rec);
-    if (!rec || !isSearchable(path, size)) continue;
-    if (++count > MAX_FILES_PER_DRIVE) break;
-    const mtime = Number(rec.metadata?.mtime) || 0;
-    const old = idx?.docs.get(path);
-    if (old && old.mtime === mtime && old.size === size) {
-      docs.set(path, old);
-      continue;
+  async function* files() {
+    for await (const node of sess.drive.createReadStream()) {
+      const rec = node.value;
+      if (!rec) continue;
+      yield {
+        path: typeof node.key === 'string' ? node.key : b4a.toString(node.key),
+        size: autobases.recordByteLength(rec),
+        mtime: Number(rec.metadata?.mtime) || 0,
+        rec,
+      };
     }
-    if (Date.now() > deadline) {
-      missing = true;
-      continue;
-    }
-    const buf = await withTimeout(autobases.resolveRecordContent(rec).catch(() => null), FILE_TIMEOUT);
-    if (buf === undefined || buf === null) {
-      missing = true;
-      continue;
-    }
-    docs.set(path, makeDoc({ path, text: b4a.toString(b4a.from(buf), 'utf8'), mtime, size }));
   }
+  const read = async (path, f) => {
+    const buf = await withTimeout(autobases.resolveRecordContent(f.rec).catch(() => null), FILE_TIMEOUT);
+    return buf == null ? null : b4a.toString(b4a.from(buf), 'utf8');
+  };
+  const { docs, missing } = await indexFiles(files(), { old: idx?.docs, read, deadline });
   idx = { version, title: await driveTitle(sess, key), docs, missing };
   indexes.set(key, idx);
   return idx;
@@ -103,7 +87,7 @@ export async function search(query, { spaceId = 1, driveKeys = null, limit = 50 
   }
   keys = [...new Set(keys)];
   const deadline = Date.now() + SEARCH_BUDGET;
-  const found = [];
+  const ready = [];
   let searched = 0;
   let skipped = 0;
   let partial = false;
@@ -122,23 +106,12 @@ export async function search(query, { spaceId = 1, driveKeys = null, limit = 50 
       }
       searched++;
       if (idx.missing) partial = true;
-      for (const { doc, score } of rankDocs(idx.docs.values(), words, limit)) {
-        found.push({ key, title: idx.title, doc, score });
-      }
+      ready.push({ key, title: idx.title, docs: idx.docs });
     }
   };
   await Promise.all(Array.from({ length: Math.min(PARALLEL, keys.length) }, worker));
-  found.sort((a, b) => b.score - a.score || b.doc.mtime - a.doc.mtime);
   return {
-    results: found.slice(0, limit).map(({ key, title, doc }) => ({
-      driveKey: key,
-      driveTitle: title,
-      url: `hyper://${key}${doc.path}`,
-      path: doc.path,
-      title: doc.title,
-      snippet: snippetFor(doc.body, words),
-      mtime: doc.mtime,
-    })),
+    results: searchIndexes(ready, words, limit),
     searched,
     skipped,
     partial,

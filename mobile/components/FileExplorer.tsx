@@ -42,6 +42,8 @@ interface Props {
   drive: ExplorerDrive | null
   backend: Backend
   onClose: () => void
+  // A collaborative drive's version history, or one file's (components/VersionHistory.tsx).
+  onHistory?: (path?: string) => void
 }
 
 // Files whose extension (or text-ish mime) we'll open in the editor; everything
@@ -92,7 +94,7 @@ type PromptState = {
 // A file manager for a drive you own: navigate folders, edit text source, and
 // add / rename / delete files and folders. Mobile adaptation of nomad's editor
 // file tree (app/userland/editor): a navigable screen rather than a sidebar.
-export default function FileExplorer ({ visible, drive, backend, onClose }: Props) {
+export default function FileExplorer ({ visible, drive, backend, onClose, onHistory }: Props) {
   const t = useTheme()
   const s = useMemo(() => makeStyles(t), [t])
 
@@ -403,6 +405,7 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
               title={drive.name}
               subtitle={`${drive.type === 'autobase' ? 'Collaborative' : 'Hyperdrive'}${writable ? '' : ' · read-only'}`}
               onBack={back}
+              actions={onHistory && drive.type === 'autobase' ? [{ icon: 'history', label: 'Version history', onPress: () => onHistory() }] : undefined}
             />
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.crumbBar} contentContainerStyle={s.crumbContent}>
@@ -481,6 +484,7 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
           onClose={() => setActionFor(null)}
           title={sheetEntry ? `${sheetEntry.name}${sheetEntry.isDir ? '/' : ''}` : ''}
           groups={sheetEntry ? [[
+            { label: 'Version history', icon: 'history', hidden: sheetEntry.isDir || !onHistory || drive.type !== 'autobase', onPress: () => onHistory!(sheetEntry.path) },
             { label: 'Rename', icon: 'pen', onPress: () => promptRename(sheetEntry) },
             { label: 'Delete', icon: 'trash-alt', destructive: true, onPress: () => confirmDelete(sheetEntry) }
           ]] : []}

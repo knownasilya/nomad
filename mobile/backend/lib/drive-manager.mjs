@@ -276,6 +276,21 @@ export default class DriveManager {
     return _content.contentLength(node.value)
   }
 
+  // The bytes of an Autobase record (inline or a blob, from any writer's blob core), and its size
+  // without reading it. Version history reads old records with these (lib/drive-history.mjs).
+  async recordContent (record, range) {
+    return _content.readContent(record, { store: this.store, range })
+  }
+
+  recordLength (record) {
+    return _content.contentLength(record)
+  }
+
+  // Can this Device write the opened drive?
+  canWrite (drive) {
+    return isWritable(drive)
+  }
+
   // Resolve a parsed hyper URL to renderable content.
   // Returns { kind: 'file', mime, buffer } or { kind: 'dir', entries }.
   // opts.wantsHTML mirrors desktop's Accept-header check: only an HTML navigation is served the

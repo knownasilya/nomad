@@ -7,6 +7,8 @@ import {
   rankDocs,
   snippetFor,
   queryWords,
+  indexFiles,
+  searchIndexes,
   MAX_FILE_BYTES,
 } from '../../shared/drive-search.mjs';
 
@@ -71,5 +73,57 @@ describe('snippetFor', () => {
 
   it('shows the start when no word is in the text', () => {
     expect(snippetFor('short text', queryWords('title-only'))).toBe('short text');
+  });
+});
+
+describe('indexFiles and searchIndexes', () => {
+  const files = (list) => list.map(([path, text, mtime, stamp]) => ({ path, size: text.length, mtime, stamp, text }));
+  const reader = (reads) => async (path, f) => {
+    reads.push(path);
+    return f.text;
+  };
+
+  it('reads only new and changed files, and keeps the rest', async () => {
+    const reads = [];
+    const first = await indexFiles(files([['/a.md', 'apples', 1], ['/b.png', 'x', 1], ['/.data/c.json', '{}', 1]]), { read: reader(reads) });
+    expect([...first.docs.keys()]).toEqual(['/a.md']);
+    expect(first.missing).toBe(false);
+    const again = await indexFiles(files([['/a.md', 'apples', 1], ['/d.txt', 'dates', 2]]), { old: first.docs, read: reader(reads) });
+    expect(reads).toEqual(['/a.md', '/d.txt']);
+    expect(again.docs.get('/a.md')).toBe(first.docs.get('/a.md'));
+  });
+
+  it('tells a changed file by its stamp when it has no mtime', async () => {
+    const reads = [];
+    const one = await indexFiles(files([['/n.txt', 'pears', 0, 5]]), { read: reader(reads) });
+    await indexFiles(files([['/n.txt', 'plums', 0, 5]]), { old: one.docs, read: reader(reads) });
+    const three = await indexFiles(files([['/n.txt', 'plums', 0, 9]]), { old: one.docs, read: reader(reads) });
+    expect(reads).toEqual(['/n.txt', '/n.txt']);
+    expect(three.docs.get('/n.txt').body).toBe('plums');
+  });
+
+  it('marks the index missing when a file can’t be read or time runs out', async () => {
+    const gone = await indexFiles(files([['/a.md', 'x', 1]]), { read: async () => null });
+    expect(gone).toMatchObject({ missing: true });
+    expect(gone.docs.size).toBe(0);
+    const late = await indexFiles(files([['/a.md', 'x', 1]]), { read: async () => 'x', deadline: Date.now() - 1 });
+    expect(late.missing).toBe(true);
+  });
+
+  it('ranks matches across drives and links each file', async () => {
+    const a = await indexFiles(files([['/soup.md', '# Tomato soup\nwith basil', 10]]), { read: async (p, f) => f.text });
+    const b = await indexFiles(files([['/notes/basil.txt', 'grow tomato plants', 20]]), { read: async (p, f) => f.text });
+    const out = searchIndexes(
+      [
+        { key: 'a'.repeat(64), title: 'Recipes', docs: a.docs },
+        { key: 'b'.repeat(64), title: 'Garden', docs: b.docs },
+      ],
+      queryWords('basil tomato'),
+    );
+    expect(out.map((r) => [r.driveTitle, r.path])).toEqual([
+      ['Garden', '/notes/basil.txt'],
+      ['Recipes', '/soup.md'],
+    ]);
+    expect(out[1]).toMatchObject({ url: `hyper://${'a'.repeat(64)}/soup.md`, title: 'Tomato soup' });
   });
 });
