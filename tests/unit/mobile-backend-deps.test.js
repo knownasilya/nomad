@@ -65,6 +65,18 @@ describe('the phone backend’s packages are in the mobile build', () => {
     expect(missing).toEqual({})
   })
 
+  // Bare decides a file's module type the way Node did before it guessed from the syntax: `.mjs` is
+  // ESM, and a `.js` file is CommonJS unless its package.json says `"type": "module"`. Nothing under
+  // app/ says so, so a `.js` file from there dies on its `export` and the worklet aborts at launch
+  // (1.52.0: shared/drive-search.mjs imported app-stdlib's search-match.js). Vitest and Node load it
+  // fine, so only this check catches it.
+  it('reaches only .mjs files in mobile/ and shared/ (Bare loads them as ES modules)', () => {
+    const outside = [...backend.keys()]
+      .map((f) => path.relative(root, f))
+      .filter((f) => !/^(mobile|shared)\//.test(f) || !f.endsWith('.mjs'))
+    expect(outside).toEqual([])
+  })
+
   it('shared modules have no bare imports (the runtime passes its own in)', () => {
     const bare = {}
     for (const [file, specs] of backend) {
@@ -81,6 +93,19 @@ describe('the phone backend’s packages are in the mobile build', () => {
     expect(target.protocol).toBe('file:')
     expect(fs.existsSync(target)).toBe(true)
     expect(fs.readFileSync(target, 'utf8')).toMatch(/export const webcrypto\b/)
+  })
+
+  // `npm run check:backend` starts the backend in Bare from source, so it repeats the bundle's
+  // import overrides (tools/bare-imports.cjs runs under Node, which Bare can't load).
+  it('starts the backend in Bare with the same import overrides as the bundle', () => {
+    const map = createRequire(import.meta.url)(path.join(root, 'mobile/tools/bare-imports.cjs'))
+    const check = fs.readFileSync(path.join(root, 'mobile/tools/check-backend-starts.cjs'), 'utf8')
+    for (const [spec, target] of Object.entries(map)) {
+      const rel = path.relative(path.join(root, 'mobile/tools'), new URL(target).pathname)
+      expect(check, spec).toContain(`'${spec}': new URL('${rel}'`)
+    }
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, 'mobile/package.json'), 'utf8'))
+    expect(pkg.scripts['check:backend']).toBe('node tools/check-backend.mjs')
   })
 
   it('pins Yjs, y-protocols and lib0 to the same versions as desktop', () => {
