@@ -30,7 +30,7 @@ export function getTemplate(id = 'blank') {
  * @returns {Record<string, any>}
  */
 export function templateManifest(tpl, meta = {}) {
-  const out = { ...(tpl.manifest || {}), ...meta };
+  const out = { ...tpl.manifest, ...meta };
   if (tpl.type) out.type = tpl.type;
   if (tpl.fallback) out.fallback = tpl.fallback;
   if (typeof out.collaborative === 'undefined' && tpl.collaborative) out.collaborative = true;

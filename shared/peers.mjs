@@ -154,7 +154,8 @@ export function keepsDrive(peer, drive, space) {
 export function withDrive(peer, driveKey, on) {
   if (!isKey(driveKey)) throw new Error('Not a drive key: ' + driveKey);
   const h = normalizeHold(peer?.hold, peer?.kind);
-  const extra = on ? [...new Set([...h.extra, driveKey])] : h.extra.filter((k) => k !== driveKey);
+  const cur = Array.isArray(h.extra) ? h.extra : [];
+  const extra = on ? [...new Set([...cur, driveKey])] : cur.filter((k) => k !== driveKey);
   return { ...h, extra };
 }
 

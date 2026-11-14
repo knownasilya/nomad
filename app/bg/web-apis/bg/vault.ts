@@ -117,11 +117,10 @@ import {
   timeLimitOf,
 } from '../../../../shared/jobs.mjs';
 
-// The Drive key of a hyper://<key>/ URL, or null.
 // The Space whose Drive Registry lists drive `key`: { rootDriveKey, name, entry }, or null.
 async function driveSpace(key) {
   // Personal (id 1) last: its list is every drive this Device keeps, so another Space's comes first.
-  const list = (await spacesDb.list()).slice().sort((a, b) => (a.id === 1) - (b.id === 1));
+  const list = (await spacesDb.list()).slice().sort((a, b) => Number(a.id === 1) - Number(b.id === 1));
   for (const sp of list) {
     const entries = await filesystem.listDrivesForSpace(sp.id).catch(() => []);
     const entry = entries.find((d) => d?.key === key);

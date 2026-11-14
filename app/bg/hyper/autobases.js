@@ -425,6 +425,10 @@ export function dirHasChildren(sess, dirPath) {
 export const inviteIdFor = (token) => createHash('sha256').update(String(token)).digest('hex');
 
 // A new link's token for `sess` (which this Device must write). The record syncs to the drive's peers.
+/**
+ * @param {any} sess
+ * @param {{ multiUse?: boolean, days?: number, note?: string }} [opts]
+ */
 export async function createInvite(sess, { multiUse = false, days, note } = {}) {
   const token = randomBytes(16).toString('hex');
   const rec = makeInvite({ multiUse, days, note, by: b4a.toString(sess.base.local.key, 'hex') });
@@ -505,7 +509,11 @@ export function removePendingRequest(bootstrapKey, writerKey) {
 // swarm. pendingRequests is per-process, so without this the owner never learns a remote
 // peer wants access. The request is remembered and re-sent to any peer that connects until
 // we actually become a writer, so it survives a not-yet-connected owner.
-export function requestWriterAccess(bootstrapKey, { writerKey, profileUrl, invite }) {
+/**
+ * @param {string} bootstrapKey
+ * @param {{ writerKey: string, profileUrl?: string | null, invite?: string | null }} req
+ */
+export function requestWriterAccess(bootstrapKey, { writerKey, profileUrl, invite = null }) {
   outgoingRequests[bootstrapKey] = {
     writerKey,
     profileUrl: profileUrl || null,
