@@ -244,6 +244,29 @@ export const CAPABILITIES = [
     },
     gates: { personal: true },
   },
+  // The drive terminal's own commands, for a turn asked from the terminal (ai-shell.ts terminalRun).
+  // The command runs in the terminal where the user sees it; one that changes the drive waits for
+  // their yes there (webterm/js/lib/ai-run.js).
+  {
+    name: 'runTerminalCommand',
+    returns: 'text',
+    description:
+      "Run a command in the drive terminal the user asked from, as if they typed it, and get its text output. " +
+      'It runs in their current directory and they see it. Commands that look run at once: ls (-l, -a), tree, pwd, ' +
+      'cd, cat (-n), head, tail, stat, wc, find (globs, -t f|d), grep (-i, -l, /regex/), search (-a for all drives), ' +
+      'versions [file], diff (a b | file version | file), info, echo, help. Commands that change the drive ask the ' +
+      'user first: write, touch, mkdir, mv, cp, rm (-r), ln, meta, restore, and > or >> into a file. Lines can ' +
+      'chain with ; and &&. Other commands are refused. Returns the output, or what went wrong, or that the ' +
+      'user said no.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'The line to run, e.g. grep -i todo or versions /index.html' },
+      },
+      required: ['command'],
+    },
+    gates: { personal: true, terminal: true },
+  },
   {
     name: 'currentTab',
     description:
@@ -1148,7 +1171,8 @@ const TAB_DRIVE_ARG = {
 // `memory`: AI memory is on (the `ai_memory` setting, ADR-0032). It adds remember and forget.
 // `scratch`: the turn has a scratch space (scratch.mjs): every chat turn and Job run, not the
 // loopback MCP's other programs. It adds saveScratch, readScratch, listScratch and deleteScratch.
-/** @param {{ allowWrite?: boolean, allowVision?: boolean, remote?: boolean, personal?: boolean, tab?: boolean, job?: false | { extra?: string[], pages?: boolean }, secrets?: boolean, memory?: boolean, scratch?: boolean }} [opts] */
+// `terminal`: the turn was asked from the drive terminal (ai-shell.ts). It adds runTerminalCommand.
+/** @param {{ allowWrite?: boolean, allowVision?: boolean, remote?: boolean, personal?: boolean, tab?: boolean, job?: false | { extra?: string[], pages?: boolean }, secrets?: boolean, memory?: boolean, scratch?: boolean, terminal?: boolean }} [opts] */
 export function visibleCapabilities({
   allowWrite = true,
   allowVision = false,
@@ -1159,6 +1183,7 @@ export function visibleCapabilities({
   secrets = false,
   memory = false,
   scratch = false,
+  terminal = false,
 } = {}) {
   const jobExtra = job && Array.isArray(job.extra) ? job.extra : []
   return CAPABILITIES.filter((cap) => {
@@ -1173,6 +1198,7 @@ export function visibleCapabilities({
     if (cap.gates?.secrets && !secrets) return false
     if (cap.gates?.memory && !memory) return false
     if (cap.gates?.scratch && !scratch) return false
+    if (cap.gates?.terminal && (!terminal || job)) return false
     if (job && (cap.gates?.personal || cap.gates?.job) && !JOB_CAPS.has(cap.name) && !jobExtra.includes(cap.name)) {
       return false
     }
@@ -1349,7 +1375,7 @@ export function dashboardGuide() {
 const GUIDES = [...splitGuides(API_REFERENCE), genuiPagesGuide(), genuiComponentsGuide(), dashboardGuide()]
 
 export function buildCatalog(opts) {
-  const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, tab, job, secrets, memory, scratch, names, skills, ownerId } =
+  const { allowWrite, allowVision, remote, pageTools, listedDrives, personal, tab, job, secrets, memory, scratch, terminal, names, skills, ownerId } =
     opts || {}
   const caps = visibleCapabilities({
     allowWrite,
@@ -1361,6 +1387,8 @@ export function buildCatalog(opts) {
     secrets: !!personal && !!secrets,
     memory: !!personal && !!memory,
     scratch: !!scratch,
+    // A turn asked from the drive terminal: runTerminalCommand.
+    terminal: !!personal && !remote && !!terminal,
   })
   return {
     capabilities: caps,

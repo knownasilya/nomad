@@ -14,7 +14,7 @@
 // nomad://shell-window and so trusted) rather than the active tab's (usually untrusted) webContents.
 
 import { findWebContentsParentWindow } from '../../lib/electron';
-import { getActive } from '../../ui/tabs/manager';
+import { getActive, findTab } from '../../ui/tabs/manager';
 import {
   callAgentHost,
   isAgentHostApp,
@@ -44,9 +44,56 @@ function activePane(sender) {
   return tab?.primaryPane || null;
 }
 
+// The drive terminal (nomad://webterm) asks from a pane of its own: its turn is about the page the
+// terminal is attached to, in the same tab, whichever tab is in front.
+function terminalPane(sender) {
+  const tab = findTab(sender);
+  const own = tab?.findPane?.(sender);
+  return own?.attachedPane || tab?.primaryPane || activePane(sender) || own || null;
+}
+
+// Commands the AI runs in the drive terminal (runTerminalCommand), waiting for the terminal's
+// answer, by the terminal's webContents and the run's id. The terminal shows each one and asks the
+// user before one that changes the drive (webterm/js/lib/ai-run.js).
+const terminalRuns = new Map();
+let terminalRunIds = 0;
+const TERMINAL_OUTPUT_MAX = 20000;
+
+function makeTerminalRun(shell, emitter) {
+  return (command, signal) =>
+    new Promise((resolve, reject) => {
+      const id = `run${++terminalRunIds}`;
+      const key = `${shell.id}:${id}`;
+      const onAbort = () => {
+        terminalRuns.delete(key);
+        reject(new Error('Stopped'));
+      };
+      if (signal?.aborted) return onAbort();
+      signal?.addEventListener?.('abort', onAbort, { once: true });
+      terminalRuns.set(key, (result) => {
+        terminalRuns.delete(key);
+        signal?.removeEventListener?.('abort', onAbort);
+        resolve(terminalRunText(command, result));
+      });
+      emitter.emit('terminal', { id, command });
+    });
+}
+
+// What the model reads back: the output as the terminal printed it, or why it didn't run.
+function terminalRunText(command, result: any = {}) {
+  if (result?.refused) return `The terminal didn't run \`${command}\`: ${String(result.refused).slice(0, 500)}`;
+  if (result?.declined) return `The user said no to \`${command}\`. Don't run it again unless they ask.`;
+  let out = typeof result?.output === 'string' ? result.output : '';
+  if (out.length > TERMINAL_OUTPUT_MAX) {
+    out = out.slice(0, TERMINAL_OUTPUT_MAX) + `\n… (${out.length - TERMINAL_OUTPUT_MAX} more characters; narrow the command)`;
+  }
+  const failed = result?.ok === false ? '\n(It failed.)' : '';
+  return `$ ${command}\n${out || '(no output)'}${failed}`;
+}
+
 // The tab the user is on in the sidebar's window, right now — or null.
-async function currentTabOf(shell) {
-  const pane = activePane(shell);
+async function currentTabOf(shell, paneOf = activePane) {
+  const pane = paneOf(shell);
   const wc = pane?.webContents;
   if (!wc || (typeof wc.isDestroyed === 'function' && wc.isDestroyed())) return null;
   const drive = await resolveActiveDrive(pane);
@@ -67,6 +114,26 @@ function describeTab(pane, drive) {
     "readCurrentPage and screenshotCurrentPage read that tab's rendered page; for a Drive, readDriveFile " +
     'and listDriveFiles read its files. To write a file, name its drive (`drive`). When they ask you to do ' +
     'something on the page, snapshotPage and the page actions click and type on it.'
+  );
+}
+
+// The same assistant, answering in the drive terminal under the page. The terminal shows plain text
+// and Markdown, so no drawings; it can undo a change with `restore`.
+function describeTerminal(pane, drive, cwd) {
+  const title = pane.title ? ` ("${pane.title}")` : '';
+  const page =
+    drive.url && drive.url.startsWith('hyper://')
+      ? `${pane.url}${title}, whose Nomad Drive is ${drive.url}${drive.writable ? ', which they can write' : ', which they can only read'}`
+      : `${pane.url || 'a new tab'}${title}, a regular web page, not a Nomad Drive`;
+  const where = cwd ? ` Its current directory is ${cwd}.` : '';
+  return (
+    "You are the user's own assistant, answering in Nomad's drive terminal: a command line the user " +
+    `opened under ${page}.${where} Work in that terminal with runTerminalCommand: run its own commands ` +
+    '(ls, tree, cat, find, grep, search, versions, diff, and write, mv, cp, rm, mkdir, restore) yourself ' +
+    'instead of asking the user to. They see every command; one that changes the drive waits for their yes. ' +
+    'Use writeDriveFile for a whole file\'s new content (name its `drive`). Answer for a terminal: short, ' +
+    'plain Markdown, code in fenced blocks, no openui-lang drawings, no wide tables. A change can be undone ' +
+    'with `versions <file>` then `restore <file> <version>`; say so after you change something.'
   );
 }
 
@@ -92,7 +159,11 @@ export default {
     const shell = this.sender;
     const turnId = typeof opts.turnId === 'string' && opts.turnId ? opts.turnId : null;
     const chatId = typeof opts.chatId === 'string' && opts.chatId ? opts.chatId : null;
-    const pane = activePane(shell);
+    // Asked from the drive terminal (nomad://webterm `ai`), not the sidebar.
+    const terminal = opts.terminal && typeof opts.terminal === 'object' ? opts.terminal : null;
+    const cwd = terminal && typeof terminal.cwd === 'string' ? terminal.cwd.slice(0, 2000) : '';
+    const paneOf = terminal ? terminalPane : activePane;
+    const pane = paneOf(shell);
     if (!pane) {
       return createChatStream(async () => {
         throw new Error('No active tab');
@@ -114,11 +185,11 @@ export default {
     async function runSidebarTurn(emitter, signal, steering) {
       // An editor or explorer that shows the drive the AI wrote to reloads that file.
       emitter.on('tool', (e) => {
-        if (e?.phase === 'write') notifyAgentHostOfWrite(activePane(shell), e.drive, e.path);
+        if (e?.phase === 'write') notifyAgentHostOfWrite(paneOf(shell), e.drive, e.path);
       });
 
       const drive = await resolveActiveDrive(pane);
-      let context = describeTab(pane, drive);
+      let context = terminal ? describeTerminal(pane, drive, cwd) : describeTab(pane, drive);
       if (isAgentHostApp(pane.url)) {
         const hostCtx = await callAgentHost(
           pane,
@@ -138,18 +209,21 @@ export default {
         effort: opts.effort,
         allowVision: opts.allowVision,
         stage: 'sidebar',
-        // The sidebar renders charts, maps and other UI the model writes in openui-lang.
-        genUi: true,
-        currentTab: () => currentTabOf(shell),
+        // The sidebar renders charts, maps and other UI the model writes in openui-lang; the
+        // terminal shows text.
+        genUi: !terminal,
+        currentTab: () => currentTabOf(shell, paneOf),
         context,
         signal,
         steering,
         // Page control remembers "allow similar" per chat, in this window.
         pageChat: chatId ? `${shell.id}:${chatId}` : null,
         // What the AI saves with saveScratch stays for the chat's later turns (scratch.mjs).
-        scratchScope: chatId ? `sidebar:${shell.id}:${chatId}` : null,
+        scratchScope: chatId ? `${terminal ? 'terminal' : 'sidebar'}:${shell.id}:${chatId}` : null,
         // An earlier answer in this chat read the user's private data (ADR-0037).
         privateData: opts.privateData === true,
+        // runTerminalCommand: the terminal runs the AI's commands where the user sees them.
+        terminalRun: terminal ? makeTerminalRun(shell, emitter) : undefined,
         // What the AI makes or changes links back to this chat (ADR-0047). A chat is kept in
         // hyper://private/ of the window's Space (chat-store.js), so the Space goes with it.
         origin: chatId
@@ -157,6 +231,15 @@ export default {
           : null,
       });
     }
+  },
+
+  // The drive terminal's answer to a command the AI ran there (makeTerminalRun): { ok, output },
+  // { declined } or { refused }. Only the terminal that was asked can answer.
+  async terminalResult(id, result) {
+    const done = terminalRuns.get(`${this.sender?.id}:${id}`);
+    if (!done) return false;
+    done(result && typeof result === 'object' ? result : {});
+    return true;
   },
 
   // A message the user sent while turn `turnId` runs. true when the turn will read it at its next

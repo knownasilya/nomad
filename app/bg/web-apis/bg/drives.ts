@@ -99,9 +99,12 @@ export default {
   },
 
   // Search the files of the drives in this page's Space (nomad://search, app/bg/hyper/drive-search.js).
+  // `drive` keeps it to one drive (the terminal's `search`).
   async searchFiles(query, opts: any = {}) {
+    const driveKeys = opts.drive ? [await drives.fromURLToKey(String(opts.drive), true)] : null;
     return driveSearch.search(String(query || ''), {
       spaceId: getSenderSpaceId(this.sender) || 1,
+      driveKeys,
       limit: Math.min(Math.max(Number(opts.limit) || 30, 1), 100),
     });
   },
