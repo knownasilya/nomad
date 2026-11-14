@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.52.1](https://github.com/knownasilya/nomad/compare/v1.52.0...v1.52.1) (2026-11-14)
+
+
+### Bug Fixes
+
+* **phone:** don't close at launch in 1.52.0 ([5b04af5](https://github.com/knownasilya/nomad/commit/5b04af5a2ac9fb4605ce118d72fcbe5983a59eaa))
+
 ## [1.52.0](https://github.com/knownasilya/nomad/compare/v1.51.1...v1.52.0) (2026-11-14)
 
 
