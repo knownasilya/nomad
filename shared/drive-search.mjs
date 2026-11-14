@@ -6,9 +6,22 @@
 // Pure. The index and the I/O are app/bg/hyper/drive-search.js. Tests:
 // tests/unit/drive-search.test.js.
 
-import { foldText, queryWords } from '../app/userland/app-stdlib/js/search-match.js';
+// The phone's backend runs this file on Bare, which loads a `.js` file under app/ (no
+// `"type": "module"`) as CommonJS and dies on its `export`: importing app-stdlib's search-match.js
+// here closed the phone at launch in 1.52.0. So the two folding rules are here, the same as
+// search-match.js's (tests/unit/search-match.test.js checks they agree), and this module imports
+// nothing outside shared/.
+const MARKS = /[\u0300-\u036f]/g;
 
-export { queryWords };
+// Lowercase, without accents.
+export function foldText(s) {
+  return String(s ?? '').normalize('NFD').replace(MARKS, '').toLowerCase();
+}
+
+// The words of a search, folded. [] for an empty one.
+export function queryWords(q) {
+  return foldText(q).split(/\s+/).filter(Boolean);
+}
 
 // Text files only, and not big ones: a search reads every file it keeps.
 export const TEXT_EXT = new Set([

@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import * as desktop from '../../app/userland/app-stdlib/js/search-match.js'
 import * as phone from '../../mobile/lib/search.ts'
+import * as driveSearch from '../../shared/drive-search.mjs'
 
 for (const [name, m] of [['desktop', desktop], ['phone', phone]]) {
   describe(`search (${name})`, () => {
@@ -77,3 +78,14 @@ for (const [name, m] of [['desktop', desktop], ['phone', phone]]) {
     })
   })
 }
+
+// shared/drive-search.mjs keeps its own foldText and queryWords (the phone's backend can't load
+// app-stdlib's .js file on Bare), so its words must fold the same way.
+describe('search in drives folds words like Notes and Reader', () => {
+  it('folds text and splits a search the same way', () => {
+    for (const s of ['  Café   PARIS ', '', '   ', 'naïve résumé', 'ÅNGSTRÖM über', 'Shopping\tlist\nnow']) {
+      expect(driveSearch.queryWords(s)).toEqual(desktop.queryWords(s))
+      expect(driveSearch.foldText(s)).toBe(desktop.foldText(s))
+    }
+  })
+})
