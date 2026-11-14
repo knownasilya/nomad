@@ -649,6 +649,31 @@ export default class DriveManager {
     await this._put(driveType, drive, path, buf)
   }
 
+  // Write a file from a stream of chunks (a file the app picked, read a piece at a time), so a big
+  // photo or video never sits in memory or crosses the RPC as one message.
+  async writeFileFrom (driveType, key, ns, path, chunks) {
+    const { drive } = await this._openOwned(driveType, key, ns)
+    if (driveType === DRIVE_AUTOBASE) {
+      const blob = await _blobStore.putBlobFrom(this._blobsForBase(drive), chunks)
+      await drive.append({ op: 'put', path, metadata: makeMetadata({ mtime: Date.now(), ctime: Date.now() }), blob })
+      await drive.update()
+      return
+    }
+    const ws = drive.createWriteStream(path)
+    await new Promise((resolve, reject) => {
+      ws.on('error', reject)
+      ws.on('close', resolve)
+      ;(async () => {
+        try {
+          for await (const chunk of chunks) {
+            if (!ws.write(chunk)) await new Promise((r) => ws.once('drain', r))
+          }
+          ws.end()
+        } catch (err) { ws.destroy(err) }
+      })()
+    })
+  }
+
   async deletePath (driveType, key, ns, path, isDir) {
     const { drive, reader } = await this._openOwned(driveType, key, ns)
     if (!isDir) return this._del(driveType, drive, path)

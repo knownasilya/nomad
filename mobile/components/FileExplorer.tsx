@@ -24,6 +24,8 @@ import { useTheme, radius, type Theme } from '../lib/theme'
 import { type DriveType } from '../lib/hyperUrl'
 import type { DirEntry } from '../lib/types'
 import type { Backend } from '../lib/useBackend'
+import { pickMedia, pickFiles, type PickedFile } from '../lib/assetFiles'
+import { freeName } from '../lib/fileNames'
 
 // The drive an explorer session targets. Always one you own (it carries `ns`),
 // so every op below opens it writable in the backend.
@@ -106,6 +108,9 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
   const [actionFor, setActionFor] = useState<DirEntry | null>(null)
   const lastActionFor = useRef<DirEntry | null>(null)
   const [busy, setBusy] = useState(false)
+  // Adding picked files: "2 of 5" while they go in, and the sheet that picks where from.
+  const [adding, setAdding] = useState<string | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
 
   const driveKey = drive?.key
   const driveType = drive?.type
@@ -335,6 +340,31 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
     [backend, drive, editor, refresh]
   )
 
+  // --- add files from the phone -------------------------------------------
+  // Photos, videos and other files go into the open folder as they are, one at a time: the backend
+  // reads each from the app's cache a piece at a time (RPC_FS_WRITE `fromPath`). A name already in
+  // the folder gets " (2)", so nothing is overwritten.
+  const addPicked = useCallback(async (picked: PickedFile[]) => {
+    if (!drive || !picked.length) return
+    const taken = new Set(entries.map((e) => e.name.toLowerCase()))
+    let failed = 0
+    for (let i = 0; i < picked.length; i++) {
+      setAdding(picked.length > 1 ? `Adding ${i + 1} of ${picked.length}…` : 'Adding…')
+      const name = freeName(picked[i].name, taken)
+      taken.add(name.toLowerCase())
+      const res = await backend.fsWriteFrom(drive.type, drive.key, drive.ns, joinPath(cwd, name), picked[i].uri)
+      if (!res.ok) failed++
+    }
+    setAdding(null)
+    await refresh()
+    if (failed) Alert.alert('Some files weren’t added', `${failed} of ${picked.length} couldn’t be added. Try them again.`)
+  }, [backend, drive, cwd, entries, refresh])
+
+  const addFrom = useCallback((source: 'library' | 'camera' | 'files') => {
+    const pick = source === 'files' ? pickFiles() : pickMedia(source)
+    pick.then(addPicked).catch((err) => Alert.alert('Couldn’t add files', String(err?.message || err)))
+  }, [addPicked])
+
   // --- breadcrumb ---------------------------------------------------------
   const crumbs = useMemo(() => {
     const segs = cwd.split('/').filter(Boolean)
@@ -396,8 +426,18 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
                   <Icon name='folder-plus' size={13} color={t.trustText} />
                   <Text style={s.toolBtnText}>New folder</Text>
                 </Pressable>
+                <Pressable style={s.toolBtn} onPress={() => setAddOpen(true)} disabled={busy || !!adding} android_ripple={{ color: t.ripple }} accessibilityRole='button'>
+                  <Icon name='plus' size={13} color={t.trustText} />
+                  <Text style={s.toolBtnText}>Add files</Text>
+                </Pressable>
               </View>
             )}
+            {adding ? (
+              <View style={s.addingBar}>
+                <ActivityIndicator size='small' color={t.accent} />
+                <Text style={s.addingText}>{adding}</Text>
+              </View>
+            ) : null}
 
             {loading ? (
               <View style={s.center}><ActivityIndicator color={t.accent} /></View>
@@ -444,6 +484,18 @@ export default function FileExplorer ({ visible, drive, backend, onClose }: Prop
             { label: 'Rename', icon: 'pen', onPress: () => promptRename(sheetEntry) },
             { label: 'Delete', icon: 'trash-alt', destructive: true, onPress: () => confirmDelete(sheetEntry) }
           ]] : []}
+        />
+
+        <ActionSheet
+          visible={addOpen}
+          onClose={() => setAddOpen(false)}
+          title='Add files'
+          subtitle={`To ${cwd === '/' ? drive.name : cwd}`}
+          groups={[[
+            { label: 'Photos and videos', icon: 'images', onPress: () => addFrom('library') },
+            { label: 'Take a photo', icon: 'camera', onPress: () => addFrom('camera') },
+            { label: 'Files', icon: 'file-upload', onPress: () => addFrom('files') }
+          ]]}
         />
 
         {/* text-input prompt (new / rename) */}
@@ -583,6 +635,8 @@ function makeStyles (t: Theme) {
     toolbar: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border },
     toolBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, backgroundColor: t.trustBg, borderRadius: radius.pill, paddingHorizontal: 14, overflow: 'hidden' },
     toolBtnText: { color: t.trustText, fontSize: 13, fontWeight: '600' },
+    addingBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
+    addingText: { color: t.textDim, fontSize: 13 },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
     errText: { color: t.danger, fontSize: 14, textAlign: 'center' },
     empty: { color: t.textMuted, fontSize: 13, textAlign: 'center', marginTop: 40 },

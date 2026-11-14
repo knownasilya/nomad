@@ -21,19 +21,23 @@ import { inlineOp, boundedUpdate } from './vault.mjs'
 import { memberRecords } from './space-library.mjs'
 import { decodeInlineJson, makeMetadata } from '../../../shared/fs-core.mjs'
 
+// A file: URI or path the app gave, as a path in one of its own folders (`roots`). Throws for
+// anything else, so a page can't have the backend read another app's files. Also used for files
+// added to a drive (backend.mjs RPC_FS_WRITE `fromPath`).
+export function localPathIn (roots, fs, uri) {
+  let p = String(uri || '')
+  if (p.startsWith('file://')) p = p.slice(7)
+  try { p = decodeURIComponent(p) } catch {}
+  const inside = roots.some((r) => {
+    const root = r.replace(/^file:\/\//, '').replace(/\/+$/, '')
+    return root && p.startsWith(root + '/')
+  })
+  if (!fs || !p.startsWith('/') || p.split('/').includes('..') || !inside) throw new Error('That file isn’t in Nomad’s own folders')
+  return p
+}
+
 export function createAssets ({ libraryOf, vaultOf = () => null, blobs, fs = null, roots = [], streams = null }) {
-  // A file: URI or path the app gave, as a path in one of its own folders.
-  function localPath (uri) {
-    let p = String(uri || '')
-    if (p.startsWith('file://')) p = p.slice(7)
-    try { p = decodeURIComponent(p) } catch {}
-    const inside = roots.some((r) => {
-      const root = r.replace(/^file:\/\//, '').replace(/\/+$/, '')
-      return root && p.startsWith(root + '/')
-    })
-    if (!fs || !p.startsWith('/') || p.split('/').includes('..') || !inside) throw new Error('That file isn’t in Nomad’s own folders')
-    return p
-  }
+  const localPath = (uri) => localPathIn(roots, fs, uri)
 
   // { base, root, shared, writable, role, memberId } for Space `space`, or null with no Vault.
   async function placeOf (space) {
