@@ -4,6 +4,7 @@ import { setupModelContext } from './model-context';
 import { setupHighlights } from './highlights';
 import { setupMods } from './mods';
 import { setupPageControl } from './page-control';
+import { setupTerminalKey } from './terminal-key';
 import { setup as setupPrompt } from './prompt';
 import { setup as setupExecuteJavascript } from './execute-javascript';
 import setupExitFullScreenHackfix from './exit-full-screen-hackfix';
@@ -23,6 +24,7 @@ setupWebAPIs();
 setupModelContext();
 setupHighlights();
 setupPageControl();
+setupTerminalKey();
 setupPrompt();
 setupExecuteJavascript();
 

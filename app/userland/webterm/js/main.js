@@ -1,6 +1,7 @@
-// nomad://webterm: the drive terminal. Ctrl+` (View → Toggle Terminal) opens it as a pane under
-// the page; it starts in the page's drive, and its commands read and change that drive (ls, cat,
-// write, mv, rm…), look back through its versions (versions, diff, restore), search it (find,
+// nomad://webterm: the drive terminal. Ctrl+` (Developer → Toggle Terminal), or ~ on a page of a
+// drive the user can edit (webview-preload/terminal-key.js), opens it as a pane under the page; it
+// starts in the page's drive, and its commands read and change that drive (ls, cat, write, mv,
+// rm…), look back through its versions (versions, diff, restore), search it (find,
 // grep, search) and ask the user's own AI (ai, or ?).
 //
 // The command line is an <input> with readline's keys, history (Up/Down, Ctrl+R, `!!`), a greyed
@@ -1137,6 +1138,7 @@ class WebTerm extends LitElement {
         <span><kbd>↑</kbd> <kbd>Ctrl</kbd>+<kbd>R</kbd> history</span>
         <span><code class="k">? question</code> asks the AI</span>
         <span><a class="link" data-run="tree">tree</a> · <a class="link" data-run="versions">versions</a></span>
+        <span><kbd>Ctrl</kbd>+<kbd>\`</kbd>${place.writable ? html` or <kbd>~</kbd> on the page` : ''} toggles this</span>
       </div>
     </div>`;
   }
