@@ -793,6 +793,15 @@ export async function setup() {
     }
     e.returnValue = false;
   });
+  // ~ on a page of a drive the user can edit (webview-preload/terminal-key.js): open or close the
+  // drive terminal under that page.
+  ipcMain.on('nomad-terminal:toggle', (e) => {
+    var tab = findTab(e.sender);
+    var pane = tab && tab.findPane(e.sender);
+    if (!pane || !String(pane.url || '').startsWith('hyper://') || !pane.writable) return;
+    if (tab.activePane !== pane) tab.setActivePane(pane);
+    tab.togglePaneByOrigin({ url: 'nomad://webterm/' });
+  });
   ipcMain.on('NOMAD_WC_FOCUSED', (e) => {
     // when a pane is focused, we want to set it as the
     // active pane of its tab

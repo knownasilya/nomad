@@ -333,7 +333,9 @@ reads the message before its next call.
 
 ### The AI in the drive terminal
 
-`ai` / `?` in nomad://webterm (`app/userland/webterm/`, unbundled) is a sidebar-stage turn through
+Ctrl+` (Developer → Toggle Terminal) opens nomad://webterm under the page, and so does ~ on a hyper://
+page of a drive the user can edit (`fg/webview-preload/terminal-key.js`, not while typing in a field; bg
+checks the pane is `writable` in `tabs/manager.js` `nomad-terminal:toggle`). `ai` / `?` in nomad://webterm (`app/userland/webterm/`, unbundled) is a sidebar-stage turn through
 internal `nomad.aiTerminal` (`aiShell.chat` with `terminal: { cwd }`; `terminalPane` and
 `describeTerminal` in `ai-shell.ts`, no genUi). That turn alone gets `runTerminalCommand`
 (`gates: { personal, terminal }`, local path only, never Jobs): `makeTerminalRun` emits a `terminal`
