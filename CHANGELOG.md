@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.53.0](https://github.com/knownasilya/nomad/compare/v1.52.1...v1.53.0) (2026-11-15)
+
+
+### Features
+
+* **webterm:** ~ on a drive you can edit opens the terminal ([bfbf8dc](https://github.com/knownasilya/nomad/commit/bfbf8dc5692628304277e7cd2c2ccd433a59efee))
+
 ### [1.52.1](https://github.com/knownasilya/nomad/compare/v1.52.0...v1.52.1) (2026-11-14)
 
 
