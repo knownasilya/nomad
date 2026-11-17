@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.53.2](https://github.com/knownasilya/nomad/compare/v1.53.1...v1.53.2) (2026-11-17)
+
+
+### Bug Fixes
+
+* **build:** remove unused beaker-index so electron-builder 26 can install app deps ([224f54b](https://github.com/knownasilya/nomad/commit/224f54b86afd181590a5276ce3ec3d2dd86abf5f))
+
 ### [1.53.1](https://github.com/knownasilya/nomad/compare/v1.53.0...v1.53.1) (2026-11-17)
 
 
