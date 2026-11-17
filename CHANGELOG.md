@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.53.3](https://github.com/knownasilya/nomad/compare/v1.53.2...v1.53.3) (2026-11-17)
+
+
+### Bug Fixes
+
+* **build:** use sodium-native's prebuilt binary on Apple Silicon ([#231](https://github.com/knownasilya/nomad/issues/231)) ([493e4e0](https://github.com/knownasilya/nomad/commit/493e4e09f7daf06d87c2c17040176623e9e6c64a))
+
 ### [1.53.2](https://github.com/knownasilya/nomad/compare/v1.53.1...v1.53.2) (2026-11-17)
 
 
