@@ -55,7 +55,7 @@
     "icojs": "^0.16.1",
     "identify-filetype": "^1.0.0",
     "into-stream": "^3.1.0",
-    "isomorphic-git": "^1.17.0",
+    "isomorphic-git": "^1.44.15",
     "keyboardevent-from-electron-accelerator": "^1.1.0",
     "keyboardevents-areequal": "^0.2.2",
     "knex": "^0.21.0",
@@ -69,12 +69,11 @@
     "lodash.groupby": "^4.6.0",
     "lodash.uniqby": "^4.7.0",
     "lru": "^3.1.0",
-    "markdown-it": "^10.0.0",
+    "markdown-it": "^14.3.3",
     "markdown-link-extractor": "^1.2.3",
     "mime": "^1.4.0",
     "mkdirp": "^1.0.4",
     "ms": "^2.1.2",
-    "nat-upnp": "^1.1.1",
     "node-fetch": "^2.6.7",
     "normalize-url": "^3.3.0",
     "once": "^1.4.0",
@@ -108,7 +107,7 @@
     "yjs": "^13.6.33",
     "yo-yo": "^1.4.0",
     "z32": "^1.1.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "overrides": {
     "node-gyp": "^10.0.0",
