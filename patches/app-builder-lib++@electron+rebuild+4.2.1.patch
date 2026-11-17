@@ -1,0 +1,17 @@
+diff --git a/node_modules/app-builder-lib/node_modules/@electron/rebuild/lib/module-type/prebuildify.js b/node_modules/app-builder-lib/node_modules/@electron/rebuild/lib/module-type/prebuildify.js
+index e62f63f..801c8e4 100644
+--- a/node_modules/app-builder-lib/node_modules/@electron/rebuild/lib/module-type/prebuildify.js
++++ b/node_modules/app-builder-lib/node_modules/@electron/rebuild/lib/module-type/prebuildify.js
+@@ -41,7 +41,11 @@ export class Prebuildify extends NativeModule {
+         const electronNapiModuleFilename = path.join(prebuiltModuleDir, `electron.napi.${nativeExt}`);
+         const nodejsNapiModuleFilename = path.join(prebuiltModuleDir, `node.napi.${nativeExt}`);
+         const abiModuleFilename = path.join(prebuiltModuleDir, `electron.abi${this.rebuilder.ABI}.${nativeExt}`);
+-        if (fs.existsSync(electronNapiModuleFilename) || fs.existsSync(nodejsNapiModuleFilename)) {
++        // Nomad patch: prebuildify names a native arm64 build (darwin-arm64, built on an M1)
++        // plain `.node`; only cross-compiled ARM builds carry the `armv8` tag. Without this
++        // the Mac arm64 build rebuilds sodium-native from source and fails.
++        const untaggedNapi = [path.join(prebuiltModuleDir, 'electron.napi.node'), path.join(prebuiltModuleDir, 'node.napi.node')];
++        if (fs.existsSync(electronNapiModuleFilename) || fs.existsSync(nodejsNapiModuleFilename) || untaggedNapi.some((f) => fs.existsSync(f))) {
+             this.nodeAPI.ensureElectronSupport();
+             d(`Found prebuilt Node-API module in ${prebuiltModuleDir}"`);
+         }
