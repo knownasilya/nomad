@@ -17,7 +17,6 @@ import { getEnvVar } from './bg/lib/env';
 import * as logger from './bg/logger';
 import * as beakerBrowser from './bg/browser';
 import * as adblocker from './bg/adblocker';
-import * as portForwarder from './bg/nat-port-forwarder';
 import dbs from './bg/dbs/index';
 import hyper from './bg/hyper/index';
 import * as filesystem from './bg/filesystem/index';
@@ -157,7 +156,6 @@ app.on('ready', async function () {
   nomadProtocol.register(protocol);
   webapis.setup();
   initWindow.open();
-  portForwarder.setup();
 
   // setup databases
   log.info('Initializing databases');
@@ -312,7 +310,6 @@ app.on(
 
 app.on('quit', () => {
   log.info('Program quit');
-  portForwarder.closePort();
 });
 
 app.on('custom-ready-to-show', () => {
