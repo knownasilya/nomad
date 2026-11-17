@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.53.1](https://github.com/knownasilya/nomad/compare/v1.53.0...v1.53.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **security:** update Electron, isomorphic-git, markdown-it and zod; drop nat-upnp ([3dcedf3](https://github.com/knownasilya/nomad/commit/3dcedf321508ebfda244a9365f95d45ca341b30d))
+
 ## [1.53.0](https://github.com/knownasilya/nomad/compare/v1.52.1...v1.53.0) (2026-11-15)
 
 
