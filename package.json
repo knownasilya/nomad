@@ -62,7 +62,7 @@
     "@types/node": "^25.9.1",
     "@xmldom/xmldom": "^0.9.12",
     "electron": "^45.2.1",
-    "electron-builder": "^23.0.2",
+    "electron-builder": "^26.18.0",
     "electron-notarize": "^0.3.0",
     "fflate": "^0.8.3",
     "fs-jetpack": "^1.2.0",
@@ -144,12 +144,14 @@
     "appImage": {
       "category": "Network",
       "desktop": {
-        "Name": "Nomad",
-        "GenericName": "Web Browser",
-        "Type": "Application",
-        "Terminal": false,
-        "MimeType": "text/html;text/xml;application/xhtml+xml;application/xml;application/rss+xml;application/rdf+xml;image/gif;image/jpeg;image/png;x-scheme-handler/http;x-scheme-handler/https;x-scheme-handler/hyper;x-scheme-handler/dat;video/webm;application/x-xpinstall;",
-        "Categories": "GNOME;GTK;Network;WebBrowser;"
+        "entry": {
+          "Name": "Nomad",
+          "GenericName": "Web Browser",
+          "Type": "Application",
+          "Terminal": false,
+          "MimeType": "text/html;text/xml;application/xhtml+xml;application/xml;application/rss+xml;application/rdf+xml;image/gif;image/jpeg;image/png;x-scheme-handler/http;x-scheme-handler/https;x-scheme-handler/hyper;x-scheme-handler/dat;video/webm;application/x-xpinstall;",
+          "Categories": "GNOME;GTK;Network;WebBrowser;"
+        }
       }
     },
     "mac": {
