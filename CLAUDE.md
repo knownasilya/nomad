@@ -878,6 +878,15 @@ other turn gets its own. A long read saves its whole text there (`note:<id>`, `p
 every auto-saved read, is private: reading it back calls `egress.notePrivate()`. The loopback MCP's
 other programs get no scratch space.
 
+A turn that goes round in circles ends (`app/bg/ai/loop-guard.mjs`, tests `tests/unit/loop-guard.test.js`):
+every call the model makes, and every capability its execute code calls, is counted by its
+arguments and result. The third same result adds a note to the result, the sixth tells the model to
+answer, and a model that still calls tools ends the turn with an error (a Job's run fails with it);
+a turn has at most `MAX_ROUNDS` model calls. A CLI's loopback MCP calls count too. One execute
+module (or job.js) that makes the same call with the same result 10 times, refused calls included,
+is killed (`guardedModule` in `ai.ts`): execute's idle timer re-arms on every call, so nothing else
+stops a polling loop.
+
 ### Personas and Sessions (ADR-0031)
 
 A Persona is one of the user's identities: a private `label` for a Profile Drive

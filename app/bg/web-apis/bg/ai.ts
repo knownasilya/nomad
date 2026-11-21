@@ -87,6 +87,16 @@ import { isSessionId } from '../../../../shared/ai-chats.mjs';
 import { streamAgent } from '../../ai/agent-cli.mjs';
 import { newToolCallId, trackToolCall } from '../../ai/tool-events.mjs';
 import {
+  createLoopGuard,
+  createModuleGuard,
+  repeatNote,
+  withNote,
+  stoppedMessage,
+  refusedMessage,
+  MAX_ROUNDS,
+  ROUNDS_NOTE,
+} from '../../ai/loop-guard.mjs';
+import {
   addSteerMessages,
   deliverSteer,
   runStep,
@@ -772,20 +782,50 @@ async function runJobModule(code, { jobId, jobTitle = '', params, space, notify,
     // What job.js makes links back to the Job (ADR-0047).
     origin,
   };
-  return executeInUtilityProcess({
-    code,
-    params,
-    signal,
-    invoke: async (call) => {
-      assertCallAllowed(call.target, call.name, catalog);
-      if (call.target === 'page') throw new Error('page tools are not available in a Job');
-      const value = await trackToolCall(emitter, { name: call.target, args: call.args }, () =>
-        executeTool(call.target, call.args || {}, sender, opts)
-      );
-      // A screenshot's image can't go anywhere from here; its text can.
-      return value && typeof value === 'object' && 'imageDataUrl' in value ? value.text : value;
-    },
-  });
+  // job.js loops on its own only so long (loop-guard.mjs).
+  return guardedModule(signal, (moduleGuard, runSignal) =>
+    executeInUtilityProcess({
+      code,
+      params,
+      signal: runSignal,
+      invoke: async (call) => {
+        let value;
+        try {
+          // A refused call counts too: code that loops on one never stops by itself.
+          assertCallAllowed(call.target, call.name, catalog);
+          if (call.target === 'page') throw new Error('page tools are not available in a Job');
+          value = await trackToolCall(emitter, { name: call.target, args: call.args }, () =>
+            executeTool(call.target, call.args || {}, sender, opts)
+          );
+        } catch (err) {
+          moduleGuard.check(call.target, call.args, err);
+          throw err;
+        }
+        moduleGuard.check(call.target, call.args, value);
+        // A screenshot's image can't go anywhere from here; its text can.
+        return value && typeof value === 'object' && 'imageDataUrl' in value ? value.text : value;
+      },
+    })
+  );
+}
+
+// Runs a module (execute's, or a Job's job.js) that its guard can end: once the guard trips, the
+// module is killed, even one that catches the error and carries on, and the guard's error is what
+// the call fails with.
+async function guardedModule(signal, run) {
+  const runStop = new AbortController();
+  const guard = createModuleGuard({ onTrip: () => runStop.abort() });
+  const onAbort = () => runStop.abort();
+  if (signal?.aborted) runStop.abort();
+  else signal?.addEventListener?.('abort', onAbort);
+  try {
+    return await run(guard, runStop.signal);
+  } catch (err) {
+    if (guard.tripped && !signal?.aborted) throw guard.tripped;
+    throw err;
+  } finally {
+    signal?.removeEventListener?.('abort', onAbort);
+  }
 }
 
 // A module's result as a run's answer: text as it is, JSON in a code block.
@@ -1048,18 +1088,32 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
     steering: opts.steering || null,
     // The drive terminal the turn was asked from (ai-shell.ts terminalRun).
     terminalRun: typeof opts.terminalRun === 'function' ? opts.terminalRun : null,
+    // Counts calls that give the same result again, so a turn going round in circles ends
+    // (loop-guard.mjs). A CLI's loopback MCP calls count too.
+    loopGuard: createLoopGuard(),
   };
+  const loopGuard = toolOpts.loopGuard;
   const steering = toolOpts.steering;
   const mcpTurn = cli && mcpPort ? openTurn({ sender, toolOpts }) : null;
 
   // Tool loop — repeats when model calls tools. A cancel (signal.abort, from a local stream
   // close or a remote CANCEL frame) stops future work but never undoes a Checkpoint the turn
   // already wrote — the revert UI covers that (ADR-0013 §5c).
+  // Model calls so far, and whether the model was told to stop calling tools and answer: after a
+  // call that kept giving the same result, or MAX_ROUNDS calls (loop-guard.mjs). Told that, a model
+  // that still calls tools ends the turn with an error.
+  let rounds = 0;
+  let finishing = false;
   try {
     while (true) {
       if (signal?.aborted) break;
       // The user steered: their message goes in before the next model call.
       addSteerMessages(msgHistory, deliverSteer(steering, emitter));
+      if (!finishing && ++rounds > MAX_ROUNDS) {
+        loopGuard.stop('rounds');
+        msgHistory.push({ role: 'user', content: ROUNDS_NOTE });
+        finishing = true;
+      }
       // A message the user sends now stops this call (steering.mjs runStep): what the model wrote
       // so far stays, and the loop reads the message before the next call.
       const step: any = await runStep(steering, signal, emitter, (stepSignal) =>
@@ -1090,6 +1144,8 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
         addSteerMessages(msgHistory, late);
         continue;
       }
+      // Told to answer, it called tools again: the turn ends here.
+      if (finishing) throw new Error(stoppedMessage(loopGuard.stopped));
 
       // Append assistant turn (with tool calls) to history. Use '' rather than null for content:
       // some local runtimes' chat templates do `content | trim`, which throws on null (None).
@@ -1112,6 +1168,11 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
           });
           continue;
         }
+        // The turn was stopped by an earlier call of this round: the rest don't run.
+        if (finishing) {
+          msgHistory.push({ role: 'tool', tool_call_id: tc.id, name: tc.function.name, content: refusedMessage() });
+          continue;
+        }
         let result;
         let args: any = {};
         try {
@@ -1132,6 +1193,13 @@ async function runChat(messages, sender, emitter, opts: any = {}) {
         } catch (err) {
           console.error(`[ai] tool "${tc.function.name}" failed:`, err);
           result = `Error: ${err.message}`;
+        }
+        // The same call with the same result again: the model is told, and past STOP_AT it answers.
+        const seen = loopGuard.top(toolCallId, tc.function.name, args, result);
+        if (seen.verdict !== 'ok') {
+          console.warn(`[ai] ${tc.function.name} repeated ${seen.repeats}x (${seen.name}): ${seen.verdict}`);
+          result = withNote(result, repeatNote(seen));
+          if (seen.verdict === 'stop') finishing = true;
         }
         // Include the function `name` on the tool result: it's part of the original OpenAI
         // function-calling spec and some runtimes' templates reference it when rendering the result.
@@ -1369,24 +1437,39 @@ async function executeToolInner(name, args, sender, opts: any = {}) {
         throw new Error('params must be an object');
       }
       let imageDataUrl = null;
-      const value = await executeInUtilityProcess({
-        code: args.code,
-        params: args.params,
-        signal,
-        invoke: async (call) => {
-          assertCallAllowed(call.target, call.name, catalog);
-          const toolName = call.target === 'page' ? 'page_' + call.name : call.target;
-          const innerId = newToolCallId();
-          const inner = await trackToolCall(
-            emitter,
-            { id: innerId, parentId: opts.toolCallId, name: toolName, args: call.args },
-            () => executeTool(toolName, call.args || {}, sender, { ...opts, toolCallId: innerId })
-          );
-          if (inner && typeof inner === 'object' && inner.imageDataUrl)
-            imageDataUrl = inner.imageDataUrl;
-          return inner;
-        },
-      });
+      // A module that loops on its own (the same call, the same result) is ended (loop-guard.mjs);
+      // the turn's guard also counts what it called, across this turn's executes.
+      const loopParent = opts.loopParent || opts.toolCallId;
+      const value = await guardedModule(signal, (moduleGuard, runSignal) =>
+        executeInUtilityProcess({
+          code: args.code,
+          params: args.params,
+          signal: runSignal,
+          invoke: async (call) => {
+            const toolName = call.target === 'page' ? 'page_' + call.name : call.target;
+            const innerId = newToolCallId();
+            let inner;
+            try {
+              // A refused call counts too: code that loops on one never stops by itself.
+              assertCallAllowed(call.target, call.name, catalog);
+              inner = await trackToolCall(
+                emitter,
+                { id: innerId, parentId: opts.toolCallId, name: toolName, args: call.args },
+                () => executeTool(toolName, call.args || {}, sender, { ...opts, toolCallId: innerId, loopParent: null })
+              );
+            } catch (err) {
+              opts.loopGuard?.inner(loopParent, toolName, call.args, err);
+              moduleGuard.check(toolName, call.args, err);
+              throw err;
+            }
+            opts.loopGuard?.inner(loopParent, toolName, call.args, inner);
+            moduleGuard.check(toolName, call.args, inner);
+            if (inner && typeof inner === 'object' && inner.imageDataUrl)
+              imageDataUrl = inner.imageDataUrl;
+            return inner;
+          },
+        })
+      );
       if (imageDataUrl) {
         const text =
           typeof value === 'string'
@@ -2264,8 +2347,20 @@ function runtimeError(status, body, tools, hasToken) {
 export async function callLocalTool(name, args, turn = null) {
   if (name !== 'search' && name !== 'execute') throw new Error(`Unknown tool: ${name}`);
   if (turn) {
-    // A CLI runs its own loop, so a message the user sent mid-turn rides on this result.
-    const result = await executeTool(name, args || {}, turn.sender, turn.toolOpts);
+    // A CLI runs its own loop, so a message the user sent mid-turn rides on this result. It also
+    // decides itself when to stop, so a turn that went round in circles refuses further calls.
+    const guard = turn.toolOpts.loopGuard;
+    if (guard?.stopped) throw new Error(refusedMessage());
+    const loopParent = newToolCallId();
+    let result;
+    try {
+      result = await executeTool(name, args || {}, turn.sender, { ...turn.toolOpts, loopParent });
+    } catch (err) {
+      guard?.top(loopParent, name, args, `Error: ${err?.message || err}`);
+      throw err;
+    }
+    const seen = guard ? guard.top(loopParent, name, args, result) : null;
+    if (seen && seen.verdict !== 'ok') result = withNote(result, repeatNote(seen));
     return withSteer(result, turn.toolOpts.steering, turn.toolOpts.emitter);
   }
   const pane = focusedPane();
