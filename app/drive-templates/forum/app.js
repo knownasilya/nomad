@@ -40,14 +40,8 @@ async function boot(el) {
   state.info = await drive.getInfo()
   state.isWriter = state.info.writable
 
-  // Load the user's profile from address book
-  try {
-    const ab = await nomad.fs.readFile('hyper://private/address-book.json').then(JSON.parse)
-    console.log('Address book', ab);
-    state.myProfileUrl = ab?.profiles?.[0]?.key ? `hyper://${ab.profiles[0].key}/` : null
-  } catch(e) {
-    console.log('No address book found', e);
-  }
+  // The profile you picked before (see chooseProfile)
+  state.myProfileUrl = savedProfileUrl()
 
   if (state.isWriter) {
     // writerKey is the local autobase writer key — exposed via listWriters
@@ -112,7 +106,7 @@ function renderHeader() {
     }
     hdr.append(h('button', { class: 'btn', click: () => openWriters() }, 'Writers' + (state.requests.length ? ` (${state.requests.length})` : '')))
     if (!state.myProfileUrl) {
-      hdr.append(h('span', { class: 'no-profile-hint' }, '⚠ ', h('a', { href: '#', click: (e) => { e.preventDefault(); showProfileHelp() } }, 'Set up your profile')))
+      hdr.append(h('span', { class: 'no-profile-hint' }, '⚠ ', h('a', { href: '#', click: (e) => { e.preventDefault(); chooseProfile() } }, 'Choose your profile')))
     }
   }
   return hdr
@@ -328,20 +322,24 @@ async function submitComment(e, postSlug) {
   await render(document.querySelector('forum-app'))
 }
 
-function showProfileHelp() {
-  alert(
-    'To set up your profile:\n\n' +
-    '1. Open the Nomad explorer and create a new drive.\n' +
-    '2. Set the drive title to your name.\n' +
-    '3. Edit /index.json and add:  "type": "walled.garden/person"\n' +
-    '4. Open hyper://private/address-book.json and add:\n' +
-    '   { "profiles": [{ "key": "<your-drive-key>" }] }\n\n' +
-    'After that, reload this page — your name will appear on your posts.'
-  )
+// Your profile drive, for post and comment authors. A page can't read your private drive, so you
+// pick the profile in Nomad's drive picker (it can make a new one too), and the forum keeps its URL.
+function savedProfileUrl() {
+  return localStorage.profileUrl || null
+}
+
+async function chooseProfile() {
+  try {
+    const url = await nomad.shell.selectDriveDialog({ title: 'Choose your profile', tag: 'contact', writable: true })
+    localStorage.profileUrl = url
+    state.myProfileUrl = url
+    await render(document.querySelector('forum-app'))
+  } catch {} // the dialog was closed
+  return state.myProfileUrl
 }
 
 async function requestAccess() {
-  const profileUrl = state.myProfileUrl
+  const profileUrl = state.myProfileUrl || await chooseProfile()
   const result = await nomad.fs.requestAccess(BASE, { profileUrl })
   alert(`Access requested. Your writer key: ${result.writerKey}\n\nThe forum owner must approve your request.`)
 }
