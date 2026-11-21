@@ -36,7 +36,7 @@ customElements.define('blog-app', class extends HTMLElement {
 async function boot(el) {
   state.info = await drive.getInfo()
   state.writable = !!state.info.writable
-  state.myProfileUrl = await loadProfileUrl()
+  state.myProfileUrl = savedProfileUrl()
 
   const route = currentRoute()
   state.view = route.view
@@ -253,11 +253,18 @@ async function loadPost(slug) {
   return { meta, body: body || '', kind: kind || 'txt', slug }
 }
 
-async function loadProfileUrl() {
+// Your profile drive, for post.author. A page can't read your private drive, so you pick the
+// profile once in Nomad's drive picker and the blog keeps its URL here.
+function savedProfileUrl() {
+  return localStorage.profileUrl || null
+}
+
+async function chooseProfileUrl() {
   try {
-    const ab = await nomad.fs.readFile('hyper://private/address-book.json').then(JSON.parse)
-    return ab?.profiles?.[0]?.key ? `hyper://${ab.profiles[0].key}/` : null
-  } catch { return null }
+    const url = await nomad.shell.selectDriveDialog({ title: 'Choose your profile', tag: 'contact', writable: true })
+    localStorage.profileUrl = url
+    return url
+  } catch { return null } // the dialog was closed
 }
 
 // ── Actions ──────────────────────────────────────────────────────────────────
@@ -276,6 +283,7 @@ async function onPublish(e) {
   if (summary) post.summary = summary
   if (tagsRaw) post.tags = tagsRaw.split(',').map(sanitizeTag).filter(Boolean)
   if (draft) post.draft = true
+  if (!state.myProfileUrl) state.myProfileUrl = await chooseProfileUrl()
   if (state.myProfileUrl) post.author = { url: state.myProfileUrl }
 
   const valid = await nomad.schemas.validate('walled.garden/post', post)
