@@ -13,6 +13,7 @@ import './select-file';
 import './prompt';
 import './basic-auth';
 import './persona-login';
+import './passkey';
 
 class ModalsWrapper extends LitElement {
   static get properties() {
@@ -96,6 +97,8 @@ class ModalsWrapper extends LitElement {
         return html`<basic-auth-modal></basic-auth-modal>`;
       case 'persona-login':
         return html`<persona-login-modal></persona-login-modal>`;
+      case 'passkey':
+        return html`<passkey-modal></passkey-modal>`;
     }
     return html`<div></div>`;
   }

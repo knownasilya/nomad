@@ -15,6 +15,7 @@ export const PAGES = [
   ['mods', 'Mods', 'fas fa-fw fa-magic'],
   ['jobs', 'Jobs', 'fas fa-fw fa-clock'],
   ['secrets', 'Secrets', 'fas fa-fw fa-key'],
+  ['passkeys', 'Passkeys', 'fas fa-fw fa-fingerprint'],
   ['sharing', 'Sharing', 'fas fa-fw fa-user-friends'],
   ['bookmarks', 'Bookmarks', 'far fa-fw fa-star'],
   ['contacts', 'Contacts', 'far fa-fw fa-address-card'],

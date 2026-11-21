@@ -826,6 +826,22 @@ Job uses only the secrets ticked for it on the secret (the local `jobs` list, no
 Library → Secrets over the internal `nomad.secrets` API (writes only from `nomad://library`). Never
 add an API that returns a value.
 
+### Passkeys for websites (ADR-0049)
+
+Nomad is the WebAuthn authenticator for https pages and http://localhost: Electron has no passkey UI,
+and macOS system passkeys need an Apple browser entitlement Nomad can't get. The webview preload
+(`fg/webview-preload/passkeys.js`) injects `passkeys-page.js` into the main world, which wraps
+`navigator.credentials.create`/`get` with `publicKey` and returns real-looking `PublicKeyCredential`s
+(keep it self-contained: it runs from its `toString()`). `bg/ui/passkeys.js` takes the origin from
+`event.senderFrame` (a frame from another origin than the top page falls back to the browser's own
+WebAuthn), opens the `passkey` modal (`fg/modals/passkey.js`; Touch ID after the yes where the Mac has
+it), and runs `bg/passkeys/ceremony.mjs`. The bytes and rules (RP ID against the Public Suffix List
+via `tldts`, CBOR, authenticator data, "none" attestation) are `shared/passkeys.mjs`, with no Buffer or
+TextEncoder so the phone can use it later. Keys are P-256, on this computer only, encrypted with
+`safeStorage` in `<userData>/passkeys.json` (`bg/passkeys/store.js`), never in the Vault; no API
+returns one. My Library → Passkeys lists and deletes them (internal `nomad.passkeys`). Tests:
+`tests/unit/passkeys.test.js`. Keep the AI and Jobs away from them.
+
 ### Sending private data to a site asks first (ADR-0037)
 
 Once a chat of the user's own AI has read private data (Notes, Reader, Mods, Jobs, drive files, the

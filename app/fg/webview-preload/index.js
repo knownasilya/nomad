@@ -5,6 +5,7 @@ import { setupHighlights } from './highlights';
 import { setupMods } from './mods';
 import { setupPageControl } from './page-control';
 import { setupTerminalKey } from './terminal-key';
+import { setupPasskeys } from './passkeys';
 import { setup as setupPrompt } from './prompt';
 import { setup as setupExecuteJavascript } from './execute-javascript';
 import setupExitFullScreenHackfix from './exit-full-screen-hackfix';
@@ -25,6 +26,7 @@ setupModelContext();
 setupHighlights();
 setupPageControl();
 setupTerminalKey();
+setupPasskeys();
 setupPrompt();
 setupExecuteJavascript();
 
