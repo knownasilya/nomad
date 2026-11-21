@@ -15,6 +15,7 @@ import './views/mods.js';
 import './views/personas.js';
 import './views/jobs.js';
 import './views/secrets.js';
+import './views/passkeys.js';
 import './views/sharing.js';
 import './views/bookmarks.js';
 import './views/contacts.js';
@@ -166,6 +167,9 @@ export class LibraryApp extends LitElement {
             : ''}
           ${this.view === 'secrets'
             ? html`<secrets-view class="full-size" .filter=${this.filter}></secrets-view>`
+            : ''}
+          ${this.view === 'passkeys'
+            ? html`<passkeys-view class="full-size" .filter=${this.filter}></passkeys-view>`
             : ''}
           ${this.view === 'sharing'
             ? html`<sharing-view class="full-size"></sharing-view>`

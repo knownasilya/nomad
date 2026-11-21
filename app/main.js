@@ -41,6 +41,7 @@ import * as windowMenu from './bg/ui/window-menu';
 import registerContextMenu from './bg/ui/context-menu';
 import * as highlights from './bg/ui/highlights';
 import * as mods from './bg/ui/mods';
+import * as passkeys from './bg/ui/passkeys';
 import * as personas from './bg/ui/personas';
 import * as aiMemory from './bg/ai/memory';
 import * as aiSkills from './bg/ai/skills';
@@ -206,6 +207,8 @@ app.on('ready', async function () {
   await highlights.setup();
   // The user's Mods (custom styles and scripts per site), from the Vault.
   mods.setup();
+  // Websites' passkeys, kept by Nomad on this computer (ADR-0049).
+  passkeys.setup();
   // The user's Personas and the Sessions sites hold (ADR-0031), from the Vault.
   personas.setup();
   // What the user's assistant remembers about them, from the Vault (ADR-0032).
